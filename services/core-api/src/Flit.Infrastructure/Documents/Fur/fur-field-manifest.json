@@ -109,7 +109,7 @@
       "y": 119.2,
       "size": 9.9
     },
-    {
+        {
       "id": "requested_process_2",
       "page": 1,
       "type": "checkbox",
@@ -118,11 +118,51 @@
       "size": 9.8
     },
     {
+      "id": "requested_process_3",
+      "page": 1,
+      "type": "checkbox",
+      "x": 167.7,
+      "y": 121.1,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_4",
+      "page": 1,
+      "type": "checkbox",
+      "x": 215.9,
+      "y": 121.1,
+      "size": 10.1
+    },
+    {
       "id": "requested_process_5",
       "page": 1,
       "type": "checkbox",
       "x": 286.9,
       "y": 124.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_7",
+      "page": 1,
+      "type": "checkbox",
+      "x": 71.3,
+      "y": 150.2,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_8",
+      "page": 1,
+      "type": "checkbox",
+      "x": 119.5,
+      "y": 150.2,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_10",
+      "page": 1,
+      "type": "checkbox",
+      "x": 215.9,
+      "y": 150.2,
       "size": 10.1
     },
     {
@@ -155,6 +195,30 @@
       "type": "checkbox",
       "x": 343.3,
       "y": 150.2,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_13",
+      "page": 1,
+      "type": "checkbox",
+      "x": 71.3,
+      "y": 177.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_15",
+      "page": 1,
+      "type": "checkbox",
+      "x": 167.7,
+      "y": 177.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_16",
+      "page": 1,
+      "type": "checkbox",
+      "x": 215.9,
+      "y": 177.0,
       "size": 10.1
     },
     {
@@ -315,6 +379,14 @@
       "type": "checkbox",
       "x": 743.4,
       "y": 130.0,
+      "size": 8.0
+    },
+    {
+      "id": "is_armored_vehicle_yes",
+      "page": 1,
+      "type": "checkbox",
+      "x": 504.0,
+      "y": 168.0,
       "size": 8.0
     },
     {

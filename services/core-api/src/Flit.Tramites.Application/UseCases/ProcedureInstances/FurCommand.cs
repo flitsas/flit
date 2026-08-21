@@ -669,10 +669,12 @@ public sealed class GenerarFurHandler(
         FurTemplateFormat templateFormat,
         IReadOnlyDictionary<string, string>? nombresRlDirectorio = null)
     {
-        var partes = new List<DocumentParte>(2);
+        var partes = new List<DocumentParte>(3);
         AddParte(partes, instance, "comprador", nombresRlDirectorio);
         if (esTraspaso)
             AddParte(partes, instance, "vendedor", nombresRlDirectorio);
+        if (instance.Actors.Any(x => string.Equals(x.ActorType, "locatario", StringComparison.OrdinalIgnoreCase)))
+            AddParte(partes, instance, "locatario", nombresRlDirectorio);
 
         var sellos = instance.Signatures
             .Where(s => s.Estado == SignatureEstados.Firmada)
@@ -709,6 +711,14 @@ public sealed class GenerarFurHandler(
             Nombre: Get(fv, "transit_office_name"),
             Ciudad: TransitOfficeCity.Legible(Get(fv, "transit_office_city")));
 
+        var transformaciones = new FurTransformacionesDeclaradas(
+            Color: Declarada(fv, MandatoObjetoComposer.CambioColor, "vehicle_color_runt", "vehicle_color")
+                || string.Equals(codigo, "CAMBIO_COLOR", StringComparison.OrdinalIgnoreCase),
+            Carroceria: Declarada(fv, MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type_runt", "vehicle_body_type")
+                || string.Equals(codigo, "CAMBIO_CARROCERIA", StringComparison.OrdinalIgnoreCase),
+            Combustible: Declarada(fv, MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel")
+                || string.Equals(codigo, "CONVERSION_COMBUSTIBLE", StringComparison.OrdinalIgnoreCase));
+
         return new FurDocumentData(
             ProcedureInstanceId: instance.Id,
             ReferenceNumber: instance.ReferenceNumber,
@@ -721,33 +731,14 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            // HU #11643 — el recuadro OBSERVACIONES reúne cuatro bloques y NO cabe todo. El orden es
-            // ahora de PRIORIDAD, no de aparición: primero lo automático (entra íntegro) y al final el
-            // texto libre del gestor (recortado a lo que quede). Antes el texto libre iba delante y sin
-            // tope, así que al desbordar el auto-encaje eliminaba con la elipsis justo lo obligatorio.
-            // Los bloques automáticos, en orden:
-            //   1. HU #10989, CF11 (HU #11257) — el beneficiario del gravamen, en constitución o en
-            //      levantamiento.
-            //   2. HU #10987 — las observaciones que escribe el gestor (fur_observations).
-            //   3. A4/B4 (HU #10673, ADR-0029) — el texto automático de las transformaciones de
-            //      color/combustible declaradas (diff snapshot RUNT vs efectivo).
-            //   4. El tipo de servicio con la empresa vinculadora que lo respalda, por el mismo
-            //      canal automático que las transformaciones (solo si hay vinculadora).
-            Observaciones: FurObservacionesComposer.Componer(
-                automatico: FurPrendaObservation.Join(
-                    FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
-                    FurPrendaObservation.Join(
-                        FurTransformationObservations.ComposeAuto(
-                            Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
-                            Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
-                            Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type")),
-                        // `vehicle_service` guarda el CÓDIGO elegido en matrícula inicial (y el texto
-                        // libre del RUNT en traspaso, que aquí no llega: el bloque exige vinculadora).
-                        FurServicioVinculadoraObservation.Compose(
-                            Get(fv, "vehicle_service"),
-                            Get(fv, "empresa_vinculadora_razon_social"),
-                            Get(fv, "empresa_vinculadora_nit")))),
-                manual: Get(fv, "fur_observations")),
+            Observaciones: ComposeObservacionesP23(
+                codigo,
+                partes,
+                prendaMarking,
+                acreedorPrenda,
+                acreedorPrendaDocumento,
+                fv,
+                transformaciones),
             FirmaImagenes: firmaImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
@@ -766,14 +757,41 @@ public sealed class GenerarFurHandler(
             // marcaba en ninguna parte. Es el mismo criterio (`bandera || diff`) que ya usa el
             // wizard para pintar el subtrámite como activo, así que documento y pantalla dejan de
             // contradecirse.
-            Transformaciones: new FurTransformacionesDeclaradas(
-                Color: Declarada(fv, MandatoObjetoComposer.CambioColor, "vehicle_color_runt", "vehicle_color"),
-                Carroceria: Declarada(fv, MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type_runt", "vehicle_body_type"),
-                Combustible: Declarada(fv, MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel")))
+            Transformaciones: transformaciones)
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.
             TenantIdParaFirmas = instance.TenantId,
         };
+    }
+
+    /// <summary>
+    /// Párrafo 23: concatena tipo (leasing/unilateral) + prenda + transformaciones + vinculadora + texto libre.
+    /// </summary>
+    private static string? ComposeObservacionesP23(
+        string? codigo,
+        IReadOnlyList<DocumentParte> partes,
+        FurPrendaMarking prendaMarking,
+        string? acreedorPrenda,
+        string? acreedorPrendaDocumento,
+        Dictionary<string, string?> fv,
+        FurTransformacionesDeclaradas transformaciones)
+    {
+        var automatico = FurPrendaObservation.Join(
+            FurTramiteObservation.Compose(codigo, partes),
+            FurPrendaObservation.Join(
+                FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
+                FurPrendaObservation.Join(
+                    FurTransformationObservations.ComposeDeclaradas(
+                        transformaciones,
+                        Get(fv, "vehicle_color"),
+                        Get(fv, "vehicle_fuel"),
+                        Get(fv, "vehicle_body_type")),
+                    FurServicioVinculadoraObservation.Compose(
+                        Get(fv, "vehicle_service"),
+                        Get(fv, "empresa_vinculadora_razon_social"),
+                        Get(fv, "empresa_vinculadora_nit")))));
+
+        return FurObservacionesComposer.Componer(automatico, Get(fv, "fur_observations"));
     }
 
     /// <summary>

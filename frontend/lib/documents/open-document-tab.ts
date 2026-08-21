@@ -193,15 +193,29 @@ function asInlinePreviewBlob(blob: Blob): Blob {
  * Abre una pestaña con el carrito, obtiene el blob y lo muestra inline.
  * Conserva PDF e imágenes; sin MIME conocido asume PDF (preview FLIT).
  */
-export async function openPdfBlobInNewTab(fetchPdf: () => Promise<Blob>): Promise<void> {
+export async function openPdfBlobInNewTab(
+  fetchPdf: () => Promise<Blob>,
+  options?: { maximize?: boolean },
+): Promise<void> {
   const win = openLoadingDocumentTab();
   try {
     const blob = await fetchPdf();
     const objectUrl = URL.createObjectURL(asInlinePreviewBlob(blob));
     openObjectUrlInWindow(objectUrl, win);
+    if (options?.maximize) tryMaximizeWindow(win);
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
   } catch {
     showDocumentTabError(win);
     throw new Error("document_preview_failed");
+  }
+}
+
+function tryMaximizeWindow(win: Window | null) {
+  if (!win || win.closed) return;
+  try {
+    win.moveTo(0, 0);
+    win.resizeTo(window.screen.availWidth, window.screen.availHeight);
+  } catch {
+    /* el navegador puede bloquear resize de pestañas */
   }
 }

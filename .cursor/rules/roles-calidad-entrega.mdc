@@ -16,6 +16,7 @@ Cada vez que el usuario pida desarrollar, ajustar, corregir o entregar algo, el 
 | **Dev (backend)** | `backend-agent` (+ `database-agent` si hay schema/migración) | APIs, dominio, persistencia; sin romper contratos salvo diseño explícito |
 | **Test (unitario / técnico)** | skill `dev-tester` (encadenada al cerrar HU) | Tests unitarios desde AC Gherkin + evidencias en ADO |
 | **QA** | `qa-agent` (+ `flit-test-case-generator`, `playwright-runner`, `bug-reporter`) | TCs, E2E, bugs, certificación; no sustituye al PO al cerrar Features |
+| **Norma / FUR** | `expert-doc-engine` (+ skill `expert-doc-engine`) | Resolución 20233040017145, Anexo 46, casillas y firmas del Formulario Único; no escribe código |
 | **Validación formal de PR** | `code-review-agent` (+ `security-agent` si aplica) | Convenciones, AC→tests, seguridad inline; puede bloquear merge |
 | **Coordinación** | `orchestrator-agent` | Elige workflow, delega por rol, respeta gates humanos; **no** escribe código |
 

@@ -312,6 +312,13 @@ export function Shell({
             onClick: () => window.location.assign("/admin/plataforma/mandatos"),
           },
           {
+            key: "admin-fur",
+            label: "FUR",
+            icon: FileText,
+            active: pathname.startsWith("/admin/plataforma/fur"),
+            onClick: () => window.location.assign("/admin/plataforma/fur"),
+          },
+          {
             key: "admin-notificaciones",
             label: "Notificaciones",
             icon: Bell,

@@ -113,6 +113,24 @@ public sealed class FurTransformacionesMarkingTests
         dict["requested_process_18"].Text.Should().Be("X");
     }
 
+    [Fact]
+    public void Blindaje_MarcaSiYDesmarcaNo()
+    {
+        var dict = FurFieldMapper.Map(Data(new FurTransformacionesDeclaradas(Blindaje: true)));
+
+        dict["is_armored_vehicle_yes"].Text.Should().Be("X");
+        dict["is_armored_vehicle_no"].Text.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SinBlindaje_MarcaNo()
+    {
+        var dict = FurFieldMapper.Map(Data(default));
+
+        dict["is_armored_vehicle_no"].Text.Should().Be("X");
+        dict["is_armored_vehicle_yes"].Text.Should().BeEmpty();
+    }
+
     // ── Combustible: valores del catálogo que no marcaban nada ────────────────
 
     /// <summary>

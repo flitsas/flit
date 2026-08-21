@@ -2,6 +2,7 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// HU #11643 — decide QUÉ entra en el recuadro OBSERVACIONES del FUR cuando no cabe todo.
+/// Orden y literales canónicos: <c>docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md</c>.
 ///
 /// <para><b>El problema.</b> El recuadro reúne cuatro bloques: el gravamen, el texto libre del gestor,
 /// las transformaciones declaradas y el tipo de servicio con su empresa vinculadora. El texto libre no

@@ -48,16 +48,20 @@ export function furAutoObservations(fields: FieldValue[] | null | undefined): st
 
   // ADR-0029 — transformaciones declaradas: solo se imprime el valor NUEVO, porque los campos del
   // vehículo en el FUR conservan el dato original del RUNT.
-  const cambios: [string, string, string][] = [
-    ['color', 'vehicle_color_runt', 'vehicle_color'],
-    ['combustible', 'vehicle_fuel_runt', 'vehicle_fuel'],
-    ['carrocería', 'vehicle_body_type_runt', 'vehicle_body_type'],
-  ];
-  for (const [etiqueta, runtKey, efectivoKey] of cambios) {
-    const runt = valueOf(fields, runtKey);
-    const efectivo = valueOf(fields, efectivoKey);
-    if (hasChanged(runt, efectivo)) segments.push(`Cambio de ${etiqueta}: ${display(efectivo)}.`);
+  const cambios: [boolean, string][] = [];
+  if (hasChanged(valueOf(fields, 'vehicle_color_runt'), valueOf(fields, 'vehicle_color'))
+    || valueOf(fields, 'cambio_color').toLowerCase() === 'true') {
+    cambios.push([true, `Color nuevo(NUEVO COLOR: ${display(valueOf(fields, 'vehicle_color'))})`]);
   }
+  if (hasChanged(valueOf(fields, 'vehicle_body_type_runt'), valueOf(fields, 'vehicle_body_type'))
+    || valueOf(fields, 'cambio_carroceria').toLowerCase() === 'true') {
+    cambios.push([true, `Carroceria nueva(NUEVA CARROCERIA: ${display(valueOf(fields, 'vehicle_body_type'))})`]);
+  }
+  if (hasChanged(valueOf(fields, 'vehicle_fuel_runt'), valueOf(fields, 'vehicle_fuel'))
+    || valueOf(fields, 'cambio_combustible').toLowerCase() === 'true') {
+    cambios.push([true, `COMBUSTIBLE_NUEVO: ${display(valueOf(fields, 'vehicle_fuel'))}`]);
+  }
+  for (const [, texto] of cambios) segments.push(texto);
 
   // Tipo de servicio + empresa vinculadora. Sin razón social no se imprime nada: el tipo de
   // servicio ya tiene su casilla propia y repetirlo solo gastaría renglones del recuadro.

@@ -68,11 +68,12 @@ public static class FurFieldMapper
                 esTraspaso ? "vendedor" : "comprador",
                 esTraspaso ? ["vendedor", "propietario"] : ["comprador", "propietario"]));
 
-        MarkTramite(dict, esTraspaso, data);
+        MarkTramite(dict, data);
         MarkClase(dict, data.Vehiculo.Clase);
         MarkCombustible(dict, data.Vehiculo.Combustible);
         MarkServicio(dict, data.Vehiculo.TipoServicio);
-        MarkCheckbox(dict, "is_armored_vehicle_no", true);
+        MarkCheckbox(dict, "is_armored_vehicle_yes", data.Transformaciones.Blindaje);
+        MarkCheckbox(dict, "is_armored_vehicle_no", !data.Transformaciones.Blindaje);
         MarkCheckbox(dict, "is_dismantling_armor_no", true);
 
         if (esTraspaso && comprador is not null)
@@ -194,36 +195,17 @@ public static class FurFieldMapper
     /// </summary>
     private static IEnumerable<string> FirmaRolKeys(string rol) => FlitFirmaBaulSello.RolKeys(rol);
 
-    private static void MarkTramite(Dictionary<string, FurFieldValue> dict, bool esTraspaso, FurDocumentData data)
+    /// <summary>
+    /// Numeral 3 del FUR. Las casillas objetivo (tipo ∪ prenda ∪ transformaciones) están en
+    /// <c>docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md</c>. Este método es el emisor actual; no
+    /// contradigas el artefacto en un cambio nuevo sin actualizarlo en el mismo PR.
+    /// </summary>
+    private static void MarkTramite(Dictionary<string, FurFieldValue> dict, FurDocumentData data)
     {
-        MarkCheckbox(dict, "requested_process_1", !esTraspaso);
-        MarkCheckbox(dict, "requested_process_2", esTraspaso);
-        // HU #10601, ampliado por HU #11257 — marca 11 (constitución) o 12 (levantamiento) del gravamen
-        // según la marca YA resuelta en el dominio (FurPrendaMarking): el mapper solo compara el enum,
-        // nunca un string de PrendaDecision. requested_process_1/_2 (tipo de trámite) no cambian: una
-        // matrícula con prenda sigue saliendo 1 + 11, no 2 + 11 (son casillas independientes).
-        MarkCheckbox(dict, "requested_process_11", data.PrendaMarking == FurPrendaMarking.Constitucion);
-        MarkCheckbox(dict, "requested_process_12", data.PrendaMarking == FurPrendaMarking.Levantamiento);
-
-        // HU #11641 — subtrámites simultáneos. Hasta ahora el mapper solo emitía cuatro casillas
-        // (1, 2, 11, 12): un trámite de matrícula CON cambio de color declaraba la transformación
-        // únicamente en el texto de observaciones, y la rejilla de trámite solicitado no lo decía en
-        // ninguna parte, de modo que el organismo tenía que deducir el alcance real leyendo el
-        // recuadro. Son casillas INDEPENDIENTES de 1/2 y de 11/12: una matrícula inicial con cambio
-        // de color y constitución de prenda marca 1 + 5 + 11.
-        MarkCheckbox(dict, "requested_process_5", data.Transformaciones.Color);
-        MarkCheckbox(dict, "requested_process_17", data.Transformaciones.Carroceria);
-        // El formulario oficial no tiene casilla de «cambio de combustible»: por decisión de negocio
-        // (supervisor, 2026-08-19) se marca en la 18 «OTROS». La 18 quedó libre al corregir la
-        // geometría de la HU #11640 — antes la ocupaba por error el levantamiento de prenda.
-        MarkCheckbox(dict, "requested_process_18", data.Transformaciones.Combustible);
-        // La casilla 6 «CAMBIO DE SERVICIO» NO se declara en el manifiesto, a propósito: el trámite
-        // no captura el cambio de servicio como subtrámite (no existe bandera `cambio_servicio` ni
-        // snapshot `vehicle_service_runt` en ninguna capa), de modo que marcarla exigiría inventarse
-        // el dato. Declararla sin emisor sería configuración muerta y obligaría a exceptuarla en la
-        // guardia de casillas huérfanas, debilitándola. Cuando producto decida capturarlo, la celda
-        // ya está medida: x 343,3 / y 124,0 / size 10,1 (columna de «12 LEVANTA PRENDA», fila de
-        // «1 MATRÍCULA»), verificado contra los trazos del blank oficial.
+        var marks = FurNumeral3Marks.Resolve(data);
+        foreach (var n in FurNumeral3Marks.Emittable)
+            MarkCheckbox(dict, FurNumeral3Marks.FieldId(n), marks.Contains(n));
+        // Casillas 6 y 14 no se declaran: no hay tipo en el catálogo (REGLAS-NUMERAL-3).
     }
 
     private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)

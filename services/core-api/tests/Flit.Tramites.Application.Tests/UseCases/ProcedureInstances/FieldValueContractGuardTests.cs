@@ -258,15 +258,36 @@ public sealed class FieldValueContractGuardTests
     };
 
     /// <summary>
-    /// Llaves que los documentos CONSUMEN: los literales de <c>Get(fv, "…")</c> (datos del trámite) y
-    /// de <c>Val(datos, "…")</c> (datos del RUES resueltos por actor) en <c>FurCommand</c>, más las
-    /// declaradas en <see cref="ConsumidasPorConstante"/>.
+    /// Llaves que los documentos CONSUMEN: los literales de <c>Get(fv, "…")</c> (datos del trámite),
+    /// de <c>Val(datos, "…")</c> (RUES por actor), de <c>RuntOrEffective</c>/<c>Declarada</c> (snapshot
+    /// RUNT vs valor efectivo en el FUR) en <c>FurCommand</c>, más las de
+    /// <see cref="ConsumidasPorConstante"/>.
     /// </summary>
     private static HashSet<string> LlavesConsumidas()
     {
         var fuente = string.Join('\n', Consumidores.Select(Leer));
         var regex = new Regex("(?:Get\\(fv|Val\\(datos),\\s*\"([a-z0-9_]+)\"", RegexOptions.CultureInvariant);
         var llaves = regex.Matches(fuente).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+
+        // El FUR ya no lee los snapshots RUNT con Get(fv, "vehicle_color_runt"): los pasa a
+        // RuntOrEffective / Declarada. Sin estas formas la guardia los daba por no consumidos.
+        foreach (Match m in Regex.Matches(
+                     fuente,
+                     @"RuntOrEffective\(fv,\s*""([a-z0-9_]+)""\s*,\s*""([a-z0-9_]+)""",
+                     RegexOptions.CultureInvariant))
+        {
+            llaves.Add(m.Groups[1].Value);
+            llaves.Add(m.Groups[2].Value);
+        }
+
+        foreach (Match m in Regex.Matches(
+                     fuente,
+                     @"Declarada\(fv,\s*[^,]+,\s*""([a-z0-9_]+)""\s*,\s*""([a-z0-9_]+)""",
+                     RegexOptions.CultureInvariant))
+        {
+            llaves.Add(m.Groups[1].Value);
+            llaves.Add(m.Groups[2].Value);
+        }
 
         // HU #11305 — las llaves `rues_*` que el lector enumera para el respaldo también son consumo,
         // aunque no aparezcan bajo la forma Get(fv, "…").

@@ -20,17 +20,17 @@ public sealed class FurPrendaObservationTests
     {
         var texto = FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "BANCO XYZ S.A.", "890900608");
 
-        texto.Should().Be("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A. - NIT 890900608");
+        texto.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
     }
 
     [Fact]
-    public void Compose_Constitucion_SinDocumento_NoDejaSeparadoresSueltos()
+    public void Compose_Constitucion_IgnoraNit_SoloNombre()
     {
-        var texto = FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "BANCO XYZ S.A.", null);
+        var conNit = FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "FONDEICON", "890900608");
+        var sinNit = FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "FONDEICON", null);
 
-        texto.Should().Be("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A.");
-        texto.Should().NotEndWith("-");
-        texto.Should().NotContain("NIT");
+        conNit.Should().Be("Inscripción de prenda a favor de FONDEICON");
+        sinNit.Should().Be(conNit);
     }
 
     [Theory]
@@ -50,7 +50,7 @@ public sealed class FurPrendaObservationTests
     {
         var texto = FurPrendaObservation.Compose(FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", "890900608");
 
-        texto.Should().Be("LEVANTAMIENTO DE GRAVAMEN A FAVOR DE: BANCO XYZ S.A. - NIT 890900608");
+        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A.");
     }
 
     [Fact]
@@ -58,8 +58,7 @@ public sealed class FurPrendaObservationTests
     {
         var texto = FurPrendaObservation.Compose(FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", null);
 
-        texto.Should().Be("LEVANTAMIENTO DE GRAVAMEN A FAVOR DE: BANCO XYZ S.A.");
-        texto.Should().NotContain("NIT");
+        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A.");
     }
 
     [Theory]
@@ -95,7 +94,7 @@ public sealed class FurPrendaObservationTests
     public void Compose_RecortaLosEspaciosDelCaptura()
     {
         FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "  BANCO XYZ S.A.  ", "  890900608  ")
-            .Should().Be("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A. - NIT 890900608");
+            .Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
     }
 
     // ── Join: el gravamen se antepone al resto del recuadro ──────────────────
@@ -104,25 +103,25 @@ public sealed class FurPrendaObservationTests
     public void Join_AnteponeElGravamenAlRestoDeObservaciones()
     {
         var resultado = FurPrendaObservation.Join(
-            "GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A.",
-            "Vehículo con platón adaptado. Cambio de color: ROJO.");
+            "Inscripción de prenda a favor de BANCO XYZ S.A.",
+            "Vehículo con platón adaptado. Color nuevo(NUEVO COLOR: ROJO)");
 
         resultado.Should().Be(
-            "GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A. Vehículo con platón adaptado. Cambio de color: ROJO.");
+            "Inscripción de prenda a favor de BANCO XYZ S.A. Vehículo con platón adaptado. Color nuevo(NUEVO COLOR: ROJO)");
     }
 
     [Fact]
     public void Join_SinGravamen_DevuelveElRestoIntacto()
     {
         // Regresión ADR-0029: un trámite sin prenda debe conservar exactamente el texto previo.
-        FurPrendaObservation.Join(null, "Cambio de color: ROJO.").Should().Be("Cambio de color: ROJO.");
+        FurPrendaObservation.Join(null, "Color nuevo(NUEVO COLOR: ROJO)").Should().Be("Color nuevo(NUEVO COLOR: ROJO)");
     }
 
     [Fact]
     public void Join_SoloGravamen_DevuelveElBloque()
     {
-        FurPrendaObservation.Join("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A.", null)
-            .Should().Be("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A.");
+        FurPrendaObservation.Join("Inscripción de prenda a favor de BANCO XYZ S.A.", null)
+            .Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
     }
 
     [Theory]
@@ -132,5 +131,14 @@ public sealed class FurPrendaObservationTests
     public void Join_SinNada_DejaElRecuadroComoEstaba(string? a, string? b)
     {
         FurPrendaObservation.Join(a, b).Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_Ambos_UneLevantamientoYConstitucion()
+    {
+        var texto = FurPrendaObservation.Compose(FurPrendaMarking.Ambos, "BANCO XYZ S.A.", "890900608");
+        texto.Should().StartWith(FurPrendaObservation.EtiquetaLevantamiento);
+        texto.Should().Contain(FurPrendaObservation.Etiqueta);
+        texto.Should().NotContain("NIT");
     }
 }

@@ -207,7 +207,10 @@ INSERT INTO tramites.procedure_types (
 VALUES
     -- Operativos / activos
     (uuidv7(), 'MATRICULA_NUEVA',           'Matrícula inicial',              'MATRICULAS', 'Matrícula inicial de vehículo.', true, '{}'::jsonb, 'published', 1, '{}'::jsonb, now(), 0),
+    (uuidv7(), 'MATRICULA_LEASING',         'Matrícula Leasing',              'MATRICULAS', 'Matrícula con locatario.', true, '{}'::jsonb, 'published', 1, '{}'::jsonb, now(), 0),
     (uuidv7(), 'TRASPASO_STANDARD',         'Traspaso',                       'TRASPASO',   'Traspaso de propiedad.', true, '{}'::jsonb, 'published', 1, '{}'::jsonb, now(), 0),
+    (uuidv7(), 'TRASPASO_UNILATERAL',       'Traspaso Unilateral',            'TRASPASO',   'Traspaso unilateral a locatario.', true, '{}'::jsonb, 'published', 1, '{}'::jsonb, now(), 0),
+    (uuidv7(), 'TRASPASO_TRANSFERENCIA_DE_DOMINIO', 'Traspaso con Transferencia de Dominio', 'TRASPASO', 'Traspaso de un locatario a otro.', true, '{}'::jsonb, 'published', 1, '{}'::jsonb, now(), 0),
     (uuidv7(), 'CAMBIO_LOCATARIO',          'Cambio de locatario',            'OTROS',      'Cambio de locatario (leasing).', true, '{}'::jsonb, 'published', 1, '{}'::jsonb, now(), 0),
     (uuidv7(), 'CAMBIO_CARROCERIA',         'Cambio de carrocería',           'OTROS',      'Cambio de carrocería.', true, '{}'::jsonb, 'published', 1, '{}'::jsonb, now(), 0),
     (uuidv7(), 'BLINDAJE',                  'Blindaje',                       'OTROS',      'Blindaje de vehículo.', true, '{}'::jsonb, 'published', 1, '{}'::jsonb, now(), 0),

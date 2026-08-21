@@ -97,6 +97,9 @@ public enum FurPrendaMarking
 
     /// <summary>Levanta un gravamen existente (<c>levantar</c>): casilla 12.</summary>
     Levantamiento,
+
+    /// <summary>Levanta e inscribe en el mismo FUR (casillas 11 y 12). Simulador / dictamen art. 5.1.8.</summary>
+    Ambos,
 }
 
 /// <summary>DocTipos de los adjuntos de prenda (compartidos con <c>AttachmentRules.ValidTipos</c>).</summary>

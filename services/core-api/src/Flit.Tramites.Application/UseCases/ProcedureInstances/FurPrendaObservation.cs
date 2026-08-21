@@ -20,14 +20,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// </summary>
 public static class FurPrendaObservation
 {
-    /// <summary>Etiqueta de constitución. Constante para que el test la afirme sin duplicar el literal.</summary>
-    public const string Etiqueta = "GRAVAMEN / PRENDA A FAVOR DE:";
+    /// <summary>Inscripción / registro de prenda (casilla 11).</summary>
+    public const string Etiqueta = "Inscripción de prenda a favor de";
 
-    /// <summary>
-    /// Etiqueta de levantamiento (HU #11257, CF11). Constante para que el test la afirme sin duplicar
-    /// el literal.
-    /// </summary>
-    public const string EtiquetaLevantamiento = "LEVANTAMIENTO DE GRAVAMEN A FAVOR DE:";
+    /// <summary>Levantamiento de prenda (casilla 12).</summary>
+    public const string EtiquetaLevantamiento = "Levantamiento de prenda a favor de";
 
     /// <summary>
     /// Devuelve el bloque de gravamen, o <c>null</c> si no hay nada que declarar.
@@ -40,6 +37,13 @@ public static class FurPrendaObservation
     /// </summary>
     public static string? Compose(FurPrendaMarking marking, string? acreedorNombre, string? acreedorDocumento)
     {
+        if (marking == FurPrendaMarking.Ambos)
+        {
+            return Join(
+                Compose(FurPrendaMarking.Levantamiento, acreedorNombre, acreedorDocumento),
+                Compose(FurPrendaMarking.Constitucion, acreedorNombre, acreedorDocumento));
+        }
+
         var etiqueta = marking switch
         {
             FurPrendaMarking.Constitucion => Etiqueta,
@@ -53,10 +57,7 @@ public static class FurPrendaObservation
         if (string.IsNullOrEmpty(nombre))
             return null;
 
-        var documento = acreedorDocumento?.Trim();
-        return string.IsNullOrEmpty(documento)
-            ? $"{etiqueta} {nombre}"
-            : $"{etiqueta} {nombre} - NIT {documento}";
+        return $"{etiqueta} {nombre}";
     }
 
     /// <summary>
