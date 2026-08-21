@@ -6287,6 +6287,60 @@ paths:
                 required: [error]
         "422": { description: "Solicitud inválida." }
 
+  /api/v1/admin/companies/{tenantId}/identity-validations/by-document:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía gestora).
+    get:
+      operationId: adminIdentityVigenciaByDocument
+      tags: ["Admin · Identidad"]
+      security:
+        - bearerAuth: []
+      summary: "Vigencia de identidad de una persona por documento (fuente única, ADR-0050)"
+      description: |
+        HU #11751 (ADR-0050) — resuelve el estado de identidad de una persona por tipo+número de
+        documento, leyendo EXCLUSIVAMENTE del módulo Identidad
+        (`tramites.procedure_instance_biometric_validations`). Devuelve UN único registro, no una
+        grilla. El tenant se deriva de la ruta (`tenantId`); no exige `X-Tenant-Id`. Normaliza el
+        documento con Trim + mayúsculas invariantes (ADR-0039). Reemplaza, para esta consulta, a las
+        rutas de `admin.admin_identity_validations`.
+      parameters:
+        - name: documentType
+          in: query
+          required: true
+          schema: { type: string }
+        - name: documentNumber
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Vigencia resuelta (posiblemente sin_validacion si no hay ninguna)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentityVigenciaByDocumentResponse"
+        "400":
+          description: "Falta documentType o documentNumber."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field: { type: string }
+                        code: { type: string, example: documento_requerido }
+                        message: { type: string }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere AdminCompany del propio tenant o SuperAdmin)." }
+
   /api/v1/tramites/instances/{id}/deferred-signature:
     parameters:
       - name: id
@@ -6620,6 +6674,22 @@ components:
         reused: { type: boolean, description: "true si se reutilizó una identidad ya vigente." }
         provider: { type: string, description: "Proveedor de validación biométrica." }
       required: [id, status, reused, provider]
+
+    AdminIdentityVigenciaByDocumentResponse:
+      type: object
+      description: >
+        HU #11751 (ADR-0050) — vigencia de identidad de UNA persona por documento, resuelta desde el
+        módulo Identidad. `documentType`/`documentNumber` son los normalizados (Trim + mayúsculas
+        invariantes), no necesariamente lo que se envió en la query.
+      properties:
+        documentType: { type: string }
+        documentNumber: { type: string, description: "PII (Ley 1581)." }
+        status:
+          type: string
+          enum: [sin_validacion, en_curso, aprobada_vigente, vencida]
+        validatedAt: { type: string, format: date-time, nullable: true }
+        validUntil: { type: string, format: date-time, nullable: true }
+      required: [documentType, documentNumber, status]
 
     # ── Admin · Baúl de Firmas (HU #10643, #11175) ───────────────────────────
     SignatureVaultResponse:

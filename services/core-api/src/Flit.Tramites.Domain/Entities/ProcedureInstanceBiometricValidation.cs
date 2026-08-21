@@ -374,3 +374,66 @@ public static class BiometricRules
         return string.Equals(validation.DocumentType.Trim(), tipoDoc.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 }
+
+/// <summary>
+/// HU #11751 (ADR-0050) — los CUATRO estados de vigencia que expone la consulta admin de identidad por
+/// documento. No son los estados persistidos de <see cref="BiometricEstados"/>: son la clasificación
+/// que ve un consumidor externo (área admin) que solo necesita saber si corresponde exigir una
+/// validación nueva o no.
+/// </summary>
+public static class IdentityVigenciaEstados
+{
+    /// <summary>Ninguna validación para ese documento en el tenant (o la única que hay fue rechazada
+    /// o falló su envío: ver nota de diseño en <see cref="IdentityVigenciaClassifier"/>).</summary>
+    public const string SinValidacion = "sin_validacion";
+
+    /// <summary>Hay una validación no terminal (enviada, en proceso o encolada de envío).</summary>
+    public const string EnCurso = "en_curso";
+
+    /// <summary>Aprobada y dentro de la ventana de <see cref="BiometricRules.VigenciaDias"/>.</summary>
+    public const string AprobadaVigente = "aprobada_vigente";
+
+    /// <summary>Aprobada pero fuera de ventana, o expirada explícitamente.</summary>
+    public const string Vencida = "vencida";
+}
+
+/// <summary>
+/// HU #11751 (ADR-0050) — clasifica la validación MÁS RECIENTE de una persona en los cuatro estados de
+/// <see cref="IdentityVigenciaEstados"/>. Es el ÚNICO punto de esta regla: lo consume el endpoint admin
+/// de consulta por documento (<c>IdentityVigenciaPorDocumentoResolver</c>, capa Application) y
+/// <c>MandateSignerDirectory</c> (HU #11752), para que ambos hablen el mismo idioma sobre "¿esta persona
+/// tiene identidad vigente?" sin duplicar la regla de vigencia (que sigue viviendo en
+/// <see cref="BiometricRules.EsAprobadaVigente"/>: esta clase no la reimplementa, solo la envuelve).
+/// </summary>
+public static class IdentityVigenciaClassifier
+{
+    /// <summary>
+    /// Clasifica <paramref name="latest"/> (la validación más reciente del documento, o <c>null</c> si
+    /// no hay ninguna) en uno de los cuatro estados.
+    ///
+    /// <para><b>Decisión de diseño — rechazada / error de envío:</b> se tratan igual que la AUSENCIA de
+    /// validación (<see cref="IdentityVigenciaEstados.SinValidacion"/>), no como un quinto estado. La
+    /// razón es que, desde el punto de vista del consumidor admin, ambos casos exigen exactamente la
+    /// misma acción — iniciar una prevalidación nueva desde el módulo Identidad — y el ADR-0050 solo
+    /// pide "exactamente cuatro estados". Distinguir "rechazada" complicaría el contrato sin cambiar la
+    /// acción que el operador debe tomar.</para>
+    /// </summary>
+    public static string Classify(ProcedureInstanceBiometricValidation? latest, DateTimeOffset now)
+    {
+        if (latest is null)
+            return IdentityVigenciaEstados.SinValidacion;
+
+        return latest.Status switch
+        {
+            BiometricEstados.Aprobado => BiometricRules.EsAprobadaVigente(latest, now)
+                ? IdentityVigenciaEstados.AprobadaVigente
+                : IdentityVigenciaEstados.Vencida,
+            BiometricEstados.Expirado => IdentityVigenciaEstados.Vencida,
+            BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.PendienteEnvio
+                => IdentityVigenciaEstados.EnCurso,
+            // Rechazado, error_envio o cualquier estado futuro no contemplado: sin_validacion (ver nota
+            // de diseño arriba).
+            _ => IdentityVigenciaEstados.SinValidacion,
+        };
+    }
+}
