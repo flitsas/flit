@@ -98,7 +98,9 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
   const [signers, setSigners] = useState<MandateSimulatorSignerOption[]>([]);
   const [signersStatus, setSignersStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
-  const [typesStatus, setTypesStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  // Arranca en "loading": el efecto de carga corre una sola vez al montar, así que no hay ventana
+  // real de "idle" y no hace falta anunciarla con un setState dentro del efecto.
+  const [typesStatus, setTypesStatus] = useState<"idle" | "loading" | "ready" | "error">("loading");
   const [previewing, setPreviewing] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,7 +137,6 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
 
   useEffect(() => {
     let cancelled = false;
-    setTypesStatus("loading");
     void tramitesClient
       .listPublishedProcedureTypes()
       .then((items) => {
@@ -161,6 +162,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
   useEffect(() => {
     if (typesStatus !== "ready") return;
     if (!family) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- cambiar de familia invalida el tipo elegido: dejarlo apuntando a un code de otra familia mandaría al preview un trámite que el select ya no muestra
       setProcedureTypeCode("");
       return;
     }
@@ -180,6 +182,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
 
   useEffect(() => {
     const inferred = inferFromType(selectedType);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de los complementos al cambiar de trámite: los que el propio tipo ya implica quedan marcados y bloqueados, y los marcados a mano para el trámite anterior no pueden arrastrarse al nuevo
     setCambioColor(inferred.color);
     setCambioCombustible(inferred.combustible);
     setCambioCarroceria(inferred.carroceria);
