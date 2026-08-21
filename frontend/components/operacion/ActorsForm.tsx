@@ -622,6 +622,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   };
   // Estado de la consulta RUNT del representante legal por índice de actor jurídico.
   const [rlRunt, setRlRunt] = useState<Record<number, LookupState>>({});
+  // Novedad 28 (AC3) — se enciende SOLO cuando un actor precargado cambia el documento del RL
+  // (rama `isPreloaded && identityDocChanged` de `handleRlIdentityDocChange`) y exige una consulta
+  // RUNT del representante exitosa antes de continuar. Se apaga cuando esa consulta llega a
+  // `found`. Nunca se enciende para captura manual (AC4): así no toca actores jurídicos que jamás
+  // pasaron por el directorio.
+  const [rlLookupRequired, setRlLookupRequired] = useState<Record<number, boolean>>({});
   // HU #10937 — representante ELEGIDO (índice en la lista precargada) por índice de actor jurídico,
   // cuando la compañía tiene varios. Default 0 (el primario). Gobierna qué representante se precarga y
   // firma, y las banderas mostradas.
@@ -1105,6 +1111,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           numeroDocumento: result.documentNumber || documentNumber,
         });
         setRlRuntFor(index, { status: 'found', kind: 'runt', result });
+        // Novedad 28 (AC3) — consulta RUNT del representante exitosa: se levanta la exigencia.
+        setRlLookupRequired((prev) => ({ ...prev, [index]: false }));
       } else {
         setRlRuntFor(index, { status: 'not_found' });
       }
@@ -1253,7 +1261,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (!validateActors(actors, modalidad).valid) return false;
 
     // Gate duro: cada actor debe tener consulta RUNT/RUES/directorio exitosa antes de persistir.
-    if (actors.some((_, i) => !isIdentityConsultationReady(runt[i]?.status))) {
+    // Novedad 28 (AC3) — además, si el documento del RL de un actor precargado cambió, ese
+    // representante también debe tener una consulta RUNT exitosa (no basta con reconsultar el NIT).
+    if (
+      actors.some(
+        (_, i) =>
+          !isIdentityConsultationReady(runt[i]?.status) ||
+          (rlLookupRequired[i] && !isIdentityConsultationReady(rlRunt[i]?.status)),
+      )
+    ) {
       return false;
     }
 
@@ -1283,8 +1299,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   useImperativeHandle(ref, () => ({ save: submitActors, hasPendingChanges: pending.hasPendingChanges }));
 
   // Notifica al wizard si Continuar puede habilitarse (consulta exitosa en todos los actores).
-  const consultationReady = actors.every((_, i) =>
-    isIdentityConsultationReady(runt[i]?.status),
+  // Novedad 28 (AC3) — mismo refuerzo del gate de guardado: si el RL de un actor precargado cambió
+  // de documento, también exige su consulta RUNT exitosa.
+  const consultationReady = actors.every(
+    (_, i) =>
+      isIdentityConsultationReady(runt[i]?.status) &&
+      (!rlLookupRequired[i] || isIdentityConsultationReady(rlRunt[i]?.status)),
   );
   useEffect(() => {
     onConsultationGateChange?.(consultationReady);
@@ -1690,7 +1710,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const runtState: LookupState = runt[index] ?? { status: 'idle' };
     const rlErrors = showErrors ? validation.byActor[index] : {};
     // P5 — si el actor fue precargado desde el directorio, el RL ya está rellenado.
-    const isPreloaded = runtState.status === 'found' && runtState.kind === 'preload';
+    // Novedad 28 (AC2) — `runt[index]` es la consulta del ACTOR (RUES/directorio), no la del RL: el
+    // efecto de rehidratación de sessionStorage (más arriba, `restoreActorConsultation`) la vuelve a
+    // poner en "found" en cuanto el NIT del actor no cambió, aunque `handleRlIdentityDocChange` la
+    // resetee a `idle`. Por eso el botón necesita el flag explícito `rlLookupRequired`, no basta con
+    // el reset transitorio de `runt[index]`.
+    const isPreloaded =
+      runtState.status === 'found' && runtState.kind === 'preload' && !rlLookupRequired[index];
 
     // Solo el cambio de documento (número/tipo) del RL invalida la consulta RUES/directorio
     // y pide volver a consultar. Nombre, correo, teléfono y demás datos básicos se pueden
@@ -1702,6 +1728,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         updateRepLegal(index, { ...patch, mecanismoFirma: undefined });
         setRuntFor(index, { status: 'idle' });
         setRlRuntFor(index, { status: 'idle' });
+        // Novedad 28 (AC3) — el documento del RL cambió sobre un actor precargado: exige una
+        // consulta RUNT del representante exitosa antes de poder continuar.
+        setRlLookupRequired((prev) => ({ ...prev, [index]: true }));
         return;
       }
       updateRepLegal(index, patch);
@@ -1776,21 +1805,38 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           {!readOnly && isPreloaded && (
             <button
               type="button"
-              onClick={() => conVelo(handleRlLookup(index))}
-              disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
-              // Secundario en navy y a plena opacidad. Antes iba en gris al 60%, que sobre blanco no
-              // llega a AA: para restar peso a una acción el sistema usa el botón secundario, no
-              // atenuar el texto — atenuado se lee como deshabilitado y encima deja de leerse.
+              disabled
+              aria-describedby={`${index}-rl-runt-preloaded-hint`}
+              // Novedad 28 (AC1) — nace deshabilitado: los datos del RL vienen resueltos desde el
+              // directorio y no hace falta reconsultar. Secundario en navy y a plena opacidad (no
+              // atenuar el texto al 60%: ya hubo una corrección de contraste por eso en este mismo
+              // archivo — ver comentario histórico más abajo).
               className="h-[42px] shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-50"
               style={{ borderColor: '#162744', color: '#162744' }}
-              title="Datos ya precargados. Consulta RUNT solo si necesitas actualizar."
+              title="Datos ya precargados desde el directorio. Cambia el documento del representante para habilitar la consulta."
             >
-              {rlState.status === 'loading' ? 'Consultando…' : 'Actualizar RUNT'}
+              Actualizar RUNT
             </button>
           )}
           <div className="hidden lg:block" aria-hidden="true" />
-          {(rlState.status === 'found' || rlState.status === 'not_found' || rlState.status === 'error') && (
+          {(isPreloaded ||
+            rlState.status === 'found' ||
+            rlState.status === 'not_found' ||
+            rlState.status === 'error') && (
             <div className="lg:col-span-4">
+              {/* Novedad 28 (AC5) — motivo del deshabilitado, no solo opacidad. Mismo id que
+                  `aria-describedby` del botón de arriba. */}
+              {isPreloaded && (
+                <p
+                  id={`${index}-rl-runt-preloaded-hint`}
+                  className="text-xs opacity-70"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Datos precargados desde el directorio. Cambia el tipo o número de documento del
+                  representante para habilitar la consulta RUNT.
+                </p>
+              )}
               {rlState.status === 'found' && (
                 <p className="text-xs" style={{ color: INLINE_ALERT_TONES.info.color }}>
                   Representante encontrado en RUNT.
