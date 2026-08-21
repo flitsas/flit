@@ -241,4 +241,17 @@ public sealed class FurGeometriaCasillasTests
             "  desbordadas:\n    {1}\n  (sin recuadro propio, no verificables por este método: {2})",
             formato, string.Join("\n    ", desbordadas), string.Join(", ", sinRecuadro));
     }
+
+    [Fact]
+    public void Alerta_LimPropiedadYOtro_MismaFilaColumnasDistintas()
+    {
+        const FurTemplateFormat formato = FurTemplateFormat.Automotor;
+        var lim = CeldaDe(formato, "alert_data_code_2");
+        var otro = CeldaDe(formato, "alert_data_code_4");
+
+        lim.Y0.Should().BeApproximately(otro.Y0, 1.0,
+            "LIM. PROPIEDAD y OTRO están en la misma fila del numeral 20");
+        lim.X0.Should().BeLessThan(otro.X0,
+            "LIM. PROPIEDAD (columna 2) queda a la izquierda de OTRO (columna 4)");
+    }
 }

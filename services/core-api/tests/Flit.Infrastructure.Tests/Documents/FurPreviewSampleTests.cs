@@ -100,6 +100,9 @@ public sealed class FurPreviewSampleTests
         mapped["requested_process_17"].Text.Should().Be("X");
         mapped["requested_process_18"].Text.Should().Be("X");
         mapped["requested_process_12"].Text.Should().Be("X");
+        mapped["alert_data_code_4"].Text.Should().Be("X");
+        mapped["alert_data_code_2"].Text.Should().BeEmpty();
+        mapped["alert_data_code_5"].Text.Should().Be("FONDEICON");
         mapped["is_armored_vehicle_yes"].Text.Should().Be("X");
         mapped["is_armored_vehicle_no"].Text.Should().BeEmpty();
     }
@@ -178,6 +181,9 @@ public sealed class FurPreviewSampleTests
         data.Observaciones.Should().NotContain("[OBSERVACIONES DE SIMULACIÓN]");
         mapped["observations"].Text.Should().Be(data.Observaciones);
         mapped["observations"].Text.Should().NotBeNullOrWhiteSpace();
+        mapped["alert_data_code_2"].Text.Should().Be("X");
+        mapped["alert_data_code_4"].Text.Should().BeEmpty();
+        mapped["alert_data_code_5"].Text.Should().Be("FONDEICON");
     }
 
     [Fact]

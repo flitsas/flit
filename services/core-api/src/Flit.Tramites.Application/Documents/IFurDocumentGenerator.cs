@@ -116,10 +116,8 @@ public sealed record FurDocumentData(
     // transportaba solo `bool TienePrenda`: `levantar` colapsaba al mismo `false` que "sin prenda", así
     // que el generador no podía distinguirlos. Por defecto sin marcación.
     FurPrendaMarking PrendaMarking = FurPrendaMarking.Ninguna,
-    // Beneficiario del gravamen. HU #10989: su TEXTO ya no se transporta hasta el mapper — se compone
-    // en GenerarFurHandler (FurPrendaObservation) y llega impreso dentro de Observaciones, porque el
-    // recuadro OBSERVACIONES es el sitio del formulario donde se declara (decisión D2 del plan de
-    // completitud documental). Este campo queda como dato del modelo para consumidores futuros.
+    // Beneficiario del gravamen. Se imprime en el numeral 20 «A FAVOR DE» (alert_data_code_5) y, si hay
+    // nombre, también en el párrafo 23 vía FurPrendaObservation. Sin nombre: sí casilla de alerta, campo vacío.
     string? AcreedorPrenda = null,
     // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
     // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).

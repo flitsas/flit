@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-19-hu11641-casillas-transformaciones",
+  "version": "2026-08-21-numeral-20-alertas-prenda",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -577,6 +577,38 @@
       "fontSize": 7.8,
       "bold": true,
       "align": "left"
+    },
+    {
+      "id": "alert_data_code_1",
+      "page": 1,
+      "type": "checkbox",
+      "x": 406.0,
+      "y": 343.0,
+      "size": 8.0
+    },
+    {
+      "id": "alert_data_code_2",
+      "page": 1,
+      "type": "checkbox",
+      "x": 460.0,
+      "y": 343.0,
+      "size": 8.0
+    },
+    {
+      "id": "alert_data_code_3",
+      "page": 1,
+      "type": "checkbox",
+      "x": 489.0,
+      "y": 343.0,
+      "size": 8.0
+    },
+    {
+      "id": "alert_data_code_4",
+      "page": 1,
+      "type": "checkbox",
+      "x": 530.0,
+      "y": 343.0,
+      "size": 8.0
     },
     {
       "id": "alert_data_code_5",
