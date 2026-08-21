@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 // Novedad 28 — el botón "Consultar RUNT" del representante legal nace deshabilitado cuando el
 // actor jurídico viene precargado desde el directorio (HU #10906), y su consulta es obligatoria
 // si cambia el documento del representante. Ver
-// `.claude/state/pending-work-items/novedad-28-runt-rl-precargado.md` (AC1-AC5).
+// `.claude/state/pending-work-items/novedad-28-runt-rl-precargado.md` (AC1-AC6).
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
@@ -204,5 +204,91 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
     },
     10000,
+  );
+
+  it(
+    'AC6: revertir el documento del RL al valor original vuelve a deshabilitar el botón y levanta el gate',
+    async () => {
+      const user = await renderPreloadedJuridicalBuyer();
+      await fillRequiredActorFields(user);
+
+      const numeroDocRl = document.getElementById('0-rl-numeroDoc') as HTMLInputElement;
+      expect(numeroDocRl.value).toBe('79123456');
+
+      // Borra un dígito: diverge de la línea base y el botón se habilita.
+      await user.type(numeroDocRl, '{backspace}');
+      expect(numeroDocRl.value).toBe('7912345');
+      expect(screen.getByRole('button', { name: 'Consultar RUNT' })).not.toBeDisabled();
+
+      // Lo vuelve a escribir ANTES de consultar: deja de divergir, así que el botón vuelve a
+      // nacer deshabilitado y no hace falta ninguna consulta al RUNT.
+      await user.type(numeroDocRl, '6');
+      expect(numeroDocRl.value).toBe('79123456');
+      expect(screen.getByRole('button', { name: 'Actualizar RUNT' })).toBeDisabled();
+
+      await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
+      await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
+      expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
+    },
+    15000,
+  );
+
+  it(
+    'AC6 (regresión): editar el documento después de una consulta exitosa invalida esa consulta',
+    async () => {
+      const user = await renderPreloadedJuridicalBuyer();
+      await fillRequiredActorFields(user);
+
+      const numeroDocRl = document.getElementById('0-rl-numeroDoc') as HTMLInputElement;
+      await user.clear(numeroDocRl);
+      await user.type(numeroDocRl, '79999999');
+
+      mocks.runtPersonLookup.mockResolvedValue(RUNT_FOUND);
+      await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+      await screen.findByText('Representante encontrado en RUNT.');
+
+      // El documento vuelve a cambiar: el `found` anterior corresponde a un número que ya no es el
+      // vigente, así que no puede seguir satisfaciendo el gate.
+      await user.type(numeroDocRl, '{backspace}');
+      expect(screen.queryByText('Representante encontrado en RUNT.')).toBeNull();
+
+      await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
+      expect(mocks.saveActors).not.toHaveBeenCalled();
+    },
+    15000,
+  );
+
+  it(
+    'AC6: revertir al documento original restituye el mecanismo de firma elegido',
+    async () => {
+      // Con firma e identidad vigentes aparece el selector de mecanismo (HU #11061).
+      mocks.lookupLegalRepresentativeByNit.mockResolvedValue({
+        ...MATCH,
+        identidadVigente: true,
+        representantes: [{ ...MATCH.representantes![0], identidadVigente: true }],
+      });
+      const user = userEvent.setup();
+      render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+      await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+      await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
+      await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
+      await screen.findByText('Precargado desde el directorio de la compañía');
+
+      const mecanismo = document.getElementById('0-mecanismo-firma') as HTMLSelectElement;
+      await user.selectOptions(mecanismo, 'identidad');
+      expect(mecanismo.value).toBe('identidad');
+
+      const numeroDocRl = document.getElementById('0-rl-numeroDoc') as HTMLInputElement;
+      await user.type(numeroDocRl, '{backspace}');
+      await user.type(numeroDocRl, '6');
+      expect(numeroDocRl.value).toBe('79123456');
+
+      // Al volver al documento de la línea base se recupera el mecanismo que estaba elegido: que
+      // revertir el número dejara la firma perdida sería justo lo que la novedad pide evitar.
+      expect(
+        (document.getElementById('0-mecanismo-firma') as HTMLSelectElement).value,
+      ).toBe('identidad');
+    },
+    15000,
   );
 });

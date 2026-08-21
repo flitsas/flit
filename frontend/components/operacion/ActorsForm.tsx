@@ -301,6 +301,18 @@ type LookupState =
 /** Solo estados `found` son candidatas a rehidratación al volver al paso. */
 type FoundLookupState = Extract<LookupState, { status: 'found' }>;
 
+/**
+ * Novedad 28 (AC6) — línea base del documento del RL en el momento en que empezó a divergir de la
+ * precarga del directorio (valores PREVIOS al primer cambio de tipo/número). Se registra UNA sola
+ * vez por índice de actor; sirve para: (a) detectar si el operador terminó revirtiendo el
+ * documento a su valor original, y (b) restituir `mecanismoFirma` si así fue.
+ */
+type RlBaselineDoc = {
+  tipoDocumento?: ActorDocumentType;
+  numeroDocumento?: string;
+  mecanismoFirma?: MecanismoFirma;
+};
+
 type ActorConsultationCacheEntry = {
   rol: ActorRol;
   tipoDocumento: string;
@@ -622,12 +634,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   };
   // Estado de la consulta RUNT del representante legal por índice de actor jurídico.
   const [rlRunt, setRlRunt] = useState<Record<number, LookupState>>({});
-  // Novedad 28 (AC3) — se enciende SOLO cuando un actor precargado cambia el documento del RL
-  // (rama `isPreloaded && identityDocChanged` de `handleRlIdentityDocChange`) y exige una consulta
-  // RUNT del representante exitosa antes de continuar. Se apaga cuando esa consulta llega a
-  // `found`. Nunca se enciende para captura manual (AC4): así no toca actores jurídicos que jamás
-  // pasaron por el directorio.
-  const [rlLookupRequired, setRlLookupRequired] = useState<Record<number, boolean>>({});
+  // Novedad 28 (AC6) — línea base por índice de actor jurídico: se registra UNA sola vez, la
+  // primera vez que el documento del RL cambia sobre una precarga viva (nunca para captura manual,
+  // AC4). Mientras exista, el par (tipo, número) ACTUAL se compara contra ella para derivar si el
+  // RL "diverge" — y por tanto exige consulta RUNT — o si el operador revirtió al valor original.
+  const [rlBaselineDoc, setRlBaselineDoc] = useState<Record<number, RlBaselineDoc>>({});
+
+  // Novedad 28 (AC6) — divergencia derivada: hay línea base Y el documento actual difiere de ella
+  // (tipo comparado tal cual por ser enum; número con `trim()`, sin mayúsculas ni separadores).
+  const isRlDocDivergent = (index: number): boolean => {
+    const baseline = rlBaselineDoc[index];
+    if (!baseline) return false;
+    const rl = actors[index]?.representanteLegal;
+    return (
+      (rl?.tipoDocumento ?? undefined) !== baseline.tipoDocumento ||
+      (rl?.numeroDocumento ?? '').trim() !== (baseline.numeroDocumento ?? '').trim()
+    );
+  };
   // HU #10937 — representante ELEGIDO (índice en la lista precargada) por índice de actor jurídico,
   // cuando la compañía tiene varios. Default 0 (el primario). Gobierna qué representante se precarga y
   // firma, y las banderas mostradas.
@@ -1123,8 +1146,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           numeroDocumento: result.documentNumber || documentNumber,
         });
         setRlRuntFor(index, { status: 'found', kind: 'runt', result });
-        // Novedad 28 (AC3) — consulta RUNT del representante exitosa: se levanta la exigencia.
-        setRlLookupRequired((prev) => ({ ...prev, [index]: false }));
+        // Novedad 28 (AC6) — ya no hace falta apagar nada aquí: la exigencia es derivada
+        // (`isRlDocDivergent`), se apaga sola cuando el documento coincide con la línea base.
       } else {
         setRlRuntFor(index, { status: 'not_found' });
       }
@@ -1273,13 +1296,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (!validateActors(actors, modalidad).valid) return false;
 
     // Gate duro: cada actor debe tener consulta RUNT/RUES/directorio exitosa antes de persistir.
-    // Novedad 28 (AC3) — además, si el documento del RL de un actor precargado cambió, ese
-    // representante también debe tener una consulta RUNT exitosa (no basta con reconsultar el NIT).
+    // Novedad 28 (AC3/AC6) — además, si el documento del RL diverge de la línea base de precarga,
+    // ese representante también debe tener una consulta RUNT exitosa (no basta con reconsultar el
+    // NIT). Al revertir el documento a su valor original, la divergencia desaparece y el gate se
+    // levanta solo, sin exigir una nueva consulta.
     if (
       actors.some(
         (_, i) =>
           !isIdentityConsultationReady(runt[i]?.status) ||
-          (rlLookupRequired[i] && !isIdentityConsultationReady(rlRunt[i]?.status)),
+          (isRlDocDivergent(i) && !isIdentityConsultationReady(rlRunt[i]?.status)),
       )
     ) {
       return false;
@@ -1311,12 +1336,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   useImperativeHandle(ref, () => ({ save: submitActors, hasPendingChanges: pending.hasPendingChanges }));
 
   // Notifica al wizard si Continuar puede habilitarse (consulta exitosa en todos los actores).
-  // Novedad 28 (AC3) — mismo refuerzo del gate de guardado: si el RL de un actor precargado cambió
-  // de documento, también exige su consulta RUNT exitosa.
+  // Novedad 28 (AC3/AC6) — mismo refuerzo del gate de guardado: solo mientras el RL diverja de la
+  // línea base exige su consulta RUNT exitosa.
   const consultationReady = actors.every(
     (_, i) =>
       isIdentityConsultationReady(runt[i]?.status) &&
-      (!rlLookupRequired[i] || isIdentityConsultationReady(rlRunt[i]?.status)),
+      (!isRlDocDivergent(i) || isIdentityConsultationReady(rlRunt[i]?.status)),
   );
   useEffect(() => {
     onConsultationGateChange?.(consultationReady);
@@ -1722,13 +1747,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const runtState: LookupState = runt[index] ?? { status: 'idle' };
     const rlErrors = showErrors ? validation.byActor[index] : {};
     // P5 — si el actor fue precargado desde el directorio, el RL ya está rellenado.
-    // Novedad 28 (AC2) — `runt[index]` es la consulta del ACTOR (RUES/directorio), no la del RL: el
-    // efecto de rehidratación de sessionStorage (más arriba, `restoreActorConsultation`) la vuelve a
-    // poner en "found" en cuanto el NIT del actor no cambió, aunque `handleRlIdentityDocChange` la
-    // resetee a `idle`. Por eso el botón necesita el flag explícito `rlLookupRequired`, no basta con
-    // el reset transitorio de `runt[index]`.
-    const isPreloaded =
-      runtState.status === 'found' && runtState.kind === 'preload' && !rlLookupRequired[index];
+    // Novedad 28 (AC6) — `runt[index]` es la consulta CRUDA del ACTOR (RUES/directorio), no la del
+    // RL: el efecto de rehidratación de sessionStorage (más arriba, `restoreActorConsultation`) la
+    // mantiene en "found" en cuanto el NIT del actor no cambió. Lo que apaga `isPreloaded` ya no es
+    // ese estado transitorio sino la divergencia DERIVADA contra la línea base (`rlBaselineDoc`):
+    // si el operador revierte el documento del RL a su valor original, deja de divergir y la
+    // precarga "revive" sin volver a consultar nada.
+    const rawPreloadedLive = runtState.status === 'found' && runtState.kind === 'preload';
+    let baseline = rlBaselineDoc[index];
+    const isPreloaded = rawPreloadedLive && !isRlDocDivergent(index);
 
     // Solo el cambio de documento (número/tipo) del RL invalida la consulta RUES/directorio
     // y pide volver a consultar. Nombre, correo, teléfono y demás datos básicos se pueden
@@ -1736,16 +1763,48 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const handleRlIdentityDocChange = (patch: Partial<RepresentanteLegal>) => {
       const identityDocChanged =
         patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined;
-      if (isPreloaded && identityDocChanged) {
-        updateRepLegal(index, { ...patch, mecanismoFirma: undefined });
-        setRuntFor(index, { status: 'idle' });
-        setRlRuntFor(index, { status: 'idle' });
-        // Novedad 28 (AC3) — el documento del RL cambió sobre un actor precargado: exige una
-        // consulta RUNT del representante exitosa antes de poder continuar.
-        setRlLookupRequired((prev) => ({ ...prev, [index]: true }));
+      if (!identityDocChanged) {
+        updateRepLegal(index, patch);
         return;
       }
-      updateRepLegal(index, patch);
+
+      if (!baseline) {
+        if (!rawPreloadedLive) {
+          // Captura manual (AC4): nunca hubo precarga cruda para este actor — comportamiento de
+          // siempre, sin línea base ni gate adicional.
+          updateRepLegal(index, patch);
+          return;
+        }
+        // Novedad 28 (AC6) — primera vez que se toca el documento de un RL precargado: fija la
+        // línea base con los valores PREVIOS al patch (incluido `mecanismoFirma`, para poder
+        // restituirlo si el operador termina revirtiendo al número original).
+        baseline = {
+          tipoDocumento: rl.tipoDocumento,
+          numeroDocumento: rl.numeroDocumento,
+          mecanismoFirma: rl.mecanismoFirma,
+        };
+        setRlBaselineDoc((prev) => ({ ...prev, [index]: baseline! }));
+        setRuntFor(index, { status: 'idle' });
+      }
+
+      const nextTipo = patch.tipoDocumento !== undefined ? patch.tipoDocumento : rl.tipoDocumento;
+      const nextNumero =
+        patch.numeroDocumento !== undefined ? patch.numeroDocumento : rl.numeroDocumento;
+      const staysAtBaseline =
+        nextTipo === baseline.tipoDocumento &&
+        (nextNumero ?? '').trim() === (baseline.numeroDocumento ?? '').trim();
+
+      // Novedad 28 (AC6 + defecto de `rlRunt` obsoleto) — con línea base viva, CUALQUIER cambio de
+      // documento invalida la consulta del RL (no solo el primero): si no, un "found" que
+      // corresponde a un número que ya no es el vigente se cuela en el gate, o queda colgado el
+      // mensaje "Representante encontrado en RUNT" tras revertir.
+      setRlRuntFor(index, { status: 'idle' });
+      updateRepLegal(index, {
+        ...patch,
+        // Al revertir exactamente al documento de la línea base, se restituye el mecanismo de
+        // firma que tenía entonces; mientras diverge, se limpia (comportamiento previo).
+        mecanismoFirma: staysAtBaseline ? baseline.mecanismoFirma : undefined,
+      });
     };
 
     return (
