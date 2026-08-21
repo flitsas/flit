@@ -48,7 +48,7 @@ public sealed class MandatoObjetoComposerTests
             ]);
 
         objeto.Should().Be(
-            "TRASPASO CON CAMBIO DE COLOR Y CAMBIO DE CARROCERÍA Y CONVERSIONES DE COMBUSTIBLE");
+            "TRASPASO CON CAMBIO DE COLOR, CAMBIO DE CARROCERÍA Y CONVERSIONES DE COMBUSTIBLE");
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public sealed class MandatoObjetoComposerTests
                 [MandatoObjetoComposer.CambioColor, MandatoObjetoComposer.CambioCarroceria],
                 FurPrendaMarking.Ambos)
             .Should().Be(
-                "TRASPASO CON LEVANTAMIENTO DE PRENDA Y INSCRIPCIÓN DE PRENDA Y CAMBIO DE COLOR Y CAMBIO DE CARROCERÍA");
+                "TRASPASO CON LEVANTAMIENTO DE PRENDA, INSCRIPCIÓN DE PRENDA, CAMBIO DE COLOR Y CAMBIO DE CARROCERÍA");
     }
 
     [Fact]

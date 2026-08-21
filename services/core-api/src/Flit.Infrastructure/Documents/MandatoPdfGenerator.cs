@@ -220,7 +220,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         return outMs.ToArray();
     }
 
-    private static string ComponerObjeto(MandatoData data)
+    internal static string ComponerObjeto(MandatoData data)
     {
         var tramite = data.Tramite;
         var code = string.IsNullOrWhiteSpace(tramite.ProcedureTypeCode)

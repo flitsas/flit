@@ -47,11 +47,16 @@ fragmentos = [copy tabla 1]
 
 Mayúsculas invariantes. No se usa el `name` del catálogo en minúsculas.
 
-| N.º de fragmentos | Fórmula | Ejemplo |
-|-------------------|---------|---------|
-| 1 | el fragmento | `MATRÍCULA INICIAL` |
-| 2 | `{a} CON {b}` | `TRASPASO CON LEVANTAMIENTO DE PRENDA` |
-| 3 o más | `{a} CON {b} Y {c} Y …` | `TRASPASO CON LEVANTAMIENTO DE PRENDA Y CAMBIO DE COLOR` |
+Tras el trámite base, si hay **algún** complemento (prenda y/o transformación), la palabra siguiente es **`CON`**.  
+Si hay **más de un** complemento, se listan con **comas** y el **último** se une con **`Y`**.  
+La prenda **nunca** se nombra solo «PRENDA»: hay que decir la acción (`INSCRIPCIÓN DE PRENDA` o `LEVANTAMIENTO DE PRENDA`).
+
+| Complementos | Fórmula | Ejemplo |
+|--------------|---------|---------|
+| 0 | trámite base | `MATRÍCULA INICIAL` |
+| 1 | `{base} CON {a}` | `TRASPASO CON LEVANTAMIENTO DE PRENDA` |
+| 2 | `{base} CON {a} Y {b}` | `TRASPASO CON LEVANTAMIENTO DE PRENDA Y CAMBIO DE COLOR` |
+| 3 o más | `{base} CON {a}, {b} Y {c}` | `TRASPASO CON LEVANTAMIENTO DE PRENDA, CAMBIO DE COLOR Y CAMBIO DE CARROCERÍA` |
 
 Orden fijo de los complementos (después del trámite base):
 
@@ -145,7 +150,7 @@ Se **suma** al tipo de la tabla 1 cuando el gestor activa transformaciones. No d
 | Traspaso + inscribir prenda | T1 + T2 inscripción | `TRASPASO CON INSCRIPCIÓN DE PRENDA` |
 | Traspaso + levantar prenda | T1 + T2 levantamiento | `TRASPASO CON LEVANTAMIENTO DE PRENDA` |
 | Traspaso + levantar prenda + color | T1 + T2 + T3 | `TRASPASO CON LEVANTAMIENTO DE PRENDA Y CAMBIO DE COLOR` |
-| Traspaso + ambas prendas + color y carrocería | T1 + T2×2 + T3×2 | `TRASPASO CON LEVANTAMIENTO DE PRENDA Y INSCRIPCIÓN DE PRENDA Y CAMBIO DE COLOR Y CAMBIO DE CARROCERÍA` |
+| Traspaso + ambas prendas + color y carrocería | T1 + T2×2 + T3×2 | `TRASPASO CON LEVANTAMIENTO DE PRENDA, INSCRIPCIÓN DE PRENDA, CAMBIO DE COLOR Y CAMBIO DE CARROCERÍA` |
 | Solo inscribir prenda | T1 (no T2) | `INSCRIBIR PRENDA` |
 | Solo cambio de color | T1 (no T3 color) | `CAMBIO DE COLOR` |
 | Solo blindaje | T1 | `BLINDAJE` |
@@ -172,7 +177,7 @@ Al implementar, contrastar **objetivo (estas tablas)** vs **lo que el compositor
 | Complemento inscripción: `PRENDA` | `INSCRIPCIÓN DE PRENDA` |
 | Tipo base inscripción: no distinguía infinitivo | `INSCRIBIR PRENDA` |
 | Combustible complemento: `CAMBIO DE COMBUSTIBLE` | `CONVERSIONES DE COMBUSTIBLE` |
-| Unión con comas y «Y» (`A, B Y C`) | `A CON B Y C` (sin coma) |
+| Unión `A CON B Y C Y D` | `{base} CON {a}, {b} Y {c}` (CON tras el base; comas; última con Y) |
 
 ---
 

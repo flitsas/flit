@@ -32,7 +32,8 @@ public static class MandatoObjetoComposer
 
     /// <summary>
     /// Compone <c>{{tramite}}</c>: tabla 1 + prenda complementaria + transformaciones.
-    /// Fórmula: un fragmento; dos → <c>A CON B</c>; más → <c>A CON B Y C Y …</c>.
+    /// Tras el trámite base va <c>CON</c>. Varios complementos: comas y la última con <c>Y</c>.
+    /// Prenda complementaria: <see cref="Prenda"/> o <see cref="LevantamientoPrenda"/>, nunca «PRENDA» sola.
     /// </summary>
     public static string Componer(
         string nombreTramite,
@@ -80,13 +81,20 @@ public static class MandatoObjetoComposer
         if (etiquetas.Count == 0)
             return nombre;
 
-        var todos = new List<string>(etiquetas.Count + 1) { nombre };
-        todos.AddRange(etiquetas);
+        return $"{nombre} CON {UnirComplementos(etiquetas)}";
+    }
 
-        if (todos.Count == 2)
-            return $"{todos[0]} CON {todos[1]}";
+    /// <summary>Un complemento tal cual; dos → «A Y B»; tres o más → «A, B Y C».</summary>
+    private static string UnirComplementos(List<string> items)
+    {
+        if (items.Count == 1)
+            return items[0];
+        if (items.Count == 2)
+            return $"{items[0]} Y {items[1]}";
 
-        return $"{todos[0]} CON {string.Join(" Y ", todos.Skip(1))}";
+        var ultima = items[^1];
+        var previas = string.Join(", ", items.Take(items.Count - 1));
+        return $"{previas} Y {ultima}";
     }
 
     private static bool EsTipoPrendaBase(string code) =>
