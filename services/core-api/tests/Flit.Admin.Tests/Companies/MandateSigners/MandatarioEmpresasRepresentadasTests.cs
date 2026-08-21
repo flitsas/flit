@@ -1,10 +1,14 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Tramites.Application.UseCases.Persons;
+using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 
 namespace Flit.Admin.Tests.Companies.MandateSigners;
@@ -87,7 +91,7 @@ public sealed class MandatarioEmpresasRepresentadasTests
         var deAcme = await SeedMandatarioAsync(ctx, "Ana", "111", [acme]);
         var deBeta = await SeedMandatarioAsync(ctx, "Beto", "222", [beta]);
 
-        var candidatos = await new MandateSignerDirectory(ctx)
+        var candidatos = await Directorio(ctx)
             .GetCandidatesAsync(Ot, Gestora, NitAcme, TestContext.Current.CancellationToken);
 
         candidatos.Select(c => c.Id).Should().BeEquivalentTo([deAcme]);
@@ -104,7 +108,7 @@ public sealed class MandatarioEmpresasRepresentadasTests
         var universal = await SeedMandatarioAsync(ctx, "Universal", "999", []);
         var soloAcme = await SeedMandatarioAsync(ctx, "Ana", "111", [acme]);
 
-        var paraOtra = await new MandateSignerDirectory(ctx)
+        var paraOtra = await Directorio(ctx)
             .GetCandidatesAsync(Ot, Gestora, NitBeta, TestContext.Current.CancellationToken);
 
         paraOtra.Select(c => c.Id).Should().BeEquivalentTo([universal]);
@@ -121,7 +125,7 @@ public sealed class MandatarioEmpresasRepresentadasTests
         await SeedMandatarioAsync(ctx, "Ana", "111", [acme]);
         await SeedMandatarioAsync(ctx, "Universal", "999", []);
 
-        var todos = await new MandateSignerDirectory(ctx)
+        var todos = await Directorio(ctx)
             .GetCandidatesAsync(Ot, Gestora, null, TestContext.Current.CancellationToken);
 
         todos.Should().HaveCount(2);
@@ -142,12 +146,12 @@ public sealed class MandatarioEmpresasRepresentadasTests
         await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         // Donde NO tiene asociación, aplica a cualquier empresa.
-        var sinAcotar = await new MandateSignerDirectory(ctx)
+        var sinAcotar = await Directorio(ctx)
             .GetCandidatesAsync(Ot, Gestora, NitBeta, TestContext.Current.CancellationToken);
         sinAcotar.Select(c => c.Id).Should().Contain(id);
 
         // Donde sí la tiene, solo a ACME: para otra empresa no se ofrece.
-        var acotado = await new MandateSignerDirectory(ctx)
+        var acotado = await Directorio(ctx)
             .GetCandidatesAsync(otroOt, Gestora, NitBeta, TestContext.Current.CancellationToken);
         acotado.Should().BeEmpty();
     }
@@ -262,4 +266,20 @@ public sealed class MandatarioEmpresasRepresentadasTests
         new(new DbContextOptionsBuilder<FlitDbContext>()
             .UseInMemoryDatabase($"flit-msrc-{Guid.NewGuid()}")
             .Options);
+
+    /// <summary>
+    /// HU #11752 (ADR-0050) — MandateSignerDirectory ya no lee <c>admin.admin_identity_validations</c>:
+    /// resuelve vigencia contra el módulo Identidad vía el tenant del OT. Esta suite no ejercita
+    /// vigencia de identidad (solo acotación por empresa representada), así que el reader de estado
+    /// operativo devuelve "sin tenant" y el resolver recibe un repositorio que nunca se invoca.
+    /// </summary>
+    private static MandateSignerDirectory Directorio(FlitDbContext ctx)
+    {
+        var otStatusReader = Substitute.For<ITransitOfficeOperationalStatusReader>();
+        otStatusReader
+            .GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((TransitOfficeOperationalStatusItem?)null);
+        var identityResolver = new IdentityVigenciaPorDocumentoResolver(Substitute.For<IProcedureInstanceRepository>());
+        return new MandateSignerDirectory(ctx, otStatusReader, identityResolver);
+    }
 }
