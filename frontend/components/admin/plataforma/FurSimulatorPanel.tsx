@@ -239,6 +239,7 @@ export function FurSimulatorPanel() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API (mismo patrón que MandatosCatalogPanel)
     void load();
   }, [load]);
 
