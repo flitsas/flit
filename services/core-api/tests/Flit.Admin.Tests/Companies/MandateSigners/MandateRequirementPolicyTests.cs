@@ -250,9 +250,10 @@ public sealed class MandateRequirementPolicyTests
     }
 
     [Fact]
-    public async Task ResolveAsync_SabanetaConConfigGenerico_IgualUsaSistema()
+    public async Task ResolveAsync_SabanetaConConfigGenerico_GanaLaEleccionDelOt()
     {
-        // Sin plantilla propia, el código RUNT manda sobre un template_code erróneo en fila.
+        // HU #11703 — la elección explícita del OT manda sobre la plantilla de sistema de su código.
+        // Antes ganaba el builtin, y por eso configurar estos cinco organismos no tenía ningún efecto.
         await using var ctx = NewContext();
         ctx.TransitOffices.Add(new TransitOffice
         {
@@ -273,8 +274,81 @@ public sealed class MandateRequirementPolicyTests
 
         var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5631000", CompanyA, Ct);
 
-        config!.TemplateCode.Should().Be("sabaneta");
+        config!.TemplateCode.Should().Be("generico");
         config.CustomTemplateKind.Should().Be("none");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_SabanetaEnAuto_DelegaEnLaPlantillaDelSistema()
+    {
+        await using var ctx = NewContext();
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = Sabaneta, Code = "5631000", Name = "SABANETA",
+            DepartmentCode = "05", CityCode = "05631", IsActive = true,
+        });
+        ctx.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(),
+            TransitOfficeId = Sabaneta,
+            TemplateCode = MandatoTemplateResolver.Auto,
+            RequiresForNaturalPerson = false,
+            MandataryFamily = "individuo",
+            CustomTemplateKind = "none",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.TemplateCode.Should().Be("sabaneta");
+    }
+
+    [Fact]
+    public async Task ResolveByOfficeIdAsync_CodigoGuardadoQueNoCoteja_IgualResuelveLaConfig()
+    {
+        // HU #11704 — el bug de Matrícula Inicial: el trámite guardaba un código DIVIPOLA de 5 dígitos
+        // ("25286") mientras el catálogo tiene el RUNT de 7 ("25286000"). Buscando por código no se
+        // encontraba NADA y el mandato salía genérico y sin organismo resuelto; por id sí aparece.
+        var funza = Guid.NewGuid();
+        await using var ctx = NewContext();
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = funza, Code = "25286000", Name = "FUNZA",
+            DepartmentCode = "25", CityCode = "25286", IsActive = true,
+        });
+        ctx.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(),
+            TransitOfficeId = funza,
+            TemplateCode = MandatoTemplateResolver.Municipio,
+            RequiresForNaturalPerson = true,
+            MandataryFamily = "individuo",
+            ChamberCity = "Funza",
+            CustomTemplateKind = "none",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var policy = new MandateRequirementPolicy(ctx);
+
+        // Por el código que quedó guardado en el trámite: nada.
+        (await policy.ResolveAsync("25286", CompanyA, Ct)).Should().BeNull();
+
+        // Por id: la parametrización real del organismo.
+        var porId = await policy.ResolveByOfficeIdAsync(funza, CompanyA, Ct);
+        porId.Should().NotBeNull();
+        porId!.TemplateCode.Should().Be(MandatoTemplateResolver.Municipio);
+        porId.TransitOfficeId.Should().Be(funza);
+        porId.ChamberCity.Should().Be("Funza");
+    }
+
+    [Fact]
+    public async Task ResolveByOfficeIdAsync_OrganismoInexistente_DevuelveNull()
+    {
+        await using var ctx = NewContext();
+        (await new MandateRequirementPolicy(ctx).ResolveByOfficeIdAsync(Guid.NewGuid(), CompanyA, Ct))
+            .Should().BeNull();
     }
 
     private static FlitDbContext NewContext() =>
