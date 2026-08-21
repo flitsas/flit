@@ -257,29 +257,9 @@ export function sendLegalRepresentativeIdentity(
   });
 }
 
-/**
- * POST "/{id}/identity/resend" — RENUEVA la validación de identidad (HU #11059). El backend respeta la
- * vigencia: con una aprobada y vigente devuelve `reused: true` sin reenviar nada; en cualquier otro
- * caso (vencida, rechazada, expirada o en curso) inicia una nueva. Por eso la UI solo ofrece renovar
- * cuando NO está vigente.
- */
-export function resendLegalRepresentativeIdentity(
-  tenantId: string,
-  id: string,
-): Promise<IdentityValidationSent> {
-  return apiFetch<IdentityValidationSent>(`${base(tenantId)}/${id}/identity/resend`, {
-    method: "POST",
-  });
-}
-
-/**
- * POST "/{id}/identity/link" — vincula una validación de identidad ya aprobada al representante
- * (HU #11180 AC6). Idempotente: si ya está vinculada devuelve la misma respuesta. Devuelve 409 con
- * código `sin_identidad_vigente` cuando no hay una validación aprobada y vigente que vincular.
- */
-export function linkLegalRepresentativeIdentity(
-  tenantId: string,
-  id: string,
-): Promise<void> {
-  return apiFetch<void>(`${base(tenantId)}/${id}/identity/link`, { method: "POST" });
-}
+// HU #11755 (ADR-0050) — `resendLegalRepresentativeIdentity` y `linkLegalRepresentativeIdentity` se
+// RETIRARON: el área admin pasa a ser solo consulta y estas rutas responderán 410 Gone (HU #11758).
+// `sendLegalRepresentativeIdentity` se conserva porque `LegalRepresentativesTab.tsx` todavía la invoca
+// desde el aviso "quedó guardado sin firma ni validación" del listado; ese punto de disparo NO está en
+// el alcance de esta HU (que solo cubre `IdentityActionsBlock.tsx`) y queda documentado como hallazgo
+// pendiente para una futura HU de cierre total del disparo admin.

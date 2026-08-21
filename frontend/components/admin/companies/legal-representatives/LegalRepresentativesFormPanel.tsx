@@ -596,14 +596,11 @@ export function LegalRepresentativesFormPanel({
 
           <div data-testid="rl-identidad">
             <IdentityActionsBlock
-              tenantId={tenantId}
               representativeId={representativeId}
               identityStatus={detail.identityStatus}
               identityValidUntil={detail.identityValidUntil}
               firmaBaulVigente={detail.firmaBaulVigente}
               firmaBaulVigenteHasta={detail.firmaBaulVigenteHasta}
-              email={detail.email}
-              onRefresh={refreshDetail}
             />
           </div>
         </div>
@@ -869,22 +866,14 @@ export function LegalRepresentativesFormPanel({
             </h3>
             {mode === "edit" ? (
               <IdentityActionsBlock
-                tenantId={tenantId}
                 representativeId={representativeId}
                 identityStatus={detail?.identityStatus}
                 identityValidUntil={detail?.identityValidUntil}
                 firmaBaulVigente={detail?.firmaBaulVigente}
                 firmaBaulVigenteHasta={detail?.firmaBaulVigenteHasta}
-                email={form.email}
-                onRefresh={refreshDetail}
               />
             ) : (
-              <IdentityActionsBlock
-                tenantId={tenantId}
-                representativeId={null}
-                email={form.email}
-                onRefresh={() => undefined}
-              />
+              <IdentityActionsBlock representativeId={null} />
             )}
           </section>
         </div>
