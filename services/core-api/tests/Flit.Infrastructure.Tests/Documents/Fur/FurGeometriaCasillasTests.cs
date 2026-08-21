@@ -242,16 +242,83 @@ public sealed class FurGeometriaCasillasTests
             formato, string.Join("\n    ", desbordadas), string.Join(", ", sinRecuadro));
     }
 
+    // ── Numeral 20 · DATOS DE ALERTA ──────────────────────────────────────────
+
+    /// <summary>
+    /// Las cuatro casillas del numeral 20 caen en la fila ROTULADA «HURTO / LIM. PROPIEDAD /
+    /// EMBARGO / OTRO», cada una en su columna.
+    ///
+    /// <para>La versión anterior de este test solo comparaba las casillas entre sí (misma fila,
+    /// columnas distintas) y por eso pasó en verde con las cuatro marcas una fila más arriba, sobre
+    /// los numerales 17-18: eran celdas coherentes entre ellas, pero de otra sección. Anclar al texto
+    /// impreso es lo único que distingue «una celda» de «LA celda»: los trazos dicen dónde hay
+    /// recuadros; solo el rótulo dice cuál es cuál.</para>
+    /// </summary>
     [Fact]
-    public void Alerta_LimPropiedadYOtro_MismaFilaColumnasDistintas()
+    public void Alerta_CasillasCaenEnLaFilaRotuladaDelNumeral20()
     {
         const FurTemplateFormat formato = FurTemplateFormat.Automotor;
-        var lim = CeldaDe(formato, "alert_data_code_2");
-        var otro = CeldaDe(formato, "alert_data_code_4");
+        var hurto = RotuloQueEmpiezaPor(formato, "HUR");
+        var celdas = Enumerable.Range(1, 4)
+            .Select(n => (Numero: n, Celda: CeldaDe(formato, $"alert_data_code_{n}")))
+            .ToList();
 
-        lim.Y0.Should().BeApproximately(otro.Y0, 1.0,
-            "LIM. PROPIEDAD y OTRO están en la misma fila del numeral 20");
-        lim.X0.Should().BeLessThan(otro.X0,
-            "LIM. PROPIEDAD (columna 2) queda a la izquierda de OTRO (columna 4)");
+        foreach (var (numero, celda) in celdas)
+        {
+            celda.Y0.Should().BeLessThan(hurto.Y,
+                "la casilla {0} del numeral 20 ({1}) debe estar en la banda del rótulo «HURTO LIM. " +
+                "PROPIEDAD EMBARGO OTRO» (línea base {2}), no en otra sección del formulario",
+                numero, celda, hurto.Y);
+            celda.Y1.Should().BeGreaterThan(hurto.Y, "la casilla {0} ({1}) comparte fila con el rótulo", numero, celda);
+        }
+
+        celdas[0].Celda.Contiene(hurto.X, hurto.Y).Should().BeTrue(
+            "la casilla 1 es la de HURTO: su celda ({0}) debe contener el arranque del rótulo ({1},{2})",
+            celdas[0].Celda, hurto.X, hurto.Y);
+
+        celdas.Select(c => Math.Round(c.Celda.X0, 1)).Should().BeInAscendingOrder()
+            .And.OnlyHaveUniqueItems(
+                "HURTO, LIM. PROPIEDAD, EMBARGO y OTRO son cuatro columnas contiguas y distintas: dos " +
+                "marcas en la misma columna harían imposible saber qué alerta se reportó");
+    }
+
+    /// <summary>
+    /// «A FAVOR DE» (casilla 5) escribe dentro de su propia columna del numeral 20 y por DEBAJO del
+    /// rótulo impreso, que es lo que deja al acreedor legible en un campo de ~50 pt de ancho.
+    /// </summary>
+    [Fact]
+    public void Alerta_AFavorDe_EscribeBajoSuRotuloYDentroDeSuColumna()
+    {
+        const FurTemplateFormat formato = FurTemplateFormat.Automotor;
+        var rotulo = RotuloQueEmpiezaPor(formato, "VOR DE:");   // cola de «A FAVOR DE:»
+        var campo = Casilla(formato, "alert_data_code_5");
+
+        var celda = FurPlantillaGeometria.CeldaQueEncierra(
+            Trazos(formato), campo.X, campo.Y, campo.X + campo.W, campo.Y + campo.H);
+
+        celda.Should().NotBeNull("el nombre del acreedor debe caber entero dentro de una celda impresa");
+        celda!.Value.Contiene(rotulo.X, rotulo.Y).Should().BeTrue(
+            "el acreedor va en la columna rotulada «A FAVOR DE» ({0}), no en la de una casilla vecina",
+            celda.Value);
+
+        campo.Y.Should().BeGreaterThan(rotulo.Y,
+            "el texto arranca bajo el rótulo impreso: si empieza por encima, se estampa sobre él");
+
+        var casillaOtro = CeldaDe(formato, "alert_data_code_4");
+        campo.X.Should().BeGreaterThan(casillaOtro.X1,
+            "«A FAVOR DE» está a la derecha de la última casilla marcable (OTRO)");
+    }
+
+    /// <summary>Primer rótulo preimpreso cuyo texto empieza por el fragmento dado.</summary>
+    private static Rotulo RotuloQueEmpiezaPor(FurTemplateFormat formato, string fragmento)
+    {
+        var rotulos = FurPlantillaGeometria.Rotulos(FurTemplatePaths.FileNamesFor(formato).P1);
+        var encontrado = rotulos.Where(r => r.Texto.StartsWith(fragmento, StringComparison.Ordinal)).ToList();
+
+        encontrado.Should().ContainSingle(
+            "«{1}» debe identificar UN punto del blank {0}: si dejó de estar, la plantilla cambió y hay " +
+            "que rehacer la calibración de esa zona; si aparece varias veces, el ancla es ambigua y " +
+            "puede estar apuntando a otra sección", formato, fragmento);
+        return encontrado[0];
     }
 }
