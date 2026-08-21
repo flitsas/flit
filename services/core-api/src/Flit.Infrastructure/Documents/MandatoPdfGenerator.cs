@@ -87,17 +87,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         var esJuridica = parte?.EsJuridica ?? false;
         var variante = MandatoTemplateResolver.Resolve(data.TemplateCode);
 
-        // El objeto cita procedure_types.name cuando viene; si no, la redacción legal según
-        // MATRICULA_NUEVA / TRASPASO_STANDARD (o sus alias de wizard).
-        var nombreTramite = MandatoObjetoComposer.Componer(
-            MandatoTramiteIdentity.NombreObjeto(
-                tramite.ProcedureTypeName,
-                tramite.ProcedureTypeCode,
-                tramite.ProcedureFamily,
-                tramite.TipologiaCodigo,
-                tramite.Modalidad),
-            data.Transformaciones,
-            tramite.PrendaMarking);
+        // Objeto {{tramite}}: tres capas (docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md).
+        var nombreTramite = ComponerObjeto(data);
 
         var placa = Val(tramite.Placa, "___");
         var ot = Val(tramite.Organismo.Nombre, "___");
@@ -229,6 +220,24 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         return outMs.ToArray();
     }
 
+    private static string ComponerObjeto(MandatoData data)
+    {
+        var tramite = data.Tramite;
+        var code = string.IsNullOrWhiteSpace(tramite.ProcedureTypeCode)
+            ? tramite.TipologiaCodigo
+            : tramite.ProcedureTypeCode;
+        return MandatoObjetoComposer.Componer(
+            MandatoTramiteIdentity.NombreObjeto(
+                tramite.ProcedureTypeName,
+                tramite.ProcedureTypeCode,
+                tramite.ProcedureFamily,
+                tramite.TipologiaCodigo,
+                tramite.Modalidad),
+            data.Transformaciones,
+            tramite.PrendaMarking,
+            code);
+    }
+
     /// <summary>
     /// Sustituye los placeholders <c>{{...}}</c> del cuerpo editado por el OT, línea por línea, marcando
     /// en negrita el VALOR sustituido (no el resto del texto libre del tenant).
@@ -245,15 +254,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
         var parte = tramite.Mandante;
-        var nombreTramite = MandatoObjetoComposer.Componer(
-            MandatoTramiteIdentity.NombreObjeto(
-                tramite.ProcedureTypeName,
-                tramite.ProcedureTypeCode,
-                tramite.ProcedureFamily,
-                tramite.TipologiaCodigo,
-                tramite.Modalidad),
-            data.Transformaciones,
-            tramite.PrendaMarking);
+        var nombreTramite = ComponerObjeto(data);
         var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
 
         var reemplazos = new (string Token, string Valor)[]

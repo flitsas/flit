@@ -3,88 +3,63 @@ using Flit.Tramites.Domain.Tramites.ValueObjects;
 namespace Flit.Tramites.Domain.Documents;
 
 /// <summary>
-/// HU #11206 — objeto del Contrato Privado de Mandato: el trámite y, si el vehículo se transforma
-/// durante él, también las transformaciones. HU #11627 — si el trámite tiene prenda, también se nombra
-/// (distinguiendo constitución de levantamiento), antes de las transformaciones.
-///
-/// <para><b>Por qué aquí y no en las plantillas:</b> ninguna de las diez plantillas del PO menciona
-/// transformaciones ni prenda; todas expresan el objeto con una sola variable (<c>{{tramite}}</c>). El
-/// requisito no es tocar las plantillas, sino <b>componer esa variable</b> (D5). Por eso es una función
-/// pura del dominio: la usan todas las familias de plantilla por igual, así que el objeto se redacta
-/// idéntico en todas (AC4) sin que ninguna tenga que saber de esto.</para>
-///
-/// <para>Sin transformaciones ni prenda el texto queda exactamente como hasta ahora (AC3/regresión
-/// HU #11627).</para>
+/// Objeto del Contrato Privado de Mandato (<c>{{tramite}}</c>).
+/// Fuente canónica: <c>docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md</c>.
+/// Las 4 plantillas interpolan este string; no duplican las capas.
 /// </summary>
 public static class MandatoObjetoComposer
 {
-    /// <summary>Claves de <c>field_values</c> que marcan una transformación declarada en el trámite.</summary>
     public const string CambioColor = "cambio_color";
     public const string CambioCarroceria = "cambio_carroceria";
     public const string CambioCombustible = "cambio_combustible";
     public const string Blindaje = "blindaje";
 
-    /// <summary>
-    /// HU #11627 — etiqueta de la prenda en el objeto del contrato cuando el FUR marca constitución
-    /// (casilla 11). Literal pendiente de validación legal por el PO: se deja como constante para que
-    /// cambiarla sea de una línea.
-    /// </summary>
-    public const string Prenda = "PRENDA";
+    /// <summary>Complemento tabla 2 — inscripción (no el trámite base <c>INSCRIBIR PRENDA</c>).</summary>
+    public const string Prenda = "INSCRIPCIÓN DE PRENDA";
 
-    /// <summary>
-    /// HU #11627 — etiqueta de la prenda en el objeto del contrato cuando el FUR marca levantamiento
-    /// (casilla 12). Mismo motivo que <see cref="Prenda"/>: constante, sujeta a validación legal.
-    /// </summary>
+    /// <summary>Complemento tabla 2 — levantamiento (no el trámite base <c>LEVANTAR PRENDA</c>).</summary>
     public const string LevantamientoPrenda = "LEVANTAMIENTO DE PRENDA";
 
-    /// <summary>
-    /// Orden canónico de las transformaciones en el texto. Es fijo a propósito: el contrato de dos
-    /// trámites con las mismas transformaciones debe leerse igual, sin depender de en qué orden las
-    /// marcó el gestor.
-    /// </summary>
+    public const string ConversionCombustible = "CONVERSIONES DE COMBUSTIBLE";
+
     private static readonly (string Clave, string Etiqueta)[] Etiquetas =
     [
         (CambioColor, "CAMBIO DE COLOR"),
         (CambioCarroceria, "CAMBIO DE CARROCERÍA"),
-        (CambioCombustible, "CAMBIO DE COMBUSTIBLE"),
+        (CambioCombustible, ConversionCombustible),
         (Blindaje, "BLINDAJE"),
     ];
 
     /// <summary>
-    /// Compone el objeto del contrato: <paramref name="nombreTramite"/> seguido de la prenda (si aplica)
-    /// y las transformaciones activas, separadas por comas y la última con «Y». Sin prenda ni
-    /// transformaciones devuelve el nombre del trámite tal cual.
+    /// Compone <c>{{tramite}}</c>: tabla 1 + prenda complementaria + transformaciones.
+    /// Fórmula: un fragmento; dos → <c>A CON B</c>; más → <c>A CON B Y C Y …</c>.
     /// </summary>
-    /// <param name="nombreTramite">Modalidad ya en mayúsculas (p. ej. «TRASPASO DE PROPIEDAD»).</param>
-    /// <param name="transformaciones">Claves activas; se ignoran las desconocidas y las repetidas.</param>
-    /// <param name="prendaMarking">
-    /// HU #11627 — marcación de prenda del trámite (agregado <c>ProcedureInstancePrenda</c>, fuera de
-    /// <c>field_values</c> por diseño del Feature #10585, ya resuelta a <see cref="FurPrendaMarking"/>).
-    /// <see cref="FurPrendaMarking.Constitucion"/> nombra <see cref="Prenda"/>;
-    /// <see cref="FurPrendaMarking.Levantamiento"/> nombra <see cref="LevantamientoPrenda"/>;
-    /// <see cref="FurPrendaMarking.Ninguna"/> no agrega nada. Se nombra primero entre los elementos que
-    /// siguen al nombre del trámite, antes de las transformaciones.
-    /// </param>
     public static string Componer(
         string nombreTramite,
         IEnumerable<string>? transformaciones,
-        FurPrendaMarking prendaMarking = FurPrendaMarking.Ninguna)
+        FurPrendaMarking prendaMarking = FurPrendaMarking.Ninguna,
+        string? procedureTypeCode = null)
     {
         var nombre = nombreTramite?.Trim() ?? string.Empty;
-
+        var code = procedureTypeCode?.Trim() ?? string.Empty;
+        var skipPrenda = EsTipoPrendaBase(code);
         var etiquetas = new List<string>();
-        switch (prendaMarking)
+
+        if (!skipPrenda)
         {
-            case FurPrendaMarking.Constitucion:
-                etiquetas.Add(Prenda);
-                break;
-            case FurPrendaMarking.Levantamiento:
-                etiquetas.Add(LevantamientoPrenda);
-                break;
-            case FurPrendaMarking.Ambos:
-                etiquetas.Add(LevantamientoPrenda);
-                etiquetas.Add(Prenda);
-                break;
+            switch (prendaMarking)
+            {
+                case FurPrendaMarking.Constitucion:
+                    etiquetas.Add(Prenda);
+                    break;
+                case FurPrendaMarking.Levantamiento:
+                    etiquetas.Add(LevantamientoPrenda);
+                    break;
+                case FurPrendaMarking.Ambos:
+                    etiquetas.Add(LevantamientoPrenda);
+                    etiquetas.Add(Prenda);
+                    break;
+            }
         }
 
         if (transformaciones is not null)
@@ -93,21 +68,45 @@ public static class MandatoObjetoComposer
                 transformaciones.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()),
                 StringComparer.OrdinalIgnoreCase);
 
-            etiquetas.AddRange(
-                Etiquetas.Where(e => activas.Contains(e.Clave)).Select(e => e.Etiqueta));
+            foreach (var (clave, etiqueta) in Etiquetas)
+            {
+                if (EsMismaTransformacionBase(code, clave))
+                    continue;
+                if (activas.Contains(clave))
+                    etiquetas.Add(etiqueta);
+            }
         }
 
         if (etiquetas.Count == 0)
-        {
             return nombre;
-        }
 
-        // El nombre del trámite es el primer elemento de la enumeración: «A, B Y C».
         var todos = new List<string>(etiquetas.Count + 1) { nombre };
         todos.AddRange(etiquetas);
 
-        var ultima = todos[^1];
-        var previas = string.Join(", ", todos.Take(todos.Count - 1));
-        return $"{previas} Y {ultima}";
+        if (todos.Count == 2)
+            return $"{todos[0]} CON {todos[1]}";
+
+        return $"{todos[0]} CON {string.Join(" Y ", todos.Skip(1))}";
+    }
+
+    private static bool EsTipoPrendaBase(string code) =>
+        code.Equals("PRENDA_INSCRIPCION", StringComparison.OrdinalIgnoreCase)
+        || code.Equals("LEVANTAMIENTO_PRENDA", StringComparison.OrdinalIgnoreCase)
+        || code.Equals("LEVANTAR_INSCRIBIR_PRENDA", StringComparison.OrdinalIgnoreCase);
+
+    private static bool EsMismaTransformacionBase(string code, string clave)
+    {
+        if (string.IsNullOrEmpty(code))
+            return false;
+
+        if (clave.Equals(CambioColor, StringComparison.OrdinalIgnoreCase))
+            return code.Equals("CAMBIO_COLOR", StringComparison.OrdinalIgnoreCase);
+        if (clave.Equals(CambioCarroceria, StringComparison.OrdinalIgnoreCase))
+            return code.Equals("CAMBIO_CARROCERIA", StringComparison.OrdinalIgnoreCase);
+        if (clave.Equals(CambioCombustible, StringComparison.OrdinalIgnoreCase))
+            return code.Equals("CONVERSION_COMBUSTIBLE", StringComparison.OrdinalIgnoreCase);
+        if (clave.Equals(Blindaje, StringComparison.OrdinalIgnoreCase))
+            return code.Contains("BLINDAJE", StringComparison.OrdinalIgnoreCase);
+        return false;
     }
 }

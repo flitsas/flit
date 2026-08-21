@@ -21,7 +21,40 @@ public static class MandatoTramiteIdentity
     public const string NombreMatriculaFallback = "MATRÍCULA INICIAL";
 
     /// <summary>Redacción legal de respaldo si el catálogo no trajo nombre.</summary>
-    public const string NombreTraspasoFallback = "TRASPASO DE PROPIEDAD";
+    public const string NombreTraspasoFallback = "TRASPASO";
+
+    /// <summary>
+    /// Tabla 1 de <c>docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md</c> (code → copy).
+    /// Leasing y unilateral no cambian el objeto respecto de matrícula/traspaso.
+    /// </summary>
+    private static readonly Dictionary<string, string> CopyTabla1 = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["MATRICULA_NUEVA"] = NombreMatriculaFallback,
+        ["MATRICULA_LEASING"] = NombreMatriculaFallback,
+        ["matricula_inicial"] = NombreMatriculaFallback,
+        ["matricula"] = NombreMatriculaFallback,
+        ["CANCELACION_MATRICULA"] = "CANCELACION DE MATRICULA",
+        ["REMATRICULA"] = "REMATRÍCULA",
+        ["TRASPASO_STANDARD"] = NombreTraspasoFallback,
+        ["TRASPASO_UNILATERAL"] = NombreTraspasoFallback,
+        ["TRASPASO_TRANSFERENCIA_DE_DOMINIO"] = NombreTraspasoFallback,
+        ["traspaso_standard"] = NombreTraspasoFallback,
+        ["traspaso"] = NombreTraspasoFallback,
+        ["TRASLADO_CUENTA"] = "TRASLADO DE CUENTA",
+        ["RADICADO_CUENTA"] = "RADICADO DE CUENTA",
+        ["CAMBIO_COLOR"] = "CAMBIO DE COLOR",
+        ["REGRABAR_MOTOR_CHASIS"] = "REGRABACIÓN DE MOTOR Y CHASIS",
+        ["DUPLICADO_TARJETA"] = "DUPLICADO DE TARJETA",
+        ["PRENDA_INSCRIPCION"] = "INSCRIBIR PRENDA",
+        ["LEVANTAMIENTO_PRENDA"] = "LEVANTAR PRENDA",
+        ["LEVANTAR_INSCRIBIR_PRENDA"] = "LEVANTAMIENTO DE PRENDA Y INSCRIPCIÓN DE PRENDA",
+        ["DUPLICADO_PLACA"] = "DUPLICADO DE PLACA",
+        ["CAMBIO_CARROCERIA"] = "CAMBIO DE CARROCERÍA",
+        ["CONVERSION_COMBUSTIBLE"] = "CONVERSIONES DE COMBUSTIBLE",
+        ["BLINDAJE"] = "BLINDAJE",
+        ["CAMBIO_LOCATARIO"] = "CAMBIO DE LOCATARIO",
+        ["CAMBIO_ACREEDOR"] = "CAMBIO DE ACREEDOR PRENDARIO",
+    };
 
     /// <summary>
     /// ¿El trámite es un traspaso? Acepta código de catálogo, familia, tipología wizard y modalidad.
@@ -47,8 +80,8 @@ public static class MandatoTramiteIdentity
     }
 
     /// <summary>
-    /// Nombre que entra al objeto del contrato (mayúsculas). Si hay nombre de
-    /// <c>procedure_types.name</c>, manda ese; si no, la redacción legal de matrícula o traspaso.
+    /// Fragmento tabla 1 del objeto. El <c>code</c> manda sobre el name del catálogo
+    /// (leasing/unilateral no se imprimen). Código desconocido: name en mayúsculas.
     /// </summary>
     public static string NombreObjeto(
         string? procedureTypeName,
@@ -57,6 +90,12 @@ public static class MandatoTramiteIdentity
         string? tipologiaCodigo,
         string? modalidad)
     {
+        foreach (var raw in new[] { procedureTypeCode, tipologiaCodigo, modalidad })
+        {
+            if (!string.IsNullOrWhiteSpace(raw) && CopyTabla1.TryGetValue(raw.Trim(), out var copy))
+                return copy;
+        }
+
         if (!string.IsNullOrWhiteSpace(procedureTypeName))
             return procedureTypeName.Trim().ToUpperInvariant();
 

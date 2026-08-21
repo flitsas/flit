@@ -29,19 +29,32 @@ public sealed class MandatoTramiteIdentityTests
     }
 
     [Fact]
-    public void NombreObjeto_UsaElNameDelCatalogoEnMayusculas()
+    public void NombreObjeto_CodeMandaSobreElNameDelCatalogo()
+    {
+        MandatoTramiteIdentity.NombreObjeto("Traspaso Unilateral", "TRASPASO_UNILATERAL", "TRASPASO", null, null)
+            .Should().Be("TRASPASO");
+        MandatoTramiteIdentity.NombreObjeto("Matrícula Leasing", "MATRICULA_LEASING", "MATRICULAS", null, null)
+            .Should().Be("MATRÍCULA INICIAL");
+        MandatoTramiteIdentity.NombreObjeto("Inscribir prenda", "PRENDA_INSCRIPCION", "OTROS", null, null)
+            .Should().Be("INSCRIBIR PRENDA");
+    }
+
+    [Fact]
+    public void NombreObjeto_UsaElNameDelCatalogoEnMayusculas_SiElCodeNoEstaEnTabla()
     {
         MandatoTramiteIdentity.NombreObjeto("Traspaso", "TRASPASO_STANDARD", "TRASPASO", null, null)
             .Should().Be("TRASPASO");
         MandatoTramiteIdentity.NombreObjeto("Matrícula inicial", "MATRICULA_NUEVA", "MATRICULAS", null, null)
             .Should().Be("MATRÍCULA INICIAL");
+        MandatoTramiteIdentity.NombreObjeto("Trámite especial OT", "CODIGO_NUEVO_XYZ", "OTROS", null, null)
+            .Should().Be("TRÁMITE ESPECIAL OT");
     }
 
     [Fact]
     public void NombreObjeto_SinCatalogo_CaeALaRedaccionLegal()
     {
         MandatoTramiteIdentity.NombreObjeto(null, "TRASPASO_STANDARD", null, null, null)
-            .Should().Be(MandatoTramiteIdentity.NombreTraspasoFallback);
+            .Should().Be("TRASPASO");
         MandatoTramiteIdentity.NombreObjeto(null, "MATRICULA_NUEVA", null, null, null)
             .Should().Be(MandatoTramiteIdentity.NombreMatriculaFallback);
     }

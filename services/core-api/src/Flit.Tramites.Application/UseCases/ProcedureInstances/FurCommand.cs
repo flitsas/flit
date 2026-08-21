@@ -297,7 +297,7 @@ public sealed class GenerarFurHandler(
         // ADR-0036 (HU #10915) — Contrato de mandato. El firmante persona puede venir ya elegido
         // en el wizard (MandateSignerId); si no, el PDF lleva placeholders y la aprobación lo regenera.
         var mandato = await TryGenerateMandatoAsync(
-            instance, data, Get(fv, "transit_office_code"), TransformacionesActivas(fv), ct);
+            instance, data, Get(fv, "transit_office_code"), TransformacionesActivas(fv, data), ct);
         if (mandato is not null)
         {
             generated.Add(mandato);
@@ -981,17 +981,40 @@ public sealed class GenerarFurHandler(
     /// HU #11206 — transformaciones declaradas en el trámite (<c>field_values</c> con valor <c>true</c>).
     /// Se leen aquí y no en el generador para que el documento no dependa del formato de almacenamiento.
     /// </summary>
-    private static IReadOnlyList<string> TransformacionesActivas(Dictionary<string, string?> fv)
+    private static IReadOnlyList<string> TransformacionesActivas(
+        Dictionary<string, string?> fv,
+        FurDocumentData data)
     {
-        string[] claves =
-        [
-            MandatoObjetoComposer.CambioColor,
-            MandatoObjetoComposer.CambioCarroceria,
-            MandatoObjetoComposer.CambioCombustible,
-        ];
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var clave in new[]
+                 {
+                     MandatoObjetoComposer.CambioColor,
+                     MandatoObjetoComposer.CambioCarroceria,
+                     MandatoObjetoComposer.CambioCombustible,
+                     MandatoObjetoComposer.Blindaje,
+                 })
+        {
+            if (string.Equals(Get(fv, clave)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                keys.Add(clave);
+        }
 
-        return [.. claves.Where(clave =>
-            string.Equals(Get(fv, clave)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))];
+        if (data.Transformaciones.Color)
+            keys.Add(MandatoObjetoComposer.CambioColor);
+        if (data.Transformaciones.Carroceria)
+            keys.Add(MandatoObjetoComposer.CambioCarroceria);
+        if (data.Transformaciones.Combustible)
+            keys.Add(MandatoObjetoComposer.CambioCombustible);
+        if (data.Transformaciones.Blindaje)
+            keys.Add(MandatoObjetoComposer.Blindaje);
+
+        var code = data.ProcedureTypeCode ?? data.TipologiaCodigo;
+        if (!string.IsNullOrWhiteSpace(code)
+            && code.Contains("BLINDAJE", StringComparison.OrdinalIgnoreCase))
+        {
+            keys.Add(MandatoObjetoComposer.Blindaje);
+        }
+
+        return [.. keys];
     }
 
     private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
