@@ -118,4 +118,27 @@ public class AsignacionPlacaEmailComposerTests
         html.Should().Contain("SOAT (Seguro Obligatorio de Accidentes de Tránsito)");
         html.Should().NotContain("posible placa");
     }
+
+    // --- Bug nov. 23: alinear al layout de tramites.aprobado/rechazado (H1 + acento de color) --
+
+    [Fact]
+    public void ComposeFlit_IncluyeH1YAcentoDeColorIgualQueCambioEstado()
+    {
+        var (_, html) = AsignacionPlacaEmailComposer.ComposeFlit(
+            Sample, AsignacionPlacaEmailPreviewSample.DefaultAssetsBaseUrl);
+
+        html.Should().Contain("<h1");
+        html.Should().Contain("ASIGNACIÓN DE PLACA");
+        html.Should().Contain("color:#2F6FED");
+        html.Should().Contain("Estado Actual:</strong> <span style=\"color:#2F6FED;font-weight:700;\">Asignado</span>");
+    }
+
+    [Fact]
+    public void ComposeRenting_NoIncluyeH1_MantieneDisenoOriginal()
+    {
+        var (_, html) = AsignacionPlacaEmailComposer.ComposeRenting(
+            Sample, AsignacionPlacaEmailPreviewSample.DefaultAssetsBaseUrl);
+
+        html.Should().NotContain("<h1");
+    }
 }
