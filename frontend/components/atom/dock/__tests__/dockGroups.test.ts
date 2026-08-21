@@ -69,6 +69,7 @@ describe("buildDockGroups", () => {
       entry("auditoria", "Auditoría"),
       entry("admin-plataforma", "Plataforma", [
         entry("admin-mandatos", "Mandatos"),
+        entry("admin-fur", "FUR"),
         entry("admin-notificaciones", "Notificaciones"),
       ]),
     ]);
@@ -85,18 +86,19 @@ describe("buildDockGroups", () => {
       "Plataforma",
     ]);
     const plataforma = groups[0].items.find((i) => i.key === "admin-plataforma");
-    expect(plataforma?.children?.map((c) => c.label)).toEqual(["Mandatos", "Notificaciones"]);
+    expect(plataforma?.children?.map((c) => c.label)).toEqual(["Mandatos", "FUR", "Notificaciones"]);
   });
 
-  it("flattenDockEntries expone Mandatos y Notificaciones para la hoja móvil", () => {
+  it("flattenDockEntries expone Mandatos, FUR y Notificaciones para la hoja móvil", () => {
     const flat = flattenDockEntries([
       entry("admin-companies", "Compañías"),
       entry("admin-plataforma", "Plataforma", [
         entry("admin-mandatos", "Mandatos"),
+        entry("admin-fur", "FUR"),
         entry("admin-notificaciones", "Notificaciones"),
       ]),
     ]);
-    expect(flat.map((i) => i.label)).toEqual(["Compañías", "Mandatos", "Notificaciones"]);
+    expect(flat.map((i) => i.label)).toEqual(["Compañías", "Mandatos", "FUR", "Notificaciones"]);
   });
 
   it("Integraciones agrupa Log QX e ICT, con Log ICT y Reportes ICT anidados bajo ICT", () => {

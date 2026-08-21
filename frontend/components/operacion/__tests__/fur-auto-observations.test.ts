@@ -30,7 +30,7 @@ describe('furAutoObservations', () => {
   it('declara el color NUEVO cuando difiere del snapshot RUNT', () => {
     expect(
       furAutoObservations(fields({ vehicle_color_runt: 'AZUL', vehicle_color: 'ROJO' })),
-    ).toEqual(['Cambio de color: ROJO.']);
+    ).toEqual(['Color nuevo(NUEVO COLOR: ROJO)']);
   });
 
   it('sin cambio real no declara transformación', () => {
@@ -56,9 +56,9 @@ describe('furAutoObservations', () => {
         }),
       ),
     ).toEqual([
-      'Cambio de color: ROJO.',
-      'Cambio de combustible: DIESEL.',
-      'Cambio de carrocería: CAMIONETA.',
+      'Color nuevo(NUEVO COLOR: ROJO)',
+      'Carroceria nueva(NUEVA CARROCERIA: CAMIONETA)',
+      'COMBUSTIBLE_NUEVO: DIESEL',
     ]);
   });
 
@@ -108,7 +108,7 @@ describe('furAutoObservations', () => {
     );
 
     expect(segments).toHaveLength(2);
-    expect(segments[0]).toBe('Cambio de color: ROJO.');
+    expect(segments[0]).toBe('Color nuevo(NUEVO COLOR: ROJO)');
     expect(segments[1]).toContain('Empresa vinculadora');
   });
 });
@@ -158,14 +158,17 @@ describe('furObservacionesDisponibles', () => {
 
   it('descuenta el bloque automático y su espacio separador', () => {
     // 30 caracteres + 1 de separación.
-    expect(furObservacionesDisponibles(['Cambio de color: NEGRO MATE.'])).toBe(
-      FUR_OBSERVACIONES_PRESUPUESTO - 'Cambio de color: NEGRO MATE.'.length - 1,
+    expect(furObservacionesDisponibles(['Color nuevo(NUEVO COLOR: NEGRO MATE)'])).toBe(
+      FUR_OBSERVACIONES_PRESUPUESTO - 'Color nuevo(NUEVO COLOR: NEGRO MATE)'.length - 1,
     );
   });
 
   it('varias declaraciones reducen más el espacio disponible', () => {
-    const una = furObservacionesDisponibles(['Cambio de color: NEGRO.']);
-    const dos = furObservacionesDisponibles(['Cambio de color: NEGRO.', 'Cambio de carrocería: FURGON.']);
+    const una = furObservacionesDisponibles(['Color nuevo(NUEVO COLOR: NEGRO)']);
+    const dos = furObservacionesDisponibles([
+      'Color nuevo(NUEVO COLOR: NEGRO)',
+      'Carroceria nueva(NUEVA CARROCERIA: FURGON)',
+    ]);
     expect(dos).toBeLessThan(una);
   });
 
