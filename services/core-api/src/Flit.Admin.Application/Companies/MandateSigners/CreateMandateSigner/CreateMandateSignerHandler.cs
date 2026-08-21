@@ -1,33 +1,33 @@
-using Flit.Admin.Application.Identity;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.TransitOffices;
-using Flit.Admin.Domain.Identity;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 
 /// <summary>
 /// Alta de un mandatario (RF22, ampliado por ADR-0036): valida OT operable, RF33 (compañías
 /// activas/no bloqueadas), autogenera la huella de integridad y persiste con auditoría atómica
-/// (RF28). Tras persistir, si trae correo, inicia la validación de identidad del mandatario por
-/// correo (HU #10911, best-effort: un fallo del proveedor NO revierte el alta).
+/// (RF28).
+///
+/// HU #11757 (ADR-0050) — el alta YA NO dispara la validación de identidad, tenga o no correo:
+/// el módulo Identidad es la única fuente que puede originar una fila de validación (y el único
+/// disparador de ese correo). El disparo que existía aquí desde la HU #10911/#11000
+/// (<c>IAdminIdentityValidationService.EnsureAsync</c>, best-effort) se retira; el resultado del
+/// alta siempre reporta <see cref="MandateSignerIdentityOutcome.NotAttempted"/>.
 /// </summary>
 public sealed class CreateMandateSignerHandler
 {
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IMandateSignerReader _reader;
     private readonly IMandateSignerRepository _repository;
-    private readonly IAdminIdentityValidationService? _identityService;
 
     public CreateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
         IMandateSignerReader reader,
-        IMandateSignerRepository repository,
-        IAdminIdentityValidationService? identityService = null)
+        IMandateSignerRepository repository)
     {
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-        _identityService = identityService;
     }
 
     public async Task<CreateMandateSignerResult> HandleAsync(
@@ -87,39 +87,11 @@ public sealed class CreateMandateSignerHandler
                 command.OfficeCompanies),
             cancellationToken).ConfigureAwait(false);
 
-        // HU #10911 — envío de validación de identidad al registrar (best-effort). Un fallo del
-        // proveedor NO revierte el alta: el mandatario queda creado y el reenvío queda disponible.
-        // HU #11000 — se APALANCA la identidad de la PERSONA en vez de arrancar siempre una validación
-        // nueva: EnsureAsync reutiliza la aprobada y vigente del mismo documento (aunque se haya validado
-        // como representante legal u otro mandatario), la ancla a este mandatario y solo envía el correo
-        // cuando no hay ninguna vigente.
-        var identity = MandateSignerIdentityOutcome.NotAttempted;
-        if (_identityService is not null && email is not null)
-        {
-            try
-            {
-                var descriptor = new AdminIdentitySubjectDescriptor(
-                    otTenantId.Value,
-                    AdminIdentitySubjectTypes.MandateSigner,
-                    signerId,
-                    fullName,
-                    documentType,
-                    documentNumber,
-                    email,
-                    command.CreatedBy);
-                var result = await _identityService
-                    .EnsureAsync(descriptor, cancellationToken).ConfigureAwait(false);
-                identity = result.Reused
-                    ? MandateSignerIdentityOutcome.Reused
-                    : MandateSignerIdentityOutcome.Sent;
-            }
-            catch (AdminIdentityProviderException)
-            {
-                // Best-effort: el alta ya está persistida; el reenvío manual queda disponible.
-                identity = MandateSignerIdentityOutcome.Failed;
-            }
-        }
-
-        return CreateMandateSignerResult.Success(signerId, integrityHash, identity);
+        // HU #11757 (ADR-0050) — el alta de un mandatario NO genera fila de validación ni correo,
+        // tenga o no correo registrado: el módulo Identidad es la única fuente que puede originarla.
+        // `email` se sigue capturando y persistiendo (dato de contacto del mandatario), solo se retiró
+        // el disparo. El desenlace siempre es `NotAttempted` — se conserva el campo en la respuesta por
+        // compatibilidad con el cliente, que ya lo tipa como uno de los cuatro valores del enum.
+        return CreateMandateSignerResult.Success(signerId, integrityHash);
     }
 }

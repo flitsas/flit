@@ -40,7 +40,8 @@ public sealed record CompanyMandateSignerRequest(
 /// radicar dejaría un dato inservible que además nadie vería fallar hasta el momento de firmar.</para>
 ///
 /// <para>Delega en <see cref="CreateMandateSignerHandler"/> para no duplicar la operabilidad del
-/// organismo, la huella de integridad ni el envío de la validación de identidad (HU #10911/#11000).
+/// organismo ni la huella de integridad. Desde la HU #11757 (ADR-0050) el alta YA NO dispara
+/// validación de identidad — eso solo lo origina el módulo Identidad.
 /// El organismo PRIMARIO es el primero de la lista; los demás viajan en <c>TransitOfficeIds</c>.</para>
 /// </summary>
 public sealed class CreateCompanyMandateSignerHandler

@@ -240,7 +240,6 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
           tenantId={tenantId}
           offices={offices}
           companies={companies}
-          onIdentityChanged={() => void load()}
           editing={editing}
           onCancel={() => {
             setFormOpen(false);

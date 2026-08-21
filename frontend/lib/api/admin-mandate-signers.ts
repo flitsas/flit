@@ -295,32 +295,10 @@ export async function fetchRepresentedCompanies(
   return r?.items ?? [];
 }
 
-/** Desenlace de una acción de identidad sobre el mandatario. */
-export interface MandateSignerIdentityResult {
-  estado: string;
-  reutilizada: boolean;
-}
-
-/**
- * Acciones de identidad del mandatario desde el configurador de la COMPAÑÍA.
- *
- * Existían solo bajo `/transit-offices/...` y ningún componente las llamaba: la empresa registraba a
- * su mandatario pero no tenía forma de pedirle la validación ni de vincular la que ya tuviera.
- *
- * - `send` inicia la validación (el proveedor manda el enlace de captura por correo);
- * - `resend` reenvía respetando la vigencia (no reenvía si ya hay aprobada y vigente);
- * - `link` vincula una identidad que esa persona YA validó, sin mandar correo (409 si no tiene).
- */
-export function mandateSignerIdentityAction(
-  tenantId: string,
-  mandateSignerId: string,
-  accion: "send" | "resend" | "link",
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${companyBase(tenantId)}/${mandateSignerId}/identity/${accion}`,
-    { method: "POST" },
-  );
-}
+// HU #11757 (ADR-0050) — se retira `mandateSignerIdentityAction` (send/resend/link desde el
+// configurador de la COMPAÑÍA): confirmado por grep, sin otro consumidor real (solo un mock de test).
+// El módulo Identidad es la única fuente que puede originar una validación; esa ruta también
+// responderá 410 Gone (HU #11758).
 
 function companyBase(tenantId: string): string {
   return `/api/v1/admin/companies/${tenantId}/mandate-signers`;

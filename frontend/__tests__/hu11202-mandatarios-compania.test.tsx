@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
   // El panel las carga para acotar para qué empresas firma el mandatario en cada organismo. Sin este
   // doble, llamar a una función inexistente rompe la carga entera y el panel cae en estado de error.
   fetchRepresentedCompanies: vi.fn().mockResolvedValue([]),
-  mandateSignerIdentityAction: vi.fn(),
   createCompanyMandateSigner: vi.fn(),
   updateCompanyMandateSigner: vi.fn(),
   inactivateCompanyMandateSigner: vi.fn(),
@@ -91,8 +90,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
     await user.type(screen.getByLabelText("Número de documento"), "1020304050");
-    // Desde la HU #11715 no se habilita en un organismo a quien no puede firmar ante él: con correo
-    // la validación de identidad sale al registrarlo.
+    // Desde la HU #11715 no se habilita en un organismo a quien no puede firmar ante él.
     await user.type(screen.getByLabelText("Correo"), "ana@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
 
@@ -124,8 +122,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
     await user.type(screen.getByLabelText("Número de documento"), "1020304050");
-    // Desde la HU #11715 no se habilita en un organismo a quien no puede firmar ante él: con correo
-    // la validación de identidad sale al registrarlo.
+    // Desde la HU #11715 no se habilita en un organismo a quien no puede firmar ante él.
     await user.type(screen.getByLabelText("Correo"), "ana@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
