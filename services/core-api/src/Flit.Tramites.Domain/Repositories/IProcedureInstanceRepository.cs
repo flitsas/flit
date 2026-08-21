@@ -189,6 +189,23 @@ public interface IProcedureInstanceRepository
             CancellationToken ct = default);
 
     /// <summary>
+    /// HU #11765 (ADR-0050) — la validación MÁS RECIENTE de CADA persona (documento normalizado,
+    /// ver <see cref="Identity.DocumentCanonicalNormalization"/>) del tenant, en UNA sola consulta
+    /// (sin N+1). Reemplaza a <c>admin.admin_identity_validations</c> como fuente de la vigencia de
+    /// identidad de los lectores admin de representantes legales y mandatarios (que proyectan
+    /// listados largos). No filtra por actividad reciente: a diferencia de
+    /// <see cref="ListBiometricValidationsForPersonAlertScanAsync"/>, aquí se necesita SIEMPRE la
+    /// última fila —exista o no actividad— para poder clasificarla igual que la resolución de una
+    /// sola persona (<c>IdentityVigenciaPorDocumentoResolver.ResolveAsync</c>). Solo devuelve UNA
+    /// fila por persona (la más reciente); ausentes en <paramref name="documents"/> sin ninguna
+    /// validación simplemente no aparecen en el resultado.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListLatestBiometricValidationsByPersonsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con sus validaciones biométricas + actores (Slice M4 — simular biométrica:
     /// resuelve el actor de la parte para poblar nombre/documento/email de la validación aprobada).
     /// </summary>

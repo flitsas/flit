@@ -2,6 +2,8 @@ using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.Identity;
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Tramites.Application.UseCases.Persons;
+using Flit.Tramites.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -20,14 +22,25 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
 
     private readonly FlitDbContext _context;
     private readonly TimeProvider _timeProvider;
+    private readonly IdentityVigenciaPorDocumentoResolver _identityResolver;
 
-    public DbLegalRepresentativeReader(FlitDbContext context, TimeProvider? timeProvider = null)
+    public DbLegalRepresentativeReader(
+        FlitDbContext context,
+        TimeProvider? timeProvider = null,
+        IdentityVigenciaPorDocumentoResolver? identityResolver = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
 
         // TimeProvider es opcional para no romper los ~15 sitios que construyen el reader directamente
         // (tests) ni la resolución por DI (TimeProvider.System está registrado como singleton).
         _timeProvider = timeProvider ?? TimeProvider.System;
+
+        // HU #11765 (ADR-0050) — igual que TimeProvider arriba: opcional para no romper los sitios que
+        // construyen el reader directamente (tests). Por DI llega el resolver real (scoped), ya
+        // registrado por Flit.Tramites.Application.DependencyInjection. Construido con el MISMO
+        // FlitDbContext para que un test que siembra en `context` lo vea sin abrir otra conexión.
+        _identityResolver = identityResolver
+            ?? new IdentityVigenciaPorDocumentoResolver(new ProcedureInstanceRepository(context));
     }
 
     public Task<PagedResult<LegalRepresentativeItem>> ListPagedAsync(
@@ -496,20 +509,33 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
     }
 
     /// <summary>
-    /// HU #11059 — vigencia de la identidad por representante, con el mismo cálculo que el mandatario
-    /// del OT (<see cref="AdminIdentityVigencia"/>). Una consulta para todos los ids.
-    /// </summary>
-    /// <summary>
-    /// HU #11192 — vigencia de identidad de la PERSONA, no del sujeto. Antes se resolvía filtrando por
-    /// <c>subject_type = 'legal_representative'</c> y por el id del representante, mientras la firma del
-    /// baúl se resolvía por documento. Esa asimetría hacía que una validación aprobada y vigente de la
-    /// misma persona creada bajo OTRO sujeto —un mandatario, un actor de trámite, u otra fila del mismo
-    /// representante en otra compañía— fuera invisible, y el panel dijera «Identidad sin validar»
-    /// teniéndola.
+    /// HU #11765 (ADR-0050) — vigencia de identidad de la PERSONA, no del sujeto, leída EXCLUSIVAMENTE
+    /// del módulo Identidad (<c>tramites.procedure_instance_biometric_validations</c>) a través de
+    /// <see cref="IdentityVigenciaPorDocumentoResolver"/>. Ya NO consulta
+    /// <c>admin.admin_identity_validations</c> (tabla abandonada, ADR-0034 superada): esa fuente dejó de
+    /// recibir escrituras desde que el módulo Identidad prevalida por documento (HU #11751/#11752), y
+    /// este lector seguía apuntándole — el defecto raíz de esta HU: el operador prevalidaba en Identidad
+    /// y la ficha admin no se movía.
     /// <para>
-    /// Se llavea por <c>(tenant, tipo de documento, documento)</c>, igual que
-    /// <see cref="LoadFirmaBaulVigenciaAsync"/>. El filtro por tenant es obligatorio: la misma persona
-    /// puede ser representante en varios tenants y la validación es tenant-scoped (DDL 40-HU10907).
+    /// HU #11192 — se conserva la llave de PERSONA <c>(tenant, tipo de documento, documento)</c>, no la
+    /// del sujeto. Antes se resolvía filtrando por <c>subject_type = 'legal_representative'</c> y por el
+    /// id del representante, mientras la firma del baúl se resolvía por documento. Esa asimetría hacía
+    /// que una validación aprobada y vigente de la misma persona creada bajo OTRO sujeto —un mandatario,
+    /// un actor de trámite, u otra fila del mismo representante en otra compañía— fuera invisible, y el
+    /// panel dijera «Identidad sin validar» teniéndola. <see cref="ResolveManyBatchedAsync"/> respeta esa
+    /// llave: agrupa por documento normalizado, no por representante.
+    /// </para>
+    /// <para>
+    /// UNA sola consulta SQL para TODAS las filas proyectadas (sin N+1): el tenant ya es el mismo para
+    /// todas (<see cref="TenantRlsScope"/> fija uno solo por llamada), así que basta una invocación a
+    /// <see cref="IdentityVigenciaPorDocumentoResolver.ResolveManyBatchedAsync"/>.
+    /// </para>
+    /// <para>
+    /// El estado ADR-0050 (sin_validacion/en_curso/aprobada_vigente/vencida) se traduce al vocabulario
+    /// histórico que expone el contrato (<see cref="AdminIdentityVigencia"/>: valid/pending/expired/none)
+    /// para no romper el DTO ni el frontend (<c>identity-vigencia.ts</c>) — la MATEMÁTICA de vigencia es
+    /// la misma que usa el endpoint de la HU #11751 para la misma persona; solo cambia el nombre del
+    /// estado en el wire.
     /// </para>
     /// <para>
     /// Esto NO vincula la validación al representante: <c>identity_validation_ref</c> solo lo escribe el
@@ -526,26 +552,31 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             return [];
         }
 
-        var tenantIds = rows.Select(r => r.TenantId).Distinct().ToList();
-        var documentos = rows.Select(r => r.DocumentNumber).Distinct().ToList();
+        // El tenant es SIEMPRE el mismo dentro de una llamada (TenantRlsScope fija uno por invocación);
+        // se toma el de la primera fila para la clave del resolver.
+        var tenantId = rows[0].TenantId;
         var now = DateTimeOffset.UtcNow;
 
-        // El filtro por tenant + documento se hace en SQL; el cotejo del tipo de documento se cierra en
-        // memoria al agrupar, porque una tupla compuesta no se traduce a un IN de PostgreSQL (mismo
-        // criterio que la carga de firmas del baúl).
-        var validaciones = await _context.AdminIdentityValidations
-            .AsNoTracking()
-            .Where(v => tenantIds.Contains(v.TenantId) && documentos.Contains(v.DocumentNumber))
-            .Select(v => new { v.TenantId, v.DocumentType, v.DocumentNumber, v.Status, v.ValidUntil })
-            .ToListAsync(cancellationToken)
+        var documentos = rows
+            .Select(r => (r.DocumentType, r.DocumentNumber))
+            .Distinct()
+            .ToList();
+
+        var resueltos = await _identityResolver
+            .ResolveManyBatchedAsync(tenantId, documentos, now, cancellationToken)
             .ConfigureAwait(false);
 
-        return validaciones
-            .GroupBy(v => (v.TenantId, v.DocumentType, v.DocumentNumber))
+        return rows
+            .GroupBy(r => (r.TenantId, r.DocumentType, r.DocumentNumber))
             .ToDictionary(
                 g => g.Key,
-                g => AdminIdentityVigencia.Resumir(
-                    g.Select(v => new AdminIdentityVigencia.Entrada(v.Status, v.ValidUntil)), now));
+                g =>
+                {
+                    var key = DocumentCanonicalNormalization.IdentidadKey(
+                        g.Key.TenantId, g.Key.DocumentType, g.Key.DocumentNumber);
+                    var resultado = resueltos.GetValueOrDefault(key, IdentityVigenciaResult.SinValidacion);
+                    return IdentityVigenciaLegacyMapper.ToLegacyResultado(resultado);
+                });
     }
 
     /// <summary>

@@ -92,6 +92,50 @@ public sealed class IdentityVigenciaPorDocumentoResolver(IProcedureInstanceRepos
         return result;
     }
 
+    /// <summary>
+    /// Resolución en LOTE con UNA sola consulta SQL (HU #11765, ADR-0050) — para los lectores admin de
+    /// representantes legales y mandatarios, cuyos listados pueden ser largos y no admiten el N+1 de
+    /// <see cref="ResolveManyAsync"/> (aceptable ahí porque el volumen es de unas pocas filas). Normaliza
+    /// y dedupe cada documento antes de ir al repositorio; documentos vacíos quedan fuera de la consulta
+    /// y no aparecen en el resultado (el llamador debe tratar la ausencia como
+    /// <see cref="IdentityVigenciaResult.SinValidacion"/>, igual que <see cref="ResolveManyAsync"/>).
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, IdentityVigenciaResult>> ResolveManyBatchedAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentType, string DocumentNumber)> documents,
+        DateTimeOffset now,
+        CancellationToken ct = default)
+    {
+        var normalizados = documents
+            .Select(d => DocumentCanonicalNormalization.Normalize(d.DocumentType, d.DocumentNumber))
+            .Where(p => p.DocumentType.Length > 0 && p.DocumentNumber.Length > 0)
+            .Distinct()
+            .ToList();
+
+        var result = new Dictionary<string, IdentityVigenciaResult>(StringComparer.Ordinal);
+        if (normalizados.Count == 0)
+            return result;
+
+        var rows = await repo
+            .ListLatestBiometricValidationsByPersonsAsync(
+                tenantId,
+                [.. normalizados.Select(p => (DocumentTypeNorm: p.DocumentType, DocumentNumberNorm: p.DocumentNumber))],
+                ct)
+            .ConfigureAwait(false);
+
+        var latestByKey = rows.ToDictionary(
+            r => DocumentCanonicalNormalization.IdentidadKey(tenantId, r.DocumentType, r.DocumentNumber),
+            r => r);
+
+        foreach (var (tipo, numero) in normalizados)
+        {
+            var key = DocumentCanonicalNormalization.IdentidadKey(tenantId, tipo, numero);
+            result[key] = Classify(latestByKey.GetValueOrDefault(key), now);
+        }
+
+        return result;
+    }
+
     /// <summary>Clasifica la fila más reciente (o su ausencia) con <see cref="IdentityVigenciaClassifier"/>.</summary>
     private static IdentityVigenciaResult Classify(ProcedureInstanceBiometricValidation? latest, DateTimeOffset now)
     {
