@@ -7,7 +7,7 @@ import type {
   AvaluoSource,
   SuggestedCommercialValue,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { WIZARD_CARD } from './wizard-field-styles';
 import { WizardCardHeader } from './wizard-atoms';
 
 /** Etiquetas legibles por fuente; orden de render. */
@@ -112,20 +112,6 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
             <p className="mt-3 text-right text-xs opacity-70" role="status">
               Valor sugerido aceptado.
             </p>
-          )}
-
-          {sugerido != null && !accepted && (
-            <div className="flex justify-end mt-3">
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => onAccept(sugerido, fuente ?? 'fasecolda', sugerido)}
-                className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: WIZARD_CTA_GRADIENT }}
-              >
-                Aceptar valor sugerido
-              </button>
-            </div>
           )}
         </>
       )}
