@@ -59,7 +59,9 @@ describe("ConfiguracionEmpresaTab — HU #11686", () => {
 
     expect(screen.queryByTestId("personalized-doc-empty-mandato")).not.toBeInTheDocument();
     expect(screen.queryByTestId("personalized-doc-empty-tramite_virtual")).not.toBeInTheDocument();
-    expect(screen.queryByText(/API Renting cliente/i)).not.toBeInTheDocument();
+    // Ojo con aseverar sobre «API Renting cliente»: ese texto tambien esta en el selector de canal
+    // y en su descripcion, que siguen ahi a proposito. Lo que debe desaparecer es el panel.
+    expect(screen.queryByRole("button", { name: /cargar documento/i })).not.toBeInTheDocument();
   });
 
   it("AC3: el resto de la pestaña sigue en pie — el selector de canal no se toca", async () => {

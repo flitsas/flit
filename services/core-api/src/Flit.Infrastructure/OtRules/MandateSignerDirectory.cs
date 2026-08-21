@@ -143,7 +143,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
     /// </summary>
     private async Task<Dictionary<Guid, IdentidadVigente>> LoadVigentIdentitiesAsync(
         Guid transitOfficeId,
-        IReadOnlyList<(Guid Id, string DocumentType, string DocumentNumber)> signers,
+        List<(Guid Id, string DocumentType, string DocumentNumber)> signers,
         CancellationToken cancellationToken)
     {
         var map = new Dictionary<Guid, IdentidadVigente>();

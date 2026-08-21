@@ -136,7 +136,12 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
   // HU #11758 (ADR-0050) — el aviso de "quedó guardado sin firma ni validación" ya no dispara el
   // correo de identidad (esa ruta responde 410 Gone): remite al módulo Identidad.
   it("tras registrar sin firma ni identidad, el aviso enlaza al módulo Identidad (no dispara correo)", async () => {
-    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([]));
+    // El aviso solo aparece si el representante recien creado esta EN LA LISTA: `pendingItem` se
+    // resuelve buscando el id devuelto por el alta dentro de `items`. Por eso la primera carga va
+    // vacia y la recarga posterior al alta ya trae la fila.
+    vi.mocked(fetchLegalRepresentatives)
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValue(page([{ ...ITEM, id: "rep-new", name: "Pedro", firstLastName: "López" }]));
     vi.mocked(createLegalRepresentative).mockResolvedValue({
       id: "rep-new",
       signals: [SIGNAL_SIN_FIRMA_NI_IDENTIDAD],
