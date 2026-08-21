@@ -1,3 +1,4 @@
+using System.Text;
 using PdfSharpCore.Pdf.Content;
 using PdfSharpCore.Pdf.Content.Objects;
 using PdfSharpCore.Pdf.IO;
@@ -6,6 +7,13 @@ namespace Flit.Infrastructure.Tests.Documents.Fur;
 
 /// <summary>Segmento recto de la plantilla, ya en coordenadas TOP-LEFT (las del manifiesto).</summary>
 public readonly record struct Segmento(double Fijo, double Desde, double Hasta);
+
+/// <summary>
+/// Fragmento de texto PREIMPRESO en la plantilla, en coordenadas top-left. <paramref name="Y"/> es la
+/// línea base. El rótulo puede venir troceado en varios fragmentos (el generador del formulario parte
+/// las cadenas por kerning), así que se busca por subcadena, no por igualdad.
+/// </summary>
+public readonly record struct Rotulo(string Texto, double X, double Y);
 
 /// <summary>Celda de una rejilla impresa, en coordenadas top-left.</summary>
 public readonly record struct Celda(double X0, double Y0, double X1, double Y1)
@@ -102,6 +110,73 @@ public static class FurPlantillaGeometria
 
         return (horizontales, verticales);
     }
+
+    /// <summary>
+    /// Rótulos preimpresos de la página 1, en coordenadas top-left. Son el ancla más fuerte que
+    /// ofrece el blank: los trazos dicen dónde están las celdas, pero solo el texto dice CUÁL es cada
+    /// una. Sin esto, una casilla puede caer limpiamente dentro de una celda equivocada.
+    /// </summary>
+    public static List<Rotulo> Rotulos(string archivo)
+    {
+        using var doc = PdfReader.Open(RutaPlantilla(archivo), PdfDocumentOpenMode.ReadOnly);
+        var pagina = doc.Pages[0];
+        var alto = pagina.Height.Point;
+        var contenido = ContentReader.ReadContent(pagina);
+
+        var rotulos = new List<Rotulo>();
+        double x = 0, y = 0, interlineado = 0;
+
+        void Emitir(string texto)
+        {
+            if (!string.IsNullOrWhiteSpace(texto))
+                rotulos.Add(new Rotulo(texto, x, alto - y));
+        }
+
+        foreach (var obj in contenido)
+        {
+            if (obj is not COperator op) continue;
+            switch (op.OpCode.Name)
+            {
+                case "BT":
+                    x = 0;
+                    y = 0;
+                    break;
+                case "Tm" when op.Operands.Count >= 6:
+                    x = Num(op.Operands[4]);
+                    y = Num(op.Operands[5]);
+                    break;
+                case "Td" when op.Operands.Count >= 2:
+                    x += Num(op.Operands[0]);
+                    y += Num(op.Operands[1]);
+                    break;
+                case "TD" when op.Operands.Count >= 2:
+                    x += Num(op.Operands[0]);
+                    y += Num(op.Operands[1]);
+                    interlineado = -Num(op.Operands[1]);
+                    break;
+                case "TL" when op.Operands.Count >= 1:
+                    interlineado = Num(op.Operands[0]);
+                    break;
+                case "T*":
+                    y -= interlineado;
+                    break;
+                case "Tj" or "'" when op.Operands.Count >= 1:
+                    Emitir(Texto(op.Operands[^1]));
+                    break;
+                case "TJ" when op.Operands[0] is CSequence secuencia:
+                {
+                    var sb = new StringBuilder();
+                    foreach (var item in secuencia) sb.Append(Texto(item));
+                    Emitir(sb.ToString());
+                    break;
+                }
+            }
+        }
+
+        return rotulos;
+    }
+
+    private static string Texto(CObject o) => o is CString s ? s.Value : string.Empty;
 
     private static void Acumular(
         List<Segmento> horizontales, List<Segmento> verticales,
