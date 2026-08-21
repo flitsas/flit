@@ -85,15 +85,15 @@ public static class AdminMandateSignersEndpoints
     private static async Task<IResult> ListAsync(
         Guid transitOfficeId,
         [FromServices] ListMandateSignersHandler handler,
-        [FromServices] Flit.Admin.Application.Identity.AdminIdentityMockOptions mockOptions,
         CancellationToken cancellationToken)
     {
         var result = await handler
             .HandleAsync(new ListMandateSignersQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
             .ConfigureAwait(false);
 
-        // HU #11028 — la consola solo ofrece "Simular validación" si el ambiente la tiene habilitada.
-        return Results.Ok(new { data = result, mockIdentityEnabled = mockOptions.Enabled });
+        // HU #11764 (ADR-0050) — se retira `mockIdentityEnabled`: el botón "Simular validación" ya no
+        // existe (su ruta responde 410 Gone) y el flag no tenía otro consumidor.
+        return Results.Ok(new { data = result });
     }
 
     private static async Task<IResult> ListCompaniesAsync(

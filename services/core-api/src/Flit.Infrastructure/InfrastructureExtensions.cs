@@ -623,17 +623,6 @@ public static class InfrastructureExtensions
         };
         services.AddSingleton(biometrics);
 
-        // HU #11028 — simulación de validaciones de identidad admin: APAGADA salvo que el ambiente la
-        // encienda explícitamente. Una identidad simulada habilita la firma del mandato, así que el
-        // default seguro es no permitirla.
-        services.AddSingleton(new Flit.Admin.Application.Identity.AdminIdentityMockOptions
-        {
-            Enabled = string.Equals(
-                Cfg("AdminIdentity:Mock:Enabled", "ADMIN_IDENTITY_MOCK_ENABLED"),
-                "true",
-                StringComparison.OrdinalIgnoreCase),
-        });
-
         services.Configure<KyverumOptions>(o =>
         {
             o.BaseUrl = Cfg("Kyverum:BaseUrl", "KYVERUM_BASE_URL") ?? "https://verify.kyverum.com";

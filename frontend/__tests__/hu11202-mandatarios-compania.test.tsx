@@ -62,7 +62,7 @@ const MANDATARIO = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.fetchCompanyMandateSigners.mockResolvedValue({ signers: [MANDATARIO], mockIdentityEnabled: false });
+  mocks.fetchCompanyMandateSigners.mockResolvedValue([MANDATARIO]);
   mocks.fetchCompanyTransitOffices.mockResolvedValue(OFICINAS);
   mocks.createCompanyMandateSigner.mockResolvedValue({ id: "ms-2", integrityHash: "b".repeat(64) });
   mocks.updateCompanyMandateSigner.mockResolvedValue({ id: "ms-1", integrityHash: "c".repeat(64) });
@@ -275,7 +275,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
 
   it("sin organismos habilitados se explica qué falta en vez de dejar registrar en el vacío", async () => {
     mocks.fetchCompanyTransitOffices.mockResolvedValue([]);
-    mocks.fetchCompanyMandateSigners.mockResolvedValue({ signers: [], mockIdentityEnabled: false });
+    mocks.fetchCompanyMandateSigners.mockResolvedValue([]);
     renderPanel();
 
     expect(

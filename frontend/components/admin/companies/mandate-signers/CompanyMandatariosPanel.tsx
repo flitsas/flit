@@ -44,7 +44,7 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [signerResult, officeList, companyList] = await Promise.all([
+        const [signerList, officeList, companyList] = await Promise.all([
           fetchCompanyMandateSigners(tenantId, signal),
           fetchCompanyTransitOffices(tenantId, signal),
           // Best-effort: sin empresas el formulario sigue funcionando y el mandatario aplica a todas,
@@ -54,10 +54,10 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
         if (signal?.aborted) {
           return;
         }
-        setSigners(signerResult.signers);
+        setSigners(signerList);
         setOffices(officeList);
         setCompanies(companyList);
-        setStatus(signerResult.signers.length === 0 ? "empty" : "ready");
+        setStatus(signerList.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) {
           setStatus("error");

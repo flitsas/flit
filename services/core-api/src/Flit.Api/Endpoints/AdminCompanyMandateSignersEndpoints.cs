@@ -119,11 +119,12 @@ public static class AdminCompanyMandateSignersEndpoints
     private static async Task<IResult> ListAsync(
         Guid tenantId,
         [FromServices] ListCompanyMandateSignersHandler handler,
-        [FromServices] Flit.Admin.Application.Identity.AdminIdentityMockOptions mockOptions,
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(tenantId, cancellationToken).ConfigureAwait(false);
-        return Results.Ok(new { data = result, mockIdentityEnabled = mockOptions.Enabled });
+        // HU #11764 (ADR-0050) — se retira `mockIdentityEnabled`: el botón "Simular validación" ya no
+        // existe (su ruta responde 410 Gone) y el flag no tenía otro consumidor.
+        return Results.Ok(new { data = result });
     }
 
     private static async Task<IResult> ListTransitOfficesAsync(

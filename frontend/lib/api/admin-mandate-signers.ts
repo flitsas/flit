@@ -99,21 +99,6 @@ export async function fetchMandateSigners(
   return result.data;
 }
 
-/**
- * GET — igual que `fetchMandateSigners` pero conservando si el ambiente permite SIMULAR validaciones
- * de identidad (HU #11028). La consola solo ofrece esa acción cuando el backend la habilita.
- */
-export async function fetchMandateSignersWithFlags(
-  transitOfficeId: string,
-  signal?: AbortSignal,
-): Promise<{ signers: MandateSigner[]; mockIdentityEnabled: boolean }> {
-  const result = await apiFetch<{ data: MandateSigner[]; mockIdentityEnabled?: boolean }>(
-    base(transitOfficeId),
-    { signal },
-  );
-  return { signers: result.data, mockIdentityEnabled: result.mockIdentityEnabled === true };
-}
-
 /** GET /companies — compañías del OT con sus mandatarios asignados (RF34 + multiselect). */
 export async function fetchOtCompanies(
   transitOfficeId: string,
@@ -246,12 +231,9 @@ function companyBase(tenantId: string): string {
 export async function fetchCompanyMandateSigners(
   tenantId: string,
   signal?: AbortSignal,
-): Promise<{ signers: MandateSigner[]; mockIdentityEnabled: boolean }> {
-  const result = await apiFetch<{ data: MandateSigner[]; mockIdentityEnabled?: boolean }>(
-    companyBase(tenantId),
-    { signal },
-  );
-  return { signers: result.data, mockIdentityEnabled: result.mockIdentityEnabled === true };
+): Promise<MandateSigner[]> {
+  const result = await apiFetch<{ data: MandateSigner[] }>(companyBase(tenantId), { signal });
+  return result.data;
 }
 
 /** GET /transit-offices — organismos que la compañía puede elegir (AC2). */
