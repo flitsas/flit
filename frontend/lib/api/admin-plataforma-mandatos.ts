@@ -3,6 +3,7 @@ import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client
 import { ApiError } from "./types";
 import type {
   MandateAssignmentMode,
+  MandatoConfiguredTemplateCode,
   MandatoTemplateCode,
 } from "@/lib/plataforma/mandato-templates";
 
@@ -15,7 +16,14 @@ export interface MandateOtConfigView {
   officeId: string;
   code: string;
   name: string;
+  /** Redacción EFECTIVA que se emite hoy para este OT (con `auto` ya resuelto). */
   templateCode: MandatoTemplateCode | string;
+  /**
+   * Redacción ELEGIDA, tal cual está guardada (`auto` si el OT no fija ninguna). Es la que
+   * preselecciona el selector: preseleccionar con la efectiva convertiría un "automática" en una
+   * redacción fija al guardar sin tocar nada.
+   */
+  configuredTemplateCode: MandatoConfiguredTemplateCode | string;
   requiresForNaturalPerson: boolean;
   mandataryFamily: MandataryFamilyCode | string;
   assignmentMode: MandateAssignmentMode | string;
@@ -61,6 +69,9 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
     code: String(raw.code ?? raw.Code ?? ""),
     name: String(raw.name ?? raw.Name ?? ""),
     templateCode: String(raw.templateCode ?? raw.TemplateCode ?? "generico"),
+    configuredTemplateCode: String(
+      raw.configuredTemplateCode ?? raw.ConfiguredTemplateCode ?? "auto",
+    ),
     requiresForNaturalPerson: Boolean(raw.requiresForNaturalPerson ?? raw.RequiresForNaturalPerson),
     mandataryFamily: String(raw.mandataryFamily ?? raw.MandataryFamily ?? "individuo"),
     assignmentMode: String(raw.assignmentMode ?? raw.AssignmentMode ?? "signer"),
@@ -323,6 +334,91 @@ export async function extractMandateConfigFromFile(
       (raw.mandatarySigla as string | null) ?? (raw.MandatarySigla as string | null) ?? null,
     notes: (raw.notes as string | null) ?? (raw.Notes as string | null) ?? null,
   };
+}
+
+/** Escenario del simulador (HU #11707). */
+export interface MandateSimulationBody {
+  officeId: string;
+  /** `natural` | `juridica` — tipo de persona del MANDANTE. */
+  personType: "natural" | "juridica";
+  /** Nulo ⇒ el modo configurado para el organismo. */
+  assignmentMode?: MandateAssignmentMode | string | null;
+  /** Nulo ⇒ el mandatario sale como dato de muestra. */
+  mandateSignerId?: string | null;
+  /** `matricula_inicial` | `traspaso_standard` — cambia el objeto del contrato. */
+  tipologia?: string | null;
+}
+
+export interface MandateSimulatorSignerOption {
+  id: string;
+  fullName: string;
+  documentNumber: string;
+  identityVigente: boolean;
+  tieneFirmaEnBaul: boolean;
+}
+
+export async function listMandateSimulatorSigners(
+  officeId: string,
+  signal?: AbortSignal,
+): Promise<MandateSimulatorSignerOption[]> {
+  const data = await apiFetch<{ items: MandateSimulatorSignerOption[] }>(
+    `${base}/simulador/ot/${officeId}/mandatarios`,
+    { signal },
+  );
+  return data?.items ?? [];
+}
+
+/** PDF de la simulación. El escenario viaja en el cuerpo, así que va por POST. */
+export async function fetchMandateSimulationPreview(
+  body: MandateSimulationBody,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return postPdf(`${base}/simulador/preview`, body, signal);
+}
+
+/**
+ * Envío por correo de la simulación. **Sin consumidores**: la función quedó oculta en la interfaz
+ * (el simulador solo previsualiza). Se conserva para no perder el trabajo si vuelve a pedirse.
+ */
+export async function sendMandateSimulation(
+  body: MandateSimulationBody & { toEmail: string; toName?: string | null },
+  signal?: AbortSignal,
+): Promise<string> {
+  const data = await apiFetch<{ message?: string }>(`${base}/simulador/enviar`, {
+    method: "POST",
+    body,
+    signal,
+  });
+  return data?.message ?? "Simulación enviada.";
+}
+
+async function postPdf(path: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
+  const baseUrl =
+    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(path, baseUrl);
+  const token = getToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      const text = await response.text();
+      detail = text ? JSON.parse(text) : null;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
+  }
+
+  const blob = await response.blob();
+  return blob.type === "application/pdf" ? blob : new Blob([blob], { type: "application/pdf" });
 }
 
 async function fetchPdf(path: string, signal?: AbortSignal): Promise<Blob> {

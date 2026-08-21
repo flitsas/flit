@@ -6,6 +6,37 @@
 
 export type MandatoTemplateCode = "generico" | "sabaneta" | "bello" | "municipio";
 
+/**
+ * Redacción ELEGIDA para un OT. `auto` no es una redacción: delega en la plantilla de sistema del
+ * organismo (o en la genérica si no tiene). Es lo que se guarda; la redacción EFECTIVA la resuelve
+ * el backend.
+ */
+export type MandatoConfiguredTemplateCode = MandatoTemplateCode | "auto";
+
+/** Opción "automática" del selector: encabeza la lista porque es el default sensato. */
+export const MANDATO_TEMPLATE_AUTO = {
+  code: "auto" as const,
+  label: "Automática (según el organismo)",
+  summary:
+    "El organismo usa la plantilla que el sistema tiene asignada a su código. Si no tiene ninguna, usa la genérica.",
+};
+
+/** Opciones del selector de plantilla por OT: la automática más las redacciones del sistema. */
+export function mandatoTemplateOptions(): readonly {
+  code: MandatoConfiguredTemplateCode;
+  label: string;
+  summary: string;
+}[] {
+  return [
+    MANDATO_TEMPLATE_AUTO,
+    ...MANDATO_TEMPLATES.map((t) => ({
+      code: t.code as MandatoConfiguredTemplateCode,
+      label: t.label,
+      summary: t.summary,
+    })),
+  ];
+}
+
 export type MandatoFamiliaCode = "individuo" | "organismo_transito";
 
 /** Modo de asignación (negocio): independiente de la redacción (`template_code`). */
