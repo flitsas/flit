@@ -6,7 +6,7 @@
 **Tags**: arquitectura, backend, frontend, identidad, modulo-companias, tramites, feature-11687, feature-11688, feature-11689
 **Supersedes**: `ADR-0034-validacion-identidad-admin-desacoplada.md` (Aceptado)
 **Enmienda**: `ADR-0039-precedencia-unica-decision-envio-identidad.md` (Aceptado) — su acotación «la identidad administrativa queda fuera de alcance» pierde la premisa
-**Relacionado**: `ADR-0025-baul-firmas-custodia-y-consumo.md` (D8, precedencia baúl > identidad), `ADR-0036-prevalidacion-natural-tracking-desacoplado-instancia.md` (restricción a persona natural), `ADR-0040-tracking-identidad-por-persona.md` (Propuesto — dependencia declarada), `ADR-0042-documentos-personalizados-por-compania.md`
+**Relacionado**: `ADR-0025-baul-firmas-custodia-y-consumo.md` (D8, precedencia baúl > identidad), `ADR-0036-prevalidacion-natural-tracking-desacoplado-instancia.md` (restricción a persona natural), `ADR-0040-tracking-identidad-por-persona.md` (Aceptado 2026-08-21 — dependencia RESUELTA), `ADR-0042-documentos-personalizados-por-compania.md`
 **HU origen**: Features #11687, #11688, #11689 — HUs #11751 a #11761
 **Refinamiento**: `.claude/state/refine-identidad-admin-v2-aprobado.md` (Fase 4 cerrada por el PO humano el 2026-08-20)
 
@@ -117,8 +117,22 @@ cada consumidor nuevo hereda la doble lectura. El PO evaluó explícitamente el 
 
 ## Dependencias
 
-- **`ADR-0040-tracking-identidad-por-persona.md` debe pasar a `Aceptado`** por el Líder Técnico humano:
-  es dependencia declarada de la consulta por documento y **bloquea el merge del Feature #11687**.
+- **`ADR-0040-tracking-identidad-por-persona.md` — RESUELTA.** Aceptado por el Líder Técnico humano el
+  **2026-08-21**; ya no bloquea el merge del Feature #11687.
+
+  El acoplamiento real, verificado contra el código, no es el que este ADR insinuaba en su primera
+  redacción. El endpoint del CF-02 **no** reutiliza el payload de
+  `GET /api/v1/biometric-validations/by-person` —así lo declara su propio encabezado en
+  `AdminIdentityVigenciaEndpoints.cs`: devuelve UN registro, no una grilla—. Lo que sí hereda del
+  ADR-0040 es la **infraestructura de consulta por documento normalizado**:
+  `IdentityVigenciaPorDocumentoResolver` resuelve vía
+  `IProcedureInstanceRepository.ListBiometricValidationsByPersonAsync(...)`, método introducido por el
+  commit `2d790e85` (Feature #11261) y respaldado por el índice por expresión
+  `57-HU11269-biometric-doc-norm-created.sql`. Sin esa consulta y ese índice, el CF-02 se queda sin
+  piso — de ahí que la dependencia fuera legítima aunque estuviera mal enunciada.
+
+  Ambos ADRs comparten además la **misma clave de agrupación** —`(tenant_id, documento normalizado)`
+  con la normalización canónica del `ADR-0039`—, y esa unidad es lo que su aceptación conjunta fija.
 - El `ADR-0036` restringe la prevalidación a **persona natural**. De ahí que el copy deba contemplar el
   caso **NIT**: un mandatario puede registrarse con tipo de documento NIT, y a esa persona jurídica no
   le aplica prevalidación. Enlazarla al módulo Identidad sería mandarla a un flujo imposible.
