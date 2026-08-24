@@ -25,49 +25,19 @@ VALUES (
 ON CONFLICT (code) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 2. Step (1 step → 1 section → fields placa-first).
+-- 2. Pasos, secciones y campos: RETIRADOS (ADR-0050).
+--
+--    Este seed creaba un paso único —CONSULTA_PLACA— «para que el wizard
+--    funcione end-to-end», de cuando los tipos se publicaban sin ninguna
+--    parametrización. Desde ADR-0050 el recorrido lo declara el catálogo
+--    (DDL 81), y como `DevelopmentAuthSeeder` re-ejecuta este script en CADA
+--    arranque de Development, el paso volvía a aparecer después de que la
+--    migración lo borrara: el tipo quedaba con DOS pasos en sort_order = 1 y el
+--    asistente pintaba uno de más, vacío, en la primera posición.
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO tramites.procedure_steps (id, procedure_type_id, code, title, sort_order, is_active)
-SELECT uuidv7(), pt.id, 'CONSULTA_PLACA', 'Consulta por placa', 1, true
-FROM tramites.procedure_types pt
-WHERE pt.code = 'TRASPASO_STANDARD'
-  AND NOT EXISTS (
-      SELECT 1 FROM tramites.procedure_steps s
-      WHERE s.procedure_type_id = pt.id AND s.code = 'CONSULTA_PLACA'
-  );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 3. Section.
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO tramites.procedure_sections (id, procedure_step_id, code, title, sort_order, layout)
-SELECT uuidv7(), s.id, 'IDENTIFICACION', 'Identificación del vehículo y propietario', 1, 'single'
-FROM tramites.procedure_steps s
-JOIN tramites.procedure_types pt ON pt.id = s.procedure_type_id
-WHERE pt.code = 'TRASPASO_STANDARD' AND s.code = 'CONSULTA_PLACA'
-  AND NOT EXISTS (
-      SELECT 1 FROM tramites.procedure_sections sec
-      WHERE sec.procedure_step_id = s.id AND sec.code = 'IDENTIFICACION'
-  );
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 4. Form fields placa-first: plate + owner_document_type/number.
---    Idempotente vía UNIQUE (procedure_section_id, field_key).
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO tramites.form_fields (id, procedure_section_id, field_key, label, field_type, is_required, sort_order)
-SELECT uuidv7(), sec.id, v.field_key, v.label, v.field_type, v.is_required, v.sort_order
-FROM tramites.procedure_sections sec
-JOIN tramites.procedure_steps s ON s.id = sec.procedure_step_id
-JOIN tramites.procedure_types pt ON pt.id = s.procedure_type_id
-CROSS JOIN (VALUES
-    ('plate',                 'Placa',                       'text', true, 1::smallint),
-    ('owner_document_type',   'Tipo de documento del propietario', 'text', true, 2::smallint),
-    ('owner_document_number', 'Número de documento del propietario','text', true, 3::smallint)
-) AS v(field_key, label, field_type, is_required, sort_order)
-WHERE pt.code = 'TRASPASO_STANDARD' AND s.code = 'CONSULTA_PLACA' AND sec.code = 'IDENTIFICACION'
-ON CONFLICT (procedure_section_id, field_key) DO NOTHING;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 5. Publicar el tipo (solo si aún no está publicado → idempotente).
+-- 3. Publicar el tipo (solo si aún no está publicado → idempotente).
 -- ─────────────────────────────────────────────────────────────────────────────
 UPDATE tramites.procedure_types
 SET publication_status = 'published',
