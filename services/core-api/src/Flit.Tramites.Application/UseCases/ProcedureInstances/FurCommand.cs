@@ -757,7 +757,12 @@ public sealed class GenerarFurHandler(
             // marcaba en ninguna parte. Es el mismo criterio (`bandera || diff`) que ya usa el
             // wizard para pintar el subtrámite como activo, así que documento y pantalla dejan de
             // contradecirse.
-            Transformaciones: transformaciones)
+            Transformaciones: transformaciones,
+            // ADR-0050 — el rótulo legal y la existencia de parte vendedora salen del tipo.
+            TipoNombre: instance.TypeName,
+            RequiereVendedor: ProcedureTypeGateProfile
+                .FromJson(instance.ProcedureType?.GateProfile)
+                .RequiresSeller)
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.
             TenantIdParaFirmas = instance.TenantId,

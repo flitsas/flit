@@ -529,4 +529,39 @@ public sealed class FurOverlayDocumentGeneratorTests
         using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(ms, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
         return doc.PageCount;
     }
+
+    // ── ADR-0050: la parte vendedora la declara el tipo ──────────────────────────────────────────
+    // Antes se decidía buscando "TRASPASO" dentro de la tipología o de la modalidad.
+
+    [Fact]
+    public void UnTipoQueDeclaraParteVendedora_EstampaLaSeccionDelComprador()
+    {
+        var data = FullData() with
+        {
+            TipologiaCodigo = "TRANSFERENCIA_DOMINIO",  // no contiene la palabra "TRASPASO"
+            Modalidad = "TRASPASO",
+            RequiereVendedor = true,
+        };
+
+        var values = FurFieldMapper.Map(data);
+
+        values["vehicle_buyer_name"].Text.Should().NotBeEmpty(
+            "el tipo declara parte vendedora, así que el FUR lleva sección de comprador");
+    }
+
+    [Fact]
+    public void UnTramiteDeOtrosNoEstampaSeccionDeComprador()
+    {
+        // Un blindaje tiene un único titular: estampar un comprador inventaría una parte.
+        var data = FullData() with
+        {
+            TipologiaCodigo = "BLINDAJE",
+            Modalidad = "OTROS",
+            RequiereVendedor = false,
+        };
+
+        var values = FurFieldMapper.Map(data);
+
+        values["vehicle_buyer_name"].Text.Should().BeEmpty();
+    }
 }

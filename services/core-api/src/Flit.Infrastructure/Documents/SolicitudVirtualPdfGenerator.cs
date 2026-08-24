@@ -34,9 +34,10 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
         // Antes salía a nombre del radicador (el comprador), declarando por la parte equivocada.
         var parte = data.Propietario;
         var esJuridica = parte?.EsJuridica ?? false;
-        var esTraspaso = string.Equals(
-            data.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
-        var tramite = esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
+        // ADR-0050 — el rótulo legal es el NOMBRE del tipo; el literal heredado queda de respaldo.
+        var tramite = !string.IsNullOrWhiteSpace(data.TipoNombre)
+            ? data.TipoNombre!.Trim().ToUpperInvariant()
+            : data.RequiereVendedor ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
 
         // HU #11016 — sin ciudad legible el encabezado es solo la fecha: antes se imprimía el código
         // DIVIPOLA del organismo («25286, 28 de julio de 2026»), que parecía pegado a la fecha.

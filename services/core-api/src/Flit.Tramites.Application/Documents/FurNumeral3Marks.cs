@@ -80,14 +80,20 @@ public static class FurNumeral3Marks
             return [];
 
         var familia = Norm(modalidad);
-        if (familia.Contains("TRASPASO", StringComparison.Ordinal) || familia == ProcedureFamilyCodes.Traspaso)
-            return [2];
-        if (code.Contains("MATRICULA", StringComparison.Ordinal)
-            || familia.Contains("MATRICULA", StringComparison.Ordinal)
-            || familia == ProcedureFamilyCodes.Matriculas)
-            return [1];
 
-        return [];
+        // Fallback por FAMILIA (ADR-0050) para un código que el catálogo de casillas todavía no
+        // contempla. Antes miraba también substrings del código y de la modalidad, así que cualquier
+        // cosa que contuviera "MATRICULA" acababa marcando la casilla 1.
+        //
+        // La familia OTROS no cae en ninguna casilla a propósito: un blindaje o un duplicado no son
+        // ni matrícula ni traspaso, y marcar una casilla equivocada en el formulario oficial es peor
+        // que no marcar ninguna — el organismo devuelve el trámite y el error es imputable a FLIT.
+        return ProcedureFamilyCodes.FromCode(familia) switch
+        {
+            ProcedureFamily.Traspaso => [2],
+            ProcedureFamily.Matriculas => [1],
+            _ => [],
+        };
     }
 
     private static bool IsPrendaBase(string code) =>

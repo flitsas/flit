@@ -88,15 +88,16 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         var esJuridica = parte?.EsJuridica ?? false;
         var variante = MandatoTemplateResolver.Resolve(data.TemplateCode);
 
-        var esTraspaso = string.Equals(
-            tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
+        // ADR-0050 — lo declara el tipo, no un código concreto: un traspaso unilateral o una
+        // transferencia de dominio también tienen parte vendedora.
+        var esTraspaso = tramite.RequiereVendedor;
         // HU #11206 — el objeto del contrato incluye las transformaciones del trámite. Se compone aquí,
         // una sola vez, para que todas las familias de plantilla lo redacten idéntico (AC4). Sin
         // transformaciones queda exactamente el texto de siempre (AC3).
         // HU #11627 — también nombra la prenda si el trámite la tiene (agregado ProcedureInstancePrenda,
         // ya resuelto en FurDocumentData.PrendaMarking; no viaja por field_values a propósito).
         var nombreTramite = MandatoObjetoComposer.Componer(
-            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
+            RotuloTramite(tramite),
             data.Transformaciones,
             tramite.PrendaMarking);
 
@@ -246,10 +247,11 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
         var parte = tramite.Mandante;
-        var esTraspaso = string.Equals(
-            tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
+        // ADR-0050 — lo declara el tipo, no un código concreto: un traspaso unilateral o una
+        // transferencia de dominio también tienen parte vendedora.
+        var esTraspaso = tramite.RequiereVendedor;
         var nombreTramite = MandatoObjetoComposer.Componer(
-            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
+            RotuloTramite(tramite),
             data.Transformaciones,
             tramite.PrendaMarking);
         var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
@@ -867,4 +869,16 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         string.IsNullOrWhiteSpace(reference)
             ? "sin_ref"
             : new string(reference.Trim().Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
+
+    /// <summary>
+    /// Rótulo legal del trámite en el mandato: el NOMBRE del tipo tal como está en el catálogo.
+    /// <para>Antes se elegía entre dos literales y todo lo que no fuera traspaso se firmaba como
+    /// "MATRÍCULA INICIAL", así que el mandato de un blindaje o de un levantamiento de prenda
+    /// nombraba un trámite distinto del que se estaba radicando. Se conserva el rótulo heredado como
+    /// respaldo para los documentos que aún no traen el nombre.</para>
+    /// </summary>
+    internal static string RotuloTramite(FurDocumentData tramite) =>
+        !string.IsNullOrWhiteSpace(tramite.TipoNombre)
+            ? tramite.TipoNombre!.Trim().ToUpperInvariant()
+            : tramite.RequiereVendedor ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
 }

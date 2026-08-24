@@ -100,4 +100,38 @@ public sealed class FurNumeral3MarksTests
         Marks("TRASPASO_STANDARD", "TRASPASO", FurPrendaMarking.Ambos)
             .Should().BeEquivalentTo([2, 11, 12]);
     }
+
+    // ── ADR-0050: el fallback por familia ────────────────────────────────────────────────────────
+    // Antes, un código sin casilla propia caía por substring: cualquier cosa que contuviera
+    // "MATRICULA" acababa marcando la casilla 1 del formulario oficial.
+
+    [Fact]
+    public void CodigoDesconocidoDeLaFamiliaOtros_NoMarcaNingunaCasilla()
+    {
+        // Marcar mal una casilla del FUR es peor que no marcar ninguna: el organismo devuelve el
+        // trámite y el error es imputable a FLIT.
+        Marks("TRAMITE_QUE_NO_EXISTE", "OTROS").Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("MATRICULAS", 1)]
+    [InlineData("TRASPASO", 2)]
+    public void CodigoDesconocido_CaeEnLaCasillaDeSuFamilia(string familia, int casilla)
+    {
+        Marks("TIPO_NUEVO_SIN_CASILLA", familia).Should().BeEquivalentTo([casilla]);
+    }
+
+    [Fact]
+    public void UnCodigoQueContieneMatriculaPeroEsDeOtraFamilia_NoHeredaLaCasillaDeMatricula()
+    {
+        // El caso que rompía la heurística por substring.
+        Marks("REVISION_MATRICULA_ESPECIAL", "OTROS").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BlindajeNoMarcaTramiteSolicitado_AunqueSeaDeLaFamiliaOtros()
+    {
+        // El blindaje se declara en su propia casilla de vehículo blindado, no en la rejilla.
+        Marks("BLINDAJE", "OTROS").Should().BeEmpty();
+    }
 }

@@ -130,7 +130,16 @@ public sealed record FurDocumentData(
     // HU #11641 — subtrámites simultáneos declarados (color / carrocería / combustible / blindaje),
     // que marcan sus casillas propias. Blindaje usa SI/NO de vehículo blindado; las otras tres van
     // a la rejilla de trámite solicitado. Por defecto ninguno.
-    FurTransformacionesDeclaradas Transformaciones = default)
+    FurTransformacionesDeclaradas Transformaciones = default,
+    // ADR-0050 — NOMBRE del tipo de trámite, tal como está en el catálogo. Es el rótulo legal de los
+    // documentos: antes el mandato y la solicitud virtual escribían "MATRÍCULA INICIAL" para todo lo
+    // que no fuera traspaso, así que un blindaje o un levantamiento de prenda salía nombrado como un
+    // trámite que no era. Vacío ⇒ los generadores caen al rótulo heredado.
+    string? TipoNombre = null,
+    // ADR-0050 — el tipo declara si hay parte VENDEDORA (gate_profile.requiresSeller). Sustituye a
+    // deducirlo por substring sobre la tipología o la modalidad, que daba por traspaso cualquier
+    // código que contuviera esa palabra.
+    bool RequiereVendedor = false)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
