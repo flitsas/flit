@@ -43,6 +43,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
     private static ProcedureInstance Instance(Guid id, Guid tenant, string status = TramiteEstado.Borrador) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),

@@ -46,6 +46,7 @@ public sealed class PersonalizedDocumentSubstitutionTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = InstanceId,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -372,6 +373,7 @@ public sealed class PersonalizedDocumentSubstitutionTests
         var id = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),

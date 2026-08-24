@@ -26,6 +26,7 @@ public sealed class ParticipantHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso_standard" ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

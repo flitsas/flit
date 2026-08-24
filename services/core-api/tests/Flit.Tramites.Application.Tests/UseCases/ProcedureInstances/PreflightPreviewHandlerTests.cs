@@ -174,6 +174,7 @@ public sealed class PreflightPreviewHandlerTests
         var tenant = Guid.NewGuid();
         var instance = new Flit.Tramites.Domain.Entities.ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),

@@ -44,6 +44,7 @@ public sealed class ListProcedureInstancesTests
         // el wizard, Track B).
         var matriculaParcial = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000001",
@@ -72,6 +73,7 @@ public sealed class ListProcedureInstancesTests
         // Traspaso ya radicado (submitted) → PasoActual reporta TotalPasos (6).
         var traspasoSubmitted = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.Traspaso),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000002",
@@ -129,6 +131,7 @@ public sealed class ListProcedureInstancesTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000010",
@@ -167,6 +170,7 @@ public sealed class ListProcedureInstancesTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000011",
@@ -202,6 +206,7 @@ public sealed class ListProcedureInstancesTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000012",
@@ -229,6 +234,7 @@ public sealed class ListProcedureInstancesTests
 
         ProcedureInstance Inst(Guid tenant, string reference) => new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ReferenceNumber = reference,
@@ -261,6 +267,7 @@ public sealed class ListProcedureInstancesTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.Traspaso),
             Id = instanceId,
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000020",
@@ -338,6 +345,7 @@ public sealed class ListProcedureInstancesTests
         var ct = TestContext.Current.CancellationToken;
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ReferenceNumber = "TR-1",
@@ -378,6 +386,7 @@ public sealed class ListProcedureInstancesTests
         var ct = TestContext.Current.CancellationToken;
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ReferenceNumber = "MI-1",
@@ -408,6 +417,7 @@ public sealed class ListProcedureInstancesTests
     /// <summary>Traspaso base para los casos de firma/fuente/gestor; sin firmas ni adjuntos.</summary>
     private static ProcedureInstance Traspaso(Guid tenantId, string reference = "TRM-2026-000100") => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.Traspaso),
         Id = Guid.NewGuid(),
         TenantId = tenantId,
         ReferenceNumber = reference,
@@ -664,6 +674,7 @@ public sealed class ListProcedureInstancesTests
         var ct = TestContext.Current.CancellationToken;
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ReferenceNumber = "MI-2",

@@ -306,6 +306,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         });
         db.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = InstanceId,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),

@@ -25,6 +25,7 @@ public sealed class PauseProcedureInstanceTests
         Guid id, Guid tenantId, string status = TramiteEstado.Borrador, string? origin = "ict") =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso" ?? "traspaso_estandar"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

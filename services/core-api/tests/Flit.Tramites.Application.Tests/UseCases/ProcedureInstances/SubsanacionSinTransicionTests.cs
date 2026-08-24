@@ -27,6 +27,7 @@ public sealed class SubsanacionSinTransicionTests
     private static ProcedureInstance Rechazado(Guid id, Guid tenantId, bool subsanacionActiva = false) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso_standard" ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

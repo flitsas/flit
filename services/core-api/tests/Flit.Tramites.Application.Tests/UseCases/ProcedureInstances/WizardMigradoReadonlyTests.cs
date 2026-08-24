@@ -30,6 +30,7 @@ public sealed class WizardMigradoReadonlyTests
     private static ProcedureInstance Traspaso(string status, bool isMigrated) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),

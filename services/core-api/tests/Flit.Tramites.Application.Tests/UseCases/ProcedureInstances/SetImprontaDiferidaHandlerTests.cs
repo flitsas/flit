@@ -19,6 +19,7 @@ public sealed class SetImprontaDiferidaHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

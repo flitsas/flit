@@ -13,6 +13,7 @@ public sealed class PlateAssignmentEmailModelProjectorTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Plate = "ABC123",
             PlateFlowStatus = "asignado",
             TransitOfficeId = Guid.NewGuid(),
@@ -39,7 +40,8 @@ public sealed class PlateAssignmentEmailModelProjectorTests
     [Fact]
     public void FieldValuesIncompletos_NoLanzaYUsaDefaults()
     {
-        var instance = new ProcedureInstance { Plate = null, PlateFlowStatus = null };
+        var instance = new ProcedureInstance {
+        ProcedureType = ProcedureTypeFixture.Matricula, Plate = null, PlateFlowStatus = null };
         var model = PlateAssignmentEmailModelProjector.Project(instance, [], new Dictionary<string, string?>());
 
         model.Placa.Should().BeEmpty();
@@ -52,7 +54,8 @@ public sealed class PlateAssignmentEmailModelProjectorTests
     [Fact]
     public void CodigoDivipola_NoSeImprimeComoCiudad()
     {
-        var instance = new ProcedureInstance { Plate = "XYZ99" };
+        var instance = new ProcedureInstance {
+        ProcedureType = ProcedureTypeFixture.Matricula, Plate = "XYZ99" };
         var fields = new Dictionary<string, string?> { ["transit_office_city"] = "25286" };
 
         var model = PlateAssignmentEmailModelProjector.Project(instance, [], fields);
@@ -64,7 +67,8 @@ public sealed class PlateAssignmentEmailModelProjectorTests
     [Fact]
     public void CodigoDivipola_UsaCiudadDelCompradorEnMetadata()
     {
-        var instance = new ProcedureInstance { Plate = "XYZ99" };
+        var instance = new ProcedureInstance {
+        ProcedureType = ProcedureTypeFixture.Matricula, Plate = "XYZ99" };
         var actors = new List<ProcedureInstanceActor>
         {
             new()

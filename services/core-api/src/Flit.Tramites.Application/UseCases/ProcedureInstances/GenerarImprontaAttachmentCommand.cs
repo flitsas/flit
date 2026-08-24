@@ -59,7 +59,7 @@ public sealed class GenerarImprontaAttachmentHandler(
         var placa = Get(fv, "plate");
         var vin = Get(fv, "vin");
 
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
 
         // Matrícula inicial: SIEMPRE por VIN (el radicador no conoce la placa aunque el RUNT ya

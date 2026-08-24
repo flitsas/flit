@@ -5,15 +5,20 @@ using Xunit;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
+/// <summary>
+/// ADR-0050 — la tipología dejó de ser un catálogo propio: es el <c>code</c> del tipo de
+/// trámite (<c>MATRICULA_NUEVA</c> / <c>TRASPASO_STANDARD</c>). La modalidad todavía existe
+/// como columna en retirada, así que el resolver sigue devolviéndola en snake_case.
+/// </summary>
 public sealed class TipologiaResolverTests
 {
     [Theory]
-    [InlineData(ProcedureFamily.Traspaso, "traspaso", "traspaso_standard")]
-    [InlineData("traspaso", "traspaso", "traspaso_standard")]
-    [InlineData(ProcedureFamily.Matriculas, "matricula_inicial", "matricula_inicial")]
-    [InlineData(ProcedureFamily.Otros, "matricula_inicial", "matricula_inicial")]
-    [InlineData("anything-else", "matricula_inicial", "matricula_inicial")]
-    [InlineData(null, "matricula_inicial", "matricula_inicial")]
+    [InlineData(ProcedureFamilyCodes.Traspaso, "traspaso", "TRASPASO_STANDARD")]
+    [InlineData("traspaso", "traspaso", "TRASPASO_STANDARD")]
+    [InlineData(ProcedureFamilyCodes.Matriculas, "matricula_inicial", "MATRICULA_NUEVA")]
+    [InlineData(ProcedureFamilyCodes.Otros, "matricula_inicial", "MATRICULA_NUEVA")]
+    [InlineData("anything-else", "matricula_inicial", "MATRICULA_NUEVA")]
+    [InlineData(null, "matricula_inicial", "MATRICULA_NUEVA")]
     public void FromFamily_MapsFamilyToModalidadAndTipologia(
         string? family, string expectedModalidad, string expectedTipologia)
     {
@@ -21,33 +26,5 @@ public sealed class TipologiaResolverTests
 
         modalidad.Should().Be(expectedModalidad);
         tipologia.Should().Be(expectedTipologia);
-    }
-
-    [Fact]
-    public void ResolveCodigo_PrefersValidTipologiaCodigo()
-    {
-        TipologiaResolver.ResolveCodigo("traspaso_standard", "matricula_inicial")
-            .Should().Be("traspaso_standard");
-    }
-
-    [Theory]
-    // tipologia_codigo null → derivado de modalidad (default defensivo para instancias viejas)
-    [InlineData(null, "matricula_inicial", "matricula_inicial")]
-    [InlineData(null, "traspaso", "traspaso_standard")]
-    [InlineData("", "traspaso", "traspaso_standard")]
-    // tipologia_codigo inválido (no catálogo) → cae al de modalidad
-    [InlineData("no_existe", "traspaso", "traspaso_standard")]
-    public void ResolveCodigo_FallsBackToModalidadWhenTipologiaMissing(
-        string? tipologiaCodigo, string? modalidad, string expected)
-    {
-        TipologiaResolver.ResolveCodigo(tipologiaCodigo, modalidad)
-            .Should().Be(expected);
-    }
-
-    [Fact]
-    public void ResolveCodigo_UnknownBoth_ReturnsNull()
-    {
-        TipologiaResolver.ResolveCodigo(null, "modalidad_desconocida")
-            .Should().BeNull();
     }
 }

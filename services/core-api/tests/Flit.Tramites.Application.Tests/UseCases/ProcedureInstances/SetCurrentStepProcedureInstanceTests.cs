@@ -32,6 +32,7 @@ public sealed class SetCurrentStepProcedureInstanceTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),

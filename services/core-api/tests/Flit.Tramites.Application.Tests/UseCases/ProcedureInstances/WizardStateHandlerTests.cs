@@ -26,6 +26,7 @@ public sealed class WizardStateHandlerTests
     private static ProcedureInstance Base(string modalidad, string? tipologia = null) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),

@@ -34,6 +34,7 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         DateTimeOffset? createdAt = null, DateTimeOffset? updatedAt = null, bool prioritario = false,
         string modalidad = "traspaso") => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(modalidad),
         Id = Guid.NewGuid(),
         TenantId = tenantId,
         ProcedureTypeId = Guid.NewGuid(),

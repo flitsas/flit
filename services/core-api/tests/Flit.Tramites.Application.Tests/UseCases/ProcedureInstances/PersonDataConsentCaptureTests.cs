@@ -47,6 +47,7 @@ public sealed class PersonDataConsentCaptureTests
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId) => new()
     {
+        ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
         Id = id,
         TenantId = tenantId,
         ProcedureTypeId = Guid.NewGuid(),

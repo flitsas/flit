@@ -315,6 +315,7 @@ public sealed class TablaDecisionValidacionIdentidadTests
         var tenant = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),
@@ -488,6 +489,7 @@ public sealed class TablaDecisionValidacionIdentidadTests
     private static ProcedureInstance BaseInstance(string modalidad, string? tipologia, DateTimeOffset now) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),

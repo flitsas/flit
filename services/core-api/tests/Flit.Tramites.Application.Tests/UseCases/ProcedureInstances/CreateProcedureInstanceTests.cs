@@ -164,11 +164,11 @@ public sealed class CreateProcedureInstanceTests
     }
 
     [Theory]
-    [InlineData("TRASPASO", "traspaso", "traspaso_standard")]
-    [InlineData("traspaso", "traspaso", "traspaso_standard")] // case-insensitive
-    [InlineData("MATRICULAS", "matricula_inicial", "matricula_inicial")]
-    [InlineData("OTROS", "matricula_inicial", "matricula_inicial")]
-    [InlineData("UNKNOWN_FAMILY", "matricula_inicial", "matricula_inicial")] // default defensivo
+    [InlineData("TRASPASO", "traspaso", "TRASPASO_STANDARD")]
+    [InlineData("traspaso", "traspaso", "TRASPASO_STANDARD")] // case-insensitive
+    [InlineData("MATRICULAS", "matricula_inicial", "MATRICULA_NUEVA")]
+    [InlineData("OTROS", "matricula_inicial", "MATRICULA_NUEVA")]
+    [InlineData("UNKNOWN_FAMILY", "matricula_inicial", "MATRICULA_NUEVA")] // default defensivo
     public async Task HandleAsync_SetsModalidadAndTipologiaFromFamily(
         string family, string expectedModalidad, string expectedTipologia)
     {
@@ -215,7 +215,7 @@ public sealed class CreateProcedureInstanceTests
             Arg.Is<ProcedureInstance>(i =>
                 i.ProcedureTypeId == pt.Id &&
                 i.ModalidadEntrada == "matricula_inicial" &&
-                i.TipologiaCodigo == "matricula_inicial"),
+                i.TipologiaCodigo == "MATRICULA_NUEVA"),
             Arg.Any<int>(),
             ct);
     }
@@ -236,7 +236,7 @@ public sealed class CreateProcedureInstanceTests
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
                 i.ModalidadEntrada == "traspaso" &&
-                i.TipologiaCodigo == "traspaso_standard"),
+                i.TipologiaCodigo == "TRASPASO_STANDARD"),
             Arg.Any<int>(),
             ct);
     }

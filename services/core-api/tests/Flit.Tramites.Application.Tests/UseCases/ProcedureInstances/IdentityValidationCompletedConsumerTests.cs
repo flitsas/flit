@@ -100,6 +100,7 @@ public sealed class IdentityValidationCompletedConsumerTests
     {
         var i = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(traspaso ? TramiteTipologiaCatalog.CodigoTraspasoStandard : TramiteTipologiaCatalog.CodigoMatriculaInicial ?? (traspaso ? "traspaso" : "matricula_inicial")),
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),

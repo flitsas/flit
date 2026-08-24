@@ -119,6 +119,7 @@ public sealed class MandateSignerBugReproTests
     /// </summary>
     private static ProcedureInstance NewInstance() => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
         Id = InstanceId,
         TenantId = TenantId,
         ProcedureTypeId = Guid.NewGuid(),

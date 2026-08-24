@@ -205,6 +205,7 @@ public sealed class ProcedureStateChangeOutboxTests
         await using var seed = NewContext(dbName);
         seed.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = InstanceId,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),

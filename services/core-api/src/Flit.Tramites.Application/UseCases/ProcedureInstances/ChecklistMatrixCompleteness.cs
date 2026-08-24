@@ -71,7 +71,7 @@ public sealed class ChecklistMatrixCompleteness(
 
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var context = TramiteDocumentContextMapper.From(instance);
         var rules = ConditionalDocumentRules.For(codigo);
         var parametros = await companyParams.GetForTenantAsync(tenantId, ct).ConfigureAwait(false);

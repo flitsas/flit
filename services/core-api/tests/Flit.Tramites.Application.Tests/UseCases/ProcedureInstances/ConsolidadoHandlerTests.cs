@@ -92,6 +92,7 @@ public sealed class ConsolidadoHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -115,6 +116,7 @@ public sealed class ConsolidadoHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -407,6 +409,7 @@ public sealed class ConsolidadoHandlerTests
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
         instance.ModalidadEntrada = "sucesion";
+        instance.ProcedureType = ProcedureTypeFixture.For("sucesion");
         foreach (var att in instance.Attachments)
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
 

@@ -48,6 +48,7 @@ public sealed class ListBiometriaPrevalenciaVigenteTests
     private static ProcedureInstance Instancia(Guid id, string modalidad) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = id,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),

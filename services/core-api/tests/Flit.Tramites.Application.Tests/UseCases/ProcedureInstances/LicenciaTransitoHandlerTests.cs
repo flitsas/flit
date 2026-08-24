@@ -62,6 +62,7 @@ public sealed class LicenciaTransitoHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

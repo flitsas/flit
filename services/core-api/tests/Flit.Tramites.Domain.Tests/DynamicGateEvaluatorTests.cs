@@ -1,4 +1,7 @@
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Xunit;
 
@@ -45,7 +48,10 @@ public sealed class DynamicGateEvaluatorTests
         state.CanSubmit.Should().BeFalse();
         state.Blockers.Should().Contain(DynamicGateEvaluator.DocumentosIncompletos);
         state.Blockers.Should().Contain(DynamicGateEvaluator.IdentidadNoAprobada);
-        state.Blockers.Should().Contain(DynamicGateEvaluator.FurPendiente);
+        // ADR-0050 — el FUR dejó de ser blocker: es un paso diferido que se genera al validar la
+        // identidad (HU #10349), y el camino estático nunca lo exigió para radicar. Mientras lo
+        // fue, un expediente con todos los datos listos no podía pasar de borrador a preparado.
+        state.Blockers.Should().NotContain(DynamicGateEvaluator.FurPendiente);
     }
 
     [Fact]
@@ -88,7 +94,10 @@ public sealed class DynamicGateEvaluatorTests
         state.Steps[3].Status.Should().Be("incomplete"); // biometric
         state.CanSubmit.Should().BeFalse();
         state.Blockers.Should().Contain(DynamicGateEvaluator.IdentidadNoAprobada);
-        state.Blockers.Should().Contain(DynamicGateEvaluator.FurPendiente);
+        // ADR-0050 — el FUR dejó de ser blocker: es un paso diferido que se genera al validar la
+        // identidad (HU #10349), y el camino estático nunca lo exigió para radicar. Mientras lo
+        // fue, un expediente con todos los datos listos no podía pasar de borrador a preparado.
+        state.Blockers.Should().NotContain(DynamicGateEvaluator.FurPendiente);
     }
 
     [Fact]
@@ -189,5 +198,94 @@ public sealed class DynamicGateEvaluatorTests
             FurGenerado = true,
         });
         ok.Should().BeEmpty();
+    }
+
+    // ── prenda_decision (ADR-0050) ───────────────────────────────────────────────────────────────
+    // Antes de ADR-0050 esta sección devolvía Complete() en ambas ramas del ternario: el gate no
+    // bloqueaba nunca y ningún test lo cubría. Ahora delega en PrendaGate (mismo núcleo R10 del
+    // camino estático), disparado por hasPrendaGate en vez de por la modalidad del trámite.
+
+    private static ProcedureTypeGateProfile PrendaProfile() => new()
+    {
+        EntryMode = "PLATE",
+        HasPrendaGate = true,
+    };
+
+    private static List<DynamicWizardStep> PrendaSteps() =>
+    [
+        new("prenda", "prenda_decision"),
+    ];
+
+    [Fact]
+    public void PrendaDecision_TipoConGate_SinDecision_Incompleto_YBloqueaRadicacion()
+    {
+        var ctx = new DynamicWizardContext { DocumentosCompletos = true };
+
+        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+
+        state.Steps[0].Status.Should().Be("incomplete");
+        state.Steps[0].Reasons.Should().Contain(TramiteEstadoErrores.PrendaDecisionRequerida);
+        state.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDecisionRequerida);
+        state.CanSubmit.Should().BeFalse();
+    }
+
+    [Fact]
+    public void PrendaDecision_TipoSinGate_NoBloquea()
+    {
+        // El mismo contexto vacío, con un tipo que no declara hasPrendaGate, no debe bloquear:
+        // la sección solo aplica cuando el tipo la exige.
+        var profile = new ProcedureTypeGateProfile { EntryMode = "PLATE" };
+        var ctx = new DynamicWizardContext { DocumentosCompletos = true };
+
+        var state = DynamicGateEvaluator.Evaluate(profile, PrendaSteps(), ctx);
+
+        state.Steps[0].Status.Should().Be("complete");
+        state.Blockers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PrendaDecision_DecisionQueExigeDocumento_SinAdjunto_Incompleto()
+    {
+        var ctx = new DynamicWizardContext
+        {
+            DocumentosCompletos = true,
+            PrendaVigente = new ProcedureInstancePrenda { Decision = PrendaDecision.Levantar },
+        };
+
+        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+
+        state.Steps[0].Status.Should().Be("incomplete");
+        state.Steps[0].Reasons.Should().Contain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public void PrendaDecision_DecisionConAdjunto_Completo()
+    {
+        var ctx = new DynamicWizardContext
+        {
+            DocumentosCompletos = true,
+            PrendaVigente = new ProcedureInstancePrenda { Decision = PrendaDecision.Levantar },
+            AttachmentTipos = [PrendaDocTipos.Levantamiento],
+        };
+
+        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+
+        state.Steps[0].Status.Should().Be("complete");
+        state.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public void PrendaDecision_Omitir_SatisfaceElGateSinDocumento()
+    {
+        // "omitir" es la vía asumo-el-riesgo: satisface R10 sin adjunto (paridad con PrendaGate).
+        var ctx = new DynamicWizardContext
+        {
+            DocumentosCompletos = true,
+            PrendaVigente = new ProcedureInstancePrenda { Decision = PrendaDecision.Omitir },
+        };
+
+        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+
+        state.Steps[0].Status.Should().Be("complete");
     }
 }

@@ -47,6 +47,7 @@ public sealed class RepresentativeIdentityLookupTests
     /// <summary>Instancia NO eliminada para las validaciones que sí vienen ligadas a un trámite.</summary>
     private static ProcedureInstance InstanciaViva(Guid id) => new()
     {
+        ProcedureType = ProcedureTypeFixture.Matricula,
         Id = id,
         TenantId = Tenant,
         ProcedureTypeId = Guid.NewGuid(),

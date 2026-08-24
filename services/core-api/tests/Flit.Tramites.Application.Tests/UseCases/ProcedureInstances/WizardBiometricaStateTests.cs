@@ -29,6 +29,7 @@ public sealed class WizardBiometricaStateTests
     private static ProcedureInstance Base(string modalidad, string? tipologia = null) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),

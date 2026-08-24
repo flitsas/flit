@@ -53,6 +53,7 @@ public sealed class GetPrevalidacionDetailHandlerTests
             ProcedureInstance = instanceId is { } iid
                 ? new ProcedureInstance
                 {
+                    ProcedureType = ProcedureTypeFixture.For("traspaso"),
                     Id = iid,
                     TenantId = tenantId,
                     ReferenceNumber = "TRM-2026-000001",

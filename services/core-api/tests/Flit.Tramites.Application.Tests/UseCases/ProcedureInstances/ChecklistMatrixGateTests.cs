@@ -29,6 +29,7 @@ public sealed class ChecklistMatrixGateTests
 
     private static ProcedureInstance Matricula() => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
         Id = Guid.NewGuid(),
         TenantId = Guid.NewGuid(),
         ProcedureTypeId = Guid.NewGuid(),

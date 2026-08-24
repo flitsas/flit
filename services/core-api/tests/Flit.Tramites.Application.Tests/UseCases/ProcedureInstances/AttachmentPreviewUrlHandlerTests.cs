@@ -56,6 +56,7 @@ public sealed class AttachmentPreviewUrlHandlerTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = instanceId,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

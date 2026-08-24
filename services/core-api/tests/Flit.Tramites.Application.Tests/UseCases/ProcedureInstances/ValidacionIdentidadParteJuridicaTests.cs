@@ -341,6 +341,7 @@ public sealed class ValidacionIdentidadParteJuridicaTests
         var tenant = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),

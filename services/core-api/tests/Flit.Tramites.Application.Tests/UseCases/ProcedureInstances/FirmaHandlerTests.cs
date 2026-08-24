@@ -30,6 +30,7 @@ public sealed class FirmaHandlerTests
         Guid id, Guid tenantId, string tipologia = TramiteTipologiaCatalog.CodigoTraspasoStandard) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? (tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial")),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

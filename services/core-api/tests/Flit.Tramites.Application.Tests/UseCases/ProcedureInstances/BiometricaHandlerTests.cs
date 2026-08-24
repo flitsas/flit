@@ -93,6 +93,7 @@ public sealed class BiometricaHandlerTests
         Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -713,6 +714,7 @@ public sealed class BiometricaHandlerTests
             CreatedAt = DateTimeOffset.UtcNow,
             ProcedureInstance = new ProcedureInstance
             {
+                ProcedureType = ProcedureTypeFixture.For(modalidad),
                 Id = Guid.NewGuid(),
                 TenantId = tenant,
                 ReferenceNumber = reference,

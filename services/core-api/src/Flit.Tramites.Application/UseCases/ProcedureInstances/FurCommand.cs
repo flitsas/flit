@@ -152,7 +152,7 @@ public sealed class GenerarFurHandler(
         if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
             return (null, "migrado_solo_lectura");
 
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
         // HU #10856 — matrícula inicial no tiene revisión técnico-mecánica: se oculta la tabla RTM.
         var esMatricula = string.Equals(codigo, TramiteTipologiaCatalog.CodigoMatriculaInicial, StringComparison.OrdinalIgnoreCase);

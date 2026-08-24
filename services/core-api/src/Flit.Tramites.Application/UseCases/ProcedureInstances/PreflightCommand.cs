@@ -912,7 +912,7 @@ public sealed class RunPreflightHandler(
         Guid tenantId,
         CancellationToken ct)
     {
-        var tipologia = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var tipologia = instance.TypeCode;
         if (!string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal))
             return;
 

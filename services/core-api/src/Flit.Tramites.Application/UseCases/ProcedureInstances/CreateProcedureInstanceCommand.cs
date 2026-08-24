@@ -119,6 +119,10 @@ public sealed class CreateProcedureInstanceHandler(
             Id = Guid.NewGuid(),
             TenantId = request.TenantId,
             ProcedureTypeId = procedureType.Id,
+            // ADR-0050 — la instancia recién creada no viene del repositorio, así que hay que darle
+            // la navegación al tipo aquí: de ella dependen Family/TypeCode/TypeName, que los pasos
+            // posteriores de la creación (snapshot, field values, preflight) ya consultan.
+            ProcedureType = procedureType,
             ReferenceNumber = string.Empty, // generado de forma resiliente en el repo (retry ante colisión)
             Status = TramiteEstado.Borrador,
             ModalidadEntrada = modalidad,

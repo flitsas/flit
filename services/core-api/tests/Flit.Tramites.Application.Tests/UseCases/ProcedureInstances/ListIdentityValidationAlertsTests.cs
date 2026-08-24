@@ -47,6 +47,7 @@ public sealed class ListIdentityValidationAlertsTests
             CreatedAt = DateTimeOffset.UtcNow,
             ProcedureInstance = new ProcedureInstance
             {
+                ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
                 Id = Guid.NewGuid(),
                 TenantId = tenant,
                 ReferenceNumber = reference,
@@ -247,6 +248,7 @@ public sealed class ListIdentityValidationAlertsTests
         var rejected = Val(tenant, BiometricEstados.Rechazado);
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenant,
             ReferenceNumber = "TRM-2026-000099",

@@ -213,6 +213,7 @@ public sealed class FirmaPosteriorLoteTests
         var id = Guid.NewGuid();
         _repo.GetByIdAsync(id, Tenant, Arg.Any<CancellationToken>()).Returns(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = Tenant,
             ProcedureTypeId = Guid.NewGuid(),

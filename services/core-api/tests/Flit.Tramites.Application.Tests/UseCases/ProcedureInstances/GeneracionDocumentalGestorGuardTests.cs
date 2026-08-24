@@ -32,6 +32,7 @@ public sealed class GeneracionDocumentalGestorGuardTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = Id,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),

@@ -29,7 +29,7 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         // B11 (HU #10659) — en TRASPASO el OT lo fija el RUNT (auto-bind en preflight) y NO es
         // editable por el usuario: cualquier PATCH de claves transit_office_* se rechaza. La excepción
         // post-submit (IsPostSubmitTransitOfficeKey) NO aplica en traspaso. Matrícula: sin cambios.
-        var tipologia = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var tipologia = instance.TypeCode;
         if (string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal)
             && request.Items.Any(i => IsTransitOfficeKey(i.FieldKey)))
         {

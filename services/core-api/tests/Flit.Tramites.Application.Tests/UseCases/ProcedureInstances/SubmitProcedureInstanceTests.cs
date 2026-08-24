@@ -57,6 +57,7 @@ public sealed class SubmitProcedureInstanceTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

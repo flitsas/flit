@@ -61,6 +61,7 @@ public sealed class ListProcedureInstancesFilteredHandlerTests
 
     private static ProcedureInstance Instancia(Guid tenantId, string reference) => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
         Id = Guid.NewGuid(),
         TenantId = tenantId,
         ReferenceNumber = reference,

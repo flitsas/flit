@@ -80,11 +80,11 @@ public static class FurNumeral3Marks
             return [];
 
         var familia = Norm(modalidad);
-        if (familia.Contains("TRASPASO", StringComparison.Ordinal) || familia == ProcedureFamily.Traspaso)
+        if (familia.Contains("TRASPASO", StringComparison.Ordinal) || familia == ProcedureFamilyCodes.Traspaso)
             return [2];
         if (code.Contains("MATRICULA", StringComparison.Ordinal)
             || familia.Contains("MATRICULA", StringComparison.Ordinal)
-            || familia == ProcedureFamily.Matriculas)
+            || familia == ProcedureFamilyCodes.Matriculas)
             return [1];
 
         return [];

@@ -54,6 +54,7 @@ public sealed class TramiteLifecycleServiceTests
         var tenantId = Guid.NewGuid();
         var i = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -598,6 +599,7 @@ public sealed class TramiteLifecycleServiceTests
         var tenantId = Guid.NewGuid();
         var i = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

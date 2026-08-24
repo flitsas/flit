@@ -311,6 +311,7 @@ public sealed class PlatePreassignPolicyTests
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = instanceId,
             TenantId = company,
             ProcedureTypeId = Guid.NewGuid(),

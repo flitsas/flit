@@ -513,7 +513,7 @@ internal static class ChecklistEstadoJson
     /// </summary>
     public static void AutoMark(ProcedureInstance instance, string docTipo)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var tip = TramiteTipologiaCatalog.Get(codigo);
         if (tip is null)
             return;
@@ -541,7 +541,7 @@ internal static class ChecklistEstadoJson
     /// </summary>
     public static void AutoUnmark(ProcedureInstance instance, string docTipo)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var tip = TramiteTipologiaCatalog.Get(codigo);
         if (tip is null)
             return;

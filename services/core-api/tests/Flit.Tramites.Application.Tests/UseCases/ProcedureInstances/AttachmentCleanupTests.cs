@@ -17,6 +17,7 @@ public sealed class AttachmentCleanupTests
 {
     private static ProcedureInstance Instance() => new()
     {
+        ProcedureType = ProcedureTypeFixture.Matricula,
         Id = Guid.NewGuid(),
         TenantId = Guid.NewGuid(),
         ProcedureTypeId = Guid.NewGuid(),

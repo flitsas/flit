@@ -109,7 +109,7 @@ public static class SubmitGate
     {
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.Completo ?? true;
     }
@@ -141,7 +141,7 @@ public static class SubmitGate
     /// </summary>
     private static bool RequiereImpronta(ProcedureInstance instance)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var tip = TramiteTipologiaCatalog.Get(codigo);
         return tip is not null && tip.Checklist.Any(i => string.Equals(i.DocTipo, "impronta", StringComparison.OrdinalIgnoreCase));
     }

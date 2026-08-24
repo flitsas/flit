@@ -50,6 +50,7 @@ public sealed class ListBiometriaFirmaBaulTests
         var id = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso"),
             Id = id,
             TenantId = TenantId,
             ModalidadEntrada = "traspaso",
