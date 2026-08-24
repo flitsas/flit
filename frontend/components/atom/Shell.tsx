@@ -43,6 +43,7 @@ import {
   ScrollText,
   Radar,
   Network,
+  Route,
   X,
   Scale,
   FileText,
@@ -64,7 +65,8 @@ export type ModuleId =
   | "auditoria"
   | "log-qx"
   | "ict-logs"
-  | "ict-reportes";
+  | "ict-reportes"
+  | "ict-trazabilidad";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   // Dashboard no va en el dock: el FAB central (Inicio FLIT) abre el mismo módulo.
@@ -425,7 +427,8 @@ export function Shell({
       key: "ict",
       label: "ICT",
       icon: Network,
-      active: !onAdminRoute && (active === "ict-logs" || active === "ict-reportes"),
+      active: !onAdminRoute
+        && (active === "ict-logs" || active === "ict-reportes" || active === "ict-trazabilidad"),
       onClick: () => undefined,
       children: [
         {
@@ -434,6 +437,13 @@ export function Shell({
           icon: Network,
           active: !onAdminRoute && active === "ict-logs",
           onClick: () => onNav("ict-logs"),
+        },
+        {
+          key: "ict-trazabilidad",
+          label: "Trazabilidad ICT",
+          icon: Route,
+          active: !onAdminRoute && active === "ict-trazabilidad",
+          onClick: () => onNav("ict-trazabilidad"),
         },
         {
           key: "ict-reportes",
