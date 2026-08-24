@@ -146,6 +146,35 @@ public static class IctTrazabilidadEndpoints
                 : Results.Ok(eventos);
         });
 
+        // HU #11820 — revelado auditado de datos personales. ÚNICO endpoint del módulo que escribe:
+        // deja constancia de quién los pidió antes de entregarlos. Es POST y no GET a propósito: no
+        // es una consulta idempotente, tiene efecto (el registro de auditoría) y no debe quedar en
+        // el historial del navegador ni en una caché intermedia.
+        group.MapPost("/tramites/{numero:long}/datos/revelar", async (
+            HttpContext context,
+            IRevelarDatosPersonalesQuery query,
+            long numero,
+            CancellationToken ct) =>
+        {
+            var access = PlatformAccessReader.Read(context);
+            if (!access.HasIctLogsAccess || !access.HasPiiRevealAccess)
+            {
+                // Se exige el permiso PROPIO de revelado además del del módulo. Sin ambos no se
+                // entrega nada y no queda registro: no hay dato que auditar.
+                return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            var revelados = await query.RevelarAsync(
+                numero,
+                access.IsSuperAdmin ? null : access.TenantId,
+                new SolicitanteRevelado(access.Subject, access.Role),
+                ct);
+
+            return revelados is null
+                ? Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound)
+                : Results.Ok(revelados);
+        });
+
         return app;
     }
 

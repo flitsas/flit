@@ -3,11 +3,19 @@ using System.IdentityModel.Tokens.Jwt;
 namespace Flit.Ict.Api.Authorization;
 
 /// <summary>Resultado de evaluar el token de plataforma (del submódulo frontend) para el submódulo ICT.</summary>
+/// <param name="HasPiiRevealAccess">
+/// Ver los datos personales EN CLARO (HU #11820). Va aparte de <c>HasIctLogsAccess</c> a propósito:
+/// si bastara con poder abrir el módulo, el enmascarado no protegería de nada.
+/// </param>
+/// <param name="Subject">Sujeto del token, para dejar constancia de quién pidió un revelado.</param>
 public sealed record PlatformAccess(
     bool HasIctLogsAccess,
     bool HasClientAdminAccess,
     bool IsSuperAdmin,
-    Guid? TenantId);
+    Guid? TenantId,
+    bool HasPiiRevealAccess = false,
+    string Subject = "",
+    string Role = "");
 
 /// <summary>
 /// Lee el JWT de plataforma reenviado por el Gateway (que ya aplicó su policy JwtRequired) para los
@@ -20,6 +28,7 @@ public static class PlatformAccessReader
 {
     private const string LogsPermission = "ict.logs.read";
     private const string ClientsManagePermission = "ict.clients.manage";
+    private const string PiiRevealPermission = "ict.pii.reveal";
 
     public static PlatformAccess Read(HttpContext context)
     {
@@ -44,11 +53,21 @@ public static class PlatformAccessReader
 
         var hasLogs = token.Claims.Any(c => c.Type == "permissions" && c.Value == LogsPermission);
         var hasClientAdmin = token.Claims.Any(c => c.Type == "permissions" && c.Value == ClientsManagePermission);
+        var hasPiiReveal = token.Claims.Any(c => c.Type == "permissions" && c.Value == PiiRevealPermission);
+        var subject = token.Claims.FirstOrDefault(c => c.Type is "sub" or "nameid")?.Value ?? string.Empty;
+        var role = token.Claims.FirstOrDefault(c => c.Type is "role" or "role_code")?.Value ?? string.Empty;
 
         Guid? tenantId = Guid.TryParse(token.Claims.FirstOrDefault(c => c.Type == "tenant_id")?.Value, out var parsed)
             ? parsed
             : null;
 
-        return new PlatformAccess(isSuperAdmin || hasLogs, isSuperAdmin || hasClientAdmin, isSuperAdmin, tenantId);
+        return new PlatformAccess(
+            isSuperAdmin || hasLogs,
+            isSuperAdmin || hasClientAdmin,
+            isSuperAdmin,
+            tenantId,
+            HasPiiRevealAccess: isSuperAdmin || hasPiiReveal,
+            Subject: subject,
+            Role: role);
     }
 }

@@ -5,18 +5,20 @@
 // responden «con qué llegó» y el log queda al fondo para cuando nada de lo anterior baste.
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Ban, Check, CircleDashed, Hourglass, X, type LucideIcon } from "lucide-react";
+import { Ban, Check, CircleDashed, Eye, EyeOff, Hourglass, X, type LucideIcon } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchConsultasFuenteIct,
   fetchDatosTramiteIct,
   fetchLogTramiteIct,
   fetchRecorridoIct,
+  revelarDatosPersonalesIct,
   type ConsultaFuenteIct,
   type DatosTramiteIct,
   type EventoLogTramiteIct,
   type HitoTrazabilidad,
   type RecorridoTramiteIct,
+  type SeccionDatos,
   type TramiteIct,
 } from "@/lib/api/ict-trazabilidad";
 import { formatearDuracion } from "@/lib/ict/trazabilidad";
@@ -378,6 +380,38 @@ function PanelDatos({ numero }: { numero: number }) {
     [numero],
   );
 
+  // HU #11820. El revelado es una acción explícita y su resultado NO sustituye a la carga normal:
+  // se guarda aparte para poder volver a tapar sin repetir la petición ni el registro de auditoría.
+  const [revelado, setRevelado] = useState<SeccionDatos[] | null>(null);
+  const [revelando, setRevelando] = useState(false);
+  const [errorRevelado, setErrorRevelado] = useState<string | null>(null);
+
+  const alternarRevelado = async () => {
+    if (revelado) {
+      setRevelado(null);
+      return;
+    }
+    setRevelando(true);
+    setErrorRevelado(null);
+    try {
+      const r = await revelarDatosPersonalesIct(numero);
+      setRevelado(r.secciones);
+    } catch {
+      // El caso normal es no tener el permiso; el mensaje lo dice sin hablar de códigos HTTP.
+      setErrorRevelado(
+        "No tienes permiso para ver los datos personales sin enmascarar. Pídeselo a quien administre los roles.",
+      );
+    } finally {
+      setRevelando(false);
+    }
+  };
+
+  // Las secciones reveladas sustituyen a las enmascaradas SOLO en los actores; el resto del detalle
+  // (transacción, adjuntos) no lleva datos personales y no cambia.
+  const secciones = dato
+    ? dato.secciones.map((s) => revelado?.find((r) => r.titulo === s.titulo) ?? s)
+    : [];
+
   return (
     <UiStateBoundary
       status={status}
@@ -391,7 +425,7 @@ function PanelDatos({ numero }: { numero: number }) {
           {/* Secciones de negocio, no un volcado JSON: la petición del cliente tiene decenas de
               campos y agruparlos por significado es lo que la hace legible. */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {dato.secciones.map((s) => (
+            {secciones.map((s) => (
               <section
                 key={s.titulo}
                 className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10"
@@ -423,9 +457,38 @@ function PanelDatos({ numero }: { numero: number }) {
               </section>
             ))}
           </div>
-          <p className="text-[10px] opacity-55">
-            Los datos personales se muestran enmascarados.
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void alternarRevelado()}
+              disabled={revelando}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#557EFF]/10 px-3 py-1.5 text-[11px] font-semibold text-[#557EFF] hover:bg-[#557EFF]/20 disabled:opacity-50"
+            >
+              {revelado ? (
+                <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {revelando
+                ? "Revelando…"
+                : revelado
+                  ? "Volver a ocultar"
+                  : "Revelar datos personales"}
+            </button>
+            <p className="text-[10px] opacity-55">
+              {revelado
+                ? "Este acceso quedó registrado con tu usuario y la fecha."
+                : "Los datos personales se muestran enmascarados. Revelarlos deja constancia de quién lo hizo."}
+            </p>
+          </div>
+          {errorRevelado && (
+            <p
+              className="rounded-lg px-3 py-2 text-[11px] font-medium"
+              style={{ background: "rgba(153,27,27,0.10)", color: "#991B1B" }}
+            >
+              {errorRevelado}
+            </p>
+          )}
         </div>
       )}
     </UiStateBoundary>

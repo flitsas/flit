@@ -201,3 +201,28 @@ export function fetchLogTramiteIct(
     { signal },
   );
 }
+
+/** Datos personales EN CLARO de un trámite, con la constancia de que el acceso quedó registrado. */
+export interface DatosPersonalesRevelados {
+  numero: number;
+  secciones: SeccionDatos[];
+  /** Siempre true: el servidor no entrega los datos si no pudo dejar constancia. */
+  auditado: boolean;
+}
+
+/**
+ * Pide ver los datos personales sin enmascarar.
+ *
+ * Es POST y no GET porque no es una consulta idempotente: tiene efecto (escribe el registro de
+ * auditoría) y no debe quedar en el historial del navegador ni en una caché intermedia.
+ * Responde 403 sin el permiso `ict.pii.reveal`.
+ */
+export function revelarDatosPersonalesIct(
+  numero: number,
+  signal?: AbortSignal,
+): Promise<DatosPersonalesRevelados> {
+  return apiFetch<DatosPersonalesRevelados>(
+    `/api/v1/ict/trazabilidad/tramites/${numero}/datos/revelar`,
+    { method: "POST", signal },
+  );
+}

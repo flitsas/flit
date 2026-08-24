@@ -76,6 +76,7 @@ public static class IctInfrastructureExtensions
         services.AddScoped<DbDetalleTramiteRepository>();
         services.AddScoped<IDatosTramiteQuery>(sp => sp.GetRequiredService<DbDetalleTramiteRepository>());
         services.AddScoped<ILogTramiteQuery>(sp => sp.GetRequiredService<DbDetalleTramiteRepository>());
+        services.AddScoped<IRevelarDatosPersonalesQuery, DbRevelarDatosPersonalesRepository>();
 
         // Seguridad (login ICT independiente).
         services.AddSingleton(sp => new IctJwtKeyMaterial(sp.GetRequiredService<IOptions<IctJwtSettings>>().Value));
