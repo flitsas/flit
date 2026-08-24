@@ -183,6 +183,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 .ThenInclude(t => t!.Steps)
                     .ThenInclude(st => st.Sections)
             .AsSplitQuery()
+            // ADR-0050 — la clasificación del expediente (familia, código y nombre del trámite) se
+            // deriva del tipo, así que el listado no puede proyectarse sin él: `ToSummary` lee
+            // `e.Family` y sin esta carga revienta con «navegación no cargada».
+            .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -217,6 +221,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         Guid tenantId, string parte, string tipoDoc, string documento, CancellationToken ct)
     {
         return await db.ProcedureInstances
+            // ADR-0050 — el consumidor lee `instance.Family` para decidir el reparto por partes.
+            .Include(i => i.ProcedureType)
             .Include(i => i.Actors)
             .Where(i => i.TenantId == tenantId
                 && i.Status == TramiteEstado.Borrador
@@ -243,6 +249,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         // se hace antes (middleware): aquí null solo llega para un caller multi-tenant autorizado.
         var query = db.ProcedureInstances
             .AsSplitQuery()
+            // ADR-0050 — la clasificación del expediente (familia, código y nombre del trámite) se
+            // deriva del tipo, así que el listado no puede proyectarse sin él: `ToSummary` lee
+            // `e.Family` y sin esta carga revienta con «navegación no cargada».
+            .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -1659,6 +1669,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         var items = await ordered
             .AsSplitQuery()
+            // ADR-0050 — la clasificación del expediente (familia, código y nombre del trámite) se
+            // deriva del tipo, así que el listado no puede proyectarse sin él: `ToSummary` lee
+            // `e.Family` y sin esta carga revienta con «navegación no cargada».
+            .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
