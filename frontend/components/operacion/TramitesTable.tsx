@@ -45,6 +45,7 @@ import {
 } from '@/lib/tramites/tramites-table-columns';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { PageNav } from '@/components/atom/PageNav';
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
@@ -1402,7 +1403,7 @@ function TableBody({
   return (
     // Scroll normal de página: la tabla crece con su contenido y solo scrollea en horizontal
     // cuando las columnas visibles no caben a lo ancho. La píldora de conteo que iba aquí se
-    // fundió con "Mostrando X de Y" de `Pagination` — un solo lugar para el recuento.
+    // fundió con "Mostrando X de Y" de `PageNav` — un solo lugar para el recuento.
     <div className="flex flex-col">
       <div className="overflow-x-auto">
         <table
@@ -1492,108 +1493,14 @@ function TableBody({
       </div>
 
       {/* Fuera del contenedor con scroll horizontal: la paginación no se desplaza con la tabla. */}
-      <Pagination
+      <PageNav
         page={page}
         totalPages={totalPages}
-        total={filtered.length}
-        shown={paginated.length}
+        resumen={`Mostrando ${paginated.length} de ${filtered.length}`}
+        ariaLabel="Paginación de trámites"
         onPageChange={onPageChange}
       />
     </div>
-  );
-}
-
-/**
- * Control de paginación client-side. La línea de conteo ("Mostrando X de Y") ahora es la ÚNICA
- * pieza que dice cuántos trámites hay — la píldora suelta que iba sobre la tabla desapareció, así
- * que este párrafo se pinta SIEMPRE, incluso con `totalPages <= 1`; solo los botones de página se
- * ocultan en ese caso (no tiene sentido paginar una sola página). Estilo FLIT: borde #DFE5ED,
- * acento #557EFF.
- */
-function Pagination({
-  page,
-  totalPages,
-  total,
-  shown,
-  onPageChange,
-}: {
-  page: number;
-  totalPages: number;
-  total: number;
-  shown: number;
-  onPageChange: (page: number) => void;
-}) {
-  const hayVariasPaginas = totalPages > 1;
-
-  // Ventana de páginas del diseño: ‹ 1 2 … N ›, con la activa rellena en azul. Se calcula en vez
-  // de dibujarse fija para que "…" solo aparezca cuando de verdad hay páginas ocultas.
-  const paginas: (number | 'gap')[] = [];
-  for (let p = 1; p <= totalPages; p += 1) {
-    const cerca = Math.abs(p - page) <= 1;
-    if (p === 1 || p === totalPages || cerca) paginas.push(p);
-    else if (paginas[paginas.length - 1] !== 'gap') paginas.push('gap');
-  }
-
-  return (
-    <nav
-      className="flex flex-wrap items-center justify-end gap-4 pt-3"
-      aria-label="Paginación de trámites"
-    >
-      <p className="text-xs opacity-70" role="status" aria-live="polite">
-        Mostrando {shown} de {total}
-      </p>
-      {hayVariasPaginas ? (
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onPageChange(page - 1)}
-            disabled={page <= 1}
-            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
-            style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
-            aria-label="Página anterior"
-          >
-            ‹
-          </button>
-          {paginas.map((p, i) =>
-            p === 'gap' ? (
-              <span
-                key={`gap-${i}`}
-                className="px-1 text-xs opacity-50"
-                aria-hidden="true"
-              >
-                …
-              </span>
-            ) : (
-              <button
-                key={p}
-                type="button"
-                onClick={() => onPageChange(p)}
-                aria-label={`Página ${p}`}
-                aria-current={p === page ? 'page' : undefined}
-                className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                style={
-                  p === page
-                    ? { background: '#557EFF', color: '#fff' }
-                    : { color: '#557EFF', background: 'rgba(85,126,255,0.08)' }
-                }
-              >
-                {p}
-              </button>
-            ),
-          )}
-          <button
-            type="button"
-            onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages}
-            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
-            style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
-            aria-label="Página siguiente"
-          >
-            ›
-          </button>
-        </div>
-      ) : null}
-    </nav>
   );
 }
 

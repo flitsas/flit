@@ -1,5 +1,7 @@
 using Flit.Api.Authorization;
+using Flit.Modules.Quipux.Application.UseCases.ConsultarBandeja;
 using Flit.Modules.Quipux.Application.UseCases.ConsultarLog;
+using Flit.Modules.Quipux.Application.UseCases.ConsultarTrazabilidad;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -38,6 +40,52 @@ public static class AdminLogQxEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // GET /api/v1/admin/log-qx/bandeja — entrada del módulo: lista sin exigir búsqueda.
+        group.MapGet("bandeja", BandejaAsync)
+            .RequirePermission("logqx.read")
+            .WithName("AdminLogQxBandeja")
+            .WithSummary("Lista los trámites con integración Quipux, uno por fila")
+            .WithDescription("Devuelve los trámites cuyo tipo declara integración Quipux —los que "
+                + "ya tienen radicación y los elegibles que aún no se encolaron, estos últimos como "
+                + "'sin_radicar'—, UNO POR TRÁMITE y no por radicación. Sin filtros responde el "
+                + "periodo por defecto (últimos 30 días por última actividad), así que la pantalla "
+                + "carga con datos sin buscar nada. Todos los filtros son combinables entre sí. "
+                + "Incluye los contadores por estado sobre el conjunto filtrado completo. Requiere "
+                + "el permiso logqx.read (SuperAdmin bypassa).")
+            .Produces<ConsultarBandejaQuipuxResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // GET /api/v1/admin/log-qx/{submissionId}/hitos — línea de tiempo con el sondeo agrupado.
+        group.MapGet("{submissionId:guid}/hitos", HitosAsync)
+            .RequirePermission("logqx.read")
+            .WithName("AdminLogQxHitos")
+            .WithSummary("Hitos de una radicación, con el sondeo repetido ya agrupado")
+            .WithDescription("Devuelve la cabecera de la radicación —con sus radicaciones hermanas "
+                + "para poder saltar entre intentos— y su línea de tiempo. Las consultas de estado "
+                + "consecutivas que no cambiaron nada se colapsan EN SERVIDOR en un único bloque con "
+                + "su conteo, ventana temporal y duración media, de modo que el payload no crece con "
+                + "la antigüedad del trámite. Requiere el permiso logqx.read.")
+            .Produces<ConsultarHitosQuipuxResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        // GET /api/v1/admin/log-qx/{submissionId}/eventos — log completo, filtrado y paginado.
+        group.MapGet("{submissionId:guid}/eventos", EventosAsync)
+            .RequirePermission("logqx.read")
+            .WithName("AdminLogQxEventos")
+            .WithSummary("Log completo de una radicación, filtrado y paginado en servidor")
+            .WithDescription("Devuelve los eventos de la radicación con su detalle sanitizado y "
+                + "enmascarado. Por defecto OCULTA las consultas de estado sin novedad e informa "
+                + "cuántas ocultó; con ocultarSinNovedad=false devuelve la totalidad, sin perder "
+                + "ningún registro. soloErrores deja únicamente los eventos cuyo resultado no es "
+                + "correcto. Requiere el permiso logqx.read.")
+            .Produces<ConsultarEventosQuipuxResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
@@ -57,5 +105,67 @@ public static class AdminLogQxEndpoints
             .ConfigureAwait(false);
 
         return Results.Ok(result);
+    }
+
+    /// <remarks>
+    /// Los identificadores se enlazan como <c>string</c>, no como <c>Guid</c>: con <c>Guid</c> un
+    /// valor mal tecleado revienta el binding con un 400 crudo, y esta es una pantalla de
+    /// diagnóstico donde un filtro inválido debe devolver una lista vacía. El handler los parsea.
+    /// </remarks>
+    private static async Task<IResult> BandejaAsync(
+        [FromServices] ConsultarBandejaQuipuxHandler handler,
+        CancellationToken cancellationToken,
+        [FromQuery] DateTimeOffset? desde = null,
+        [FromQuery] DateTimeOffset? hasta = null,
+        [FromQuery] string? placa = null,
+        [FromQuery] string? instanceId = null,
+        [FromQuery] string? referencia = null,
+        [FromQuery] string? documento = null,
+        [FromQuery] string? estado = null,
+        [FromQuery] string? transitOfficeId = null,
+        [FromQuery] string? tenantId = null,
+        [FromQuery] string? procedureTypeId = null,
+        [FromQuery] int? page = null,
+        [FromQuery] int? pageSize = null)
+    {
+        var result = await handler
+            .HandleAsync(
+                new ConsultarBandejaQuipuxQuery(
+                    desde, hasta, placa, instanceId, referencia, documento, estado,
+                    transitOfficeId, tenantId, procedureTypeId, page, pageSize),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> HitosAsync(
+        [FromServices] ConsultarHitosQuipuxHandler handler,
+        Guid submissionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(submissionId, cancellationToken).ConfigureAwait(false);
+
+        // 404 sin cuerpo: una radicación inexistente no debe filtrar nada de las demás.
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+
+    private static async Task<IResult> EventosAsync(
+        [FromServices] ConsultarEventosQuipuxHandler handler,
+        Guid submissionId,
+        CancellationToken cancellationToken,
+        [FromQuery] bool? ocultarSinNovedad = null,
+        [FromQuery] bool? soloErrores = null,
+        [FromQuery] int? page = null,
+        [FromQuery] int? pageSize = null)
+    {
+        var result = await handler
+            .HandleAsync(
+                new ConsultarEventosQuipuxQuery(
+                    submissionId, ocultarSinNovedad, soloErrores, page, pageSize),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result is null ? Results.NotFound() : Results.Ok(result);
     }
 }

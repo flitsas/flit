@@ -1098,6 +1098,13 @@ public static class InfrastructureExtensions
         // LOG QX (HU #10793): lectura de trazabilidad para soporte/admin. Solo consulta (sin claim ni
         // transiciones), cross-tenant por el mismo motivo que la consola de cola.
         services.AddScoped<IQuipuxLogRepository, DbQuipuxLogRepository>();
+
+        // Bandeja del LOG QX (HU #11786): universo por TRÁMITE (no por radicación), con los
+        // elegibles sin radicar incluidos. SQL crudo — el predicado depende del jsonb external_refs.
+        services.AddScoped<IQuipuxBandejaRepository, DbQuipuxBandejaRepository>();
+
+        // Trazabilidad de una radicación (HU #11787): cabecera + eventos para hitos + log paginado.
+        services.AddScoped<IQuipuxTrazabilidadRepository, DbQuipuxTrazabilidadRepository>();
         services.AddSingleton<IQuipuxAuditLog, QuipuxSubmissionAuditLog>();
         services.AddSingleton<IQuipuxJobRunLog, QuipuxJobRunLog>();
 
