@@ -26,5 +26,13 @@ public sealed record TenantSettingsResponse(
     string FinesQuerySource,
     // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, desacoplada del canal.
     bool DocumentosPersonalizadosActivo,
-    // HU #11469 — interruptor operativo de avisos de correo al cambio de estado (default true).
-    bool AvisosCambioEstadoActivos);
+    bool AvisosAprobacionActivos,
+    bool AvisosRechazoActivos,
+    DestinatariosNotificacionDto DestinatariosNotificacion);
+
+/// <summary>Checkboxes + correo extra de avisos de estado.</summary>
+public sealed record DestinatariosNotificacionDto(
+    bool Comprador,
+    bool VendedorOPropietario,
+    bool Radicador,
+    string? ExtraEmail);

@@ -103,7 +103,7 @@ public static class AdminPlataformaNotificacionesEndpoints
     {
         var result = await service
             .SendAsync(
-                new SendNotificationTestRequest(request.TemplateId, request.Channel),
+                new SendNotificationTestRequest(request.TemplateId, request.Channel, request.ProcedureTypeId),
                 ResolveUserId(user),
                 ct)
             .ConfigureAwait(false);
@@ -126,6 +126,12 @@ public static class AdminPlataformaNotificacionesEndpoints
             // por diseño (AC3 de la HU #11362) y siempre salen por Colas FLIT en producción.
             NotificationTestSendOutcome.TemplateChannelMismatch => Results.BadRequest(
                 new { error = "plantilla_sin_enrutamiento_por_canal", message = result.Message }),
+            NotificationTestSendOutcome.InvalidProcedureTypeId => Results.BadRequest(
+                new { error = "procedure_type_id_invalido", message = result.Message }),
+            NotificationTestSendOutcome.ProcedureTypeNotFound => Results.BadRequest(
+                new { error = "tipo_tramite_no_encontrado", message = result.Message }),
+            NotificationTestSendOutcome.ProcedureTypeInactive => Results.BadRequest(
+                new { error = "tipo_tramite_inactivo", message = result.Message }),
             NotificationTestSendOutcome.RateLimited => Results.Json(
                 new { error = "limite_frecuencia", message = result.Message, retryAfterSeconds = result.RetryAfterSeconds },
                 statusCode: StatusCodes.Status429TooManyRequests),
@@ -191,7 +197,10 @@ public sealed record NotificationTestMailboxResponse(
 /// Cuerpo de <c>POST /api/v1/admin/plataforma/notificaciones/buzon-pruebas/envios</c> (HU #11368).
 /// El destinatario NUNCA viaja en el cuerpo: siempre es el buzón de pruebas configurado.
 /// </summary>
-public sealed record SendNotificationTestBodyRequest(string? TemplateId, string? Channel);
+public sealed record SendNotificationTestBodyRequest(
+    string? TemplateId,
+    string? Channel,
+    Guid? ProcedureTypeId = null);
 
 /// <summary>
 /// Respuesta de <c>POST /api/v1/admin/plataforma/notificaciones/buzon-pruebas/envios</c> (HU #11368,

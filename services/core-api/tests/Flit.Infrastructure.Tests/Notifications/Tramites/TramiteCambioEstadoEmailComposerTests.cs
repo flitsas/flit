@@ -54,6 +54,7 @@ public class TramiteCambioEstadoEmailComposerTests
         html.Should().NotContain("❌");
         html.Should().Contain("BANCOLOMBIA S.A");
         html.Should().Contain("EL NEGOCIO DEL ALVARO AMADO");
+        html.Should().Contain("Nos ponemos en contacto para informarle que el trámite de traspaso de propiedad");
         html.Should().Contain("POLÍTICA DE PRIVACIDAD");
         html.Should().NotContain("Motivo de rechazo");
         html.Should().NotContain(">Observación");
@@ -87,6 +88,7 @@ public class TramiteCambioEstadoEmailComposerTests
 
         html.Should().Contain("¡Buenas Noticias!");
         html.Should().Contain("APROBADO");
+        html.Should().Contain("del trámite de traspaso de propiedad del vehículo");
         html.Should().Contain("Tu tarjeta de propiedad/matrícula llegará pronto");
     }
 
@@ -143,6 +145,17 @@ public class TramiteCambioEstadoEmailComposerTests
 
         html.Should().NotContain("<strong>Vendedor:</strong>");
         html.Should().Contain("Comprador SAS");
+    }
+
+    [Fact]
+    public void ComposeFlit_ConNombreTipoTramite_InterpolaTalCualYNoUsaFallback()
+    {
+        var model = TraspasoAprobado with { NombreTipoTramite = "Cambio de color" };
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(model, "https://cdn.example/email-assets");
+
+        html.Should().Contain("Nos ponemos en contacto para informarle que el trámite de Cambio de color");
+        html.Should().Contain("el trámite de Cambio de color del vehículo");
+        html.Should().NotContain("el traspaso de propiedad");
     }
 
     [Fact]

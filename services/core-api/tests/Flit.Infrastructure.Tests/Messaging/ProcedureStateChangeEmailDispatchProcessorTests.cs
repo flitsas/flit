@@ -36,12 +36,11 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
 
         var sender = new RecordingSender();
         var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
-
-        await processor.ProcessPendingAsync(Ct);
         await processor.ProcessPendingAsync(Ct);
 
-        sender.Messages.Should().HaveCount(2);
-        sender.Messages.Select(m => m.ToName).Should().BeEquivalentTo(["Empresa SAS", "Rep Legal"]);
+        sender.Messages.Should().ContainSingle();
+        sender.Messages[0].ToName.Should().Be("Empresa SAS");
+        sender.Messages[0].BccEmails.Should().Equal("rl@flit.test");
     }
 
     [Fact]
@@ -156,7 +155,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
             {
                 Id = Guid.NewGuid(),
                 TenantId = TenantId,
-                TramiteStateEmailsEnabled = false,
+                TramiteApprovedEmailsEnabled = false,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
             await db.SaveChangesAsync(Ct);
@@ -186,7 +185,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
             {
                 Id = Guid.NewGuid(),
                 TenantId = TenantId,
-                TramiteStateEmailsEnabled = false,
+                TramiteApprovedEmailsEnabled = false,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
             await db.SaveChangesAsync(Ct);
@@ -200,7 +199,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         await using (var db = NewContext(dbName))
         {
             var policy = await db.TenantOperationalPolicies.SingleAsync(Ct);
-            policy.TramiteStateEmailsEnabled = true;
+            policy.TramiteApprovedEmailsEnabled = true;
             await db.SaveChangesAsync(Ct);
         }
 

@@ -1,8 +1,10 @@
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Catalog;
+using Flit.Infrastructure.Notifications.Tramites;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -76,12 +78,15 @@ public static class AdminPlataformaNotificacionesPlantillasEndpoints
         return Results.Ok(new NotificationTemplateListResponse(items));
     }
 
-    private static IResult GetSampleAsync(
+    private static async Task<IResult> GetSampleAsync(
         string templateId,
         [FromQuery] string? tramiteId,
         [FromQuery] string? usuarioId,
         [FromQuery] string? channel,
-        IOptions<NotificationEmailAssetsOptions> emailAssets)
+        [FromQuery] Guid? procedureTypeId,
+        IOptions<NotificationEmailAssetsOptions> emailAssets,
+        IProcedureTypeCatalog procedureTypes,
+        CancellationToken ct)
     {
         // AC3 — el contrato NO admite identificadores reales. Se rechaza aquí, ANTES de resolver
         // el catálogo, para que la respuesta sea IDÉNTICA exista o no exista el templateId
@@ -101,8 +106,28 @@ public static class AdminPlataformaNotificacionesPlantillasEndpoints
         if (!NotificationTemplateCatalog.TryResolve(templateId ?? string.Empty, out var descriptor))
             return Results.NotFound();
 
+        NotificationSampleProcedureType? overlay = null;
+        if (TramiteCambioEstadoEmailComposer.RequiresProcedureType(descriptor.Id))
+        {
+            if (procedureTypeId is null || procedureTypeId == Guid.Empty)
+                return Results.BadRequest(new { error = "procedure_type_id_invalido" });
+
+            var type = await procedureTypes
+                .GetByIdForNotificationPreviewAsync(procedureTypeId.Value, ct)
+                .ConfigureAwait(false);
+            if (type is null)
+                return Results.BadRequest(new { error = "tipo_tramite_no_encontrado" });
+            if (!type.IsActive)
+                return Results.BadRequest(new { error = "tipo_tramite_inactivo" });
+
+            overlay = new NotificationSampleProcedureType(
+                type.Name,
+                string.Equals(type.Family, "TRASPASO", StringComparison.OrdinalIgnoreCase));
+        }
+
         var assetsBaseUrl = emailAssets.Value.BaseUrl;
-        var (subject, html) = NotificationSampleRenderer.Render(descriptor.Id, resolvedChannel, assetsBaseUrl);
+        var (subject, html) = NotificationSampleRenderer.Render(
+            descriptor.Id, resolvedChannel, assetsBaseUrl, overlay);
         return Results.Ok(new NotificationTemplateSampleResponse(descriptor.Id, subject, html));
     }
 
