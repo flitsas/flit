@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
-import { Eye, FileText, Info } from 'lucide-react';
+import { Eye, Info } from 'lucide-react';
 import {
   resumirVins,
   useProcedureDocuments,
@@ -12,7 +12,7 @@ import { useProcedureBatchUpload } from '@/hooks/useProcedureBatchUpload';
 import { BatchDropzone } from './BatchDropzone';
 import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
-import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
+import { WizardCardHeader } from './wizard-atoms';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -24,6 +24,8 @@ import type {
   ProcedureAttachment,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+
+export type DocumentUploadMode = 'individual' | 'batch';
 
 interface Props {
   instanceId: string | null;
@@ -40,7 +42,73 @@ interface Props {
   hideHeader?: boolean;
   /** Modalidad del trámite: decide qué tipos pasan por OCR (matrícula: 4; traspaso: impronta+soat). */
   modalidad?: WizardModalidad;
+  /**
+   * Modo controlado (prototipo: toggle en cabecera del acordeón). Sin props, el checklist
+   * gestiona el modo por su cuenta y pinta el toggle en el cuerpo.
+   */
+  uploadMode?: DocumentUploadMode;
+  onUploadModeChange?: (mode: DocumentUploadMode) => void;
+  /** Si true, no pinta el toggle interno (ya va en el badge del WizardAccordion). */
+  hideModeToggle?: boolean;
 }
+
+/**
+ * Toggle Carga Individual / Carga Masiva (prototipo Lovable — pista segmentada con borde).
+ * Exportado para vivir en la cabecera del acordeón «Gestión de documentos».
+ */
+export function DocumentUploadModeToggle({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: DocumentUploadMode;
+  onChange: (mode: DocumentUploadMode) => void;
+  disabled?: boolean;
+}) {
+  const options: { value: DocumentUploadMode; label: string }[] = [
+    { value: 'individual', label: 'Carga Individual' },
+    { value: 'batch', label: 'Carga Masiva' },
+  ];
+  return (
+    <div
+      className="inline-flex rounded-xl border bg-white p-1 dark:bg-[#162744]"
+      style={{ borderColor: '#E2E8F0' }}
+      role="group"
+      aria-label="Modo de cargue de documentos"
+    >
+      {options.map((opt) => {
+        const on = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={on}
+            onClick={() => onChange(opt.value)}
+            className="rounded-lg px-4 py-2 text-[13px] font-semibold transition disabled:opacity-50"
+            style={
+              on
+                ? {
+                    background: '#EFF6FF',
+                    color: '#557EFF',
+                    boxShadow: '0 4px 20px -2px rgba(15,23,42,0.05)',
+                  }
+                : { color: '#64748B' }
+            }
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Tipos de documento que el sistema genera automáticamente (mandato, trámite virtual).
+ * El operador no puede ni debe adjuntarlos; el slot muestra "Autogenerado por el sistema".
+ */
+const AUTO_DOC_TIPOS = new Set(['mandato', 'tramite_virtual']);
 
 /** MIME permitidos por el contrato. */
 export const ALLOWED_MIME = [
@@ -438,6 +506,7 @@ export function DocumentSlot({
   const tipo = item.docTipo ?? item.key;
   const done = item.satisfied || !!attachment;
   const busy = uploading || analyzing || deleting;
+  const isAuto = AUTO_DOC_TIPOS.has(tipo);
 
   // La impronta es un documento que se genera en el paso de firma (FUR), no se carga aquí. Cuando es
   // obligatoria y aún no hay adjunto, el operador puede diferir su generación marcando este check
@@ -478,72 +547,73 @@ export function DocumentSlot({
   return (
     <li
       className={
-        'flex h-full flex-col rounded-2xl bg-white p-4 transition dark:bg-[#162744] ' +
-        // La caja punteada del diseño es la señal de "aquí falta algo": se reserva para el slot
-        // vacío y desaparece en cuanto hay archivo, que pasa a borde sólido de tarjeta normal.
-        (done
-          ? 'border shadow-sm hover:shadow-md'
-          : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#EFF6FF]')
+        'relative flex h-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] ' +
+        (isAuto || done
+          ? 'border'
+          : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]')
       }
-      style={{
-        borderColor: done
-          ? 'rgba(140,198,63,0.45)'
-          : item.obligatorio
-            ? 'rgba(255,78,0,0.35)'
-            : '#DFE5ED',
-      }}
+      style={{ borderColor: '#E2E8F0' }}
     >
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="flex min-w-0 items-start gap-2.5">
-          <FileText
-            className="mt-0.5 h-4 w-4 shrink-0"
-            style={{ color: done ? '#8CC63F' : '#59677D' }}
-            aria-hidden="true"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold leading-snug">{item.label}</p>
-            <p className="mt-1 text-xs opacity-70">
-              {ALLOWED_LABEL}
-              {item.maxSizeBytes ? ` · hasta ${formatSize(item.maxSizeBytes)}` : ''}
-            </p>
-            {attachment && (
-              <p className="mt-1 truncate text-xs opacity-70">
-                {attachment.filename} · {formatSize(attachment.sizeBytes)}
-              </p>
-            )}
-          </div>
-        </div>
-        {/* Insignias arriba a la derecha, como en la propuesta: el estado del documento se lee
-            antes que su nombre cuando se barre la grilla en diagonal. */}
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          {item.obligatorio ? (
-            // B4 (guardián de diseño) — el badge iba en `#FF4E00` sobre `rgba(255,78,0,0.14)`
-            // (3.0:1). `StatusBadge tone="danger"` resuelve la paleta con contraste AA.
-            <StatusBadge
-              tone="danger"
-              className="uppercase tracking-wide"
-              label={
-                <span className="inline-flex items-center gap-1">
-                  <span aria-hidden="true">●</span>
-                  Obligatorio
-                </span>
-              }
+      {/* Badges esquina superior derecha (prototipo DocSlot). */}
+      <div className="absolute right-3 top-3 flex items-center gap-1.5">
+        {isAuto && done ? (
+          <span
+            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+            style={{ background: '#8CC63F' }}
+          >
+            Validado
+          </span>
+        ) : done && !isAuto ? (
+          <span
+            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+            style={{ background: '#8CC63F' }}
+          >
+            Validado
+          </span>
+        ) : item.obligatorio ? (
+          <span className="whitespace-nowrap rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
+            * Obligatorio
+          </span>
+        ) : (
+          <span className="text-xs font-medium opacity-60">Opcional</span>
+        )}
+        {ocr && done && (
+          <button
+            type="button"
+            onClick={() => attachment && onPreview?.(attachment)}
+            aria-label="Ver resultado OCR"
+            className="p-0.5"
+            disabled={!attachment || !onPreview}
+          >
+            <Info
+              className="h-4 w-4"
+              style={{ color: '#8CC63F' }}
+              aria-hidden="true"
             />
-          ) : (
-            <span className="whitespace-nowrap text-xs font-medium uppercase tracking-wide opacity-70">
-              Opcional
-            </span>
-          )}
-          {ocr ? <OcrStatusPanel tipo={tipo} ocr={ocr} /> : null}
-        </div>
+          </button>
+        )}
       </div>
 
-      {/* Barra de avance del diseño: llena y verde cuando el documento está resuelto, en pulso
-          azul mientras el OCR lo analiza. Es decorativa — el estado ya va escrito en la píldora. */}
+      <p
+        className="pr-28 text-[13px] font-semibold leading-tight"
+        style={{ color: '#162744' }}
+      >
+        {item.label}
+      </p>
+      {isAuto && (
+        <p className="mt-0.5 text-[11px] opacity-70">Autogenerado por el sistema</p>
+      )}
+      <p className="mt-1 text-[11px] opacity-70">PDF, JPG hasta 5MB</p>
+      {attachment && !isAuto && (
+        <p className="mt-1 truncate text-[11px] opacity-60">
+          {attachment.filename} · {formatSize(attachment.sizeBytes)}
+        </p>
+      )}
+
       {(done || analyzing) && (
         <div
           className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: '#DFE5ED' }}
+          style={{ background: '#F1F5F9' }}
           aria-hidden="true"
         >
           <div
@@ -556,15 +626,18 @@ export function DocumentSlot({
         </div>
       )}
 
-      <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
-        {/* Tintado y no de relleno pleno con texto blanco: el verde de marca sobre blanco da 2.05:1
-            y el sistema prohíbe expresamente ese badge. `StatusBadge` resuelve tono y contraste. */}
-        <StatusBadge
-          label={done ? 'Adjunto' : 'Sin adjuntar'}
-          tone={done ? 'success' : 'neutral'}
-        />
+      {ocr ? (
+        <div className="mt-2">
+          <OcrStatusPanel tipo={tipo} ocr={ocr} />
+        </div>
+      ) : null}
 
-        {readOnly ? (
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+        {isAuto ? (
+          <p className="text-[11px] italic opacity-60">
+            Autogenerado por el sistema al radicar.
+          </p>
+        ) : readOnly ? (
           attachment && onPreview ? (
             <button
               type="button"
@@ -597,22 +670,20 @@ export function DocumentSlot({
               className="hidden"
               aria-label={`Subir ${item.label}`}
             />
-            {/* CTA con borde, no enlace: en la grilla de la propuesta es la única acción primaria
-                de la tarjeta y tiene que competir con la insignia de obligatorio. */}
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={busy}
-              className="rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
+              className="h-9 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
               style={{ borderColor: '#557EFF', color: '#557EFF' }}
             >
               {analyzing
-                ? 'Analizando…'
+                ? 'Analizando documento...'
                 : uploading
                   ? 'Subiendo…'
                   : attachment
-                    ? 'Reemplazar'
-                    : 'Adjuntar'}
+                    ? 'Reemplazar archivo'
+                    : 'Adjuntar archivo'}
             </button>
             {attachment && (
               <button
@@ -631,7 +702,7 @@ export function DocumentSlot({
       </div>
 
       {canDefer && (
-        <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
+        <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs">
           <input
             type="checkbox"
             checked={deferred}
@@ -675,6 +746,9 @@ export function DocumentChecklist({
   onChanged,
   hideHeader = false,
   modalidad,
+  uploadMode: uploadModeProp,
+  onUploadModeChange,
+  hideModeToggle = false,
 }: Props) {
   const { state, refresh, upload, remove, clearError } = useProcedureDocuments(
     instanceId,
@@ -684,7 +758,12 @@ export function DocumentChecklist({
     state;
 
   // Feature #11211 — modos mutuamente excluyentes: individual (checklist) vs batch (masivo).
-  const [uploadMode, setUploadMode] = useState<'individual' | 'batch'>('individual');
+  const [uploadModeState, setUploadModeState] = useState<DocumentUploadMode>('individual');
+  const uploadMode = uploadModeProp ?? uploadModeState;
+  const setUploadMode = (mode: DocumentUploadMode) => {
+    if (uploadModeProp === undefined) setUploadModeState(mode);
+    onUploadModeChange?.(mode);
+  };
   const batch = useProcedureBatchUpload(instanceId, { modalidad });
   const readOnly = useWizardReadOnly();
 
@@ -698,7 +777,8 @@ export function DocumentChecklist({
     const tipo = item.docTipo ?? item.key;
     return !isPrendaManagedChecklistTipo(tipo);
   });
-  const showModeToggle = !readOnly && !!instanceId && items.length > 0;
+  const showModeToggle =
+    !hideModeToggle && !readOnly && !!instanceId && items.length > 0;
 
   // Preview modal state (HU #10703)
   const [previewAttachment, setPreviewAttachment] = useState<ProcedureAttachment | null>(null);
@@ -784,28 +864,33 @@ export function DocumentChecklist({
       onDownload={previewAttachment ? () => void handleDownloadFromPreview() : undefined}
     />
     <section
-      className="rounded-2xl p-4 border bg-white dark:bg-[#162744]"
+      className={
+        hideHeader
+          ? ''
+          : 'rounded-2xl border bg-white p-4 dark:bg-[#162744]'
+      }
       aria-label="Documentos del trámite"
     >
-      {/* Embebido en el asistente el paso ya tiene su título, pero la tarjeta necesita el suyo:
-          desde el rediseño comparte el paso con las declaraciones, la prenda y las observaciones,
-          y sin nombre propio las cuatro se leían como un único bloque continuo. */}
-      <WizardCardHeader
-        title={hideHeader ? 'Gestión de documentos' : 'Documentos requeridos'}
-        subtitle={
-          hideHeader
-            ? undefined
-            : `Adjunta los documentos que exige el trámite (${ALLOWED_LABEL}, máx 20 MB).`
-        }
-      />
+      {!hideHeader && (
+        <WizardCardHeader
+          title="Gestión de documentos"
+          action={
+            showModeToggle ? (
+              <div className="flex flex-wrap items-center gap-3">
+                {uploadMode === 'batch' && (
+                  <StatusBadge label="Clasificación automática por OCR" tone="info" />
+                )}
+                <DocumentUploadModeToggle value={uploadMode} onChange={setUploadMode} />
+              </div>
+            ) : undefined
+          }
+        />
+      )}
 
-      {/* Banda de completitud, no píldora en la esquina: es la respuesta a "¿ya puedo seguir?" y
-          en la propuesta ocupa el ancho de la tarjeta, con el ámbar de lo que falta o el verde de
-          lo resuelto. */}
-      {checklist &&
+      {/* Banda de completitud — solo fuera del acordeón del wizard (ahí el título ya basta). */}
+      {!hideHeader &&
+        checklist &&
         (() => {
-          // Los tonos salen de INLINE_ALERT_TONES y no de hex sueltos: es la misma paleta con la
-          // que el resto del asistente pinta "todo bien" y "falta algo".
           const tono = INLINE_ALERT_TONES[checklist.completo ? 'success' : 'warning'];
           const Icono = tono.Icon;
           return (
@@ -829,7 +914,7 @@ export function DocumentChecklist({
 
       {state.error && (
         <div
-          className="rounded-xl p-3 text-xs border mb-3 flex items-center justify-between gap-3"
+          className="mb-3 flex items-center justify-between gap-3 rounded-xl border p-3 text-xs"
           style={{
             borderColor: '#FF4E00',
             background: 'rgba(255,78,0,0.06)',
@@ -850,31 +935,22 @@ export function DocumentChecklist({
         </div>
       )}
 
-      {/* Feature #11211 — selector de modo (excluyente) + UI correspondiente. Default: uno a uno. */}
+      {/* Toggle interno solo si no vive en la cabecera del acordeón. */}
       {showModeToggle && (
-        <div className="mb-3 space-y-2">
-          {/* Pista segmentada como en la propuesta (Carga Individual / Carga Masiva): las dos
-              opciones son excluyentes y cambian lo que se ve debajo, así que conviene verlas
-              juntas y no como dos píldoras sueltas que se leen como filtros. */}
-          <WizardSegmented
-            label="Modo de cargue de documentos"
-            value={uploadMode}
-            options={[
-              { value: 'individual', label: 'Uno a uno' },
-              { value: 'batch', label: 'Masivo' },
-            ]}
-            onChange={setUploadMode}
-          />
-          <p className="text-xs opacity-70" role="note">
-            {uploadMode === 'individual'
-              ? 'Puedes cargar cada documento en su casilla, uno a uno. También puedes cambiar a Masivo para subir varios archivos juntos.'
-              : 'Carga varios archivos a la vez: el sistema los clasifica y tú confirmas. Las casillas de abajo siguen disponibles por si falta alguno.'}
-          </p>
+        <div className="mb-3 flex flex-wrap items-center justify-end gap-3">
+          {uploadMode === 'batch' && (
+            <StatusBadge label="Clasificación automática por OCR" tone="info" />
+          )}
+          <DocumentUploadModeToggle value={uploadMode} onChange={setUploadMode} />
         </div>
       )}
 
-      {showModeToggle && uploadMode === 'batch' && (
-        <div className="mb-3">
+      {uploadMode === 'batch' && !readOnly && !!instanceId && items.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-3 text-[12px] opacity-70">
+            La IA identifica cada archivo cargado y lo ubica automáticamente en su slot
+            correspondiente, incluidos los trámites simultáneos.
+          </p>
           {batch.state.phase === 'reviewing' || batch.state.phase === 'uploading' ? (
             <BatchReviewPanel
               state={batch.state}
@@ -929,17 +1005,7 @@ export function DocumentChecklist({
         </p>
       ) : (
         <ul
-          // La propuesta llega a cuatro columnas en pantalla ancha; el checklist se quedaba en tres
-          // y dejaba una franja muerta a la derecha en trámites con muchos documentos.
-          className={`grid gap-3 ${
-            items.length === 1
-              ? 'grid-cols-1'
-              : items.length === 2
-                ? 'grid-cols-1 sm:grid-cols-2'
-                : items.length === 3
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                  : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-          }`}
+          className="mt-1 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
           aria-label="Checklist de documentos"
         >
           {[...items]

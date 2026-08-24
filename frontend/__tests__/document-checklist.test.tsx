@@ -79,7 +79,7 @@ describe('DocumentChecklist — render guiado por checklist', () => {
 
     expect(await screen.findByText('Cédula del comprador')).toBeInTheDocument();
     expect(screen.getByText('SOAT vigente')).toBeInTheDocument();
-    expect(screen.getByText('Obligatorio')).toBeInTheDocument();
+    expect(screen.getByText('* Obligatorio')).toBeInTheDocument();
     expect(screen.getByText('Opcional')).toBeInTheDocument();
   });
 

@@ -97,7 +97,7 @@ describe('FEATURE 02 — el propietario queda fijo cuando la compañía solo tra
     renderTraspaso();
 
     const numero = (await screen.findByLabelText(
-      'Número documento propietario',
+      'Número documento del propietario',
     )) as HTMLInputElement;
 
     // Se normaliza quitando separadores; el dígito de verificación se conserva
@@ -111,7 +111,7 @@ describe('FEATURE 02 — el propietario queda fijo cuando la compañía solo tra
     renderTraspaso();
 
     const numero = (await screen.findByLabelText(
-      'Número documento propietario',
+      'Número documento del propietario',
     )) as HTMLInputElement;
     await waitFor(() => expect(numero).toHaveValue('9001234567'));
 
@@ -146,7 +146,7 @@ describe('FEATURE 02 — el propietario queda fijo cuando la compañía solo tra
     renderTraspaso();
 
     const numero = (await screen.findByLabelText(
-      'Número documento propietario',
+      'Número documento del propietario',
     )) as HTMLInputElement;
 
     expect(numero).not.toHaveAttribute('readonly');

@@ -102,7 +102,7 @@ const SECRETARIAS = [
 
 /** Deja el paso 1 listo para consultar: VIN escrito. */
 async function prepararConsulta(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+  await user.type(await screen.findByLabelText(/Ingrese el VIN o la placa/i), VIN_VALIDO);
 }
 
 /**
@@ -349,7 +349,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
       expect(screen.getByRole('button', { name: /Continuar/ })).not.toBeDisabled(),
     );
 
-    await user.type(screen.getByLabelText('Número VIN'), '9');
+    await user.type(screen.getByLabelText(/Ingrese el VIN o la placa/i), '9');
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled());
     expect(mocks.createInstanceFromConsulta).not.toHaveBeenCalled();

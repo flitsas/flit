@@ -44,7 +44,7 @@ const runtBase: FieldValue[] = [
   fv('vehicle_fuel_runt', 'GASOLINA'),
 ];
 
-describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcional)"', () => {
+describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos"', () => {
   it('no renderiza antes de consultar el RUNT (sin datos de vehículo)', () => {
     const { container } = render(
       <VehicleTransformationsCard fieldValues={[]} readOnly={false} saving={false} onPatch={vi.fn()} />,
@@ -52,13 +52,12 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcion
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('estado neutro: sin subtrámites seleccionados y resumen "sin transformaciones"', () => {
+  it('estado neutro: sin subtrámites y resumen "sin transformaciones"', () => {
     renderCard(runtBase);
-    expect(screen.getByText('Trámites Simultáneos (Opcional)')).toBeInTheDocument();
-    expect(screen.getByText('Sin trámites simultáneos seleccionados')).toBeInTheDocument();
+    expect(
+      screen.getByText('Trámites Simultáneos — Transformaciones del Vehículo'),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Sin transformaciones declaradas/)).toBeInTheDocument();
-    // El selector ofrece las tres opciones del catálogo, ninguna del catálogo de la propuesta que
-    // FLIT excluye a propósito.
     const select = screen.getByLabelText('Agregar trámite simultáneo');
     expect(screen.getByRole('option', { name: 'Cambio de Color' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Conversiones de Combustible' })).toBeInTheDocument();
@@ -68,7 +67,7 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcion
     expect(select).toBeInTheDocument();
   });
 
-  it('seleccionar "Cambio de Color" lo agrega como chip, marca el flag y persiste el valor RUNT por defecto', async () => {
+  it('seleccionar "Cambio de Color" marca el flag y deja el valor vacío (obligatorio escoger)', async () => {
     const user = userEvent.setup();
     const onPatch = renderCard(runtBase);
 
@@ -76,25 +75,33 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcion
 
     expect(onPatch).toHaveBeenCalledWith([
       { fieldKey: 'cambio_color', valueText: 'true' },
-      { fieldKey: 'vehicle_color', valueText: 'PLATA' },
+      { fieldKey: 'vehicle_color', valueText: '' },
     ]);
   });
 
-  it('con cambio_color activo, el subtrámite aparece seleccionado con su chip y su bloque de valor', () => {
+  it('con cambio_color activo sin valor nuevo, el select aparece vacío y obligatorio', () => {
+    renderCard([...runtBase, fv('cambio_color', 'true')]);
+
+    expect(screen.getByRole('button', { name: 'Quitar Cambio de Color' })).toBeInTheDocument();
+    expect(screen.getByText('* Obligatorio')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nuevo color/)).toHaveTextContent('Selecciona…');
+    expect(screen.getByText(/Escoge un valor distinto al del RUNT/)).toBeInTheDocument();
+    expect(screen.getByText(/Adjunta el soporte obligatorio/)).toBeInTheDocument();
+  });
+
+  it('con cambio_color activo y valor nuevo, aparece la card con el valor y sin opción de re-agregar', () => {
     renderCard([
       ...runtBase.filter((f) => f.fieldKey !== 'vehicle_color'),
       fv('vehicle_color', 'NEGRO'),
       fv('cambio_color', 'true'),
     ]);
 
-    // Chip, identificado por su botón de quitar (el nombre también aparece en el bloque de valor).
     expect(screen.getByRole('button', { name: 'Quitar Cambio de Color' })).toBeInTheDocument();
-    // Ya no está disponible para volver a agregarlo
+    expect(screen.getByText('Cambio de Color')).toBeInTheDocument();
+    expect(screen.getByText('Soporte de cambio de color')).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Cambio de Color' })).not.toBeInTheDocument();
-    // Bloque de valor con el campo del color efectivo
-    expect(screen.getByLabelText('Nuevo color')).toHaveTextContent('NEGRO');
+    expect(screen.getByLabelText(/Nuevo color/)).toHaveTextContent('NEGRO');
     expect(screen.getByText(/RUNT: PLATA/)).toBeInTheDocument();
-    // El resumen para el FUR muestra solo el valor NUEVO (sin flecha ni origen RUNT).
     expect(screen.getByText(/Se registrará en el FUR — Color: NEGRO/)).toBeInTheDocument();
   });
 
@@ -105,7 +112,7 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcion
       fv('cambio_color', 'true'),
     ]);
 
-    await user.click(screen.getByLabelText('Nuevo color'));
+    await user.click(screen.getByLabelText(/Nuevo color/));
     await user.click(screen.getByRole('option', { name: 'NEGRO' }));
 
     expect(onPatch).toHaveBeenCalledWith([
@@ -121,7 +128,7 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcion
       fv('cambio_combustible', 'true'),
     ]);
 
-    await user.click(screen.getByLabelText('Nuevo combustible'));
+    await user.click(screen.getByLabelText(/Nuevo combustible/));
     await user.click(screen.getByRole('option', { name: 'ELECTRICO' }));
 
     expect(onPatch).toHaveBeenCalledWith([
@@ -181,15 +188,15 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcion
     expect(
       screen.getByRole('button', { name: 'Quitar Conversiones de Combustible' }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Nuevo color')).toHaveTextContent('NEGRO');
-    expect(screen.getByLabelText('Nuevo combustible')).toHaveTextContent('ELECTRICO');
+    expect(screen.getByLabelText(/Nuevo color/)).toHaveTextContent('NEGRO');
+    expect(screen.getByLabelText(/Nuevo combustible/)).toHaveTextContent('ELECTRICO');
     // Solo queda disponible el tercero.
     expect(screen.getByRole('option', { name: 'Cambio de Carrocería' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Cambio de Color' })).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Conversiones de Combustible' })).not.toBeInTheDocument();
   });
 
-  it('un color RUNT fuera del catálogo API sigue siendo opción válida del selector de valor', async () => {
+  it('con flag activo y valor igual al RUNT, el select queda vacío (pendiente de escoger)', async () => {
     const user = userEvent.setup();
     renderCard([
       fv('plate', 'ABC123'),
@@ -198,9 +205,10 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcion
       fv('cambio_color', 'true'),
     ]);
 
-    expect(screen.getByLabelText('Nuevo color')).toHaveTextContent('FUCSIA');
-    await user.click(screen.getByLabelText('Nuevo color'));
-    expect(await screen.findByRole('option', { name: 'FUCSIA' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nuevo color/)).toHaveTextContent('Selecciona…');
+    await user.click(screen.getByLabelText(/Nuevo color/));
+    // El valor RUNT no se ofrece como "nuevo"; el catálogo mock trae NEGRO/BLANCO/ROJO.
+    expect(await screen.findByRole('option', { name: 'NEGRO' })).toBeInTheDocument();
   });
 
   it('en modo readOnly: el selector de agregar está deshabilitado y los chips no ofrecen quitar', () => {
@@ -242,7 +250,7 @@ describe('VehicleTransformationsCard — carrocería (P2/P3)', () => {
     );
   });
 
-  it('con cambio_carroceria activo y clase CAMION muestra el selector de valor filtrado', async () => {
+  it('con cambio_carroceria activo y clase CAMION muestra el selector sin el valor RUNT', async () => {
     const user = userEvent.setup();
     render(
       <VehicleTransformationsCard
@@ -252,9 +260,11 @@ describe('VehicleTransformationsCard — carrocería (P2/P3)', () => {
         onPatch={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText('Nueva carrocería')).toBeInTheDocument();
-    await user.click(screen.getByLabelText('Nueva carrocería'));
-    expect(screen.getByRole('option', { name: 'ESTACAS' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nueva carrocería/)).toHaveTextContent('Selecciona…');
+    await user.click(screen.getByLabelText(/Nueva carrocería/));
+    // El valor actual del RUNT no se ofrece como “nuevo”.
+    expect(screen.queryByRole('option', { name: 'ESTACAS' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
   });
 
   it('muestra mensaje si la clase es desconocida y no hay opciones', () => {

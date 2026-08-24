@@ -100,13 +100,17 @@
 
   /* Badges de estado — paleta semántica unificada (HU #10844). Cinco tones; forma
      tintada (fondo translúcido + texto + borde). Reemplaza los colores crudos que cada
-     dominio pasaba a mano y los badges de relleno sólido (OtStatusBadge). */
-  --badge-success-bg: rgba(0, 219, 213, 0.15);
-  --badge-success-fg: #0f766e;
-  --badge-success-border: rgba(0, 219, 213, 0.35);
-  --badge-warning-bg: rgba(245, 158, 11, 0.15);
+     dominio pasaba a mano y los badges de relleno sólido (OtStatusBadge).
+     ACTUALIZACIÓN: success pasa de cian (#00DBD5) a verde tintado alineado al PDF 20 ago +
+     prototipo Lovable (OK = { color:#4F7A12, bg:#F3FBE8, border:#CDEB9C }). La semántica
+     verde = válido/completo ya era correcta en prototype_rules.md; el cian era un error
+     de implementación. Warning alineado a #F9AC00 (ámbar FLIT del PDF 20 ago). */
+  --badge-success-bg: #F3FBE8;
+  --badge-success-fg: #4F7A12;
+  --badge-success-border: #CDEB9C;
+  --badge-warning-bg: rgba(249, 172, 0, 0.15);
   --badge-warning-fg: #b45309;
-  --badge-warning-border: rgba(245, 158, 11, 0.35);
+  --badge-warning-border: rgba(249, 172, 0, 0.40);
   --badge-danger-bg: rgba(255, 78, 0, 0.12);
   --badge-danger-fg: #c2410c;
   --badge-danger-border: rgba(255, 78, 0, 0.32);
@@ -192,13 +196,14 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
 
-  /* Badges de estado — variantes para modo oscuro (HU #10844). */
-  --badge-success-bg: rgba(0, 219, 213, 0.18);
-  --badge-success-fg: #5eead4;
-  --badge-success-border: rgba(0, 219, 213, 0.35);
-  --badge-warning-bg: rgba(245, 158, 11, 0.2);
+  /* Badges de estado — variantes para modo oscuro (HU #10844).
+     Success: verde oscuro tintado (PDF 20 ago). Warning: #F9AC00 familia. */
+  --badge-success-bg: rgba(140, 198, 63, 0.22);
+  --badge-success-fg: #B8E986;
+  --badge-success-border: rgba(140, 198, 63, 0.45);
+  --badge-warning-bg: rgba(249, 172, 0, 0.20);
   --badge-warning-fg: #fbbf24;
-  --badge-warning-border: rgba(245, 158, 11, 0.4);
+  --badge-warning-border: rgba(249, 172, 0, 0.40);
   --badge-danger-bg: rgba(255, 78, 0, 0.2);
   --badge-danger-fg: #fca574;
   --badge-danger-border: rgba(255, 78, 0, 0.4);

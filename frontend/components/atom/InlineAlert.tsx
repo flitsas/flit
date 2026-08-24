@@ -23,27 +23,29 @@ export const INLINE_ALERT_TONES: Record<
   { color: string; background: string; border: string; Icon: typeof AlertTriangle }
 > = {
   error: {
-    color: '#C2410C',
-    background: 'rgba(255,78,0,0.08)',
-    border: 'rgba(255,78,0,0.30)',
+    color: 'var(--badge-danger-fg)',
+    background: 'var(--badge-danger-bg)',
+    border: 'var(--badge-danger-border)',
     Icon: XCircle,
   },
   warning: {
-    color: '#B45309',
-    background: 'rgba(245,158,11,0.10)',
-    border: 'rgba(245,158,11,0.35)',
+    // Ámbar FLIT (#F9AC00 familia) — tokens de globals.css / design guardian v2.1.
+    color: 'var(--badge-warning-fg)',
+    background: 'var(--badge-warning-bg)',
+    border: 'var(--badge-warning-border)',
     Icon: AlertTriangle,
   },
   info: {
-    color: '#1D4ED8',
-    background: 'rgba(85,126,255,0.08)',
-    border: 'rgba(85,126,255,0.30)',
+    color: 'var(--badge-info-fg)',
+    background: 'var(--badge-info-bg)',
+    border: 'var(--badge-info-border)',
     Icon: Info,
   },
   success: {
-    color: '#047857',
-    background: 'rgba(0,219,213,0.10)',
-    border: 'rgba(0,219,213,0.35)',
+    // Verde tintado (PDF 20 ago) — no cian.
+    color: 'var(--badge-success-fg)',
+    background: 'var(--badge-success-bg)',
+    border: 'var(--badge-success-border)',
     Icon: CheckCircle2,
   },
 };

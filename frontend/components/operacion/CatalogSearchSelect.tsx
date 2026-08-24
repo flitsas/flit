@@ -14,6 +14,7 @@ export function CatalogSearchSelect({
   options,
   disabled = false,
   placeholder = 'Buscar…',
+  invalid = false,
   onChange,
 }: {
   id: string;
@@ -22,6 +23,8 @@ export function CatalogSearchSelect({
   options: readonly string[];
   disabled?: boolean;
   placeholder?: string;
+  /** Borde rojo de campo obligatorio sin valor. */
+  invalid?: boolean;
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -59,7 +62,9 @@ export function CatalogSearchSelect({
           setOpen((v) => !v);
           setTimeout(() => inputRef.current?.focus(), 0);
         }}
+        aria-invalid={invalid || undefined}
         className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-[#162744]"
+        style={invalid ? { borderColor: '#FF4E00', borderWidth: 2 } : undefined}
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>
           {display || 'Selecciona…'}
