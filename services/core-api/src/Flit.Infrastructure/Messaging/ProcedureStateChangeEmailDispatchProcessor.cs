@@ -112,7 +112,8 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         }
 
         var row = await db.ProcedureStateChangeEmailDispatches.FirstAsync(d => d.Id == claimedId.Value, ct);
-        await DispatchAsync(row, db, emailSender, channelResolver, assets, ct);
+        var batch = await LoadBatchAsync(db, row.OutboxId, ct);
+        await DispatchBatchAsync(batch, db, emailSender, channelResolver, assets, ct);
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -132,40 +133,68 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         if (excludeIds.Count > 0)
             query = query.Where(d => !excludeIds.Contains(d.Id));
 
-        var row = await query.OrderBy(d => d.QueuedAt).FirstOrDefaultAsync(ct);
-        if (row is null)
+        var seed = await query.OrderBy(d => d.QueuedAt).FirstOrDefaultAsync(ct);
+        if (seed is null)
             return null;
 
-        await DispatchAsync(row, db, emailSender, channelResolver, assets, ct);
+        var batch = await db.ProcedureStateChangeEmailDispatches
+            .Where(d => d.OutboxId == seed.OutboxId
+                        && d.Status == StatusPendiente
+                        && d.Attempts < MaxAttempts)
+            .ToListAsync(ct);
+
+        await DispatchBatchAsync(batch, db, emailSender, channelResolver, assets, ct);
         await db.SaveChangesAsync(ct);
-        return row.Id;
+        return seed.Id;
     }
 
-    private async Task DispatchAsync(
-        ProcedureStateChangeEmailDispatch row,
+    private static async Task<List<ProcedureStateChangeEmailDispatch>> LoadBatchAsync(
+        FlitDbContext db, Guid outboxId, CancellationToken ct) =>
+        await db.ProcedureStateChangeEmailDispatches
+            .Where(d => d.OutboxId == outboxId
+                        && d.Status == StatusPendiente
+                        && d.Attempts < MaxAttempts)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    private async Task DispatchBatchAsync(
+        List<ProcedureStateChangeEmailDispatch> batch,
         FlitDbContext db,
         IEmailSender emailSender,
         INotificationChannelResolver channelResolver,
         NotificationEmailAssetsOptions assets,
         CancellationToken ct)
     {
-        // Kill-switch (HU #11469): si está apagado, NO incrementar attempts — la fila queda pendiente.
-        if (!await IsTramiteStateEmailsEnabledAsync(db, row.TenantId, ct).ConfigureAwait(false))
+        if (batch.Count == 0)
+            return;
+
+        var seed = batch[0];
+        if (!await IsTemplateEmailsEnabledAsync(db, seed.TenantId, seed.TemplateKey, ct).ConfigureAwait(false))
         {
-            EmailDispatchLog.PausedByKillSwitch(logger, row.TenantId, row.ProcedureInstanceId);
+            EmailDispatchLog.PausedByKillSwitch(logger, seed.TenantId, seed.ProcedureInstanceId);
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(row.Recipient))
+        var withEmail = batch.Where(r => !string.IsNullOrWhiteSpace(r.Recipient)).ToList();
+        foreach (var empty in batch.Where(r => string.IsNullOrWhiteSpace(r.Recipient)))
         {
-            // Defensivo: las omitidas no se reclaman; si llegara una, no reintentar.
-            row.Status = StatusFallido;
-            row.FailureReason = "Destinatario vacío";
-            row.ProcessedAt = DateTimeOffset.UtcNow;
-            return;
+            empty.Status = StatusFallido;
+            empty.FailureReason = "Destinatario vacío";
+            empty.ProcessedAt = DateTimeOffset.UtcNow;
         }
 
-        row.Attempts += 1;
+        if (withEmail.Count == 0)
+            return;
+
+        var to = PickPrimary(withEmail);
+        var bcc = withEmail
+            .Where(r => r.Id != to.Id)
+            .Select(r => r.Recipient!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var row in withEmail)
+            row.Attempts += 1;
 
         try
         {
@@ -174,29 +203,33 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                 .Include(i => i.Actors)
                 .Include(i => i.FieldValues)
                 .FirstOrDefaultAsync(
-                    i => i.Id == row.ProcedureInstanceId && i.TenantId == row.TenantId,
+                    i => i.Id == seed.ProcedureInstanceId && i.TenantId == seed.TenantId,
                     ct)
                 .ConfigureAwait(false);
 
             if (instance is null)
             {
-                row.Status = StatusFallido;
-                row.FailureReason = "Instancia de trámite no encontrada";
-                row.ProcessedAt = DateTimeOffset.UtcNow;
-                EmailDispatchLog.InstanceMissing(logger, row.ProcedureInstanceId, row.TenantId);
+                foreach (var row in withEmail)
+                {
+                    row.Status = StatusFallido;
+                    row.FailureReason = "Instancia de trámite no encontrada";
+                    row.ProcessedAt = DateTimeOffset.UtcNow;
+                }
+
+                EmailDispatchLog.InstanceMissing(logger, seed.ProcedureInstanceId, seed.TenantId);
                 return;
             }
 
             var fieldValues = instance.FieldValues
                 .ToDictionary(fv => fv.FieldKey, fv => fv.ValueText, StringComparer.OrdinalIgnoreCase);
-            var estado = EstadoFromTemplateKey(row.TemplateKey);
+            var estado = EstadoFromTemplateKey(seed.TemplateKey);
 
             IReadOnlyList<string>? causales = null;
             string? observacion = null;
-            if (string.Equals(row.TemplateKey, TramiteCambioEstadoEmailComposer.TemplateIdRechazado, StringComparison.Ordinal))
+            if (string.Equals(seed.TemplateKey, TramiteCambioEstadoEmailComposer.TemplateIdRechazado, StringComparison.Ordinal))
             {
                 (causales, observacion) = await TramiteRechazoEmailDataLoader
-                    .LoadAsync(db, row.TenantId, row.ProcedureInstanceId, ct)
+                    .LoadAsync(db, seed.TenantId, seed.ProcedureInstanceId, ct)
                     .ConfigureAwait(false);
             }
 
@@ -216,71 +249,117 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                 observacion,
                 typeName);
 
-            var channel = await channelResolver.ResolveAsync(row.TenantId, ct).ConfigureAwait(false);
+            var channel = await channelResolver.ResolveAsync(seed.TenantId, ct).ConfigureAwait(false);
             var assetsBaseUrl = assets.BaseUrl;
             var (subject, html) = channel == NotificationChannel.TenantApi
                 ? TramiteCambioEstadoEmailComposer.ComposeRenting(model, assetsBaseUrl)
                 : TramiteCambioEstadoEmailComposer.ComposeFlit(model, assetsBaseUrl);
 
             var message = new EmailMessage(
-                row.TenantId,
-                row.TemplateKey,
-                row.Recipient,
-                row.RecipientName ?? string.Empty,
+                seed.TenantId,
+                seed.TemplateKey,
+                to.Recipient!,
+                to.RecipientName ?? string.Empty,
                 subject,
-                html);
+                html)
+            {
+                BccEmails = bcc,
+            };
 
             var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);
             if (result.Success)
             {
-                row.Status = StatusEnviado;
-                row.FailureReason = null;
-                row.ProcessedAt = DateTimeOffset.UtcNow;
-                EmailDispatchLog.Sent(logger, row.ProcedureInstanceId, row.RecipientKind);
+                var now = DateTimeOffset.UtcNow;
+                foreach (var row in withEmail)
+                {
+                    row.Status = StatusEnviado;
+                    row.FailureReason = null;
+                    row.ProcessedAt = now;
+                }
+
+                EmailDispatchLog.Sent(logger, seed.ProcedureInstanceId, to.RecipientKind);
                 return;
             }
 
-            row.FailureReason = Truncate(result.Message, 1000);
-            if (row.Attempts >= MaxAttempts)
+            foreach (var row in withEmail)
             {
-                row.Status = StatusFallido;
-                row.ProcessedAt = DateTimeOffset.UtcNow;
-                EmailDispatchLog.DeadLettered(logger, row.ProcedureInstanceId, row.Attempts);
+                row.FailureReason = Truncate(result.Message, 1000);
+                if (row.Attempts >= MaxAttempts)
+                {
+                    row.Status = StatusFallido;
+                    row.ProcessedAt = DateTimeOffset.UtcNow;
+                }
             }
+
+            if (withEmail[0].Attempts >= MaxAttempts)
+                EmailDispatchLog.DeadLettered(logger, seed.ProcedureInstanceId, withEmail[0].Attempts);
             else
-            {
-                EmailDispatchLog.SendFailed(logger, row.ProcedureInstanceId, result.Outcome.ToString());
-            }
+                EmailDispatchLog.SendFailed(logger, seed.ProcedureInstanceId, result.Outcome.ToString());
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            row.FailureReason = Truncate(ex.Message, 1000);
-            if (row.Attempts >= MaxAttempts)
+            foreach (var row in withEmail)
             {
-                row.Status = StatusFallido;
-                row.ProcessedAt = DateTimeOffset.UtcNow;
-                EmailDispatchLog.DeadLettered(logger, row.ProcedureInstanceId, row.Attempts);
+                row.FailureReason = Truncate(ex.Message, 1000);
+                if (row.Attempts >= MaxAttempts)
+                {
+                    row.Status = StatusFallido;
+                    row.ProcessedAt = DateTimeOffset.UtcNow;
+                }
             }
+
+            if (withEmail[0].Attempts >= MaxAttempts)
+                EmailDispatchLog.DeadLettered(logger, seed.ProcedureInstanceId, withEmail[0].Attempts);
             else
-            {
-                EmailDispatchLog.SendError(logger, row.ProcedureInstanceId, ex);
-            }
+                EmailDispatchLog.SendError(logger, seed.ProcedureInstanceId, ex);
         }
     }
 
-    /// <summary>
-    /// HU #11469 — interruptor operativo. Sin fila de política o columna ausente ⇒ <c>true</c>
-    /// (avisos encendidos; default de despliegue).
-    /// </summary>
-    private static async Task<bool> IsTramiteStateEmailsEnabledAsync(
-        FlitDbContext db, Guid tenantId, CancellationToken ct)
+    internal static ProcedureStateChangeEmailDispatch PickPrimary(
+        IReadOnlyList<ProcedureStateChangeEmailDispatch> withEmail)
     {
-        var enabled = await db.TenantOperationalPolicies.AsNoTracking()
+        var comprador = withEmail
+            .Where(r => string.Equals(r.RecipientRole, "comprador", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(r => KindRank(r.RecipientKind))
+            .FirstOrDefault();
+        if (comprador is not null)
+            return comprador;
+
+        return withEmail
+            .OrderBy(r => RoleRank(r.RecipientRole))
+            .ThenBy(r => KindRank(r.RecipientKind))
+            .First();
+    }
+
+    private static int KindRank(string? kind) => kind switch
+    {
+        "empresa" => 0,
+        "representante_legal" => 1,
+        _ => 2,
+    };
+
+    private static int RoleRank(string? role) => role switch
+    {
+        "comprador" => 0,
+        "locatario" => 1,
+        "vendedor" => 2,
+        "radicador" => 3,
+        _ => 4,
+    };
+
+    private static async Task<bool> IsTemplateEmailsEnabledAsync(
+        FlitDbContext db, Guid tenantId, string templateKey, CancellationToken ct)
+    {
+        var policy = await db.TenantOperationalPolicies.AsNoTracking()
             .Where(p => p.TenantId == tenantId)
-            .Select(p => (bool?)p.TramiteStateEmailsEnabled)
+            .Select(p => new { p.TramiteApprovedEmailsEnabled, p.TramiteRejectedEmailsEnabled })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
-        return enabled ?? true;
+        if (policy is null)
+            return true;
+        if (string.Equals(templateKey, TramiteCambioEstadoEmailComposer.TemplateIdRechazado, StringComparison.Ordinal))
+            return policy.TramiteRejectedEmailsEnabled;
+        return policy.TramiteApprovedEmailsEnabled;
     }
 
     private static string EstadoFromTemplateKey(string templateKey)

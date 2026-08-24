@@ -167,17 +167,15 @@ internal sealed partial class TenantChannelEmailRouter(
         }
 
         var options = rentingOptions.Value;
-        var request = RentingSendEmailRequest.ToSingleRecipient(
+        var request = new RentingSendEmailRequest(
             message.Subject,
             message.HtmlBody,
             new RentingEmailAddress(options.SendEmailSenderEmail, options.SendEmailSenderUsername),
-            new RentingEmailAddress(message.ToEmail, message.ToName))
-            with
-        {
-            Attachments = message.Attachments
+            [new RentingEmailAddress(message.ToEmail, message.ToName)],
+            message.BccEmails.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).ToList(),
+            message.Attachments
                 .Select(a => new RentingEmailAttachment(a.FileName, a.ContentType, a.Content))
-                .ToList(),
-        };
+                .ToList());
 
         // HU #11372 — solo el camino del banco de pruebas (SendAsync(NotificationChannel, ...))
         // suministra recipientExemption; el camino de producción (SendAsync(EmailMessage, ...)) lo

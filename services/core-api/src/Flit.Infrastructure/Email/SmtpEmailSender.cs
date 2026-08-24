@@ -39,6 +39,11 @@ public sealed partial class SmtpEmailSender(EmailSettings settings, ILogger<Smtp
         var mime = new MimeMessage();
         mime.From.Add(new MailboxAddress(settings.DefaultSenderName, settings.DefaultSenderEmail));
         mime.To.Add(new MailboxAddress(message.ToName, message.ToEmail));
+        foreach (var bcc in message.BccEmails)
+        {
+            if (!string.IsNullOrWhiteSpace(bcc))
+                mime.Bcc.Add(MailboxAddress.Parse(bcc.Trim()));
+        }
         mime.Subject = message.Subject;
         var bodyBuilder = new BodyBuilder { HtmlBody = message.HtmlBody };
         foreach (var attachment in message.Attachments)

@@ -112,7 +112,8 @@ public sealed class PlateAssignmentEmailDispatchProcessorTests
             {
                 Id = Guid.NewGuid(),
                 TenantId = TenantId,
-                TramiteStateEmailsEnabled = false,
+                TramiteApprovedEmailsEnabled = false,
+                TramiteRejectedEmailsEnabled = true,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
             await db.SaveChangesAsync(Ct);
