@@ -71,6 +71,7 @@ public static class IctInfrastructureExtensions
 
         // Trazabilidad ICT por trámite (Feature #11814). Solo lectura.
         services.AddScoped<ITrazabilidadBandejaQuery, DbTrazabilidadBandejaRepository>();
+        services.AddScoped<IRecorridoTramiteQuery, DbRecorridoTramiteRepository>();
 
         // Seguridad (login ICT independiente).
         services.AddSingleton(sp => new IctJwtKeyMaterial(sp.GetRequiredService<IOptions<IctJwtSettings>>().Value));

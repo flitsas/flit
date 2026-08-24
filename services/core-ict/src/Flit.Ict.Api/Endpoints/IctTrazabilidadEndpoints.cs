@@ -58,6 +58,29 @@ public static class IctTrazabilidadEndpoints
             return Results.Ok(resultado);
         });
 
+        // HU #11816 — recorrido de un trámite con los tiempos consumidos en cada etapa.
+        group.MapGet("/tramites/{numero:long}/recorrido", async (
+            HttpContext context,
+            IRecorridoTramiteQuery query,
+            long numero,
+            CancellationToken ct) =>
+        {
+            var access = PlatformAccessReader.Read(context);
+            if (!access.HasIctLogsAccess)
+            {
+                return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            var recorrido = await query.ConsultarAsync(
+                numero, access.IsSuperAdmin ? null : access.TenantId, ct);
+
+            // Un trámite de otra compañía responde 404 igual que uno inexistente. Un 403 delataría que
+            // el número existe, y eso ya es información sobre la operación de otro cliente.
+            return recorrido is null
+                ? Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound)
+                : Results.Ok(recorrido);
+        });
+
         return app;
     }
 

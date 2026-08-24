@@ -39,15 +39,24 @@ public sealed partial class DevMockDataSeeder(
 
         try
         {
-            if (await AlreadySeededAsync(connection, cancellationToken))
-            {
-                return;
-            }
-
             var tenantId = await FirstTenantIdAsync(connection, cancellationToken);
             if (tenantId is null)
             {
                 Log.NoTenant(logger);
+                return;
+            }
+
+            // El bloque de trazabilidad se siembra por separado y con su propio guardián: las bases de
+            // desarrollo que ya recibieron el sembrado original se quedarían sin etapas para siempre si
+            // dependiera del mismo interruptor.
+            if (!await YaSembradoAsync(connection, "SELECT count(*) FROM ict.external_integration_process_status", cancellationToken))
+            {
+                await EjecutarAsync(connection, TrazabilidadMockSql, tenantId.Value, cancellationToken);
+                Log.SeededTrazabilidad(logger);
+            }
+
+            if (await AlreadySeededAsync(connection, cancellationToken))
+            {
                 return;
             }
 
@@ -81,6 +90,25 @@ public sealed partial class DevMockDataSeeder(
         return count is long l && l > 0;
     }
 
+    private static async Task<bool> YaSembradoAsync(DbConnection connection, string conteoSql, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = conteoSql;
+        var count = await cmd.ExecuteScalarAsync(ct);
+        return count is long l && l > 0;
+    }
+
+    private static async Task EjecutarAsync(DbConnection connection, string sql, Guid tenantId, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        var p = cmd.CreateParameter();
+        p.ParameterName = "tenant";
+        p.Value = tenantId;
+        cmd.Parameters.Add(p);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task<Guid?> FirstTenantIdAsync(DbConnection connection, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
@@ -88,6 +116,63 @@ public sealed partial class DevMockDataSeeder(
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is Guid id ? id : null;
     }
+
+    /// <summary>
+    /// Etapas y marcas de tiempo de los pre-trámites de muestra (Feature #11814). Sin esto, la pantalla
+    /// de trazabilidad en desarrollo enseña la bandeja pero el recorrido sale vacío, que es justo lo que
+    /// hay que poder mirar. Cubre los cinco desenlaces: en curso, atascado, con novedades, borrador y
+    /// anulado.
+    /// </summary>
+    private const string TrazabilidadMockSql = """
+        -- Marcas que faltaban en los tres pre-trámites originales.
+        UPDATE ict.external_integration_master SET
+            business_date_validation = created_at + interval '1 min 16 s',
+            external_date_validation = CASE WHEN external_validation >= 2
+                                            THEN created_at + interval '3 min 26 s' END
+        WHERE tenant_id = @tenant AND manager_id_transaction IN ('MOCK-STUCK-1', 'MOCK-NOV-1', 'MOCK-OK-1');
+
+        -- Dos desenlaces que no estaban representados: borrador creado y anulado.
+        INSERT INTO ict.external_integration_master
+            (tenant_id, manager_id_transaction, transaction_type, transaction_operation, plate, vin,
+             process_status_id, business_validation, external_validation, created_at,
+             business_date_validation, external_date_validation, procedure_instance_id,
+             traffic_secretary_code, runt_transit_office_name, manager_user)
+        VALUES
+            (@tenant, 'MOCK-DRAFT-1', 3, 1, 'JKL012', NULL, 3, 2, 2, now() - interval '3 h',
+             now() - interval '3 h' + interval '1 min 16 s', now() - interval '3 h' + interval '3 min 26 s',
+             gen_random_uuid(), '25286000', 'STRIA TTOyTTE MCPAL FUNZA', 'MADRID SALCEDO EDSON BRIAN'),
+            (@tenant, 'MOCK-VOID-1', 3, 1, 'MNO345', 'JALFVR347V7000402', 9, 2, 0, now() - interval '5 h',
+             now() - interval '5 h' + interval '1 min 16 s', NULL, NULL,
+             '', NULL, 'NIEVES TORO JHOANNA PAOLA');
+
+        -- Historial de etapas. Solo se registran las etapas de DESENLACE (con novedades, borrador,
+        -- anulado): las de tránsito ya viven en las columnas de fecha del master, que es de donde las
+        -- lee el recorrido.
+        INSERT INTO ict.external_integration_process_status
+            (id, id_eimas, tenant_id, id_parprosta, message_validation, status_process_status,
+             status_process_registrationdate, status_process_userregistered, created_at)
+        SELECT gen_random_uuid(), m.id, m.tenant_id, 4,
+               'CON NOVEDADES VALIDANDO REGLAS DE NEGOCIO: traffic_secretary_code no tiene un valor valido o no esta activa;',
+               0, m.created_at + interval '1 min 16 s', 'ictdev', now()
+        FROM ict.external_integration_master m
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-NOV-1';
+
+        INSERT INTO ict.external_integration_process_status
+            (id, id_eimas, tenant_id, id_parprosta, message_validation, status_process_status,
+             status_process_registrationdate, status_process_userregistered, created_at)
+        SELECT gen_random_uuid(), m.id, m.tenant_id, 5, '', 0,
+               m.created_at + interval '4 min 25 s', 'ictdev', now()
+        FROM ict.external_integration_master m
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-DRAFT-1';
+
+        INSERT INTO ict.external_integration_process_status
+            (id, id_eimas, tenant_id, id_parprosta, message_validation, status_process_status,
+             status_process_registrationdate, status_process_userregistered, created_at)
+        SELECT gen_random_uuid(), m.id, m.tenant_id, 6, 'Anulado a petición del cliente', 0,
+               m.created_at + interval '3 min 31 s', 'ictdev', now()
+        FROM ict.external_integration_master m
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-VOID-1';
+        """;
 
     private const string MockSql = """
         INSERT INTO ict.integration_log
@@ -121,6 +206,9 @@ public sealed partial class DevMockDataSeeder(
     {
         [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: logs, pre-trámites y webhook de muestra creados.")]
         public static partial void Seeded(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: etapas y marcas de trazabilidad creadas.")]
+        public static partial void SeededTrazabilidad(ILogger logger);
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev mock seed: no hay tenants; se omite.")]
         public static partial void NoTenant(ILogger logger);
