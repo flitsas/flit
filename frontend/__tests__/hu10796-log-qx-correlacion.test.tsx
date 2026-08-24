@@ -6,7 +6,7 @@
 // La capa de datos y los permisos se mockean (sin red real).
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { LogQxEntry, LogQxPage } from "@/lib/api/admin-log-qx";
 
 // next/link → <a> simple para poder consultar el href sin router de Next.
@@ -18,10 +18,22 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-const mocks = vi.hoisted(() => ({ fetchLogQx: vi.fn(), usePermissions: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}));
+
+const mocks = vi.hoisted(() => ({
+  fetchLogQx: vi.fn(),
+  fetchLogQxBandeja: vi.fn(),
+  usePermissions: vi.fn(),
+}));
 vi.mock("@/lib/api/admin-log-qx", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/admin-log-qx")>();
-  return { ...actual, fetchLogQx: mocks.fetchLogQx };
+  return {
+    ...actual,
+    fetchLogQx: mocks.fetchLogQx,
+    fetchLogQxBandeja: mocks.fetchLogQxBandeja,
+  };
 });
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: mocks.usePermissions }));
 
@@ -130,27 +142,81 @@ describe("LogQxLink — enlace 'Ver LOG QX' del detalle del trámite (HU #10796,
 });
 
 describe("LogQx — deep-link y back-link (HU #10796, AC1/AC2)", () => {
+  // El módulo se rediseñó como bandeja (HU #11788), pero la correlación desde el detalle del
+  // trámite sigue vigente: el deep-link ahora ACOTA la bandeja a ese trámite en vez de disparar
+  // una búsqueda por eje.
+  const BANDEJA = {
+    data: [
+      {
+        procedureInstanceId: INSTANCE,
+        referenceNumber: "TRM-2026-000001",
+        plate: "ABC123",
+        procedureTypeName: "Traspaso",
+        estado: "aprobado" as const,
+        clientTenantName: "Renting del Café S.A.S.",
+        transitOfficeName: "Bogotá",
+        divipoCode: "05001",
+        documentoQx: "FLIT_TRM-2026-000001",
+        submissionId: "11111111-1111-1111-1111-111111111111",
+        intentos: 1,
+        attempts: 1,
+        pollCount: 1,
+        qxRegisterCode: 81,
+        qxProcedureCode: 2,
+        rejectionReason: null,
+        ultimaActividad: "2026-07-01T12:00:00Z",
+        esperandoDesde: null,
+        horasEsperando: null,
+        submissionCreatedAt: "2026-07-01T12:00:00Z",
+      },
+    ],
+    totalCount: 1,
+    page: 1,
+    pageSize: 25,
+    contadores: [],
+  };
+
   beforeEach(() => {
-    mocks.fetchLogQx.mockReset();
+    mocks.fetchLogQxBandeja.mockReset();
   });
 
-  it("AC1 (deep-link): con initialInstanceId auto-aplica la búsqueda por instanceId al montar", async () => {
-    mocks.fetchLogQx.mockResolvedValue(PAGE);
+  it("AC1 (deep-link): con initialInstanceId acota la bandeja a ese trámite al montar", async () => {
+    mocks.fetchLogQxBandeja.mockResolvedValue(BANDEJA);
 
     render(<LogQx initialInstanceId={INSTANCE} />);
 
     await waitFor(() =>
-      expect(mocks.fetchLogQx).toHaveBeenCalledWith(expect.objectContaining({ instanceId: INSTANCE })),
+      expect(mocks.fetchLogQxBandeja).toHaveBeenCalledWith(
+        expect.objectContaining({ instanceId: INSTANCE }),
+      ),
     );
     expect(await screen.findByText("TRM-2026-000001")).toBeInTheDocument();
   });
 
-  it("AC2 (back-link): cada radicación enlaza al detalle del trámite /tramites/{id}", async () => {
-    mocks.fetchLogQx.mockResolvedValue(PAGE);
+  it("AC1 (deep-link): se explica por qué la lista está acotada y se puede quitar el filtro", async () => {
+    mocks.fetchLogQxBandeja.mockResolvedValue(BANDEJA);
 
     render(<LogQx initialInstanceId={INSTANCE} />);
 
-    const link = await screen.findByRole("link", { name: /Ver el trámite TRM-2026-000001/i });
+    expect(await screen.findByText(/Mostrando solo el trámite/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Ver todos/i }));
+    await waitFor(() =>
+      expect(mocks.fetchLogQxBandeja).toHaveBeenLastCalledWith(
+        expect.objectContaining({ instanceId: undefined }),
+      ),
+    );
+  });
+
+  it("AC2 (back-link): el vistazo de la fila enlaza al detalle del trámite /tramites/{id}", async () => {
+    mocks.fetchLogQxBandeja.mockResolvedValue(BANDEJA);
+
+    render(<LogQx initialInstanceId={INSTANCE} />);
+
+    // El enlace vive en el vistazo, así que primero hay que expandir la fila.
+    fireEvent.click(await screen.findByRole("button", { name: /TRM-2026-000001/i }));
+
+    const link = await screen.findByRole("link", { name: /Ver trámite/i });
     expect(link).toHaveAttribute("href", `/tramites/${INSTANCE}`);
   });
 });
