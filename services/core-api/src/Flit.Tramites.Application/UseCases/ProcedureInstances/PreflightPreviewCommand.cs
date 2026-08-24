@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -26,7 +27,12 @@ public sealed record PreflightPreviewRequest(
     /// HU #11199 — secretaría elegida en el primer paso. OBLIGATORIA en matrícula inicial: sin ella
     /// no se consulta el VIN. En traspaso llega nula (el organismo lo impone el RUNT, HU #11200).
     /// </summary>
-    Guid? TransitOfficeId = null);
+    Guid? TransitOfficeId = null,
+    /// <summary>
+    /// ADR-0050 — <c>code</c> del tipo elegido. Decide qué identificador exige la consulta; sin él
+    /// se cae a la familia heredada, que solo distingue matrícula de traspaso.
+    /// </summary>
+    string? ProcedureTypeCode = null);
 
 /// <summary>Atributo del vehículo hidratado por la consulta, en la forma que ya consume el wizard.</summary>
 public sealed record PreflightPreviewFieldDto(string FieldKey, string? ValueText, string? ValueJson);
@@ -138,7 +144,8 @@ public sealed class RunPreflightPreviewHandler(
     ITransitOfficeResolver transitOfficeResolver,
     IConsultationBlockingPolicy? blockingPolicy = null,
     TramiteValidationPolicy? validationPolicy = null,
-    IOtOperabilityGate? otOperability = null)
+    IOtOperabilityGate? otOperability = null,
+    IProcedureTypeRepository? typeRepo = null)
 {
     private readonly IConsultationBlockingPolicy _blockingPolicy =
         blockingPolicy ?? NullConsultationBlockingPolicy.Instance;
@@ -160,11 +167,32 @@ public sealed class RunPreflightPreviewHandler(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var modalidad = ProcedureFamilyCodes.FromCodeOrLegacyModalidad(request.Modalidad);
+        // ADR-0050 — el tipo elegido manda sobre la familia heredada.
+        ProcedureType? procedureType = null;
+        if (typeRepo is not null && !string.IsNullOrWhiteSpace(request.ProcedureTypeCode))
+        {
+            procedureType = await typeRepo
+                .GetByCodePublishedAsync(request.ProcedureTypeCode!.Trim(), ct)
+                .ConfigureAwait(false);
+            if (procedureType is null)
+                return (null, "procedure_type_not_found", null, null);
+        }
+
+        var modalidad = procedureType is not null
+            ? ProcedureFamilyCodes.FromCodeOrOtros(procedureType.Family)
+            : ProcedureFamilyCodes.FromCodeOrLegacyModalidad(request.Modalidad);
         if (modalidad is null)
             return (null, "modalidad_not_available", null, null);
 
-        var esMatricula = modalidad == ProcedureFamily.Matriculas;
+        // Qué identificador pide la consulta lo declara el tipo (`entryMode`): un trámite de la
+        // familia OTROS entra por placa, y por familia habría pedido un VIN que el vehículo ya
+        // matriculado no es lo que lo identifica.
+        var esMatricula = procedureType is not null
+            ? string.Equals(
+                ProcedureTypeGateProfile.FromJson(procedureType.GateProfile).EntryMode,
+                "VIN",
+                StringComparison.OrdinalIgnoreCase)
+            : modalidad == ProcedureFamily.Matriculas;
         var vin = Trim(request.Vin);
         var plate = Trim(request.Plate);
 

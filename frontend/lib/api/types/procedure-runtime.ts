@@ -60,7 +60,14 @@ export interface CreateInstanceRequest {
  * avanzar al paso 2 (`createInstanceFromConsulta`).
  */
 export interface ConsultaVehiculoInput {
-  modalidad: WizardModalidad;
+  /** Familia del trámite; gobierna el bloqueo por compañía. El nombre del campo es heredado. */
+  modalidad: ProcedureFamily | WizardModalidad;
+  /**
+   * ADR-0050 — `code` del tipo elegido en el catálogo. Manda sobre `modalidad`: decide qué
+   * identificador exige la consulta y qué trámite se crea. Sin él, todo lo que no fuera traspaso se
+   * consultaba y creaba como matrícula inicial.
+   */
+  procedureTypeCode?: string | null;
   vin?: string | null;
   plate?: string | null;
   ownerDocumentType?: string | null;
@@ -969,9 +976,46 @@ export interface WizardStep {
 }
 
 /** Respuesta de GET /instances/{id}/wizard. */
+/**
+ * Capacidades del tipo con el que se conformó el expediente (ADR-0050).
+ *
+ * Es lo que le faltaba al asistente para dejar de decidir por modalidad: qué partes pide el trámite,
+ * si lleva datos comerciales, si la prenda es una puerta y por qué identificador entra el vehículo.
+ * Salen del mismo `gate_profile` que gobierna los gates del backend, congelado en el snapshot del
+ * expediente, así que el asistente y el servidor no pueden discrepar.
+ *
+ * Es una proyección PARCIAL a propósito: lo que solo afecta a validaciones del servidor no viaja,
+ * para que el frontend no pueda reimplementar un gate.
+ */
+export interface WizardCapabilities {
+  /** `VIN` (el vehículo aún no tiene placa) o `PLATE`. */
+  entryMode: string | null;
+  /** Hay parte vendedora. En la familia OTROS el titular no vende. */
+  requiresSeller: boolean;
+  /** Hay parte compradora o titular. */
+  requiresBuyer: boolean;
+  allowsMultipleBuyer: boolean;
+  requiresCommercialValue: boolean;
+  requiresBiometrics: boolean;
+  /** Actores a validar: `OWNER`, `BUYER`. */
+  biometricActors: string[];
+  /** La decisión de prenda es una puerta y no una declaración. */
+  hasPrendaGate: boolean;
+}
+
 export interface WizardState {
-  modalidad: WizardModalidad;
+  /**
+   * ADR-0050 — familia del tipo (`MATRICULAS` | `TRASPASO` | `OTROS`). El nombre del campo es
+   * heredado; el backend escribe aquí `procedure_types.family` desde que se retiró
+   * `modalidad_entrada`, así que declararlo como `WizardModalidad` era una promesa falsa: ninguna
+   * comparación contra `'traspaso'` podía acertar.
+   */
+  modalidad: ProcedureFamily | WizardModalidad;
   tipologiaCodigo: string;
+  /** Nombre del tipo del catálogo, para titular el trámite que se está haciendo. */
+  typeName?: string | null;
+  /** Ausente solo si el tipo no tiene pasos parametrizados (el asistente pinta el bloqueo). */
+  capabilities?: WizardCapabilities | null;
   totalSteps: number;
   steps: WizardStep[];
   canSubmit: boolean;

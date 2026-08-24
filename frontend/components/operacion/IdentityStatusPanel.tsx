@@ -1,5 +1,7 @@
 'use client';
 
+import { esFamiliaTraspaso } from './wizardCapabilities';
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, Clock, Info, XCircle } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -96,15 +98,18 @@ function ordenarPartes(actors: ProcedureActor[]): ProcedureActor[] {
 }
 
 function buildOutcomeRows(
-  modalidad: WizardModalidad,
+  familia: ProcedureFamily | WizardModalidad,
   actors: ProcedureActor[],
   validations: BiometricValidation[],
 ): OutcomeRow[] {
   const rows: OutcomeRow[] = [];
+  // ADR-0050 — el estado del asistente trae la FAMILIA en el campo `modalidad`, así que comparar
+  // contra `'traspaso'` nunca acertaba: las validaciones del vendedor se atribuían al comprador.
+  const dosPartes = esFamiliaTraspaso(familia);
   for (const actor of ordenarPartes(actors)) {
     const parte = actor.rol;
     const matches = validations.filter((v) =>
-      modalidad === 'traspaso'
+      dosPartes
         ? v.partyRole === parte
         : v.partyRole === null || v.partyRole === 'comprador',
     );
@@ -135,7 +140,7 @@ export function IdentityStatusPanel({
   // HU #11666 — motivos tipificados de no envío del estado biométrico (derivados al vuelo por el
   // backend). Se refrescan con cada carga, igual que las validaciones.
   const [motivos, setMotivos] = useState<EnvioValidacionMotivo[]>([]);
-  const [wizardModalidad, setWizardModalidad] = useState<WizardModalidad | null>(null);
+  const [wizardFamilia, setWizardFamilia] = useState<ProcedureFamily | WizardModalidad | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const fetchingRef = useRef(false);
@@ -153,7 +158,7 @@ export function IdentityStatusPanel({
         tramitesClient.getBiometricState(instanceId),
         tramitesClient.getInstanceIdentityValidationAlerts(instanceId),
       ]);
-      setWizardModalidad(wizardRes?.modalidad ?? null);
+      setWizardFamilia(wizardRes?.modalidad ?? null);
       setActors(actorsRes);
       setValidations(biometricRes.validations);
       setMotivos(biometricRes.motivosNoEnvio ?? []);
@@ -193,8 +198,8 @@ export function IdentityStatusPanel({
 
   const hasData = actors !== null && validations !== null && alerts !== null;
   const initialLoading = open && loading && !hasData && error === null;
-  const effModalidad = modalidad ?? wizardModalidad ?? 'traspaso';
-  const outcomes = hasData ? buildOutcomeRows(effModalidad, actors, validations) : [];
+  const effFamilia = modalidad ?? wizardFamilia ?? 'TRASPASO';
+  const outcomes = hasData ? buildOutcomeRows(effFamilia, actors, validations) : [];
   const accionables =
     hasData
       ? alerts.filter((a) => a.alertKind != null)

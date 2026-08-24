@@ -7,7 +7,6 @@ import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import type { ProcedureFamily, ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 import { FAMILY_LABEL } from '@/lib/api/types/procedure-parametrization';
-import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
  * `/tramites/nuevo/[procedureTypeCode]` — paso 1 del asistente para un tipo concreto (ADR-0050).
@@ -18,6 +17,11 @@ import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
  *
  * El tipo se resuelve contra el catálogo en lugar de confiar en la URL: así un `code` inventado o
  * un tipo sin la barrera de operación encendida no abre el asistente.
+ *
+ * El asistente recibe el `code` y la familia: el primero decide cómo se conforma el recorrido y qué
+ * trámite se crea; la segunda, solo el bloqueo por compañía. Aquí vivía un puente que traducía la
+ * familia a una de las dos modalidades, así que cualquier tipo que no fuera traspaso —los diecisiete
+ * de la familia OTROS incluidos— entraba al asistente disfrazado de matrícula inicial.
  */
 export default function NuevoTramitePage() {
   return (
@@ -27,14 +31,6 @@ export default function NuevoTramitePage() {
       <PasoConsulta />
     </Suspense>
   );
-}
-
-/**
- * PUENTE TEMPORAL — el asistente todavía se configura por modalidad. Se retira cuando el wizard se
- * conforme desde los pasos del tipo, igual que ya hace el backend.
- */
-function modalidadDe(family: ProcedureFamily): WizardModalidad {
-  return family === 'TRASPASO' ? 'traspaso' : 'matricula_inicial';
 }
 
 function bloqueadaPorCompania(
@@ -129,7 +125,7 @@ function PasoConsulta() {
 
   return (
     <TramiteWizard
-      modalidad={modalidadDe(gate.tipo.family)}
+      family={gate.tipo.family}
       procedureTypeCode={gate.tipo.code}
       title={gate.tipo.name}
       seedVin={seedVin}

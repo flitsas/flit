@@ -14,12 +14,13 @@ import type {
  * (OtSidePanel xl, sin scroll) con título, obligatoriedad y descripción en 2 columnas.
  */
 export function ProcedureDocsPreviewInformativo({
-  modalidad,
+  procedureTypeCode,
   transitOfficeId,
   open: openProp,
   onOpenChange,
 }: {
-  modalidad: WizardModalidad;
+  /** `code` del tipo en el catálogo (ADR-0050). */
+  procedureTypeCode: string;
   transitOfficeId?: string;
   /**
    * Modo controlado, SIN el enlace: el disparador vive fuera. Lo necesita el carril de consulta del
@@ -44,7 +45,7 @@ export function ProcedureDocsPreviewInformativo({
     error: string | null;
   } | null>(null);
 
-  const key = `${modalidad}|${transitOfficeId ?? ''}`;
+  const key = `${procedureTypeCode}|${transitOfficeId ?? ''}`;
   const loaded = result?.key === key ? result : null;
   const loading = open && loaded === null;
   const items = loaded?.items ?? null;
@@ -54,7 +55,7 @@ export function ProcedureDocsPreviewInformativo({
     if (!open) return;
     let active = true;
     void tramitesClient
-      .fetchDocumentRequirementsPreview(modalidad, transitOfficeId)
+      .fetchDocumentRequirementsPreview(procedureTypeCode, transitOfficeId)
       .then((list) => {
         if (active) setResult({ key, items: list, error: null });
       })
@@ -66,7 +67,7 @@ export function ProcedureDocsPreviewInformativo({
     return () => {
       active = false;
     };
-  }, [open, key, modalidad, transitOfficeId]);
+  }, [open, key, procedureTypeCode, transitOfficeId]);
 
   return (
     <>

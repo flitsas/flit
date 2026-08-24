@@ -58,8 +58,9 @@ import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 
 // Esqueleto que devuelve GET /wizard-preview: paso 1 abierto, el resto bloqueado.
 const PREVIEW_MATRICULA: WizardState = {
-  modalidad: 'matricula_inicial',
-  tipologiaCodigo: 'matricula_inicial',
+  // ADR-0050 — el estado trae la FAMILIA en `modalidad` y el `code` canónico en `tipologiaCodigo`.
+  modalidad: 'MATRICULAS',
+  tipologiaCodigo: 'MATRICULA_NUEVA',
   totalSteps: 5,
   canSubmit: false,
   blockers: [],
@@ -118,7 +119,7 @@ function renderNuevaMatricula() {
   return render(
     <TramiteWizard
       procedureTypeCode="MATRICULA_NUEVA"
-        modalidad="matricula_inicial"
+        family="MATRICULAS"
       title="Matrícula inicial"
       onCreated={(summary) => routerReplace(`/tramites/${summary.id}?t=${summary.tenantId}`)}
       onExit={() => {}}
@@ -169,7 +170,11 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
 
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
     expect(mocks.runPreflightPreview).toHaveBeenCalledWith(
-      expect.objectContaining({ modalidad: 'matricula_inicial', vin: VIN_VALIDO }),
+      expect.objectContaining({
+        modalidad: 'MATRICULAS',
+        procedureTypeCode: 'MATRICULA_NUEVA',
+        vin: VIN_VALIDO,
+      }),
     );
     expect(mocks.createInstanceFromConsulta).not.toHaveBeenCalled();
     // El resultado de la consulta se pinta igual que con trámite creado.
@@ -265,7 +270,9 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalledTimes(1));
     expect(mocks.createInstanceFromConsulta).toHaveBeenCalledWith(
       expect.objectContaining({
-        modalidad: 'matricula_inicial',
+        modalidad: 'MATRICULAS',
+        // ADR-0050 — el `code` es lo que decide QUÉ trámite se crea; la familia solo el bloqueo.
+        procedureTypeCode: 'MATRICULA_NUEVA',
         vin: VIN_VALIDO,
         previewToken: 'token-abc',
       }),

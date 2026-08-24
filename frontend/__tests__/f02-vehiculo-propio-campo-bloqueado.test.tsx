@@ -82,7 +82,7 @@ function configConPolitica(onlyOwnVehicles: boolean) {
 function renderTraspaso() {
   return render(
     <TramiteWizard procedureTypeCode="TRASPASO_STANDARD"
-        modalidad="traspaso" title="Traspaso" onCreated={() => {}} onExit={() => {}} />,
+        family="TRASPASO" title="Traspaso" onCreated={() => {}} onExit={() => {}} />,
   );
 }
 

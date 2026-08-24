@@ -14,6 +14,14 @@ import {
   Wrench,
 } from 'lucide-react';
 import { resolveStepBody } from './sectionRendererRegistry';
+import {
+  capacidadesEfectivas,
+  modalidadPorEntrada,
+  modalidadPorPartes,
+  rolesDeActores,
+  type CapacidadesEfectivas,
+} from './wizardCapabilities';
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
@@ -122,15 +130,16 @@ import { InlineAlert } from '@/components/atom/InlineAlert';
 type Props = {
   onExit: () => void;
 } & (
-  | { existingInstanceId: string; modalidad?: undefined; procedureTypeCode?: undefined; title?: undefined; configuration?: undefined; procedureTypeId?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
+  | { existingInstanceId: string; family?: undefined; procedureTypeCode?: undefined; title?: undefined; configuration?: undefined; procedureTypeId?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
   | {
-      modalidad: WizardModalidad;
-      title: string;
       /**
-       * ADR-0050 — `code` del tipo elegido. Con él se pide el esqueleto de pasos del paso 1, que el
-       * backend conforma desde el catálogo. La `modalidad` sigue gobernando el render del cuerpo
-       * hasta que el wizard se conforme también desde el tipo.
+       * ADR-0050 — familia del tipo elegido. Ya no gobierna el render (eso lo hacen las capacidades
+       * que publica el estado del asistente): queda para el bloqueo por compañía, que se evalúa por
+       * familia, y como respaldo mientras el trámite no existe.
        */
+      family: ProcedureFamily;
+      title: string;
+      /** `code` del tipo elegido. Con él se pide el esqueleto de pasos y se crea el trámite. */
       procedureTypeCode: string;
       /** CF-02 — el trámite acaba de crearse al avanzar al paso 2; la página navega a su ruta. */
       onCreated?: (summary: ProcedureInstanceSummary) => void;
@@ -141,7 +150,7 @@ type Props = {
       configuration?: undefined;
       procedureTypeId?: undefined;
     }
-  | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; modalidad?: undefined; procedureTypeCode?: undefined; title?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
+  | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; family?: undefined; procedureTypeCode?: undefined; title?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
 );
 
 /**
@@ -201,15 +210,22 @@ const STEP_SUBTITLE: Record<string, string> = {
  * biométrica del comprador está aprobada; en traspaso la biométrica vive dentro del paso `fur`, que
  * lista `pendiente_biometria` mientras falte alguna parte. `locked` ⇒ aún no alcanzable ⇒ no aprobada.
  */
-function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): boolean {
-  if (modalidad === 'traspaso') {
-    const fur = steps.find((s) => s.key === 'fur');
-    if (!fur || fur.status === 'locked') return false;
-    return !fur.reasons.includes('pendiente_biometria');
+function isIdentityApproved(steps: WizardStep[]): boolean {
+  // ADR-0050 — la pregunta es DÓNDE vive la biométrica en este recorrido, y eso lo dicen los pasos,
+  // no la modalidad: donde hay sección `biometric` manda su estado; donde no la hay, la biométrica
+  // se resolvió dentro del paso de firma y lo dice su razón. Antes se preguntaba si era un traspaso,
+  // lo que daba por hecho que solo el traspaso pliega la identidad dentro del FUR.
+  const identidad = steps.find((s) => s.sectionType === 'biometric' || s.key === 'identidad');
+  if (identidad) return identidad.status === 'complete';
+
+  const firma = steps.find((s) => s.sectionType === 'signature_fur' || s.key === 'fur');
+  if (firma) {
+    if (firma.status === 'locked') return false;
+    return !firma.reasons.includes('pendiente_biometria');
   }
-  const identidad = steps.find((s) => s.key === 'identidad');
+
   // HU #10549 — sin paso de identidad (el OT la deshabilitó y el wizard lo ocultó) ⇒ no se exige.
-  return identidad ? identidad.status === 'complete' : true;
+  return true;
 }
 
 /**
@@ -312,8 +328,11 @@ function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
 export function TramiteWizard(props: Props) {
   const {
     procedureTypeId,
-    modalidad: entryModalidad,
+    family: entryFamily,
     procedureTypeCode: entryProcedureTypeCode,
+    // Nombre del tipo que eligió el gestor. Es el título mientras el trámite no existe y el estado
+    // del asistente todavía no puede traer el nombre del catálogo.
+    title: entryTitle,
     existingInstanceId,
     onCreated,
     seedVin,
@@ -328,7 +347,7 @@ export function TramiteWizard(props: Props) {
   // CF-02 (HU #10883, AC3) — entrada por modalidad: el trámite NO existe todavía. El paso 1 corre
   // contra la consulta desacoplada y el registro se crea al avanzar al paso 2 (AC4). Solo aplica
   // mientras no haya instancia: en cuanto se crea, el wizard es el de siempre.
-  const deferredCreation = !existingInstanceId && !!entryModalidad && !instanceId;
+  const deferredCreation = !existingInstanceId && !!entryFamily && !instanceId;
   // Consulta resuelta en el paso 1 (token + identificadores) a la espera de crear el trámite.
   const [pendingConsulta, setPendingConsulta] = useState<PendingConsulta | null>(null);
   // Condiciones marcadas en el paso 1 antes de que el trámite exista (leasing, carrocería, paz y
@@ -429,7 +448,7 @@ export function TramiteWizard(props: Props) {
   // actualice el modo sin re-consultar la instancia.
 
   // Clave estable de creación (modalidad o procedureTypeId) para el guard.
-  const startKey = entryModalidad ?? procedureTypeId ?? '';
+  const startKey = entryFamily ?? procedureTypeId ?? '';
 
   // Guardia anti doble-create: StrictMode re-invoca los efectos en dev, lo que
   // dispararía DOS POST /instances casi simultáneos → choque UNIQUE de
@@ -442,12 +461,12 @@ export function TramiteWizard(props: Props) {
   // existente no hay nada que crear, y en la entrada por modalidad la creación se difiere al avance
   // al paso 2 (CF-02): entrar al wizard ya no da de alta ningún registro.
   useEffect(() => {
-    if (existingInstanceId || entryModalidad) return;
+    if (existingInstanceId || entryFamily) return;
     if (startedForRef.current === startKey) return;
     startedForRef.current = startKey;
     void start({ procedureTypeId: procedureTypeId! });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startKey, existingInstanceId, entryModalidad]);
+  }, [startKey, existingInstanceId, entryFamily]);
 
   const {
     wizard,
@@ -610,7 +629,10 @@ export function TramiteWizard(props: Props) {
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
 
-  const modalidad: WizardModalidad = wizard?.modalidad ?? entryModalidad ?? 'matricula_inicial';
+  // Familia vigente. El campo `modalidad` del estado transporta `procedure_types.family` desde
+  // ADR-0050; el nombre es heredado y solo sobrevive en el contrato.
+  const familia: ProcedureFamily | WizardModalidad =
+    wizard?.modalidad ?? entryFamily ?? 'MATRICULAS';
   const activeStep: WizardStep | undefined = steps[activeIndex];
 
   // Reportes2 HU-A — telemetría de uso del wizard (fire-and-forget; emite
@@ -621,31 +643,42 @@ export function TramiteWizard(props: Props) {
   // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
   // canRadicar gobierna el botón "Preparar" (N 03: borrador→preparado): el gate RF03 exige identidad,
   // mientras que canSubmit (matrícula) trata la identidad como diferida → no basta canSubmit.
-  const identityApproved = isIdentityApproved(steps, modalidad);
+  const identityApproved = isIdentityApproved(steps);
   const canRadicar = canSubmit && identityApproved;
+
+  // ADR-0050 — capacidades del tipo. Sustituyen a `modalidad === 'traspaso'` como discriminante:
+  // con dos modalidades las dos ramas agotaban el catálogo, con veintiún tipos ya no. Un blindaje
+  // entraba por la rama de matrícula y pedía un comprador que no existe, sin que nada fallara.
+  const caps = capacidadesEfectivas(wizard?.capabilities, familia);
+  // `tipologiaCodigo` ES el `code` canónico del catálogo desde ADR-0050; mientras el trámite no
+  // existe, el code lo trae la ruta.
+  const tipoCodigo = wizard?.tipologiaCodigo?.trim() || entryProcedureTypeCode || '';
 
   // Header en la forma de la propuesta: el título ES el trámite, con una frase que dice qué hace, y
   // la identidad del expediente (referencia, tipo, identificador, estado) baja a su propia franja.
+  //
+  // El título es el nombre del tipo en el catálogo. Antes era uno de dos literales, así que un
+  // levantamiento de prenda se anunciaba al gestor como «Matrícula Inicial».
   const modalidadLabel =
-    modalidad === 'traspaso' ? 'Traspaso Estándar' : 'Matrícula Inicial';
+    wizard?.typeName?.trim() || entryTitle?.trim() || (caps.pideVendedor ? 'Traspaso Estándar' : 'Matrícula Inicial');
   const displayTitle = modalidadLabel;
-  const displaySubtitle =
-    modalidad === 'traspaso'
-      ? 'Traspasa la propiedad del vehículo ante el organismo de tránsito.'
-      : 'Radica el registro inicial del vehículo ante el organismo de tránsito.';
+  const displaySubtitle = caps.pideVendedor
+    ? 'Traspasa la propiedad del vehículo ante el organismo de tránsito.'
+    : caps.entraPorVin
+      ? 'Radica el registro inicial del vehículo ante el organismo de tránsito.'
+      : 'Registra el cambio sobre el vehículo ante el organismo de tránsito.';
   const refLabel = referenceNumber ?? state.detail?.referenceNumber ?? null;
-  // Identificador del expediente: el VIN manda en matrícula y la placa en traspaso, que es el dato
-  // por el que se consultó el vehículo en cada modalidad.
+  // Identificador del expediente: el dato por el que el tipo consulta el vehículo. Un trámite que
+  // entra por VIN es uno cuyo vehículo aún no tiene placa; el resto entra por placa.
   const fvOf = (key: string) =>
     state.detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText?.trim() || null;
   // Organismo real del trámite, para el texto del modal "Confirmar radicación" (propuesta:
   // MatriculaInicial.tsx:1114) — nunca un literal de maqueta.
   const organismoNombre = fvOf('transit_office_name');
-  const identificador =
-    modalidad === 'traspaso'
-      ? (fvOf('plate') ?? fvOf('vin'))
-      : (fvOf('vin') ?? fvOf('plate'));
-  const identificadorLabel = modalidad === 'traspaso' ? 'PLACA' : 'VIN';
+  const identificador = caps.entraPorVin
+    ? (fvOf('vin') ?? fvOf('plate'))
+    : (fvOf('plate') ?? fvOf('vin'));
+  const identificadorLabel = caps.entraPorVin ? 'VIN' : 'PLACA';
 
   // AC1 (HU #10883) — autosave del paso: al AVANZAR (no al retroceder) persiste la `key` del paso
   // destino vía PATCH /instances/{id}/current-step (HU #10879), para retomar ahí al reabrir el
@@ -1020,13 +1053,15 @@ export function TramiteWizard(props: Props) {
   // el valor de venta solo se guarda al Continuar, y Continuar solo se habilitaba con el valor ya
   // guardado. `comercial` se conserva porque un borrador antiguo puede seguir apuntando ahí y
   // `StepBody` lo normaliza a Requisitos: mismo cuerpo, mismo guardado.
-  const isRequisitosTraspasoStep =
-    modalidad === 'traspaso' &&
+  //
+  // ADR-0050: lo que hace guardable ese paso es que lleve datos comerciales, no que sea un traspaso.
+  const isRequisitosConComercialStep =
+    caps.pideValorComercial &&
     (activeStep?.key === 'documentos' || activeStep?.key === 'comercial');
   const isSavableStep =
     activeStep?.key === 'comprador' ||
     activeStep?.key === 'vendedor' ||
-    isRequisitosTraspasoStep;
+    isRequisitosConComercialStep;
   const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
   // La prenda vive en Requisitos en AMBAS modalidades: gate con decisiones de gestión en las dos
   // (HU #11592 invirtió la HU #10596 — matrícula deja de ser declarativa/informativa y también
@@ -1047,11 +1082,13 @@ export function TramiteWizard(props: Props) {
     // HU #11628 — dígito de preferencia de placa sin declarar (ni dígito ni "sin preferencia") con
     // preasignación activa: no Continuar. `digitoPlacaGateOk` ya contempla los casos donde no aplica.
     (activeStep?.key === 'consulta_vin' && !digitoPlacaGateOk) ||
-    // Tipo de servicio (casilla 18 del FUR, solo matrícula inicial): sin tipo elegido no se avanza
-    // del paso de requisitos; si el tipo es PÚBLICO, tampoco hasta que la consulta devuelva la razón
-    // social de la empresa vinculadora (casilla 19). Misma regla que antes gobernaba el paso 1, en el
-    // paso donde ahora se captura — ver `DeclaracionesTramite`.
-    (activeStep?.key === 'documentos' && modalidad !== 'traspaso' && !tipoServicioGateOk) ||
+    // Tipo de servicio: sin tipo elegido no se avanza del paso de requisitos; si el tipo es PÚBLICO,
+    // tampoco hasta que la consulta devuelva la razón social de la empresa vinculadora (casilla 19).
+    // Misma regla que antes gobernaba el paso 1, en el paso donde ahora se captura — ver
+    // `DeclaracionesTramite`.
+    // (casilla 18 del FUR): la pide el trámite que MATRICULA el vehículo, no «el que no es
+    // traspaso». Se ata al mismo criterio de entrada por VIN que ya distingue a esos trámites.
+    (activeStep?.key === 'documentos' && caps.entraPorVin && !tipoServicioGateOk) ||
     // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
     // consulta del vehículo salió bien (sin bloqueos), que es el único requisito del paso 1.
     // Sin instancia no hay gates de backend que evaluar (WizardStateQuery necesita la instancia), así
@@ -1073,12 +1110,14 @@ export function TramiteWizard(props: Props) {
     // nace el registro, con el vehículo ya consultado. Si la creación falla no se avanza y no queda
     // nada persistido; el operador puede reintentar sobre la misma consulta.
     if (deferredCreation) {
-      if (!pendingConsulta || !entryModalidad) return;
+      if (!pendingConsulta || !entryFamily) return;
       beginContinuing();
       setSubmitError(null);
       try {
         const created = await tramitesClient.createInstanceFromConsulta({
-          modalidad: entryModalidad,
+          // La familia gobierna el bloqueo por compañía; el `code` gobierna QUÉ trámite se crea.
+          modalidad: entryFamily,
+          procedureTypeCode: entryProcedureTypeCode,
           vin: pendingConsulta.vin,
           plate: pendingConsulta.plate,
           ownerDocumentType: pendingConsulta.ownerDocumentType,
@@ -1146,8 +1185,9 @@ export function TramiteWizard(props: Props) {
     }
 
     if (!isSavableStep) {
-      // Matrícula: la prenda vive en el paso documentos; se persiste al Continuar (sin botón aparte).
-      if (activeStep?.key === 'documentos' && modalidad !== 'traspaso') {
+      // Sin datos comerciales el paso no es "guardable", pero la prenda sigue viviendo ahí y se
+      // persiste al Continuar (sin botón aparte).
+      if (activeStep?.key === 'documentos' && !caps.pideValorComercial) {
         beginContinuing();
         setSubmitError(null);
         try {
@@ -1187,7 +1227,7 @@ export function TramiteWizard(props: Props) {
         setSubmitError(
           isActorStep
             ? 'Consulta RUNT o RUES con éxito antes de continuar. Sin datos de la consulta no se puede avanzar.'
-            : isRequisitosTraspasoStep
+            : isRequisitosConComercialStep
               // El save de los datos comerciales devuelve false por dato faltante, no por fallo de
               // red: "reintenta" mandaba a repetir un clic que iba a fallar igual. La tarjeta ya
               // marca los campos; el pie dice cuál es el bloqueo y dónde está.
@@ -1197,10 +1237,10 @@ export function TramiteWizard(props: Props) {
         return;
       }
 
-      // Traspaso: la prenda va en Requisitos, junto a los datos comerciales — mismo Continuar, sin
-      // botón dedicado. Con el gravamen en warn el backend exige decisión vigente para preparar o
+      // Donde hay datos comerciales, la prenda va en el mismo paso de Requisitos — mismo Continuar,
+      // sin botón dedicado. Con el gravamen en warn el backend exige decisión vigente para preparar o
       // radicar, así que dejarla sin persistir aquí solo aplaza el bloqueo hasta el final del flujo.
-      if (isRequisitosTraspasoStep) {
+      if (isRequisitosConComercialStep) {
         const okPrenda = await prendaFormRef.current?.save();
         if (okPrenda === false) {
           setSubmitError('No se pudo guardar la decisión de prenda. Por favor, reintenta.');
@@ -1210,8 +1250,11 @@ export function TramiteWizard(props: Props) {
 
       // HU #10350 — al guardar la parte (comprador/vendedor), asegura su identidad sin esperar el clic
       // en "Validar identidad". En traspaso unificado se asegura ambas partes en el mismo Continuar.
+      // ADR-0050: se aseguran las partes que el TIPO declara. Un paso de actores unificado captura
+      // las dos a la vez; donde no hay parte vendedora, asegurar «vendedor» crearía una validación
+      // de identidad para alguien que no interviene en el trámite.
       const partesIdentidad: BiometricParte[] =
-        modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep?.key)
+        caps.pideVendedor && isTraspasoActorStepKey(activeStep?.key)
           ? ['vendedor', 'comprador']
           : activeStep?.key === 'comprador'
             ? ['comprador']
@@ -1277,10 +1320,11 @@ export function TramiteWizard(props: Props) {
       const fresh = await refresh();
       const freshSteps = fresh?.steps ?? steps;
       const currentComplete = freshSteps[activeIndex]?.status === 'complete';
-      // Traspaso unificado: también avanzar si ambos actores quedaron complete aunque
-      // el índice activo sea el del vendedor (el comprador server-side se completa en el mismo save).
+      // Actores unificados: también avanzar si ambos quedaron complete aunque el índice activo sea
+      // el del vendedor (el comprador server-side se completa en el mismo save). Solo hay dos partes
+      // que unificar donde el tipo declara parte vendedora.
       const actoresBothComplete =
-        modalidad === 'traspaso' &&
+        caps.pideVendedor &&
         isTraspasoActorStepKey(activeStep?.key) &&
         freshSteps.find((s) => s.key === 'vendedor')?.status === 'complete' &&
         freshSteps.find((s) => s.key === 'comprador')?.status === 'complete';
@@ -1382,7 +1426,7 @@ export function TramiteWizard(props: Props) {
             activeIndex={activeIndex}
             onGoToStep={goToStep}
             viewOnly={navViewOnly}
-            coalesceActores={modalidad === 'traspaso'}
+            coalesceActores={caps.pideVendedor}
             compacto={cabeceraCompacta}
           />
         )}
@@ -1532,13 +1576,15 @@ export function TramiteWizard(props: Props) {
                   rótulos seguidos diciendo lo mismo. Se conserva como encabezado accesible para no
                   dejar el cuerpo del paso sin nombre en el árbol de encabezados. */}
               <h2 className="sr-only">
-                {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
+                {caps.pideVendedor && isTraspasoActorStepKey(activeStep.key)
                   ? stepLabelCopy('actores', 'Actores')
                   : stepLabelCopy(activeStep.key, activeStep.label)}
               </h2>
               <StepBody
                 step={activeStep}
-                modalidad={modalidad}
+                caps={caps}
+                tipoNombre={displayTitle}
+                tipoCodigo={tipoCodigo}
                 instanceId={instanceId}
                 instanceStatus={estadoTramite}
                 preflight={preflight}
@@ -1556,7 +1602,7 @@ export function TramiteWizard(props: Props) {
                 esMigrado={wizard?.esMigrado ?? false}
                 prendaDocumentRequired={wizard?.prendaDocumentRequired ?? true}
                 onPrendaDocumentGateChange={setPrendaDocGateOk}
-                deferredModalidad={deferredCreation ? entryModalidad : undefined}
+                deferredFamily={deferredCreation ? entryFamily : undefined}
                 seedVin={seedVin}
                 seedPlaca={seedPlaca}
                 onPreviewDone={handlePreviewDone}
@@ -1881,31 +1927,6 @@ const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
  * pasos para ella—. Se pinta apagada en vez de omitirla porque el gestor la busca; ofrecerla
  * seleccionable sería un camino sin salida.
  */
-const MODALIDAD_OPCIONES: {
-  id: string;
-  label: string;
-  descripcion: string;
-  disponible: boolean;
-}[] = [
-  {
-    id: 'matricula_inicial',
-    label: 'Matrícula Inicial',
-    descripcion: 'Vehículo nuevo sin placa asignada',
-    disponible: true,
-  },
-  {
-    id: 'traspaso',
-    label: 'Traspaso',
-    descripcion: 'Cambio de propietario del vehículo',
-    disponible: true,
-  },
-  {
-    id: 'otros',
-    label: 'Otros Trámites',
-    descripcion: 'Modificaciones y novedades',
-    disponible: false,
-  },
-];
 
 /**
  * Atributos de detalle del vehículo (los que NO van en el hero placa/marca/línea/
@@ -2246,12 +2267,15 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
  */
 function ConsultaStep({
   step,
+  caps,
+  tipoNombre,
+  tipoCodigo,
   instanceId,
   preflight,
   preflightLoading,
   onRunPreflight,
   onRefresh,
-  deferredModalidad,
+  deferredFamily,
   seedVin,
   seedPlaca,
   onPreviewDone,
@@ -2262,13 +2286,19 @@ function ConsultaStep({
   onDigitoPlacaGateChange,
 }: {
   step: WizardStep;
+  /** ADR-0050 — capacidades del tipo: deciden si el vehículo entra por VIN o por placa. */
+  caps: CapacidadesEfectivas;
+  /** Nombre del tipo en el catálogo, para que la tarjeta diga qué trámite se está haciendo. */
+  tipoNombre: string;
+  /** `code` del tipo: gobierna qué documentos lista el carril de consulta. */
+  tipoCodigo: string;
   instanceId: string | null;
   preflight: PreflightSnapshot | null;
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   /** CF-02 — modalidad en curso cuando el trámite aún no existe: la consulta va contra el preview. */
-  deferredModalidad?: WizardModalidad;
+  deferredFamily?: ProcedureFamily | WizardModalidad;
   seedVin?: string;
   seedPlaca?: string;
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
@@ -2282,11 +2312,14 @@ function ConsultaStep({
   /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
   onDigitoPlacaGateChange?: (ok: boolean) => void;
 }) {
-  const isVin = step.key === 'consulta_vin';
+  // ADR-0050 — por qué identificador entra el vehículo lo declara el tipo (`entryMode`), no el
+  // nombre del paso. La clave sigue valiendo como respaldo para los borradores cuyo estado aún no
+  // trae capacidades.
+  const isVin = caps.entraPorVin || step.key === 'consulta_vin';
   // CF-02 (HU #10883, AC3) — sin trámite creado: la consulta no persiste nada y sus resultados viven
   // en este componente hasta que "Continuar" cree el registro. El paso ofrece EXACTAMENTE los mismos
   // controles que antes; lo único que cambia es que su guardado se difiere a la creación.
-  const deferred = !!deferredModalidad && !instanceId;
+  const deferred = !!deferredFamily && !instanceId;
   const readOnly = useWizardReadOnly();
   const router = useRouter();
   // Confirmación de paz y salvo de impuesto (traspaso, paso 1): se ofrece cuando el
@@ -2326,10 +2359,13 @@ function ConsultaStep({
   const hideOwnerDocType =
     !isVin && platePrimaryProvider === 'kyverum_runt' && !ownerDocTypeSuggested;
 
-  // HU #11199 — la secretaría se elige aquí SOLO en matrícula inicial y SOLO mientras el trámite no
-  // existe (AC5 + convivencia D8): los borradores abiertos antes del cambio siguen eligiendo el
-  // organismo en el paso del FUR, donde ya lo tenían.
-  const eligeSecretaria = deferred && deferredModalidad === 'matricula_inicial';
+  // HU #11199 — la secretaría se elige aquí SOLO en los trámites que matriculan el vehículo y SOLO
+  // mientras el trámite no existe (AC5 + convivencia D8): los borradores abiertos antes del cambio
+  // siguen eligiendo el organismo en el paso del FUR, donde ya lo tenían.
+  //
+  // ADR-0050 — el criterio es entrar por VIN, que es lo que significa «el vehículo aún no tiene
+  // placa y por tanto tampoco organismo de matrícula». En los demás lo impone el RUNT.
+  const eligeSecretaria = deferred && isVin;
   /**
    * Si la TARJETA de radicación se pinta. Distinto de `eligeSecretaria`, que decide si el organismo
    * viaja en la creación y si el gate de "Continuar" lo exige.
@@ -2610,7 +2646,9 @@ function ConsultaStep({
       // que es lo que crea el registro reusando esta misma consulta.
       if (deferred) {
         const result = await tramitesClient.runPreflightPreview({
-          modalidad: deferredModalidad!,
+          // El `code` decide qué identificador exige la consulta; la familia queda para el bloqueo.
+          modalidad: deferredFamily!,
+          procedureTypeCode: tipoCodigo || null,
           vin: isVin ? vin.trim() : null,
           plate: isVin ? null : plate.trim(),
           ownerDocumentType: isVin ? null : ownerDocType,
@@ -2953,11 +2991,6 @@ function ConsultaStep({
     router.push(`/tramites/nuevo/TRASPASO_STANDARD${qs ? `?${qs}` : ''}`);
   };
 
-  // Trámite principal que gobierna el paso. Con creación diferida la trae la ruta; con el trámite
-  // ya creado se deduce de la clave del paso, que es lo único que distingue las dos ramas aquí.
-  const modalidadVigente: WizardModalidad =
-    deferredModalidad ?? (isVin ? 'matricula_inicial' : 'traspaso');
-
   // Cambiar de tipo se confirma antes de navegar, como en la propuesta: al hacerlo cambian las
   // validaciones y los documentos exigidos, y lo poco que ya se hubiera capturado en este paso
   // (placa, documento del propietario, secretaría) se pierde al montar el otro asistente.
@@ -3003,62 +3036,53 @@ function ConsultaStep({
           vea ocupado por cualquier motivo. */}
       {persisting && <CarLoaderModal mode="runt" />}
       <WizardHelpRail
-        modalidad={modalidadVigente}
+        procedureTypeCode={tipoCodigo}
         transitOfficeId={transitOfficeId || undefined}
       />
 
-      {/* 1ª tarjeta: Configuración del Trámite. La propuesta elige el tipo con tarjetas, no con un
-          desplegable: son tres opciones fijas, cada una con una frase que dice qué resuelve, y así
-          se leen de un vistazo en vez de tener que abrir una lista. Operable solo mientras el
-          trámite no existe (creación diferida): ahí cambiar de tipo es navegar al otro, no hay nada
-          creado que migrar. Con el trámite ya creado la modalidad gobierna sus pasos y documentos,
-          así que queda fija y las demás tarjetas se apagan. */}
+      {/* 1ª tarjeta: Configuración del Trámite.
+
+          ADR-0050 — antes eran tres tarjetas fijas (Matrícula / Traspaso / «Otros Trámites · aún no
+          disponible») y confirmar el cambio navegaba a `/tramites/nuevo/matricula_inicial`, que no
+          es un `code` del catálogo: la ruta respondía «trámite no disponible». Ahora el tipo se elige
+          en `/tramites/nuevo` contra el catálogo, así que aquí se muestra el que se eligió y el
+          cambio devuelve al selector, donde están los veintiún tipos y no tres literales. */}
       <div className={WIZARD_CARD}>
         <WizardCardHeader
           title="Configuración del Trámite"
-          subtitle="Define el trámite principal que se radicará con este expediente."
+          subtitle="Trámite principal que se radicará con este expediente."
         />
-        <fieldset className="mt-4">
-          <legend className="text-xs font-semibold">Tipo de Trámite Principal</legend>
-          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {MODALIDAD_OPCIONES.map((o) => {
-              const activa = o.id === modalidadVigente;
-              // `disponible: false` (Otros Trámites) es una familia que la propuesta contempla y el
-              // sistema todavía no radica. Se muestra —está en el diseño y el gestor pregunta por
-              // ella— pero apagada y anunciada como tal, en vez de ofrecer un camino sin salida.
-              const seleccionable = o.disponible && deferred && !readOnly && !activa;
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  onClick={() => setPendingTipo(o.id)}
-                  disabled={!seleccionable}
-                  aria-current={activa ? 'step' : undefined}
-                  className="w-full rounded-xl border p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed enabled:hover:border-[#557EFF]"
-                  style={
-                    activa
-                      ? {
-                          borderColor: '#557EFF',
-                          background: '#EFF6FF',
-                          boxShadow: '0 0 0 3px rgba(85,126,255,0.15)',
-                        }
-                      : { opacity: o.disponible ? 1 : 0.55 }
-                  }
-                >
-                  <p
-                    className="text-xs font-semibold"
-                    style={{ color: activa ? '#557EFF' : '#162744' }}
-                  >
-                    {o.label}
-                  </p>
-                  <p className="mt-0.5 text-xs opacity-70">
-                    {o.disponible ? o.descripcion : `${o.descripcion} · aún no disponible`}
-                  </p>
-                </button>
-              );
-            })}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div
+            className="min-w-0 flex-1 rounded-xl border p-3.5"
+            style={{
+              borderColor: '#557EFF',
+              background: '#EFF6FF',
+              boxShadow: '0 0 0 3px rgba(85,126,255,0.15)',
+            }}
+            aria-current="step"
+          >
+            <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+              {tipoNombre}
+            </p>
+            <p className="mt-0.5 text-xs opacity-70">
+              {isVin
+                ? 'Se identifica por VIN: el vehículo aún no tiene placa.'
+                : 'Se identifica por placa y documento del propietario.'}
+            </p>
           </div>
-        </fieldset>
+          {/* Cambiar de tipo solo tiene sentido mientras el trámite no existe: después no hay nada
+              que migrar, y las validaciones y documentos ya cuelgan del tipo elegido. */}
+          {deferred && !readOnly && (
+            <button
+              type="button"
+              onClick={() => setPendingTipo('__selector__')}
+              className="shrink-0 rounded-xl border px-4 py-2 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 hover:border-[#557EFF]"
+            >
+              Cambiar tipo
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 2ª tarjeta: Consulta del Vehículo. En la propuesta la consulta tiene su propia tarjeta,
@@ -3172,9 +3196,10 @@ function ConsultaStep({
 
         {/* Notas de los campos de arriba: a lo ancho de la tarjeta, no dentro de una columna,
             donde descuadraban la altura de su campo. */}
-        {(ownerDocLocked ||
-          (!hideOwnerDocType && ownerDocTypeSuggested) ||
-          (deferred && deferredModalidad === 'traspaso')) && (
+        {/* La tercera condición era `deferred && modalidad === 'traspaso'`, que no habilitaba
+            ninguna nota: dentro solo hay dos y ambas tienen su propia condición. Abría un contenedor
+            vacío con margen. */}
+        {(ownerDocLocked || (!hideOwnerDocType && ownerDocTypeSuggested)) && (
           <div className="mt-3 space-y-1.5">
             {/* El fondo gris por sí solo no comunica "no editable": se dice con texto, y este
                 párrafo es además el nombre accesible del estado (aria-describedby del campo). */}
@@ -3506,7 +3531,7 @@ function ConsultaStep({
       {pendingTipo && (
         <WizardModal title="Cambiar tipo de trámite" onClose={() => setPendingTipo(null)}>
           <p className="text-xs leading-relaxed opacity-80">
-            ¿Deseas cambiar el tipo de trámite? Se actualizarán las validaciones y los documentos
+            ¿Deseas elegir otro tipo de trámite? Se actualizarán las validaciones y los documentos
             requeridos, y se perderá lo capturado en este paso.
           </p>
           <div className="mt-5 flex justify-end gap-2">
@@ -3519,11 +3544,11 @@ function ConsultaStep({
             </button>
             <button
               type="button"
-              onClick={() => router.push(`/tramites/nuevo/${pendingTipo}`)}
+              onClick={() => router.push('/tramites/nuevo')}
               className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
               style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
             >
-              Sí, cambiar
+              Sí, elegir otro
             </button>
           </div>
         </WizardModal>
@@ -3538,7 +3563,9 @@ function ConsultaStep({
  */
 function StepBody({
   step,
-  modalidad,
+  caps,
+  tipoNombre,
+  tipoCodigo,
   instanceId,
   instanceStatus,
   preflight,
@@ -3556,7 +3583,7 @@ function StepBody({
   esMigrado = false,
   prendaDocumentRequired = true,
   onPrendaDocumentGateChange,
-  deferredModalidad,
+  deferredFamily,
   seedVin,
   seedPlaca,
   onPreviewDone,
@@ -3571,12 +3598,17 @@ function StepBody({
   onMarkDirty,
 }: {
   step: WizardStep;
-  modalidad: WizardModalidad;
+  /** ADR-0050 — capacidades del tipo; deciden lo que antes decidía la modalidad. */
+  caps: CapacidadesEfectivas;
+  /** Nombre del tipo en el catálogo. */
+  tipoNombre: string;
+  /** `code` del tipo en el catálogo. */
+  tipoCodigo: string;
   instanceId: string | null;
   /** Para remount del paso FUR tras Preparar y mostrar adjuntos generados. */
   instanceStatus?: InstanceStatus | null;
   /** CF-02 — modalidad en curso cuando el trámite AÚN no existe (paso 1 desacoplado). */
-  deferredModalidad?: WizardModalidad;
+  deferredFamily?: ProcedureFamily | WizardModalidad;
   seedVin?: string;
   seedPlaca?: string;
   /** CF-02 — resultado de la consulta desacoplada: habilita "Continuar" (que crea el trámite). */
@@ -3641,12 +3673,15 @@ function StepBody({
       return (
         <ConsultaStep
           step={step}
+          caps={caps}
+          tipoNombre={tipoNombre}
+          tipoCodigo={tipoCodigo}
           instanceId={instanceId}
           preflight={preflight}
           preflightLoading={preflightLoading}
           onRunPreflight={onRunPreflight}
           onRefresh={onRefresh}
-          deferredModalidad={deferredModalidad}
+          deferredFamily={deferredFamily}
           seedVin={seedVin}
           seedPlaca={seedPlaca}
           onPreviewDone={onPreviewDone}
@@ -3671,7 +3706,7 @@ function StepBody({
               declaran sobre el vehículo ya consultado y ajustan el checklist de abajo. */}
           <DeclaracionesTramite
             instanceId={instanceId}
-            modalidad={modalidad}
+            modalidad={modalidadPorEntrada(caps)}
             onChanged={() => {
               onMarkDirty?.();
               onRefresh?.();
@@ -3683,7 +3718,7 @@ function StepBody({
               hueco que dejaban lo ocupa la validación de identidad de las dos partes. Así las dos
               modalidades recorren los mismos cinco pasos. El guardado sigue colgando del pie
               ("Continuar y guardar") vía `stepFormRef`, sin botón propio. */}
-          {modalidad === 'traspaso' && (
+          {caps.pideValorComercial && (
             <CommercialForm
               key="comercial-en-requisitos"
               ref={stepFormRef}
@@ -3700,15 +3735,17 @@ function StepBody({
               vivían en pasos distintos; ahora comparten sitio, que es lo que el gestor espera. */}
           {(() => {
             const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
-            const esTraspaso = modalidad === 'traspaso';
+            // ADR-0050 — lo que cambia aquí es si la prenda es una PUERTA con decisiones de gestión
+            // o una declaración; lo declara el tipo (`hasPrendaGate`), no la modalidad.
+            const esPuerta = caps.prendaEsPuerta;
             return (
               <PrendaForm
                 ref={prendaFormRef}
                 instanceId={instanceId}
                 onSaved={onRefresh}
                 embeddedInWizard
-                modalidad={esTraspaso ? 'traspaso' : 'matricula_inicial'}
-                decisions={esTraspaso ? traspasoDecisions(prendaDocumentRequired) : undefined}
+                modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
+                decisions={esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined}
                 documentRequired={prendaDocumentRequired}
                 onDocumentGateChange={onPrendaDocumentGateChange}
                 runtHasGravamen={gravamen?.status === 'warn'}
@@ -3723,7 +3760,7 @@ function StepBody({
               onRefresh?.();
             }}
             hideHeader
-            modalidad={modalidad}
+            modalidad={modalidadPorEntrada(caps)}
           />
           {/* P6 — observaciones del trámite; escribe `fur_observations` (mismo campo que FirmaFurStep).
               Van al final, como en la propuesta: es el cierre del paso, lo que el gestor escribe una
@@ -3733,37 +3770,34 @@ function StepBody({
         </div>
       );
 
-    // Traspaso: vendedor y comprador se unifican en un solo formulario (2 tarjetas).
-    // Matrícula sigue con comprador en layout split. key estable `actores` evita remontar
-    // al pasar del índice server vendedor↔comprador.
+    // ADR-0050 — las partes las declara el TIPO. Con dos partes se unifican en un solo formulario
+    // (2 tarjetas) y la key estable `actores` evita remontar al pasar del índice server
+    // vendedor↔comprador; con una sola parte va en layout split.
+    //
+    // Esta era la puerta por la que un trámite de la familia OTROS entraba mal: caía en la rama de
+    // matrícula y capturaba un «comprador» de un vehículo que nadie está comprando. El titular sigue
+    // persistiéndose con el rol `comprador` —es el modelo de datos— pero es el paso el que se titula
+    // «Propietario», como lo nombra el catálogo.
     case 'actores': {
-      if (modalidad === 'traspaso') {
-        return (
-          <ActorsForm
-            key="actores-unificados"
-            ref={stepFormRef}
-            instanceId={instanceId}
-            modalidad="traspaso"
-            roles={['vendedor', 'comprador']}
-            onSaved={onRefresh}
-            embeddedInWizard
-            seedDocumentoFromOwner
-            autoConsultRunt
-            rnmcEnabled={rnmcEnabled}
-            onConsultationGateChange={onActorsConsultationGateChange}
-          />
-        );
-      }
+      const roles = rolesDeActores(caps);
+      const unificado = roles.length > 1;
+      // El documento se siembra desde el propietario que devolvió el RUNT cuando el vehículo YA
+      // tiene uno, que es justo lo que significa entrar por placa. En una matrícula inicial no hay
+      // de dónde sembrarlo; en la familia OTROS el titular ES ese propietario, así que sembrarlo le
+      // ahorra al gestor teclear un dato que la consulta ya trajo.
+      const hayPropietarioPrevio = !caps.entraPorVin;
       return (
         <ActorsForm
-          key={step.key}
+          key={unificado ? 'actores-unificados' : step.key}
           ref={stepFormRef}
           instanceId={instanceId}
-          modalidad="matricula_inicial"
-          roles={['comprador']}
+          modalidad={unificado ? 'traspaso' : 'matricula_inicial'}
+          roles={roles}
           onSaved={onRefresh}
           embeddedInWizard
-          layout="split"
+          seedDocumentoFromOwner={hayPropietarioPrevio}
+          autoConsultRunt={hayPropietarioPrevio}
+          {...(unificado ? {} : { layout: 'split' as const })}
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
         />
@@ -3779,7 +3813,7 @@ function StepBody({
       const biometric = (
         <BiometricStep
           instanceId={instanceId}
-          modalidad={modalidad}
+          modalidad={modalidadPorPartes(caps)}
           onRefresh={onRefresh}
           hideIntro
           heading="Identidad"
@@ -3819,7 +3853,7 @@ function StepBody({
                 <span className="inline-flex items-center gap-2">
                   <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                   Generando documentos del expediente (FUR, certificados
-                  {modalidad === 'traspaso' ? ', compraventa' : ''} e impronta)… No bloquea Preparar.
+                  {caps.pideValorComercial ? ', compraventa' : ''} e impronta)… No bloquea Preparar.
                 </span>
               ) : (
                 <span>
@@ -3854,7 +3888,7 @@ function StepBody({
           <FirmaFurStep
             key={`${instanceId ?? 'new'}-${instanceStatus ?? 'borrador'}`}
             instanceId={instanceId}
-            modalidad={modalidad}
+            modalidad={modalidadPorEntrada(caps)}
             onRefresh={onRefresh}
             rnmcEnabled={rnmcEnabled}
             onPaqueteStatusChange={onPaqueteStatusChange}

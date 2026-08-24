@@ -50,7 +50,7 @@ beforeEach(() => {
  */
 describe('WizardHelpRail — carril de consulta del paso 1', () => {
   it('ofrece los dos accesos con nombre accesible', () => {
-    render(<WizardHelpRail modalidad="matricula_inicial" />);
+    render(<WizardHelpRail procedureTypeCode="MATRICULA_NUEVA" />);
 
     expect(screen.getByRole('button', { name: 'Escrituras vigentes' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Documentos a tener listos' })).toBeInTheDocument();
@@ -58,7 +58,7 @@ describe('WizardHelpRail — carril de consulta del paso 1', () => {
 
   it('el icono de escrituras abre su panel y carga el listado de la compañía', async () => {
     const user = userEvent.setup();
-    render(<WizardHelpRail modalidad="matricula_inicial" />);
+    render(<WizardHelpRail procedureTypeCode="MATRICULA_NUEVA" />);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Escrituras vigentes' }));
@@ -72,21 +72,21 @@ describe('WizardHelpRail — carril de consulta del paso 1', () => {
 
   it('el icono de documentos abre su panel y carga la guía del trámite', async () => {
     const user = userEvent.setup();
-    render(<WizardHelpRail modalidad="matricula_inicial" transitOfficeId="ot-1" />);
+    render(<WizardHelpRail procedureTypeCode="MATRICULA_NUEVA" transitOfficeId="ot-1" />);
 
     await user.click(screen.getByRole('button', { name: 'Documentos a tener listos' }));
 
     const panel = await screen.findByRole('dialog', { name: 'Documentos a tener listos' });
     expect(await within(panel).findByText('Factura de venta')).toBeInTheDocument();
     expect(mocks.fetchDocumentRequirementsPreview).toHaveBeenCalledWith(
-      'matricula_inicial',
+      'MATRICULA_NUEVA',
       'ot-1',
     );
   });
 
   it('los paneles NO cuelgan del carril, que crea bloque contenedor por su backdrop-filter', async () => {
     const user = userEvent.setup();
-    render(<WizardHelpRail modalidad="matricula_inicial" />);
+    render(<WizardHelpRail procedureTypeCode="MATRICULA_NUEVA" />);
     const carril = screen.getByRole('group', { name: 'Consultas del trámite' });
 
     // jsdom no resuelve el bloque contenedor de CSS, así que la regla se fija sobre el árbol: si
@@ -102,7 +102,7 @@ describe('WizardHelpRail — carril de consulta del paso 1', () => {
 
   it('el panel se cierra y puede reabrirse sin volver a consultar', async () => {
     const user = userEvent.setup();
-    render(<WizardHelpRail modalidad="matricula_inicial" />);
+    render(<WizardHelpRail procedureTypeCode="MATRICULA_NUEVA" />);
 
     await user.click(screen.getByRole('button', { name: 'Escrituras vigentes' }));
     await screen.findByRole('dialog', { name: 'Escrituras vigentes de la compañía' });

@@ -729,13 +729,15 @@ internal static class ProcedureInstanceEndpoints
                     body.Plate,
                     body.OwnerDocumentType,
                     body.OwnerDocumentNumber,
-                    body.TransitOfficeId),
+                    body.TransitOfficeId,
+                    body.ProcedureTypeCode),
                 ct);
 
             return err switch
             {
                 "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
-                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para consultar."),
+                "procedure_type_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "El tipo de trámite indicado no existe o no está publicado."),
+                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el identificador del vehículo (VIN o placa, según el tipo de trámite) para consultar."),
                 // HU #11199 (AC2) — en matrícula inicial la consulta por VIN no corre sin secretaría.
                 TransitOfficeSelectionPolicy.RequiredErrorCode => Results.Problem(
                     statusCode: 400,
@@ -824,12 +826,16 @@ internal static class ProcedureInstanceEndpoints
                     body.TransitOfficeId,
                     body.TipoServicioCode,
                     body.EmpresaVinculadoraNit,
-                    body.EmpresaVinculadoraRazonSocial),
+                    body.EmpresaVinculadoraRazonSocial,
+                    body.ProcedureTypeCode),
                 ct);
 
             return err switch
             {
-                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para crear el trámite."),
+                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el identificador del vehículo (VIN o placa, según el tipo de trámite) para crear el trámite."),
+                // ADR-0050 — el tipo elegido no existe o no está publicado. Se distingue de
+                // `modalidad_not_available`: aquí el catálogo SÍ se consultó y el code no está.
+                "procedure_type_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "El tipo de trámite indicado no existe o no está publicado."),
                 // HU sin ADO 2026-08-11 — tipoServicioCode debe ser uno de los 6 códigos cerrados
                 // (VehicleServiceTypeCode). Es entrada estructurada del selector, no texto libre del
                 // RUNT: un valor fuera del catálogo se rechaza en vez de caer en silencio a "Particular".
@@ -884,7 +890,8 @@ internal static class ProcedureInstanceEndpoints
     private static async Task<(Guid Tenant, IResult? Error)> ResolveEffectiveTenantAsync(
         HttpContext http,
         Guid bodyTenantId,
-        string? modalidad,
+        /// <summary>Familia del trámite a crear (o la modalidad heredada, que se traduce).</summary>
+        string? familyCode,
         GetTenantSettingsHandler settingsHandler,
         CancellationToken ct)
     {
@@ -909,31 +916,34 @@ internal static class ProcedureInstanceEndpoints
                 detail: "El usuario autenticado no tiene una compañía asignada."));
         }
 
-        if (EsMatriculaInicial(modalidad))
+        // ADR-0050 — el bloqueo por compañía cubre las TRES familias. Antes solo miraba matrículas y
+        // traspaso: un trámite de la familia OTROS pasaba el gate sin que nadie lo evaluara, así que
+        // el interruptor `otros` de la configuración de la compañía no bloqueaba nada.
+        var familia = ProcedureFamilyCodes.FromCodeOrLegacyModalidad(familyCode);
+        if (familia is null)
+            return (effectiveTenant, null);
+
+        var settings = await settingsHandler.HandleAsync(
+            new GetTenantSettingsQuery { TenantId = effectiveTenant }, ct);
+        var bloqueo = settings?.SwitchesMatricula.BlockProcedureFamily;
+
+        var (bloqueada, etiqueta) = familia switch
         {
-            var settings = await settingsHandler.HandleAsync(
-                new GetTenantSettingsQuery { TenantId = effectiveTenant }, ct);
-            var blocked = settings?.SwitchesMatricula.BlockProcedureFamily?.Matriculas
-                ?? settings is not { SwitchesMatricula.AllowInitialRegistration: true };
-            if (blocked)
-            {
-                return (effectiveTenant, Results.Problem(
-                    statusCode: 422,
-                    title: "Unprocessable Entity",
-                    detail: "La compañía tiene bloqueada la creación de trámites de matrículas. Contacta al administrador."));
-            }
-        }
-        else if (EsTraspaso(modalidad))
+            ProcedureFamily.Matriculas => (
+                // La matrícula conserva su interruptor histórico `AllowInitialRegistration` como
+                // respaldo: la compañía sin ajustes cargados no puede crearlas.
+                bloqueo?.Matriculas ?? settings is not { SwitchesMatricula.AllowInitialRegistration: true },
+                "matrículas"),
+            ProcedureFamily.Traspaso => (bloqueo?.Traspaso == true, "traspaso"),
+            _ => (bloqueo?.Otros == true, "otros trámites"),
+        };
+
+        if (bloqueada)
         {
-            var settings = await settingsHandler.HandleAsync(
-                new GetTenantSettingsQuery { TenantId = effectiveTenant }, ct);
-            if (settings?.SwitchesMatricula.BlockProcedureFamily?.Traspaso == true)
-            {
-                return (effectiveTenant, Results.Problem(
-                    statusCode: 422,
-                    title: "Unprocessable Entity",
-                    detail: "La compañía tiene bloqueada la creación de trámites de traspaso. Contacta al administrador."));
-            }
+            return (effectiveTenant, Results.Problem(
+                statusCode: 422,
+                title: "Unprocessable Entity",
+                detail: $"La compañía tiene bloqueada la creación de trámites de {etiqueta}. Contacta al administrador."));
         }
 
         return (effectiveTenant, null);
@@ -1029,7 +1039,9 @@ internal sealed record PreflightPreviewBody(
     string? OwnerDocumentType,
     string? OwnerDocumentNumber,
     /// <summary>HU #11199 — secretaría del paso 1; obligatoria en matrícula inicial.</summary>
-    Guid? TransitOfficeId);
+    Guid? TransitOfficeId,
+    /// <summary>ADR-0050 — `code` del tipo elegido; decide qué identificador exige la consulta.</summary>
+    string? ProcedureTypeCode = null);
 
 /// <summary>Body de POST /rues-preview (HU sin ADO 2026-08-11). NIT a consultar en RUES.</summary>
 internal sealed record RuesPreviewBody(string? DocumentNumber);
@@ -1059,5 +1071,10 @@ internal sealed record CreateFromConsultaBody(
     /// <see cref="TipoServicioCode"/> es <c>PUBLICO</c>; con cualquier otro valor (o ausente) se
     /// ignora, ver <c>CreateProcedureInstanceFromConsultaHandler</c>.
     /// </summary>
+    /// <summary>
+    /// ADR-0050 — <c>code</c> del tipo elegido en el catálogo. Cuando viene MANDA sobre
+    /// <see cref="Modalidad"/>, que queda solo como familia para el bloqueo por compañía.
+    /// </summary>
+    string? ProcedureTypeCode = null,
     string? EmpresaVinculadoraNit = null,
     string? EmpresaVinculadoraRazonSocial = null);

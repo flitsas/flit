@@ -55,7 +55,10 @@ internal static class WizardEndpoints
 
         // Guía informativa de documentos del trámite (paso 1, sin instancia).
         // modalidad: matricula_inicial | traspaso; transitOfficeId opcional (overrides OT).
+        // ADR-0050 — el handler acepta cualquier `code` del catálogo desde HU-07; el parámetro se
+        // llama ya por lo que es. `modalidad` se sigue leyendo para no romper un enlace abierto.
         group.MapGet("/document-requirements/preview", async (
+            string? procedureTypeCode,
             string? modalidad,
             Guid? transitOfficeId,
             PreviewDocumentosInformativosHandler handler,
@@ -64,7 +67,7 @@ internal static class WizardEndpoints
             var result = await handler.HandleAsync(
                 new PreviewDocumentosInformativosQuery
                 {
-                    Modalidad = modalidad ?? string.Empty,
+                    Modalidad = procedureTypeCode ?? modalidad ?? string.Empty,
                     TransitOfficeId = transitOfficeId is null || transitOfficeId == Guid.Empty
                         ? null
                         : transitOfficeId,

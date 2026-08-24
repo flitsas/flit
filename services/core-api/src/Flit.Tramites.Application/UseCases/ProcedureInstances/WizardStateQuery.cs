@@ -103,6 +103,61 @@ public sealed record WizardStateDto(
     /// flag para pintar Obligatorio/Opcional en la carga del certificado.
     /// </summary>
     public bool PrendaDocumentRequired { get; init; } = true;
+
+    /// <summary>
+    /// ADR-0050 — identidad del tipo con el que se conformó el expediente, para que el asistente
+    /// titule el trámite que se está haciendo. Sin esto, el frontend solo tenía la familia y
+    /// rotulaba «Matrícula Inicial» cualquier cosa que no fuera un traspaso.
+    /// </summary>
+    public string? TypeName { get; init; }
+
+    /// <summary>
+    /// ADR-0050 — capacidades del tipo, tomadas del mismo <c>gate_profile</c> que gobierna los gates
+    /// del backend (snapshot congelado, con respaldo en el catálogo vivo).
+    /// <para>Es lo que le faltaba al asistente para dejar de decidir por modalidad: qué partes pide,
+    /// si lleva datos comerciales, si tiene puerta de prenda y por qué identificador entra el
+    /// vehículo. Sin ellas, un tipo de la familia OTROS se podía elegir y dibujar, pero por dentro
+    /// se comportaba como una matrícula.</para>
+    /// </summary>
+    public WizardCapabilitiesDto? Capabilities { get; init; }
+}
+
+/// <summary>
+/// Capacidades del tipo que el asistente necesita para armarse (ADR-0050). Es una proyección
+/// deliberadamente PARCIAL de <c>ProcedureTypeGateProfile</c>: solo lo que cambia lo que el gestor
+/// ve o captura. Lo que solo afecta a validaciones del servidor —<c>validateOtOperability</c>,
+/// <c>simitMode</c>— no se publica: el frontend no debe poder reimplementar un gate del backend.
+/// </summary>
+/// <param name="EntryMode">
+/// Identificador con el que entra el vehículo: <c>VIN</c> (aún no tiene placa) o <c>PLATE</c>.
+/// </param>
+/// <param name="RequiresSeller">Hay parte vendedora. En la familia OTROS el titular no vende.</param>
+/// <param name="RequiresBuyer">Hay parte compradora o titular.</param>
+/// <param name="AllowsMultipleBuyer">La parte compradora admite varias personas.</param>
+/// <param name="RequiresCommercialValue">El trámite lleva valor y fecha de venta.</param>
+/// <param name="RequiresBiometrics">Se valida identidad.</param>
+/// <param name="BiometricActors">Actores a validar (<c>OWNER</c>, <c>BUYER</c>).</param>
+/// <param name="HasPrendaGate">La decisión de prenda es una puerta y no una declaración.</param>
+public sealed record WizardCapabilitiesDto(
+    string? EntryMode,
+    bool RequiresSeller,
+    bool RequiresBuyer,
+    bool AllowsMultipleBuyer,
+    bool RequiresCommercialValue,
+    bool RequiresBiometrics,
+    IReadOnlyList<string> BiometricActors,
+    bool HasPrendaGate)
+{
+    internal static WizardCapabilitiesDto From(ProcedureTypeGateProfile profile) =>
+        new(
+            profile.EntryMode,
+            profile.RequiresSeller,
+            profile.RequiresBuyer,
+            profile.AllowsMultipleBuyer,
+            profile.RequiresCommercialValue,
+            profile.RequiresBiometrics,
+            profile.BiometricActors,
+            profile.HasPrendaGate);
 }
 
 /// <summary>
@@ -537,7 +592,13 @@ public sealed class GetWizardStateHandler(
             canSubmit,
             blockers,
             instance.Status,
-            TramiteStateMachine.TransitionsFrom(instance.Status));
+            TramiteStateMachine.TransitionsFrom(instance.Status))
+        {
+            // ADR-0050 — el mismo perfil que acaba de gobernar los gates viaja al asistente, para
+            // que no vuelva a deducir por familia lo que el tipo ya declara.
+            TypeName = instance.TypeName,
+            Capabilities = WizardCapabilitiesDto.From(conformation.GateProfile),
+        };
     }
 
     /// <summary>
@@ -755,9 +816,14 @@ public sealed class GetWizardStateHandler(
         // expediente se ve, no avanza, y el motivo es explícito.
         if (conformation is null)
         {
+            // Sin pasos parametrizados no hay capacidades que publicar: el asistente pinta el
+            // bloqueo, no un recorrido a medias.
             return new WizardStateDto(
                 string.Empty, instance.TypeCode, 0, [], false, [TipoSinParametrizar],
-                instance.Status, TramiteStateMachine.TransitionsFrom(instance.Status));
+                instance.Status, TramiteStateMachine.TransitionsFrom(instance.Status))
+            {
+                TypeName = instance.TypeName,
+            };
         }
 
         // Migración V1→V2 — un trámite MIGRADO en estado terminal es una FOTO de solo lectura: no se
@@ -813,7 +879,11 @@ public sealed class GetWizardStateHandler(
             false,   // canSubmit: terminal, sin acciones
             [],      // blockers
             instance.Status,
-            TramiteStateMachine.TransitionsFrom(instance.Status));
+            TramiteStateMachine.TransitionsFrom(instance.Status))
+        {
+            TypeName = instance.TypeName,
+            Capabilities = WizardCapabilitiesDto.From(conformation.GateProfile),
+        };
     }
 
     // ---- Composición de canSubmit / blockers --------------------------------
@@ -1183,7 +1253,13 @@ public sealed class GetWizardStateHandler(
             CanSubmit: false,
             Blockers: [],
             TramiteEstado.Borrador,
-            AllowedTransitions: []);
+            AllowedTransitions: [])
+        {
+            // El paso 1 ya necesita saber por qué identificador entra el vehículo: es la diferencia
+            // entre pedir VIN o placa, y era lo primero que el asistente deducía de la modalidad.
+            TypeName = type.Name,
+            Capabilities = WizardCapabilitiesDto.From(conformation.GateProfile),
+        };
     }
 
     /// <summary>

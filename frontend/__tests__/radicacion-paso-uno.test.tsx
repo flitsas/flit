@@ -96,7 +96,7 @@ function renderNuevo() {
   return render(
     <TramiteWizard
       procedureTypeCode="MATRICULA_NUEVA"
-        modalidad="matricula_inicial"
+        family="MATRICULAS"
       title="Nuevo trámite"
       onCreated={() => {}}
       onExit={() => {}}
@@ -204,7 +204,7 @@ describe('Trámite prioritario — paso 1', () => {
     render(
       <TramiteWizard
         procedureTypeCode="MATRICULA_NUEVA"
-        modalidad="matricula_inicial"
+        family="MATRICULAS"
         title="Nuevo trámite"
         onCreated={onCreated}
         onExit={() => {}}

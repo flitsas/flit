@@ -97,9 +97,10 @@ const PREVIEW_RESULT = {
 
 function renderNuevo(modalidad: 'matricula_inicial' | 'traspaso' = 'matricula_inicial') {
   mocks.getWizardPreview.mockResolvedValue(wizard(modalidad));
+  const family = modalidad === 'traspaso' ? 'TRASPASO' : 'MATRICULAS';
   return render(
-    <TramiteWizard procedureTypeCode="MATRICULA_NUEVA"
-        modalidad={modalidad} title="Nuevo trámite" onCreated={() => {}} onExit={() => {}} />,
+    <TramiteWizard procedureTypeCode={modalidad === 'traspaso' ? 'TRASPASO_STANDARD' : 'MATRICULA_NUEVA'}
+        family={family} title="Nuevo trámite" onCreated={() => {}} onExit={() => {}} />,
   );
 }
 
