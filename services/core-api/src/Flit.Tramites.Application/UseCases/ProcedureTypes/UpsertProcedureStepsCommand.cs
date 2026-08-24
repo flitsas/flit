@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureTypes;
@@ -18,7 +19,13 @@ public sealed record ProcedureSectionInput(
     string Title,
     short SortOrder,
     string? Layout,
-    List<FormFieldInput> FormFields);
+    List<FormFieldInput> FormFields,
+    /// <summary>
+    /// Renderer de la sección (CFD-09). <c>null</c> = conservar el valor ya almacenado; solo si la
+    /// sección es nueva se cae a <c>generic_form</c>. Sin esta preservación, un cliente que no envíe
+    /// el campo — todos los actuales — degradaría a genéricas las secciones tipadas del seed.
+    /// </summary>
+    string? SectionType = null);
 
 public sealed record ProcedureStepInput(
     string Code,
@@ -68,7 +75,8 @@ public sealed class UpsertProcedureStepsHandler(IProcedureTypeRepository reposit
                 sec.FormFields.Select(f => new FormFieldDto(
                     f.Id, f.FieldKey, f.Label, f.FieldType,
                     f.IsRequired, f.SortOrder, f.IsLocked, f.LockReason,
-                    f.ConsultationTemplateId, f.Options, f.ValidationSchema)).ToList()
+                    f.ConsultationTemplateId, f.Options, f.ValidationSchema)).ToList(),
+                sec.SectionType
             )).ToList()
         )).ToList();
 
@@ -84,6 +92,17 @@ public sealed class UpsertProcedureStepsHandler(IProcedureTypeRepository reposit
             .SelectMany(s => s.Sections)
             .SelectMany(sec => sec.FormFields)
             .ToDictionary(f => f.FieldKey, f => f, StringComparer.OrdinalIgnoreCase);
+
+        // ReplaceStepsAsync borra y recrea: sin este mapa, cada PUT reescribiría section_type al
+        // default 'generic_form' y dejaría los tipos parametrizados (PRENDA_INSCRIPCION,
+        // CAMBIO_LOCATARIO) sin renderer ni gate. Se indexa por paso+sección porque el código de
+        // sección solo es único dentro de su paso.
+        var existingSectionTypes = existingSteps
+            .SelectMany(st => st.Sections.Select(sec => (st.Code, sec)))
+            .ToDictionary(
+                x => (x.Code, x.sec.Code),
+                x => x.sec.SectionType,
+                TupleComparer);
 
         return inputs.Select(si =>
         {
@@ -108,6 +127,7 @@ public sealed class UpsertProcedureStepsHandler(IProcedureTypeRepository reposit
                     Title = sec.Title,
                     SortOrder = sec.SortOrder,
                     Layout = sec.Layout ?? "single",
+                    SectionType = ResolveSectionType(si.Code, sec, existingSectionTypes),
                     CreatedAt = DateTimeOffset.UtcNow
                 };
 
@@ -140,5 +160,38 @@ public sealed class UpsertProcedureStepsHandler(IProcedureTypeRepository reposit
 
             return step;
         }).ToList();
+    }
+
+    private static readonly IEqualityComparer<(string StepCode, string SectionCode)> TupleComparer =
+        new StepSectionComparer();
+
+    /// <summary>
+    /// Precedencia del renderer: lo que envía el cliente (si es válido) &gt; lo ya almacenado &gt;
+    /// <c>generic_form</c>. Un valor fuera del catálogo se ignora en lugar de propagarse: el CHECK del
+    /// DDL lo rechazaría igualmente, y descartarlo preserva la sección en vez de romper el guardado.
+    /// </summary>
+    private static string ResolveSectionType(
+        string stepCode,
+        ProcedureSectionInput input,
+        Dictionary<(string StepCode, string SectionCode), string> existing)
+    {
+        if (ProcedureSectionTypes.IsValid(input.SectionType))
+            return input.SectionType!;
+
+        return existing.TryGetValue((stepCode, input.Code), out var stored)
+            ? stored
+            : ProcedureSectionTypes.GenericForm;
+    }
+
+    private sealed class StepSectionComparer : IEqualityComparer<(string StepCode, string SectionCode)>
+    {
+        public bool Equals((string StepCode, string SectionCode) a, (string StepCode, string SectionCode) b) =>
+            string.Equals(a.StepCode, b.StepCode, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a.SectionCode, b.SectionCode, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string StepCode, string SectionCode) x) =>
+            HashCode.Combine(
+                x.StepCode.ToUpperInvariant(),
+                x.SectionCode.ToUpperInvariant());
     }
 }

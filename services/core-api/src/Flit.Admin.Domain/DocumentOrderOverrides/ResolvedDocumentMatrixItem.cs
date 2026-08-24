@@ -23,6 +23,13 @@ public sealed class ResolvedDocumentMatrixItem
     public short OrdenResuelto { get; init; }
 
     /// <summary>
+    /// Buzón dummy (CFD-06) — <c>is_dummy</c>. Se muestra en el checklist pero NUNCA bloquea el
+    /// avance del paso, aunque sea obligatorio. Sin este dato el gate de documentos trataría un
+    /// buzón informativo como requisito bloqueante.
+    /// </summary>
+    public bool EsDummy { get; init; }
+
+    /// <summary>
     /// Nivel que determinó el orden: <see cref="DocumentOrderScope.Cliente"/>,
     /// <see cref="DocumentOrderScope.Ot"/> o <see cref="DocumentOrderScope.Default"/>.
     /// </summary>

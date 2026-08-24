@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -28,6 +29,13 @@ public sealed record WizardStepDto(
 
     /// <summary>Configuración del renderer para el frontend (SectionRendererRegistry). Null si no aplica.</summary>
     public JsonNode? SectionConfig { get; init; }
+
+    /// <summary>
+    /// Todas las secciones del paso, en orden (CFD-09). <see cref="SectionType"/> es la primera y se
+    /// mantiene por compatibilidad del contrato; un paso con varias secciones las expone aquí para
+    /// que el frontend las renderice completas.
+    /// </summary>
+    public IReadOnlyList<string>? SectionTypes { get; init; }
 }
 
 /// <summary>
@@ -127,7 +135,8 @@ public sealed class GetWizardStateHandler(
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
     IProcedureTypeRepository? typeRepo = null,
-    IProcedureInstancePrendaRepository? prendaRepo = null)
+    IProcedureInstancePrendaRepository? prendaRepo = null,
+    IResolvedChecklistMatrixProvider? checklistMatrixProvider = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -167,6 +176,12 @@ public sealed class GetWizardStateHandler(
     // repo (tests, listado de trámites) la decisión queda null ⇒ el override calla, igual que antes.
     private readonly IProcedureInstancePrendaRepository? _prendaRepo = prendaRepo;
 
+    // CFD-06 — matriz documental resuelta por tipo (+ overrides del OT). El camino dinámico la
+    // necesita para que DocumentRequirementGate evalúe requisitos reales; sin ella caía siempre al
+    // booleano agregado DocumentosCompletos y CFD-06 no llegaba nunca al motor. Sin proveedor
+    // (tests) se conserva ese fallback.
+    private readonly IResolvedChecklistMatrixProvider? _checklistMatrixProvider = checklistMatrixProvider;
+
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -185,18 +200,6 @@ public sealed class GetWizardStateHandler(
         // FEATURE-08 / HU-BE-06 (CFD-09): wizard dinámico flag-guarded. Solo cuando F08_DynamicProcedures
         // está habilitado para el tenant Y la instancia tiene snapshot (tipo dinámico). En cualquier otro
         // caso se preserva el camino estático (BuildMatricula/BuildTraspaso) sin regresión (AC-02).
-        if (!esMigradoTerminal && snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct))
-        {
-            var snapshot = await snapshotRepo.GetByInstanceIdAsync(id, tenantId, ct);
-            if (snapshot is not null)
-            {
-                // HU #10879 — el paso persistido prima como punto de retoma también en el wizard dinámico.
-                var dynamicState = await BuildDynamicStateAsync(instance, snapshot, ct);
-                var dynamicRequired = await ResolvePrendaDocumentRequiredAsync(instance, ct);
-                return (AnnotateInstanceFlags(dynamicState with { PrendaDocumentRequired = dynamicRequired }, instance), null);
-            }
-        }
-
         // Identidad PER-PERSONA (documento del actor), no por instancia: se referencia la validación
         // vigente de la persona en N trámites sin clonar (HU #10350).
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
@@ -243,6 +246,40 @@ public sealed class GetWizardStateHandler(
 
         var prendaDocumentRequired = await ResolvePrendaDocumentRequiredAsync(instance, ct);
 
+        // ADR-0050 / CFD-09 — el wizard se conforma SIEMPRE desde el tipo: un solo motor, sin flag.
+        // La conformación sale del snapshot congelado al crear y, si no lo hay, del catálogo vivo
+        // (ResolveConformationAsync).
+        //
+        // La paridad con el antiguo camino estático está cubierta por DynamicVsStaticParityGapsTests:
+        // bloqueo de pasos diferidos, razón según entryMode, semáforo del pre-vuelo, bloqueos duros en
+        // el paso de documentos, actor por sección y el FUR fuera de los blockers. El camino estático
+        // que queda debajo solo actúa si el tipo NO tiene pasos parametrizados, y desaparece cuando
+        // los 21 tipos estén sembrados.
+        //
+        // La bifurcación va DESPUÉS de resolver las señales, no antes: cuando estaba arriba, el camino
+        // dinámico se saltaba identidad, RNMC, prenda del OT y la matriz documental, y devolvía los
+        // defaults del DTO.
+        if (!esMigradoTerminal)
+        {
+            var conformation = await ResolveConformationAsync(instance, id, tenantId, ct);
+            if (conformation is not null && conformation.Steps.Count > 0)
+            {
+                var dynamicState = await BuildDynamicStateAsync(
+                    instance, conformation, partesEfectivas, prendaOtBlocker,
+                    comparendosBloquean, runtExigido, ct);
+
+                // HU #10879 — el paso persistido prima como punto de retoma también en el dinámico.
+                return (AnnotateInstanceFlags(
+                    dynamicState with
+                    {
+                        IdentityValidationEnabled = identityRequired,
+                        RnmcEnabled = rnmcEnabled,
+                        PrendaDocumentRequired = prendaDocumentRequired,
+                    },
+                    instance), null);
+            }
+        }
+
         var state = AnnotateInstanceFlags(
             ComputeState(
                 instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
@@ -271,8 +308,40 @@ public sealed class GetWizardStateHandler(
     /// stepSectionTypes) y las MISMAS señales de la instancia que el camino estático, delegando en
     /// <see cref="DynamicGateEvaluator"/>. Mapea el resultado al contrato con <c>sectionType</c> por paso.
     /// </summary>
-    private async Task<WizardStateDto> BuildDynamicStateAsync(
-        ProcedureInstance instance, ProcedureTypeSnapshotRecord snapshot, CancellationToken ct)
+    /// <summary>
+    /// Conformación del wizard: perfil de gates + pasos con sus <c>section_type</c>.
+    /// </summary>
+    private sealed record WizardConformation(
+        ProcedureTypeGateProfile GateProfile,
+        IReadOnlyList<DynamicWizardStep> Steps);
+
+    /// <summary>
+    /// Resuelve la conformación del expediente (ADR-0050). Precedencia:
+    /// <list type="number">
+    /// <item>el <b>snapshot</b> congelado al crear — así un cambio del catálogo no reconfigura un
+    /// expediente en curso;</item>
+    /// <item>el <b>catálogo vivo</b>, para expedientes anteriores al snapshot o creados sin él.</item>
+    /// </list>
+    /// Devuelve <c>null</c> si el tipo no tiene pasos parametrizados: ahí no hay wizard que construir.
+    /// </summary>
+    private async Task<WizardConformation?> ResolveConformationAsync(
+        ProcedureInstance instance, Guid id, Guid tenantId, CancellationToken ct)
+    {
+        if (snapshotRepo is not null)
+        {
+            var snapshot = await snapshotRepo.GetByInstanceIdAsync(id, tenantId, ct);
+            if (snapshot is not null)
+            {
+                var fromSnapshot = FromSnapshot(snapshot);
+                if (fromSnapshot is not null)
+                    return fromSnapshot;
+            }
+        }
+
+        return FromCatalog(instance);
+    }
+
+    private static WizardConformation? FromSnapshot(ProcedureTypeSnapshotRecord snapshot)
     {
         var root = JsonNode.Parse(snapshot.Snapshot) as JsonObject ?? [];
         var gateProfile = ProcedureTypeGateProfile.FromJson(root["gateProfile"]?.ToJsonString());
@@ -284,23 +353,115 @@ public sealed class GetWizardStateHandler(
             {
                 if (node is not JsonObject stepObj)
                     continue;
+
                 var stepCode = (stepObj["stepCode"] as JsonValue)?.ToString() ?? string.Empty;
-                var firstType = "generic_form";
-                if (stepObj["sectionTypes"] is JsonArray sts && sts.Count > 0)
-                    firstType = (sts[0] as JsonValue)?.ToString() ?? "generic_form";
-                steps.Add(new DynamicWizardStep(stepCode, firstType));
+
+                // Antes se tomaba solo sectionTypes[0] y las demás secciones del paso desaparecían
+                // en silencio, con sus gates sin evaluar.
+                var sectionTypes = new List<string>();
+                if (stepObj["sectionTypes"] is JsonArray sts)
+                {
+                    foreach (var st in sts)
+                    {
+                        var value = (st as JsonValue)?.ToString();
+                        if (!string.IsNullOrWhiteSpace(value))
+                            sectionTypes.Add(value);
+                    }
+                }
+
+                if (sectionTypes.Count == 0)
+                    sectionTypes.Add(ProcedureSectionTypes.GenericForm);
+
+                var sectionCodes = new List<string>();
+                if (stepObj["sectionCodes"] is JsonArray scs)
+                {
+                    foreach (var sc in scs)
+                    {
+                        var value = (sc as JsonValue)?.ToString();
+                        if (!string.IsNullOrWhiteSpace(value))
+                            sectionCodes.Add(value);
+                    }
+                }
+
+                steps.Add(new DynamicWizardStep(stepCode, sectionTypes) { SectionCodes = sectionCodes });
             }
         }
+
+        return steps.Count > 0 ? new WizardConformation(gateProfile, steps) : null;
+    }
+
+    private static WizardConformation? FromCatalog(ProcedureInstance instance)
+    {
+        var type = instance.ProcedureType;
+        if (type is null || type.Steps.Count == 0)
+            return null;
+
+        var steps = type.Steps
+            .Where(st => st.IsActive)
+            .OrderBy(st => st.SortOrder)
+            .Select(st => new DynamicWizardStep(
+                st.Code,
+                [.. st.Sections.OrderBy(sec => sec.SortOrder).Select(sec => sec.SectionType)])
+            {
+                SectionCodes = [.. st.Sections.OrderBy(sec => sec.SortOrder).Select(sec => sec.Code)],
+            })
+            .Where(st => st.SectionTypes.Count > 0)
+            .ToList();
+
+        return steps.Count > 0
+            ? new WizardConformation(ProcedureTypeGateProfile.FromJson(type.GateProfile), steps)
+            : null;
+    }
+
+    private async Task<WizardStateDto> BuildDynamicStateAsync(
+        ProcedureInstance instance,
+        WizardConformation conformation,
+        IReadOnlySet<string> partesEfectivas,
+        string? prendaOtBlocker,
+        bool comparendosBloquean,
+        RuntConsultaExigida? runtExigido,
+        CancellationToken ct)
+    {
+        // CFD-06 — requisitos reales del tipo (+ overrides del OT). Con la matriz cargada el gate
+        // evalúa documento a documento; sin ella cae al booleano agregado, como hacía siempre.
+        var documentRequirements = await ResolveDynamicDocumentRequirementsAsync(instance, ct);
+
+        // La decisión de prenda vive en un agregado aparte y la necesita la sección prenda_decision.
+        var prendaVigente = _prendaRepo is null
+            ? null
+            : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+
+        return BuildDynamicStateCore(
+            instance, conformation, partesEfectivas, prendaOtBlocker, comparendosBloquean,
+            runtExigido, documentRequirements, prendaVigente);
+    }
+
+    /// <summary>
+    /// Núcleo del wizard dinámico, SIN IO: compone el contexto desde el grafo ya cargado y lo evalúa.
+    /// <para>Lo comparten el detalle del wizard —que además resuelve por IO la matriz documental y la
+    /// prenda— y el listado de trámites, que necesita el mismo progreso por expediente y no puede
+    /// pagar una consulta por fila.</para>
+    /// </summary>
+    private static WizardStateDto BuildDynamicStateCore(
+        ProcedureInstance instance,
+        WizardConformation conformation,
+        IReadOnlySet<string> partesEfectivas,
+        string? prendaOtBlocker,
+        bool comparendosBloquean,
+        RuntConsultaExigida? runtExigido,
+        IReadOnlyList<DocumentRequirementItem> documentRequirements,
+        ProcedureInstancePrenda? prendaVigente)
+    {
+        var gateProfile = conformation.GateProfile;
+        var steps = conformation.Steps;
 
         var fv = FieldValues(instance);
         var comprador = ParteOf(instance, "comprador");
         var vendedor = ParteOf(instance, "vendedor");
-        var runtComprador = RuntOf(instance, "comprador");
-        var runtVendedor = RuntOf(instance, "vendedor");
+        var runtComprador = RuntOf(instance, "comprador", runtExigido);
+        var runtVendedor = RuntOf(instance, "vendedor", runtExigido);
         var preflight = PreflightOf(instance);
-
-        var approvedParties = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
-            repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
+        var simitComprador = SimitOf(instance, comprador, preflight);
 
         var ctx = new DynamicWizardContext
         {
@@ -312,12 +473,23 @@ public sealed class GetWizardStateHandler(
             BuyerRuntConsultado = runtComprador?.Consultado == true,
             HasSeller = vendedor is not null,
             SellerRuntConsultado = runtVendedor?.Consultado == true,
+            BuyerCompleto = ParteCompletaRule.EstaCompleta(comprador),
+            SellerCompleto = ParteCompletaRule.EstaCompleta(vendedor),
             ValorVenta = instance.Commercial?.ValorVenta ?? 0m,
-            BiometricsApproved = MapPartiesToEntityCodes(approvedParties),
+            // partesEfectivas y no las aprobadas en crudo: si el OT deshabilita la identidad, las
+            // partes cuentan como satisfechas y el paso biométrico no bloquea (HU #10548).
+            BiometricsApproved = MapPartiesToEntityCodes(partesEfectivas),
             FurGenerado = FurGenerado(instance),
             PlateRequestCompleted = PlateRequestCompleted(fv),
             UploadedDocumentCodes = new HashSet<string>(
                 instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
+            DocumentRequirements = documentRequirements,
+            PrendaVigente = prendaVigente,
+            AttachmentTipos = instance.Attachments.Select(a => a.Tipo).ToList(),
+            CompradorConComparendos = (simitComprador?.TotalComparendos ?? 0) > 0,
+            ComparendosBloquean = comparendosBloquean,
+            PreflightRed = preflight?.Overall == "red",
+            RiesgoAceptado = RiesgoAceptado(instance),
         };
 
         var result = DynamicGateEvaluator.Evaluate(gateProfile, steps, ctx);
@@ -326,16 +498,28 @@ public sealed class GetWizardStateHandler(
             .Select(s => new WizardStepDto(s.Index, s.Key, SectionLabel(s.SectionType), s.Status, s.Reasons)
             {
                 SectionType = s.SectionType,
+                SectionTypes = s.SectionTypes,
+                SectionConfig = BuildSectionConfig(s, gateProfile),
             })
             .ToList();
+
+        // CF-06 (HU #10881) — el override del OT es IO y vive fuera del evaluador puro; se compone
+        // aquí para que el wizard y el gate de preparación devuelvan el mismo código de bloqueo.
+        var blockers = result.Blockers;
+        var canSubmit = result.CanSubmit;
+        if (prendaOtBlocker is not null && !blockers.Contains(prendaOtBlocker, StringComparer.Ordinal))
+        {
+            blockers = [.. blockers, prendaOtBlocker];
+            canSubmit = false;
+        }
 
         return new WizardStateDto(
             instance.ModalidadEntrada ?? string.Empty,
             instance.TipologiaCodigo,
             result.Steps.Count,
             wizardSteps,
-            result.CanSubmit,
-            result.Blockers,
+            canSubmit,
+            blockers,
             instance.Status,
             TramiteStateMachine.TransitionsFrom(instance.Status));
     }
@@ -367,6 +551,79 @@ public sealed class GetWizardStateHandler(
     /// Mapea las partes aprobadas (comprador/vendedor/locatario) a los códigos de entidad del
     /// gate_profile (BUYER/OWNER/LESSEE) para compararlas con <c>biometricActors</c>.
     /// </summary>
+    /// <summary>
+    /// CFD-06 — requisitos documentales del tipo, resueltos con los overrides del OT, en la forma que
+    /// consume <see cref="DocumentRequirementGate"/>. Lista vacía si no hay proveedor cableado o el
+    /// tipo no tiene matriz: el gate cae entonces al booleano agregado, sin regresión.
+    /// </summary>
+    private async Task<IReadOnlyList<DocumentRequirementItem>> ResolveDynamicDocumentRequirementsAsync(
+        ProcedureInstance instance, CancellationToken ct)
+    {
+        if (_checklistMatrixProvider is null)
+            return [];
+
+        var matriz = await _checklistMatrixProvider
+            .GetForAsync(
+                instance.ProcedureTypeId,
+                instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+                ct)
+            .ConfigureAwait(false);
+
+        return [.. matriz.Select(d => new DocumentRequirementItem(d.Codigo, d.Obligatorio, d.EsDummy))];
+    }
+
+    /// <summary>
+    /// Configuración que el <c>SectionRendererRegistry</c> del frontend necesita para pintar la
+    /// sección. La propiedad existía en el contrato desde F08 y nunca se asignaba, así que el cliente
+    /// recibía siempre <c>null</c> y no podía saber, por ejemplo, si el paso de actores pide vendedor.
+    /// </summary>
+    private static JsonObject? BuildSectionConfig(
+        DynamicWizardStepResult step, ProcedureTypeGateProfile profile)
+    {
+        switch (step.SectionType)
+        {
+            case ProcedureSectionTypes.VehicleQuery:
+                return new JsonObject { ["entryMode"] = profile.EntryMode };
+
+            case ProcedureSectionTypes.ActorForm:
+                return new JsonObject
+                {
+                    ["requiresSeller"] = profile.RequiresSeller,
+                    ["requiresBuyer"] = profile.RequiresBuyer,
+                    ["allowsMultipleSeller"] = profile.AllowsMultipleSeller,
+                    ["allowsMultipleBuyer"] = profile.AllowsMultipleBuyer,
+                };
+
+            case ProcedureSectionTypes.Commercial:
+                return new JsonObject
+                {
+                    ["requiresCommercialValue"] = profile.RequiresCommercialValue,
+                    ["commercialValueSource"] = profile.CommercialValueSource,
+                };
+
+            case ProcedureSectionTypes.Biometric:
+                return new JsonObject
+                {
+                    ["requiresBiometrics"] = profile.RequiresBiometrics,
+                    ["actors"] = new JsonArray([.. profile.BiometricActors.Select(a => (JsonNode)a!)]),
+                };
+
+            case ProcedureSectionTypes.SignatureFur:
+                return new JsonObject { ["requiresSignature"] = profile.RequiresSignature };
+
+            case ProcedureSectionTypes.PlateRequest:
+                return new JsonObject { ["requiresPlateRequest"] = profile.RequiresPlateRequest };
+
+            case ProcedureSectionTypes.PrendaDecision:
+                return new JsonObject { ["hasPrendaGate"] = profile.HasPrendaGate };
+
+            default:
+                // document_checklist y generic_form no necesitan config: el checklist llega por su
+                // propio endpoint y el genérico se pinta desde form_fields.
+                return null;
+        }
+    }
+
     private static HashSet<string> MapPartiesToEntityCodes(IReadOnlySet<string> approvedParties)
     {
         var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -485,6 +742,20 @@ public sealed class GetWizardStateHandler(
         if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
             return BuildReadonlySnapshot(instance, modalidad);
 
+        // ADR-0050 — mismo motor que el detalle del wizard, conformado desde el catálogo del tipo.
+        // El listado no resuelve por IO la matriz documental ni la prenda (una consulta por fila):
+        // el gate de documentos cae entonces a la completitud agregada, que es lo que este camino
+        // usaba antes de todos modos.
+        var conformation = FromCatalog(instance);
+        if (conformation is not null)
+        {
+            return BuildDynamicStateCore(
+                instance, conformation, identidadAprobadaPartes, prendaOtBlocker,
+                comparendosBloquean, runtExigido, documentRequirements: [], prendaVigente: null);
+        }
+
+        // Tipo sin pasos parametrizados: se conserva el recorrido histórico hasta que los 21 tipos
+        // estén sembrados. Es lo último que queda del camino estático.
         return modalidad == TramiteModalidadEntrada.Traspaso
             ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaOtBlocker, runtExigido)
             : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride, runtExigido, prendaOtBlocker);
@@ -869,7 +1140,7 @@ public sealed class GetWizardStateHandler(
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
 
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.Completo ?? true;
@@ -888,7 +1159,7 @@ public sealed class GetWizardStateHandler(
     /// </summary>
     public static PreflightCheckDto? DerivaFirmaCompraventaCheck(ProcedureInstance instance)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         if (!string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase))
             return null;
 
