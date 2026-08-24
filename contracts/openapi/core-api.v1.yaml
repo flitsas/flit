@@ -553,7 +553,7 @@ paths:
       description: >
         Persiste de forma atómica (todo o nada) la configuración operativa del
         tenant y genera una entrada de auditoría por cada campo modificado. Si la
-        validación falla (p. ej. notificationTarget fuera del enum) retorna 422 sin
+        validación falla (p. ej. extraEmail inválido) retorna 422 sin
         persistir ni auditar. Requiere JWT con rol SuperAdmin (RF01).
       security:
         - bearerAuth: []
@@ -7274,6 +7274,16 @@ components:
         notificationTarget:
           type: string
           enum: [COMPRADOR, RADICADOR, NINGUNO]
+          deprecated: true
+          description: Legado. Ya no gobierna el envío; usar destinatariosNotificacion.
+        avisosAprobacionActivos:
+          type: boolean
+          description: Envío de correos de trámite aprobado (kill-switch del worker).
+        avisosRechazoActivos:
+          type: boolean
+          description: Envío de correos de trámite rechazado (kill-switch del worker).
+        destinatariosNotificacion:
+          $ref: "#/components/schemas/DestinatariosNotificacion"
         metodosRecaudo:
           type: array
           items: { type: string }
@@ -7288,7 +7298,7 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ConsultationProviderChoice"
       required:
-        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig]
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig]
 
     ConsultationProviderChoice:
       type: object
@@ -7314,6 +7324,12 @@ components:
         notificationTarget:
           type: string
           enum: [COMPRADOR, RADICADOR, NINGUNO]
+          deprecated: true
+          description: Legado. Si se envía se ignora para el envío; no sustituye destinatariosNotificacion.
+        avisosAprobacionActivos: { type: boolean }
+        avisosRechazoActivos: { type: boolean }
+        destinatariosNotificacion:
+          $ref: "#/components/schemas/DestinatariosNotificacion"
         metodosRecaudo:
           type: array
           items: { type: string }
@@ -7330,7 +7346,20 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ConsultationProviderChoice"
       required:
-        [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
+        [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, metodosRecaudo]
+
+    DestinatariosNotificacion:
+      type: object
+      description: Perfiles que reciben avisos de aprobación/rechazo y correo extra opcional.
+      properties:
+        comprador: { type: boolean }
+        vendedorOPropietario: { type: boolean }
+        radicador: { type: boolean }
+        extraEmail:
+          type: string
+          format: email
+          nullable: true
+      required: [comprador, vendedorOPropietario, radicador]
 
     ValidationError:
       type: object

@@ -33,4 +33,14 @@ internal sealed class ProcedureTypeCatalog : IProcedureTypeCatalog
             .Select(p => new ProcedureTypeCatalogItem(p.Id, p.Code, p.Name))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    public async Task<ProcedureTypeNotificationPreviewItem?> GetByIdForNotificationPreviewAsync(
+        Guid procedureTypeId,
+        CancellationToken cancellationToken = default) =>
+        await _context.ProcedureTypes
+            .AsNoTracking()
+            .Where(p => p.Id == procedureTypeId)
+            .Select(p => new ProcedureTypeNotificationPreviewItem(p.Id, p.Name, p.Family, p.IsActive))
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 }

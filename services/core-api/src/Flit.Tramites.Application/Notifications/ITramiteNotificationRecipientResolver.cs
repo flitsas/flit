@@ -11,5 +11,7 @@ public interface ITramiteNotificationRecipientResolver
     TramiteRecipientResolution Resolve(
         ProcedureInstance instance,
         IReadOnlyList<ProcedureInstanceActor> actors,
-        IReadOnlyList<ProcedureInstanceParticipant> participants);
+        IReadOnlyList<ProcedureInstanceParticipant> participants,
+        TramiteStateEmailRecipientPolicy? policy = null,
+        TramiteEmailRecipient? radicador = null);
 }

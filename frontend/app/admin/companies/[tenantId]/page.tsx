@@ -167,7 +167,14 @@ function defaultSettings(tenantId: string): TenantSettings {
     baulFirmasActivo: false,
     preasignacionPlacaActiva: false,
     enrutamientoSMTP: "FLIT_SMTP",
-    notificationTarget: "NINGUNO",
+    avisosAprobacionActivos: true,
+    avisosRechazoActivos: true,
+    destinatariosNotificacion: {
+      comprador: true,
+      vendedorOPropietario: true,
+      radicador: true,
+      extraEmail: null,
+    },
     metodosRecaudo: [],
   };
 }

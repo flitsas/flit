@@ -159,7 +159,9 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.ValidateSoatWithRunt = settings.ValidateSoatWithRunt;
         policy.NotificationChannel = TenantSettingsCodes.ToDb(settings.NotificationChannel);
         policy.PersonalizedDocumentsEnabled = settings.PersonalizedDocumentsEnabled;
-        policy.TramiteStateEmailsEnabled = settings.TramiteStateEmailsEnabled;
+        policy.TramiteApprovedEmailsEnabled = settings.TramiteApprovedEmailsEnabled;
+        policy.TramiteRejectedEmailsEnabled = settings.TramiteRejectedEmailsEnabled;
+        policy.TramiteStateEmailRecipients = SerializeStateRecipients(settings.StateEmailRecipients);
         policy.NotificationTarget = TenantSettingsCodes.ToDb(settings.NotificationTarget);
         policy.PaymentMethods = JsonSerializer.Serialize(settings.PaymentMethods);
         policy.RuntFailoverTimeoutMs = settings.RuntFailoverTimeoutMs;
@@ -184,7 +186,9 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         PlateFlowSkipToTerminado = entity.PlateFlowSkipToTerminado,
         NotificationChannel = TenantSettingsCodes.ParseChannelDb(entity.NotificationChannel),
         PersonalizedDocumentsEnabled = entity.PersonalizedDocumentsEnabled,
-        TramiteStateEmailsEnabled = entity.TramiteStateEmailsEnabled,
+        TramiteApprovedEmailsEnabled = entity.TramiteApprovedEmailsEnabled,
+        TramiteRejectedEmailsEnabled = entity.TramiteRejectedEmailsEnabled,
+        StateEmailRecipients = DeserializeStateRecipients(entity.TramiteStateEmailRecipients),
         NotificationTarget = TenantSettingsCodes.ParseTargetDb(entity.NotificationTarget),
         PaymentMethods = DeserializePaymentMethods(entity.PaymentMethods),
         RuntFailoverTimeoutMs = entity.RuntFailoverTimeoutMs,
@@ -251,5 +255,30 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         return new AvaluoProviderConfig(
             raw.Primary ?? AvaluoProviderConfig.BaseProvider,
             raw.Enabled);
+    }
+
+    private sealed record StateRecipientsJson(
+        bool Comprador,
+        bool VendedorOPropietario,
+        bool Radicador,
+        string? ExtraEmail);
+
+    private static string SerializeStateRecipients(TramiteStateEmailRecipients value) =>
+        JsonSerializer.Serialize(
+            new StateRecipientsJson(
+                value.Comprador, value.VendedorOPropietario, value.Radicador, value.ExtraEmail),
+            WebJson);
+
+    private static TramiteStateEmailRecipients DeserializeStateRecipients(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return TramiteStateEmailRecipients.AllOn;
+
+        var raw = JsonSerializer.Deserialize<StateRecipientsJson>(json, WebJson);
+        if (raw is null)
+            return TramiteStateEmailRecipients.AllOn;
+
+        return TramiteStateEmailRecipients.FromJson(
+            raw.Comprador, raw.VendedorOPropietario, raw.Radicador, raw.ExtraEmail);
     }
 }

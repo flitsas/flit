@@ -64,10 +64,15 @@ export interface NotificationSample {
  */
 export async function getNotificationSample(
   templateId: string,
-  options?: { channel?: NotificationTestChannel; signal?: AbortSignal },
+  options?: {
+    channel?: NotificationTestChannel;
+    procedureTypeId?: string;
+    signal?: AbortSignal;
+  },
 ): Promise<NotificationSample> {
   const params = new URLSearchParams();
   if (options?.channel) params.set("channel", options.channel);
+  if (options?.procedureTypeId) params.set("procedureTypeId", options.procedureTypeId);
   const qs = params.toString();
   const path = `${plantillasBase}/${encodeURIComponent(templateId)}/muestra${qs ? `?${qs}` : ""}`;
   return apiFetch<NotificationSample>(path, { signal: options?.signal });
@@ -137,11 +142,16 @@ export interface NotificationTestSendResult {
 export async function sendNotificationTest(
   templateId: string,
   channel: NotificationTestChannel,
+  procedureTypeId?: string,
   signal?: AbortSignal,
 ): Promise<NotificationTestSendResult> {
   return apiFetch<NotificationTestSendResult>(`${buzonPruebasBase}/envios`, {
     method: "POST",
-    body: { templateId, channel },
+    body: {
+      templateId,
+      channel,
+      ...(procedureTypeId ? { procedureTypeId } : {}),
+    },
     signal,
   });
 }

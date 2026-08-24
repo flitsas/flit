@@ -92,13 +92,14 @@ public sealed class TenantSettings
     /// </summary>
     public bool PersonalizedDocumentsEnabled { get; init; }
 
-    /// <summary>
-    /// HU #11469 — interruptor operativo de avisos de correo al cambio de estado
-    /// (<c>tramite_state_emails_enabled</c>). Default <c>true</c>.
-    /// </summary>
-    public bool TramiteStateEmailsEnabled { get; init; } = true;
+    public bool TramiteApprovedEmailsEnabled { get; init; } = true;
 
-    /// <summary>Destinatario de notificaciones (<c>notification_target</c>).</summary>
+    public bool TramiteRejectedEmailsEnabled { get; init; } = true;
+
+    public TramiteStateEmailRecipients StateEmailRecipients { get; init; } =
+        TramiteStateEmailRecipients.AllOn;
+
+    /// <summary>Destinatario legado (<c>notification_target</c>). Ya no gobierna el envío.</summary>
     public required NotificationTarget NotificationTarget { get; init; }
 
     /// <summary>Métodos de recaudo habilitados (<c>payment_methods</c>, jsonb).</summary>
@@ -152,7 +153,9 @@ public sealed class TenantSettings
         ValidateSoatWithRunt = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
         PersonalizedDocumentsEnabled = false,
-        TramiteStateEmailsEnabled = true,
+        TramiteApprovedEmailsEnabled = true,
+        TramiteRejectedEmailsEnabled = true,
+        StateEmailRecipients = TramiteStateEmailRecipients.AllOn,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],
         RuntFailoverTimeoutMs = 60_000,

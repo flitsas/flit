@@ -52,6 +52,20 @@ public static class TramiteEmailPreviewSample
             SampleRechazado,
             ResolveBaseUrl(assetsBaseUrl));
 
+    public static TramiteCambioEstadoEmailModel OverlayProcedureType(
+        TramiteCambioEstadoEmailModel sample,
+        string nombreTipoTramite,
+        bool esTraspaso)
+    {
+        ArgumentNullException.ThrowIfNull(sample);
+        return sample with
+        {
+            NombreTipoTramite = nombreTipoTramite ?? string.Empty,
+            EsTraspaso = esTraspaso,
+            VendedorNombre = esTraspaso ? sample.VendedorNombre : string.Empty,
+        };
+    }
+
     /// <summary>Compat: apunta a la muestra rechazada (antes «cambio-estado»).</summary>
     public static TramiteCambioEstadoEmailModel SampleModel => SampleRechazado;
 
