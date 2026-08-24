@@ -195,6 +195,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Commercial)
             .Include(x => x.BiometricValidations)
             .Include(x => x.Signatures)
+            .Include(x => x.ProcedureType)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public async Task<IReadOnlyList<ProcedureInstance>> ListDraftFinalizedByActorAsync(

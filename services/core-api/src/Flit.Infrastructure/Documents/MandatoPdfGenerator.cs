@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
-using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using QuestPDF;
 using QuestPDF.Fluent;
@@ -88,17 +87,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         var esJuridica = parte?.EsJuridica ?? false;
         var variante = MandatoTemplateResolver.Resolve(data.TemplateCode);
 
-        var esTraspaso = string.Equals(
-            tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
-        // HU #11206 — el objeto del contrato incluye las transformaciones del trámite. Se compone aquí,
-        // una sola vez, para que todas las familias de plantilla lo redacten idéntico (AC4). Sin
-        // transformaciones queda exactamente el texto de siempre (AC3).
-        // HU #11627 — también nombra la prenda si el trámite la tiene (agregado ProcedureInstancePrenda,
-        // ya resuelto en FurDocumentData.PrendaMarking; no viaja por field_values a propósito).
-        var nombreTramite = MandatoObjetoComposer.Componer(
-            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
-            data.Transformaciones,
-            tramite.PrendaMarking);
+        // Objeto {{tramite}}: tres capas (docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md).
+        var nombreTramite = ComponerObjeto(data);
 
         var placa = Val(tramite.Placa, "___");
         var ot = Val(tramite.Organismo.Nombre, "___");
@@ -230,6 +220,24 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         return outMs.ToArray();
     }
 
+    internal static string ComponerObjeto(MandatoData data)
+    {
+        var tramite = data.Tramite;
+        var code = string.IsNullOrWhiteSpace(tramite.ProcedureTypeCode)
+            ? tramite.TipologiaCodigo
+            : tramite.ProcedureTypeCode;
+        return MandatoObjetoComposer.Componer(
+            MandatoTramiteIdentity.NombreObjeto(
+                tramite.ProcedureTypeName,
+                tramite.ProcedureTypeCode,
+                tramite.ProcedureFamily,
+                tramite.TipologiaCodigo,
+                tramite.Modalidad),
+            data.Transformaciones,
+            tramite.PrendaMarking,
+            code);
+    }
+
     /// <summary>
     /// Sustituye los placeholders <c>{{...}}</c> del cuerpo editado por el OT, línea por línea, marcando
     /// en negrita el VALOR sustituido (no el resto del texto libre del tenant).
@@ -246,12 +254,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
         var parte = tramite.Mandante;
-        var esTraspaso = string.Equals(
-            tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
-        var nombreTramite = MandatoObjetoComposer.Componer(
-            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
-            data.Transformaciones,
-            tramite.PrendaMarking);
+        var nombreTramite = ComponerObjeto(data);
         var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
 
         var reemplazos = new (string Token, string Valor)[]

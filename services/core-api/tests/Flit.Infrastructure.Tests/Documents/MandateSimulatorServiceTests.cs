@@ -44,6 +44,8 @@ public sealed class MandateSimulatorServiceTests
     [InlineData("juridica", "traspaso_standard", "pj_traspaso")]
     [InlineData("natural", "matricula_inicial", "pn_matricula")]
     [InlineData("juridica", "matricula_inicial", "pj_matricula")]
+    [InlineData("juridica", "TRASPASO_STANDARD", "pj_traspaso")]
+    [InlineData("juridica", "MATRICULA_NUEVA", "pj_matricula")]
     public async Task PreviewAsync_GeneraPdfDelEscenarioPedido(
         string personType, string tipologia, string sufijo)
     {

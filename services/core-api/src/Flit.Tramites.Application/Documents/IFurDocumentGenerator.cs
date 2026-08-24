@@ -130,7 +130,13 @@ public sealed record FurDocumentData(
     // HU #11641 — subtrámites simultáneos declarados (color / carrocería / combustible / blindaje),
     // que marcan sus casillas propias. Blindaje usa SI/NO de vehículo blindado; las otras tres van
     // a la rejilla de trámite solicitado. Por defecto ninguno.
-    FurTransformacionesDeclaradas Transformaciones = default)
+    FurTransformacionesDeclaradas Transformaciones = default,
+    /// <summary>Código de <c>tramites.procedure_types.code</c> (p. ej. <c>MATRICULA_NUEVA</c>).</summary>
+    string? ProcedureTypeCode = null,
+    /// <summary>Nombre de <c>tramites.procedure_types.name</c>. El mandato lo usa como objeto del contrato.</summary>
+    string? ProcedureTypeName = null,
+    /// <summary>Familia de <c>tramites.procedure_types.family</c> (<c>MATRICULAS</c> | <c>TRASPASO</c> | <c>OTROS</c>).</summary>
+    string? ProcedureFamily = null)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
