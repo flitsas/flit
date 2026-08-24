@@ -329,7 +329,8 @@ describe('BiometricStep — inventario: resultados de la validación', () => {
 
     const comprador = await screen.findByRole('group', { name: 'Biométrica Comprador' });
     expect(within(comprador).getByText('Aprobado — 95/100')).toBeInTheDocument();
-    expect(within(comprador).getByText(/Ana Compradora/)).toBeInTheDocument();
+    // El nombre aparece tanto en la columna de identidad como en el canvas de firma.
+    expect(within(comprador).getAllByText(/Ana Compradora/).length).toBeGreaterThan(0);
     // Resuelta: ya no se ofrece iniciar ni simular nada.
     expect(within(comprador).queryByRole('button', { name: /validación de identidad/i })).toBeNull();
   });
@@ -438,15 +439,16 @@ describe('BiometricStep — inventario: identidad cubierta por la firma del baú
 });
 
 describe('BiometricStep — inventario: refrescar el estado y avisar al asistente', () => {
-  it('el botón de actualizar re-consulta al proveedor y notifica al wizard', async () => {
+  it('el botón global "Actualizar" ya no existe — la actualización es automática', async () => {
     const onRefresh = vi.fn();
-    const user = await renderPaso('matricula_inicial', { onRefresh });
+    await renderPaso('matricula_inicial', { onRefresh });
 
     await screen.findByRole('group', { name: 'Biométrica Comprador' });
-    await user.click(screen.getByRole('button', { name: 'Actualizar estado biométrico' }));
-
-    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
-    expect(mocks.getBiometricState.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // El botón global fue removido del header; la actualización ocurre por polling o
+    // por el botón de reconciliación por tarjeta (Kyverum recover).
+    expect(screen.queryByRole('button', { name: 'Actualizar estado biométrico' })).toBeNull();
+    // La carga inicial sigue consultando el estado biométrico.
+    expect(mocks.getBiometricState.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('con todas las partes resueltas por el baúl ya no hay nada que actualizar', async () => {

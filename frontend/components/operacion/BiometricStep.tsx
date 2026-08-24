@@ -16,6 +16,7 @@ import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader } from './wizard-atoms';
+import { WizardAccordion } from './WizardAccordion';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import type {
@@ -125,7 +126,8 @@ function parteBadge(
     return { label: 'Cubierto por firma del baúl', tone: 'success' };
   }
   if (!validation) {
-    return { label: 'Sin iniciar', tone: 'neutral' };
+    // Prototipo ValidacionCard: "Pendiente" (warn). Misma condición: sin fila biométrica aún.
+    return { label: 'Pendiente', tone: 'warning' };
   }
   // Un enlace vencido cae a RejectedView aunque el estado crudo siga en `en_proceso` (ver ParteCard);
   // el chip debe reflejar lo que el gestor ve en la tarjeta, no el campo crudo del backend.
@@ -188,34 +190,6 @@ function personaInfoFor(
   };
 }
 
-/**
- * Recuadro que identifica a la persona detrás de la validación (paridad con la referencia del
- * diseño: `MatriculaInicial` `Step4`, líneas 917-924 — "TRANSPORTES ANDINOS S.A.S — Comprador" /
- * "Rep. Legal: Héctor Copete Andrade · CC 71.654.328"). FLIT rotulaba únicamente el ROL en la
- * cabecera de la tarjeta (`PARTE_LABEL`); el nombre solo aparecía dentro de algunas vistas de
- * estado. Se pinta antes de la vista de estado, en todos los estados, y se omite en silencio si
- * todavía no hay ningún dato (nunca deja el paso en blanco por esto).
- */
-function PartyIdentityBox({
-  parte,
-  validation,
-  actor,
-}: {
-  parte: BiometricParte;
-  validation: BiometricValidation | null;
-  actor: ProcedureActor | null;
-}) {
-  const info = personaInfoFor(validation, actor);
-  if (!info) return null;
-  return (
-    <div className="mb-3 rounded-xl border p-3" style={{ borderColor: '#DFE5ED' }}>
-      <p className="text-xs font-semibold">
-        {info.nombre} — {PARTE_LABEL[parte]}
-      </p>
-      <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
-    </div>
-  );
-}
 
 /**
  * Paso de validación de identidad. Es provider-aware (HU #10233): con `kyverum` el clic dispara la
@@ -246,7 +220,6 @@ export function BiometricStep({
   // Partes cubiertas por el baúl según el BACKEND. Se consulta en vez de depender solo de la prop
   // porque esta última solo existe durante el registro; al reabrir el trámite llegaba vacía.
   const [firmaBaulServidor, setFirmaBaulServidor] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Actores del trámite: solo se usan para el recuadro "quién es la persona" cuando una parte
   // TODAVÍA no tiene ninguna validación (la validación, si existe, ya trae name/documentType/
@@ -311,12 +284,7 @@ export function BiometricStep({
   }, [provider, validations, load, onRefresh]);
 
   const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      await load();
-    } finally {
-      setLoading(false);
-    }
+    await load();
     onRefresh?.();
   };
 
@@ -327,42 +295,8 @@ export function BiometricStep({
   //    vacío = acción de iniciar; lleno = verificado/en proceso/rechazado).
   const initialLoading = instanceId != null && validations === null && error === null;
 
-  // Feature #11211 — ocultar "Actualizar" global cuando todas las partes están resueltas
-  // (baúl) o no queda biométrica pendiente de aprobación.
-  const todasCoveredByVault =
-    partes.length > 0 &&
-    partes.every(
-      (p) => firmaBaulServidor.includes(p) || vaultCoveredPartes.includes(p),
-    );
-  const algunaPendienteBiometria = partes.some((p) => {
-    if (firmaBaulServidor.includes(p) || vaultCoveredPartes.includes(p)) return false;
-    const matches = (validations ?? []).filter((v) =>
-      modalidad === 'traspaso'
-        ? v.partyRole === p
-        : v.partyRole === null || v.partyRole === 'comprador',
-    );
-    const validation = matches.length > 0 ? matches[matches.length - 1] : null;
-    return !validation || validation.status !== 'aprobado';
-  });
-  const showRefreshHeader =
-    !readOnly && !todasCoveredByVault && (validations === null || algunaPendienteBiometria);
-
-  // Paso Identidad: un solo panel blanco con título + subtítulo + Actualizar + tarjetas.
+  // Paso Identidad: título + subtítulo en card propia; partes = acordeones separados.
   const pagePanel = Boolean(heading);
-
-  const refreshButton = showRefreshHeader ? (
-    <button
-      type="button"
-      onClick={() => void handleRefresh()}
-      disabled={loading || !instanceId}
-      className="flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-      style={{ borderColor: '#557EFF', color: '#557EFF' }}
-      aria-label="Actualizar estado biométrico"
-    >
-      <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden />
-      Actualizar
-    </button>
-  ) : null;
 
   // Feature 05 (rediseño) — la rejilla de partes es de dos columnas SOLO cuando hay dos partes
   // (traspaso: vendedor + comprador); con una sola (matrícula inicial) se queda en una columna para
@@ -376,6 +310,8 @@ export function BiometricStep({
     // `ParteBlock`), así que la rejilla exterior deja de repartir partes en columnas: cada bloque va
     // a ancho completo y apilado, con su propio encabezado de rol para no confundir vendedor y
     // comprador cuando hay dos (traspaso).
+    // Paso Validación (prototipo AccordionRow + ValidacionCard): cuando !embedded, cada parte es
+    // un acordeón desplegable separado con badge de estado en la cabecera.
     <div className="space-y-4">
       {partes.map((parte) => {
         const matches = (validations ?? []).filter((v) =>
@@ -385,43 +321,57 @@ export function BiometricStep({
         );
         const validation = matches.length > 0 ? matches[matches.length - 1] : null;
         const actor = actors?.find((a) => a.rol === parte) ?? null;
-        return (
+        const vaultCovered =
+          firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte);
+        const badge = parteBadge(validation, vaultCovered);
+
+        const inner = (
           <ParteBlock
-            key={parte}
             parte={parte}
             instanceId={instanceId}
             provider={provider}
             validation={validation}
             actor={actor}
             historial={matches}
-            vaultCovered={
-              firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)
-            }
+            vaultCovered={vaultCovered}
             onChanged={() => void handleRefresh()}
-            embedded={embedded}
           />
+        );
+
+        return (
+          <div
+            key={parte}
+            role="group"
+            aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
+          >
+            {!embedded ? (
+              <WizardAccordion
+                title={`Validación del ${PARTE_LABEL[parte]}`}
+                defaultOpen
+                badge={<StatusBadge label={badge.label} tone={badge.tone} />}
+              >
+                {inner}
+              </WizardAccordion>
+            ) : (
+              inner
+            )}
+          </div>
         );
       })}
     </div>
   );
 
   if (pagePanel) {
-    // PDF: título DENTRO del mismo contenedor + aviso de flujo automático.
+    // Paso Identidad: card intro con título + subtítulo + acordeones de partes separados.
+    // Sin botón "Actualizar" global (la actualización es automática) y sin banner azul
+    // (el polling sigue activo; no hace falta explicarlo en el panel del paso).
     return (
-      <div className={`${WIZARD_CARD} space-y-4`}>
-        <WizardCardHeader title={heading ?? ''} subtitle={headingSubtitle} action={refreshButton} />
-        <div
-          className="rounded-xl border px-3 py-2"
-          style={{ borderColor: 'rgba(85,126,255,0.25)', background: 'rgba(85,126,255,0.06)' }}
-        >
-          <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
-            La validación se inicia automáticamente al continuar
-          </p>
-          <p className="mt-0.5 text-xs opacity-70">
-            Aquí monitoreas el estado. El enlace de captura se envía por correo cuando el flujo
-            automático lo dispara.
-          </p>
-        </div>
+      <div className="space-y-4">
+        {(heading || headingSubtitle) && (
+          <div className={WIZARD_CARD}>
+            <WizardCardHeader title={heading ?? ''} subtitle={headingSubtitle} />
+          </div>
+        )}
         {error && <InlineAlert tone="error">{error}</InlineAlert>}
         {partesContent}
       </div>
@@ -430,24 +380,19 @@ export function BiometricStep({
 
   return (
     <div className="space-y-4">
-      {/* En resumen (hideIntro) no se muestra la franja vacía con solo "Actualizar":
-          el polling / "Actualizar estado" por tarjeta bastan. */}
       {!hideIntro && (
         <div
-          className={`${WIZARD_CARD} flex items-start justify-between gap-3`}
+          className={`${WIZARD_CARD}`}
           style={{ borderLeft: '3px solid #557EFF' }}
         >
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
-              La validación se inicia automáticamente al continuar
-            </p>
-            <p className="text-xs opacity-70">
-              Aquí solo monitoreas el estado. Si la validación se encaminó correctamente, el cliente
-              recibirá el enlace de captura por correo; el resultado se actualiza en tiempo real. Si
-              algo falla, puedes reiniciarla desde cada tarjeta.
-            </p>
-          </div>
-          {refreshButton}
+          <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+            La validación se inicia automáticamente al continuar
+          </p>
+          <p className="mt-1 text-xs opacity-70">
+            Aquí solo monitoreas el estado. Si la validación se encaminó correctamente, el cliente
+            recibirá el enlace de captura por correo; el resultado se actualiza en tiempo real. Si
+            algo falla, puedes reiniciarla desde cada tarjeta.
+          </p>
         </div>
       )}
 
@@ -492,15 +437,17 @@ function BiometricSkeleton({
 }
 
 /**
- * Bloque de UNA parte del trámite: paridad con la referencia del diseño (`MatriculaInicial` Step4,
- * líneas 904-950), que compone para la MISMA persona dos tarjetas lado a lado —
- * `SignatureCard` (firma electrónica, INFORMACIÓN: ¿esta parte ya tiene firma vigente?) y `ParteCard`
- * (validación biométrica, ACCIÓN: ¿hace falta pedirla?). No son excluyentes entre sí — lo excluyente
- * es si la biométrica hace falta, no si ambas tarjetas se muestran; verlas juntas es justamente lo que
- * explica por qué a veces no se pide biométrica (cubierta por firma del baúl).
+ * Bloque de UNA parte del trámite: paridad con la referencia del diseño (`ValidacionCard` del
+ * prototipo Lovable, líneas 546-598). Una única card con:
+ *  - Cabecera: "Validación del {Parte}" + badge de estado biométrico global (parteBadge).
+ *  - Grid 2 columnas:
+ *    - Izquierda: Datos de Identificación (nombre/doc) + Estado Biométrico + vistas de acción
+ *      (VaultCoveredView / VerifiedView / KyverumPendingView / RejectedView / etc.).
+ *    - Derecha: Método de Firma — canvas con "Firma electrónica", nombre con blur si no validado,
+ *      badge de mecanismo (signatureBadge) y texto detalle; historial de validaciones al pie.
  *
- * Con dos partes (traspaso) cada bloque va a ANCHO COMPLETO y apilado (antes las partes competían por
- * columna); el rótulo de rol encabeza el bloque para no confundir vendedor y comprador.
+ * El `role="group"` abarca todo el bloque (izquierda + derecha) para que los tests y lectores de
+ * pantalla localicen todo el contexto de una parte bajo un único landmark accesible.
  */
 function ParteBlock({
   parte,
@@ -511,7 +458,6 @@ function ParteBlock({
   historial,
   vaultCovered,
   onChanged,
-  embedded = false,
 }: {
   parte: BiometricParte;
   instanceId: string | null;
@@ -521,42 +467,130 @@ function ParteBlock({
   historial: BiometricValidation[];
   vaultCovered: boolean;
   onChanged: () => void;
-  embedded?: boolean;
 }) {
+  const estado = validation?.status;
+  const badge = parteBadge(validation, vaultCovered);
+  const mecanismoFirma = actor?.representanteLegal?.mecanismoFirma;
+  const sigBadge = signatureBadge(vaultCovered, mecanismoFirma);
+  const bioBadge = biometricStateBadge(validation, vaultCovered);
+  const info = personaInfoFor(validation, actor);
+
+  const sigDetalle = vaultCovered
+    ? `${PARTE_LABEL[parte]} firmará con la firma electrónica precargada en el baúl.`
+    : mecanismoFirma === 'identidad'
+    ? `${PARTE_LABEL[parte]} firmará con el sello de la validación de identidad (biométrica) como mecanismo de firma.`
+    : `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`;
+
+  // Nombre en el canvas: con blur si la parte NO está validada/firmada.
+  const isValidated =
+    vaultCovered || (validation?.status === 'aprobado' && !validation?.expired);
+  const sigNombre = info?.nombre ?? PARTE_LABEL[parte];
+
+  const actionView = vaultCovered ? (
+    <VaultCoveredView />
+  ) : estado === 'aprobado' ? (
+    <VerifiedView validation={validation!} />
+  ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
+    <KyverumPendingView validation={validation} instanceId={instanceId} onChanged={onChanged} />
+  ) : estado === 'rechazado' || estado === 'expirado' || validation?.expired ? (
+    <RejectedView
+      validation={validation!}
+      parte={parte}
+      instanceId={instanceId}
+      provider={provider}
+      onChanged={onChanged}
+    />
+  ) : estado === 'error_envio' ? (
+    <SendFailedView
+      validation={validation!}
+      parte={parte}
+      instanceId={instanceId}
+      provider={provider}
+      onChanged={onChanged}
+    />
+  ) : estado === 'enviado' || estado === 'pendiente_envio' || estado === 'en_proceso' ? (
+    <SentPendingView
+      validation={validation!}
+      parte={parte}
+      instanceId={instanceId}
+      provider={provider}
+      onChanged={onChanged}
+    />
+  ) : (
+    <StartAction parte={parte} instanceId={instanceId} provider={provider} onStarted={onChanged} />
+  );
+
   return (
-    <div className={embedded ? undefined : WIZARD_CARD}>
-      {/* PDF oleada 3: un contenedor por parte, título interno azul, contenido a 2 columnas
-          con la misma altura (ValidacionCard del prototipo). */}
-      {!embedded && (
-        <h3 className="mb-3 text-sm font-bold" style={{ color: '#557EFF' }}>
-          Validación del {PARTE_LABEL[parte]}
-        </h3>
-      )}
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-        <SignatureCard parte={parte} actor={actor} vaultCovered={vaultCovered} embedded />
-        <ParteCard
-          parte={parte}
-          instanceId={instanceId}
-          provider={provider}
-          validation={validation}
-          actor={actor}
-          historial={historial}
-          vaultCovered={vaultCovered}
-          onChanged={onChanged}
-          embedded
-        />
+    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+        {/* ── Izquierda: identidad + estado biométrico + vistas de acción ── */}
+        <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+          <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
+            Datos de Identificación
+          </p>
+          {info && (
+            <>
+              <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
+                {info.nombre} — {PARTE_LABEL[parte]}
+              </p>
+              <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
+            </>
+          )}
+          <div className="mt-4">
+            <p
+              className="text-[11px] font-medium uppercase tracking-wide"
+              style={{ color: '#59677D' }}
+            >
+              Estado Biométrico
+            </p>
+            <div className="mt-2">
+              <StatusBadge label={bioBadge.label} tone={bioBadge.tone} />
+            </div>
+          </div>
+          <div className="mt-3">{actionView}</div>
+        </div>
+
+        {/* ── Derecha: método de firma ── */}
+        <div className="flex flex-col rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+          <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
+            Método de Firma
+          </p>
+          <div
+            className="flex flex-1 items-center justify-center rounded-xl border p-5 text-center"
+            style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+          >
+            <div>
+              <p
+                className="text-[11px] font-medium uppercase tracking-wide"
+                style={{ color: '#59677D' }}
+              >
+                Firma electrónica
+              </p>
+              <p
+                className="mt-2 select-none text-2xl font-semibold italic"
+                style={{ color: '#1A2B4C', filter: isValidated ? undefined : 'blur(4px)' }}
+              >
+                {sigNombre}
+              </p>
+              <div className="mt-2">
+                <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
+              </div>
+              <p className="mt-2 text-xs opacity-70">{sigDetalle}</p>
+            </div>
+          </div>
+          {!vaultCovered && (
+            <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
+          )}
+        </div>
       </div>
-    </div>
   );
 }
 
 /**
- * Estado del badge de `SignatureCard`, en tres niveles según el dato REAL disponible (nunca se
- * fabrica): 1) cubierta por el baúl (`vaultCovered`, calculado por el paso a partir de
- * `firmaBaulPartes` del backend + la señal optimista `vaultCoveredPartes`); 2) mecanismo elegido
- * explícitamente por el gestor cuando el representante tiene baúl e identidad vigentes a la vez
- * (`actor.representanteLegal.mecanismoFirma === 'identidad'`, HU #11061); 3) sin ninguno de los dos
- * datos, la parte no tiene firma registrada.
+ * Badge del recuadro de firma en la columna derecha de cada parte, en tres niveles según el dato
+ * REAL disponible (nunca se fabrica): 1) cubierta por el baúl (`vaultCovered`); 2) mecanismo
+ * elegido explícitamente por el gestor cuando el representante tiene baúl e identidad vigentes a
+ * la vez (`actor.representanteLegal.mecanismoFirma === 'identidad'`, HU #11061); 3) sin ninguno
+ * de los dos datos, la parte no tiene firma registrada.
  */
 function signatureBadge(
   vaultCovered: boolean,
@@ -572,167 +606,29 @@ function signatureBadge(
 }
 
 /**
- * Tarjeta izquierda del bloque de una parte (paridad con la referencia del diseño: `MatriculaInicial`
- * Step4, líneas 905-915 — "Firma electrónica" con badge de estado a la derecha del título). Es
- * INFORMACIÓN, no acción: explica qué firma se usará y con qué mecanismo, a partir de datos que el
- * paso ya tiene (no dispara ninguna llamada propia).
- *
- * A diferencia de la referencia, esta tarjeta NO representa la firma manuscrita ni enseña ningún hash
- * (Step4 líneas 911-913): en FLIT no existe ni imagen de firma ni hash en ningún tipo del frontend —
- * ni `ProcedureActor` ni `BiometricValidation` traen uno — y en la maqueta ese hash es un texto FIJO,
- * idéntico en todas las pantallas del prototipo (Step4 y también Step5). Fabricarlo aquí sería
- * mostrar, en la pantalla que certifica una identidad, un dato que no viene de ninguna parte. En su
- * lugar, el recuadro dice el mecanismo REAL con el que esa firma se va a plasmar.
+ * Badge de "Estado Biométrico" en la columna izquierda (Datos de Identificación). Complementa al
+ * `parteBadge` de la cabecera: usa el mismo conjunto de estados pero con etiquetas descriptivas
+ * orientadas al panel de identidad (p. ej. "Biometría aprobada · Firma OK" en vez del score puro).
  */
-function SignatureCard({
-  parte,
-  actor,
-  vaultCovered,
-  embedded = false,
-}: {
-  parte: BiometricParte;
-  actor: ProcedureActor | null;
-  vaultCovered: boolean;
-  embedded?: boolean;
-}) {
-  const mecanismoFirma = actor?.representanteLegal?.mecanismoFirma;
-  const badge = signatureBadge(vaultCovered, mecanismoFirma);
-  const detalle = vaultCovered
-    ? `${PARTE_LABEL[parte]} firmará con la firma electrónica precargada en el baúl.`
-    : mecanismoFirma === 'identidad'
-    ? `${PARTE_LABEL[parte]} firmará con el sello de la validación de identidad (biométrica) como mecanismo de firma.`
-    : `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`;
-
-  return (
-    // Embebido en `MatriculaResumen`: sin el radio/borde/fondo propios de `WIZARD_CARD` — ya está
-    // dentro de la tarjeta del actor, y repetirlos dibujaba una tarjeta dentro de otra.
-    <div className={embedded ? 'rounded-xl border p-3' : WIZARD_CARD}>
-      <WizardCardHeader
-        title="Firma electrónica"
-        action={<StatusBadge label={badge.label} tone={badge.tone} />}
-      />
-      <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}>
-        <p className="text-xs opacity-70">{detalle}</p>
-      </div>
-    </div>
-  );
+function biometricStateBadge(
+  validation: BiometricValidation | null,
+  vaultCovered: boolean,
+): { label: string; tone: StatusTone } {
+  if (vaultCovered) {
+    return { label: 'Biometría cubierta · Firma OK', tone: 'success' };
+  }
+  if (!validation) {
+    return { label: 'Pendiente de validación', tone: 'warning' };
+  }
+  if (validation.expired) {
+    return { label: ESTADO_LABEL.expirado, tone: ESTADO_TONE.expirado };
+  }
+  if (validation.status === 'aprobado') {
+    return { label: 'Biometría aprobada · Firma OK', tone: 'success' };
+  }
+  return { label: ESTADO_LABEL[validation.status], tone: ESTADO_TONE[validation.status] };
 }
 
-/** Tarjeta por parte: enruta a la vista según el estado de la validación. */
-function ParteCard({
-  parte,
-  instanceId,
-  provider,
-  validation,
-  actor,
-  historial,
-  vaultCovered,
-  onChanged,
-  embedded = false,
-}: {
-  parte: BiometricParte;
-  instanceId: string | null;
-  provider: string;
-  validation: BiometricValidation | null;
-  /** Actor del trámite para este `parte` (comprador/vendedor); alimenta el recuadro de identidad
-   *  cuando aún no hay validación. `null` si los actores no cargaron o no hay uno para esta parte. */
-  actor: ProcedureActor | null;
-  /** CF-08 (Feature #11004, HU #11009) — todas las validaciones de la parte, orden cronológico. */
-  historial: BiometricValidation[];
-  vaultCovered: boolean;
-  onChanged: () => void;
-  embedded?: boolean;
-}) {
-  const estado = validation?.status;
-  const badge = parteBadge(validation, vaultCovered);
-  return (
-    <div
-      role="group"
-      aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
-      className={embedded ? 'rounded-xl border p-3' : WIZARD_CARD}
-    >
-      {/* El chip de estado de la cabecera (paridad con la referencia del diseño) es seguro junto al
-          placeholder de carga de AC8: el esqueleto se busca por su NOMBRE accesible ("Cargando
-          validaciones de identidad"), no por el rol `status` a secas, así que puede convivir con los
-          `role="status"` que trae cada `StatusBadge` sin volverse ambiguo para un lector de pantalla
-          ni para el test que verifica que el esqueleto desaparece. */}
-      {/* Título en paridad con la referencia del diseño ("Validación biométrica digital", Step4
-          línea 919); el rol de la parte ya lo dice el encabezado del bloque (`ParteBlock`) y, dentro
-          de la tarjeta, `PartyIdentityBox`. El nombre accesible del `role="group"` sigue viniendo del
-          `aria-label` explícito de abajo, no de este título. */}
-      <WizardCardHeader
-        title="Validación biométrica digital"
-        action={<StatusBadge label={badge.label} tone={badge.tone} />}
-      />
-
-      {/* Recuadro "quién es la persona que se está validando" (paridad con la referencia del
-          diseño: MatriculaInicial Step4). Siempre encima de la vista de estado, en TODOS los
-          estados (incluido "Sin iniciar" y cubierto por baúl): FLIT antes solo rotulaba el rol
-          ("Comprador"/"Vendedor") en la cabecera y el nombre solo aparecía dentro de algunas
-          vistas de estado — se está validando la identidad DE ALGUIEN y ese alguien debe verse
-          siempre. */}
-      <PartyIdentityBox parte={parte} validation={validation} actor={actor} />
-
-      {/* HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: la identidad ya está
-          satisfecha server-side; se presenta como firma electrónica y se omite toda la biométrica. */}
-      {vaultCovered ? (
-        <VaultCoveredView />
-      ) : estado === 'aprobado' ? (
-        <VerifiedView validation={validation!} />
-      ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
-        // El enlace de captura solo se muestra si NO está vencido. Un enlace vencido (validation.expired:
-        // backend `now > expiresAt`) cae a RejectedView aunque el estado siga en_proceso, para informar el
-        // vencimiento y re-habilitar el botón de reenvío de inmediato (sin esperar a que el worker lo cambie).
-        <KyverumPendingView
-          validation={validation}
-          instanceId={instanceId}
-          onChanged={onChanged}
-        />
-      ) : estado === 'rechazado' || estado === 'expirado' || validation?.expired ? (
-        <RejectedView
-          validation={validation!}
-          parte={parte}
-          instanceId={instanceId}
-          provider={provider}
-          onChanged={onChanged}
-        />
-      ) : estado === 'error_envio' ? (
-        // Fallo de envío (cola provider-agnostic): NO es una espera, es un error — se distingue con
-        // InlineAlert tone="error" en vez de la vista de "ya enviada, esperando".
-        <SendFailedView
-          validation={validation!}
-          parte={parte}
-          instanceId={instanceId}
-          provider={provider}
-          onChanged={onChanged}
-        />
-      ) : estado === 'enviado' || estado === 'pendiente_envio' || estado === 'en_proceso' ? (
-        // `enviado` / `pendiente_envio` / `en_proceso` SIN captureUrl (el caso CON enlace ya lo cubrió
-        // la rama de KyverumPendingView arriba): la validación ya se disparó y sigue en vuelo. Antes
-        // caían aquí abajo, al StartAction genérico, como si no hubiera pasado nada — el gestor podía
-        // disparar una segunda validación sobre una que ya estaba en curso.
-        <SentPendingView
-          validation={validation!}
-          parte={parte}
-          instanceId={instanceId}
-          provider={provider}
-          onChanged={onChanged}
-        />
-      ) : (
-        <StartAction
-          parte={parte}
-          instanceId={instanceId}
-          provider={provider}
-          onStarted={onChanged}
-        />
-      )}
-
-      {/* CF-08 (Feature #11004, HU #11009) — historial completo de la parte (ya NO se limita a
-          matches[matches.length-1]); no aplica a la cobertura por baúl (no hay biométrica que auditar). */}
-      {!vaultCovered && <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />}
-    </div>
-  );
-}
 
 /**
  * CF-08 (Feature #11004, HU #11009) — "Historial de validaciones" de una parte: todas las filas que

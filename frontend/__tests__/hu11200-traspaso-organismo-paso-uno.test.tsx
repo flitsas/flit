@@ -80,8 +80,8 @@ const PREVIEW_OK = {
 };
 
 async function consultarVehiculo(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText('Placa'), 'ABC123');
-  await user.type(screen.getByLabelText('Número documento propietario'), '1020304050');
+  await user.type(await screen.findByLabelText('Placa del vehículo'), 'ABC123');
+  await user.type(screen.getByLabelText('Número documento del propietario'), '1020304050');
   await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 }
 
@@ -153,7 +153,7 @@ describe('HU #11200 — el organismo del traspaso se valida en el primer paso', 
   it('AC5: en traspaso no se pide elegir organismo (lo impone el RUNT)', async () => {
     renderTraspaso();
 
-    await screen.findByLabelText('Placa');
+    await screen.findByLabelText('Placa del vehículo');
     expect(screen.queryByLabelText('Secretaría de tránsito')).not.toBeInTheDocument();
     expect(mocks.listTransitOffices).not.toHaveBeenCalled();
   });

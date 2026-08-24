@@ -117,7 +117,7 @@ beforeEach(() => {
 async function renderJuridicalBuyerWithNit(nit: string) {
   const user = userEvent.setup();
   render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-  await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+  await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
   // El input principal de identificación (no el del representante legal) se distingue por placeholder.
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), nit);
   return user;

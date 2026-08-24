@@ -33,6 +33,7 @@ Antes de entregar cualquier resultado visual o frontend, verificar cumplimiento 
 | @.cursor/skills/flit-design-guardian/templates/audit_report.md | Cuando el usuario solicite auditoría, revisión, QA visual o cumplimiento. |
 | @.cursor/skills/flit-design-guardian/references/design_research.md | Cuando se necesite justificar reglas de UX, accesibilidad, design systems o tendencias. |
 | @.cursor/skills/flit-design-guardian/references/prototipo flit 2.0 (v4).pdf | Cuando haga falta comparar **composición** contra el prototipo. |
+| @.cursor/skills/flit-design-guardian/references/20-agosto-notas-diseno-mi-traspasos.pdf | Para wizard MI/Traspaso: manda en **botones de consulta** (sólido `#557EFF` vs degradado) y **colores de badges/etiquetas** (success=verde, **NO cian**). Consultar cuando la tarea toque estos elementos. |
 
 ## Reglas no negociables
 
@@ -79,7 +80,7 @@ Aplicar estas reglas como compuertas bloqueantes.
 |---|---|
 | App interna | Fondo azul claro, **dock inferior flotante**, topbar derecha, título en tarjeta blanca y contenido modular en cards. |
 | Autenticación | Pantalla partida con panel visual izquierdo y formulario derecho en tarjeta clara. |
-| Botones | CTA primario en pastilla degradada `#557EFF → #00DBD5`; cierre en `#00DBD5 → #8CC63F`; «Anterior» en navy; cancelar/error en naranja-rojo. |
+| Botones | CTA primario (avance/cierre) en pastilla degradada `#557EFF → #00DBD5`; cierre final en `#00DBD5 → #8CC63F`; «Anterior» en navy; cancelar/error en naranja-rojo. **Consulta** (Consultar RUNT/RUES, Buscar): `#557EFF` **sólido SIN degradado** + clase `bg-[#557EFF]` (PDF 20 ago). |
 | Tablas | `<table>` semántica, cabecera `#DFE5ED`, filas cómodas, badges tintados, progreso y acciones con iconos lineales. |
 | Wizards | Stepper horizontal con pasos circulares numerados y colores por estado. |
 | Modales | Blur de fondo, overlay azulado, contenedor claro, radio amplio, X superior, CTA degradado, `role="dialog"` y focus trap. |
@@ -116,6 +117,8 @@ Corregir antes de entregar si aparece alguno de estos:
 - Modal sin `role="dialog"` y focus trap
 - Grilla de `div` sustituyendo una tabla de datos
 - Badge sólido con texto blanco
+- Badge `success` con tint cian (`rgba(0,219,213,…)`): incorrecto — success = verde tintado (`#F3FBE8`/`#4F7A12`), el cian es acento tecnológico (PDF 20 ago)
+- Botón Consultar/Buscar con degradado: incorrecto — consulta = `#557EFF` sólido; el degradado es solo para CTA de avance/cierre (PDF 20 ago)
 - Iconografía de otra familia
 - Eliminación de tarjetas título
 - Reordenamiento del wizard sin HU que lo respalde

@@ -46,6 +46,8 @@ public static class AttachmentRules
         "rtm", "paz_salvo", "cedulas", "cert_tradicion",
         // Prenda / gravamen (IT-3, Feature #10585): un DocTipo por decisión que requiere soporte.
         "prenda_solicitud", "prenda_registro", "prenda_levantamiento",
+        // Trámites simultáneos / transformaciones (prototipo Lovable DocSlot + RF33 carrocería).
+        "soporte_cambio_color", "soporte_conversion_combustible", "factura_carroceria",
         // HU #10604 (R19) / #10697 — paz y salvo RNMC. RNMC ya NO bloquea el envío al OT (la medida
         // correctiva es informativa): este adjunto queda como OPCIONAL informativo, no como requisito.
         "paz_salvo_rnmc",

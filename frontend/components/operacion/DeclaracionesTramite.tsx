@@ -9,10 +9,10 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
-import { WizardCardHeader } from './wizard-atoms';
+import { WizardCardHeader, WizardFieldToggle } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
-import { WIZARD_INPUT } from './wizard-field-styles';
+import { WIZARD_BTN, WIZARD_BTN_SOLID, WIZARD_INPUT, WIZARD_SELECT } from './wizard-field-styles';
 
 /** El proveedor RUES respondió y no existe empresa con ese NIT — distinto del fallo transitorio 503. */
 const RUES_NO_ENCONTRADO =
@@ -313,7 +313,7 @@ export function DeclaracionesTramite({
                   value={tipoServicioCode}
                   onChange={(e) => void handleTipoServicioChange(e.target.value)}
                   disabled={readOnly || saving}
-                  className={`${inputClass} disabled:opacity-60`}
+                  className={`${WIZARD_SELECT} disabled:opacity-60`}
                 >
                   <option value="">Selecciona…</option>
                   {tiposServicio.map((t) => (
@@ -355,8 +355,8 @@ export function DeclaracionesTramite({
                           type="button"
                           onClick={() => void handleConsultarRues()}
                           disabled={ruesLoading || !empresaVinculadoraNit.trim()}
-                          className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                          className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-1.5 bg-[#557EFF] text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
+                          style={{ background: WIZARD_BTN_SOLID }}
                           aria-label="Buscar empresa en RUES"
                         >
                           <Search className="h-3.5 w-3.5" aria-hidden="true" />
@@ -431,8 +431,8 @@ export function DeclaracionesTramite({
               <button
                 type="button"
                 onClick={() => void handleConsultarRues()}
-                className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                className="shrink-0 rounded-xl bg-[#557EFF] px-4 py-2 text-xs font-semibold text-white"
+                style={{ background: WIZARD_BTN_SOLID }}
                 aria-label="Reintentar consulta al RUES"
               >
                 Reintentar
@@ -460,10 +460,7 @@ export function DeclaracionesTramite({
         />
       )}
 
-      {/* Leasing: condición del vehículo (solo traspaso), no un trámite simultáneo — no comparte
-          el selector de arriba. Antes vivía como casilla suelta dentro del mismo acordeón que las
-          transformaciones; con tarjeta propia queda con su propio encabezado real, independiente
-          de la sección vecina. */}
+      {/* Leasing (solo traspaso): toggle del prototipo Lovable — «No aplica» / «Sí, en leasing». */}
       {!esMatricula && (
         <div className={noCardWrapper ? 'space-y-2' : 'space-y-2 rounded-2xl border bg-white p-4 dark:bg-[#162744]'}>
           {!noCardWrapper && (
@@ -472,25 +469,18 @@ export function DeclaracionesTramite({
               subtitle="Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente."
             />
           )}
-          <label className="flex items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={esLeasing}
-              onChange={(e) =>
-                void persistir([
-                  { fieldKey: 'es_leasing', valueText: e.target.checked ? 'true' : 'false' },
-                ])
-              }
-              disabled={readOnly || saving}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-            />
-            <span className="text-xs">
-              <span className="font-semibold">Vehículo en leasing</span>
-              <span className="mt-0.5 block opacity-70">
-                Exige contrato de leasing y declaración de la arrendadora.
-              </span>
-            </span>
-          </label>
+          <WizardFieldToggle
+            id="condicion-leasing"
+            label="Vehículo en leasing"
+            description="Exige contrato de leasing y declaración de la arrendadora."
+            checked={esLeasing}
+            labelOn="Sí, en leasing"
+            labelOff="No aplica"
+            disabled={readOnly || saving}
+            onChange={(next) =>
+              void persistir([{ fieldKey: 'es_leasing', valueText: next ? 'true' : 'false' }])
+            }
+          />
         </div>
       )}
     </div>

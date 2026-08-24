@@ -162,7 +162,7 @@ describe('ActorsForm — validación cliente', () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     await user.type(screen.getByLabelText(/Número de documento/), '123');
-    await user.type(screen.getByLabelText(/Nombre completo/), 'Juan Perez');
+    await user.type(screen.getByLabelText(/Nombres y apellidos/), 'Juan Perez');
     await user.type(screen.getByLabelText(/Correo electrónico/), 'no-es-email');
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
@@ -179,7 +179,7 @@ describe('ActorsForm — validación cliente', () => {
 
     await screen.findByRole('group', { name: 'Vendedor' });
     const numeros = screen.getAllByLabelText(/Número de documento/);
-    const nombres = screen.getAllByLabelText(/Nombre completo/);
+    const nombres = screen.getAllByLabelText(/Nombres y apellidos/);
     const emails = screen.getAllByLabelText(/Correo electrónico/);
 
     await user.type(numeros[0], '111');
@@ -212,7 +212,7 @@ describe('ActorsForm — validación cliente', () => {
 
     await screen.findByRole('group', { name: 'Vendedor' });
     const numeros = screen.getAllByLabelText(/Número de documento/);
-    const nombres = screen.getAllByLabelText(/Nombre completo/);
+    const nombres = screen.getAllByLabelText(/Nombres y apellidos/);
     const emails = screen.getAllByLabelText(/Correo electrónico/);
 
     // vendedor (índice 0)
@@ -280,7 +280,7 @@ describe('ActorsForm — submit', () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     await user.type(await screen.findByLabelText(/Número de documento/), '12345');
-    await user.type(screen.getByLabelText(/Nombre completo/), 'Juan Perez');
+    await user.type(screen.getByLabelText(/Nombres y apellidos/), 'Juan Perez');
     await user.type(screen.getByLabelText(/Correo electrónico/), 'juan@example.com');
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
@@ -299,7 +299,7 @@ describe('ActorsForm — submit', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     expect(await screen.findByText(/No se pudo consultar RUNT/i)).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/Nombre completo/), 'Juan Perez');
+    await user.type(screen.getByLabelText(/Nombres y apellidos/), 'Juan Perez');
     await user.type(screen.getByLabelText(/Correo electrónico/), 'juan@example.com');
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
@@ -310,27 +310,23 @@ describe('ActorsForm — submit', () => {
 });
 
 describe('ActorsForm — tipo de persona (HU #10543)', () => {
-  it('por defecto persona natural: selector activo y nota de cédula automática', async () => {
+  it('por defecto persona natural: selector activo', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     expect(
-      await screen.findByRole('button', { name: 'Persona natural' }),
+      await screen.findByRole('button', { name: 'Persona Natural' }),
     ).toHaveAttribute('aria-pressed', 'true');
     expect(
-      screen.getByRole('button', { name: 'Persona jurídica' }),
+      screen.getByRole('button', { name: 'Persona Jurídica' }),
     ).toHaveAttribute('aria-pressed', 'false');
-    // Persona natural: la cédula se incorpora desde la validación de identidad.
-    expect(screen.getByText(/no se carga manualmente/)).toBeInTheDocument();
   });
 
-  it('al elegir persona jurídica: oculta la nota y guarda personType=juridical', async () => {
+  it('al elegir persona jurídica: guarda personType=juridical', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     await user.click(
-      await screen.findByRole('button', { name: 'Persona jurídica' }),
+      await screen.findByRole('button', { name: 'Persona Jurídica' }),
     );
-    expect(screen.queryByText(/no se carga manualmente/)).toBeNull();
-
     // El bloque de representante legal añade su propio «Número de documento»: se apunta al del actor
     // por su placeholder para que la query no sea ambigua.
     await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900123');
@@ -341,7 +337,7 @@ describe('ActorsForm — tipo de persona (HU #10543)', () => {
       document.querySelector('#comprador-email') as HTMLInputElement,
       'empresa@example.com',
     );
-    // Persona jurídica exige el representante legal (sujeto de identidad, HU #10688).
+    // Persona Jurídica exige el representante legal (sujeto de identidad, HU #10688).
     await user.type(
       document.getElementById('0-rl-numeroDoc') as HTMLInputElement,
       '1020304050',
@@ -479,8 +475,8 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
-    expect(screen.getByText('JUAN CARLOS')).toBeInTheDocument();
-    expect(screen.getByText('PEREZ GOMEZ')).toBeInTheDocument();
+    expect(screen.getByLabelText('Nombres')).toHaveValue('JUAN CARLOS');
+    expect(screen.getByLabelText('Apellidos')).toHaveValue('PEREZ GOMEZ');
     // Conductor status
     expect(screen.getByText('ACTIVO')).toBeInTheDocument();
     // Card B multas negativa
@@ -517,8 +513,8 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
-    expect(screen.getByText('JOSE GABRIEL JAIME')).toBeInTheDocument();
-    expect(screen.getByText('ACOSTA MADRID')).toBeInTheDocument();
+    expect(screen.getByLabelText('Nombres')).toHaveValue('JOSE GABRIEL JAIME');
+    expect(screen.getByLabelText('Apellidos')).toHaveValue('ACOSTA MADRID');
     expect(screen.getByDisplayValue('JOSE GABRIEL JAIME ACOSTA MADRID')).toBeInTheDocument();
   });
 
@@ -544,7 +540,7 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     await user.type(await screen.findByLabelText('Número de documento'), '9999999');
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
-    expect(await screen.findByText(/ALERTA: Comparendos\/Multas pendientes/)).toBeInTheDocument();
+    expect(await screen.findByText(/ALERTA: Comparendos \/ Multas Pendientes/)).toBeInTheDocument();
   });
 
   it('lista el detalle de los comparendos bajo la alerta cuando el SIMIT lo trae', async () => {
@@ -579,7 +575,7 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     await user.type(await screen.findByLabelText('Número de documento'), '1193552679');
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
-    expect(await screen.findByText(/ALERTA: Comparendos\/Multas pendientes/)).toBeInTheDocument();
+    expect(await screen.findByText(/ALERTA: Comparendos \/ Multas Pendientes/)).toBeInTheDocument();
     const detalle = screen.getByRole('list', { name: 'Detalle de comparendos' });
     expect(detalle).toHaveTextContent('Comparendo 25612001000012662173');
     expect(detalle).toHaveTextContent('Semáforo en rojo');
@@ -644,7 +640,7 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     );
 
     expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
-    expect(screen.getByText(/ALERTA: Comparendos\/Multas pendientes/i)).toBeInTheDocument();
+    expect(screen.getByText(/ALERTA: Comparendos \/ Multas Pendientes/i)).toBeInTheDocument();
     expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
   });
 });

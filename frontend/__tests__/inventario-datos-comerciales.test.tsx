@@ -251,17 +251,18 @@ describe('CommercialForm — inventario: los cinco datos de la operación', () =
     await renderForm();
 
     // El bloque se presenta con su propio título cuando el contenedor no lo pinta.
-    expect(screen.getByRole('heading', { name: 'Datos comerciales' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Datos Comerciales' })).toBeInTheDocument();
 
     // 1 · Lo que se paga por el vehículo.
     expect(screen.getByLabelText(/^Valor de venta/)).toBeInTheDocument();
     // 2 · Por qué cambia de dueño (determina el tratamiento del trámite).
     expect(screen.getByLabelText(/^Causal/)).toBeInTheDocument();
     // 3 y 4 · Liquidación: tasa de impuesto y derechos del organismo.
-    expect(screen.getByLabelText(/^Tasa de impuesto/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Derechos')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Tasa de Impuesto/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Derechos/)).toBeInTheDocument();
     // 5 · Cómo se pagó.
     expect(screen.getByLabelText('Método de pago')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Condiciones Comerciales' })).toBeInTheDocument();
   });
 
   it('la causal ofrece el catálogo completo de motivos del traspaso', async () => {
@@ -315,9 +316,9 @@ describe('CommercialForm — inventario: los cinco datos de la operación', () =
 
     await user.type(screen.getByLabelText(/^Valor de venta/), '30000000');
     await user.selectOptions(screen.getByLabelText(/^Causal/), 'DONACION');
-    await user.type(screen.getByLabelText(/^Tasa de impuesto/), '1.5');
-    await user.type(screen.getByLabelText('Derechos'), '120000');
-    await user.type(screen.getByLabelText('Método de pago'), 'Transferencia');
+    await user.type(screen.getByLabelText(/^Tasa de Impuesto/), '1.5');
+    await user.type(screen.getByLabelText(/^Derechos/), '120000');
+    await user.selectOptions(screen.getByLabelText('Método de pago'), 'Transferencia bancaria');
 
     // Sin botón propio: el guardado cuelga del "Guardar y continuar" de la shell.
     expect(screen.queryByRole('button', { name: 'Guardar datos comerciales' })).toBeNull();
@@ -333,7 +334,7 @@ describe('CommercialForm — inventario: los cinco datos de la operación', () =
         causal: 'DONACION',
         tasaImpuesto: 1.5,
         derechos: 120000,
-        metodoPago: 'Transferencia',
+        metodoPago: 'Transferencia bancaria',
       }),
     );
   });
@@ -384,10 +385,10 @@ describe('CommercialForm — inventario: tarjeta de avalúo comercial sugerido',
     await renderForm();
 
     const avaluo = await screen.findByRole('region', { name: 'Avalúo comercial sugerido' });
-    expect(within(avaluo).getByRole('heading', { name: 'Avalúo comercial' })).toBeInTheDocument();
+    expect(within(avaluo).getByRole('heading', { name: 'Avalúo Comercial' })).toBeInTheDocument();
 
-    // Valor sugerido y de qué fuente sale.
-    expect(within(avaluo).getByText('Sugerido')).toBeInTheDocument();
+    // Valor sugerido y de qué fuente sale (caja «Sugerido Fasecolda» del prototipo).
+    expect(within(avaluo).getAllByText(/Sugerido/i).length).toBeGreaterThan(0);
     expect(within(avaluo).getAllByText(/48\.000\.000/).length).toBeGreaterThan(0);
 
     // Las tres fuentes siguen listadas aunque alguna no traiga dato.
@@ -408,7 +409,7 @@ describe('CommercialForm — inventario: tarjeta de avalúo comercial sugerido',
 
     expect(screen.getByLabelText(/^Valor de venta/)).toHaveValue('48.000.000');
     // Aceptado: ya no hay nada que elegir, la tarjeta pasa a informativa.
-    expect(await screen.findByText('Valor sugerido aceptado.')).toBeInTheDocument();
+    expect(await screen.findByText('Valor sugerido aceptado')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Aceptar valor sugerido' })).toBeNull();
   });
 
@@ -458,8 +459,8 @@ describe('Paridad entre modalidades — los datos comerciales dentro de Requisit
     expect(await screen.findByRole('form', { name: 'Datos comerciales del trámite' })).toBeInTheDocument();
     expect(screen.getByLabelText(/^Valor de venta/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Causal/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Tasa de impuesto/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Derechos')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Tasa de Impuesto/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Derechos/)).toBeInTheDocument();
     expect(screen.getByLabelText('Método de pago')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Avalúo comercial sugerido' })).toBeInTheDocument();
   });

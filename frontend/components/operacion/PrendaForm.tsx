@@ -5,13 +5,13 @@ import { ChevronDown } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly } from '@/lib/format/currency';
 import { formatDateOnly } from '@/lib/format/date-only';
-import { InlineAlert } from '@/components/atom/InlineAlert';
+import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PrendaDocumentUpload } from './PrendaDocumentUpload';
 import { prendaDocTipoFor } from './prenda-document-tipos';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
@@ -189,6 +189,11 @@ function hasRuntDetail(s: RuntPrendaSummary): boolean {
 
 function hasRuntAcreedorDetail(s: RuntPrendaSummary): boolean {
   return Boolean(s.prendario || s.nombreAcreedor || s.items.length > 0);
+}
+
+/** Hay detalle de acreedor en ítems: el resumen no debe repetir el mismo nombre. */
+function itemsHaveAcreedorDetail(s: RuntPrendaSummary): boolean {
+  return s.items.some((i) => Boolean(i.acreedor?.trim() || i.documentoAcreedor?.trim()));
 }
 
 /** Acreedor/NIT sugeridos por la consulta RUNT (primer ítem con dato, o campos resumen). */
@@ -406,12 +411,18 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               'El vehículo tiene gravámenes o prendas según el RUNT. Revisa y declara la decisión correspondiente.'}
           </InlineAlert>
 
-          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(245,158,11,0.35)' }}>
+          <div
+            className="overflow-hidden rounded-xl border"
+            style={{ borderColor: INLINE_ALERT_TONES.warning.border }}
+          >
             <button
               type="button"
               onClick={() => setRuntOpen((o) => !o)}
               className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-xs font-semibold"
-              style={{ background: 'rgba(245,158,11,0.08)', color: 'var(--badge-warning-fg)' }}
+              style={{
+                background: INLINE_ALERT_TONES.warning.background,
+                color: INLINE_ALERT_TONES.warning.color,
+              }}
               aria-expanded={runtOpen}
               aria-controls={runtDetailId}
             >
@@ -425,17 +436,23 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               <div
                 id={runtDetailId}
                 className="space-y-3 border-t px-3 py-3 text-xs"
-                style={{ borderColor: 'rgba(245,158,11,0.25)' }}
+                style={{ borderColor: INLINE_ALERT_TONES.warning.border }}
                 role="region"
                 aria-label="Detalle de prenda reportado por el RUNT"
               >
                 {showDetailRows ? (
                   <>
+                    {/* Flags sí/no: info única. Acreedor/prendario del resumen se omiten si ya
+                        vienen en los ítems (evita SUZUKI… tres veces: resumen + PRENDA 1 + form). */}
                     <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <RuntField label="Tiene gravámenes" value={summary.tieneGravamenes} />
                       <RuntField label="Tiene prendas" value={summary.tienePrendas} />
-                      <RuntField label="Prendario" value={summary.prendario} />
-                      <RuntField label="Acreedor (RUNT)" value={summary.nombreAcreedor} />
+                      {!itemsHaveAcreedorDetail(summary) && (
+                        <>
+                          <RuntField label="Prendario" value={summary.prendario} />
+                          <RuntField label="Acreedor (RUNT)" value={summary.nombreAcreedor} />
+                        </>
+                      )}
                     </dl>
 
                     {summary.items.length > 0 && (
@@ -496,8 +513,12 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
       {error && (
         <div
-          className="rounded-xl p-3 text-xs border mb-3 flex items-center justify-between gap-3"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          className="mb-3 flex items-center justify-between gap-3 rounded-xl border p-3 text-xs"
+          style={{
+            borderColor: INLINE_ALERT_TONES.error.border,
+            background: INLINE_ALERT_TONES.error.background,
+            color: INLINE_ALERT_TONES.error.color,
+          }}
           role="alert"
           aria-live="polite"
         >
@@ -531,7 +552,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   value={decision}
                   onChange={(e) => handleDecisionChange(e.target.value as PrendaDecision | '')}
                   disabled={readOnly}
-                  className={`${INPUT_BASE} disabled:opacity-60`}
+                  className={`${WIZARD_SELECT} disabled:opacity-60`}
                 >
                   <option value="">Seleccionar…</option>
                   {decisions.map((d) => (
@@ -576,6 +597,11 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                     />
                   </div>
                 </>
+              )}
+              {muestraAcreedor && runtHasGravamen && !acreedorReadOnly && (
+                <p className="md:col-span-3 -mt-2 text-xs opacity-70">
+                  Acreedor y documento se precargaron desde el RUNT; puedes editarlos si aplica.
+                </p>
               )}
               {acreedorReadOnly && (
                 <p className="md:col-span-3 text-xs opacity-70 -mt-2">

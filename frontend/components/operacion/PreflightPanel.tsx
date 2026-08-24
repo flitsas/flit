@@ -12,6 +12,7 @@ import type {
   PreflightCheckStatus,
   PreflightSnapshot,
 } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_BTN, WIZARD_BTN_SOLID, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 interface Props {
   snapshot: PreflightSnapshot | null;
@@ -84,18 +85,9 @@ export function statusPillWord(status: PreflightCheckStatus): string {
   }
 }
 
-/** Detalle del unknown: alude a que no existe / no se encontró en la fuente. */
-function unknownPillDetail(message: string, sourceLabelText: string): string {
-  if (/sin informaci[oó]n/i.test(message)) return 'No existe en la fuente';
-  if (/sin documento/i.test(message)) return 'No existe';
-  if (message && message.length <= 42) return message;
-  if (sourceLabelText) return `Sin dato en ${sourceLabelText}`;
-  return 'No encontrado';
-}
-
 /**
- * Texto de la pastilla: `OK (RUNT)` / `NO ENCONTRADO (No existe en la fuente)`.
- * Conserva status + fuente o mensaje (misma información, formato compacto).
+ * Texto de la pastilla — formato del prototipo Lovable / PDF:
+ * `OK - RUNT` · `ADVERTENCIA - RUNT` · `NO ENCONTRADO` (detalle debajo del título).
  */
 export function checkPillLabel(check: {
   status: PreflightCheckStatus;
@@ -105,22 +97,34 @@ export function checkPillLabel(check: {
   const word = statusPillWord(check.status);
   const src = sourceLabel(check.source);
   const msg = check.message?.trim() ?? '';
-  if (check.status === 'unknown') {
-    return `${word} (${unknownPillDetail(msg, src)})`;
-  }
-  if (check.status === 'ok' && src) return `${word} (${src})`;
-  // Mensajes cortos van en la pastilla; los largos quedan debajo.
-  if (msg && msg.length <= 42 && check.status !== 'ok') return `${word} (${msg})`;
-  if (src) return `${word} (${src})`;
-  if (msg) {
-    const short = msg.length > 42 ? `${msg.slice(0, 39)}…` : msg;
-    return `${word} (${short})`;
-  }
+  // Prototipo: OK / ADVERTENCIA llevan la fuente con guion; el detalle no va en la pastilla.
+  if (check.status === 'ok') return src ? `${word} - ${src}` : word;
+  if (check.status === 'warn') return src ? `${word} - ${src}` : word;
+  if (check.status === 'unknown') return word;
+  if (msg && msg.length <= 42) return `${word} - ${msg}`;
+  if (src) return `${word} - ${src}`;
   return word;
 }
 
 function checkPillTone(check: { status: PreflightCheckStatus; message?: string | null }): StatusTone {
   return STATUS_PILL_TONE[check.status];
+}
+
+/**
+ * Pastilla OK del diagnóstico: relleno verde de marca + texto blanco, como el prototipo
+ * (`OK - RUNT`). El resto de tonos siguen con `StatusBadge` tintado (contraste AA).
+ */
+function DiagnosticOkPill({ label, ariaLabel }: { label: string; ariaLabel: string }) {
+  return (
+    <span
+      role="status"
+      aria-label={ariaLabel}
+      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white"
+      style={{ background: '#8CC63F' }}
+    >
+      {label}
+    </span>
+  );
 }
 
 
@@ -272,8 +276,8 @@ export function PreflightPanel({
           porque el disparo de la consulta está arriba, junto al identificador del vehículo. */}
       {!bare && (
         <WizardCardHeader
-          title="Pre-vuelo de requisitos"
-          subtitle="RUNT · SIMIT · RNMC — consulta antes de radicar el trámite"
+          title="Diagnóstico de Requisitos Previos"
+          subtitle="Validación automática en fuentes RUNT, SIMIT y RNMC antes de radicar."
           action={
             <div className="flex items-center gap-2">
               {ov && <StatusBadge label={ov.label} tone={ov.tone} />}
@@ -282,8 +286,8 @@ export function PreflightPanel({
                   type="button"
                   onClick={() => onRun(hasResult)}
                   disabled={loading}
-                  className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} flex items-center justify-center gap-2 bg-[#557EFF] text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
+                  style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                   aria-label={hasResult ? 'Actualizar consulta' : 'Consultar RUNT y SIMIT'}
                 >
                   {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
@@ -292,6 +296,13 @@ export function PreflightPanel({
             </div>
           }
         />
+      )}
+
+      {/* Embebido en acordeón: el título lo pone el acordeón; aquí solo el subtítulo del prototipo. */}
+      {bare && (
+        <p className="mb-4 text-[13px] leading-snug opacity-70">
+          Validación automática en fuentes RUNT, SIMIT y RNMC antes de radicar.
+        </p>
       )}
 
       {!hasResult && !loading && !esMigrado && (
@@ -347,37 +358,42 @@ export function PreflightPanel({
 
       {hasResult && (
         <ul
-          className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
-          aria-label="Resultados del pre-vuelo"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          aria-label="Diagnóstico de requisitos previos"
         >
           {visibleChecks.map((c) => {
             const pill = checkPillLabel(c);
             const pillTone = checkPillTone(c);
             const msg = c.message?.trim() ?? '';
-            // Si el mensaje ya está en la pastilla, no lo repetimos debajo.
-            const msgInPill =
-              !!msg &&
-              (pill.includes(`(${msg}`) || (msg.length > 42 && pill.includes('…')));
-            const showMessage = !!msg && !msgInPill;
+            const showMessage = !!msg && c.status !== 'ok';
+            const aria = `${c.label}: ${pill}`;
             return (
               <li
                 key={c.key}
-                className="flex flex-col gap-1.5 rounded-2xl border bg-white px-3 py-2.5 dark:bg-[#162744]"
+                className="flex flex-col gap-2 rounded-xl border bg-white p-4 shadow-sm dark:bg-[#162744]"
+                style={{ borderColor: '#E2E8F0' }}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 text-xs font-semibold leading-snug">
+                <div className="flex items-start justify-between gap-2">
+                  <span
+                    className="min-w-0 text-[13px] font-semibold leading-tight"
+                    style={{ color: '#162744' }}
+                  >
                     {c.label}
                     {checkRoleSuffix(c.key)}
                   </span>
-                  <StatusBadge
-                    label={pill}
-                    tone={pillTone}
-                    ariaLabel={`${c.label}: ${pill}`}
-                    className="shrink-0 uppercase tracking-wide"
-                  />
+                  {c.status === 'ok' ? (
+                    <DiagnosticOkPill label={pill} ariaLabel={aria} />
+                  ) : (
+                    <StatusBadge
+                      label={pill}
+                      tone={pillTone}
+                      ariaLabel={aria}
+                      className="shrink-0 uppercase tracking-wide"
+                    />
+                  )}
                 </div>
                 {showMessage && (
-                  <p className="text-xs opacity-70">{c.message}</p>
+                  <p className="text-[11.5px] leading-snug opacity-70">{c.message}</p>
                 )}
                 {c.action && (
                   <span
@@ -409,7 +425,7 @@ export function PreflightPanel({
               type="button"
               onClick={onIniciarTraspaso}
               className="mt-2 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              style={{ background: WIZARD_CTA_GRADIENT }}
             >
               Iniciar traspaso de este vehículo →
             </button>
@@ -457,9 +473,9 @@ export function PreflightPanel({
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs opacity-70">
-            Puedes continuar con el trámite; el organismo de tránsito verá estas
-            observaciones.
+          <p className="mt-2 text-xs font-semibold" style={{ color: '#162744' }}>
+            Puedes continuar con la gestión del trámite. El organismo de tránsito correspondiente
+            revisará estas observaciones durante el proceso.
           </p>
         </div>
       )}

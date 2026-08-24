@@ -105,7 +105,7 @@ function renderNuevo() {
 
 /** Deja el paso 1 con la consulta RUNT ya resuelta (la tarjeta de radicación aparece con ella). */
 async function consultarVehiculo(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+  await user.type(await screen.findByLabelText(/Ingrese el VIN o la placa/i), VIN_VALIDO);
   await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
   await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 }
@@ -452,7 +452,7 @@ describe('Tarjeta de radicación sobre un trámite ya creado', () => {
 describe('Velo de espera del paso 1', () => {
   it('no aparece al abrir el paso, aunque el pre-vuelo se esté recargando solo', async () => {
     renderNuevo();
-    await screen.findByLabelText('Número VIN');
+    await screen.findByLabelText(/Ingrese el VIN o la placa/i);
     expect(screen.queryByText(/Consultando información en el RUNT/)).toBeNull();
   });
 
@@ -465,7 +465,7 @@ describe('Velo de espera del paso 1', () => {
 
     const user = userEvent.setup();
     renderNuevo();
-    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await user.type(await screen.findByLabelText(/Ingrese el VIN o la placa/i), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     expect(await screen.findByText(/Consultando información en el RUNT/)).toBeInTheDocument();

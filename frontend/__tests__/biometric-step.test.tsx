@@ -328,28 +328,30 @@ describe('BiometricStep — resultado verificado', () => {
     expect(
       await screen.findByText('Aprobado — 95/100'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Ana Comprador/)).toBeInTheDocument();
+    // El nombre aparece tanto en la columna de identidad como en el canvas de firma.
+    expect(screen.getAllByText(/Ana Comprador/).length).toBeGreaterThan(0);
     // No debe ofrecer botón de iniciar/simular cuando ya hay validación aprobada.
     expect(
       screen.queryByRole('button', { name: /validación de identidad/i }),
     ).not.toBeInTheDocument();
   });
 
-  it('al actualizar re-consulta y dispara onRefresh', async () => {
-    const onRefresh = vi.fn();
-    const user = userEvent.setup();
+  it('el botón global "Actualizar" ya no existe — la actualización es automática (polling)', async () => {
     render(
       <BiometricStep
         instanceId={INSTANCE}
         modalidad="matricula_inicial"
-        onRefresh={onRefresh}
+        onRefresh={vi.fn()}
       />,
     );
     await screen.findByRole('group', { name: 'Biométrica Comprador' });
-    await user.click(screen.getByRole('button', { name: 'Actualizar estado biométrico' }));
-    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
-    // 1 carga inicial + 1 al actualizar.
-    expect(mocks.getBiometricState.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // El botón "Actualizar estado biométrico" fue removido del header; la actualización
+    // ocurre por polling automático o por el botón de reconciliación por tarjeta.
+    expect(
+      screen.queryByRole('button', { name: 'Actualizar estado biométrico' }),
+    ).not.toBeInTheDocument();
+    // La carga inicial sigue consultando el estado.
+    expect(mocks.getBiometricState.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -486,8 +488,8 @@ describe('BiometricStep — estados "en vuelo" que antes caían al botón de arr
     expect(screen.queryByRole('button', { name: 'Simular validación de identidad' })).not.toBeInTheDocument();
     // El reenvío es una acción secundaria y explícita, nunca el botón primario del arranque.
     expect(screen.getByRole('button', { name: 'Reenviar validación' })).toBeInTheDocument();
-    // Chip de la cabecera refleja el estado real.
-    expect(screen.getByText('Enviado')).toBeInTheDocument();
+    // El estado aparece en el badge de cabecera y en el badge "Estado Biométrico".
+    expect(screen.getAllByText('Enviado').length).toBeGreaterThan(0);
   });
 
   it('pendiente_envio: informa que está en cola y NO ofrece "Validar identidad"', async () => {
@@ -500,7 +502,7 @@ describe('BiometricStep — estados "en vuelo" que antes caían al botón de arr
     expect(screen.queryByRole('button', { name: 'Validar identidad' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Simular validación de identidad' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reenviar validación' })).toBeInTheDocument();
-    expect(screen.getByText('Pendiente de envío')).toBeInTheDocument();
+    expect(screen.getAllByText('Pendiente de envío').length).toBeGreaterThan(0);
   });
 
   it('en_proceso SIN captureUrl: informa que sigue en proceso y NO ofrece "Validar identidad"', async () => {
@@ -527,7 +529,7 @@ describe('BiometricStep — estados "en vuelo" que antes caían al botón de arr
     expect(screen.queryByRole('button', { name: 'Validar identidad' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Simular validación de identidad' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reintentar envío' })).toBeInTheDocument();
-    expect(screen.getByText('Error de envío')).toBeInTheDocument();
+    expect(screen.getAllByText('Error de envío').length).toBeGreaterThan(0);
   });
 });
 

@@ -109,30 +109,36 @@ export function WizardCardHeader({
  */
 export function WizardSegmented<T extends string>({
   label,
+  ariaLabel,
   value,
   options,
   onChange,
   disabled,
   className = '',
 }: {
-  /** Rótulo visible sobre la pista; también nombra el grupo para el lector de pantalla. */
-  label: string;
+  /**
+   * Rótulo visible sobre la pista. Si se omite, el grupo solo se nombra para
+   * lectores de pantalla vía `ariaLabel` (o un fallback genérico).
+   */
+  label?: string;
+  /** Nombre accesible del grupo cuando no hay rótulo visible. */
+  ariaLabel?: string;
   value: T;
   options: ReadonlyArray<{ value: T; label: string; disabled?: boolean }>;
   onChange: (value: T) => void;
-  /** Deshabilita el control completo (solo lectura del asistente). */
   disabled?: boolean;
   className?: string;
 }) {
+  const groupName = ariaLabel ?? label ?? 'Opciones';
   return (
     <div className={className}>
-      <span className="mb-1.5 block text-xs font-semibold">{label}</span>
+      {label ? <span className="mb-1.5 block text-xs font-semibold">{label}</span> : null}
       {/* La pista va en el azul de fondo de la app (`background.app`) y no en un gris frío: sobre la
           tarjeta blanca hunde el control lo justo, y el gris que trae la propuesta para esto es de
           la escala `slate-*` de Tailwind, que no es paleta FLIT. */}
       <div
         role="group"
-        aria-label={label}
+        aria-label={groupName}
         className="inline-flex gap-0.5 rounded-xl border p-1"
         style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
       >
@@ -254,6 +260,71 @@ export function WizardSelectCards<T extends string>({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Toggle de campo del wizard (prototipo Lovable Traspaso · Condiciones):
+ * caja a ancho completo con el estado a la izquierda («No aplica» / «Sí, en leasing»)
+ * y el switch a la derecha. Colores de marca FLIT (`#557EFF` encendido).
+ */
+export function WizardFieldToggle({
+  id,
+  label,
+  description,
+  checked,
+  onChange,
+  disabled = false,
+  labelOn = 'Activado',
+  labelOff = 'No aplica',
+}: {
+  id: string;
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  labelOn?: string;
+  labelOff?: string;
+}) {
+  const hintId = description ? `${id}-hint` : undefined;
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-[13px] font-medium text-[#162744] dark:text-white">
+        {label}
+      </label>
+      <button
+        type="button"
+        id={id}
+        role="switch"
+        aria-checked={checked}
+        aria-describedby={hintId}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className="flex h-[42px] w-full items-center justify-between rounded-xl border bg-white px-3 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]"
+        style={{
+          borderColor: checked ? '#557EFF' : '#DFE5ED',
+          color: checked ? '#557EFF' : '#162744',
+        }}
+      >
+        <span>{checked ? labelOn : labelOff}</span>
+        <span
+          aria-hidden="true"
+          className="relative inline-block h-5 w-9 shrink-0 rounded-full transition"
+          style={{ background: checked ? '#557EFF' : '#CBD5E1' }}
+        >
+          <span
+            className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+            style={{ left: checked ? 18 : 2 }}
+          />
+        </span>
+      </button>
+      {description ? (
+        <p id={hintId} className="text-[12px] text-[#59677D] dark:text-white/60">
+          {description}
+        </p>
+      ) : null}
     </div>
   );
 }

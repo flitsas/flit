@@ -952,9 +952,9 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
 
-    await user.type(screen.getByLabelText(/^Placa$/), 'ABC123');
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'ABC123');
     await user.type(
-      screen.getByLabelText(/Número documento propietario/),
+      screen.getByLabelText(/Número documento del propietario/),
       '1020304050',
     );
 
@@ -1532,14 +1532,14 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
     await user.click(consultaTab);
     // Espera a que el form de placa (traspaso) se pinte.
-    await screen.findByLabelText('Placa');
+    await screen.findByLabelText('Placa del vehículo');
   }
 
   it('con Kyverum RUNT (default) NO pide el tipo, pero sí placa y número', async () => {
     await abrirPasoConsulta();
 
-    expect(screen.getByLabelText('Placa')).toBeInTheDocument();
-    expect(screen.getByLabelText('Número documento propietario')).toBeInTheDocument();
+    expect(screen.getByLabelText('Placa del vehículo')).toBeInTheDocument();
+    expect(screen.getByLabelText('Número documento del propietario')).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.queryByLabelText('Tipo documento propietario')).not.toBeInTheDocument(),
     );
@@ -1567,10 +1567,10 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
     // Instancia existente: reanuda en la frontera, así que hay que abrir el paso de consulta.
     await user.click(await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ }));
-    await screen.findByLabelText('Placa');
+    await screen.findByLabelText('Placa del vehículo');
 
-    await user.type(screen.getByLabelText(/^Placa$/), 'PWL160');
-    await user.type(screen.getByLabelText(/Número documento propietario/), '890903938');
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento del propietario/), '890903938');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
 
     await waitFor(() =>
