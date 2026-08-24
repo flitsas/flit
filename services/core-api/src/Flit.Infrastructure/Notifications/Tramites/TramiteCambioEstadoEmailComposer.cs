@@ -267,8 +267,8 @@ public static class TramiteCambioEstadoEmailComposer
     }
 
     /// <summary>
-    /// Copy del trámite: si hay <see cref="TramiteCambioEstadoEmailModel.NombreTipoTramite"/> se interpola
-    /// tal cual (catálogo). Si no, se conserva el fallback histórico por <c>EsTraspaso</c>.
+    /// Copy del trámite: siempre «el trámite de …». El <c>name</c> del catálogo se interpola tal cual.
+    /// Sin nombre, fallback por <c>EsTraspaso</c>.
     /// </summary>
     private static string ProcedureNounPhrase(
         TramiteCambioEstadoEmailModel model, string placaEncoded, bool forRentingLead)
@@ -277,15 +277,19 @@ public static class TramiteCambioEstadoEmailComposer
         {
             var nombre = Enc(model.NombreTipoTramite.Trim());
             return forRentingLead
-                ? $"del {nombre} del vehículo"
-                : $"el {nombre} del vehículo con placa <strong>{placaEncoded}</strong>";
+                ? $"del trámite de {nombre} del vehículo"
+                : $"el trámite de {nombre} del vehículo con placa <strong>{placaEncoded}</strong>";
         }
 
         if (forRentingLead)
-            return model.EsTraspaso ? "del traspaso de propiedad del vehículo" : "del trámite del vehículo";
+        {
+            return model.EsTraspaso
+                ? "del trámite de traspaso de propiedad del vehículo"
+                : "del trámite del vehículo";
+        }
 
         return model.EsTraspaso
-            ? $"el traspaso de propiedad del vehículo con placa <strong>{placaEncoded}</strong>"
+            ? $"el trámite de traspaso de propiedad del vehículo con placa <strong>{placaEncoded}</strong>"
             : $"el trámite del vehículo con placa <strong>{placaEncoded}</strong>";
     }
 

@@ -101,7 +101,7 @@ describe("NotificacionesBankPanel — selector de tipo de trámite", () => {
     getNotificationSample.mockResolvedValue({
       templateId: "tramites.aprobado",
       subject: "asunto",
-      html: "<p>el Cambio de color del vehículo</p>",
+      html: "<p>el trámite de Cambio de color del vehículo</p>",
     });
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
