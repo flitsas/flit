@@ -112,8 +112,10 @@ describe("LOG QX — bandeja (HU #11788)", () => {
     await screen.findByText("TRM-2026-000271");
 
     const encabezados = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    // La primera columna es la del desplegable: no tiene rótulo visible, pero sí nombre
+    // accesible ("Detalle"), porque un `columnheader` vacío no se puede anunciar.
     expect(encabezados).toEqual([
-      "",
+      "Detalle",
       "Trámite",
       "Placa",
       "Tipo",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Cpu } from "lucide-react";
+import { Check, Clock, Cpu, Hourglass, RefreshCw, X } from "lucide-react";
 import type { LogQxHito, LogQxRadicacion } from "@/lib/api/admin-log-qx";
 import {
   codigoQx,
@@ -74,23 +74,25 @@ function Rail({
   ultima: boolean;
 }) {
   const esError = outcome !== "ok";
+  // Tonos de la paleta de estados del sistema (`lib/tramites/estados`), no colores propios de
+  // esta pantalla: el mismo verde/naranja/azul que usan los chips del resto de la consola.
   const color =
     tipo === "sondeo"
-      ? "text-[#4F74C9] border-[#4F74C9]"
+      ? "text-[#557EFF] border-[#557EFF]"
       : esError
-        ? "text-[#D3352A] border-[#D3352A]"
-        : "text-[#5FA82C] border-[#5FA82C]";
-  const icono = tipo === "sondeo" ? "⏱" : esError ? "✕" : "✓";
+        ? "text-[#C2410C] border-[#C2410C]"
+        : "text-[#15803D] border-[#15803D]";
+  const Icon = tipo === "sondeo" ? RefreshCw : esError ? X : Check;
 
   return (
     <div className="flex flex-col items-center">
       <span
         aria-hidden="true"
-        className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] bg-white text-[11px] font-bold dark:bg-[#0B0F14] ${color}`}
+        className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] bg-white dark:bg-[#0B0F14] ${color}`}
       >
-        {icono}
+        <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
       </span>
-      {!ultima && <span className="-mb-3.5 mt-0.5 w-0.5 flex-1 bg-[#DDE5F0] dark:bg-white/10" />}
+      {!ultima && <span className="-mb-3.5 mt-0.5 w-0.5 flex-1 bg-[#DFE5ED] dark:bg-white/10" />}
     </div>
   );
 }
@@ -101,13 +103,13 @@ function Hito({ hito }: { hito: LogQxHito }) {
   const duracion = formatDuracion(hito.durationMs);
 
   return (
-    <div className="min-w-0 rounded-[9px] border border-[#DDE5F0] bg-white px-3.5 py-2.5 dark:border-white/10 dark:bg-[#0B0F14]">
+    <div className="min-w-0 rounded-[9px] border border-[#DFE5ED] bg-white px-3.5 py-2.5 dark:border-white/10 dark:bg-[#0B0F14]">
       <div className="flex flex-wrap items-baseline gap-2.5">
         <h3 className="text-[13.5px] font-semibold">{etapa(hito.stage)}</h3>
         {hito.outcome !== "ok" && (
           <span
             className={`text-[10px] font-bold uppercase ${
-              hito.outcome === "error_definitivo" ? "text-[#D3352A]" : "text-[#D9521F]"
+              hito.outcome === "error_definitivo" ? "text-[#991B1B]" : "text-[#C2410C]"
             }`}
           >
             {res.label}
@@ -133,7 +135,7 @@ function Hito({ hito }: { hito: LogQxHito }) {
       </div>
 
       {hito.mensaje && (
-        <p className="mt-2 rounded-r-md border-l-2 border-[#C9D6EA] bg-[#EEF3FB] px-3 py-1.5 text-[12.5px] italic opacity-80 dark:border-white/15 dark:bg-white/5">
+        <p className="mt-2 rounded-r-md border-l-2 border-[#C9D6EA] bg-[#F4F7FC] px-3 py-1.5 text-[12.5px] italic opacity-80 dark:border-white/15 dark:bg-white/5">
           “{hito.mensaje}”
         </p>
       )}
@@ -156,7 +158,7 @@ function BloqueSondeo({ hito, indice }: { hito: LogQxHito; indice: number }) {
       className="min-w-0 rounded-[9px] border border-dashed border-[#C9D6EA] px-3.5 py-2.5 dark:border-white/15"
       style={{
         backgroundImage:
-          "repeating-linear-gradient(135deg, rgba(79,116,201,0.05) 0 9px, transparent 9px 18px)",
+          "repeating-linear-gradient(135deg, rgba(85,126,255,0.05) 0 9px, transparent 9px 18px)",
       }}
     >
       <div className="flex flex-wrap items-baseline gap-2.5">
@@ -185,7 +187,7 @@ function BloqueSondeo({ hito, indice }: { hito: LogQxHito; indice: number }) {
         aria-expanded={abierto}
         aria-controls={detalleId}
         onClick={() => setAbierto((v) => !v)}
-        className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#4F74C9] hover:underline"
+        className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#557EFF] hover:underline"
       >
         {abierto ? "▾" : "▸"} Qué hay dentro de este bloque
       </button>
@@ -223,12 +225,12 @@ function EsperandoDecision({ nombreSecretaria }: { nombreSecretaria: string }) {
       <div className="flex flex-col items-center">
         <span
           aria-hidden="true"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] border-[#D9521F] bg-white text-[11px] font-bold text-[#D9521F] dark:bg-[#0B0F14]"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] border-[#C2410C] bg-white text-[#C2410C] dark:bg-[#0B0F14]"
         >
-          ⏳
+          <Hourglass className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
         </span>
       </div>
-      <div className="min-w-0 rounded-[9px] border border-dashed border-[#DDE5F0] px-3.5 py-2.5 dark:border-white/10">
+      <div className="min-w-0 rounded-[9px] border border-dashed border-[#DFE5ED] px-3.5 py-2.5 dark:border-white/10">
         <h3 className="text-[13.5px] font-semibold">
           Esperando la decisión de {secretaria(nombreSecretaria)}
         </h3>

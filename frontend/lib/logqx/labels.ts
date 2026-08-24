@@ -1,5 +1,6 @@
 import type { StatusTone } from "@/components/atom/StatusBadge";
-import type { LogQxBandejaEstado } from "@/lib/api/admin-log-qx";
+import type { LogQxBandejaEstado, LogQxStatus } from "@/lib/api/admin-log-qx";
+import { ESTADO_CHIP_STYLES, type EstadoChipStyle } from "@/lib/tramites/estados";
 
 /**
  * Traducción de todo lo que el LOG QX muestra (Feature #11784). Vive en un solo sitio porque lo
@@ -58,15 +59,44 @@ export const RESULTADO: Record<string, { label: string; tone: StatusTone }> = {
   omitido: { label: "Omitido", tone: "neutral" },
 };
 
-/** Estados de la bandeja, en el orden en que se muestran los contadores. */
-export const ESTADO_BANDEJA: Record<LogQxBandejaEstado, { label: string; tone: StatusTone }> = {
-  sin_radicar: { label: "Sin radicar", tone: "neutral" },
-  pendiente: { label: "Pendiente", tone: "neutral" },
-  radicado: { label: "Radicado", tone: "info" },
-  en_tramite: { label: "En trámite", tone: "warning" },
-  aprobado: { label: "Aprobado", tone: "success" },
-  rechazado: { label: "Rechazado", tone: "danger" },
-  fallido: { label: "Fallido", tone: "danger" },
+/**
+ * Estados de la bandeja, en el orden en que se muestran los contadores.
+ *
+ * El color NO sale de los cinco tonos semánticos de `StatusBadge`: con siete estados, tres caían
+ * en `neutral`/`danger` y dejaban de distinguirse justo en la tira de contadores, que existe
+ * para diferenciarlos de un vistazo. Se usa la misma paleta por estado de la pantalla de trámites
+ * (`ESTADO_CHIP_STYLES`), donde cada estado tiene tono propio y `accent` ya está calibrado para
+ * elementos gráficos y `color` para texto. `tone` se conserva porque lo consumen los tests y las
+ * pantallas que sí quieren el chip semántico.
+ */
+export const ESTADO_BANDEJA: Record<
+  LogQxBandejaEstado,
+  { label: string; tone: StatusTone; style: EstadoChipStyle }
+> = {
+  sin_radicar: { label: "Sin radicar", tone: "neutral", style: ESTADO_CHIP_STYLES.borrador },
+  pendiente: { label: "Pendiente", tone: "neutral", style: ESTADO_CHIP_STYLES.preparado },
+  radicado: { label: "Radicado", tone: "info", style: ESTADO_CHIP_STYLES.entregado },
+  en_tramite: { label: "En trámite", tone: "warning", style: ESTADO_CHIP_STYLES.subsanacion },
+  aprobado: { label: "Aprobado", tone: "success", style: ESTADO_CHIP_STYLES.aprobado },
+  rechazado: { label: "Rechazado", tone: "danger", style: ESTADO_CHIP_STYLES.rechazado },
+  fallido: { label: "Fallido", tone: "danger", style: ESTADO_CHIP_STYLES.anulado },
+};
+
+/**
+ * Mismo criterio para el estado de UNA radicación, que es el vocabulario del backend
+ * (`quipux_submissions.status`) y no coincide con el de la bandeja: aquí no existe
+ * `sin_radicar` —si hay radicación, ya se radicó— y `registrado` no se ha desdoblado todavía
+ * en «radicado» y «en trámite».
+ */
+export const ESTADO_RADICACION: Record<
+  LogQxStatus,
+  { label: string; tone: StatusTone; style: EstadoChipStyle }
+> = {
+  pendiente: ESTADO_BANDEJA.pendiente,
+  registrado: { ...ESTADO_BANDEJA.en_tramite, label: "En trámite" },
+  aprobado: ESTADO_BANDEJA.aprobado,
+  rechazado: ESTADO_BANDEJA.rechazado,
+  fallido: ESTADO_BANDEJA.fallido,
 };
 
 export const ESTADOS_BANDEJA: LogQxBandejaEstado[] = [

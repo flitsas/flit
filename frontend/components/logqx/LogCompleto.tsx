@@ -89,19 +89,19 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 border-b border-[#DDE5F0] bg-[#F4F6FA] px-4 py-3 dark:border-white/10 dark:bg-white/5">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[#DFE5ED] bg-[#F4F7FC] px-4 py-3 dark:border-white/10 dark:bg-white/5">
         <label className="inline-flex cursor-pointer select-none items-center gap-2.5 text-[12.5px] font-medium">
           <input
             type="checkbox"
             checked={ocultarSinNovedad}
             onChange={(e) => cambiar(() => setOcultarSinNovedad(e.target.checked))}
-            className="h-4 w-4 accent-[#4F74C9]"
+            className="h-4 w-4 accent-[#557EFF]"
           />
           Ocultar consultas sin novedad
         </label>
 
         {ocultarSinNovedad && data && data.ocultosSinNovedad > 0 && (
-          <span className="rounded-full bg-[#F05A35]/15 px-2.5 py-1 font-mono text-[11.5px] tabular-nums text-[#D9521F]">
+          <span className="rounded-full bg-[#FF4E00]/15 px-2.5 py-1 font-mono text-[11.5px] tabular-nums text-[#C2410C]">
             {data.ocultosSinNovedad.toLocaleString("es-CO")} consultas sin novedad ocultas
           </span>
         )}
@@ -113,7 +113,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
             type="button"
             aria-pressed={!soloErrores}
             onClick={() => cambiar(() => setSoloErrores(false))}
-            className={`px-3 py-1.5 text-[12px] ${!soloErrores ? "bg-[#4F74C9] font-semibold text-white" : "opacity-70"}`}
+            className={`px-3 py-1.5 text-[12px] ${!soloErrores ? "bg-[#557EFF] font-semibold text-white" : "opacity-70"}`}
           >
             Todo
           </button>
@@ -122,7 +122,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
             aria-pressed={soloErrores}
             onClick={() => cambiar(() => setSoloErrores(true))}
             className={`border-l border-[#D9DEE8] px-3 py-1.5 text-[12px] dark:border-white/15 ${
-              soloErrores ? "bg-[#4F74C9] font-semibold text-white" : "opacity-70"
+              soloErrores ? "bg-[#557EFF] font-semibold text-white" : "opacity-70"
             }`}
           >
             Solo errores
@@ -152,17 +152,24 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
       >
         {data && data.data.length > 0 && (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-collapse">
+            <div className="overflow-x-auto px-4 pt-3">
+              <table className="w-full min-w-[820px] border-separate border-spacing-y-2 text-xs">
                 <thead>
-                  <tr className="bg-[#F4F6FA] dark:bg-white/5">
-                    <th className={thCls} style={{ width: 28 }} />
-                    <th className={thCls}>Fecha y hora</th>
-                    <th className={thCls}>Etapa</th>
-                    <th className={thCls}>Resultado</th>
-                    <th className={thCls}>Código</th>
-                    <th className={thCls}>Duración</th>
-                    <th className={thCls}>Origen</th>
+                  <tr
+                    className="text-left text-[10px] font-semibold uppercase"
+                    style={{ color: "#162744" }}
+                  >
+                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: "#DFE5ED", width: 34 }}>
+                      <span className="sr-only">Detalle</span>
+                    </th>
+                    {["Fecha y hora", "Etapa", "Resultado", "Código", "Duración"].map((c) => (
+                      <th key={c} className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                        {c}
+                      </th>
+                    ))}
+                    <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                      Origen
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -179,7 +186,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
               </table>
             </div>
 
-            <div className="px-4 pb-3">
+            <div className="px-4 pb-3 pt-1">
               <Pagination
                 page={page}
                 pageSize={PAGE_SIZE}
@@ -201,10 +208,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
   );
 }
 
-const thCls =
-  "text-left text-[10px] font-bold uppercase tracking-wider opacity-55 px-3 py-2.5 border-b border-[#DDE5F0] dark:border-white/10 whitespace-nowrap";
-
-const tdCls = "px-3 py-2 border-b border-[#DDE5F0] dark:border-white/10 text-[12.5px]";
+const tdCls = "border-y px-4 py-2.5 align-middle";
 
 function FilaEvento({
   evento,
@@ -223,7 +227,9 @@ function FilaEvento({
   return (
     <>
       <tr
-        className={`cursor-pointer ${abierto ? "bg-[#4F74C9]/[0.06]" : "hover:bg-[#4F74C9]/[0.04]"}`}
+        className={`cursor-pointer transition ${
+          abierto ? "bg-[#557EFF]/[0.06]" : "bg-white hover:bg-[#557EFF]/[0.04] dark:bg-[#0B0F14]"
+        }`}
         onClick={onToggle}
         tabIndex={0}
         role="button"
@@ -235,13 +241,13 @@ function FilaEvento({
           }
         }}
       >
-        <td className={tdCls}>
+        <td className={`${tdCls} rounded-l-xl border-l px-3`}>
           <ChevronRight
             className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierto ? "rotate-90" : ""}`}
             aria-hidden="true"
           />
         </td>
-        <td className={`${tdCls} font-mono tabular-nums whitespace-nowrap`}>
+        <td className={`${tdCls} whitespace-nowrap font-mono tabular-nums`}>
           {formatFecha(evento.occurredAt)}
         </td>
         <td className={tdCls}>{etapa(evento.stage)}</td>
@@ -250,9 +256,9 @@ function FilaEvento({
             className={`text-[10px] font-bold uppercase ${
               esError
                 ? evento.outcome === "error_definitivo"
-                  ? "text-[#D3352A]"
-                  : "text-[#D9521F]"
-                : "text-[#5FA82C]"
+                  ? "text-[#991B1B]"
+                  : "text-[#C2410C]"
+                : "text-[#15803D]"
             }`}
           >
             {res.label}
@@ -263,11 +269,11 @@ function FilaEvento({
         <td className={`${tdCls} font-mono tabular-nums`}>
           {formatDuracion(evento.durationMs) ?? "—"}
         </td>
-        <td className={tdCls}>{origen(evento.origin)}</td>
+        <td className={`${tdCls} rounded-r-xl border-r`}>{origen(evento.origin)}</td>
       </tr>
       {abierto && (
         <tr>
-          <td colSpan={7} className="border-b border-[#DDE5F0] bg-[#EEF3FB] p-0 dark:border-white/10 dark:bg-white/[0.03]">
+          <td colSpan={7} className="rounded-xl border bg-[#F4F7FC] p-0 dark:bg-white/[0.03]">
             <Payloads evento={evento} indice={indice} />
           </td>
         </tr>
@@ -309,7 +315,7 @@ function Payloads({ evento, indice }: { evento: LogQxEvent; indice: number }) {
             <button
               type="button"
               onClick={() => setCrudo((v) => !v)}
-              className="ml-auto text-[11px] font-medium text-[#4F74C9] hover:underline"
+              className="ml-auto text-[11px] font-medium text-[#557EFF] hover:underline"
             >
               {crudo ? "ocultar original" : "ver original"}
             </button>
@@ -321,7 +327,7 @@ function Payloads({ evento, indice }: { evento: LogQxEvent; indice: number }) {
         <button
           type="button"
           onClick={() => setCrudo((v) => !v)}
-          className="ml-auto text-[11px] font-medium text-[#4F74C9] hover:underline"
+          className="ml-auto text-[11px] font-medium text-[#557EFF] hover:underline"
         >
           {crudo ? "ocultar original" : "ver original"}
         </button>
@@ -337,7 +343,7 @@ function Payloads({ evento, indice }: { evento: LogQxEvent; indice: number }) {
       {crudo && (
         <pre
           id={`logqx-raw-${indice}`}
-          className={`overflow-x-auto rounded-[9px] border border-[#DDE5F0] bg-white p-3 font-mono text-[11.5px] leading-relaxed opacity-80 dark:border-white/10 dark:bg-[#0B0F14] ${soloUnLado ? "" : "md:col-span-2"}`}
+          className={`overflow-x-auto rounded-[9px] border border-[#DFE5ED] bg-white p-3 font-mono text-[11.5px] leading-relaxed opacity-80 dark:border-white/10 dark:bg-[#0B0F14] ${soloUnLado ? "" : "md:col-span-2"}`}
         >
           {JSON.stringify(detalle, null, 2)}
         </pre>
@@ -384,11 +390,11 @@ function Columna({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="min-w-0 overflow-hidden rounded-[9px] border border-[#DDE5F0] bg-white dark:border-white/10 dark:bg-[#0B0F14]">
-      <div className="flex items-center gap-2 border-b border-[#DDE5F0] bg-[#F4F6FA] px-3 py-2 dark:border-white/10 dark:bg-white/5">
+    <div className="min-w-0 overflow-hidden rounded-[9px] border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#0B0F14]">
+      <div className="flex items-center gap-2 border-b border-[#DFE5ED] bg-[#F4F6FA] px-3 py-2 dark:border-white/10 dark:bg-white/5">
         <span
           className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
-            tono === "info" ? "bg-[#4F74C9]/15 text-[#4F74C9]" : "bg-[#70CF3A]/20 text-[#5FA82C]"
+            tono === "info" ? "bg-[#557EFF]/15 text-[#557EFF]" : "bg-[#16A34A]/15 text-[#15803D]"
           }`}
         >
           {etiqueta}
@@ -403,10 +409,10 @@ function Columna({
           <tbody>
             {datos.map(([k, v]) => (
               <tr key={k}>
-                <td className="w-px whitespace-nowrap border-b border-[#DDE5F0] px-3 py-1.5 text-[12px] font-medium opacity-70 last:border-0 dark:border-white/10">
+                <td className="w-px whitespace-nowrap border-b border-[#DFE5ED] px-3 py-1.5 text-[12px] font-medium opacity-70 last:border-0 dark:border-white/10">
                   {k}
                 </td>
-                <td className="break-all border-b border-[#DDE5F0] px-3 py-1.5 font-mono text-[11.5px] dark:border-white/10">
+                <td className="break-all border-b border-[#DFE5ED] px-3 py-1.5 font-mono text-[11.5px] dark:border-white/10">
                   {formatValor(v)}
                 </td>
               </tr>

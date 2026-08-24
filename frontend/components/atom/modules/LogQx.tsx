@@ -3,11 +3,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, FileText, Search, X } from "lucide-react";
+import {
+  BadgeCheck,
+  Ban,
+  CheckCircle2,
+  ChevronRight,
+  CircleDashed,
+  Clock,
+  FileCheck2,
+  RefreshCw,
+  Search,
+  X,
+  XCircle,
+} from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { Pagination } from "@/components/atom/Pagination";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
+import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
   fetchLogQxBandeja,
   type LogQxBandejaEntry,
@@ -224,7 +237,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
       />
 
       {aplicados.instanceId && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-[#4F74C9]/30 bg-[#4F74C9]/[0.07] px-3 py-2 text-xs">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.07] px-3 py-2 text-xs">
           <span>
             Mostrando solo el trámite{" "}
             <span className="font-mono">{aplicados.instanceId}</span>
@@ -232,33 +245,58 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
           <button
             type="button"
             onClick={quitarTramite}
-            className="inline-flex items-center gap-1 rounded-full border border-[#4F74C9]/40 px-2 py-0.5 font-medium text-[#4F74C9] hover:bg-[#4F74C9]/10"
+            className="inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 px-2 py-0.5 font-medium text-[#557EFF] hover:bg-[#557EFF]/10"
           >
             <X className="h-3 w-3" aria-hidden="true" /> Ver todos
           </button>
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 shrink-0" role="group" aria-label="Contadores por estado">
+      {/* Tira de contadores por estado, con la misma presentación que los KPIs de Trámites
+          (`EstadoFunnel`): una tarjeta única dividida en columnas, con icono en pastilla del tono
+          del estado, etiqueta y conteo. Antes eran siete cajas grises indistinguibles entre sí. */}
+      <div
+        role="group"
+        aria-label="Contadores por estado"
+        className="grid shrink-0 grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+      >
         {ESTADOS_BANDEJA.map((estado) => {
           const meta = ESTADO_BANDEJA[estado];
+          const Icon = ESTADO_ICON[estado];
           const activo = aplicados.estado === estado;
+          const total = contadores[estado] ?? 0;
           return (
             <button
               key={estado}
               type="button"
+              aria-label={`${meta.label}: ${total} trámite${total === 1 ? "" : "s"}`}
               aria-pressed={activo}
               onClick={() => alternarEstado(estado)}
-              className={`flex-1 min-w-[120px] rounded-xl border px-3 py-2 text-left transition ${
-                activo
-                  ? "border-[#4F74C9] bg-[#4F74C9]/[0.08]"
-                  : "border-[#DDE5F0] dark:border-white/10 bg-white dark:bg-[#0B0F14] hover:border-[#C9D6EA]"
-              }`}
+              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+              style={activo ? { background: meta.style.bg } : undefined}
             >
-              <span className="block font-mono text-xl font-bold tabular-nums">
-                {contadores[estado] ?? 0}
+              {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
+              <span
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                style={{ background: meta.style.bg }}
+              >
+                <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="block text-[11px] font-medium opacity-70">{meta.label}</span>
+              <span className="max-w-full truncate text-xs font-medium text-[#162744]/70 dark:text-white/70">
+                {meta.label}
+              </span>
+              <span
+                className="text-xl font-bold leading-none tabular-nums text-[#162744] dark:text-white"
+                aria-hidden="true"
+              >
+                {total}
+              </span>
+              {/* El filtro activo no depende solo del fondo. */}
+              <span
+                className="h-0.5 w-6 rounded-full"
+                style={{ background: activo ? meta.style.color : "transparent" }}
+                aria-hidden="true"
+              />
             </button>
           );
         })}
@@ -266,7 +304,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 
       <form
         onSubmit={handleSubmit}
-        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-[#DDE5F0] dark:border-white/10 bg-white dark:bg-[#0B0F14] p-3"
+        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-[#DFE5ED] dark:border-white/10 bg-white dark:bg-[#0B0F14] p-3"
         role="search"
         aria-label="Filtros del LOG QX"
       >
@@ -328,7 +366,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
           type="submit"
           disabled={fetching}
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ background: "linear-gradient(90deg,#4FD4CC 0%,#4F74C9 100%)" }}
+          style={{ background: WIZARD_CTA_GRADIENT }}
         >
           <Search className="h-3.5 w-3.5" aria-hidden="true" /> Aplicar
         </button>
@@ -343,40 +381,45 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
       >
         {entries && entries.length > 0 && (
           <>
-            <div className="rounded-2xl border border-[#DDE5F0] dark:border-white/10 bg-white dark:bg-[#0B0F14] overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1040px] border-collapse">
-                  <thead>
-                    <tr className="bg-[#F4F6FA] dark:bg-white/5">
-                      <th className={thCls} style={{ width: 28 }} />
-                      <th className={thCls}>Trámite</th>
-                      <th className={thCls}>Placa</th>
-                      <th className={thCls}>Tipo</th>
-                      <th className={thCls}>Estado</th>
-                      <th className={thCls}>Empresa</th>
-                      <th className={thCls}>Secretaría</th>
-                      <th className={thCls}>Documento QX</th>
-                      <th className={thCls}>Última actividad</th>
-                      <th className={thCls}>Antigüedad</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map((entry) => (
-                      <FilaTramite
-                        key={entry.procedureInstanceId}
-                        entry={entry}
-                        abierta={abierta === entry.procedureInstanceId}
-                        onToggle={() =>
-                          setAbierta(
-                            abierta === entry.procedureInstanceId ? null : entry.procedureInstanceId,
-                          )
-                        }
-                        onAbrir={() => abrirTrazabilidad(entry)}
-                      />
+            {/* Tabla en el patrón del resto de la consola (companies / trámites): cabecera en
+                pastilla #DFE5ED y cada fila como tarjeta blanca separada, no una rejilla de
+                bordes. */}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1040px] border-separate border-spacing-y-2 text-xs">
+                <thead>
+                  <tr
+                    className="text-left text-[10px] font-semibold uppercase"
+                    style={{ color: "#162744" }}
+                  >
+                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: "#DFE5ED", width: 34 }}>
+                      <span className="sr-only">Detalle</span>
+                    </th>
+                    {COLUMNAS.map((c) => (
+                      <th key={c} className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                        {c}
+                      </th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                    <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                      Antigüedad
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <FilaTramite
+                      key={entry.procedureInstanceId}
+                      entry={entry}
+                      abierta={abierta === entry.procedureInstanceId}
+                      onToggle={() =>
+                        setAbierta(
+                          abierta === entry.procedureInstanceId ? null : entry.procedureInstanceId,
+                        )
+                      }
+                      onAbrir={() => abrirTrazabilidad(entry)}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
             <Pagination
               page={page}
@@ -396,15 +439,35 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 }
 
 const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/20";
+  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20";
 
 const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-[#4F74C9]";
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-[#557EFF]";
 
-const thCls =
-  "text-left text-[10px] font-bold uppercase tracking-wider opacity-55 px-3 py-2.5 border-b border-[#DDE5F0] dark:border-white/10 whitespace-nowrap";
+/** Cabeceras entre el chevron y «Antigüedad»; el orden lo fijó el PO. */
+const COLUMNAS = [
+  "Trámite",
+  "Placa",
+  "Tipo",
+  "Estado",
+  "Empresa",
+  "Secretaría",
+  "Documento QX",
+  "Última actividad",
+] as const;
 
-const tdCls = "px-3 py-2.5 border-b border-[#DDE5F0] dark:border-white/10 align-middle";
+/** Icono por estado, en la línea de `ESTADO_ICON` de la tira de KPIs de trámites. */
+const ESTADO_ICON: Record<LogQxBandejaEstado, typeof CircleDashed> = {
+  sin_radicar: CircleDashed,
+  pendiente: FileCheck2,
+  radicado: BadgeCheck,
+  en_tramite: RefreshCw,
+  aprobado: CheckCircle2,
+  rechazado: XCircle,
+  fallido: Ban,
+};
+
+const tdCls = "border-y px-4 py-3 align-middle";
 
 function Campo({
   label,
@@ -442,7 +505,9 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer transition ${abierta ? "bg-[#4F74C9]/[0.06]" : "hover:bg-[#4F74C9]/[0.04]"}`}
+        className={`cursor-pointer transition ${
+          abierta ? "bg-[#557EFF]/[0.06]" : "bg-white hover:bg-[#557EFF]/[0.04] dark:bg-[#0B0F14]"
+        }`}
         onClick={onToggle}
         tabIndex={0}
         role="button"
@@ -454,65 +519,73 @@ function FilaTramite({
           }
         }}
       >
-        <td className={tdCls}>
+        <td className={`${tdCls} rounded-l-xl border-l px-3`}>
           <ChevronRight
             className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierta ? "rotate-90" : ""}`}
             aria-hidden="true"
           />
         </td>
         <td className={tdCls}>
-          <span className="font-mono text-xs font-medium text-[#4F74C9]">{entry.referenceNumber}</span>
+          <span className="font-mono font-semibold text-[#557EFF]">{entry.referenceNumber}</span>
           {entry.intentos > 1 && (
-            <span className="ml-1.5 rounded-full bg-[#F05A35]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#D9521F]">
+            <span className="ml-1.5 rounded-full bg-[#FF4E00]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#C2410C]">
               {entry.intentos} intentos
             </span>
           )}
         </td>
         <td className={tdCls}>
           {entry.plate ? (
-            <span className="rounded border border-[#D9DEE8] dark:border-white/15 bg-[#F4F6FA] dark:bg-white/5 px-1.5 py-0.5 font-mono text-xs font-bold tracking-wide">
+            <span className="rounded border border-[#D9DEE8] bg-[#F4F6FA] px-1.5 py-0.5 font-mono font-bold tracking-wide dark:border-white/15 dark:bg-white/5">
               {entry.plate}
             </span>
           ) : (
-            <span className="text-xs opacity-40">sin placa</span>
+            <span className="opacity-40">sin placa</span>
           )}
         </td>
-        <td className={`${tdCls} text-xs`}>{entry.procedureTypeName}</td>
+        <td className={tdCls}>{entry.procedureTypeName}</td>
         <td className={tdCls}>
-          <StatusBadge label={meta.label} tone={meta.tone} />
+          {/* Mismo chip que el listado de trámites: la paleta por estado, no los cinco tonos
+              semánticos, que dejaban tres de estos siete estados con el mismo color. */}
+          <StatusBadge
+            label={meta.label}
+            bg={meta.style.bg}
+            color={meta.style.color}
+            border={meta.style.border}
+          />
         </td>
-        <td className={`${tdCls} text-xs opacity-75`}>{entry.clientTenantName}</td>
-        <td className={`${tdCls} text-xs opacity-75`}>{entry.transitOfficeName}</td>
+        <td className={`${tdCls} opacity-75`}>{entry.clientTenantName}</td>
+        <td className={`${tdCls} opacity-75`}>{entry.transitOfficeName}</td>
         <td className={tdCls}>
           {entry.documentoQx ? (
-            <span className="font-mono text-[11px] opacity-80" title={entry.documentoQx}>
+            <span className="font-mono opacity-80" title={entry.documentoQx}>
               {entry.documentoQx.length > 26
                 ? `…${entry.documentoQx.slice(-24)}`
                 : entry.documentoQx}
             </span>
           ) : (
-            <span className="text-xs opacity-40">—</span>
+            <span className="opacity-40">—</span>
           )}
         </td>
-        <td className={`${tdCls} whitespace-nowrap text-xs opacity-75`}>
+        <td className={`${tdCls} whitespace-nowrap opacity-75`}>
           {entry.ultimaActividad ? formatFecha(entry.ultimaActividad) : "—"}
         </td>
-        <td className={tdCls}>
+        <td className={`${tdCls} rounded-r-xl border-r`}>
           {espera ? (
             <span
-              className={`font-mono text-xs tabular-nums whitespace-nowrap ${alta ? "font-bold text-[#D9521F]" : ""}`}
+              className={`whitespace-nowrap font-mono tabular-nums ${alta ? "font-bold text-[#C2410C]" : ""}`}
             >
               {espera}
               {alta ? " ⚠" : ""}
             </span>
           ) : (
-            <span className="text-xs opacity-40">—</span>
+            <span className="opacity-40">—</span>
           )}
         </td>
       </tr>
       {abierta && (
         <tr>
-          <td colSpan={10} className="border-b border-[#DDE5F0] dark:border-white/10 bg-[#EEF3FB] dark:bg-white/[0.03] p-0">
+          {/* El detalle es su propia tarjeta, coherente con las filas-tarjeta de la tabla. */}
+          <td colSpan={10} className="rounded-xl border bg-[#F4F7FC] p-0 dark:bg-white/[0.03]">
             <Vistazo entry={entry} onAbrir={onAbrir} />
           </td>
         </tr>
@@ -527,22 +600,22 @@ function FilaTramite({
  */
 function Vistazo({ entry, onAbrir }: { entry: LogQxBandejaEntry; onAbrir: () => void }) {
   return (
-    <div className="flex flex-wrap items-start gap-5 px-10 py-4">
-      <div className="flex-1 min-w-[380px]">
+    <div className="flex flex-wrap items-start gap-5 px-8 py-4">
+      <div className="min-w-[380px] flex-1">
         <p className="max-w-[70ch] text-[13px] leading-relaxed">{resumen(entry)}</p>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {pasos(entry).map((p, i) => (
+          {pasos(entry).map((p) => (
             <span
-              key={i}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#DDE5F0] dark:border-white/10 bg-white dark:bg-[#0B0F14] px-2.5 py-1 text-[11px] font-medium"
+              key={p.label}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#DFE5ED] bg-white px-2.5 py-1 text-[11px] font-medium dark:border-white/10 dark:bg-[#0B0F14]"
             >
-              <span aria-hidden="true">{p.icono}</span>
+              <p.Icon className="h-3.5 w-3.5" style={{ color: p.color }} aria-hidden="true" />
               {p.label}
             </span>
           ))}
         </div>
         {entry.rejectionReason && (
-          <p className="mt-3 rounded-lg border-l-2 border-[#E43D30] bg-[#E43D30]/[0.06] px-3 py-2 text-xs text-[#D3352A]">
+          <p className="mt-3 rounded-lg border-l-2 border-[#FF4E00] bg-[#FF4E00]/[0.08] px-3 py-2 text-xs text-[#C2410C]">
             Motivo del rechazo: {entry.rejectionReason}
           </p>
         )}
@@ -552,9 +625,10 @@ function Vistazo({ entry, onAbrir }: { entry: LogQxBandejaEntry; onAbrir: () => 
           <button
             type="button"
             onClick={onAbrir}
-            className="whitespace-nowrap rounded-lg bg-[#4F74C9] px-4 py-2 text-xs font-semibold text-white hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
-            Ver trazabilidad completa →
+            Ver trazabilidad completa
           </button>
         ) : (
           <span className="max-w-[220px] text-[11px] italic opacity-55">
@@ -564,9 +638,9 @@ function Vistazo({ entry, onAbrir }: { entry: LogQxBandejaEntry; onAbrir: () => 
         <Link
           href={`/tramites/${entry.procedureInstanceId}`}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-[#DDE5F0] dark:border-white/15 px-4 py-2 text-xs font-semibold text-[#4F74C9] hover:bg-[#4F74C9]/[0.08]"
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent"
         >
-          <FileText className="h-3.5 w-3.5" aria-hidden="true" /> Ver trámite
+          Ver trámite
         </Link>
       </div>
     </div>
@@ -623,29 +697,46 @@ function resumen(e: LogQxBandejaEntry): string {
   }
 }
 
-/** Los pasos alcanzados, sin entrar en el detalle técnico. */
-function pasos(e: LogQxBandejaEntry): { icono: string; label: string }[] {
+/**
+ * Los pasos alcanzados, sin entrar en el detalle técnico.
+ *
+ * Los iconos son del set de la app (lucide) y no glifos sueltos (⏳, ✓, ○): esos se renderizan
+ * como emoji, con su propio color y su propia caja, y desentonan con el resto de la consola.
+ */
+function pasos(e: LogQxBandejaEntry): { Icon: typeof CircleDashed; color: string; label: string }[] {
+  const gris = ESTADO_BANDEJA.sin_radicar.style.accent;
+  const espera = ESTADO_BANDEJA.en_tramite.style.accent;
+  const ok = ESTADO_BANDEJA.aprobado.style.accent;
+  const mal = ESTADO_BANDEJA.rechazado.style.accent;
+
   if (e.estado === "sin_radicar") {
-    return [{ icono: "○", label: "Sin encolar" }, { icono: "⏳", label: "Elegible, a la espera" }];
+    return [
+      { Icon: CircleDashed, color: gris, label: "Sin encolar" },
+      { Icon: Clock, color: espera, label: "Elegible, a la espera" },
+    ];
   }
 
-  const out: { icono: string; label: string }[] = [];
+  const out: { Icon: typeof CircleDashed; color: string; label: string }[] = [];
 
   if (e.estado === "pendiente") {
-    out.push({ icono: "○", label: "En cola" });
+    out.push({ Icon: CircleDashed, color: gris, label: "En cola" });
   } else if (e.estado !== "fallido") {
-    out.push({ icono: "✓", label: "Radicado" });
+    out.push({ Icon: BadgeCheck, color: ok, label: "Radicado" });
   }
 
   if (e.pollCount > 0) {
-    out.push({ icono: "⏱", label: `${e.pollCount} consultas` });
+    out.push({ Icon: RefreshCw, color: espera, label: `${e.pollCount} consultas` });
   }
 
-  if (e.estado === "en_tramite") out.push({ icono: "⏳", label: "Sin decisión" });
-  if (e.estado === "radicado") out.push({ icono: "⏱", label: "Primera consulta pendiente" });
-  if (e.estado === "aprobado") out.push({ icono: "✓", label: "Aprobado" });
-  if (e.estado === "rechazado") out.push({ icono: "✕", label: "Rechazado" });
-  if (e.estado === "fallido") out.push({ icono: "✕", label: "Radicación fallida" });
+  if (e.estado === "en_tramite") out.push({ Icon: Clock, color: espera, label: "Sin decisión" });
+  if (e.estado === "radicado") {
+    out.push({ Icon: Clock, color: espera, label: "Primera consulta pendiente" });
+  }
+  if (e.estado === "aprobado") out.push({ Icon: CheckCircle2, color: ok, label: "Aprobado" });
+  if (e.estado === "rechazado") out.push({ Icon: XCircle, color: mal, label: "Rechazado" });
+  if (e.estado === "fallido") {
+    out.push({ Icon: Ban, color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });
+  }
 
   return out;
 }

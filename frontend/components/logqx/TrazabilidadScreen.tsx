@@ -2,21 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { HitosTimeline } from "./HitosTimeline";
 import { LogCompleto } from "./LogCompleto";
-import { fetchLogQxHitos, type LogQxHitosResult, type LogQxStatus } from "@/lib/api/admin-log-qx";
+import { fetchLogQxHitos, type LogQxHitosResult } from "@/lib/api/admin-log-qx";
 import {
   codigoQx,
   estadoTramiteQx,
+  ESTADO_RADICACION,
   formatEspera,
   fragmentoFecha,
   Secretaria,
   secretaria,
 } from "@/lib/logqx/labels";
-import type { StatusTone } from "@/components/atom/StatusBadge";
 
 /**
  * Pantalla de trazabilidad de una radicación (HU #11789 + #11790, ruta `/log-qx/{submissionId}`).
@@ -28,14 +28,6 @@ import type { StatusTone } from "@/components/atom/StatusBadge";
  * Dos pestañas porque son dos preguntas de tamaños distintos: «por qué está atascado» se responde
  * en cinco líneas (Hitos) y «qué le mandamos exactamente el 18/08» necesita el log entero.
  */
-
-const ESTADO_RADICACION: Record<LogQxStatus, { label: string; tone: StatusTone }> = {
-  pendiente: { label: "Pendiente", tone: "neutral" },
-  registrado: { label: "En trámite", tone: "warning" },
-  aprobado: { label: "Aprobado", tone: "success" },
-  rechazado: { label: "Rechazado", tone: "danger" },
-  fallido: { label: "Fallido", tone: "danger" },
-};
 
 type Pestana = "hitos" | "log";
 
@@ -90,7 +82,7 @@ export function TrazabilidadScreen({
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 text-[#162744] dark:text-white">
       <Link
         href={volverHref}
-        className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium opacity-70 hover:text-[#4F74C9] hover:opacity-100"
+        className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium opacity-70 hover:text-[#557EFF] hover:opacity-100"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         Volver a LOG QX <span className="opacity-60">(filtros conservados)</span>
@@ -106,7 +98,7 @@ export function TrazabilidadScreen({
         {data && r && (
           <>
             {/* Cabecera fija: la identificación no se pierde al desplazar la línea de tiempo. */}
-            <header className="sticky top-0 z-30 mb-4 rounded-2xl border border-[#DDE5F0] bg-white shadow-sm dark:border-white/10 dark:bg-[#0B0F14]">
+            <header className="sticky top-0 z-30 mb-4 rounded-2xl border border-[#DFE5ED] bg-white shadow-sm dark:border-white/10 dark:bg-[#0B0F14]">
               <div className="flex flex-wrap items-start gap-5 px-5 py-4">
                 <div className="min-w-[300px] flex-1">
                   <h1 className="font-mono text-[19px] font-bold tracking-tight">
@@ -123,9 +115,12 @@ export function TrazabilidadScreen({
                     <span>{r.clientTenantName}</span>
                     <span className="opacity-50">·</span>
                     <span>{Secretaria(r.transitOfficeName)}</span>
+                    {/* Mismo chip por estado que la bandeja y el listado de trámites. */}
                     <StatusBadge
                       label={ESTADO_RADICACION[r.status]?.label ?? r.status}
-                      tone={ESTADO_RADICACION[r.status]?.tone ?? "neutral"}
+                      bg={ESTADO_RADICACION[r.status]?.style.bg}
+                      color={ESTADO_RADICACION[r.status]?.style.color}
+                      border={ESTADO_RADICACION[r.status]?.style.border}
                     />
                   </div>
                 </div>
@@ -140,16 +135,16 @@ export function TrazabilidadScreen({
 
                 <Link
                   href={`/tramites/${r.procedureInstanceId}`}
-                  className="inline-flex items-center gap-1.5 self-center rounded-lg border border-[#DDE5F0] px-3.5 py-2 text-[12.5px] font-semibold text-[#4F74C9] hover:bg-[#4F74C9]/[0.08] dark:border-white/15"
+                  className="inline-flex items-center self-center rounded-lg border border-[#DFE5ED] px-3.5 py-2 text-[12.5px] font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15"
                 >
-                  <FileText className="h-3.5 w-3.5" aria-hidden="true" /> Ver trámite
+                  Ver trámite
                 </Link>
               </div>
 
               {/* Tira de intentos: solo cuando el trámite acumuló más de una radicación. */}
               {r.totalIntentos > 1 && (
-                <div className="flex flex-wrap items-center gap-2 border-t border-[#DDE5F0] bg-[#F05A35]/[0.08] px-5 py-2.5 text-[12.5px] dark:border-white/10">
-                  <span className="font-semibold text-[#D9521F]">
+                <div className="flex flex-wrap items-center gap-2 border-t border-[#DFE5ED] bg-[#FF4E00]/[0.08] px-5 py-2.5 text-[12.5px] dark:border-white/10">
+                  <span className="font-semibold text-[#C2410C]">
                     Este trámite tuvo {r.totalIntentos} radicaciones.
                   </span>
                   <span className="opacity-70">Viendo:</span>
@@ -164,7 +159,7 @@ export function TrazabilidadScreen({
                       }}
                       className={`rounded-full border px-2.5 py-1 font-mono text-[11.5px] ${
                         h.id === r.id
-                          ? "border-[#4F74C9] bg-[#4F74C9]/[0.1] font-bold text-[#4F74C9]"
+                          ? "border-[#557EFF] bg-[#557EFF]/[0.1] font-bold text-[#557EFF]"
                           : "border-[#D9DEE8] opacity-70 hover:opacity-100 dark:border-white/15"
                       }`}
                     >
@@ -174,7 +169,11 @@ export function TrazabilidadScreen({
                 </div>
               )}
 
-              <div className="flex gap-0.5 border-t border-[#DDE5F0] px-5 dark:border-white/10" role="tablist">
+              <div
+                className="flex flex-wrap items-center gap-1 border-t border-[#DFE5ED] px-5 dark:border-white/10"
+                role="tablist"
+                aria-label="Vista de la trazabilidad"
+              >
                 <Tab actual={pestana} valor="hitos" onSelect={setPestana}>
                   Hitos
                 </Tab>
@@ -184,11 +183,11 @@ export function TrazabilidadScreen({
               </div>
             </header>
 
-            <div className="rounded-2xl border border-[#DDE5F0] bg-white dark:border-white/10 dark:bg-[#0B0F14]">
+            <div className="rounded-2xl border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#0B0F14]">
               {pestana === "hitos" ? (
                 <>
-                  <div className="border-b border-[#DDE5F0] px-6 py-4 dark:border-white/10">
-                    <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#4F74C9]">
+                  <div className="border-b border-[#DFE5ED] px-6 py-4 dark:border-white/10">
+                    <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#557EFF]">
                       Qué pasó
                     </p>
                     <p className="max-w-[76ch] text-[15px] leading-relaxed">{resumen(r, espera)}</p>
@@ -224,13 +223,19 @@ function Tab({
       role="tab"
       aria-selected={activa}
       onClick={() => onSelect(valor)}
-      className={`-mb-px border-b-2 px-4 py-2.5 text-[13px] transition ${
-        activa
-          ? "border-[#4F74C9] font-semibold text-[#4F74C9]"
-          : "border-transparent opacity-70 hover:opacity-100"
-      }`}
+      // Mismo tab que el resto de la consola (`TramitesListToolbar`): el estado activo se marca
+      // con color Y con subrayado, para no depender solo del color.
+      className="relative rounded-t-lg px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+      style={activa ? { color: "#557EFF" } : { color: "#162744", opacity: 0.65 }}
     >
       {children}
+      {activa ? (
+        <span
+          className="absolute inset-x-2 -bottom-px h-0.5 rounded-full"
+          style={{ background: "#557EFF" }}
+          aria-hidden="true"
+        />
+      ) : null}
     </button>
   );
 }
@@ -251,7 +256,7 @@ function Dato({
       <dt className="text-[10px] font-bold uppercase tracking-wider opacity-55">{label}</dt>
       <dd
         className={`m-0 text-[13px] ${mono ? "font-mono tabular-nums" : ""} ${
-          destacado ? "font-bold text-[#D9521F]" : "font-medium"
+          destacado ? "font-bold text-[#C2410C]" : "font-medium"
         }`}
         title={valor}
       >
