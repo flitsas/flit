@@ -30,5 +30,7 @@ public sealed record UpdateTenantSettingsRequest(
     // null conserva el valor previo — así una actualización de OTRO switch (p. ej. el canal) nunca
     // apaga esta capacidad por omisión, que es exactamente el riesgo que este ADR elimina.
     bool? DocumentosPersonalizadosActivo = null,
-    // HU #11469 — interruptor de avisos de cambio de estado. Opcional: null conserva el previo.
-    bool? AvisosCambioEstadoActivos = null);
+    bool? AvisosCambioEstadoActivos = null,
+    bool? AvisosAprobacionActivos = null,
+    bool? AvisosRechazoActivos = null,
+    DestinatariosNotificacionDto? DestinatariosNotificacion = null);
