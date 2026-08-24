@@ -86,8 +86,6 @@ public sealed class GenerarRuesAttachmentHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000010",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         if (conActorNit)

@@ -772,12 +772,12 @@ public sealed class OtQueryRepositoryTests
         var id = Guid.NewGuid();
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId ?? ClientTenant,
             ProcedureTypeId = ProcedureTypeId,
             ReferenceNumber = reference,
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             Plate = placa,
             Vin = vin,
             Prioritario = prioritario,

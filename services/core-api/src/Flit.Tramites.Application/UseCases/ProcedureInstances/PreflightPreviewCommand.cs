@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -159,11 +160,11 @@ public sealed class RunPreflightPreviewHandler(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(request.Modalidad);
+        var modalidad = ProcedureFamilyCodes.FromCodeOrLegacyModalidad(request.Modalidad);
         if (modalidad is null)
             return (null, "modalidad_not_available", null, null);
 
-        var esMatricula = modalidad == TramiteModalidadEntrada.MatriculaInicial;
+        var esMatricula = modalidad == ProcedureFamily.Matriculas;
         var vin = Trim(request.Vin);
         var plate = Trim(request.Plate);
 
@@ -400,13 +401,13 @@ public sealed class RunPreflightPreviewHandler(
     /// de la instancia, con <c>Guid.Empty</c> como exclusión (no hay trámite propio que excluir).
     /// </summary>
     private async Task<Guid?> FindDuplicateActiveProcedureAsync(
-        TramiteModalidadEntrada modalidad,
+        ProcedureFamily modalidad,
         Guid tenantId,
         string? vin,
         string? plate,
         CancellationToken ct)
     {
-        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad == ProcedureFamily.Matriculas)
         {
             var vinNorm = VinNormalizer.Normalize(vin);
             if (vinNorm is null)
@@ -417,7 +418,7 @@ public sealed class RunPreflightPreviewHandler(
                 existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
-        if (modalidad == TramiteModalidadEntrada.Traspaso)
+        if (modalidad == ProcedureFamily.Traspaso)
         {
             var placaNorm = plate?.ToUpperInvariant();
             if (string.IsNullOrEmpty(placaNorm))

@@ -35,8 +35,6 @@ public sealed class WizardBiometricaStateTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

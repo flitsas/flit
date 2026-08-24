@@ -54,7 +54,6 @@ public sealed class MandateSignerSelectionTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "MAT-2026-000001",
             Status = estado,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             MandateSignerId = elegido,
             CreatedAt = DateTimeOffset.UtcNow,
         };

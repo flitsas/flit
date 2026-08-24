@@ -192,7 +192,6 @@ public sealed class ColumnaFirmadoMecanismoFirmaTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000042",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue

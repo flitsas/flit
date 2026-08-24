@@ -401,7 +401,6 @@ public sealed class EnsureIdentityHandlerTests
         TenantId = TenantId,
         ReferenceNumber = "TRM-2026-000100",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
         CreatedAt = DateTimeOffset.UtcNow,
         Actors =
         {

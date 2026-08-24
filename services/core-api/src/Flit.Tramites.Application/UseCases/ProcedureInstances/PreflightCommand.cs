@@ -124,7 +124,7 @@ public sealed class RunPreflightHandler(
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft", null, null);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
+        var modalidad = instance.Family;
 
         var fieldValues = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
@@ -160,7 +160,7 @@ public sealed class RunPreflightHandler(
         // checks antes de componer el overall (ver AplicarPoliticaDeBloqueo).
         var blockingRules = await _blockingPolicy.GetAsync(tenantId, otId, ct);
 
-        if (modalidad == TramiteModalidadEntrada.Traspaso)
+        if (modalidad == ProcedureFamily.Traspaso)
         {
             // Vehículo por placa (requiere documento del propietario actual). El doc del
             // propietario se persiste en field_values en el paso "consulta" (puede llegar
@@ -267,13 +267,13 @@ public sealed class RunPreflightHandler(
     /// </summary>
     private async Task<Guid?> FindDuplicateActiveProcedureAsync(
         ProcedureInstance instance,
-        TramiteModalidadEntrada? modalidad,
+        ProcedureFamily? modalidad,
         Guid tenantId,
         string? vin,
         string? plate,
         CancellationToken ct)
     {
-        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad == ProcedureFamily.Matriculas)
         {
             var vinNorm = VinNormalizer.Normalize(vin);
             if (vinNorm is null)
@@ -284,7 +284,7 @@ public sealed class RunPreflightHandler(
                 existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
-        if (modalidad == TramiteModalidadEntrada.Traspaso)
+        if (modalidad == ProcedureFamily.Traspaso)
         {
             var placaNorm = plate?.Trim().ToUpperInvariant();
             if (string.IsNullOrEmpty(placaNorm))
@@ -419,10 +419,10 @@ public sealed class RunPreflightHandler(
     /// </summary>
     internal static VehicleStateBlock? EndurecerEstadoVehiculoMatricula(
         List<PreflightCheckDto> checks,
-        TramiteModalidadEntrada? modalidad,
+        ProcedureFamily? modalidad,
         TramiteValidationMode mode = TramiteValidationMode.Block)
     {
-        if (modalidad != TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad != ProcedureFamily.Matriculas)
             return null;
 
         for (var i = 0; i < checks.Count; i++)

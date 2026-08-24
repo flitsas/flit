@@ -281,9 +281,7 @@ public sealed class PatchFieldValuesTests
     private static ProcedureInstance TraspasoInstance(Guid id, Guid tenantId, string status)
     {
         var instance = Instance(id, tenantId, status);
-        instance.ModalidadEntrada = "traspaso";
         instance.ProcedureType = ProcedureTypeFixture.For("traspaso");
-        instance.TipologiaCodigo = "traspaso_standard";
         return instance;
     }
 

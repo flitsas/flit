@@ -313,7 +313,6 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
             ReferenceNumber = "DSP-1",
             Status = "aprobado",
             Plate = "ABC123",
-            ModalidadEntrada = "matricula_inicial",
             CreatedByUserId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow,
             Actors =

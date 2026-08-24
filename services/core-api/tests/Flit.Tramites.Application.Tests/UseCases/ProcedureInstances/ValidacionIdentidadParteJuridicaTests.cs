@@ -347,7 +347,6 @@ public sealed class ValidacionIdentidadParteJuridicaTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(instance);

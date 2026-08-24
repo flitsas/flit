@@ -32,7 +32,6 @@ public sealed class CommercialHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "traspaso",
             Commercial = commercial,
             CreatedAt = DateTimeOffset.UtcNow,
         };

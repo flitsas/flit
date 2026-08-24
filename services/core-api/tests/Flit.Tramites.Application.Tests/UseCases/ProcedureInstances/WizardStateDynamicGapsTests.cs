@@ -56,7 +56,6 @@ public sealed class WizardStateDynamicGapsTests
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = "TRM-2026-000042",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = "matricula_inicial",
         CreatedAt = DateTimeOffset.UtcNow,
     };
 

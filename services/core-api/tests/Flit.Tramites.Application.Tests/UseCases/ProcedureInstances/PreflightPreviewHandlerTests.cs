@@ -180,7 +180,6 @@ public sealed class PreflightPreviewHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "MAT-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new Flit.Tramites.Domain.Entities.ProcedureInstanceFieldValue

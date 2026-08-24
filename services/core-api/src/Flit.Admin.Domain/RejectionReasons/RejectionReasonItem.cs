@@ -11,7 +11,7 @@ public sealed record RejectionReasonItem(
 
 /// <summary>
 /// Modalidades sobre las que se define una causal. Espejo de
-/// <c>TramiteModalidadEntrada</c> — se duplica aquí para no acoplar el módulo Admin al dominio de
+/// <c>ProcedureFamily</c> — se duplica aquí para no acoplar el módulo Admin al dominio de
 /// Trámites por una constante, igual que hace el resto de catálogos administrativos.
 /// </summary>
 public static class RejectionReasonModalidades

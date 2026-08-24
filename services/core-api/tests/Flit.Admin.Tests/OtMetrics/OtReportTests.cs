@@ -390,12 +390,12 @@ public sealed class OtReportTests
         Guid? tenantId = null) =>
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId ?? ClientTenant,
             ProcedureTypeId = ProcedureTypeId,
             ReferenceNumber = reference,
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             PlateFlowStatus = plateFlowStatus,
             IsPaused = isPaused,
             SubsanacionActiva = subsanacionActiva,

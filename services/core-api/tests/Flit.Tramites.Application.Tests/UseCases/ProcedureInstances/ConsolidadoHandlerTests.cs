@@ -98,8 +98,6 @@ public sealed class ConsolidadoHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000099",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -122,8 +120,6 @@ public sealed class ConsolidadoHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000100",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -408,7 +404,6 @@ public sealed class ConsolidadoHandlerTests
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
-        instance.ModalidadEntrada = "sucesion";
         instance.ProcedureType = ProcedureTypeFixture.For("sucesion");
         foreach (var att in instance.Attachments)
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);

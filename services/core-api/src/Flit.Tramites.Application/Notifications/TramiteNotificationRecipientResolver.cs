@@ -25,7 +25,7 @@ public sealed class TramiteNotificationRecipientResolver : ITramiteNotificationR
         var recipients = new List<TramiteEmailRecipient>();
         var gaps = new List<TramiteRecipientGap>();
 
-        foreach (var role in RolesToNotify(instance.ModalidadEntrada))
+        foreach (var role in RolesToNotify(instance.FamilyCode))
         {
             var actor = actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));

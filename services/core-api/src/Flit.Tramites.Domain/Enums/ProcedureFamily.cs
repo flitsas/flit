@@ -72,4 +72,25 @@ public static class ProcedureFamilyCodes
 
     /// <summary><c>true</c> si el valor pertenece al dominio de familias.</summary>
     public static bool IsValid(string? value) => FromCode(value) is not null;
+
+    /// <summary>
+    /// PUENTE TEMPORAL — acepta además los dos valores de la difunta <c>modalidad_entrada</c>
+    /// (<c>matricula_inicial</c> / <c>traspaso</c>) que el frontend todavía envía en los requests de
+    /// creación y de pre-vuelo.
+    /// <para>Se retira cuando el cliente pase a enviar <c>procedureTypeCode</c> (HU del selector
+    /// familia → tipo). No usar en código nuevo: para eso está <see cref="FromCode"/>.</para>
+    /// </summary>
+    public static ProcedureFamily? FromCodeOrLegacyModalidad(string? value)
+    {
+        var familia = FromCode(value);
+        if (familia is not null)
+            return familia;
+
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "matricula_inicial" => ProcedureFamily.Matriculas,
+            "traspaso" => ProcedureFamily.Traspaso,
+            _ => null,
+        };
+    }
 }

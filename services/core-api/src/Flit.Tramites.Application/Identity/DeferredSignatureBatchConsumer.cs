@@ -135,7 +135,7 @@ public sealed class DeferredSignatureBatchConsumer(
             {
                 validation_id = validationId,
                 parte = mark.PartyRole,
-                modalidad = instance.ModalidadEntrada,
+                modalidad = instance.FamilyCode,
                 accion,
                 estado_marca = mark.Estado,
                 motivo = mark.DiscardedReason,

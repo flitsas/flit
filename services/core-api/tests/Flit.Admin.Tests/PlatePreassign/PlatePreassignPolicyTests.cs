@@ -315,7 +315,6 @@ public sealed class PlatePreassignPolicyTests
             Id = instanceId,
             TenantId = company,
             ProcedureTypeId = Guid.NewGuid(),
-            ModalidadEntrada = modalidad,
             Status = "preparado",
             CreatedAt = DateTimeOffset.UtcNow,
         });

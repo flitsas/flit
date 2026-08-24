@@ -183,12 +183,12 @@ public sealed class OtAlertSnapshotTests
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = ClientTenant,
             ProcedureTypeId = ProcedureType,
             ReferenceNumber = reference,
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             TransitOfficeId = TransitOffice,
             CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
         });

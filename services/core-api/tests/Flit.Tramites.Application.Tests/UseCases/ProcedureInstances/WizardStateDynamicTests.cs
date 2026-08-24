@@ -31,7 +31,6 @@ public sealed class WizardStateDynamicTests
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = "TRM-2026-000001",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = modalidad,
         CreatedAt = DateTimeOffset.UtcNow,
     };
 

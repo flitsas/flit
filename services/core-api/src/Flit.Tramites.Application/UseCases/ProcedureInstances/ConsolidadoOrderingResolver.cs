@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -16,10 +17,10 @@ internal static class ConsolidadoOrderingResolver
     internal static IReadOnlyList<ProcedureInstanceAttachment> Select(
         IEnumerable<ProcedureInstanceAttachment> attachments,
         string? modalidadCode) =>
-        TramiteModalidadEntradaCodes.FromCode(modalidadCode) switch
+        ProcedureFamilyCodes.FromCodeOrLegacyModalidad(modalidadCode) switch
         {
-            TramiteModalidadEntrada.MatriculaInicial => MatriculaConsolidadoOrdering.SelectOrdered(attachments),
-            TramiteModalidadEntrada.Traspaso => TraspasoConsolidadoOrdering.SelectOrdered(attachments),
+            ProcedureFamily.Matriculas => MatriculaConsolidadoOrdering.SelectOrdered(attachments),
+            ProcedureFamily.Traspaso => TraspasoConsolidadoOrdering.SelectOrdered(attachments),
             _ => GenericConsolidadoOrdering.SelectOrdered(attachments),
         };
 }

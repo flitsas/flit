@@ -233,7 +233,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
                 p.Vin,
                 p.TransitOfficeId,
                 p.ProcedureTypeId,
-                p.ModalidadEntrada,
+                (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                 p.Status,
                 p.Prioritario,
                 p.SubsanacionActiva,

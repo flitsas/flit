@@ -30,11 +30,11 @@ public static class TipologiaResolver
     {
         if (ProcedureFamilyCodes.FromCode(family) == ProcedureFamily.Traspaso)
         {
-            return (TramiteModalidadEntradaCodes.Traspaso, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+            return (ProcedureFamilyCodes.Traspaso, TramiteTipologiaCatalog.CodigoTraspasoStandard);
         }
 
         // MATRICULAS, OTROS y cualquier familia desconocida → matrícula inicial (default MVP).
-        return (TramiteModalidadEntradaCodes.MatriculaInicial, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        return (ProcedureFamilyCodes.Matriculas, TramiteTipologiaCatalog.CodigoMatriculaInicial);
     }
 
 }

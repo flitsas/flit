@@ -557,7 +557,7 @@ public sealed class TramiteLifecycleService(
         if (_validationPolicy.VehicleRegistrationState != TramiteValidationMode.Block)
             return null;
 
-        if (TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) != TramiteModalidadEntrada.MatriculaInicial)
+        if (instance.Family != ProcedureFamily.Matriculas)
             return null;
 
         var vin = instance.FieldValues.FirstOrDefault(f =>
@@ -609,10 +609,10 @@ public sealed class TramiteLifecycleService(
         if (_prendaRepo is null)
             return (null, null);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
+        var modalidad = instance.Family;
 
         // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda), solo traspaso.
-        if (modalidad == TramiteModalidadEntrada.Traspaso && HasGravamenWarn(instance))
+        if (modalidad == ProcedureFamily.Traspaso && HasGravamenWarn(instance))
         {
             return MapPrendaGateResult(
                 PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos),
@@ -626,7 +626,7 @@ public sealed class TramiteLifecycleService(
         // matrícula el vehículo es nuevo y el gravamen, si existe, se CONSTITUYE con el trámite —mismo
         // razonamiento que ya documenta EvaluateOtOverride para el override del OT). Sin decisión de
         // prenda vigente, no hay soporte del gravamen: no se puede preparar el trámite.
-        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad == ProcedureFamily.Matriculas)
         {
             return MapPrendaGateResult(
                 PrendaGate.EvaluateMatriculaInicial(prenda, docTipos),

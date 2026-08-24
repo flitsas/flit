@@ -12,6 +12,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.Logging;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Modules.Quipux.Application.UseCases.RegistrarDocumento;
 
@@ -586,17 +587,17 @@ public sealed class RegistrarDocumentoQuipuxHandler
     /// </summary>
     private static bool EsTraspaso(ProcedureInstance instance)
     {
-        if (!string.IsNullOrEmpty(instance.TipologiaCodigo)
-            && TramiteTipologiaCatalog.IsValid(instance.TipologiaCodigo))
+        if (!string.IsNullOrEmpty(instance.TypeCode)
+            && TramiteTipologiaCatalog.IsValid(instance.TypeCode))
         {
             return string.Equals(
-                instance.TipologiaCodigo,
+                instance.TypeCode,
                 TramiteTipologiaCatalog.CodigoTraspasoStandard,
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        return TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-            == TramiteModalidadEntrada.Traspaso;
+        return instance.Family
+            == ProcedureFamily.Traspaso;
     }
 
     /// <summary>

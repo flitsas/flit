@@ -31,8 +31,6 @@ public sealed class PauseProcedureInstanceTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "traspaso_estandar",
-            TipologiaCodigo = "traspaso",
             Origin = origin,
             CreatedAt = DateTimeOffset.UtcNow,
         };

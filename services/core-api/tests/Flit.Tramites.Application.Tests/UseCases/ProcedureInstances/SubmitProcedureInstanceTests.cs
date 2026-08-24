@@ -63,8 +63,6 @@ public sealed class SubmitProcedureInstanceTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow
         };
 

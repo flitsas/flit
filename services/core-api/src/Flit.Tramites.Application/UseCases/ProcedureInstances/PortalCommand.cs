@@ -98,7 +98,7 @@ public sealed class GetPortalByTokenHandler(IProcedureInstanceRepository repo)
 
         var summary = new PortalInstanceSummary(
             instance.ReferenceNumber,
-            instance.ModalidadEntrada,
+            instance.FamilyCode,
             codigo,
             tipologia?.Nombre);
 

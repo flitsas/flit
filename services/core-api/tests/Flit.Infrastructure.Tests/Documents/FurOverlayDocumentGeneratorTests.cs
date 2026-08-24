@@ -44,7 +44,6 @@ public sealed class FurOverlayDocumentGeneratorTests
     private static FurDocumentData TraspasoData() => FullData() with
     {
         Modalidad = "traspaso",
-        TipologiaCodigo = "traspaso_standard",
         Vehiculo = FullData().Vehiculo with
         {
             Marca = "BAJAJ",

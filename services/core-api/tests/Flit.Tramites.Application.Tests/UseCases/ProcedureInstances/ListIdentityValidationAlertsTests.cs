@@ -51,7 +51,6 @@ public sealed class ListIdentityValidationAlertsTests
                 Id = Guid.NewGuid(),
                 TenantId = tenant,
                 ReferenceNumber = reference,
-                ModalidadEntrada = "matricula_inicial",
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedByUserId = createdByUserId ?? Guid.NewGuid(),
             },
@@ -252,7 +251,6 @@ public sealed class ListIdentityValidationAlertsTests
             Id = id,
             TenantId = tenant,
             ReferenceNumber = "TRM-2026-000099",
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedByUserId = Guid.NewGuid(),
         };

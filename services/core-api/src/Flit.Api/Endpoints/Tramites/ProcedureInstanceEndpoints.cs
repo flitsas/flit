@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Api.Endpoints.Tramites;
 
@@ -963,14 +964,14 @@ internal static class ProcedureInstanceEndpoints
     private static bool EsMatriculaInicial(string? modalidad) =>
         string.Equals(
             modalidad?.Trim(),
-            TramiteModalidadEntradaCodes.MatriculaInicial,
+            ProcedureFamilyCodes.Matriculas,
             StringComparison.OrdinalIgnoreCase);
 
     /// <summary>La modalidad solicitada es traspaso (tolerante a espacios/caja).</summary>
     private static bool EsTraspaso(string? modalidad) =>
         string.Equals(
             modalidad?.Trim(),
-            TramiteModalidadEntradaCodes.Traspaso,
+            ProcedureFamilyCodes.Traspaso,
             StringComparison.OrdinalIgnoreCase);
 }
 

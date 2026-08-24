@@ -63,7 +63,6 @@ public sealed class RnmcConsultHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = "borrador",
-            ModalidadEntrada = modalidad,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         foreach (var a in actors)

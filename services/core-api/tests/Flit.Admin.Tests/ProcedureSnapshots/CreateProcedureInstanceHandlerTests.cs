@@ -161,6 +161,7 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             seed.ProcedureInstances.Add(new ProcedureInstance
             {
+                ProcedureType = ProcedureTypeFixture.Matricula,
                 Id = Guid.NewGuid(),
                 TenantId = ClienteId,
                 ProcedureTypeId = ProcedureTypeId,

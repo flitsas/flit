@@ -106,8 +106,6 @@ public sealed class IdentityValidationCompletedConsumerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = reference,
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = traspaso ? "traspaso" : "matricula_inicial",
-            TipologiaCodigo = traspaso ? TramiteTipologiaCatalog.CodigoTraspasoStandard : TramiteTipologiaCatalog.CodigoMatriculaInicial,
             DraftFinalizedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
         };

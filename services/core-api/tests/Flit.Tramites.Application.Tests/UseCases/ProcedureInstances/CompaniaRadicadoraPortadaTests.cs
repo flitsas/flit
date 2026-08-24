@@ -341,7 +341,6 @@ public sealed class CompaniaRadicadoraPortadaTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000123",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

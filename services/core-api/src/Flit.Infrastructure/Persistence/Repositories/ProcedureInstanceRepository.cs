@@ -9,6 +9,7 @@ using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -37,7 +38,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Where(i => i.TenantId == tenantId
                 && i.DeletedAt == null
                 && i.Id != excludeInstanceId
-                && i.ModalidadEntrada == TramiteModalidadEntradaCodes.MatriculaInicial
+                && (i.ProcedureType != null ? i.ProcedureType.Family : "") == ProcedureFamilyCodes.Matriculas
                 && i.FieldValues.Any(f => f.FieldKey == "vin"
                     && f.ValueText != null
                     && f.ValueText.Trim().ToUpper() == vinNormalizado))
@@ -94,7 +95,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Where(i => i.TenantId == tenantId
                 && i.DeletedAt == null
                 && i.Id != excludeInstanceId
-                && i.ModalidadEntrada == TramiteModalidadEntradaCodes.Traspaso
+                && (i.ProcedureType != null ? i.ProcedureType.Family : "") == ProcedureFamilyCodes.Traspaso
                 && i.FieldValues.Any(f => f.FieldKey == "plate"
                     && f.ValueText != null
                     && f.ValueText.Trim().ToUpper() == placaNormalizada))
@@ -459,7 +460,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 InstanceId = v.ProcedureInstanceId!.Value,
                 v.ProcedureInstance!.ReferenceNumber,
                 v.ProcedureInstance.Status,
-                Modalidad = v.ProcedureInstance.ModalidadEntrada,
+                Modalidad = v.ProcedureInstance.FamilyCode,
             })
             .ToListAsync(ct);
 
@@ -479,7 +480,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 InstanceId = a.ProcedureInstanceId,
                 a.ProcedureInstance!.ReferenceNumber,
                 a.ProcedureInstance.Status,
-                Modalidad = a.ProcedureInstance.ModalidadEntrada,
+                Modalidad = a.ProcedureInstance.FamilyCode,
             })
             .ToListAsync(ct);
 
@@ -962,7 +963,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     ExpiresAt = latest.ExpiresAt,
                     ProcedureInstanceId = latest.ProcedureInstanceId,
                     ReferenceNumber = latest.ProcedureInstance?.ReferenceNumber,
-                    Modalidad = latest.ProcedureInstance?.ModalidadEntrada,
+                    Modalidad = (latest.ProcedureInstance != null && latest.ProcedureInstance.ProcedureType != null ? latest.ProcedureInstance.ProcedureType.Family : ""),
                     PartyRole = latest.PartyRole,
                     Email = latest.Email,
                     Provider = latest.Provider,
@@ -1139,7 +1140,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         {
             var term = EscapeLike(filter.Modalidad.Trim());
             query = query.Where(v => v.ProcedureInstance != null
-                && EF.Functions.ILike(v.ProcedureInstance.ModalidadEntrada, $"%{term}%", LikeEscapeChar));
+                && EF.Functions.ILike(v.ProcedureInstance.FamilyCode, $"%{term}%", LikeEscapeChar));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Name))
@@ -1685,7 +1686,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             query = query.Where(x =>
                 (x.Signatures.Any(s => s.Parte == SignatureRules.ParteComprador
                         && s.DocTipo == SignatureDocTipos.Compraventa && s.Estado == SignatureEstados.Firmada)
-                    && (x.ModalidadEntrada != TramiteModalidadEntradaCodes.Traspaso
+                    && ((x.ProcedureType != null ? x.ProcedureType.Family : "") != ProcedureFamilyCodes.Traspaso
                         || x.Signatures.Any(s => s.Parte == SignatureRules.ParteVendedor
                             && s.DocTipo == SignatureDocTipos.Compraventa && s.Estado == SignatureEstados.Firmada)))
                 == firmadoCompleto);

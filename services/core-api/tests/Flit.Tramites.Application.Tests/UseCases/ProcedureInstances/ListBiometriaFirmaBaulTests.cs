@@ -53,7 +53,6 @@ public sealed class ListBiometriaFirmaBaulTests
             ProcedureType = ProcedureTypeFixture.For("traspaso"),
             Id = id,
             TenantId = TenantId,
-            ModalidadEntrada = "traspaso",
             ReferenceNumber = "T-1",
         };
         instance.Actors.Add(ActorJuridico("comprador", mecanismoComprador));

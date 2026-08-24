@@ -62,7 +62,6 @@ public sealed class AttachmentPreviewUrlHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.Attachments.Add(new ProcedureInstanceAttachment

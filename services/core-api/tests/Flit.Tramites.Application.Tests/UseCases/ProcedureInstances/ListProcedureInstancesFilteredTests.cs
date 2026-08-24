@@ -66,7 +66,6 @@ public sealed class ListProcedureInstancesFilteredHandlerTests
         TenantId = tenantId,
         ReferenceNumber = reference,
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
         CreatedAt = DateTimeOffset.UtcNow,
     };
 

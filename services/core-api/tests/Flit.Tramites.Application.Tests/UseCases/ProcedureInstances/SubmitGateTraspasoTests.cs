@@ -27,8 +27,6 @@ public sealed class SubmitGateTraspasoTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000200",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

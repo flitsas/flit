@@ -153,7 +153,6 @@ public sealed class TramiteNotificationRecipientResolverTests
         ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
         Id = Guid.NewGuid(),
         TenantId = Guid.NewGuid(),
-        ModalidadEntrada = "matricula_inicial",
     };
 
     private static ProcedureInstance Traspaso() => new()
@@ -161,7 +160,6 @@ public sealed class TramiteNotificationRecipientResolverTests
         ProcedureType = ProcedureTypeFixture.For("traspaso"),
         Id = Guid.NewGuid(),
         TenantId = Guid.NewGuid(),
-        ModalidadEntrada = "traspaso",
     };
 
     private static ProcedureInstanceActor Natural(string role, string email) => new()

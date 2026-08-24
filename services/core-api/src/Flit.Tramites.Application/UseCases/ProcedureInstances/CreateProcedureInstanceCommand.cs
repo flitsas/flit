@@ -46,8 +46,12 @@ public sealed class CreateProcedureInstanceHandler(
     private static readonly Dictionary<string, string> ModalidadToCanonicalCode =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            [TramiteModalidadEntradaCodes.MatriculaInicial] = "MATRICULA_NUEVA",
-            [TramiteModalidadEntradaCodes.Traspaso] = "TRASPASO_STANDARD",
+            [ProcedureFamilyCodes.Matriculas] = "MATRICULA_NUEVA",
+            [ProcedureFamilyCodes.Traspaso] = "TRASPASO_STANDARD",
+            // PUENTE TEMPORAL — el cliente todavía envía la modalidad. Se retira cuando pase a
+            // enviar procedureTypeCode (HU del selector familia → tipo).
+            ["matricula_inicial"] = "MATRICULA_NUEVA",
+            ["traspaso"] = "TRASPASO_STANDARD",
         };
 
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
@@ -110,10 +114,6 @@ public sealed class CreateProcedureInstanceHandler(
         var now = DateTimeOffset.UtcNow;
         var year = now.Year;
 
-        // Slice 4b: deriva modalidad/tipología desde la familia del tipo elegido para que el
-        // wizard y el gating de documentos apliquen la modalidad correcta en runtime.
-        var (modalidad, tipologia) = TipologiaResolver.FromFamily(procedureType.Family);
-
         var instance = new ProcedureInstance
         {
             Id = Guid.NewGuid(),
@@ -125,8 +125,6 @@ public sealed class CreateProcedureInstanceHandler(
             ProcedureType = procedureType,
             ReferenceNumber = string.Empty, // generado de forma resiliente en el repo (retry ante colisión)
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             TransitOfficeId = request.TransitOfficeId,
             CreatedByUserId = request.CreatedByUserId,
             // ICT — correlación idempotente (null para trámites de plataforma). Van en el MISMO INSERT

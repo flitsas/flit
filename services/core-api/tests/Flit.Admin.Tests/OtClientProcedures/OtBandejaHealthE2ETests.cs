@@ -222,6 +222,7 @@ public sealed class OtBandejaHealthE2ETests
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = clientTenantId,
             ProcedureTypeId = procedureTypeId,

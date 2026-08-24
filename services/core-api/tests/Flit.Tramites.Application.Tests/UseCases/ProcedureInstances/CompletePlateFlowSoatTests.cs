@@ -31,8 +31,6 @@ public sealed class CompletePlateFlowSoatTests
             ReferenceNumber = "TRM-2026-000100",
             Status = TramiteEstado.Entregado,
             PlateFlowStatus = PlateFlowStatus.Asignado,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetByIdWithDetailsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);

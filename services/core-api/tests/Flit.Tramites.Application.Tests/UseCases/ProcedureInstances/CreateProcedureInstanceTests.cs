@@ -164,37 +164,29 @@ public sealed class CreateProcedureInstanceTests
     }
 
     [Theory]
-    [InlineData("TRASPASO", "traspaso", "TRASPASO_STANDARD")]
-    [InlineData("traspaso", "traspaso", "TRASPASO_STANDARD")] // case-insensitive
-    [InlineData("MATRICULAS", "matricula_inicial", "MATRICULA_NUEVA")]
-    [InlineData("OTROS", "matricula_inicial", "MATRICULA_NUEVA")]
-    [InlineData("UNKNOWN_FAMILY", "matricula_inicial", "MATRICULA_NUEVA")] // default defensivo
-    public async Task HandleAsync_SetsModalidadAndTipologiaFromFamily(
-        string family, string expectedModalidad, string expectedTipologia)
+    [InlineData("TRASPASO", "TRASPASO_STANDARD")]
+    [InlineData("traspaso", "TRASPASO_STANDARD")]
+    [InlineData("MATRICULAS", "MATRICULA_NUEVA")]
+    [InlineData("OTROS", "BLINDAJE")]
+    public async Task HandleAsync_LaInstanciaQuedaLigadaAlTipo_SinClasificacionPropia(
+        string family, string code)
     {
+        // ADR-0050 — la instancia ya no persiste modalidad ni tipología: su clasificación se deriva
+        // del tipo, así que basta con que el FK y la navegación queden bien puestos. Antes esta
+        // prueba verificaba la derivación familia → (modalidad, tipología), que ya no existe.
         var ct = TestContext.Current.CancellationToken;
-        var pt = new ProcedureType
-        {
-            Id = Guid.NewGuid(),
-            Code = "X",
-            Name = "X",
-            Family = family,
-            PublicationStatus = PublicationStatus.Published,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-        _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
-        StubReferenceGenerator();
+        var pt = PublishedType(code, family);
+        _typeRepo.GetByIdAsync(pt.Id, Arg.Any<CancellationToken>()).Returns(pt);
 
-        var (result, error) = await _sut.HandleAsync(Request(), ct);
+        var (result, error) = await _sut.HandleAsync(
+            new CreateProcedureInstanceRequest(Guid.NewGuid(), pt.Id, Guid.NewGuid(), null), ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
         await _repo.Received(1).AddWithUniqueReferenceAsync(
-            Arg.Is<ProcedureInstance>(i =>
-                i.ModalidadEntrada == expectedModalidad &&
-                i.TipologiaCodigo == expectedTipologia),
+            Arg.Is<ProcedureInstance>(i => i.ProcedureTypeId == pt.Id && i.TypeCode == code),
             Arg.Any<int>(),
-            ct);
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -214,8 +206,8 @@ public sealed class CreateProcedureInstanceTests
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
                 i.ProcedureTypeId == pt.Id &&
-                i.ModalidadEntrada == "matricula_inicial" &&
-                i.TipologiaCodigo == "MATRICULA_NUEVA"),
+                i.FamilyCode == "matricula_inicial" &&
+                i.TypeCode == "MATRICULA_NUEVA"),
             Arg.Any<int>(),
             ct);
     }
@@ -235,8 +227,8 @@ public sealed class CreateProcedureInstanceTests
         result!.ProcedureTypeId.Should().Be(pt.Id);
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
-                i.ModalidadEntrada == "traspaso" &&
-                i.TipologiaCodigo == "TRASPASO_STANDARD"),
+                i.FamilyCode == "traspaso" &&
+                i.TypeCode == "TRASPASO_STANDARD"),
             Arg.Any<int>(),
             ct);
     }

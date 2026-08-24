@@ -53,7 +53,6 @@ public sealed class ListBiometriaPrevalenciaVigenteTests
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000042",
-            ModalidadEntrada = modalidad,
             CreatedAt = Ayer,
         };
 

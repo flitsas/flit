@@ -57,7 +57,6 @@ public sealed class GetPrevalidacionDetailHandlerTests
                     Id = iid,
                     TenantId = tenantId,
                     ReferenceNumber = "TRM-2026-000001",
-                    ModalidadEntrada = "traspaso",
                     Status = TramiteEstado.Borrador,
                 }
                 : null,
@@ -98,7 +97,7 @@ public sealed class GetPrevalidacionDetailHandlerTests
         result!.Id.Should().Be(validation.Id);
         result.ProcedureInstanceId.Should().Be(instanceId);
         result.ReferenceNumber.Should().Be("TRM-2026-000001");
-        result.Modalidad.Should().Be("traspaso");
+        result.Modalidad.Should().Be("TRASPASO");
     }
 
     [Fact]

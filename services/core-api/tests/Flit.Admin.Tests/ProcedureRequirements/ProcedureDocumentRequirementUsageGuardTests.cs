@@ -112,6 +112,7 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
         await using var ctx = NewContext(dbName);
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = instanceId,
             TenantId = TenantId,
             ProcedureTypeId = ProcedureTypeId,

@@ -14,7 +14,6 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
         var instance = new ProcedureInstance
         {
             ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
-            ModalidadEntrada = "matricula_inicial",
             Plate = null,
         };
         var actors = new List<ProcedureInstanceActor>
@@ -44,7 +43,7 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     public void CodigoDivipola_NoSeImprimeComoCiudad()
     {
         var instance = new ProcedureInstance {
-        ProcedureType = ProcedureTypeFixture.For("traspaso"), ModalidadEntrada = "traspaso", Plate = "ABC123" };
+        ProcedureType = ProcedureTypeFixture.For("traspaso"), Plate = "ABC123" };
         var fields = new Dictionary<string, string?>
         {
             ["transit_office_city"] = "25286",
@@ -62,7 +61,7 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     public void CodigoDivipola_UsaCiudadDelCompradorEnMetadata()
     {
         var instance = new ProcedureInstance {
-        ProcedureType = ProcedureTypeFixture.For("matricula_inicial"), ModalidadEntrada = "matricula_inicial", Plate = "ABC123" };
+        ProcedureType = ProcedureTypeFixture.For("matricula_inicial"), Plate = "ABC123" };
         var actors = new List<ProcedureInstanceActor>
         {
             new()
@@ -88,7 +87,7 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     public void MatriculaInicial_NoExponeVendedorEnModelo()
     {
         var instance = new ProcedureInstance {
-        ProcedureType = ProcedureTypeFixture.For("matricula_inicial"), ModalidadEntrada = "matricula_inicial", Plate = "XYZ99" };
+        ProcedureType = ProcedureTypeFixture.For("matricula_inicial"), Plate = "XYZ99" };
         var actors = new List<ProcedureInstanceActor>
         {
             new() { ActorType = "comprador", FullName = "Comprador" },
@@ -106,7 +105,7 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     public void Rechazado_MapeaCausalesYObservacion()
     {
         var instance = new ProcedureInstance {
-        ProcedureType = ProcedureTypeFixture.For("traspaso"), ModalidadEntrada = "traspaso", Plate = "ABC123" };
+        ProcedureType = ProcedureTypeFixture.For("traspaso"), Plate = "ABC123" };
         var causales = new[] { "Documentos ilegibles", "Improntas no coinciden" };
 
         var model = TramiteCambioEstadoEmailProjector.Project(

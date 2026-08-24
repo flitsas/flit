@@ -1180,6 +1180,7 @@ public sealed class OtClientProcedureHandlerTests
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = clientTenantId,
             ProcedureTypeId = procedureTypeId,

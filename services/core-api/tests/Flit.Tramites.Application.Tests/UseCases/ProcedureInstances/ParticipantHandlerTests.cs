@@ -32,8 +32,6 @@ public sealed class ParticipantHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = "traspaso_standard",
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

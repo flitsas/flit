@@ -52,8 +52,6 @@ public sealed class PersonalizedDocumentSubstitutionTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000099",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue
@@ -379,8 +377,6 @@ public sealed class PersonalizedDocumentSubstitutionTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000199",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue

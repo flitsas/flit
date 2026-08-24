@@ -36,8 +36,6 @@ public sealed class WizardMigradoReadonlyTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "MIG-TR-24860",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             IsMigrated = isMigrated,
             CreatedAt = DateTimeOffset.UtcNow,
         };

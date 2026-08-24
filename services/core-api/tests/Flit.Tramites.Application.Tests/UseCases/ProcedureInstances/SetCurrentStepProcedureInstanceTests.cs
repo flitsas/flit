@@ -38,7 +38,6 @@ public sealed class SetCurrentStepProcedureInstanceTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             CurrentStep = currentStep,
             CreatedAt = DateTimeOffset.UtcNow,
         };

@@ -48,6 +48,7 @@ public sealed class DbQuipuxSubmissionConsoleRepositoryTests
         var procedureId = Guid.NewGuid();
         db.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = procedureId,
             TenantId = TenantId,
             ProcedureTypeId = ProcedureTypeId,
@@ -167,6 +168,7 @@ public sealed class DbQuipuxSubmissionConsoleRepositoryTests
         var procedureId = Guid.NewGuid();
         db.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = procedureId,
             TenantId = TenantId,
             ProcedureTypeId = ProcedureTypeId,

@@ -541,12 +541,12 @@ public sealed class CompanyQueryRepositoryTests
         var id = Guid.NewGuid();
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId ?? Empresa,
             ProcedureTypeId = TipoId,
             ReferenceNumber = reference,
             Status = status,
-            ModalidadEntrada = modalidad,
             Plate = placa,
             Vin = vin,
             Prioritario = prioritario,

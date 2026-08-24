@@ -59,6 +59,7 @@ public sealed class ConsultarLogQuipuxTests
         var instanceId = Guid.NewGuid();
         db.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = instanceId,
             TenantId = TenantId,
             ProcedureTypeId = ProcedureTypeId,

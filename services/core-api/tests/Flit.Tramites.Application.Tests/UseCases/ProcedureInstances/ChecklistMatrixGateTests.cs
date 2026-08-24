@@ -35,8 +35,6 @@ public sealed class ChecklistMatrixGateTests
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = "TRM-1",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = "matricula_inicial",
-        TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
         ChecklistEstado = "{}",
         CreatedAt = DateTimeOffset.UtcNow,
     };

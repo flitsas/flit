@@ -530,8 +530,8 @@ public sealed class GetWizardStateHandler(
         }
 
         return new WizardStateDto(
-            instance.ModalidadEntrada ?? string.Empty,
-            instance.TipologiaCodigo,
+            instance.FamilyCode ?? string.Empty,
+            instance.TypeCode,
             result.Steps.Count,
             wizardSteps,
             canSubmit,

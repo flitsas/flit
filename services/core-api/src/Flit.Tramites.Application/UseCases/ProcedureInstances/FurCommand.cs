@@ -722,7 +722,7 @@ public sealed class GenerarFurHandler(
         return new FurDocumentData(
             ProcedureInstanceId: instance.Id,
             ReferenceNumber: instance.ReferenceNumber,
-            Modalidad: instance.ModalidadEntrada,
+            Modalidad: instance.FamilyCode,
             TipologiaCodigo: codigo,
             Vehiculo: vehiculo,
             Organismo: organismo,

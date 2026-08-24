@@ -207,7 +207,6 @@ public sealed class ProcedureStateChangeEmailEnqueueNotifierTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "ENQ-1",
             Status = "entregado",
-            ModalidadEntrada = modalidad,
             CreatedByUserId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow,
         };

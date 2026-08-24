@@ -7,7 +7,7 @@ namespace Flit.Tramites.Domain.Tramites.ValueObjects;
 
 /// <summary>
 /// Clasificación y capacidades de un expediente, derivadas del tipo de trámite (ADR-0050).
-/// <para>Sustituye a <c>ProcedureInstance.ModalidadEntrada</c> y <c>TipologiaCodigo</c>. La fuente
+/// <para>Sustituye a <c>ProcedureInstance.FamilyCode</c> y <c>TipologiaCodigo</c>. La fuente
 /// preferente es el snapshot congelado al crear (<c>procedure_type_snapshots</c>), de modo que un
 /// cambio posterior del catálogo no reclasifique expedientes en curso; el catálogo vivo es el
 /// respaldo.</para>

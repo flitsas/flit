@@ -29,7 +29,7 @@ public static class ExpedienteCoverInfoBuilder
         return new ExpedienteCoverInfo(
             CodigoTramite: instance.ReferenceNumber,
             Placa: Get(fv, "plate"),
-            TipoTramite: HumanizeModalidad(instance.ModalidadEntrada),
+            TipoTramite: HumanizeModalidad(instance.FamilyCode),
             SecretariaTransito: Get(fv, "transit_office_name"),
             CompaniaRadicadora: Get(fv, "company_name")
                                 ?? Get(fv, "radicadora")

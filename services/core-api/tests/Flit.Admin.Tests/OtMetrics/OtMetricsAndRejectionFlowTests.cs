@@ -493,12 +493,12 @@ public sealed class OtMetricsAndRejectionFlowTests
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = ClientTenant,
             ProcedureTypeId = ProcedureType,
             ReferenceNumber = reference,
             Status = status,
-            ModalidadEntrada = modalidad,
             PlateFlowStatus = plateFlowStatus,
             IsPaused = isPaused,
             Prioritario = prioritario,

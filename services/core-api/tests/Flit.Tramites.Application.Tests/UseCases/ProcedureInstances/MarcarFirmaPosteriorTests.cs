@@ -282,7 +282,6 @@ public sealed class MarcarFirmaPosteriorTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.Actors.Add(new ProcedureInstanceActor

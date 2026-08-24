@@ -321,7 +321,6 @@ public sealed class TablaDecisionValidacionIdentidadTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(instance);
@@ -495,8 +494,6 @@ public sealed class TablaDecisionValidacionIdentidadTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             CreatedAt = now,
         };
 

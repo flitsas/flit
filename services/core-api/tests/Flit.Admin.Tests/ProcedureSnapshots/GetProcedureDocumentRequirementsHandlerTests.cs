@@ -74,6 +74,7 @@ public sealed class GetProcedureDocumentRequirementsHandlerTests
         {
             seed.ProcedureInstances.Add(new ProcedureInstance
             {
+                ProcedureType = ProcedureTypeFixture.Matricula,
                 Id = TramiteId,
                 TenantId = TenantId,
                 ProcedureTypeId = ProcedureTypeId,
@@ -108,6 +109,7 @@ public sealed class GetProcedureDocumentRequirementsHandlerTests
         await using var ctx = NewContext(dbName);
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = TramiteId,
             TenantId = TenantId,
             ProcedureTypeId = ProcedureTypeId,

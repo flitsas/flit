@@ -400,7 +400,7 @@ public sealed class GenerarConsolidadoHandler(
 
         if (configurado.Count == 0)
             return SanitizeConsolidadoParts(
-                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada));
+                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.FamilyCode));
 
         return SanitizeConsolidadoParts(
             GenericConsolidadoOrdering.SelectByPrecedence(

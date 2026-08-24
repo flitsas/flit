@@ -32,8 +32,6 @@ public sealed class WizardStateHandlerTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -241,7 +239,7 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Modalidad.Should().Be("matricula_inicial");
+        result!.Modalidad.Should().Be("MATRICULAS");
         result.TotalSteps.Should().Be(5);
         result.Steps.Should().HaveCount(5);
     }
@@ -284,7 +282,7 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Modalidad.Should().Be("traspaso");
+        result!.Modalidad.Should().Be("TRASPASO");
         result.TotalSteps.Should().Be(6);
         result.Steps.Should().HaveCount(6);
     }

@@ -46,7 +46,7 @@ public sealed class RunRnmcConsultHandler(
         if (instance.IsMigrated)
             return (null, "migrado_solo_lectura");
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
+        var modalidad = instance.Family;
         var fieldValues = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
 
@@ -64,7 +64,7 @@ public sealed class RunRnmcConsultHandler(
             var comprador = ActorOf(instance, "comprador");
             await RunRnmcForActorAsync(checks, "comprador", comprador, fieldValues, ct);
 
-            if (modalidad == TramiteModalidadEntrada.Traspaso)
+            if (modalidad == ProcedureFamily.Traspaso)
             {
                 var vendedor = ActorOf(instance, "vendedor");
                 await RunRnmcForActorAsync(checks, "vendedor", vendedor, fieldValues, ct);

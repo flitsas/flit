@@ -125,8 +125,6 @@ public sealed class MandateSignerBugReproTests
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = "TRM-2026-000777",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = "matricula_inicial",
-        TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
         TransitOfficeId = Ot,
         MandateSignerId = null,
         CreatedAt = DateTimeOffset.UtcNow,

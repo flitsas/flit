@@ -39,7 +39,6 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         TenantId = tenantId,
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = reference,
-        ModalidadEntrada = modalidad,
         Vin = vin,
         Plate = plate,
         VendedorNombre = vendedor,

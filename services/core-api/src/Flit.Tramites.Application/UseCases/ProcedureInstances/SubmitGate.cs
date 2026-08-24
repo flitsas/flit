@@ -3,6 +3,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -48,12 +49,11 @@ public static class SubmitGate
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
+        var modalidad = instance.Family;
 
         var docsCompletos = documentosCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
 
-        return modalidad == TramiteModalidadEntrada.Traspaso
+        return modalidad == ProcedureFamily.Traspaso
             ? EvaluateTraspaso(instance, identidadAprobadaPartes, docsCompletos)
             : EvaluateMatricula(instance, identidadAprobadaPartes, docsCompletos);
     }

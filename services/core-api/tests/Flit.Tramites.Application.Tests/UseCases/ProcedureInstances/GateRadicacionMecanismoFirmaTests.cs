@@ -125,7 +125,6 @@ public sealed class GateRadicacionMecanismoFirmaTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = now,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue

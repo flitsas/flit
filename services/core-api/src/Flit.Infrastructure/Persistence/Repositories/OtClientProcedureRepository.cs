@@ -75,7 +75,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 ProcedureTypeId = p.ProcedureTypeId,
                                 ReferenceNumber = p.ReferenceNumber,
                                 Status = p.Status,
-                                ModalidadEntrada = p.ModalidadEntrada,
+                                ModalidadEntrada = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                                 PlateFlowStatus = p.PlateFlowStatus,
                                 // HU #10804 — soat_estado por fila (para ocultar Aprobar/Rechazar en el frontend
                                 // hasta que la placa esté 'asignado' con SOAT 'vigente'). Lectura cross-tenant
@@ -164,6 +164,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         // Todos los 'entregado' dirigidos a este organismo, con o sin grant vigente:
                         // los "sin grant" son precisamente los que la bandeja no muestra (R09).
                         var delivered = _context.ProcedureInstances
+                            .Include(x => x.ProcedureType)
                             .AsNoTracking()
                             .Where(p => p.DeletedAt == null
                                 && p.Status == TramiteEstado.Entregado
@@ -285,6 +286,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             async () =>
             {
                 var entity = await _context.ProcedureInstances
+                    .Include(x => x.ProcedureType)
                     .FirstOrDefaultAsync(
                         p => p.Id == procedureInstanceId
                             && p.TenantId == accessible.ClientTenantId
@@ -516,6 +518,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             async () =>
             {
                 var entity = await _context.ProcedureInstances
+                    .Include(x => x.ProcedureType)
                     .FirstOrDefaultAsync(
                         p => p.Id == procedureInstanceId
                             && p.TenantId == accessible.ClientTenantId
@@ -653,6 +656,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             async () =>
             {
                 var entity = await _context.ProcedureInstances
+                    .Include(x => x.ProcedureType)
                     .FirstOrDefaultAsync(
                         p => p.Id == procedureInstanceId
                             && p.TenantId == accessible.ClientTenantId
@@ -729,7 +733,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         Status = p.Status,
                         // La modalidad gobierna qué causales de rechazo aplican: sin ella, el guard
                         // del rechazo descartaría causales válidas por creerlas de otro proceso.
-                        ModalidadEntrada = p.ModalidadEntrada,
+                        ModalidadEntrada = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                         PlateFlowStatus = p.PlateFlowStatus,
                         // HU #10804 — soat_estado también en el detalle (mismo criterio de visibilidad).
                         SoatEstado = _context.ProcedureInstanceFieldValues
@@ -870,6 +874,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid transitOfficeId,
         IReadOnlyList<Guid> clientTenantIds) =>
         _context.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .AsNoTracking()
             .Where(p => p.DeletedAt == null
                 && p.TransitOfficeId == transitOfficeId
@@ -943,6 +948,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
         return ExecuteCrossTenantReadAsync(
             () => _context.ProcedureInstances
+                .Include(x => x.ProcedureType)
                 .AsNoTracking()
                 .Where(p => p.Id != excludedProcedureInstanceId
                     && p.DeletedAt == null
@@ -1167,7 +1173,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         ProcedureTypeId = entity.ProcedureTypeId,
         ReferenceNumber = entity.ReferenceNumber,
         Status = entity.Status,
-        ModalidadEntrada = entity.ModalidadEntrada,
+        ModalidadEntrada = entity.ProcedureType != null ? entity.ProcedureType.Family : "",
         PlateFlowStatus = entity.PlateFlowStatus,
         TransitOfficeId = entity.TransitOfficeId,
         CreatedAt = entity.CreatedAt,

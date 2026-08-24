@@ -8,13 +8,9 @@ public sealed class ProcedureInstance
     public string ReferenceNumber { get; set; } = string.Empty;
     public string Status { get; set; } = Tramites.Estados.TramiteEstado.Borrador;
 
-    // Rework trámites (Slice 1) — modalidad/tipología/checklist explícitos
-    //
-    // ADR-0050: ModalidadEntrada y TipologiaCodigo están EN RETIRADA. La clasificación del expediente
-    // se deriva del tipo (Family / TypeCode / TypeName, más abajo); estas dos columnas desaparecen con
-    // el DDL 80-tramites-reset-fuente-unica.sql. No añadir consumidores nuevos.
-    public string ModalidadEntrada { get; set; } = "matricula_inicial";
-    public string? TipologiaCodigo { get; set; }
+    // Rework trámites (Slice 1) — checklist explícito.
+    // ADR-0050: modalidad_entrada y tipologia_codigo se eliminaron. La clasificación del expediente
+    // se deriva del tipo (Family / TypeCode / TypeName, más abajo).
     public string ChecklistEstado { get; set; } = "{}";
 
     /// <summary>
@@ -34,6 +30,9 @@ public sealed class ProcedureInstance
     /// ADR-0050 elimina el catálogo de tipologías paralelo.
     /// </summary>
     public string TypeCode => RequireProcedureType().Code;
+
+    /// <summary>Código persistido de la familia, para DTOs, filtros y exportes.</summary>
+    public string FamilyCode => Enums.ProcedureFamilyCodes.ToCode(Family);
 
     /// <summary>Etiqueta de negocio del tipo: la que deben rotular FUR, portada y mandato.</summary>
     public string TypeName => RequireProcedureType().Name;

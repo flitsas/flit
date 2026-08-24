@@ -38,8 +38,6 @@ public sealed class GeneracionDocumentalGestorGuardTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-011051",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetByIdAsync(Id, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
