@@ -1102,6 +1102,9 @@ public static class InfrastructureExtensions
         // Bandeja del LOG QX (HU #11786): universo por TRÁMITE (no por radicación), con los
         // elegibles sin radicar incluidos. SQL crudo — el predicado depende del jsonb external_refs.
         services.AddScoped<IQuipuxBandejaRepository, DbQuipuxBandejaRepository>();
+
+        // Trazabilidad de una radicación (HU #11787): cabecera + eventos para hitos + log paginado.
+        services.AddScoped<IQuipuxTrazabilidadRepository, DbQuipuxTrazabilidadRepository>();
         services.AddSingleton<IQuipuxAuditLog, QuipuxSubmissionAuditLog>();
         services.AddSingleton<IQuipuxJobRunLog, QuipuxJobRunLog>();
 
