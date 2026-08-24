@@ -146,6 +146,16 @@ public class TramiteCambioEstadoEmailComposerTests
     }
 
     [Fact]
+    public void ComposeFlit_ConNombreTipoTramite_InterpolaTalCualYNoUsaFallback()
+    {
+        var model = TraspasoAprobado with { NombreTipoTramite = "Cambio de color" };
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(model, "https://cdn.example/email-assets");
+
+        html.Should().Contain("el Cambio de color del vehículo");
+        html.Should().NotContain("el traspaso de propiedad");
+    }
+
+    [Fact]
     public void ComposeFlit_SinCiudad_OmiteFragmento()
     {
         var model = TraspasoAprobado with { CiudadOt = string.Empty };

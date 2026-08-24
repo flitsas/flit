@@ -8,7 +8,10 @@ namespace Flit.Admin.Application.Plataforma.Notificaciones;
 /// Código wire del canal: <c>FLIT_SMTP</c> | <c>TENANT_API</c> (ver <c>SettingsWire</c>). Ninguno
 /// de los dos infiere el canal: lo elige el SuperAdmin en cada envío.
 /// </param>
-public sealed record SendNotificationTestRequest(string? TemplateId, string? Channel);
+public sealed record SendNotificationTestRequest(
+    string? TemplateId,
+    string? Channel,
+    Guid? ProcedureTypeId = null);
 
 /// <summary>
 /// HU #11368 AC1-AC8 — catálogo CERRADO de desenlaces de un intento de envío de prueba.
@@ -56,6 +59,15 @@ public enum NotificationTestSendOutcome
     /// consume el enfriamiento.
     /// </summary>
     TemplateChannelMismatch,
+
+    /// <summary>Aprobado/rechazado sin UUID de catálogo válido.</summary>
+    InvalidProcedureTypeId,
+
+    /// <summary>El UUID no existe en <c>tramites.procedure_types</c>.</summary>
+    ProcedureTypeNotFound,
+
+    /// <summary>El tipo existe pero no está activo.</summary>
+    ProcedureTypeInactive,
 }
 
 /// <summary>

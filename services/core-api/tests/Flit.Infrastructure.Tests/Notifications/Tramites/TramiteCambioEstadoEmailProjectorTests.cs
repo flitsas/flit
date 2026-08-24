@@ -96,6 +96,23 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
 
         model.VendedorNombre.Should().BeEmpty();
         model.EsTraspaso.Should().BeFalse();
+        model.NombreTipoTramite.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void NombreTipoTramite_SeCopiaTalCualDelCatalogo()
+    {
+        var instance = new ProcedureInstance { ModalidadEntrada = "traspaso", Plate = "ABC123" };
+
+        var model = TramiteCambioEstadoEmailProjector.Project(
+            instance,
+            [],
+            new Dictionary<string, string?>(),
+            "APROBADO",
+            nombreTipoTramite: "Matrícula inicial");
+
+        model.NombreTipoTramite.Should().Be("Matrícula inicial");
+        model.EsTraspaso.Should().BeTrue();
     }
 
     [Fact]

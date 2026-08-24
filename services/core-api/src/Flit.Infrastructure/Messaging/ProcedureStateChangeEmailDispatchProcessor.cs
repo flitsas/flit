@@ -200,8 +200,21 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                     .ConfigureAwait(false);
             }
 
+            var typeName = await db.ProcedureTypes
+                .AsNoTracking()
+                .Where(t => t.Id == instance.ProcedureTypeId)
+                .Select(t => t.Name)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+
             var model = TramiteCambioEstadoEmailProjector.Project(
-                instance, instance.Actors.ToList(), fieldValues, estado, causales, observacion);
+                instance,
+                instance.Actors.ToList(),
+                fieldValues,
+                estado,
+                causales,
+                observacion,
+                typeName);
 
             var channel = await channelResolver.ResolveAsync(row.TenantId, ct).ConfigureAwait(false);
             var assetsBaseUrl = assets.BaseUrl;

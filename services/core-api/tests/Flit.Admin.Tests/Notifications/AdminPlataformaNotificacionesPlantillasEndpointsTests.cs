@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Flit.Admin.Application.Auditing;
+using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Tests.Companies;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
@@ -117,8 +118,11 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     {
         var client = SuperAdminClient();
 
+        var qs = templateId is "tramites.aprobado" or "tramites.rechazado"
+            ? $"?channel={channel}&procedureTypeId={_factory.ActiveProcedureTypeId}"
+            : $"?channel={channel}";
         var response = await client.GetAsync(
-            $"{GroupUrl}/{templateId}/muestra?channel={channel}",
+            $"{GroupUrl}/{templateId}/muestra{qs}",
             TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -130,6 +134,61 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
             body.Html.Should().Contain("tramite-cambio-estado-header.png");
         else
             body.Html.Should().Contain("tramite-cambio-estado-renting-header.png");
+    }
+
+    [Fact]
+    public async Task GetSample_TramitesAprobado_WithoutProcedureTypeId_Returns400()
+    {
+        var response = await SuperAdminClient().GetAsync(
+            $"{GroupUrl}/tramites.aprobado/muestra?channel=FLIT_SMTP",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        json.Should().Contain("procedure_type_id_invalido");
+    }
+
+    [Fact]
+    public async Task GetSample_TramitesAprobado_UnknownProcedureType_Returns400TipoNoEncontrado()
+    {
+        var unknown = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var response = await SuperAdminClient().GetAsync(
+            $"{GroupUrl}/tramites.aprobado/muestra?channel=FLIT_SMTP&procedureTypeId={unknown}",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        json.Should().Contain("tipo_tramite_no_encontrado");
+    }
+
+    [Fact]
+    public async Task GetSample_TramitesAprobado_InactiveProcedureType_Returns400()
+    {
+        var inactiveId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        _factory.ProcedureTypes
+            .GetByIdForNotificationPreviewAsync(inactiveId, Arg.Any<CancellationToken>())
+            .Returns(new ProcedureTypeNotificationPreviewItem(inactiveId, "Archivado", "OTROS", false));
+
+        var response = await SuperAdminClient().GetAsync(
+            $"{GroupUrl}/tramites.aprobado/muestra?channel=FLIT_SMTP&procedureTypeId={inactiveId}",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        json.Should().Contain("tipo_tramite_inactivo");
+    }
+
+    [Fact]
+    public async Task GetSample_TramitesAprobado_OverlaysCatalogNameAsIs()
+    {
+        var response = await SuperAdminClient().GetAsync(
+            $"{GroupUrl}/tramites.aprobado/muestra?channel=FLIT_SMTP&procedureTypeId={_factory.ActiveProcedureTypeId}",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SampleDto>(TestContext.Current.CancellationToken);
+        System.Net.WebUtility.HtmlDecode(body!.Html).Should().Contain("Traspaso estándar");
+        body.Html.Should().NotContain("el traspaso de propiedad");
     }
 
     // ── AC2 — render de muestra por id ──────────────────────────────────────
@@ -287,6 +346,16 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         public ITemporaryPasswordGenerator PasswordGenerator { get; } = Substitute.For<ITemporaryPasswordGenerator>();
         public IPasswordHasher PasswordHasher { get; } = Substitute.For<IPasswordHasher>();
         public IAdminAuditWriter AuditWriter { get; } = Substitute.For<IAdminAuditWriter>();
+        public IProcedureTypeCatalog ProcedureTypes { get; } = Substitute.For<IProcedureTypeCatalog>();
+        public Guid ActiveProcedureTypeId { get; } = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+        public SideEffectFreeFactory()
+        {
+            ProcedureTypes
+                .GetByIdForNotificationPreviewAsync(ActiveProcedureTypeId, Arg.Any<CancellationToken>())
+                .Returns(new ProcedureTypeNotificationPreviewItem(
+                    ActiveProcedureTypeId, "Traspaso estándar", "TRASPASO", true));
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -298,6 +367,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
                 services.AddScoped(_ => PasswordGenerator);
                 services.AddScoped(_ => PasswordHasher);
                 services.AddScoped(_ => AuditWriter);
+                services.AddScoped(_ => ProcedureTypes);
             });
         }
     }
