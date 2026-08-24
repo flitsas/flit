@@ -206,7 +206,6 @@ public sealed class CreateProcedureInstanceTests
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
                 i.ProcedureTypeId == pt.Id &&
-                i.FamilyCode == "matricula_inicial" &&
                 i.TypeCode == "MATRICULA_NUEVA"),
             Arg.Any<int>(),
             ct);
@@ -227,7 +226,6 @@ public sealed class CreateProcedureInstanceTests
         result!.ProcedureTypeId.Should().Be(pt.Id);
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
-                i.FamilyCode == "traspaso" &&
                 i.TypeCode == "TRASPASO_STANDARD"),
             Arg.Any<int>(),
             ct);

@@ -1132,7 +1132,7 @@ public sealed class OtClientProcedureHandlerTests
             });
         }
 
-        if (!ctx.ProcedureTypes.Any(pt => pt.Id == procedureTypeId))
+        if (!ctx.ProcedureTypes.Local.Any(pt => pt.Id == procedureTypeId) && !ctx.ProcedureTypes.Any(pt => pt.Id == procedureTypeId))
         {
             ctx.ProcedureTypes.Add(new ProcedureType
             {
@@ -1178,9 +1178,24 @@ public sealed class OtClientProcedureHandlerTests
         string? plateFlowStatus = null,
         string? plate = null)
     {
+        // ADR-0050 — el tipo referenciado debe existir: la clasificación se resuelve navegando a él,
+        // y el proveedor InMemory descarta la fila si la navegación no encuentra destino.
+        if (!ctx.ProcedureTypes.Local.Any(pt => pt.Id == procedureTypeId) && !ctx.ProcedureTypes.Any(pt => pt.Id == procedureTypeId))
+        {
+            ctx.ProcedureTypes.Add(new ProcedureType
+            {
+                Id = procedureTypeId,
+                Code = "MATRICULA_NUEVA",
+                Name = "Matrícula inicial",
+                Family = "MATRICULAS",
+                IsActive = true,
+                PublicationStatus = PublicationStatus.Published,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = clientTenantId,
             ProcedureTypeId = procedureTypeId,

@@ -30,7 +30,7 @@ public sealed record SetRejectionReasonActiveRequest(bool IsActive);
 internal static class RejectionReasonMapper
 {
     public static RejectionReasonResponse ToResponse(RejectionReasonItem item) =>
-        new(item.Id, item.Code, item.Description, item.Modalidad, item.SortOrder, item.IsActive);
+        new(item.Id, item.Code, item.Description, item.Family, item.SortOrder, item.IsActive);
 }
 
 /// <summary>
@@ -65,7 +65,7 @@ internal static class RejectionReasonValidator
             return $"La descripción no puede superar {DescriptionMaxLength} caracteres.";
         }
 
-        return RejectionReasonModalidades.EsValida(modalidad)
+        return RejectionReasonFamilies.EsValida(modalidad)
             ? null
             : "La modalidad debe ser 'matricula_inicial' o 'traspaso'.";
     }

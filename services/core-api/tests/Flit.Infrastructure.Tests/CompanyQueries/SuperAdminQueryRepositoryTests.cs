@@ -258,7 +258,6 @@ public sealed class SuperAdminQueryRepositoryTests
     private static void Tramite(FlitDbContext ctx, string reference, Guid tenantId, string placa) =>
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ProcedureTypeId = TipoId,

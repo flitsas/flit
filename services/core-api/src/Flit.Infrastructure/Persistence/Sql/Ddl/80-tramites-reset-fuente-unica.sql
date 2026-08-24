@@ -1,13 +1,13 @@
 -- ADR-0050 (parte 2 de 2) — reset de expedientes y eliminación de los vocabularios paralelos.
--- Migración: PENDIENTE — se crea al cerrar la HU-02 (backend sin modalidad_entrada/tipologia_codigo).
+-- Migración: 20260822110000_TramitesResetFuenteUnica
 --
--- ⚠️ DESTRUCTIVO Y BREAKING. NO existe todavía una clase Migration que lo ejecute, y es deliberado:
---    hoy 262 archivos de la solución siguen leyendo modalidad_entrada / tipologia_codigo, y
---    Database:AutoMigrate está en true por defecto (Flit.Api/Program.cs), así que registrar esta
---    migración antes de tiempo rompería el arranque de la aplicación.
+-- ⚠️ DESTRUCTIVO. Borra TODOS los expedientes. El backend ya no lee modalidad_entrada ni
+--    tipologia_codigo —se eliminaron del modelo y de sus ~35 consumidores— así que la migración es
+--    coherente con el código; lo que no puede deshacerse es el borrado de datos.
 --
---    Activar SOLO cuando: (a) HU-02 haya eliminado esas columnas del modelo EF y de todos sus
---    consumidores, y (b) exista respaldo verificado y aprobación explícita del borrado.
+--    ANTES DE APLICARLA en cualquier ambiente con datos: respaldo verificado y aprobación explícita.
+--    Database:AutoMigrate está en true por defecto (Flit.Api/Program.cs), de modo que arrancar la
+--    aplicación la ejecuta. Ver ADR-0050 §Cambios operacionales.
 --
 -- Idempotente: el borrado va guardado por la existencia de modalidad_entrada, de modo que una
 -- reaplicación posterior no vuelve a borrar datos.

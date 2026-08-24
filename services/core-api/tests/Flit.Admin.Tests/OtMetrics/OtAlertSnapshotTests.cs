@@ -170,6 +170,7 @@ public sealed class OtAlertSnapshotTests
         });
         ctx.ProcedureTypes.Add(new ProcedureType
         {
+            Family = "MATRICULAS",
             Id = ProcedureType,
             Code = "MATRICULA_NUEVA",
             Name = "Matrícula inicial",
@@ -183,7 +184,6 @@ public sealed class OtAlertSnapshotTests
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = ClientTenant,
             ProcedureTypeId = ProcedureType,

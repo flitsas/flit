@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Documents;
 using FluentAssertions;
 using PdfSharpCore.Fonts;
 using Xunit;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Infrastructure.Tests.Documents;
 
@@ -43,7 +44,9 @@ public sealed class FurOverlayDocumentGeneratorTests
 
     private static FurDocumentData TraspasoData() => FullData() with
     {
-        Modalidad = "traspaso",
+        // ADR-0050 — la tipología es el code del tipo; antes bastaba con la modalidad.
+        TipologiaCodigo = "TRASPASO_STANDARD",
+        Modalidad = ProcedureFamilyCodes.Traspaso,
         Vehiculo = FullData().Vehiculo with
         {
             Marca = "BAJAJ",

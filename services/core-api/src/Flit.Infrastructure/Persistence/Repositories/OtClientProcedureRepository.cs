@@ -286,7 +286,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             async () =>
             {
                 var entity = await _context.ProcedureInstances
-                    .Include(x => x.ProcedureType)
                     .FirstOrDefaultAsync(
                         p => p.Id == procedureInstanceId
                             && p.TenantId == accessible.ClientTenantId
@@ -518,7 +517,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             async () =>
             {
                 var entity = await _context.ProcedureInstances
-                    .Include(x => x.ProcedureType)
                     .FirstOrDefaultAsync(
                         p => p.Id == procedureInstanceId
                             && p.TenantId == accessible.ClientTenantId
@@ -656,7 +654,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             async () =>
             {
                 var entity = await _context.ProcedureInstances
-                    .Include(x => x.ProcedureType)
                     .FirstOrDefaultAsync(
                         p => p.Id == procedureInstanceId
                             && p.TenantId == accessible.ClientTenantId
@@ -874,7 +871,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid transitOfficeId,
         IReadOnlyList<Guid> clientTenantIds) =>
         _context.ProcedureInstances
-            .Include(x => x.ProcedureType)
             .AsNoTracking()
             .Where(p => p.DeletedAt == null
                 && p.TransitOfficeId == transitOfficeId

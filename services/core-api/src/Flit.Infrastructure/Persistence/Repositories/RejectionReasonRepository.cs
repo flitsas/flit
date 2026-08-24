@@ -24,7 +24,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
 
         if (!string.IsNullOrWhiteSpace(modalidad))
         {
-            query = query.Where(r => r.Modalidad == modalidad);
+            query = query.Where(r => r.Family == modalidad);
         }
 
         if (!includeInactive)
@@ -33,11 +33,11 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
         }
 
         return await query
-            .OrderBy(r => r.Modalidad)
+            .OrderBy(r => r.Family)
             .ThenBy(r => r.SortOrder)
             .ThenBy(r => r.Description)
             .Select(r => new RejectionReasonItem(
-                r.Id, r.Code, r.Description, r.Modalidad, r.SortOrder, r.IsActive))
+                r.Id, r.Code, r.Description, r.Family, r.SortOrder, r.IsActive))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
     }
@@ -49,7 +49,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
             .AsNoTracking()
             .Where(r => r.Id == id)
             .Select(r => new RejectionReasonItem(
-                r.Id, r.Code, r.Description, r.Modalidad, r.SortOrder, r.IsActive))
+                r.Id, r.Code, r.Description, r.Family, r.SortOrder, r.IsActive))
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -77,7 +77,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
             Id = Guid.NewGuid(),
             Code = code,
             Description = description,
-            Modalidad = modalidad,
+            Family = modalidad,
             SortOrder = sortOrder,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -110,7 +110,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
 
         entity.Code = code;
         entity.Description = description;
-        entity.Modalidad = modalidad;
+        entity.Family = modalidad;
         entity.SortOrder = sortOrder;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.UpdatedBy = updatedBy;
@@ -160,12 +160,12 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
 
         return await _context.RejectionReasons
             .AsNoTracking()
-            .Where(r => unique.Contains(r.Id) && r.IsActive && r.Modalidad == modalidad)
+            .Where(r => unique.Contains(r.Id) && r.IsActive && r.Family == modalidad)
             .Select(r => r.Id)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
     }
 
     private static RejectionReasonItem Map(RejectionReason entity) =>
-        new(entity.Id, entity.Code, entity.Description, entity.Modalidad, entity.SortOrder, entity.IsActive);
+        new(entity.Id, entity.Code, entity.Description, entity.Family, entity.SortOrder, entity.IsActive);
 }

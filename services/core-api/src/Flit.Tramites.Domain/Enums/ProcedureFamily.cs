@@ -23,7 +23,7 @@ public enum ProcedureFamily
 /// <para>Antes de ADR-0050 convivían cuatro criterios para los mismos strings:
 /// <c>TramiteModalidadEntradaCodes.FromCode</c> (case-sensitive, sin trim),
 /// <c>ProcedureInstanceEndpoints.EsMatriculaInicial</c> (trim + ignore-case),
-/// <c>RejectionReasonModalidades.EsValida</c> (Ordinal) y <c>TipologiaResolver.FromFamily</c>
+/// <c>RejectionReasonFamilies.EsValida</c> (Ordinal) y la derivación desde la familia
 /// (OrdinalIgnoreCase). Todo el parseo de familia pasa ahora por aquí.</para>
 /// </summary>
 public static class ProcedureFamilyCodes

@@ -390,7 +390,6 @@ public sealed class OtReportTests
         Guid? tenantId = null) =>
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId ?? ClientTenant,
             ProcedureTypeId = ProcedureTypeId,
@@ -433,7 +432,7 @@ public sealed class OtReportTests
             Id = Guid.NewGuid(),
             Code = code,
             Description = description,
-            Modalidad = "matricula_inicial",
+            Family = "matricula_inicial",
             SortOrder = 10,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -495,6 +494,7 @@ public sealed class OtReportTests
 
         ctx.ProcedureTypes.Add(new ProcedureType
         {
+            Family = "MATRICULAS",
             Id = ProcedureTypeId,
             Code = "MATRICULA_NUEVA",
             Name = "Matrícula inicial",

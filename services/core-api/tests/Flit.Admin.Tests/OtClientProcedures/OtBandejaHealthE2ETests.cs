@@ -195,7 +195,7 @@ public sealed class OtBandejaHealthE2ETests
             });
         }
 
-        if (!ctx.ProcedureTypes.Any(pt => pt.Id == procedureTypeId))
+        if (!ctx.ProcedureTypes.Local.Any(pt => pt.Id == procedureTypeId) && !ctx.ProcedureTypes.Any(pt => pt.Id == procedureTypeId))
         {
             ctx.ProcedureTypes.Add(new ProcedureType
             {
@@ -222,7 +222,6 @@ public sealed class OtBandejaHealthE2ETests
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = clientTenantId,
             ProcedureTypeId = procedureTypeId,

@@ -2806,7 +2806,7 @@ namespace Flit.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
-                        .HasColumnName("modalidad");
+                        .HasColumnName("family");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer")

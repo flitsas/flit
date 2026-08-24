@@ -404,7 +404,6 @@ public sealed class OtReviewersReportTests
         var id = Guid.NewGuid();
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId ?? ClientTenant,
             ProcedureTypeId = ProcedureTypeId,
@@ -468,7 +467,7 @@ public sealed class OtReviewersReportTests
             Id = Guid.NewGuid(),
             Code = code,
             Description = description,
-            Modalidad = "matricula_inicial",
+            Family = "matricula_inicial",
             SortOrder = 10,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

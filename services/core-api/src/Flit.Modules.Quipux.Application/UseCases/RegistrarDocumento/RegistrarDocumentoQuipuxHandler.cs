@@ -580,24 +580,12 @@ public sealed class RegistrarDocumentoQuipuxHandler
     }
 
     /// <summary>
-    /// ¿El trámite es un traspaso? Prioriza <c>tipologia_codigo</c> y cae a <c>modalidad_entrada</c>
-    /// para las instancias antiguas sin tipología persistida (mismo criterio que
-    /// <c>TipologiaResolver.ResolveCodigo</c>, que vive en <c>Flit.Tramites.Application</c> y este
-    /// módulo no referencia).
+    /// ¿El trámite es un traspaso? Lo decide la familia del tipo (ADR-0050). Antes se resolvía por
+    /// tipología con respaldo en modalidad_entrada, dos vocabularios que ya no existen.
     /// </summary>
     private static bool EsTraspaso(ProcedureInstance instance)
     {
-        if (!string.IsNullOrEmpty(instance.TypeCode)
-            && TramiteTipologiaCatalog.IsValid(instance.TypeCode))
-        {
-            return string.Equals(
-                instance.TypeCode,
-                TramiteTipologiaCatalog.CodigoTraspasoStandard,
-                StringComparison.OrdinalIgnoreCase);
-        }
-
-        return instance.Family
-            == ProcedureFamily.Traspaso;
+        return instance.Family == ProcedureFamily.Traspaso;
     }
 
     /// <summary>

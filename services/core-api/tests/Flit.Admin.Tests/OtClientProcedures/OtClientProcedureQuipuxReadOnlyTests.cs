@@ -80,7 +80,6 @@ public sealed class OtClientProcedureQuipuxReadOnlyTests
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = ClientTenant,
             ProcedureTypeId = ProcedureType,

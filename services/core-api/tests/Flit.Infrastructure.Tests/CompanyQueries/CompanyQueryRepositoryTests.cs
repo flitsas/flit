@@ -31,6 +31,7 @@ public sealed class CompanyQueryRepositoryTests
     private static readonly Guid OtraEmpresa = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static readonly Guid Organismo = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
     private static readonly Guid TipoId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid TipoMatriculaId = Guid.Parse("11111111-1111-1111-1111-111111111112");
     private static readonly Guid Gustavo = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     // ── Cobertura ─────────────────────────────────────────────────────────────────────────────
@@ -541,10 +542,11 @@ public sealed class CompanyQueryRepositoryTests
         var id = Guid.NewGuid();
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId ?? Empresa,
-            ProcedureTypeId = TipoId,
+            ProcedureTypeId = modalidad.Contains("traspaso", StringComparison.OrdinalIgnoreCase)
+                ? TipoId
+                : TipoMatriculaId,
             ReferenceNumber = reference,
             Status = status,
             Plate = placa,
@@ -644,12 +646,22 @@ public sealed class CompanyQueryRepositoryTests
             Name = "Secretaría de Movilidad",
         });
 
+        // ADR-0050 — la familia del tipo es lo que clasifica el expediente, así que hacen falta dos
+        // tipos para poder distinguir un traspaso de una matrícula en los filtros.
         ctx.ProcedureTypes.Add(new ProcedureType
         {
             Id = TipoId,
-            Code = "TRASPASO",
+            Code = "TRASPASO_STANDARD",
             Name = "Traspaso de vehículo",
             Family = "TRASPASO",
+        });
+
+        ctx.ProcedureTypes.Add(new ProcedureType
+        {
+            Id = TipoMatriculaId,
+            Code = "MATRICULA_NUEVA",
+            Name = "Matrícula inicial",
+            Family = "MATRICULAS",
         });
 
         ctx.Users.Add(new User

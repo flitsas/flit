@@ -97,7 +97,8 @@ public sealed class CreateProcedureInstanceHandlerTests
         var db = NewDbName();
         await using (var seed = NewContext(db))
         {
-            seed.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "X", Name = "X", IsActive = true });
+            seed.ProcedureTypes.Add(new ProcedureType {
+            Family = "MATRICULAS", Id = ProcedureTypeId, Code = "X", Name = "X", IsActive = true });
             seed.Tenants.Add(new Tenant { Id = ClienteId, Code = "C1", LegalName = "Cliente 1" });
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -161,7 +162,6 @@ public sealed class CreateProcedureInstanceHandlerTests
         {
             seed.ProcedureInstances.Add(new ProcedureInstance
             {
-                ProcedureType = ProcedureTypeFixture.Matricula,
                 Id = Guid.NewGuid(),
                 TenantId = ClienteId,
                 ProcedureTypeId = ProcedureTypeId,
@@ -276,7 +276,8 @@ public sealed class CreateProcedureInstanceHandlerTests
     private static async Task SeedAsync(string dbName)
     {
         await using var ctx = NewContext(dbName);
-        ctx.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+        ctx.ProcedureTypes.Add(new ProcedureType {
+        Family = "MATRICULAS", Id = ProcedureTypeId, Code = "traspaso", Name = "Traspaso", IsActive = true });
         ctx.Tenants.Add(new Tenant { Id = ClienteId, Code = "C1", LegalName = "Cliente 1" });
         ctx.Users.Add(new User { Id = Actor, Email = "operador@cliente.co", DisplayName = "Operador", Status = "active", CreatedAt = DateTimeOffset.UtcNow });
         ctx.DocumentTypes.AddRange(

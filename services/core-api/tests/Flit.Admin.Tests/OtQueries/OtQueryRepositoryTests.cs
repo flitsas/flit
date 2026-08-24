@@ -132,7 +132,7 @@ public sealed class OtQueryRepositoryTests
         }
 
         var result = await RunAsync(db, Definir(
-            Cond(OtQueryFieldCatalog.TipoTramite, "traspaso")));
+            Cond(OtQueryFieldCatalog.TipoTramite, "TRASPASO")));
 
         result!.Cobertura.Should().BeEmpty();
     }
@@ -456,7 +456,7 @@ public sealed class OtQueryRepositoryTests
             [OtQueryFieldCatalog.Comprador] = "1020304050",
             [OtQueryFieldCatalog.Vendedor] = "Vera Vendedora",
             [OtQueryFieldCatalog.Empresa] = ClientTenant.ToString(),
-            [OtQueryFieldCatalog.TipoTramite] = "matricula_inicial",
+            [OtQueryFieldCatalog.TipoTramite] = "MATRICULAS",
             [OtQueryFieldCatalog.Estado] = "aprobado",
             [OtQueryFieldCatalog.Revisor] = Carla.ToString(),
             [OtQueryFieldCatalog.Prioritario] = "true",
@@ -770,9 +770,20 @@ public sealed class OtQueryRepositoryTests
         string? vin = null)
     {
         var id = Guid.NewGuid();
+        // ADR-0050 — el tipo referenciado debe existir: la clasificación se resuelve navegando a él.
+        if (!ctx.ProcedureTypes.Local.Any(pt => pt.Id == ProcedureTypeId) && !ctx.ProcedureTypes.Any(pt => pt.Id == ProcedureTypeId))
+        {
+            ctx.ProcedureTypes.Add(new ProcedureType
+            {
+                Id = ProcedureTypeId,
+                Code = "MATRICULA_NUEVA",
+                Name = "Matrícula inicial",
+                Family = "MATRICULAS",
+            });
+        }
+
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId ?? ClientTenant,
             ProcedureTypeId = ProcedureTypeId,
@@ -897,6 +908,10 @@ public sealed class OtQueryRepositoryTests
         }
 
         ctx.Users.Add(new User { Id = Carla, Email = "carla@ot.local", DisplayName = "Carla Revisora" });
+
+        // ADR-0050 — las consultas del OT resuelven la familia por la navegación al tipo, así que el
+        // tipo referenciado tiene que existir: antes bastaba con el FK porque la clasificación
+        // viajaba en una columna de la propia instancia.
     }
 
     private static string NewDbName() => Guid.NewGuid().ToString();
