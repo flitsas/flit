@@ -8,10 +8,13 @@ using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Integration;
+using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Documents;
@@ -217,11 +220,21 @@ public sealed class MandateSimulatorServiceTests
         db.SaveChanges();
 
         var sender = new FakeEmailSender();
+        // HU #11752 (ADR-0050) — MandateSignerDirectory ya no lee admin.admin_identity_validations:
+        // resuelve identidad contra el módulo Identidad, vía el tenant del OT (ITransitOfficeOperationalStatusReader)
+        // y IdentityVigenciaPorDocumentoResolver. Estas pruebas no ejercitan vigencia de identidad, así
+        // que el reader devuelve "sin tenant" (LoadVigentIdentitiesAsync corta antes de consultar
+        // Identidad) y el resolver recibe un repositorio nunca invocado.
+        var otStatusReader = Substitute.For<ITransitOfficeOperationalStatusReader>();
+        otStatusReader
+            .GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((Flit.Admin.Domain.Companies.TransitOffices.TransitOfficeOperationalStatusItem?)null);
+        var identityResolver = new IdentityVigenciaPorDocumentoResolver(Substitute.For<IProcedureInstanceRepository>());
         var service = new MandateSimulatorService(
             db,
             new FakeCatalog(),
             new MandateRequirementPolicy(db),
-            new MandateSignerDirectory(db),
+            new MandateSignerDirectory(db, otStatusReader, identityResolver),
             new MandatoPdfGenerator(),
             new FakeConfigService(),
             NullSignatureVaultPolicy.Instance,

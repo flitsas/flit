@@ -1,11 +1,12 @@
 // HU #11180 — Representantes legales — Firma del baúl e identidad dentro del formulario.
-// Tests que cubren los 6 AC de la HU:
+// HU #11755 (ADR-0050) actualizó AC5/AC6: el bloque de identidad pasa a SOLO CONSULTA — ya no ofrece
+// Enviar / Reenviar / Renovar / Asociar validación en ningún estado. Se conservan aquí como regresión.
+// Tests que cubren los AC de la HU:
 //   AC1 — selector de firma: solo firmas vigentes de la persona
 //   AC2 — la firma elegida se envía en el payload de guardado
 //   AC3 — sin firmas vigentes: aviso con remisión al baúl
-//   AC4 — modo create: aviso de identidad automática al guardar
-//   AC5 — enviar y reenviar la validación de identidad
-//   AC6 — asociar la validación de identidad aprobada
+//   AC4 — modo create: aviso de identidad automática al guardar (sin botones)
+//   AC5/AC6 (HU #11755) — solo consulta: nunca se renderizan los 3 controles de escritura
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -27,9 +28,6 @@ vi.mock("@/lib/api/admin-legal-representatives", async (importOriginal) => {
   return {
     ...actual,
     fetchLegalRepresentative: vi.fn(),
-    sendLegalRepresentativeIdentity: vi.fn(),
-    resendLegalRepresentativeIdentity: vi.fn(),
-    linkLegalRepresentativeIdentity: vi.fn(),
   };
 });
 
@@ -52,9 +50,6 @@ vi.mock("@/lib/api/admin-deeds", async (importOriginal) => {
 
 import {
   fetchLegalRepresentative,
-  sendLegalRepresentativeIdentity,
-  resendLegalRepresentativeIdentity,
-  linkLegalRepresentativeIdentity,
 } from "@/lib/api/admin-legal-representatives";
 import { fetchSignatureVaultByDocument } from "@/lib/api/admin-signature-vault";
 
@@ -358,163 +353,141 @@ describe("HU #11180 — AC4: en modo create se informa de la identidad automáti
   });
 });
 
-// ── AC5 — Enviar y reenviar la validación de identidad ───────────────────────
+// ── AC5/AC6 (HU #11755, ADR-0050) — solo consulta: sin controles de escritura ─
 
-describe("HU #11180 — AC5: enviar y reenviar la validación de identidad", () => {
-  // Uso de ejemplo: click en «Enviar validación» → sendLegalRepresentativeIdentity(TENANT, "rep-2")
-  //   → mensaje de confirmación visible.
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_NONE);
-    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([]);
-    vi.mocked(sendLegalRepresentativeIdentity).mockResolvedValue({
-      id: "rep-2",
-      status: "pending",
-      captureUrl: null,
-      validUntil: null,
-      reused: false,
-    });
-    vi.mocked(resendLegalRepresentativeIdentity).mockResolvedValue({
-      id: "rep-2",
-      status: "pending",
-      captureUrl: null,
-      validUntil: null,
-      reused: false,
-    });
-  });
-
-  it("AC5 — happy path: el botón «Enviar validación» aparece cuando el estado es «none»", async () => {
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    expect(await screen.findByTestId("rl-identity-send")).toBeInTheDocument();
-  });
-
-  it("AC5 — happy path: al enviar la validación se llama a sendLegalRepresentativeIdentity", async () => {
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByTestId("rl-identity-send"));
-    await waitFor(() => expect(sendLegalRepresentativeIdentity).toHaveBeenCalledWith(TENANT, "rep-2"));
-  });
-
-  it("AC5 — happy path: tras enviar se muestra mensaje de confirmación", async () => {
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByTestId("rl-identity-send"));
-    expect(
-      await screen.findByTestId("rl-identity-success"),
-    ).toBeInTheDocument();
-  });
-
-  it("AC5 — edge case: con estado «pending» aparece «Reenviar validación» en lugar de «Enviar»", async () => {
-    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_PENDING);
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    expect(await screen.findByTestId("rl-identity-resend")).toBeInTheDocument();
-    expect(screen.queryByTestId("rl-identity-send")).not.toBeInTheDocument();
-  });
-
-  it("AC5 — happy path: al reenviar se llama a resendLegalRepresentativeIdentity", async () => {
-    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_PENDING);
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByTestId("rl-identity-resend"));
-    await waitFor(() =>
-      expect(resendLegalRepresentativeIdentity).toHaveBeenCalledWith(TENANT, "rep-2"),
-    );
-  });
-
-  it("AC5 — edge case: un error en envío muestra mensaje de error (no cierra el panel)", async () => {
-    vi.mocked(sendLegalRepresentativeIdentity).mockRejectedValue(new Error("red"));
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByTestId("rl-identity-send"));
-    expect(await screen.findByTestId("rl-identity-error")).toBeInTheDocument();
-  });
-
-  it("AC5 — contrato: el botón «Enviar» no aparece en modo create (sin representativeId persistido)", () => {
-    renderPanel("create", { representativeId: null });
-    expect(screen.queryByTestId("rl-identity-send")).not.toBeInTheDocument();
-  });
-});
-
-// ── AC6 — Asociar la validación de identidad aprobada ────────────────────────
-
-describe("HU #11180 — AC6: asociar la validación de identidad aprobada", () => {
-  // Uso de ejemplo: click en «Asociar validación de identidad» → linkLegalRepresentativeIdentity(TENANT, "rep-2")
-  //   → panel refresca y muestra el nuevo estado.
+describe("HU #11755 — la ficha del RL retira los controles de escritura de identidad", () => {
+  // Uso de ejemplo: cualquier estado de identidad (none/pending/valid/expired), en view o edit,
+  // renderiza el badge y la vigencia pero NUNCA los botones Enviar/Reenviar/Asociar.
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_NONE);
     vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([]);
-    vi.mocked(linkLegalRepresentativeIdentity).mockResolvedValue(undefined);
   });
 
-  it("AC6 — happy path: el botón «Asociar validación» aparece cuando el estado no es «valid»", async () => {
+  it("happy path: en modo view con identidad «none» no aparece ningún control de escritura", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_NONE);
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    expect(await screen.findByTestId("rl-identity-link")).toBeInTheDocument();
-  });
-
-  it("AC6 — happy path: al asociar se llama a linkLegalRepresentativeIdentity", async () => {
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByTestId("rl-identity-link"));
-    await waitFor(() =>
-      expect(linkLegalRepresentativeIdentity).toHaveBeenCalledWith(TENANT, "rep-2"),
-    );
-  });
-
-  it("AC6 — happy path: tras asociar se muestra confirmación de identidad vinculada", async () => {
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByTestId("rl-identity-link"));
-    expect(await screen.findByTestId("rl-identity-success")).toBeInTheDocument();
-    expect(screen.getByTestId("rl-identity-success")).toHaveTextContent(
-      /validación de identidad asociada/i,
-    );
-  });
-
-  it("AC6 — edge case: 409 sin_identidad_vigente muestra el mensaje adecuado", async () => {
-    const { ApiError } = await import("@/lib/api/types");
-    vi.mocked(linkLegalRepresentativeIdentity).mockRejectedValue(new ApiError(409, "sin_identidad_vigente"));
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByTestId("rl-identity-link"));
-    expect(await screen.findByTestId("rl-identity-error")).toHaveTextContent(
-      /no hay una validación de identidad aprobada/i,
-    );
-  });
-
-  it("AC6 — contrato: el botón «Asociar» NO aparece cuando la identidad ya es válida", async () => {
-    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_VALID_IDENTITY);
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    // El bloque de identidad debe cargarse sin el botón de link.
     await screen.findByTestId("rl-identity-block");
+
+    expect(screen.queryByTestId("rl-identity-send")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-resend")).not.toBeInTheDocument();
     expect(screen.queryByTestId("rl-identity-link")).not.toBeInTheDocument();
   });
 
-  it("AC6 — contrato: el panel de identidad en modo view muestra estado y vigencia cuando está validada", async () => {
+  it("edge case: en modo view con identidad «pending» tampoco aparece ningún control", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_PENDING);
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+    await screen.findByTestId("rl-identity-block");
+
+    expect(screen.queryByTestId("rl-identity-send")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-resend")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-link")).not.toBeInTheDocument();
+  });
+
+  it("edge case: en modo view con identidad «valid» tampoco aparece ningún control", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_VALID_IDENTITY);
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+    await screen.findByTestId("rl-identity-block");
+
+    expect(screen.queryByTestId("rl-identity-send")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-resend")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-link")).not.toBeInTheDocument();
+  });
+
+  it("contrato: en modo edit (representante persistido) no aparece ningún control de escritura", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_NONE);
+    renderPanel("edit");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+    await screen.findByTestId("rl-identity-block");
+
+    expect(screen.queryByTestId("rl-identity-send")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-resend")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-link")).not.toBeInTheDocument();
+  });
+
+  it("contrato: en modo create no aparece ningún control de escritura", () => {
+    renderPanel("create", { representativeId: null });
+
+    expect(screen.queryByTestId("rl-identity-send")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-resend")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-link")).not.toBeInTheDocument();
+  });
+
+  it("contrato: el panel en modo view sigue mostrando los dos rótulos (solo consulta, HU #11756)", async () => {
     vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_VALID_IDENTITY);
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
 
     expect(await screen.findByTestId("rl-identity-status-badge")).toHaveTextContent(
-      /identidad validada/i,
+      /identidad: aprobada y vigente/i,
     );
-    expect(screen.getByTestId("rl-identity-vigencia")).toHaveTextContent(/válida hasta/i);
+    expect(screen.getByTestId("rl-identity-firma-baul-badge")).toHaveTextContent(
+      /firma del baúl: vigente hasta/i,
+    );
+  });
+});
+
+// ── HU #11756 (ADR-0050) — copy por estado + matriz de rótulos ───────────────
+
+describe("HU #11756 — la ficha del RL muestra los dos rótulos y el copy por estado", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([]);
+  });
+
+  it("happy path: sin validación y sin firma vigente muestra el enlace al módulo Identidad", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_NONE);
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    expect(await screen.findByTestId("rl-identity-status-badge")).toHaveTextContent(
+      /identidad: sin validación/i,
+    );
+    expect(screen.getByTestId("rl-identity-firma-baul-badge")).toHaveTextContent(
+      /firma del baúl: sin firma vigente/i,
+    );
+    expect(screen.getByTestId("rl-identity-module-link")).toBeInTheDocument();
+  });
+
+  it("edge case: con firma de baúl vigente NO se invita a prevalidar (D8 ADR-0025 manda)", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_VALID_IDENTITY);
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    await screen.findByTestId("rl-identity-firma-baul-badge");
+    expect(screen.queryByTestId("rl-identity-copy")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-module-link")).not.toBeInTheDocument();
+  });
+
+  it("contrato: identidad vencida sin firma vigente invita a renovar (copy distinto de «sin validación»)", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue({
+      ...ITEM_NONE,
+      identityStatus: "expired",
+    });
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    expect(await screen.findByTestId("rl-identity-status-badge")).toHaveTextContent(
+      /identidad: vencida/i,
+    );
+    expect(screen.getByTestId("rl-identity-copy")).toHaveTextContent(/venció/i);
+    expect(screen.getByTestId("rl-identity-module-link")).toBeInTheDocument();
+  });
+
+  it("contrato: persona jurídica (NIT) sin firma vigente ve «no aplica», no el enlace", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue({
+      ...ITEM_NONE,
+      documentType: "NIT",
+    });
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    expect(await screen.findByTestId("rl-identity-copy")).toHaveTextContent(
+      /no aplica prevalidación/i,
+    );
+    expect(screen.queryByTestId("rl-identity-module-link")).not.toBeInTheDocument();
   });
 });

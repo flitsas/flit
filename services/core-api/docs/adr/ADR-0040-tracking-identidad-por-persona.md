@@ -1,13 +1,16 @@
 # ADR-0040: Tracking de identidad agrupado por persona
 
 **Fecha**: 2026-08-05
-**Status**: Propuesto
-**Deciders**: Líder Técnico FLIT, equipo core-api, equipo tramites
+**Status**: Aceptado
+**Fecha de aceptación**: 2026-08-21
+**Status previo**: Propuesto (2026-08-05)
+**Deciders**: Juan Felipe Montoya Garcia (Líder Técnico) — aceptado 2026-08-21; equipo core-api, equipo tramites
+**Decisión aceptada**: Opción 1 — modo agrupado en endpoint/superficie propia
 **Tags**: arquitectura, backend, frontend, identidad, tramites, feature-11261
 **Supersedes**: **decisión 2 de `ADR-0036-prevalidacion-natural-tracking-desacoplado-instancia.md`**
 (tracking anclado a `validationId`). La **decisión 1 de ese ADR —prevalidación restringida a persona
 natural— sigue vigente y no se toca.**
-**Relacionado**: `ADR-0030-persona-entidad-tenant-prevalidacion.md` (Propuesto), `ADR-0039-precedencia-unica-decision-envio-identidad.md` (Propuesto), `ADR-0021-analitica-fuente-datos-tramites.md` (Aceptado)
+**Relacionado**: `ADR-0030-persona-entidad-tenant-prevalidacion.md` (Propuesto), `ADR-0039-precedencia-unica-decision-envio-identidad.md` (Aceptado), `ADR-0021-analitica-fuente-datos-tramites.md` (Aceptado)
 **HU origen**: Feature #11261 — HUs #11268, #11269, #11270, #11271, #11272, #11273
 **Plan técnico**: `docs/plan-tecnico-ajustes-validacion-identidad.md` (v2, CF-05 a CF-07, D1/D5/D6/D7/D13)
 
@@ -237,7 +240,7 @@ contador por persona de la grilla.
 - `ADR-0036-prevalidacion-natural-tracking-desacoplado-instancia.md` (**Propuesto**) — este ADR
   **supersede su decisión 2** (tracking anclado a `validationId` como única puerta). Su **decisión 1**
   (prevalidación solo persona natural) **sigue vigente**. El endpoint por `validationId` no se elimina.
-- `ADR-0039-precedencia-unica-decision-envio-identidad.md` (**Propuesto**) — fija la función canónica de
+- `ADR-0039-precedencia-unica-decision-envio-identidad.md` (**Aceptado** 2026-08-20) — fija la función canónica de
   normalización del documento que este ADR usa como clave de agrupación.
 - `ADR-0030-persona-entidad-tenant-prevalidacion.md` (**Propuesto**) — modelo de `tramites.persons`; sin
   cambios: la agrupación es por documento normalizado, no por `person_id`.

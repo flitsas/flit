@@ -242,6 +242,7 @@ app.MapAdminDeedsEndpoints();
 app.MapAdminPersonalizedDocumentsEndpoints();
 app.MapAdminCompanyNotificationDeliveryLogsEndpoints();
 app.MapAdminLegalRepresentativeIdentityEndpoints();
+app.MapAdminIdentityVigenciaEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminRejectionReasonsEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();

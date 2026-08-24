@@ -86,17 +86,6 @@ export interface MandateSignerSaved {
   identity?: "sent" | "reused" | "failed" | "notattempted";
 }
 
-/** Resultado de iniciar/reenviar la validación de identidad del mandatario (ADR-0036, HU #10911). */
-export interface MandateSignerIdentityResult {
-  id: string;
-  status: string;
-  captureUrl: string | null;
-  validUntil: string | null;
-  reused: boolean;
-  /** HU #11028 — `"mock"` cuando la validación fue simulada en un ambiente de prueba. */
-  provider?: string;
-}
-
 function base(transitOfficeId: string): string {
   return `/api/v1/admin/transit-offices/${transitOfficeId}/mandate-signers`;
 }
@@ -108,21 +97,6 @@ export async function fetchMandateSigners(
 ): Promise<MandateSigner[]> {
   const result = await apiFetch<{ data: MandateSigner[] }>(base(transitOfficeId), { signal });
   return result.data;
-}
-
-/**
- * GET — igual que `fetchMandateSigners` pero conservando si el ambiente permite SIMULAR validaciones
- * de identidad (HU #11028). La consola solo ofrece esa acción cuando el backend la habilita.
- */
-export async function fetchMandateSignersWithFlags(
-  transitOfficeId: string,
-  signal?: AbortSignal,
-): Promise<{ signers: MandateSigner[]; mockIdentityEnabled: boolean }> {
-  const result = await apiFetch<{ data: MandateSigner[]; mockIdentityEnabled?: boolean }>(
-    base(transitOfficeId),
-    { signal },
-  );
-  return { signers: result.data, mockIdentityEnabled: result.mockIdentityEnabled === true };
 }
 
 /** GET /companies — compañías del OT con sus mandatarios asignados (RF34 + multiselect). */
@@ -174,61 +148,10 @@ export function reactivateMandateSigner(
   });
 }
 
-/**
- * POST /{signerId}/identity/send — inicia la validación de identidad del mandatario por correo
- * (ADR-0036, HU #10911). Lanza ApiValidationError en 422 (email_requerido / ot_sin_alta); el proveedor
- * no disponible es 503 y su error definitivo 502.
- */
-export function sendMandateSignerIdentity(
-  transitOfficeId: string,
-  mandateSignerId: string,
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${base(transitOfficeId)}/${mandateSignerId}/identity/send`,
-    { method: "POST" },
-  );
-}
-
-/**
- * POST /{signerId}/identity/link — vincula al mandatario una validación que la PERSONA ya hizo y sigue
- * vigente (HU #11028). No envía correo ni crea nada: lanza ApiError 409 `sin_identidad_vigente` cuando
- * esa persona no tiene ninguna identidad aprobada y vigente.
- */
-export function linkMandateSignerIdentity(
-  transitOfficeId: string,
-  mandateSignerId: string,
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${base(transitOfficeId)}/${mandateSignerId}/identity/link`,
-    { method: "POST" },
-  );
-}
-
-/**
- * POST /{signerId}/identity/mock — SIMULA una validación aprobada (HU #11028). Solo disponible en
- * ambientes de prueba: con la simulación deshabilitada el backend responde 403 `simulacion_deshabilitada`.
- * La validación queda marcada como simulada (`provider: "mock"`), nunca se confunde con una real.
- */
-export function mockMandateSignerIdentity(
-  transitOfficeId: string,
-  mandateSignerId: string,
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${base(transitOfficeId)}/${mandateSignerId}/identity/mock`,
-    { method: "POST" },
-  );
-}
-
-/** POST /{signerId}/identity/resend — reenvía (respeta la vigencia: no reenvía si ya está aprobada). */
-export function resendMandateSignerIdentity(
-  transitOfficeId: string,
-  mandateSignerId: string,
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${base(transitOfficeId)}/${mandateSignerId}/identity/resend`,
-    { method: "POST" },
-  );
-}
+// HU #11759 (ADR-0050, DA-5) — se retiran `sendMandateSignerIdentity`, `resendMandateSignerIdentity`,
+// `linkMandateSignerIdentity` y `mockMandateSignerIdentity` (OT-scoped, HU #10911/#11028): huérfanas
+// desde la HU #11202 (confirmado por grep, cero consumidores) y, además, las rutas que llamaban ya
+// responden 410 Gone desde la HU #11758.
 
 // ── HU #11202 — mandatarios desde el configurador de la COMPAÑÍA ──────────────
 // Vista inversa: la empresa registra a la persona y marca en cuáles de SUS organismos aplica, en vez
@@ -295,32 +218,10 @@ export async function fetchRepresentedCompanies(
   return r?.items ?? [];
 }
 
-/** Desenlace de una acción de identidad sobre el mandatario. */
-export interface MandateSignerIdentityResult {
-  estado: string;
-  reutilizada: boolean;
-}
-
-/**
- * Acciones de identidad del mandatario desde el configurador de la COMPAÑÍA.
- *
- * Existían solo bajo `/transit-offices/...` y ningún componente las llamaba: la empresa registraba a
- * su mandatario pero no tenía forma de pedirle la validación ni de vincular la que ya tuviera.
- *
- * - `send` inicia la validación (el proveedor manda el enlace de captura por correo);
- * - `resend` reenvía respetando la vigencia (no reenvía si ya hay aprobada y vigente);
- * - `link` vincula una identidad que esa persona YA validó, sin mandar correo (409 si no tiene).
- */
-export function mandateSignerIdentityAction(
-  tenantId: string,
-  mandateSignerId: string,
-  accion: "send" | "resend" | "link",
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${companyBase(tenantId)}/${mandateSignerId}/identity/${accion}`,
-    { method: "POST" },
-  );
-}
+// HU #11757 (ADR-0050) — se retira `mandateSignerIdentityAction` (send/resend/link desde el
+// configurador de la COMPAÑÍA): confirmado por grep, sin otro consumidor real (solo un mock de test).
+// El módulo Identidad es la única fuente que puede originar una validación; esa ruta también
+// responderá 410 Gone (HU #11758).
 
 function companyBase(tenantId: string): string {
   return `/api/v1/admin/companies/${tenantId}/mandate-signers`;
@@ -330,12 +231,9 @@ function companyBase(tenantId: string): string {
 export async function fetchCompanyMandateSigners(
   tenantId: string,
   signal?: AbortSignal,
-): Promise<{ signers: MandateSigner[]; mockIdentityEnabled: boolean }> {
-  const result = await apiFetch<{ data: MandateSigner[]; mockIdentityEnabled?: boolean }>(
-    companyBase(tenantId),
-    { signal },
-  );
-  return { signers: result.data, mockIdentityEnabled: result.mockIdentityEnabled === true };
+): Promise<MandateSigner[]> {
+  const result = await apiFetch<{ data: MandateSigner[] }>(companyBase(tenantId), { signal });
+  return result.data;
 }
 
 /** GET /transit-offices — organismos que la compañía puede elegir (AC2). */

@@ -1,5 +1,8 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Identity;
+using Flit.Tramites.Application.UseCases.Persons;
+using Flit.Tramites.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -16,10 +19,22 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class DbMandateSignerReader : IMandateSignerReader
 {
     private readonly FlitDbContext _context;
+    private readonly ITransitOfficeOperationalStatusReader _otStatus;
+    private readonly IdentityVigenciaPorDocumentoResolver _identityResolver;
 
-    public DbMandateSignerReader(FlitDbContext context)
+    public DbMandateSignerReader(
+        FlitDbContext context,
+        ITransitOfficeOperationalStatusReader? otStatus = null,
+        IdentityVigenciaPorDocumentoResolver? identityResolver = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+
+        // HU #11765 (ADR-0050) — igual patrón que DbLegalRepresentativeReader: opcionales para no romper
+        // los sitios que construyen el reader directamente (tests, ~5 archivos que ni siquiera aseveran
+        // IdentityStatus). Por DI llegan las implementaciones reales (ambas ya registradas).
+        _otStatus = otStatus ?? new DbTransitOfficeOperationalStatusReader(context);
+        _identityResolver = identityResolver
+            ?? new IdentityVigenciaPorDocumentoResolver(new ProcedureInstanceRepository(context));
     }
 
     public Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
@@ -56,7 +71,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
 
                 var vigenciaBySigner = await LoadIdentityVigenciaAsync(
-                    [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
+                    signers, cancellationToken).ConfigureAwait(false);
 
                 var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
                     [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
@@ -97,7 +112,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     [signer.Id], cancellationToken).ConfigureAwait(false);
 
                 var vigenciaBySigner = await LoadIdentityVigenciaAsync(
-                    [signer.Id], cancellationToken).ConfigureAwait(false);
+                    [signer], cancellationToken).ConfigureAwait(false);
 
                 var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
                     [signer.Id], cancellationToken).ConfigureAwait(false);
@@ -163,7 +178,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .ConfigureAwait(false);
                 var officesBySigner = await LoadOfficeIdsBySignerAsync(signerIds, cancellationToken)
                     .ConfigureAwait(false);
-                var vigenciaBySigner = await LoadIdentityVigenciaAsync(signerIds, cancellationToken)
+                var vigenciaBySigner = await LoadIdentityVigenciaAsync(signers, cancellationToken)
                     .ConfigureAwait(false);
                 var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(signerIds, cancellationToken)
                     .ConfigureAwait(false);
@@ -474,36 +489,76 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     }
 
     /// <summary>
-    /// Vigencia de la identidad (HU #10994) por mandatario. La precedencia vive en
-    /// <see cref="AdminIdentityVigencia"/>, compartida con el representante legal (HU #11059): aquí solo
-    /// queda la consulta en lote. Desde la HU #11060 se devuelve TAMBIÉN hasta cuándo es válida, que es
-    /// lo que la consola necesita para informar la vigencia en curso en vez de ofrecer renovar.
-    /// Se lee dentro del scope cross-tenant (row_security off) que abre <c>ExecuteCrossTenantReadAsync</c>.
+    /// HU #11765 (ADR-0050) — vigencia de identidad por mandatario, leída EXCLUSIVAMENTE del módulo
+    /// Identidad (<c>tramites.procedure_instance_biometric_validations</c>) a través de
+    /// <see cref="IdentityVigenciaPorDocumentoResolver"/>. Ya NO consulta
+    /// <c>admin.admin_identity_validations</c> (tabla abandonada, ADR-0034 superada): era la otra mitad
+    /// del defecto raíz de esta HU — <c>MandateSignerDirectory</c> (HU #11752, ruta de RADICACIÓN) ya
+    /// había migrado, pero la ficha admin (esta clase) seguía leyendo la tabla vieja y su rótulo no se
+    /// movía al prevalidar desde Identidad.
+    /// <para>
+    /// <b>Tenant.</b> La identidad de un mandatario vive en el tenant PROPIO del organismo donde está
+    /// registrado (<c>signer.TransitOfficeId</c>), NO en la compañía gestora que consulta la ficha —
+    /// mismo mecanismo que <c>MandateSignerDirectory.LoadVigentIdentitiesAsync</c> (HU #11752), resuelto
+    /// con <see cref="ITransitOfficeOperationalStatusReader"/>. Se agrupa por organismo para resolver el
+    /// tenant una sola vez por OT y no repetir la consulta de perfil por cada mandatario.
+    /// </para>
+    /// <para>
+    /// <b>Lote.</b> Dentro de cada grupo por organismo, UNA sola consulta SQL para todos sus documentos
+    /// vía <see cref="IdentityVigenciaPorDocumentoResolver.ResolveManyBatchedAsync"/> (sin N+1). Un OT sin
+    /// tenant operativo (<c>HasTenant=false</c>) no tiene contra qué resolver identidad: sus mandatarios
+    /// quedan en <see cref="AdminIdentityVigencia.None"/>, igual que antes cuando no había fila admin.
+    /// </para>
+    /// <para>
+    /// El estado ADR-0050 se traduce al vocabulario histórico del contrato con
+    /// <see cref="IdentityVigenciaLegacyMapper"/> (compartido con <c>DbLegalRepresentativeReader</c>).
+    /// </para>
+    /// <para>
+    /// Se lee dentro del scope cross-tenant (row_security off) que abre <c>ExecuteCrossTenantReadAsync</c>;
+    /// la tabla de Identidad no lo necesita (aislamiento por <c>WHERE tenant_id</c> explícito, igual que
+    /// el endpoint de la HU #11751), pero tampoco estorba correr ahí dentro.
+    /// </para>
     /// </summary>
     private async Task<Dictionary<Guid, AdminIdentityVigencia.Resultado>> LoadIdentityVigenciaAsync(
-        List<Guid> signerIds,
+        List<Entities.Admin.MandateSigner> signers,
         CancellationToken cancellationToken)
     {
-        if (signerIds.Count == 0)
+        var result = new Dictionary<Guid, AdminIdentityVigencia.Resultado>();
+        if (signers.Count == 0)
         {
-            return [];
+            return result;
         }
 
         var now = DateTimeOffset.UtcNow;
-        var rows = await _context.AdminIdentityValidations
-            .AsNoTracking()
-            .Where(v => v.SubjectType == AdminIdentitySubjectTypes.MandateSigner
-                && signerIds.Contains(v.SubjectRef))
-            .Select(v => new { v.SubjectRef, v.Status, v.ValidUntil })
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
 
-        return rows
-            .GroupBy(r => r.SubjectRef)
-            .ToDictionary(
-                g => g.Key,
-                g => AdminIdentityVigencia.Resumir(
-                    g.Select(r => new AdminIdentityVigencia.Entrada(r.Status, r.ValidUntil)), now));
+        foreach (var group in signers.GroupBy(s => s.TransitOfficeId))
+        {
+            var status = await _otStatus.GetByIdAsync(group.Key, cancellationToken).ConfigureAwait(false);
+            if (status is null || !status.HasTenant || status.TenantId is not { } otTenantId)
+            {
+                // Sin tenant operativo del OT no hay contra qué resolver identidad (igual que antes:
+                // sin fila ⇒ None). El resolver de Identidad NO se invoca para este grupo.
+                continue;
+            }
+
+            var documentos = group
+                .Select(s => (s.DocumentType, s.DocumentNumber))
+                .Distinct()
+                .ToList();
+
+            var resueltos = await _identityResolver
+                .ResolveManyBatchedAsync(otTenantId, documentos, now, cancellationToken)
+                .ConfigureAwait(false);
+
+            foreach (var s in group)
+            {
+                var key = DocumentCanonicalNormalization.IdentidadKey(otTenantId, s.DocumentType, s.DocumentNumber);
+                var resultado = resueltos.GetValueOrDefault(key, IdentityVigenciaResult.SinValidacion);
+                result[s.Id] = IdentityVigenciaLegacyMapper.ToLegacyResultado(resultado);
+            }
+        }
+
+        return result;
     }
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(

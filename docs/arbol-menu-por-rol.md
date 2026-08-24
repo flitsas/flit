@@ -133,7 +133,7 @@ FAB Inicio FLIT (Dashboard)
 Compañía {razón social}
 ├── Matrícula Inicial
 ├── Traspasos
-├── Configuración Empresa
+├── Configuración Empresa      (sin el panel de documentos personalizados — HU #11686)
 ├── Documentos
 ├── Placas preasignadas          (solo si preasignación activa)
 ├── Representantes legales
@@ -200,7 +200,7 @@ Misma barra de pestañas que SuperAdmin, **sin** la pestaña Usuarios inyectada 
 Administración → /admin/companies/{su-tenant}
 ├── Matrícula Inicial
 ├── Traspasos
-├── Configuración Empresa
+├── Configuración Empresa      (sin el panel de documentos personalizados — HU #11686)
 ├── Documentos
 ├── Placas preasignadas          (condicional)
 ├── Representantes legales

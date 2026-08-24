@@ -153,6 +153,10 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Persons.GetPrevalidacionDetailHandler>();
         // HU #11272 — historial multi-validación por persona (ADR-0040).
         services.AddScoped<UseCases.Persons.ListPersonBiometricValidationsHandler>();
+        // HU #11751 (ADR-0050) — resolución/clasificación de vigencia de identidad por documento,
+        // fuente única reutilizada también por MandateSignerDirectory (HU #11752).
+        services.AddScoped<UseCases.Persons.IdentityVigenciaPorDocumentoResolver>();
+        services.AddScoped<UseCases.Persons.GetIdentityVigenciaPorDocumentoHandler>();
 
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.

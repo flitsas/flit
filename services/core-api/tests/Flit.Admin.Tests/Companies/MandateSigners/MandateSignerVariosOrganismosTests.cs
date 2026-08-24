@@ -1,10 +1,14 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Tramites.Application.UseCases.Persons;
+using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 
 namespace Flit.Admin.Tests.Companies.MandateSigners;
@@ -29,6 +33,22 @@ public sealed class MandateSignerVariosOrganismosTests
         new(new DbContextOptionsBuilder<FlitDbContext>()
             .UseInMemoryDatabase($"flit-mandatarios-{Guid.NewGuid()}")
             .Options);
+
+    /// <summary>
+    /// HU #11752 (ADR-0050) — MandateSignerDirectory ya no lee <c>admin.admin_identity_validations</c>:
+    /// resuelve vigencia contra el módulo Identidad vía el tenant del OT. Esta suite no ejercita
+    /// vigencia de identidad (solo organismos/compañías), así que el reader de estado operativo
+    /// devuelve "sin tenant" y el resolver recibe un repositorio que nunca se invoca.
+    /// </summary>
+    private static MandateSignerDirectory Directorio(FlitDbContext ctx)
+    {
+        var otStatusReader = Substitute.For<ITransitOfficeOperationalStatusReader>();
+        otStatusReader
+            .GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((TransitOfficeOperationalStatusItem?)null);
+        var identityResolver = new IdentityVigenciaPorDocumentoResolver(Substitute.For<IProcedureInstanceRepository>());
+        return new MandateSignerDirectory(ctx, otStatusReader, identityResolver);
+    }
 
     private static CreateMandateSignerData Alta(IReadOnlyList<Guid>? organismos = null) =>
         new(
@@ -163,7 +183,7 @@ public sealed class MandateSignerVariosOrganismosTests
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = NewContext();
         var repo = new MandateSignerRepository(ctx);
-        var directorio = new MandateSignerDirectory(ctx);
+        var directorio = Directorio(ctx);
 
         var signerId = await repo.CreateAsync(Alta([OtMedellin, OtEnvigado]), ct);
 
@@ -263,7 +283,7 @@ public sealed class MandateSignerVariosOrganismosTests
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = NewContext();
         var repo = new MandateSignerRepository(ctx);
-        var directorio = new MandateSignerDirectory(ctx);
+        var directorio = Directorio(ctx);
 
         var signerId = await repo.CreateAsync(Alta([OtMedellin, OtEnvigado]), ct);
 
@@ -300,7 +320,7 @@ public sealed class MandateSignerVariosOrganismosTests
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = NewContext();
         var repo = new MandateSignerRepository(ctx);
-        var directorio = new MandateSignerDirectory(ctx);
+        var directorio = Directorio(ctx);
 
         var signerId = await repo.CreateAsync(Alta([OtMedellin, OtEnvigado]), ct);
 
