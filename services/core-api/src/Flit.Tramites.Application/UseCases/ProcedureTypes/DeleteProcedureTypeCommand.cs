@@ -25,6 +25,10 @@ public sealed class DeleteProcedureTypeHandler(IProcedureTypeRepository reposito
             entity.PublicationStatus = PublicationStatus.Archived;
         }
 
+        // ADR-0050 — retirar el tipo apaga su barrera de operación. Dejarla encendida en un tipo
+        // archivado es una incoherencia latente: no se puede crear un trámite con él, pero si
+        // alguien lo republicara volvería a ofrecerse sin que nadie lo decidiera.
+        entity.WizardEnabled = false;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         await repository.UpdateAsync(entity, ct);
         await repository.SaveChangesAsync(ct);
