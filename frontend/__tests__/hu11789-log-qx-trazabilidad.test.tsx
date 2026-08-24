@@ -233,6 +233,53 @@ describe("LOG QX — pantalla de trazabilidad (HU #11789)", () => {
     ).toBeInTheDocument();
   });
 
+  it("no duplica el tipo cuando el nombre del catálogo ya empieza por «Secretaría»", async () => {
+    // Los nombres reales vienen así: "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA".
+    mocks.fetchLogQxHitos.mockResolvedValue(
+      result({
+        radicacion: radicacion({ transitOfficeName: "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA" }),
+      }),
+    );
+
+    render(<TrazabilidadScreen submissionId={SUB} volverHref="/?m=log-qx" />);
+    await screen.findByText("TRM-2026-000271");
+
+    expect(screen.queryByText(/Secretaría de SECRETARIA/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/La SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA/).length)
+      .toBeGreaterThan(0);
+  });
+
+  it("antepone «Secretaría de» cuando el nombre NO lo trae", async () => {
+    mocks.fetchLogQxHitos.mockResolvedValue(
+      result({ radicacion: radicacion({ transitOfficeName: "Ibagué" }) }),
+    );
+
+    render(<TrazabilidadScreen submissionId={SUB} volverHref="/?m=log-qx" />);
+    await screen.findByText("TRM-2026-000271");
+
+    expect(screen.getAllByText(/Secretaría de Ibagué/).length).toBeGreaterThan(0);
+  });
+
+  it("una radicación aprobada sin fecha de cierre no produce «lo aprobó el —»", async () => {
+    mocks.fetchLogQxHitos.mockResolvedValue(
+      result({
+        radicacion: radicacion({
+          status: "aprobado",
+          completedAt: null,
+          esperandoDesde: null,
+          horasEsperando: null,
+        }),
+      }),
+    );
+
+    render(<TrazabilidadScreen submissionId={SUB} volverHref="/?m=log-qx" />);
+
+    const resumen = await screen.findByText(/lo aprobó/i);
+    // El guión del formateador sirve en una tabla; en mitad de una frase la rompe.
+    expect(resumen.textContent).not.toMatch(/aprobó el —/);
+    expect(resumen.textContent).toMatch(/lo aprobó\./);
+  });
+
   it("un trámite resuelto no muestra el cierre de «esperando decisión»", async () => {
     mocks.fetchLogQxHitos.mockResolvedValue(
       result({

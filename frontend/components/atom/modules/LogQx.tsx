@@ -20,6 +20,8 @@ import {
   esperaEsAlta,
   formatEspera,
   formatFecha,
+  Secretaria,
+  secretaria,
 } from "@/lib/logqx/labels";
 
 /**
@@ -582,38 +584,42 @@ function resumen(e: LogQxBandejaEntry): string {
     case "sin_radicar":
       return `Este trámite cumple los requisitos para ir a Quipux${
         espera ? ` desde hace ${espera}` : ""
-      }, pero todavía no se ha encolado. Conviene revisar que la Secretaría de ${
-        e.transitOfficeName
-      } tenga el DIVIPO configurado y la integración activa para este tipo de trámite.`;
+      }, pero todavía no se ha encolado. Conviene revisar que ${secretaria(
+        e.transitOfficeName,
+      )} tenga el DIVIPO configurado y la integración activa para este tipo de trámite.`;
 
     case "pendiente":
-      return `Está en cola para radicarse en Quipux${espera ? `, esperando desde hace ${espera}` : ""}. Aún no se ha enviado a la Secretaría de ${e.transitOfficeName}.`;
+      return `Está en cola para radicarse en Quipux${
+        espera ? `, esperando desde hace ${espera}` : ""
+      }. Aún no se ha enviado a ${secretaria(e.transitOfficeName)}.`;
 
     case "radicado":
-      return `Radicado en Quipux como ${e.documentoQx}. Todavía no se ha ejecutado la primera consulta de estado a la Secretaría de ${e.transitOfficeName}.`;
+      return `Radicado en Quipux como ${e.documentoQx}. Todavía no se ha ejecutado la primera consulta de estado a ${secretaria(e.transitOfficeName)}.`;
 
     case "en_tramite":
-      return `Radicado en Quipux como ${e.documentoQx}. La Secretaría de ${
-        e.transitOfficeName
-      } aún no lo resuelve${espera ? `: llevamos ${espera} esperando` : ""}, con ${
+      return `Radicado en Quipux como ${e.documentoQx}. ${Secretaria(
+        e.transitOfficeName,
+      )} aún no lo resuelve${espera ? `: llevamos ${espera} esperando` : ""}, con ${
         e.pollCount
       } consultas de estado realizadas.`;
 
     case "aprobado":
-      return `La Secretaría de ${e.transitOfficeName} lo aprobó. Se radicó como ${e.documentoQx} y el trámite quedó resuelto.`;
+      return `${Secretaria(e.transitOfficeName)} lo aprobó. Se radicó como ${e.documentoQx} y el trámite quedó resuelto.`;
 
     case "rechazado":
-      return `La Secretaría de ${e.transitOfficeName} lo rechazó${
+      return `${Secretaria(e.transitOfficeName)} lo rechazó${
         e.rejectionReason ? "" : " sin dejar un motivo registrado"
       }. Se había radicado como ${e.documentoQx}.`;
 
     case "fallido":
       return `La radicación falló tras ${e.attempts} ${
         e.attempts === 1 ? "intento" : "intentos"
-      }${e.intentos > 1 ? ` y ${e.intentos} radicaciones` : ""}. Este trámite nunca llegó a la Secretaría de ${e.transitOfficeName}.`;
+      }${
+        e.intentos > 1 ? ` y ${e.intentos} radicaciones` : ""
+      }. Este trámite nunca llegó a ${secretaria(e.transitOfficeName)}.`;
 
     default:
-      return `Estado ${e.estado} en la Secretaría de ${e.transitOfficeName}.`;
+      return `Estado ${e.estado} en ${secretaria(e.transitOfficeName)}.`;
   }
 }
 

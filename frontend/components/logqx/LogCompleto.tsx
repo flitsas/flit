@@ -296,9 +296,27 @@ function Payloads({ evento, indice }: { evento: LogQxEvent; indice: number }) {
 
   const { enviado, recibido } = repartir(detalle);
 
+  // Muchos eventos registran UN SOLO lado: `registro_respuesta` guarda la respuesta, `claimed`
+  // guarda contexto del envío. Pintar la columna contraria vacía con «Sin datos registrados» se
+  // lee como un fallo, cuando lo cierto es que ese evento no tiene ese lado.
+  const soloUnLado = enviado.length === 0 || recibido.length === 0;
+
   return (
-    <div className="grid gap-3.5 px-4 py-3.5 md:grid-cols-2">
-      <Columna titulo="Lo que enviamos" etiqueta="Rq" tono="info" datos={enviado} />
+    <div className={`grid gap-3.5 px-4 py-3.5 ${soloUnLado ? "" : "md:grid-cols-2"}`}>
+      {enviado.length > 0 && (
+        <Columna titulo="Lo que enviamos" etiqueta="Rq" tono="info" datos={enviado}>
+          {recibido.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setCrudo((v) => !v)}
+              className="ml-auto text-[11px] font-medium text-[#4F74C9] hover:underline"
+            >
+              {crudo ? "ocultar original" : "ver original"}
+            </button>
+          )}
+        </Columna>
+      )}
+      {recibido.length > 0 && (
       <Columna titulo="Lo que respondió Quipux" etiqueta="Rs" tono="ok" datos={recibido}>
         <button
           type="button"
@@ -308,10 +326,18 @@ function Payloads({ evento, indice }: { evento: LogQxEvent; indice: number }) {
           {crudo ? "ocultar original" : "ver original"}
         </button>
       </Columna>
+      )}
+      {soloUnLado && (
+        <p className="text-[12px] italic opacity-55">
+          {enviado.length === 0
+            ? "Este evento solo registra la respuesta de Quipux."
+            : "Este evento solo registra lo que se envió; no hubo respuesta que guardar."}
+        </p>
+      )}
       {crudo && (
         <pre
           id={`logqx-raw-${indice}`}
-          className="overflow-x-auto rounded-[9px] border border-[#DDE5F0] bg-white p-3 font-mono text-[11.5px] leading-relaxed opacity-80 md:col-span-2 dark:border-white/10 dark:bg-[#0B0F14]"
+          className={`overflow-x-auto rounded-[9px] border border-[#DDE5F0] bg-white p-3 font-mono text-[11.5px] leading-relaxed opacity-80 dark:border-white/10 dark:bg-[#0B0F14] ${soloUnLado ? "" : "md:col-span-2"}`}
         >
           {JSON.stringify(detalle, null, 2)}
         </pre>

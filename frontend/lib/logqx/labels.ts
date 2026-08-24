@@ -98,6 +98,39 @@ export function estadoTramiteQx(code: number | null | undefined): string {
   return ESTADO_TRAMITE_QX[code] ?? String(code);
 }
 
+/**
+ * Nombre de la secretaría listo para incrustar en una frase.
+ *
+ * Los nombres del catálogo ya vienen con su tipo delante («SECRETARIA DISTRITAL DE MOVILIDAD DE
+ * BOGOTA», «SECRETARÍA DE TRÁNSITO DE IBAGUÉ»), así que anteponer «la Secretaría de» produce
+ * «la Secretaría de SECRETARIA DISTRITAL…». Se antepone solo cuando el nombre NO lo trae.
+ */
+export function secretaria(nombre: string): string {
+  const limpio = nombre.trim();
+  const empiezaConTipo = /^secretar[ií]a\b/i.test(limpio);
+  return empiezaConTipo ? `la ${limpio}` : `la Secretaría de ${limpio}`;
+}
+
+/**
+ * Igual que {@link secretaria} pero en inicio de oración, con la mayúscula donde toca.
+ */
+export function Secretaria(nombre: string): string {
+  const frase = secretaria(nombre);
+  return frase.charAt(0).toUpperCase() + frase.slice(1);
+}
+
+/**
+ * Fragmento « el {fecha}» para incrustar en una frase, o cadena vacía si no hay fecha.
+ *
+ * Existe para no escribir «lo aprobó el —.»: el guión del formateador sirve en una tabla, donde
+ * marca una celda sin dato, pero en mitad de una oración la rompe.
+ */
+export function fragmentoFecha(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const formateada = formatFecha(iso);
+  return formateada === "—" ? "" : ` el ${formateada}`;
+}
+
 export function formatFecha(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);

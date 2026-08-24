@@ -8,7 +8,14 @@ import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { HitosTimeline } from "./HitosTimeline";
 import { LogCompleto } from "./LogCompleto";
 import { fetchLogQxHitos, type LogQxHitosResult, type LogQxStatus } from "@/lib/api/admin-log-qx";
-import { codigoQx, estadoTramiteQx, formatEspera, formatFecha } from "@/lib/logqx/labels";
+import {
+  codigoQx,
+  estadoTramiteQx,
+  formatEspera,
+  fragmentoFecha,
+  Secretaria,
+  secretaria,
+} from "@/lib/logqx/labels";
 import type { StatusTone } from "@/components/atom/StatusBadge";
 
 /**
@@ -115,7 +122,7 @@ export function TrazabilidadScreen({
                     <span className="opacity-50">·</span>
                     <span>{r.clientTenantName}</span>
                     <span className="opacity-50">·</span>
-                    <span>Secretaría de {r.transitOfficeName}</span>
+                    <span>{Secretaria(r.transitOfficeName)}</span>
                     <StatusBadge
                       label={ESTADO_RADICACION[r.status]?.label ?? r.status}
                       tone={ESTADO_RADICACION[r.status]?.tone ?? "neutral"}
@@ -256,39 +263,43 @@ function Dato({
 
 /** El resumen que un agente de soporte le repite al cliente por teléfono. */
 function resumen(r: LogQxHitosResult["radicacion"], espera: string | null): string {
-  const radicado = `Radicado en Quipux el ${formatFecha(r.registeredAt ?? r.createdAt)} como ${r.documentoQx}`;
+  const radicado = `Radicado en Quipux${fragmentoFecha(
+    r.registeredAt ?? r.createdAt,
+  )} como ${r.documentoQx}`;
 
   switch (r.status) {
     case "pendiente":
       return `Está en cola para radicarse en Quipux${
         espera ? `, esperando desde hace ${espera}` : ""
-      }. Todavía no se ha enviado a la Secretaría de ${r.transitOfficeName}.`;
+      }. Todavía no se ha enviado a ${secretaria(r.transitOfficeName)}.`;
 
     case "registrado":
-      return `${radicado}. La Secretaría de ${r.transitOfficeName} todavía no lo resuelve${
+      return `${radicado}. ${Secretaria(r.transitOfficeName)} todavía no lo resuelve${
         espera ? `: llevamos ${espera} esperando` : ""
       }, con ${r.pollCount.toLocaleString("es-CO")} consultas de estado realizadas${
-        r.lastPolledAt ? `, la última el ${formatFecha(r.lastPolledAt)}` : ""
+        r.lastPolledAt ? `, la última${fragmentoFecha(r.lastPolledAt)}` : ""
       }.`;
 
+    // `fragmentoFecha` devuelve "" cuando no hay fecha: sin él, un completedAt nulo
+    // producía la frase rota «lo aprobó el —.».
     case "aprobado":
-      return `${radicado}, y la Secretaría de ${r.transitOfficeName} lo aprobó el ${formatFecha(
+      return `${radicado}, y ${secretaria(r.transitOfficeName)} lo aprobó${fragmentoFecha(
         r.completedAt,
       )}.`;
 
     case "rechazado":
-      return `${radicado}. La Secretaría de ${r.transitOfficeName} lo rechazó el ${formatFecha(
+      return `${radicado}. ${Secretaria(r.transitOfficeName)} lo rechazó${fragmentoFecha(
         r.completedAt,
       )}${r.rejectionReason ? `. Motivo: ${r.rejectionReason}` : " sin dejar un motivo registrado"}.`;
 
     case "fallido":
       return `La radicación falló tras ${r.attempts} ${
         r.attempts === 1 ? "intento" : "intentos"
-      }${r.rejectionReason ? `. ${r.rejectionReason}` : ""}. Este documento nunca llegó a la Secretaría de ${
-        r.transitOfficeName
-      }.`;
+      }${r.rejectionReason ? `. ${r.rejectionReason}` : ""}. Este documento nunca llegó a ${secretaria(
+        r.transitOfficeName,
+      )}.`;
 
     default:
-      return `Estado ${r.status} en la Secretaría de ${r.transitOfficeName}.`;
+      return `Estado ${r.status} en ${secretaria(r.transitOfficeName)}.`;
   }
 }

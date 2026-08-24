@@ -176,6 +176,41 @@ describe("LOG QX — log completo (HU #11790)", () => {
     expect(screen.queryByText(/HTTP 76/)).not.toBeInTheDocument();
   });
 
+  it("AC4: un evento que solo registra la respuesta no pinta una columna vacía", async () => {
+    // registro_respuesta guarda solo el lado de Quipux; pintar "Lo que enviamos: sin datos"
+    // se lee como un fallo cuando en realidad ese evento no tiene envío.
+    const soloRespuesta: LogQxEvent = {
+      ...EVENTO_REGISTRO,
+      stage: "registro_respuesta",
+      detail: { codigo: 81, mensaje: "Los datos se almacenaron correctamente", duration_ms: 1100 },
+    };
+    mocks.fetchLogQxEventos.mockResolvedValue(page({ data: [soloRespuesta] }));
+
+    render(<LogCompleto submissionId={SUB} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Radicado en Quipux/i }));
+
+    expect(await screen.findByText("Lo que respondió Quipux")).toBeInTheDocument();
+    expect(screen.queryByText("Lo que enviamos")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sin datos registrados/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/solo registra la respuesta de Quipux/i)).toBeInTheDocument();
+  });
+
+  it("AC4: el JSON original sigue accesible aunque solo haya un lado", async () => {
+    const soloEnvio: LogQxEvent = {
+      ...EVENTO_REGISTRO,
+      stage: "claimed",
+      detail: { batch: "BATCH-003" },
+      responseCode: null,
+    };
+    mocks.fetchLogQxEventos.mockResolvedValue(page({ data: [soloEnvio] }));
+
+    render(<LogCompleto submissionId={SUB} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Tomado de la cola/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /ver original/i }));
+
+    expect(await screen.findByText(/"batch": "BATCH-003"/)).toBeInTheDocument();
+  });
+
   it("AC6: un evento histórico sin payload lo dice, sin romper la pantalla", async () => {
     mocks.fetchLogQxEventos.mockResolvedValue(page({ data: [EVENTO_SIN_PAYLOAD] }));
 

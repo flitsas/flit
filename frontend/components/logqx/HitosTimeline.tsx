@@ -9,6 +9,7 @@ import {
   formatDuracion,
   formatFecha,
   resultado,
+  secretaria,
 } from "@/lib/logqx/labels";
 
 /**
@@ -41,7 +42,7 @@ export function HitosTimeline({
       {hitos.map((h, i) => (
         <Entrada key={i} hito={h} indice={i} ultima={i === hitos.length - 1 && !esperando} />
       ))}
-      {esperando && <EsperandoDecision secretaria={radicacion.transitOfficeName} />}
+      {esperando && <EsperandoDecision nombreSecretaria={radicacion.transitOfficeName} />}
     </ol>
   );
 }
@@ -216,7 +217,7 @@ function BloqueSondeo({ hito, indice }: { hito: LogQxHito; indice: number }) {
 }
 
 /** Cierre de la línea: qué se está esperando ahora mismo. */
-function EsperandoDecision({ secretaria }: { secretaria: string }) {
+function EsperandoDecision({ nombreSecretaria }: { nombreSecretaria: string }) {
   return (
     <li className="grid grid-cols-[26px_1fr] gap-3.5">
       <div className="flex flex-col items-center">
@@ -229,7 +230,7 @@ function EsperandoDecision({ secretaria }: { secretaria: string }) {
       </div>
       <div className="min-w-0 rounded-[9px] border border-dashed border-[#DDE5F0] px-3.5 py-2.5 dark:border-white/10">
         <h3 className="text-[13.5px] font-semibold">
-          Esperando la decisión de la Secretaría de {secretaria}
+          Esperando la decisión de {secretaria(nombreSecretaria)}
         </h3>
         <p className="mt-1 text-[12.5px] opacity-70">Se sigue consultando periódicamente.</p>
       </div>
