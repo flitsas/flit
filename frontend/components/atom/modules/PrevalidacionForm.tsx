@@ -240,15 +240,16 @@ export function PrevalidacionForm({
   return (
     /* Overlay */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: 'rgba(22,39,68,0.45)', backdropFilter: 'blur(6px)' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="prevalidacion-form-title"
     >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-xl dark:bg-[#0B0F14]">
+      <div className="relative w-full max-w-lg rounded-2xl border border-[#DFE5ED] bg-white shadow-xl dark:bg-[#162744]">
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 id="prevalidacion-form-title" className="text-base font-semibold text-[#162744] dark:text-white">
+        <div className="flex items-start justify-between px-6 pt-5">
+          <h2 id="prevalidacion-form-title" className="text-base font-bold" style={{ color: '#557EFF' }}>
             Nueva prevalidación de identidad
           </h2>
           <button
@@ -264,65 +265,62 @@ export function PrevalidacionForm({
         {/* Body */}
         <form onSubmit={(e) => void handleSubmit(e)} noValidate>
           <div className="space-y-4 overflow-y-auto max-h-[70vh] px-6 py-5">
-            {/* Documento */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                  Tipo de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
-                </label>
-                <select
-                  id="pv-docType"
-                  value={values.documentType}
-                  onChange={(e) => {
-                    const nextType = e.target.value;
-                    set('documentType', nextType);
-                    set(
-                      'documentNumber',
-                      sanitizeDocNumber(values.documentNumber, nextType),
-                    );
-                  }}
-                  disabled={submitting}
-                  className={fieldClass('documentType')}
-                  aria-describedby={touched.documentType && errors.documentType ? 'pv-docType-err' : undefined}
-                  aria-invalid={!!(touched.documentType && errors.documentType)}
-                >
-                  {DOCUMENT_TYPES.map((d) => (
-                    <option key={d.value} value={d.value}>
-                      {d.label}
-                    </option>
-                  ))}
-                </select>
-                {touched.documentType && errors.documentType && (
-                  <p id="pv-docType-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
-                    {errors.documentType}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                  Número de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
-                </label>
-                <input
-                  id="pv-docNum"
-                  type="text"
-                  inputMode={values.documentType === 'PAS' ? 'text' : 'numeric'}
-                  value={values.documentNumber}
-                  onChange={(e) =>
-                    set('documentNumber', sanitizeDocNumber(e.target.value, values.documentType))
-                  }
-                  disabled={submitting}
-                  placeholder="Ej. 1234567890"
-                  autoComplete="off"
-                  className={fieldClass('documentNumber')}
-                  aria-describedby={touched.documentNumber && errors.documentNumber ? 'pv-docNum-err' : undefined}
-                  aria-invalid={!!(touched.documentNumber && errors.documentNumber)}
-                />
-                {touched.documentNumber && errors.documentNumber && (
-                  <p id="pv-docNum-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
-                    {errors.documentNumber}
-                  </p>
-                )}
-              </div>
+            <div>
+              <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
+                Tipo de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              </label>
+              <select
+                id="pv-docType"
+                value={values.documentType}
+                onChange={(e) => {
+                  const nextType = e.target.value;
+                  set('documentType', nextType);
+                  set(
+                    'documentNumber',
+                    sanitizeDocNumber(values.documentNumber, nextType),
+                  );
+                }}
+                disabled={submitting}
+                className={fieldClass('documentType')}
+                aria-describedby={touched.documentType && errors.documentType ? 'pv-docType-err' : undefined}
+                aria-invalid={!!(touched.documentType && errors.documentType)}
+              >
+                {DOCUMENT_TYPES.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              {touched.documentType && errors.documentType && (
+                <p id="pv-docType-err" className="mt-1 text-xs text-[#FF4E00]" role="alert">
+                  {errors.documentType}
+                </p>
+              )}
+            </div>
+            <div>
+              <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
+                Número de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              </label>
+              <input
+                id="pv-docNum"
+                type="text"
+                inputMode={values.documentType === 'PAS' ? 'text' : 'numeric'}
+                value={values.documentNumber}
+                onChange={(e) =>
+                  set('documentNumber', sanitizeDocNumber(e.target.value, values.documentType))
+                }
+                disabled={submitting}
+                placeholder="Ej. 1017229356"
+                autoComplete="off"
+                className={fieldClass('documentNumber')}
+                aria-describedby={touched.documentNumber && errors.documentNumber ? 'pv-docNum-err' : undefined}
+                aria-invalid={!!(touched.documentNumber && errors.documentNumber)}
+              />
+              {touched.documentNumber && errors.documentNumber && (
+                <p id="pv-docNum-err" className="mt-1 text-xs text-[#FF4E00]" role="alert">
+                  {errors.documentNumber}
+                </p>
+              )}
             </div>
 
             {/* Nombre */}
@@ -336,7 +334,7 @@ export function PrevalidacionForm({
                 value={values.name}
                 onChange={(e) => set('name', e.target.value)}
                 disabled={submitting}
-                placeholder="Nombre completo de la persona"
+                placeholder="Nombres y apellidos"
                 className={fieldClass('name')}
                 aria-describedby={touched.name && errors.name ? 'pv-name-err' : undefined}
                 aria-invalid={!!(touched.name && errors.name)}
@@ -359,13 +357,13 @@ export function PrevalidacionForm({
                 value={values.email}
                 onChange={(e) => set('email', e.target.value)}
                 disabled={submitting}
-                placeholder="correo@ejemplo.com"
+                placeholder="nombre@empresa.com"
                 autoComplete="email"
                 className={fieldClass('email')}
                 aria-describedby={touched.email && errors.email ? 'pv-email-err' : 'pv-email-hint'}
                 aria-invalid={!!(touched.email && errors.email)}
               />
-              <p id="pv-email-hint" className="mt-1 text-[11px] opacity-60">
+              <p id="pv-email-hint" className="mt-1 text-xs opacity-70">
                 A este correo se enviará el enlace de captura biométrica.
               </p>
               {touched.email && errors.email && (
@@ -441,7 +439,7 @@ export function PrevalidacionForm({
                 type="submit"
                 disabled={submitting}
                 className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-                style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+                style={{ background: 'linear-gradient(90deg, #557EFF 0%, #00DBD5 100%)' }}
               >
                 Crear prevalidación
               </button>
@@ -458,8 +456,8 @@ export function PrevalidacionForm({
             aria-labelledby="pv-confirm-title"
           >
             <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lg dark:bg-[#0B0F14]">
-              <h3 id="pv-confirm-title" className="text-sm font-semibold text-[#162744] dark:text-white">
-                Confirmar envío
+              <h3 id="pv-confirm-title" className="text-sm font-semibold" style={{ color: '#557EFF' }}>
+                Confirmar envío de prevalidación
               </h3>
               <p className="mt-2 text-xs opacity-80">
                 Se enviará el enlace de captura a <strong>{values.email.trim()}</strong>. ¿Continuar?

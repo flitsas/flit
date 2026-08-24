@@ -20,7 +20,10 @@ import {
   AssociatedProceduresList,
   buildAssociatedProcedures,
 } from '@/components/atom/modules/AssociatedProceduresList';
-import { IdentityCaptureLinkBlock } from '@/components/atom/modules/IdentityCaptureLinkBlock';
+import {
+  hasKyverumCaptureQr,
+  IdentityCaptureLinkBlock,
+} from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
 import { FLIT } from '@/lib/flit-design-tokens';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
@@ -35,7 +38,7 @@ const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> 
   en_proceso: { label: 'En proceso', tone: 'warning' },
   aprobado: { label: 'Aprobado', tone: 'success' },
   rechazado: { label: 'Rechazado', tone: 'danger' },
-  expirado: { label: 'Expirado', tone: 'neutral' },
+  expirado: { label: 'Expirado', tone: 'warning' },
   pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
   error_envio: { label: 'Error de envío', tone: 'danger' },
 };
@@ -124,7 +127,7 @@ export function PrevalidacionDetailDrawer({
   }, [onClose]);
 
   const meta = detail ? (ESTADO_META[detail.status] ?? ESTADO_META.enviado) : null;
-  const showCaptura = Boolean(detail?.captureUrl && !isTerminal(detail));
+  const showCaptura = hasKyverumCaptureQr(detail?.captureUrl);
   const awaiting =
     detail != null &&
     !isTerminal(detail) &&
@@ -275,7 +278,7 @@ export function PrevalidacionDetailDrawer({
                 </div>
               )}
 
-              {showCaptura && <IdentityCaptureLinkBlock captureUrl={detail.captureUrl!} />}
+          {showCaptura && <IdentityCaptureLinkBlock captureUrl={detail.captureUrl!} />}
 
               <div className="rounded-xl border p-3">
                 <p className="mb-1 text-[11px] font-semibold text-[#162744] dark:text-white">

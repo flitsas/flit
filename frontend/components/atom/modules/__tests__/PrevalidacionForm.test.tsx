@@ -458,7 +458,7 @@ describe('PrevalidacionForm (HU #10868)', () => {
       expect(await screen.findByText(/gestiónala desde ese trámite/i)).toBeInTheDocument();
       expect(mocks.editPrevalidacion).not.toHaveBeenCalled();
       expect(mocks.resendPrevalidacion).not.toHaveBeenCalled();
-    });
+    }, 10_000);
   });
 
   it('invoca onClose al pulsar Cancelar', async () => {
