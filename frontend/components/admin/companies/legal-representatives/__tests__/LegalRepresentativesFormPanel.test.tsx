@@ -277,8 +277,12 @@ describe("LegalRepresentativesFormPanel — modo view (AC1)", () => {
     renderPanel("view");
     expect(await screen.findByTestId("rl-identidad")).toBeInTheDocument();
     expect(screen.getByTestId("rl-firma-baul")).toBeInTheDocument();
-    expect(screen.getByText(/identidad sin validar/i)).toBeInTheDocument();
+    // HU #11756 — el rotulo pasa a ser explicito sobre su fuente: «Identidad: {estado}», con los 4
+    // estados del ADR-0050. El copy anterior («Identidad sin validar») desaparece a proposito.
+    expect(screen.getByText(/identidad: sin validaci[oó]n/i)).toBeInTheDocument();
     expect(screen.getByText(/sin firma registrada/i)).toBeInTheDocument();
+    // Y el rotulo del baul esta SIEMPRE, tenga o no firma (CF-04).
+    expect(screen.getByText(/firma del ba[uú]l: sin firma vigente/i)).toBeInTheDocument();
   });
 
   it("ordena la ficha: persona → firma → identidad → NITs", async () => {

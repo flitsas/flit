@@ -8,9 +8,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { LegalRepresentativesTab } from "../LegalRepresentativesTab";
-import type {
-  LegalRepresentativeItem,
-  LegalRepresentativePage,
+import { IDENTITY_MODULE_HREF } from "@/lib/admin/identity-vigencia";
+import {
+  SIGNAL_SIN_FIRMA_NI_IDENTIDAD,
+  type LegalRepresentativeItem,
+  type LegalRepresentativePage,
 } from "@/lib/api/admin-legal-representatives";
 
 vi.mock("@/lib/api/admin-legal-representatives", async (importOriginal) => {
@@ -23,7 +25,6 @@ vi.mock("@/lib/api/admin-legal-representatives", async (importOriginal) => {
     createLegalRepresentative: vi.fn(),
     updateLegalRepresentative: vi.fn(),
     deleteLegalRepresentative: vi.fn(),
-    sendLegalRepresentativeIdentity: vi.fn(),
   };
 });
 
@@ -33,7 +34,6 @@ import {
   fetchAssignableProcedureTypes,
   fetchLegalRepresentative,
   fetchLegalRepresentatives,
-  sendLegalRepresentativeIdentity,
   updateLegalRepresentative,
   type AssignableProcedureType,
 } from "@/lib/api/admin-legal-representatives";
@@ -133,24 +133,32 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     expect(screen.queryByText("900123456-7")).not.toBeInTheDocument();
   });
 
-  it("envía el correo de validación de identidad desde Editar", async () => {
-    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
-    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM);
-    vi.mocked(sendLegalRepresentativeIdentity).mockResolvedValue({
-      id: "val-1",
-      status: "PENDING",
-      reused: false,
+  // HU #11758 (ADR-0050) — el aviso de "quedó guardado sin firma ni validación" ya no dispara el
+  // correo de identidad (esa ruta responde 410 Gone): remite al módulo Identidad.
+  it("tras registrar sin firma ni identidad, el aviso enlaza al módulo Identidad (no dispara correo)", async () => {
+    // El aviso solo aparece si el representante recien creado esta EN LA LISTA: `pendingItem` se
+    // resuelve buscando el id devuelto por el alta dentro de `items`. Por eso la primera carga va
+    // vacia y la recarga posterior al alta ya trae la fila.
+    vi.mocked(fetchLegalRepresentatives)
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValue(page([{ ...ITEM, id: "rep-new", name: "Pedro", firstLastName: "López" }]));
+    vi.mocked(createLegalRepresentative).mockResolvedValue({
+      id: "rep-new",
+      signals: [SIGNAL_SIN_FIRMA_NI_IDENTIDAD],
     });
     renderTab();
-    await screen.findByText("Ana Gómez Ruiz");
+    await screen.findByText(/aún no tiene representantes legales registrados/i);
 
-    await userEvent.click(screen.getByRole("button", { name: /editar persona y firma de ana gómez ruiz/i }));
-    await screen.findByRole("dialog", { name: /editar representante legal/i });
+    await userEvent.click(screen.getByRole("button", { name: /^nuevo representante$/i }));
+    await userEvent.type(screen.getByLabelText(/^nombres$/i), "Pedro");
+    await userEvent.type(screen.getByLabelText(/primer apellido/i), "López");
+    await userEvent.type(screen.getByLabelText(/número de documento/i), "9876543");
+    await userEvent.click(screen.getByRole("button", { name: /^registrar representante$/i }));
 
-    await userEvent.click(await screen.findByRole("button", { name: /enviar validaci[oó]n/i }));
-    await waitFor(() =>
-      expect(sendLegalRepresentativeIdentity).toHaveBeenCalledWith(TENANT, "rep-1"),
-    );
+    await waitFor(() => expect(createLegalRepresentative).toHaveBeenCalledTimes(1));
+
+    const link = await screen.findByRole("link", { name: /ir al módulo identidad/i });
+    expect(link).toHaveAttribute("href", IDENTITY_MODULE_HREF);
   });
 
   it("alimenta el multiselect con los tipos del catálogo del backend (no una lista estática)", async () => {

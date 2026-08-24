@@ -229,6 +229,23 @@ function renderValidaciones() {
   return render(<Validaciones />);
 }
 
+async function abrirFiltros(user = userEvent.setup()) {
+  if (!screen.queryByRole('button', { name: /colapsar panel de búsqueda/i })) {
+    await user.click(screen.getByRole('button', { name: /desplegar panel de búsqueda/i }));
+  }
+  return user;
+}
+
+async function abrirIncidencias(user = userEvent.setup()) {
+  await user.click(screen.getByRole('button', { name: /ver alertas de validación/i }));
+  return screen.getByRole('dialog', { name: /gestión de incidencias/i });
+}
+
+async function buscar(user = userEvent.setup()) {
+  await user.click(screen.getByRole('button', { name: /^buscar$/i }));
+  return user;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Por defecto no hay eventos atascados (el banner no aparece); cada test puede sobreescribirlo.
@@ -362,17 +379,17 @@ describe('Validaciones — datos y accesibilidad', () => {
   it('muestra aprobación, expiración y días restantes de vigencia en la fila aprobada', async () => {
     renderValidaciones();
 
-    // La fila aprobada expone la fecha de fin de vigencia y los días restantes (badge "20 días").
+    // La fila aprobada expone la fecha de fin de vigencia y el estado "Vigente" (>7 días).
     const row = await screen.findByLabelText(/^validación de ana compradora/i);
     // Columnas desacopladas: la grilla expone cabeceras separadas Registro / Aprobación / Vigencia.
     expect(screen.getByText('Aprobación')).toBeInTheDocument();
     // "Vigencia" aparece como cabecera de columna Y como label del filtro → debe haber ≥1.
     expect(screen.getAllByText('Vigencia').length).toBeGreaterThan(0);
-    // La fila aprobada muestra el badge de días restantes (en la columna Vigencia).
-    expect(within(row).getByText('20 días')).toBeInTheDocument();
+    // La fila aprobada muestra el estado de vigencia (en la columna Vigencia).
+    expect(within(row).getByText('Vigente')).toBeInTheDocument();
     // El aria-label resume la vigencia para lectores de pantalla.
     expect(row.getAttribute('aria-label')).toMatch(/vigente hasta/i);
-    expect(row.getAttribute('aria-label')).toMatch(/vigencia: 20 días restantes/i);
+    expect(row.getAttribute('aria-label')).toMatch(/vigencia: Vigente, 20 días restantes/i);
   });
 
   it('la fila sin aprobación no muestra días de vigencia (—)', async () => {
@@ -383,12 +400,12 @@ describe('Validaciones — datos y accesibilidad', () => {
     expect(row.getAttribute('aria-label')).not.toMatch(/vigente hasta/i);
   });
 
-  it('el botón Actualizar tiene nombre accesible', async () => {
+  it('el acordeón de filtros tiene nombre accesible', async () => {
     renderValidaciones();
 
     await screen.findByText('TRM-2026-000001');
     expect(
-      screen.getByRole('button', { name: /actualizar validaciones de identidad/i }),
+      screen.getByRole('button', { name: /desplegar panel de búsqueda/i }),
     ).toBeInTheDocument();
   });
 });
@@ -492,7 +509,7 @@ describe('Validaciones — HU #11505 intentos consumidos en la grilla', () => {
     await user.click(screen.getByRole('button', { name: /acciones de validación de ana compradora/i }));
     await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
 
-    expect(await screen.findByRole('dialog', { name: /proceso de validación/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /historial y tracking de identidad/i })).toBeInTheDocument();
   });
 });
 
@@ -514,6 +531,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
 
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
+    await abrirFiltros();
 
     expect(screen.queryByRole('combobox', { name: /ver las validaciones de otra empresa/i })).not.toBeInTheDocument();
     expect(mocks.listCompanies).not.toHaveBeenCalled();
@@ -526,7 +544,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
 
     renderValidaciones();
 
-    const user = userEvent.setup();
+    const user = await abrirFiltros();
     const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
     await user.click(selector);
 
@@ -542,6 +560,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
 
     renderValidaciones();
+    await abrirFiltros(user);
     await user.click(await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i }));
     await user.keyboard('medell');
 
@@ -557,6 +576,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
 
     renderValidaciones();
+    await abrirFiltros(user);
     const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
     mocks.listTenantBiometricPersons.mockClear();
 
@@ -575,6 +595,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
 
     renderValidaciones();
+    await abrirFiltros(user);
     const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
     await user.click(selector);
     await user.click(screen.getByRole('option', { name: /Movilidad Bogotá/ }));
@@ -591,6 +612,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
 
     renderValidaciones();
+    await abrirFiltros(user);
     const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
 
     // En "Mi empresa" no hay aviso: es el caso normal.
@@ -610,6 +632,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
 
     const { unmount } = renderValidaciones();
+    await abrirFiltros();
     await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
     mocks.setActiveTramitesTenant.mockClear();
 
@@ -626,6 +649,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     renderValidaciones();
 
     expect(await screen.findByText('TRM-2026-000001')).toBeInTheDocument();
+    await abrirFiltros();
     expect(screen.queryByRole('combobox', { name: /ver las validaciones de otra empresa/i })).not.toBeInTheDocument();
   });
 });
@@ -637,8 +661,10 @@ describe('Validaciones — filtros (HU #10348)', () => {
 
     renderValidaciones();
     await screen.findByText('TRM-2026-000001'); // carga inicial
+    await abrirFiltros(user);
 
     await user.selectOptions(screen.getByLabelText('Estado'), 'aprobado');
+    await buscar(user);
 
     await waitFor(() =>
       expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
@@ -653,8 +679,10 @@ describe('Validaciones — filtros (HU #10348)', () => {
 
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
+    await abrirFiltros(user);
 
     await user.selectOptions(screen.getByLabelText('Vigencia'), 'por_vencer');
+    await buscar(user);
 
     await waitFor(() =>
       expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
@@ -669,11 +697,12 @@ describe('Validaciones — filtros (HU #10348)', () => {
 
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
+    await abrirFiltros(user);
 
-    // Los date-pickers de vencimiento viven en el panel avanzado.
-    await user.click(screen.getByRole('button', { name: /más filtros/i }));
+    await user.click(screen.getByRole('button', { name: /rango vencimiento/i }));
     await user.type(screen.getByLabelText('Vence desde'), '2026-07-01');
     await user.type(screen.getByLabelText('Vence hasta'), '2026-07-31');
+    await buscar(user);
 
     await waitFor(() =>
       expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
@@ -691,9 +720,10 @@ describe('Validaciones — filtros (HU #10348)', () => {
 
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
+    await abrirFiltros(user);
 
-    await user.click(screen.getByRole('button', { name: /más filtros/i }));
     await user.type(screen.getByLabelText('Vence en ≤ N días'), '3');
+    await buscar(user);
 
     await waitFor(() =>
       expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
@@ -703,22 +733,33 @@ describe('Validaciones — filtros (HU #10348)', () => {
   });
 
   it('combina filtros de texto (nombre + documento) y los envía al backend', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
 
     renderValidaciones();
-    await screen.findByLabelText(/filtrar por nombre de la persona/i);
+    await screen.findByText('TRM-2026-000001');
+    await abrirFiltros(user);
+    const q = screen.getByLabelText(/buscar por persona o documento/i);
+    await user.clear(q);
+    await user.type(q, 'Ana');
+    await buscar(user);
 
-    await user.type(screen.getByLabelText(/filtrar por nombre de la persona/i), 'Ana');
-    await user.type(screen.getByLabelText('Documento'), '1020304050');
-
-    // Debounce ~300ms; la última consulta combina ambos filtros (AND en el backend).
     await waitFor(() =>
       expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'Ana', documentNumber: '1020304050' }),
+        expect.objectContaining({ name: 'Ana' }),
       ),
     );
-  });
+
+    await user.clear(q);
+    await user.type(q, '1020304050');
+    await buscar(user);
+
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+        expect.objectContaining({ documentNumber: '1020304050' }),
+      ),
+    );
+  }, 15_000);
 
   it('la grilla por persona NO ofrece filtros de una validación concreta', async () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
@@ -743,8 +784,10 @@ describe('Validaciones — filtros (HU #10348)', () => {
 
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
+    await abrirFiltros(user);
 
     await user.selectOptions(screen.getByLabelText('Estado'), 'expirado');
+    await buscar(user);
 
     expect(await screen.findByText(/sin resultados\./i)).toBeInTheDocument();
     // NO debe mostrar el vacío inicial.
@@ -759,9 +802,11 @@ describe('Validaciones — filtros (HU #10348)', () => {
 
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
+    await abrirFiltros(user);
 
     const estadoSelect = screen.getByLabelText('Estado');
     await user.selectOptions(estadoSelect, 'aprobado');
+    await buscar(user);
     await waitFor(() => expect(estadoSelect).toHaveValue('aprobado'));
 
     mocks.listTenantBiometricPersons.mockClear();
@@ -828,11 +873,8 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
    * "Reintentar todos". El detalle por persona se despliega desde el propio título.
    */
   async function abrirPanelAtascadas() {
-    const banner = await screen.findByRole('region', {
-      name: /validaciones de identidad atascadas/i,
-    });
-    await userEvent.click(within(banner).getByRole('button', { name: /de identidad atascada/i }));
-    return banner;
+    const dialog = await abrirIncidencias();
+    return dialog;
   }
 
   async function expandStuckGroup(label: RegExp | string) {
@@ -844,33 +886,29 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
     return banner;
   }
 
-  it('nace plegado: solo el aviso y "Reintentar todos", sin la lista por encima de la grilla', async () => {
+  it('nace plegado: la campana no abre el detalle hasta pulsarla; los grupos salen colapsados', async () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
     mocks.listStuckIdentityValidations.mockResolvedValue(STUCK);
 
     renderValidaciones();
+    await screen.findByRole('button', { name: /ver alertas de validación/i });
+    expect(screen.queryByRole('dialog', { name: /gestión de incidencias/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /maria compradora/i })).not.toBeInTheDocument();
 
-    const banner = await screen.findByRole('region', {
-      name: /validaciones de identidad atascadas/i,
-    });
-    const toggle = within(banner).getByRole('button', { name: /de identidad atascada/i });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    // Ni el detalle por persona ni la explicación ocupan sitio mientras está plegado.
-    expect(within(banner).queryByRole('button', { name: /maria compradora/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/reintentos automáticos/i)).not.toBeInTheDocument();
-
-    await userEvent.click(toggle);
-
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(within(banner).getByRole('button', { name: /maria compradora/i })).toBeInTheDocument();
-  });
+    const dialog = await abrirIncidencias();
+    const maria = within(dialog).getByRole('button', { name: /maria compradora/i });
+    expect(maria).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      within(dialog).queryByRole('button', { name: /reintentar la validación de maria/i }),
+    ).not.toBeInTheDocument();
+  }, 15_000);
 
   it('muestra el banner con el nombre y el documento enmascarado de la persona', async () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
     mocks.listStuckIdentityValidations.mockResolvedValue(STUCK);
 
     renderValidaciones();
-
+    await abrirIncidencias();
     expect(await screen.findByText(/de identidad atascada/i)).toBeInTheDocument();
     const banner = await expandStuckGroup(/maria compradora/i);
     expect(within(banner).getAllByText(/Maria Compradora/).length).toBeGreaterThanOrEqual(1);
@@ -926,9 +964,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
     await waitFor(() =>
       expect(mocks.requeueStuckIdentityValidation).toHaveBeenCalledWith('evt-1'),
     );
-    await waitFor(() =>
-      expect(screen.queryByText(/de identidad atascada/i)).not.toBeInTheDocument(),
-    );
+    expect(await screen.findByText(/no hay validaciones de identidad atascadas/i)).toBeInTheDocument();
   });
 
   it('no muestra el banner cuando no hay atascados', async () => {
@@ -967,6 +1003,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
       .mockResolvedValue(NO_STUCK); // tras reencolar todos: ninguno
 
     renderValidaciones();
+    await abrirIncidencias(user);
     const btn = await screen.findByRole('button', {
       name: /reintentar todas las validaciones atascadas/i,
     });
@@ -974,9 +1011,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
     await user.click(btn);
 
     await waitFor(() => expect(mocks.requeueAllStuckIdentityValidations).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(screen.queryByText(/de identidad atascada/i)).not.toBeInTheDocument(),
-    );
+    expect(await screen.findByText(/no hay validaciones de identidad atascadas/i)).toBeInTheDocument();
   });
 
   // HU #11268 — acordeón por persona
@@ -1095,6 +1130,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
 
     mocks.listStuckIdentityValidations.mockRejectedValue(new Error('cola caída'));
     renderValidaciones();
+    await abrirIncidencias();
     expect(
       await screen.findByRole('alert', { name: /error al cargar validaciones atascadas/i }),
     ).toBeInTheDocument();
@@ -1190,25 +1226,22 @@ describe('Validaciones — paginación', () => {
       expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
     });
 
-    it('la columna "Enlace vigente" muestra la fecha CON HORA, sin la palabra "Vence"', async () => {
+    it('la columna "Enlace vigente" muestra Sí / No y conserva Acciones', async () => {
       mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([ROW_EN_PROCESO]));
 
       renderValidaciones();
       await screen.findByText('TRM-2026-000003');
 
       expect(screen.getByText('Enlace vigente')).toBeInTheDocument();
-      // "medium + short" incluye la hora: el gestor necesita saber a qué hora deja de servir.
-      const esperado = new Intl.DateTimeFormat('es-CO', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(LINK_FUTURO));
+      expect(screen.getAllByText('Acciones').length).toBeGreaterThan(0);
       const grilla = screen.getByRole('list', { name: /validaciones de identidad/i });
-      expect(within(grilla).getByText(esperado)).toBeInTheDocument();
-      // Sin "Vence" delante: el nombre de la columna ya lo dice (el filtro "Por vencer" no cuenta).
-      expect(within(grilla).queryByText(/vence/i)).not.toBeInTheDocument();
+      expect(within(grilla).getByText('Sí')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }),
+      ).toBeInTheDocument();
     });
 
-    it('terminada: la celda Enlace dice "No disponible" aunque el backend siga devolviendo la URL', async () => {
+    it('terminada: la celda Enlace dice "No" aunque el backend siga devolviendo la URL', async () => {
       const user = userEvent.setup();
       // El endpoint agrupado NO anula captureUrl en estados terminales: el enlace llega pero no sirve.
       mocks.listTenantBiometricPersons.mockResolvedValue(
@@ -1224,7 +1257,7 @@ describe('Validaciones — paginación', () => {
       renderValidaciones();
       await screen.findByText('TRM-2026-000001');
 
-      expect(screen.getByText('No disponible')).toBeInTheDocument();
+      expect(screen.getByText('No')).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /acciones de validación/i }));
       expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /abrir captura/i })).not.toBeInTheDocument();
@@ -1254,7 +1287,7 @@ describe('Validaciones — paginación', () => {
       renderValidaciones();
       await screen.findByText('TRM-2026-000003');
 
-      expect(screen.getByText('No disponible')).toBeInTheDocument();
+      expect(screen.getByText('No')).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /acciones de validación/i }));
       expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
     });
@@ -1419,7 +1452,9 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
     await user.click(primerMenu);
     await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
 
-    expect(await screen.findByRole('dialog', { name: /proceso de validación/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /historial y tracking de identidad/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /sesión más reciente/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /actualizar estado/i })).toBeInTheDocument();
     await waitFor(() =>
       expect(mocks.listPersonBiometricValidations).toHaveBeenCalledWith(
         ROW_APROBADA.documentType,
@@ -1427,6 +1462,114 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
         expect.anything(),
       ),
     );
+  });
+
+  it('muestra el QR Kyverum en el detalle cuando la validación es de trámite', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([ROW_EN_PROCESO]));
+    mocks.listPersonBiometricValidations.mockResolvedValue({
+      documentType: ROW_EN_PROCESO.documentType,
+      documentNumber: ROW_EN_PROCESO.documentNumber,
+      name: ROW_EN_PROCESO.name,
+      validations: [
+        {
+          id: ROW_EN_PROCESO.id,
+          partyRole: ROW_EN_PROCESO.partyRole,
+          name: ROW_EN_PROCESO.name,
+          documentType: ROW_EN_PROCESO.documentType,
+          documentNumber: ROW_EN_PROCESO.documentNumber,
+          email: ROW_EN_PROCESO.email,
+          status: ROW_EN_PROCESO.status,
+          intentos: 1,
+          maxIntentos: 3,
+          score: null,
+          expiresAt: '2026-07-28T10:00:00Z',
+          validatedAt: null,
+          expired: false,
+          provider: 'kyverum',
+          captureUrl: ROW_EN_PROCESO.captureUrl,
+          procedureInstanceId: ROW_EN_PROCESO.instanceId,
+          referenceNumber: ROW_EN_PROCESO.referenceNumber,
+        },
+      ],
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      allTerminal: false,
+    });
+    mocks.getBiometricAuditByValidation.mockResolvedValue({
+      validationId: ROW_EN_PROCESO.id,
+      events: [],
+      referencedFromOtherProcedure: false,
+    });
+
+    renderValidaciones();
+    await screen.findByText('TRM-2026-000003');
+    await user.click(screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }));
+    await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
+
+    expect(await screen.findByTestId('identity-capture-qr')).toBeInTheDocument();
+    expect(screen.getByLabelText(/código qr del enlace de captura/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /abrir captura kyverum/i })).toHaveAttribute(
+      'href',
+      'https://capture.kyverum.co/kyv_123',
+    );
+  });
+
+  it('muestra el QR Kyverum en el detalle de prevalidación (identidad, sin trámite)', async () => {
+    const user = userEvent.setup();
+    const standalone = {
+      ...ROW_EN_PROCESO,
+      instanceId: null,
+      referenceNumber: null,
+      modalidad: null,
+      name: 'Marta Prevalidada',
+      documentNumber: '990011',
+    };
+    mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([standalone]));
+    mocks.listPersonBiometricValidations.mockResolvedValue({
+      documentType: standalone.documentType,
+      documentNumber: standalone.documentNumber,
+      name: standalone.name,
+      validations: [
+        {
+          id: standalone.id,
+          partyRole: null,
+          name: standalone.name,
+          documentType: standalone.documentType,
+          documentNumber: standalone.documentNumber,
+          email: standalone.email,
+          status: 'en_proceso',
+          intentos: 1,
+          maxIntentos: 3,
+          score: null,
+          expiresAt: '2026-07-28T10:00:00Z',
+          validatedAt: null,
+          expired: false,
+          provider: 'kyverum',
+          captureUrl: standalone.captureUrl,
+          procedureInstanceId: null,
+          referenceNumber: null,
+        },
+      ],
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      allTerminal: false,
+    });
+    mocks.getBiometricAuditByValidation.mockResolvedValue({
+      validationId: standalone.id,
+      events: [],
+      referencedFromOtherProcedure: false,
+    });
+
+    renderValidaciones();
+    await screen.findByText('Prevalidación');
+    await user.click(screen.getByRole('button', { name: /acciones de validación de marta prevalidada/i }));
+    await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
+
+    expect(await screen.findByTestId('identity-capture-qr')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /abrir captura kyverum/i })).toBeInTheDocument();
   });
 
   it('HU #11069 — en el listado de Validaciones NO embebe trámites (van en el detalle)', async () => {

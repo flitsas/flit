@@ -20,6 +20,9 @@ export type SendTestFailureCause =
   | "limite_frecuencia"
   | "fallo_render"
   | "plantilla_sin_enrutamiento_por_canal"
+  | "procedure_type_id_invalido"
+  | "tipo_tramite_no_encontrado"
+  | "tipo_tramite_inactivo"
   | "transporte_fallido"
   | "desconocida";
 
@@ -41,6 +44,10 @@ const FAILURE_MESSAGES: Record<Exclude<SendTestFailureCause, "limite_frecuencia"
   fallo_render: "No fue posible generar el contenido del correo de prueba.",
   plantilla_sin_enrutamiento_por_canal:
     "Esta plantilla no se enruta por canal: es un correo de cuenta (invitación, recuperación o restablecimiento de contraseña) y, también en producción, sale siempre por Colas FLIT para no exponer el acceso a la plataforma a través de un tercero. Selecciona el canal Colas FLIT para probarla.",
+  procedure_type_id_invalido:
+    "Selecciona un tipo de trámite activo antes de enviar la prueba de esta plantilla.",
+  tipo_tramite_no_encontrado: "El tipo de trámite no existe en el catálogo.",
+  tipo_tramite_inactivo: "El tipo de trámite no está activo.",
   transporte_fallido:
     "El transporte de correo rechazó el envío. Es un fallo del proveedor, no de la plantilla ni del buzón.",
   desconocida: "No fue posible completar el envío de la prueba.",
@@ -61,6 +68,9 @@ const KNOWN_CAUSES = new Set<string>([
   "limite_frecuencia",
   "fallo_render",
   "plantilla_sin_enrutamiento_por_canal",
+  "procedure_type_id_invalido",
+  "tipo_tramite_no_encontrado",
+  "tipo_tramite_inactivo",
 ]);
 
 /**

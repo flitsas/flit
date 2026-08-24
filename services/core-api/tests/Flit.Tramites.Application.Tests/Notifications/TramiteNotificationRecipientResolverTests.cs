@@ -36,6 +36,19 @@ public sealed class TramiteNotificationRecipientResolverTests
     }
 
     [Fact]
+    public void CompradorEncendido_IncluyeLocatarioNatural()
+    {
+        var locatario = Natural("locatario", "loca@flit.test");
+        locatario.FullName = "Locatario Uno";
+        var policy = new TramiteStateEmailRecipientPolicy(true, false, false, null);
+
+        var result = _sut.Resolve(Matricula(), [Natural("comprador", "c@flit.test"), locatario], [], policy);
+
+        result.Recipients.Select(r => r.Role).Should().BeEquivalentTo(["comprador", "locatario"]);
+        result.Recipients.Should().Contain(r => r.Email == "loca@flit.test");
+    }
+
+    [Fact]
     public void CupoRlSinCorreo_NoSeRellenaConElDeLaEmpresa()
     {
         var actor = JuridicalComprador(empresaEmail: "empresa@flit.test", rlEmail: null, rlNombre: "Rep Sin Mail");
@@ -120,18 +133,18 @@ public sealed class TramiteNotificationRecipientResolverTests
     }
 
     [Fact]
-    public void VendedorSoloSeNotificaEnTraspaso()
+    public void VendedorOPropietario_SeNotificaEnCualquierFamiliaSiElPerfilEstaEncendido()
     {
         var comprador = Natural("comprador", "c@flit.test");
         var vendedor = Natural("vendedor", "v@flit.test");
 
-        var soloMatricula = _sut.Resolve(Matricula(), [comprador, vendedor], []);
-        soloMatricula.Recipients.Should().ContainSingle(r => r.Role == "comprador");
-        soloMatricula.Recipients.Should().NotContain(r => r.Role == "vendedor");
+        var matricula = _sut.Resolve(Matricula(), [comprador, vendedor], []);
+        matricula.Recipients.Select(r => r.Role).Should().BeEquivalentTo(["comprador", "vendedor"]);
 
-        var traspaso = _sut.Resolve(Traspaso(), [comprador, vendedor], []);
-        traspaso.Recipients.Should().HaveCount(2);
-        traspaso.Recipients.Select(r => r.Role).Should().BeEquivalentTo(["comprador", "vendedor"]);
+        var apagado = new TramiteStateEmailRecipientPolicy(true, false, false, null);
+        var soloComprador = _sut.Resolve(Matricula(), [comprador, vendedor], [], apagado);
+        soloComprador.Recipients.Should().ContainSingle(r => r.Role == "comprador");
+        soloComprador.Recipients.Should().NotContain(r => r.Role == "vendedor");
     }
 
     [Fact]

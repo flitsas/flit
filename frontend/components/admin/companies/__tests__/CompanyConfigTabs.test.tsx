@@ -61,7 +61,14 @@ describe("CompanyConfigTabs (AC2)", () => {
       plateFlowSkipToTerminado: false,
       validarSoatConRunt: false,
       enrutamientoSMTP: "FLIT_SMTP",
-      notificationTarget: "COMPRADOR",
+      avisosAprobacionActivos: true,
+      avisosRechazoActivos: true,
+      destinatariosNotificacion: {
+        comprador: true,
+        vendedorOPropietario: true,
+        radicador: true,
+        extraEmail: null,
+      },
       metodosRecaudo: ["Pasarela FLIT"],
       // HU #10478 — defaults Kyverum-first cuando la config no viene en settings.
       runtFailoverTimeoutMs: 60000,
@@ -224,6 +231,40 @@ describe("CompanyConfigTabs (AC2)", () => {
     await user.click(screen.getByRole("tab", { name: /configuración empresa/i }));
     await waitFor(() =>
       expect(screen.getByText(/valor inválido para el canal/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("persiste toggles de aprobación/rechazo y destinatarios en el PUT", async () => {
+    const user = userEvent.setup();
+    const onSaveSettings = vi.fn().mockResolvedValue(undefined);
+
+    render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
+    await user.click(screen.getByRole("tab", { name: /configuración empresa/i }));
+
+    expect(screen.getByLabelText(/avisos al aprobar trámite/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/avisos al rechazar trámite/i)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /^comprador$/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /vendedor \/ propietario/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /radicador/i })).toBeChecked();
+
+    await user.click(screen.getByLabelText(/avisos al rechazar trámite/i));
+    await user.click(screen.getByRole("checkbox", { name: /radicador/i }));
+    await user.type(screen.getByLabelText(/correo adicional/i), "avisos@acme.test");
+
+    await user.click(screen.getByRole("button", { name: /guardar todo/i }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /guardar cambios/i }));
+
+    expect(onSaveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        avisosAprobacionActivos: true,
+        avisosRechazoActivos: false,
+        destinatariosNotificacion: {
+          comprador: true,
+          vendedorOPropietario: true,
+          radicador: false,
+          extraEmail: "avisos@acme.test",
+        },
+      }),
     );
   });
 });

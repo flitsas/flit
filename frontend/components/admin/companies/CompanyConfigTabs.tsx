@@ -167,6 +167,9 @@ export function CompanyConfigTabs({
         const mapped: Record<string, string> = {};
         for (const e of errors) {
           mapped[e.field] = e.message;
+          if (e.field === "destinatariosNotificacion.extraEmail") {
+            mapped.extraEmail = e.message;
+          }
         }
         setFieldErrors(mapped);
         setErrorBanner("Revisa los campos marcados: hay valores inválidos.");
@@ -283,8 +286,6 @@ export function CompanyConfigTabs({
             onChange={patch}
             otSlot={otSlot}
             fieldErrors={fieldErrors}
-            tenantId={settings.tenantId}
-            canalPersistido={settings.enrutamientoSMTP}
           />
         )}
         {activeTabId === "documentos" && documentosSlot}

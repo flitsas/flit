@@ -553,7 +553,7 @@ paths:
       description: >
         Persiste de forma atómica (todo o nada) la configuración operativa del
         tenant y genera una entrada de auditoría por cada campo modificado. Si la
-        validación falla (p. ej. notificationTarget fuera del enum) retorna 422 sin
+        validación falla (p. ej. extraEmail inválido) retorna 422 sin
         persistir ni auditar. Requiere JWT con rol SuperAdmin (RF01).
       security:
         - bearerAuth: []
@@ -1629,15 +1629,14 @@ paths:
       operationId: securityDeleteUser
       summary: Elimina (soft-delete reversible) a un usuario del alcance del caller (#10623)
       description: >
-        Marca `deletedAt`/`deletedBy` en el usuario dentro del alcance del caller
-        (AdminCompany solo su propio tenant, SuperAdmin cualquiera) — HU #10623.
+        Marca `deletedAt`/`deletedBy` en el usuario — operación EXCLUSIVA de SuperAdmin
+        (AdminCompany puede suspender/desactivar pero NO eliminar) — ocultar-eliminar-admin-company.
         `rowVersion` es obligatorio (concurrencia optimista, el valor leído de
         `TenantUserDto.rowVersion`). NO toca roles ni suspensiones: al restaurar
         (`POST /api/v1/superadmin/users/{userId}/restore`, SOLO SuperAdmin) el
         usuario recupera exactamente el mismo estado. Se rechaza la
         auto-eliminación y la eliminación del último administrador activo del
-        tenant/sistema. Requiere JWT con rol SuperAdmin o AdminCompany
-        (AdminCompanyPolicy).
+        tenant/sistema. Requiere JWT con rol SuperAdmin (SuperAdminPolicy).
       security:
         - bearerAuth: []
       requestBody:
@@ -1658,7 +1657,7 @@ paths:
         "401":
           description: No autenticado o falta el claim tenant_id.
         "403":
-          description: Sin rol SuperAdmin o AdminCompany, o sin ámbito sobre el usuario objetivo.
+          description: Sin rol SuperAdmin o sin ámbito sobre el usuario objetivo. AdminCompany no puede eliminar usuarios (solo suspender/bloquear).
           content:
             application/json:
               schema:
@@ -6240,7 +6239,12 @@ paths:
         "401": { description: "No autenticado." }
         "403": { description: "Sin permiso (requiere SuperAdmin)." }
 
-  # ── Admin · Identidad de Representantes (HU #11176) ──────────────────────────
+  # ── Admin · Identidad de Representantes (HU #11758, ADR-0050) ────────────────
+  # Retirado: el módulo Identidad es la única fuente que puede originar una validación de
+  # identidad. Esta ruta (antes HU #11176) y las otras nueve de disparo/vinculación admin
+  # (representante legal send/resend; mandatario por OT send/resend/link/mock; mandatario por
+  # compañía send/resend/link) responden 410 Gone con `code: endpoint_deprecado` — nunca 404
+  # (decisión DA-1: el recurso existió y se retiró a propósito).
   /api/v1/admin/companies/{tenantId}/legal-representatives/{id}/identity/link:
     parameters:
       - name: tenantId
@@ -6258,34 +6262,82 @@ paths:
       tags: ["Admin · Identidad de Representantes"]
       security:
         - bearerAuth: []
-      summary: "Vincula al representante una validación de identidad ya existente y vigente"
+      summary: "Retirado (410) — la identidad se origina en el módulo Identidad, ADR-0050"
       description: |
-        Vincula al representante legal una identidad que la persona ya validó en el tenant
-        (HU #11176). NO envía correo ni crea validaciones nuevas. Si la persona no tiene
-        ninguna identidad aprobada y vigente en el tenant, responde 409 con
-        `sin_identidad_vigente`. Si el representante ya la tiene vigente, responde 200 con
-        `reused=true` (idempotente). Las respuestas NUNCA exponen el documento ni el correo
-        del representante (PII, Ley 1581).
+        HU #11758 (ADR-0050) — ruta RETIRADA. El módulo Identidad
+        (`tramites.procedure_instance_biometric_validations`) es la única fuente que puede
+        originar una validación de identidad; el área admin deja de disparar y de vincular.
+        Responde siempre 410 Gone con `code: endpoint_deprecado`.
       responses:
-        "200":
-          description: "Identidad vinculada (o reutilizada si ya estaba vigente)."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AdminIdentityLinkResponse"
-        "401": { description: "No autenticado." }
-        "403": { description: "Sin permiso (requiere SuperAdmin)." }
-        "404": { description: "Representante no encontrado en esta compañía." }
-        "409":
-          description: "La persona no tiene ninguna identidad aprobada y vigente en el tenant."
+        "410":
+          description: "Retirado: el módulo Identidad es la única fuente de verdad (ADR-0050)."
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  error: { type: string, example: sin_identidad_vigente }
-                required: [error]
-        "422": { description: "Solicitud inválida." }
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field: { type: string, nullable: true }
+                        code: { type: string, example: endpoint_deprecado }
+                        message: { type: string }
+
+  /api/v1/admin/companies/{tenantId}/identity-validations/by-document:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía gestora).
+    get:
+      operationId: adminIdentityVigenciaByDocument
+      tags: ["Admin · Identidad"]
+      security:
+        - bearerAuth: []
+      summary: "Vigencia de identidad de una persona por documento (fuente única, ADR-0050)"
+      description: |
+        HU #11751 (ADR-0050) — resuelve el estado de identidad de una persona por tipo+número de
+        documento, leyendo EXCLUSIVAMENTE del módulo Identidad
+        (`tramites.procedure_instance_biometric_validations`). Devuelve UN único registro, no una
+        grilla. El tenant se deriva de la ruta (`tenantId`); no exige `X-Tenant-Id`. Normaliza el
+        documento con Trim + mayúsculas invariantes (ADR-0039). Reemplaza, para esta consulta, a las
+        rutas de `admin.admin_identity_validations`.
+      parameters:
+        - name: documentType
+          in: query
+          required: true
+          schema: { type: string }
+        - name: documentNumber
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Vigencia resuelta (posiblemente sin_validacion si no hay ninguna)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentityVigenciaByDocumentResponse"
+        "400":
+          description: "Falta documentType o documentNumber."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field: { type: string }
+                        code: { type: string, example: documento_requerido }
+                        message: { type: string }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere AdminCompany del propio tenant o SuperAdmin)." }
 
   /api/v1/tramites/instances/{id}/deferred-signature:
     parameters:
@@ -6605,21 +6657,24 @@ components:
           type: object
           additionalProperties: true
           description: "{} si el usuario nunca guardó una preferencia para ese scope."
-    # ── Admin · Identidad de Representantes (HU #11176) ──────────────────────
-    AdminIdentityLinkResponse:
+    # AdminIdentityLinkResponse (HU #11176) se retiró: la ruta que lo usaba responde 410 Gone
+    # desde la HU #11758 (ADR-0050).
+
+    AdminIdentityVigenciaByDocumentResponse:
       type: object
       description: >
-        Resultado de vincular una identidad ya existente al representante legal.
-        `reused=true` indica que ya estaba vigente (idempotente, AC3).
-        NUNCA expone documento ni correo del representante (PII, Ley 1581).
+        HU #11751 (ADR-0050) — vigencia de identidad de UNA persona por documento, resuelta desde el
+        módulo Identidad. `documentType`/`documentNumber` son los normalizados (Trim + mayúsculas
+        invariantes), no necesariamente lo que se envió en la query.
       properties:
-        id: { type: string, format: uuid, description: "Id de la validación de identidad." }
-        status: { type: string, description: "Estado de la validación (aprobado, etc.)." }
-        captureUrl: { type: string, nullable: true, description: "URL de captura biométrica (null en vinculación)." }
-        validUntil: { type: string, format: date-time, nullable: true, description: "Fecha hasta la que es válida la identidad." }
-        reused: { type: boolean, description: "true si se reutilizó una identidad ya vigente." }
-        provider: { type: string, description: "Proveedor de validación biométrica." }
-      required: [id, status, reused, provider]
+        documentType: { type: string }
+        documentNumber: { type: string, description: "PII (Ley 1581)." }
+        status:
+          type: string
+          enum: [sin_validacion, en_curso, aprobada_vigente, vencida]
+        validatedAt: { type: string, format: date-time, nullable: true }
+        validUntil: { type: string, format: date-time, nullable: true }
+      required: [documentType, documentNumber, status]
 
     # ── Admin · Baúl de Firmas (HU #10643, #11175) ───────────────────────────
     SignatureVaultResponse:
@@ -7219,6 +7274,16 @@ components:
         notificationTarget:
           type: string
           enum: [COMPRADOR, RADICADOR, NINGUNO]
+          deprecated: true
+          description: Legado. Ya no gobierna el envío; usar destinatariosNotificacion.
+        avisosAprobacionActivos:
+          type: boolean
+          description: Envío de correos de trámite aprobado (kill-switch del worker).
+        avisosRechazoActivos:
+          type: boolean
+          description: Envío de correos de trámite rechazado (kill-switch del worker).
+        destinatariosNotificacion:
+          $ref: "#/components/schemas/DestinatariosNotificacion"
         metodosRecaudo:
           type: array
           items: { type: string }
@@ -7233,7 +7298,7 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ConsultationProviderChoice"
       required:
-        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig]
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig]
 
     ConsultationProviderChoice:
       type: object
@@ -7259,6 +7324,12 @@ components:
         notificationTarget:
           type: string
           enum: [COMPRADOR, RADICADOR, NINGUNO]
+          deprecated: true
+          description: Legado. Si se envía se ignora para el envío; no sustituye destinatariosNotificacion.
+        avisosAprobacionActivos: { type: boolean }
+        avisosRechazoActivos: { type: boolean }
+        destinatariosNotificacion:
+          $ref: "#/components/schemas/DestinatariosNotificacion"
         metodosRecaudo:
           type: array
           items: { type: string }
@@ -7275,7 +7346,20 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ConsultationProviderChoice"
       required:
-        [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, notificationTarget, metodosRecaudo]
+        [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, metodosRecaudo]
+
+    DestinatariosNotificacion:
+      type: object
+      description: Perfiles que reciben avisos de aprobación/rechazo y correo extra opcional.
+      properties:
+        comprador: { type: boolean }
+        vendedorOPropietario: { type: boolean }
+        radicador: { type: boolean }
+        extraEmail:
+          type: string
+          format: email
+          nullable: true
+      required: [comprador, vendedorOPropietario, radicador]
 
     ValidationError:
       type: object

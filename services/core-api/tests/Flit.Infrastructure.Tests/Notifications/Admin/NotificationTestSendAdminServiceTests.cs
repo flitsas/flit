@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Plataforma.Notificaciones;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Admin;
@@ -36,6 +37,17 @@ namespace Flit.Infrastructure.Tests.Notifications.Admin;
 public sealed class NotificationTestSendAdminServiceTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly Guid ActiveProcedureTypeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+    private static IProcedureTypeCatalog NewProcedureTypeCatalog()
+    {
+        var catalog = Substitute.For<IProcedureTypeCatalog>();
+        catalog
+            .GetByIdForNotificationPreviewAsync(ActiveProcedureTypeId, Arg.Any<CancellationToken>())
+            .Returns(new ProcedureTypeNotificationPreviewItem(
+                ActiveProcedureTypeId, "Traspaso estándar", "TRASPASO", true));
+        return catalog;
+    }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -67,6 +79,46 @@ public sealed class NotificationTestSendAdminServiceTests
 
         await explicitSender.Received(1).SendAsync(
             NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TramitesAprobado_SinProcedureTypeId_NoConsumeEnfriamientoNiTransporte()
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+
+        var service = NewService(dbName, explicitSender, new TestTimeProvider(DateTimeOffset.UtcNow), isConsoleTransport: false);
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("tramites.aprobado", "FLIT_SMTP"), UserId, Ct);
+
+        result.Outcome.Should().Be(NotificationTestSendOutcome.InvalidProcedureTypeId);
+        await explicitSender.DidNotReceive().SendAsync(
+            Arg.Any<NotificationChannel>(), Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TramitesAprobado_ConProcedureTypeIdActivo_EnviaConNombreDeCatalogo()
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        EmailMessage? captured = null;
+        explicitSender
+            .SendAsync(NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<EmailMessage>();
+                return Task.FromResult(EmailSendResult.Sent);
+            });
+
+        var service = NewService(dbName, explicitSender, new TestTimeProvider(DateTimeOffset.UtcNow), isConsoleTransport: false);
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("tramites.aprobado", "FLIT_SMTP", ActiveProcedureTypeId), UserId, Ct);
+
+        result.Success.Should().BeTrue();
+        captured.Should().NotBeNull();
+        captured!.HtmlBody.Should().Contain("Traspaso estándar");
     }
 
     // ── AC2 — límite de frecuencia ───────────────────────────────────────────
@@ -585,7 +637,8 @@ public sealed class NotificationTestSendAdminServiceTests
             Options.Create(new NotificationEmailAssetsOptions()),
             new EmailTransportDescriptor(isConsoleTransport),
             timeProvider,
-            NullLogger<NotificationTestSendAdminService>.Instance);
+            NullLogger<NotificationTestSendAdminService>.Instance,
+            NewProcedureTypeCatalog());
     }
 
     /// <summary>

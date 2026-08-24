@@ -210,6 +210,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Commercial)
             .Include(x => x.BiometricValidations)
             .Include(x => x.Signatures)
+            .Include(x => x.ProcedureType)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public async Task<IReadOnlyList<ProcedureInstance>> ListDraftFinalizedByActorAsync(
@@ -608,6 +609,44 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 var activity = v.UpdatedAt ?? v.CreatedAt;
                 return activity >= since;
             })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>>
+        ListLatestBiometricValidationsByPersonsAsync(
+            Guid tenantId,
+            IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
+            CancellationToken ct)
+    {
+        if (documents.Count == 0)
+            return [];
+
+        var typeSet = documents.Select(d => d.DocumentTypeNorm).ToHashSet(StringComparer.Ordinal);
+        var numberSet = documents.Select(d => d.DocumentNumberNorm).ToHashSet(StringComparer.Ordinal);
+        var pairSet = documents
+            .Select(d => $"{d.DocumentTypeNorm}|{d.DocumentNumberNorm}")
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Una única consulta para TODAS las personas proyectadas (mismo patrón de candidatos por
+        // tipo/número que ListBiometricValidationsForPersonAlertScanAsync); el par exacto y la fila
+        // más reciente por persona se resuelven en memoria porque una tupla compuesta no se traduce
+        // a un IN de PostgreSQL.
+        var candidates = await BaseTenantBiometricQuery(tenantId)
+            .Where(v => typeSet.Contains(v.DocumentType.Trim().ToUpper())
+                && numberSet.Contains(v.DocumentNumber.Trim().ToUpper()))
+            .ToListAsync(ct);
+
+        return candidates
+            .Where(v => pairSet.Contains(
+                $"{DocumentCanonicalNormalization.NormalizePart(v.DocumentType)}"
+                    + $"|{DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber)}"))
+            .GroupBy(v => (
+                Tipo: DocumentCanonicalNormalization.NormalizePart(v.DocumentType),
+                Numero: DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber)))
+            .Select(g => g
+                .OrderByDescending(v => v.CreatedAt)
+                .ThenByDescending(v => v.Id)
+                .First())
             .ToList();
     }
 

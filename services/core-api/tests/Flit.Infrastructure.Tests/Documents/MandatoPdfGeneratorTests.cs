@@ -1,6 +1,8 @@
 using Flit.Infrastructure.Documents;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Xunit;
 
@@ -72,6 +74,32 @@ public sealed class MandatoPdfGeneratorTests
 
         var pj = Generator.GenerateMandato(Mandato(Juridica(), template, mandatario: firmante));
         pj.Content.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Municipio_ElObjetoLlevaConDespuesDelTramiteBase()
+    {
+        // Misma redacción que el simulador (Funza/Envigado): "radicación y reclamación del trámite de …"
+        var data = MandatoPreviewSample.Build(
+            MandatoTemplateResolver.Municipio,
+            esJuridica: true,
+            tipologiaCodigo: "TRASPASO_STANDARD",
+            datosDeMuestra: true,
+            procedureTypeName: "Traspaso",
+            procedureFamily: "TRASPASO",
+            prendaMarking: FurPrendaMarking.Levantamiento,
+            transformaciones:
+            [
+                MandatoObjetoComposer.CambioColor,
+                MandatoObjetoComposer.CambioCarroceria,
+                MandatoObjetoComposer.Blindaje,
+            ]);
+
+        MandatoPdfGenerator.ComponerObjeto(data).Should().Be(
+            "TRASPASO CON LEVANTAMIENTO DE PRENDA, CAMBIO DE COLOR, CAMBIO DE CARROCERÍA Y BLINDAJE");
+
+        var pdf = Generator.GenerateMandato(data);
+        pdf.Content.Should().NotBeEmpty();
     }
 
     [Fact]

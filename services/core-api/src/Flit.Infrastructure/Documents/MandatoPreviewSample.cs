@@ -1,6 +1,6 @@
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
-using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -58,27 +58,31 @@ public static class MandatoPreviewSample
     /// </param>
     /// <param name="mandatario">Mandatario real (con su firma resuelta). Nulo ⇒ marcadores.</param>
     /// <param name="tipologiaCodigo">
-    /// Tipología del trámite simulado. Cambia el OBJETO del contrato: traspaso de propiedad o
-    /// matrícula inicial. Nulo ⇒ traspaso (el comportamiento histórico de esta muestra).
+    /// Código del trámite: catálogo (<c>MATRICULA_NUEVA</c> / <c>TRASPASO_STANDARD</c>) o alias wizard.
+    /// Nulo ⇒ traspaso (el comportamiento histórico de esta muestra).
     /// </param>
     /// <param name="datosDeMuestra">
     /// En <c>true</c> el mandante y la placa salen con datos ficticios legibles en vez de marcadores
     /// entre corchetes, para juzgar el documento como se verá impreso. Son datos de MUESTRA y así se
     /// anuncian en el propio texto: no corresponden a ninguna persona.
     /// </param>
+    /// <param name="procedureTypeName">Nombre de <c>procedure_types.name</c>, si se resolvió.</param>
+    /// <param name="procedureFamily">Familia de <c>procedure_types.family</c>, si se resolvió.</param>
     public static MandatoData Build(
         string templateCode,
         bool esJuridica = true,
         OrganismoTransito? organismo = null,
         MandatarioFirmante? mandatario = null,
         string? tipologiaCodigo = null,
-        bool datosDeMuestra = false)
+        bool datosDeMuestra = false,
+        string? procedureTypeName = null,
+        string? procedureFamily = null,
+        FurPrendaMarking prendaMarking = FurPrendaMarking.Ninguna,
+        IReadOnlyList<string>? transformaciones = null)
     {
-        var tipologia = string.IsNullOrWhiteSpace(tipologiaCodigo)
-            ? TramiteTipologiaCatalog.CodigoTraspasoStandard
-            : tipologiaCodigo.Trim();
-        var esTraspaso = string.Equals(
-            tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
+        var codigo = MandatoTramiteIdentity.CanonicalCode(tipologiaCodigo, tipologiaCodigo);
+        var esTraspaso = MandatoTramiteIdentity.EsTraspaso(
+            codigo, procedureFamily, tipologiaCodigo, null);
 
         var normalized = (templateCode ?? string.Empty).Trim().ToLowerInvariant();
         var (officeCode, officeName, city) = normalized switch
@@ -122,7 +126,7 @@ public static class MandatoPreviewSample
             ProcedureInstanceId: Guid.NewGuid(),
             ReferenceNumber: "PREV-MANDATO",
             Modalidad: esTraspaso ? "traspaso" : "matricula_inicial",
-            TipologiaCodigo: tipologia,
+            TipologiaCodigo: codigo,
             Vehiculo: new VehiculoDatos(
                 null, null, null, null, null, null, null, null, placa),
             Organismo: organismo ?? new OrganismoTransito(officeCode, officeName, city),
@@ -130,13 +134,17 @@ public static class MandatoPreviewSample
             ValorVenta: null,
             Causal: null,
             SellosFirma: [],
-            FechaTramite: DateTime.UtcNow);
+            FechaTramite: DateTime.UtcNow,
+            PrendaMarking: prendaMarking,
+            ProcedureTypeCode: codigo,
+            ProcedureTypeName: procedureTypeName,
+            ProcedureFamily: procedureFamily);
 
         var firmante = mandatario ?? (datosDeMuestra
             ? new MandatarioFirmante(MuestraMandatarioNombre, MuestraMandatarioDocumento)
             : new MandatarioFirmante(PhMandatarioNombre, PhMandatarioDocumento));
 
-        return normalized switch
+        var sample = normalized switch
         {
             MandatoTemplateResolver.Sabaneta => new MandatoData(
                 tramite,
@@ -182,5 +190,7 @@ public static class MandatoPreviewSample
                 null,
                 ModoFirmaMandatario: MandatarioFirmaModo.Estampada),
         };
+
+        return sample with { Transformaciones = transformaciones };
     }
 }

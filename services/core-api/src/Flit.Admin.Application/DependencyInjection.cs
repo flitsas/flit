@@ -237,11 +237,6 @@ public static class DependencyInjection
         services.AddScoped<Companies.PersonalizedDocuments.Deactivate.DeactivatePersonalizedDocumentHandler>();
         services.AddScoped<Companies.PersonalizedDocuments.GetView.GetPersonalizedDocumentViewHandler>();
 
-        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
-        // correo (agnóstico del sujeto). Proveedor/repositorio/linker se registran en
-        // AddAdminInfrastructure; el reloj se toma de TimeProvider.System (vigencia determinista).
-        services.AddScoped<Identity.IAdminIdentityValidationService, Identity.AdminIdentityValidationService>();
-
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
         services.AddScoped<ListImprontasHandler>();

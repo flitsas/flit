@@ -99,6 +99,24 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
 
         model.VendedorNombre.Should().BeEmpty();
         model.EsTraspaso.Should().BeFalse();
+        model.NombreTipoTramite.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void NombreTipoTramite_SeCopiaTalCualDelCatalogo()
+    {
+        // ADR-0050 — la familia la deriva el tipo; `modalidad_entrada` ya no existe.
+        var instance = new ProcedureInstance { ProcedureType = ProcedureTypeFixture.Traspaso, Plate = "ABC123" };
+
+        var model = TramiteCambioEstadoEmailProjector.Project(
+            instance,
+            [],
+            new Dictionary<string, string?>(),
+            "APROBADO",
+            nombreTipoTramite: "Matrícula inicial");
+
+        model.NombreTipoTramite.Should().Be("Matrícula inicial");
+        model.EsTraspaso.Should().BeTrue();
     }
 
     [Fact]

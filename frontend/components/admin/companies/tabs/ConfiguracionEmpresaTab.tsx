@@ -4,21 +4,14 @@ import type { ReactNode } from "react";
 import { ToggleSwitch } from "../ToggleSwitch";
 import { ConsultaProvidersSection } from "../ConsultaProvidersSection";
 import { AvaluoProvidersSection } from "../AvaluoProvidersSection";
-import { PersonalizedDocumentsPanel } from "../PersonalizedDocumentsPanel";
 import {
   FINES_QUERY_SOURCE_LABELS,
   FINES_QUERY_SOURCES,
   METODOS_RECAUDO,
-  NOTIFICATION_TARGET_LABELS,
-  NOTIFICATION_TARGETS,
   SMTP_LABELS,
   type SettingsForm,
 } from "../settingsForm";
-import type {
-  EnrutamientoSMTP,
-  FinesQuerySource,
-  NotificationTarget,
-} from "@/lib/api/types";
+import type { EnrutamientoSMTP, FinesQuerySource } from "@/lib/api/types";
 
 // Pestaña Configuración Empresa (HU #10194, AC2/AC4 / RF09-RF10). Baúl de firmas,
 // enrutamiento SMTP, destinatario de notificaciones, métodos de recaudo + tabla
@@ -30,19 +23,6 @@ export interface ConfiguracionEmpresaTabProps {
   /** Tabla consolidada de Organismos de Tránsito (grant + bloqueos + restricciones). */
   otSlot?: ReactNode;
   fieldErrors?: Record<string, string>;
-  /**
-   * HU #11315 (Feature #11309) — compañía en configuración. El panel de documentos
-   * personalizados vive AQUÍ, justo debajo del selector de canal del que depende su
-   * visibilidad (CF-01 del Feature #11309): quien cambia el canal ve de inmediato qué habilita.
-   */
-  tenantId: string;
-  /**
-   * Canal **persistido** del tenant, no el del formulario. La visibilidad del panel se decide
-   * con la política operativa guardada (CF-01: fuente única de verdad), porque el backend
-   * responde 409 `canal_no_habilitado` leyendo esa misma política: si la compuerta usara el
-   * borrador, cambiar el selector sin guardar mostraría una sección cuyas cargas fallarían.
-   */
-  canalPersistido: EnrutamientoSMTP;
 }
 
 export function ConfiguracionEmpresaTab({
@@ -50,8 +30,6 @@ export function ConfiguracionEmpresaTab({
   onChange,
   otSlot,
   fieldErrors,
-  tenantId,
-  canalPersistido,
 }: ConfiguracionEmpresaTabProps) {
   const toggleMetodo = (metodo: string, on: boolean) => {
     const next = on
@@ -59,6 +37,9 @@ export function ConfiguracionEmpresaTab({
       : form.metodosRecaudo.filter((m) => m !== metodo);
     onChange({ metodosRecaudo: next });
   };
+
+  const extraEmailError =
+    fieldErrors?.extraEmail ?? fieldErrors?.["destinatariosNotificacion.extraEmail"];
 
   return (
     <div className="space-y-4">
@@ -132,43 +113,73 @@ export function ConfiguracionEmpresaTab({
       </div>
 
       <ToggleSwitch
-        id="avisosCambioEstadoActivos"
-        label="Avisos de correo al cambio de estado"
-        description="Cuando está activo, se notifica por correo al ciudadano (y a la empresa / representante legal si aplica) al aprobar o rechazar un trámite. Si se apaga, los avisos quedan en cola y se envían al reactivar."
-        checked={form.avisosCambioEstadoActivos}
-        onChange={(v) => onChange({ avisosCambioEstadoActivos: v })}
+        id="avisosAprobacionActivos"
+        label="Avisos al aprobar trámite"
+        description="Cuando está activo, se envía el correo de trámite aprobado. Si se apaga, los avisos de aprobación quedan en cola y se envían al reactivar."
+        checked={form.avisosAprobacionActivos}
+        onChange={(v) => onChange({ avisosAprobacionActivos: v })}
       />
 
-      {/* HU #11315 — condicionado al MISMO canal de arriba; con FLIT_SMTP no se renderiza nada. */}
-      <PersonalizedDocumentsPanel tenantId={tenantId} enrutamientoSMTP={canalPersistido} />
+      <ToggleSwitch
+        id="avisosRechazoActivos"
+        label="Avisos al rechazar trámite"
+        description="Cuando está activo, se envía el correo de trámite rechazado. Si se apaga, los avisos de rechazo quedan en cola y se envían al reactivar."
+        checked={form.avisosRechazoActivos}
+        onChange={(v) => onChange({ avisosRechazoActivos: v })}
+      />
 
-      <div>
-        <label htmlFor="notificationTarget" className="mb-1 block text-xs font-semibold">
-          Destinatario de notificaciones
-        </label>
-        <select
-          id="notificationTarget"
-          value={form.notificationTarget}
-          onChange={(e) => onChange({ notificationTarget: e.target.value as NotificationTarget })}
-          className="w-full max-w-xs rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
-          style={{ borderColor: fieldErrors?.notificationTarget ? "#FF4E00" : "#DFE5ED" }}
-        >
-          {NOTIFICATION_TARGETS.map((value) => (
-            <option key={value} value={value}>
-              {NOTIFICATION_TARGET_LABELS[value]}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 max-w-md text-[11px] opacity-60">
-          Quién recibe los avisos del avance de cada trámite: el comprador del vehículo, el radicador
-          que gestiona el trámite, o nadie si eliges «Sin notificaciones».
+      <fieldset>
+        <legend className="text-xs font-semibold">Destinatarios de avisos de estado</legend>
+        <p className="mb-2 mt-0.5 max-w-md text-[11px] opacity-60">
+          El aviso llega a los perfiles encendidos. Comprador y vendedor/propietario cubren persona
+          natural, jurídica (empresa y representante legal) y locatario si existe. Si hay más de un
+          correo, el comprador va como destinatario principal y el resto en copia oculta.
         </p>
-        {fieldErrors?.notificationTarget && (
+        <div className="flex max-w-md flex-col gap-2">
+          {(
+            [
+              ["destinatarioComprador", "Comprador", form.destinatarioComprador],
+              [
+                "destinatarioVendedorOPropietario",
+                "Vendedor / propietario",
+                form.destinatarioVendedorOPropietario,
+              ],
+              ["destinatarioRadicador", "Radicador (quien crea el trámite)", form.destinatarioRadicador],
+            ] as const
+          ).map(([key, label, checked]) => (
+            <label
+              key={key}
+              className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+            >
+              <input
+                id={key}
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => onChange({ [key]: e.target.checked } as Partial<SettingsForm>)}
+                className="h-4 w-4 accent-[#557EFF]"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <label htmlFor="destinatarioExtraEmail" className="mb-1 mt-3 block text-xs font-semibold">
+          Correo adicional
+        </label>
+        <input
+          id="destinatarioExtraEmail"
+          type="email"
+          value={form.destinatarioExtraEmail}
+          onChange={(e) => onChange({ destinatarioExtraEmail: e.target.value })}
+          placeholder="opcional@empresa.com"
+          className="w-full max-w-md rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
+          style={{ borderColor: extraEmailError ? "#FF4E00" : "#DFE5ED" }}
+        />
+        {extraEmailError && (
           <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
-            {fieldErrors.notificationTarget}
+            {extraEmailError}
           </p>
         )}
-      </div>
+      </fieldset>
 
       <fieldset>
         <legend className="text-xs font-semibold">Métodos de recaudo</legend>

@@ -23,9 +23,17 @@ public sealed record MandateSimulationRequest(
     string? AssignmentMode,
     Guid? MandateSignerId,
     /// <summary>
-    /// <c>matricula_inicial</c> | <c>traspaso</c>. Cambia el OBJETO del contrato. Nulo ⇒ traspaso.
+    /// Código de catálogo o alias wizard. Nulo ⇒ traspaso. Preferir <see cref="ProcedureTypeCode"/>.
     /// </summary>
-    string? Tipologia = null);
+    string? Tipologia = null,
+    /// <summary>Código de <c>tramites.procedure_types</c> (p. ej. <c>MATRICULA_NUEVA</c>).</summary>
+    string? ProcedureTypeCode = null,
+    /// <summary><c>ninguna</c> | <c>inscripcion</c> | <c>levantamiento</c> | <c>ambas</c>. Mismo vocabulario que el simulador FUR.</summary>
+    string? Prenda = null,
+    bool CambioColor = false,
+    bool CambioCombustible = false,
+    bool CambioCarroceria = false,
+    bool Blindaje = false);
 
 /// <summary>
 /// Escenario + destinatario del envío.
@@ -42,7 +50,13 @@ public sealed record MandateSimulationSendRequest(
     Guid? MandateSignerId,
     string? ToEmail,
     string? ToName,
-    string? Tipologia = null);
+    string? Tipologia = null,
+    string? ProcedureTypeCode = null,
+    string? Prenda = null,
+    bool CambioColor = false,
+    bool CambioCombustible = false,
+    bool CambioCarroceria = false,
+    bool Blindaje = false);
 
 /// <summary>Tipologías simulables: lo que cambia es el objeto del contrato.</summary>
 public static class MandateSimulationTipologias

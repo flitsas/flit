@@ -7,7 +7,9 @@ using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.OtRules;
@@ -118,7 +120,9 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         ArgumentNullException.ThrowIfNull(request);
         return await BuildAsync(
             request.OfficeId, request.PersonType, request.AssignmentMode, request.MandateSignerId,
-            request.Tipologia, ct)
+            request.Tipologia, request.ProcedureTypeCode,
+            request.Prenda, request.CambioColor, request.CambioCombustible, request.CambioCarroceria,
+            request.Blindaje, ct)
             .ConfigureAwait(false);
     }
 
@@ -138,7 +142,9 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
 
         var documento = await BuildAsync(
             request.OfficeId, request.PersonType, request.AssignmentMode, request.MandateSignerId,
-            request.Tipologia, ct)
+            request.Tipologia, request.ProcedureTypeCode,
+            request.Prenda, request.CambioColor, request.CambioCombustible, request.CambioCarroceria,
+            request.Blindaje, ct)
             .ConfigureAwait(false);
         if (!documento.Success)
             return documento;
@@ -190,6 +196,12 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         string? assignmentModeOverride,
         Guid? mandateSignerId,
         string? tipologia,
+        string? procedureTypeCode,
+        string? prenda,
+        bool cambioColor,
+        bool cambioCombustible,
+        bool cambioCarroceria,
+        bool blindaje,
         CancellationToken ct)
     {
         var office = _catalog.GetById(officeId);
@@ -260,13 +272,20 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
 
         // Datos de muestra (no marcadores entre corchetes): el simulador existe para juzgar cómo se
         // LEE el contrato impreso. Son ficticios y lo dicen en el propio texto.
+        var resolved = await ResolveProcedureTypeAsync(procedureTypeCode, tipologia, ct)
+            .ConfigureAwait(false);
+
         var sample = MandatoPreviewSample.Build(
             templateCode,
             esJuridica,
             new OrganismoTransito(office.Code, office.Name, MandatoPreviewSample.PhCiudadOrganismo),
             mandatario,
-            MandateSimulationTipologias.Resolve(tipologia),
-            datosDeMuestra: true);
+            resolved.Code,
+            datosDeMuestra: true,
+            resolved.Name,
+            resolved.Family,
+            ResolvePrenda(prenda),
+            ResolveTransformaciones(cambioColor, cambioCombustible, cambioCarroceria, blindaje));
 
         byte[]? customPdf = null;
         if (MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind)
@@ -295,14 +314,62 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         };
 
         var doc = _generator.GenerateMandato(data);
-        var sufijoTramite = MandateSimulationTipologias.Resolve(tipologia)
-            == MandateSimulationTipologias.MatriculaInicial ? "matricula" : "traspaso";
+        var sufijoTramite = MandatoTramiteIdentity.EsTraspaso(
+            resolved.Code, resolved.Family, tipologia, null)
+            ? "traspaso"
+            : MandatoTramiteIdentity.EsCodigoMatricula(resolved.Code) ? "matricula" : resolved.Code.ToLowerInvariant();
         var nombre = string.Create(
             CultureInfo.InvariantCulture,
             $"mandato_simulado_{office.Code}_{(esJuridica ? "pj" : "pn")}_{sufijoTramite}.pdf");
 
         return new MandateSimulationResult(
             MandateSimulationOutcome.Ok, "Simulación generada.", doc.Content, nombre);
+    }
+
+    private static FurPrendaMarking ResolvePrenda(string? prenda)
+    {
+        var v = prenda?.Trim().ToLowerInvariant();
+        return v switch
+        {
+            "inscripcion" => FurPrendaMarking.Constitucion,
+            "levantamiento" => FurPrendaMarking.Levantamiento,
+            "ambas" => FurPrendaMarking.Ambos,
+            _ => FurPrendaMarking.Ninguna,
+        };
+    }
+
+    private static List<string> ResolveTransformaciones(
+        bool cambioColor, bool cambioCombustible, bool cambioCarroceria, bool blindaje)
+    {
+        var keys = new List<string>(4);
+        if (cambioColor) keys.Add(MandatoObjetoComposer.CambioColor);
+        if (cambioCarroceria) keys.Add(MandatoObjetoComposer.CambioCarroceria);
+        if (cambioCombustible) keys.Add(MandatoObjetoComposer.CambioCombustible);
+        if (blindaje) keys.Add(MandatoObjetoComposer.Blindaje);
+        return keys;
+    }
+
+    /// <summary>
+    /// Resuelve el tipo de trámite del simulador: code de catálogo si está publicado; si no, alias
+    /// wizard → <c>MATRICULA_NUEVA</c> / <c>TRASPASO_STANDARD</c> con el name de la tabla si existe.
+    /// </summary>
+    private async Task<(string Code, string? Name, string? Family)> ResolveProcedureTypeAsync(
+        string? procedureTypeCode,
+        string? tipologia,
+        CancellationToken ct)
+    {
+        var canonical = MandatoTramiteIdentity.CanonicalCode(procedureTypeCode, tipologia);
+
+        var pt = await _db.ProcedureTypes.AsNoTracking()
+            .Where(p => p.IsActive && p.PublicationStatus == PublicationStatus.Published)
+            .FirstOrDefaultAsync(
+                p => p.Code == canonical,
+                ct)
+            .ConfigureAwait(false);
+
+        return pt is null
+            ? (canonical, null, null)
+            : (pt.Code, pt.Name, pt.Family);
     }
 
     /// <summary>Tenant de la compañía que habilita a ese mandatario en ese organismo, si lo hay.</summary>

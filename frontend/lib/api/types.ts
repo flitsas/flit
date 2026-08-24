@@ -124,6 +124,13 @@ export interface BlockProcedureFamily {
 export type EnrutamientoSMTP = "FLIT_SMTP" | "TENANT_API";
 export type NotificationTarget = "COMPRADOR" | "RADICADOR" | "NINGUNO";
 
+export interface DestinatariosNotificacion {
+  comprador: boolean;
+  vendedorOPropietario: boolean;
+  radicador: boolean;
+  extraEmail: string | null;
+}
+
 /**
  * Fuente de la consulta de comparendos de la compañía (FEATURE 02): `internal` (módulo de
  * comparendos con fuente base) o `external` (consulta en línea al SIMIT). Su USO en el flujo
@@ -167,7 +174,10 @@ export interface TenantSettings {
   /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
   validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
-  notificationTarget: NotificationTarget;
+  notificationTarget?: NotificationTarget;
+  avisosAprobacionActivos?: boolean;
+  avisosRechazoActivos?: boolean;
+  destinatariosNotificacion?: DestinatariosNotificacion;
   metodosRecaudo: string[];
   // HU #10478 — opcionales en el tipo por compatibilidad; el backend siempre los devuelve.
   runtFailoverTimeoutMs?: number;
@@ -176,7 +186,7 @@ export interface TenantSettings {
   avaluoProviderConfig?: AvaluoProviderConfig;
   // FEATURE 02 — opcional por compatibilidad; el backend siempre lo devuelve.
   finesQuerySource?: FinesQuerySource;
-  /** HU #11469 — avisos de correo al cambio de estado. Default true. */
+  /** HU #11469 legado. */
   avisosCambioEstadoActivos?: boolean;
 }
 
@@ -194,7 +204,10 @@ export interface TenantSettingsUpdate {
   /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
   validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
-  notificationTarget: NotificationTarget;
+  notificationTarget?: NotificationTarget;
+  avisosAprobacionActivos?: boolean;
+  avisosRechazoActivos?: boolean;
+  destinatariosNotificacion?: DestinatariosNotificacion;
   metodosRecaudo: string[];
   // HU #10478 — opcionales: si se omiten el backend conserva el valor previo.
   runtFailoverTimeoutMs?: number;
@@ -203,7 +216,7 @@ export interface TenantSettingsUpdate {
   avaluoProviderConfig?: AvaluoProviderConfig;
   // FEATURE 02 — si se omite el backend conserva el valor previo.
   finesQuerySource?: FinesQuerySource;
-  /** HU #11469 — avisos de correo al cambio de estado. Opcional: null conserva. */
+  /** HU #11469 legado. */
   avisosCambioEstadoActivos?: boolean;
 }
 

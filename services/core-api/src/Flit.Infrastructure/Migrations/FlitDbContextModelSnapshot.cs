@@ -2365,11 +2365,24 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
-                    b.Property<bool>("TramiteStateEmailsEnabled")
+                    b.Property<bool>("TramiteApprovedEmailsEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
-                        .HasColumnName("tramite_state_emails_enabled");
+                        .HasColumnName("tramite_approved_emails_enabled");
+
+                    b.Property<bool>("TramiteRejectedEmailsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("tramite_rejected_emails_enabled");
+
+                    b.Property<string>("TramiteStateEmailRecipients")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tramite_state_email_recipients")
+                        .HasDefaultValueSql("'{\"comprador\":true,\"vendedorOPropietario\":true,\"radicador\":true,\"extraEmail\":null}'");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

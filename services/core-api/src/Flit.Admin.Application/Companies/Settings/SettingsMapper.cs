@@ -33,7 +33,13 @@ internal static class SettingsMapper
             settings.AvaluoProviderConfig.Enabled),
         settings.FinesQuerySource,
         settings.PersonalizedDocumentsEnabled,
-        settings.TramiteStateEmailsEnabled);
+        settings.TramiteApprovedEmailsEnabled,
+        settings.TramiteRejectedEmailsEnabled,
+        new DestinatariosNotificacionDto(
+            settings.StateEmailRecipients.Comprador,
+            settings.StateEmailRecipients.VendedorOPropietario,
+            settings.StateEmailRecipients.Radicador,
+            settings.StateEmailRecipients.ExtraEmail));
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)

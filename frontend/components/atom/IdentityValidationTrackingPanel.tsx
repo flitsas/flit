@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ChevronRight, RefreshCw } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { FLIT } from '@/lib/flit-design-tokens';
 
 /**
@@ -43,7 +44,14 @@ const OUTCOME_LABEL: Record<string, string> = {
   cuerpo_invalido: 'Cuerpo inválido',
 };
 
-function auditStageLabel(stage: string): string {
+const STAGE_LABEL_DETAIL: Record<string, string> = {
+  send_response: 'Respuesta proveedor',
+  reconcile: 'Consulta de estado',
+  expired: 'Cierre por vencimiento',
+};
+
+function auditStageLabel(stage: string, detail = false): string {
+  if (detail && STAGE_LABEL_DETAIL[stage]) return STAGE_LABEL_DETAIL[stage];
   return STAGE_LABEL[stage] ?? stage;
 }
 
@@ -81,9 +89,20 @@ function eventoCorrecto(e: IdentityAuditEvent): boolean {
  * falló, o que ese evento no cifra nada. Inventar «AES-256» sería afirmar un algoritmo que este
  * frontend no conoce, en la pantalla que certifica una identidad.
  */
-function auditCifradoText(e: IdentityAuditEvent): string {
-  if (e.decryptOk == null) return 'No aplica';
-  return e.decryptOk ? 'Verificado' : 'Falló';
+function auditCifradoText(e: IdentityAuditEvent, detail = false): string {
+  if (e.decryptOk == null) return detail ? '—' : 'No aplica';
+  if (e.decryptOk) return detail ? 'OK' : 'Verificado';
+  return 'Falló';
+}
+
+function auditOutcomeTone(e: IdentityAuditEvent): StatusTone {
+  if (eventoCorrecto(e)) return 'success';
+  if (e.outcome === 'pendiente') return 'info';
+  if (e.outcome === 'expirado') return 'warning';
+  if (['error', 'rechazado', 'decrypt_failed', 'firma_invalida', 'cuerpo_invalido'].includes(e.outcome)) {
+    return 'danger';
+  }
+  return 'neutral';
 }
 
 function auditDetailText(e: IdentityAuditEvent): string {
@@ -112,6 +131,7 @@ export function IdentityValidationTrackingPanel({
   refreshKey = 0,
   defaultOpen = false,
   embebido = false,
+  detailLayout = false,
 }: {
   validationId: string;
   /** Cuando cambia (p. ej. cada poll del detalle), recarga la bitácora si el panel está abierto. */
@@ -125,6 +145,8 @@ export function IdentityValidationTrackingPanel({
    * para un solo contenido. Los demás consumidores (Validaciones, Prevalidaciones) lo conservan.
    */
   embebido?: boolean;
+  /** Tabla del modal de Identidad: badges de resultado, «Detalle técnico», cifrado OK. */
+  detailLayout?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen || embebido);
   const [events, setEvents] = useState<IdentityAuditEvent[] | null>(null);
@@ -222,7 +244,7 @@ export function IdentityValidationTrackingPanel({
                     <th scope="col" className="px-3 py-2 font-semibold uppercase tracking-wide">Resultado</th>
                     <th scope="col" className="px-3 py-2 font-semibold uppercase tracking-wide">Cifrado</th>
                     <th scope="col" className="rounded-r-lg px-3 py-2 font-semibold uppercase tracking-wide">
-                      Detalle
+                      {detailLayout ? 'Detalle técnico' : 'Detalle'}
                     </th>
                   </tr>
                 </thead>
@@ -230,16 +252,21 @@ export function IdentityValidationTrackingPanel({
                   {events.map((e, i) => (
                     <tr key={i} className="border-t align-top" style={{ borderColor: FLIT.border.soft }}>
                       <td className="whitespace-nowrap px-3 py-2.5 opacity-70">{formatFecha(e.occurredAt)}</td>
-                      <td className="px-3 py-2.5 font-medium">{auditStageLabel(e.stage)}</td>
-                      {/* El resultado en verde cuando fue bien, como en la referencia: es la columna
-                          que se barre en diagonal para ver si algo se torció. */}
-                      <td
-                        className="px-3 py-2.5 font-semibold"
-                        style={eventoCorrecto(e) ? { color: 'var(--flit-success-ink)' } : undefined}
-                      >
-                        {auditOutcomeLabel(e)}
+                      <td className="px-3 py-2.5 font-medium">{auditStageLabel(e.stage, detailLayout)}</td>
+                      <td className="px-3 py-2.5 font-semibold">
+                        {detailLayout ? (
+                          <StatusBadge
+                            label={auditOutcomeLabel(e)}
+                            tone={auditOutcomeTone(e)}
+                            ariaLabel={`Resultado: ${auditOutcomeLabel(e)}`}
+                          />
+                        ) : (
+                          <span style={eventoCorrecto(e) ? { color: 'var(--flit-success-ink)' } : undefined}>
+                            {auditOutcomeLabel(e)}
+                          </span>
+                        )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5">{auditCifradoText(e)}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5">{auditCifradoText(e, detailLayout)}</td>
                       <td className="px-3 py-2.5 opacity-70">{auditDetailText(e)}</td>
                     </tr>
                   ))}
@@ -247,17 +274,19 @@ export function IdentityValidationTrackingPanel({
               </table>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => void loadAudit()}
-            disabled={loading}
-            className="flex items-center gap-1 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ color: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
-            aria-label="Refrescar bitácora"
-          >
-            <RefreshCw className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
-            Refrescar
-          </button>
+          {events && events.length > 0 && !embebido && (
+            <button
+              type="button"
+              onClick={() => void loadAudit()}
+              disabled={loading}
+              className="flex items-center gap-1 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{ color: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
+              aria-label="Refrescar bitácora"
+            >
+              <RefreshCw className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
+              Refrescar
+            </button>
+          )}
         </div>
       )}
     </div>

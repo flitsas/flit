@@ -13,19 +13,28 @@ public sealed class TramiteNotificationRecipientResolver : ITramiteNotificationR
     public const string RoleVendedor = "vendedor";
     public const string ModalidadTraspaso = "traspaso";
 
+    public const string RoleLocatario = "locatario";
+    public const string RoleRadicador = "radicador";
+    public const string RoleConfiguracionEmpresa = "configuracion_empresa";
+
     public TramiteRecipientResolution Resolve(
         ProcedureInstance instance,
         IReadOnlyList<ProcedureInstanceActor> actors,
-        IReadOnlyList<ProcedureInstanceParticipant> participants)
+        IReadOnlyList<ProcedureInstanceParticipant> participants,
+        TramiteStateEmailRecipientPolicy? policy = null,
+        TramiteEmailRecipient? radicador = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(actors);
         ArgumentNullException.ThrowIfNull(participants);
 
+        policy ??= new TramiteStateEmailRecipientPolicy(
+            Comprador: true, VendedorOPropietario: true, Radicador: false, ExtraEmail: null);
+
         var recipients = new List<TramiteEmailRecipient>();
         var gaps = new List<TramiteRecipientGap>();
 
-        foreach (var role in RolesToNotify(instance.FamilyCode))
+        foreach (var role in RolesToNotify(policy))
         {
             var actor = actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
@@ -47,13 +56,48 @@ public sealed class TramiteNotificationRecipientResolver : ITramiteNotificationR
             }
         }
 
+        if (policy.Radicador)
+        {
+            if (radicador is not null && !string.IsNullOrWhiteSpace(radicador.Email))
+            {
+                recipients.Add(radicador);
+            }
+            else if (radicador is not null)
+            {
+                gaps.Add(new TramiteRecipientGap(
+                    RoleRadicador, TramiteRecipientKind.Persona, radicador.DisplayName));
+            }
+        }
+
+        var extra = TramiteStateEmailRecipientsNormalize(policy.ExtraEmail);
+        if (extra is not null)
+        {
+            recipients.Add(new TramiteEmailRecipient(
+                RoleConfiguracionEmpresa,
+                TramiteRecipientKind.Persona,
+                extra,
+                extra));
+        }
+
         return new TramiteRecipientResolution(recipients, gaps);
     }
 
-    private static IEnumerable<string> RolesToNotify(string modalidadEntrada)
+    private static string? TramiteStateEmailRecipientsNormalize(string? extraEmail)
     {
-        yield return RoleComprador;
-        if (string.Equals(modalidadEntrada?.Trim(), ModalidadTraspaso, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(extraEmail))
+            return null;
+        return extraEmail.Trim();
+    }
+
+    private static IEnumerable<string> RolesToNotify(TramiteStateEmailRecipientPolicy policy)
+    {
+        if (policy.Comprador)
+        {
+            yield return RoleComprador;
+            yield return RoleLocatario;
+        }
+
+        if (policy.VendedorOPropietario)
         {
             yield return RoleVendedor;
         }

@@ -190,18 +190,14 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.NotificationDeliveryLogs.INotificationDeliveryLogRepository,
             Flit.Infrastructure.Persistence.Repositories.NotificationDeliveryLogRepository>();
 
-        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
-        // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient
-        // + cifra el secreto del webhook) y linker que ancla la identidad aprobada al sujeto
-        // (representante legal → identity_validation_ref). El servicio se registra en AddAdminApplication.
-        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationRepository,
-            AdminIdentityValidationRepository>();
-        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentitySubjectLinker,
-            AdminIdentitySubjectLinker>();
-        // HU #11028 — identidad que la persona ya validó dentro de un trámite de las compañías del OT.
-        services.AddScoped<Flit.Admin.Application.Identity.IPersonIdentityLookup, PersonIdentityLookup>();
-        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationProvider,
-            Flit.Infrastructure.Kyverum.KyverumAdminIdentityValidationProvider>();
+        // HU #11764 (ADR-0050) — el bloque de validación de identidad administrativa desacoplada por
+        // correo (HU #10907/#11028) se RETIRA por completo: sin consumidor real (el módulo Identidad es
+        // la única fuente que puede originar una validación). Se fueron IAdminIdentityValidationService/
+        // Provider/Repository/SubjectLinker/PersonIdentityLookup y sus implementaciones
+        // (AdminIdentityValidationRepository, AdminIdentitySubjectLinker, PersonIdentityLookup,
+        // KyverumAdminIdentityValidationProvider). La tabla admin.admin_identity_validations y su
+        // lectura de vigencia (AdminIdentityVigencia, vía EF directo) NO se tocan: siguen alimentando el
+        // estado de identidad que muestra la consola.
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();

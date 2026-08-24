@@ -45,10 +45,24 @@ public sealed class UpdateTenantSettingsHandler
                 "enrutamientoSMTP", $"Valor inválido. Valores permitidos: {SettingsWire.AllowedChannels}."));
         }
 
-        if (!SettingsWire.TryParseTarget(request.NotificationTarget, out var target))
+        NotificationTarget target = default;
+        if (request.NotificationTarget is not null
+            && !SettingsWire.TryParseTarget(request.NotificationTarget, out target))
         {
             errors.Add(new SettingsValidationError(
                 "notificationTarget", $"Valor inválido. Valores permitidos: {SettingsWire.AllowedTargets}."));
+        }
+
+        var extraEmail = request.DestinatariosNotificacion?.ExtraEmail;
+        if (!string.IsNullOrWhiteSpace(extraEmail))
+        {
+            var trimmed = extraEmail.Trim();
+            if (trimmed.Contains(',') || trimmed.Length > 320 || !SettingsWire.IsSingleEmail(trimmed))
+            {
+                errors.Add(new SettingsValidationError(
+                    "destinatariosNotificacion.extraEmail",
+                    "Debe ser un único correo válido (máximo 320 caracteres)."));
+            }
         }
 
         var methods = request.MetodosRecaudo ?? [];
@@ -132,8 +146,19 @@ public sealed class UpdateTenantSettingsHandler
             // HU #11357/#11362 (ADR-0043) — campo propio, ya no derivado del canal. Opcional: si el
             // request no lo envía, se conserva el valor previo (ver UpdateTenantSettingsRequest).
             PersonalizedDocumentsEnabled = request.DocumentosPersonalizadosActivo ?? previous.PersonalizedDocumentsEnabled,
-            TramiteStateEmailsEnabled = request.AvisosCambioEstadoActivos ?? previous.TramiteStateEmailsEnabled,
-            NotificationTarget = target,
+            TramiteApprovedEmailsEnabled = request.AvisosAprobacionActivos
+                ?? request.AvisosCambioEstadoActivos
+                ?? previous.TramiteApprovedEmailsEnabled,
+            TramiteRejectedEmailsEnabled = request.AvisosRechazoActivos
+                ?? request.AvisosCambioEstadoActivos
+                ?? previous.TramiteRejectedEmailsEnabled,
+            StateEmailRecipients = request.DestinatariosNotificacion is { } dest
+                ? TramiteStateEmailRecipients.FromJson(
+                    dest.Comprador, dest.VendedorOPropietario, dest.Radicador, dest.ExtraEmail)
+                : previous.StateEmailRecipients,
+            NotificationTarget = request.NotificationTarget is null
+                ? previous.NotificationTarget
+                : target,
             PaymentMethods = [.. methods],
             // Campos opcionales HU #10478: si el request los omite, se conserva el valor previo.
             RuntFailoverTimeoutMs = request.RuntFailoverTimeoutMs ?? previous.RuntFailoverTimeoutMs,

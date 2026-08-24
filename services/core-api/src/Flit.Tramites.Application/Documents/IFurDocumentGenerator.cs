@@ -131,14 +131,20 @@ public sealed record FurDocumentData(
     // que marcan sus casillas propias. Blindaje usa SI/NO de vehículo blindado; las otras tres van
     // a la rejilla de trámite solicitado. Por defecto ninguno.
     FurTransformacionesDeclaradas Transformaciones = default,
-    // ADR-0050 — NOMBRE del tipo de trámite, tal como está en el catálogo. Es el rótulo legal de los
-    // documentos: antes el mandato y la solicitud virtual escribían "MATRÍCULA INICIAL" para todo lo
-    // que no fuera traspaso, así que un blindaje o un levantamiento de prenda salía nombrado como un
-    // trámite que no era. Vacío ⇒ los generadores caen al rótulo heredado.
-    string? TipoNombre = null,
-    // ADR-0050 — el tipo declara si hay parte VENDEDORA (gate_profile.requiresSeller). Sustituye a
-    // deducirlo por substring sobre la tipología o la modalidad, que daba por traspaso cualquier
-    // código que contuviera esa palabra.
+    /// <summary>Código de <c>tramites.procedure_types.code</c> (p. ej. <c>MATRICULA_NUEVA</c>).</summary>
+    string? ProcedureTypeCode = null,
+    /// <summary>Nombre de <c>tramites.procedure_types.name</c>. El mandato lo usa como objeto del contrato.</summary>
+    string? ProcedureTypeName = null,
+    /// <summary>Familia de <c>tramites.procedure_types.family</c> (<c>MATRICULAS</c> | <c>TRASPASO</c> | <c>OTROS</c>).</summary>
+    string? ProcedureFamily = null,
+    /// <summary>
+    /// ADR-0050 — el tipo declara si hay parte VENDEDORA (<c>gate_profile.requiresSeller</c>).
+    /// <para>Convive con <see cref="ProcedureFamily"/> y no lo duplica: la familia dice QUÉ ES el
+    /// trámite y esta bandera QUÉ EXIGE. Es la que decide si el FUR estampa sección de comprador y
+    /// si el mandato se redacta con parte otorgante, preguntas que son de capacidad. Sustituye a
+    /// deducirlo por substring sobre la tipología o la modalidad, que daba por traspaso cualquier
+    /// código que contuviera esa palabra.</para>
+    /// </summary>
     bool RequiereVendedor = false)
 {
     public string? Vin => Vehiculo.Vin;

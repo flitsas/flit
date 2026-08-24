@@ -55,11 +55,66 @@ internal sealed class ProcedureStateChangeEmailEnqueueNotifier(
 
         var actors = instance.Actors?.ToList() ?? [];
         var participants = instance.Participants?.ToList() ?? [];
-        var resolution = recipientResolver.Resolve(instance, actors, participants);
+        var policy = await LoadRecipientPolicyAsync(change.TenantId, cancellationToken).ConfigureAwait(false);
+        var radicador = await LoadRadicadorAsync(instance.CreatedByUserId, cancellationToken).ConfigureAwait(false);
+        var resolution = recipientResolver.Resolve(instance, actors, participants, policy, radicador);
         var rows = BuildRows(change, templateKey, resolution, logger);
 
         await InsertIdempotentAsync(rows, cancellationToken).ConfigureAwait(false);
     }
+
+    private static readonly System.Text.Json.JsonSerializerOptions RecipientJson =
+        new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    private async Task<TramiteStateEmailRecipientPolicy> LoadRecipientPolicyAsync(
+        Guid tenantId, CancellationToken ct)
+    {
+        var row = await db.TenantOperationalPolicies.AsNoTracking()
+            .Where(p => p.TenantId == tenantId)
+            .Select(p => p.TramiteStateEmailRecipients)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(row))
+            return TramiteStateEmailRecipientPolicy.AllOn;
+
+        try
+        {
+            var parsed = System.Text.Json.JsonSerializer.Deserialize<RecipientPolicyJson>(row, RecipientJson);
+            if (parsed is null)
+                return TramiteStateEmailRecipientPolicy.AllOn;
+            return new TramiteStateEmailRecipientPolicy(
+                parsed.Comprador, parsed.VendedorOPropietario, parsed.Radicador, parsed.ExtraEmail);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return TramiteStateEmailRecipientPolicy.AllOn;
+        }
+    }
+
+    private async Task<TramiteEmailRecipient?> LoadRadicadorAsync(Guid createdByUserId, CancellationToken ct)
+    {
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == createdByUserId)
+            .Select(u => new { u.Email, u.DisplayName })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (user is null)
+            return null;
+
+        var email = user.Email?.Trim();
+        return new TramiteEmailRecipient(
+            TramiteNotificationRecipientResolver.RoleRadicador,
+            TramiteRecipientKind.Persona,
+            email ?? string.Empty,
+            string.IsNullOrWhiteSpace(user.DisplayName) ? (email ?? string.Empty) : user.DisplayName);
+    }
+
+    private sealed record RecipientPolicyJson(
+        bool Comprador = true,
+        bool VendedorOPropietario = true,
+        bool Radicador = true,
+        string? ExtraEmail = null);
 
     /// <summary>
     /// Orden determinista del resolver (comprador→vendedor; empresa→RL) + colapso de

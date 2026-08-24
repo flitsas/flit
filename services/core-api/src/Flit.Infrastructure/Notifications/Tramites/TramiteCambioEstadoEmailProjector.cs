@@ -16,7 +16,8 @@ public static class TramiteCambioEstadoEmailProjector
         IReadOnlyDictionary<string, string?> fieldValues,
         string estadoActual,
         IReadOnlyList<string>? causalesRechazo = null,
-        string? observacionRechazo = null)
+        string? observacionRechazo = null,
+        string? nombreTipoTramite = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(actors);
@@ -42,7 +43,8 @@ public static class TramiteCambioEstadoEmailProjector
             EstadoActual: estadoActual,
             EsTraspaso: esTraspaso,
             CausalesRechazo: causalesRechazo,
-            ObservacionRechazo: observacionRechazo);
+            ObservacionRechazo: observacionRechazo,
+            NombreTipoTramite: nombreTipoTramite?.Trim() ?? string.Empty);
     }
 
     private static ProcedureInstanceActor? FindActor(

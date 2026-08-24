@@ -268,7 +268,7 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
     {
         var enabled = await db.TenantOperationalPolicies.AsNoTracking()
             .Where(p => p.TenantId == tenantId)
-            .Select(p => (bool?)p.TramiteStateEmailsEnabled)
+            .Select(p => (bool?)p.TramiteApprovedEmailsEnabled)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
         return enabled ?? true;

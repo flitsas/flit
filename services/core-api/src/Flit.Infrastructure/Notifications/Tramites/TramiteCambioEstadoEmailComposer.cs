@@ -16,7 +16,8 @@ public sealed record TramiteCambioEstadoEmailModel(
     string EstadoActual,
     bool EsTraspaso,
     IReadOnlyList<string>? CausalesRechazo = null,
-    string? ObservacionRechazo = null);
+    string? ObservacionRechazo = null,
+    string NombreTipoTramite = "");
 
 /// <summary>
 /// Composer compartido de <c>tramites.aprobado</c> y <c>tramites.rechazado</c>:
@@ -27,6 +28,10 @@ public static class TramiteCambioEstadoEmailComposer
 {
     public const string TemplateIdAprobado = "tramites.aprobado";
     public const string TemplateIdRechazado = "tramites.rechazado";
+
+    public static bool RequiresProcedureType(string templateId) =>
+        string.Equals(templateId, TemplateIdAprobado, StringComparison.Ordinal)
+        || string.Equals(templateId, TemplateIdRechazado, StringComparison.Ordinal);
 
     private const string PrimaryBlue = "#2F6FED";
     private const string Ink = "#162244";
@@ -114,9 +119,7 @@ public static class TramiteCambioEstadoEmailComposer
             ? $"Estimados Señor/a <strong style=\"color:{PrimaryBlue}\">{Enc(model.VendedorNombre)}</strong> y Señor/a <strong style=\"color:{PrimaryBlue}\">{comprador}</strong>."
             : $"Estimado/a Señor/a <strong style=\"color:{PrimaryBlue}\">{comprador}</strong>.";
 
-        var introParte = model.EsTraspaso
-            ? $"el traspaso de propiedad del vehículo con placa <strong>{placa}</strong>"
-            : $"el trámite del vehículo con placa <strong>{placa}</strong>";
+        var introParte = ProcedureNounPhrase(model, placa, forRentingLead: false);
 
         var sb = new StringBuilder();
         sb.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"/></head>");
@@ -191,9 +194,7 @@ public static class TramiteCambioEstadoEmailComposer
         var supportEmail = Enc(RentingSupportEmail);
         var supportMailto = EncAttr($"mailto:{RentingSupportEmail}");
 
-        var procesoParte = model.EsTraspaso
-            ? "del traspaso de propiedad del vehículo"
-            : "del trámite del vehículo";
+        var procesoParte = ProcedureNounPhrase(model, placa, forRentingLead: true);
 
         var lead = approved
             ? $"¡Buenas Noticias! Queremos mantenerte informado/a sobre el estado actualizado {procesoParte} con placa <strong>{placa}</strong>"
@@ -263,6 +264,33 @@ public static class TramiteCambioEstadoEmailComposer
             $"<tr><td class=\"renting-footer-bg\" bgcolor=\"#ffffff\" style=\"padding:8px 24px 28px;background-color:#ffffff !important;\"><img src=\"{footerUrl}\" alt=\"Línea nacional y WhatsApp Renting Colombia\" width=\"592\" style=\"display:block;width:100%;max-width:592px;height:auto;border:0;margin:0 auto;background-color:#ffffff;\"/></td></tr>");
         sb.Append("</table></body></html>");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Copy del trámite: siempre «el trámite de …». El <c>name</c> del catálogo se interpola tal cual.
+    /// Sin nombre, fallback por <c>EsTraspaso</c>.
+    /// </summary>
+    private static string ProcedureNounPhrase(
+        TramiteCambioEstadoEmailModel model, string placaEncoded, bool forRentingLead)
+    {
+        if (!string.IsNullOrWhiteSpace(model.NombreTipoTramite))
+        {
+            var nombre = Enc(model.NombreTipoTramite.Trim());
+            return forRentingLead
+                ? $"del trámite de {nombre} del vehículo"
+                : $"el trámite de {nombre} del vehículo con placa <strong>{placaEncoded}</strong>";
+        }
+
+        if (forRentingLead)
+        {
+            return model.EsTraspaso
+                ? "del trámite de traspaso de propiedad del vehículo"
+                : "del trámite del vehículo";
+        }
+
+        return model.EsTraspaso
+            ? $"el trámite de traspaso de propiedad del vehículo con placa <strong>{placaEncoded}</strong>"
+            : $"el trámite del vehículo con placa <strong>{placaEncoded}</strong>";
     }
 
     private static string CombineAssetUrl(string assetsBaseUrl, string fileName)

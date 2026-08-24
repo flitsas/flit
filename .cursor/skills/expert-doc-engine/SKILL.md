@@ -14,15 +14,17 @@ El agente **expert-doc-engine** (ExpertDocEngine) es el dueño de esta skill. Ot
 
 ## Pre-flight
 
-1. Artefacto de casillas/observaciones: `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md` (obligatorio)
-2. PDF de la resolución: `docs/ot/resolutions/Resolución 20233040017145 de 2023 Ministerio de Transporte.pdf`
-3. Ejemplares: `docs/ot/fur/`
-4. Referencias de esta skill (`references/`)
-5. Mapper FLIT: `FurFieldMapper.MarkTramite` (casillas que **sí** se pintan hoy; contrastar con el artefacto)
+1. Artefacto de casillas/observaciones FUR: `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md` (obligatorio si el dictamen es FUR)
+2. Artefacto de objeto del mandato: `docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md` (obligatorio si el dictamen es mandato)
+3. PDF de la resolución: `docs/ot/resolutions/Resolución 20233040017145 de 2023 Ministerio de Transporte.pdf`
+4. Ejemplares FUR: `docs/ot/fur/` — ejemplares mandato: `docs/ot/mandato/`
+5. Referencias de esta skill (`references/`)
+6. Mapper FUR: `FurFieldMapper.MarkTramite` — compositor mandato: `MandatoObjetoComposer` (contrastar con el artefacto)
 
 ## Referencias
 
 - `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md` — **canónico**: numeral 3 en tres capas + literales de observaciones
+- `docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md` — **canónico**: objeto `{{tramite}}` en tres capas (válido para las 4 plantillas)
 - `references/resolucion-20233040017145.md` — mapa de artículos y reglas que FLIT usa a diario
 - `references/fur-diligenciamiento.md` — rejilla 1–18, ejemplares y contraste con el overlay
 

@@ -1,10 +1,12 @@
 using Flit.Admin.Application.Plataforma.Notificaciones;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Application.Companies.Settings;
+using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.Catalog;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
+using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Modules.Security.Domain.Auth;
@@ -74,7 +76,8 @@ internal sealed partial class NotificationTestSendAdminService(
     IOptions<NotificationEmailAssetsOptions> emailAssets,
     EmailTransportDescriptor transportDescriptor,
     TimeProvider timeProvider,
-    ILogger<NotificationTestSendAdminService> logger) : INotificationTestSendAdminService
+    ILogger<NotificationTestSendAdminService> logger,
+    IProcedureTypeCatalog procedureTypes) : INotificationTestSendAdminService
 {
     // Ventana de enfriamiento entre envíos de prueba (AC2). Decisión del PO del 2026-08-11: baja de
     // 5 minutos a 5 segundos. Sigue siendo global (una sola fila) y sigue sin ser configuración —
@@ -131,6 +134,11 @@ internal sealed partial class NotificationTestSendAdminService(
                 templateId: descriptor.Id,
                 channel: SettingsWire.ToWire(channel));
         }
+
+        var procedureTypeResult = await ResolveProcedureTypeAsync(descriptor.Id, request.ProcedureTypeId, ct)
+            .ConfigureAwait(false);
+        if (procedureTypeResult.Failure is not null)
+            return procedureTypeResult.Failure;
 
         var row = await GetRowAsync(ct).ConfigureAwait(false);
 
@@ -196,7 +204,7 @@ internal sealed partial class NotificationTestSendAdminService(
         try
         {
             (subject, html) = NotificationSampleRenderer.Render(
-                descriptor.Id, channel, emailAssets.Value.BaseUrl);
+                descriptor.Id, channel, emailAssets.Value.BaseUrl, procedureTypeResult.Overlay);
         }
         catch (Exception ex)
         {
@@ -265,8 +273,44 @@ internal sealed partial class NotificationTestSendAdminService(
             RecipientDiverted: sendResult.RecipientDiverted);
     }
 
+    private async Task<(NotificationTestSendResult? Failure, NotificationSampleProcedureType? Overlay)>
+        ResolveProcedureTypeAsync(string templateId, Guid? procedureTypeId, CancellationToken ct)
+    {
+        if (!TramiteCambioEstadoEmailComposer.RequiresProcedureType(templateId))
+            return (null, null);
+
+        if (procedureTypeId is null || procedureTypeId == Guid.Empty)
+        {
+            return (NotificationTestSendResult.Failure(
+                NotificationTestSendOutcome.InvalidProcedureTypeId,
+                "Selecciona un tipo de trámite activo para esta plantilla.",
+                templateId: templateId), null);
+        }
+
+        var item = await procedureTypes
+            .GetByIdForNotificationPreviewAsync(procedureTypeId.Value, ct)
+            .ConfigureAwait(false);
+        if (item is null)
+        {
+            return (NotificationTestSendResult.Failure(
+                NotificationTestSendOutcome.ProcedureTypeNotFound,
+                "El tipo de trámite no existe en el catálogo.",
+                templateId: templateId), null);
+        }
+
+        if (!item.IsActive)
+        {
+            return (NotificationTestSendResult.Failure(
+                NotificationTestSendOutcome.ProcedureTypeInactive,
+                "El tipo de trámite no está activo.",
+                templateId: templateId), null);
+        }
+
+        var esTraspaso = string.Equals(item.Family, "TRASPASO", StringComparison.OrdinalIgnoreCase);
+        return (null, new NotificationSampleProcedureType(item.Name, esTraspaso));
+    }
+
     /// <summary>
-    /// HU #11371 — remitente por canal: FlitSmtp lee <see cref="EmailSettings.DefaultSenderEmail"/> /
     /// <see cref="EmailSettings.DefaultSenderName"/>; TenantApi lee
     /// <see cref="RentingChannelOptions.SendEmailSenderEmail"/> /
     /// <see cref="RentingChannelOptions.SendEmailSenderUsername"/> — el mismo remitente que usa el

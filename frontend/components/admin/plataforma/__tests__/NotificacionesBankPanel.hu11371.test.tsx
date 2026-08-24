@@ -121,11 +121,11 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /ver en vivo/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /preview flit/i);
     await user.click(button);
 
     expect(await screen.findByText(/te invitaron a flit/i)).toBeInTheDocument();
-    expect(getNotificationSample).toHaveBeenCalledWith("security.invitation");
+    expect(getNotificationSample).toHaveBeenCalledWith("security.invitation", { channel: "FLIT_SMTP" });
     expect(sendNotificationTest).not.toHaveBeenCalled();
   });
 
@@ -139,7 +139,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /ver en vivo/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /preview flit/i);
     await user.click(button);
 
     const iframe = await screen.findByTitle(/vista previa aislada de invitación a la plataforma/i);
@@ -161,7 +161,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /ver en vivo/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /preview flit/i);
     await user.click(button);
 
     expect(await screen.findByTestId("ui-error")).toBeInTheDocument();
@@ -185,7 +185,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     const result = await screen.findByTestId("notificaciones-enviar-prueba-resultado");
@@ -209,7 +209,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     expect(
@@ -229,7 +229,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     const errorBlock = await screen.findByTestId("notificaciones-enviar-prueba-error");
@@ -249,7 +249,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     const errorBlock = await screen.findByTestId("notificaciones-enviar-prueba-error");
@@ -272,7 +272,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     const result = await screen.findByTestId("notificaciones-enviar-prueba-resultado");
@@ -286,7 +286,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     expect(await screen.findByTestId("notificaciones-enviar-prueba-sin-buzon")).toBeInTheDocument();
@@ -368,7 +368,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     const errorBlock = await screen.findByTestId("notificaciones-enviar-prueba-error");
@@ -395,7 +395,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     const notice = await screen.findByTestId("notificaciones-enviar-prueba-desvio");
@@ -420,7 +420,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     await screen.findByTestId("notificaciones-enviar-prueba-resultado");
@@ -444,7 +444,7 @@ describe("NotificacionesBankPanel — HU #11371", () => {
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
-    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar flit/i);
     await user.click(button);
 
     const result = await screen.findByTestId("notificaciones-enviar-prueba-resultado");

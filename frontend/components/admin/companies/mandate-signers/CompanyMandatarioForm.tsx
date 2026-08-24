@@ -31,7 +31,6 @@ export function CompanyMandatarioForm({
   editing,
   onCancel,
   onSubmit,
-  onIdentityChanged,
 }: {
   tenantId: string;
   offices: CompanyTransitOfficeOption[];
@@ -40,8 +39,6 @@ export function CompanyMandatarioForm({
   editing: MandateSigner | null;
   onCancel: () => void;
   onSubmit: (input: CompanyMandateSignerInput) => Promise<MandateSignerSaved>;
-  /** Refresca el listado tras una acción de identidad, que cambia el estado del mandatario. */
-  onIdentityChanged?: () => void;
 }) {
   const [fullName, setFullName] = useState(editing?.fullName ?? "");
   const [documentType, setDocumentType] = useState(editing?.documentType ?? "CC");
@@ -233,20 +230,13 @@ export function CompanyMandatarioForm({
               className={inputClass}
             />
             <p className="mt-1 text-[11px] leading-tight opacity-70">
-              Con correo se le envía la validación de identidad al registrarlo. Si la persona ya tiene
-              una vigente, se reutiliza y no se le vuelve a escribir.
+              El correo queda registrado como dato de contacto. La validación de identidad se origina
+              siempre desde el módulo Identidad, no desde este formulario (ADR-0050).
             </p>
           </div>
 
-          {/* Solo al EDITAR: en el alta el mandatario aún no tiene id contra el que actuar, y el envío
-              inicial ya lo dispara el propio alta cuando hay correo. */}
-          {editing && (
-            <MandatarioIdentidadBlock
-              tenantId={tenantId}
-              signer={editing}
-              onRefresh={() => onIdentityChanged?.()}
-            />
-          )}
+          {/* Solo al EDITAR: en el alta el mandatario aún no tiene id contra el que consultar. */}
+          {editing && <MandatarioIdentidadBlock signer={editing} />}
 
           {/* Igual que en el panel del representante legal, pero sin escrituras: el mandatario no las
               necesita. Sirve para elegir su firma o capturarla ahí mismo si aún no tiene. */}

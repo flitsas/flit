@@ -172,15 +172,6 @@ export interface LegalRepresentativeSaved {
   signals: string[];
 }
 
-/** Respuesta del envío de validación de identidad (POST .../identity/send, HU #10907). */
-export interface IdentityValidationSent {
-  id: string;
-  status: string;
-  captureUrl?: string | null;
-  validUntil?: string | null;
-  reused: boolean;
-}
-
 function base(tenantId: string): string {
   return `/api/v1/admin/companies/${tenantId}/legal-representatives`;
 }
@@ -244,42 +235,7 @@ export function fetchAssignableProcedureTypes(
   return apiFetch<AssignableProcedureType[]>(`${base(tenantId)}/procedure-types`, { signal });
 }
 
-/**
- * POST "/{id}/identity/send" — inicia la validación de identidad por correo (HU #10907). Lanza
- * ApiValidationError en 422 (`email_requerido`) y ApiError en 502/503 (proveedor no disponible).
- */
-export function sendLegalRepresentativeIdentity(
-  tenantId: string,
-  id: string,
-): Promise<IdentityValidationSent> {
-  return apiFetch<IdentityValidationSent>(`${base(tenantId)}/${id}/identity/send`, {
-    method: "POST",
-  });
-}
-
-/**
- * POST "/{id}/identity/resend" — RENUEVA la validación de identidad (HU #11059). El backend respeta la
- * vigencia: con una aprobada y vigente devuelve `reused: true` sin reenviar nada; en cualquier otro
- * caso (vencida, rechazada, expirada o en curso) inicia una nueva. Por eso la UI solo ofrece renovar
- * cuando NO está vigente.
- */
-export function resendLegalRepresentativeIdentity(
-  tenantId: string,
-  id: string,
-): Promise<IdentityValidationSent> {
-  return apiFetch<IdentityValidationSent>(`${base(tenantId)}/${id}/identity/resend`, {
-    method: "POST",
-  });
-}
-
-/**
- * POST "/{id}/identity/link" — vincula una validación de identidad ya aprobada al representante
- * (HU #11180 AC6). Idempotente: si ya está vinculada devuelve la misma respuesta. Devuelve 409 con
- * código `sin_identidad_vigente` cuando no hay una validación aprobada y vigente que vincular.
- */
-export function linkLegalRepresentativeIdentity(
-  tenantId: string,
-  id: string,
-): Promise<void> {
-  return apiFetch<void>(`${base(tenantId)}/${id}/identity/link`, { method: "POST" });
-}
+// HU #11755/#11758 (ADR-0050) — `resendLegalRepresentativeIdentity`, `linkLegalRepresentativeIdentity`
+// y `sendLegalRepresentativeIdentity` se RETIRARON: el área admin pasa a ser solo consulta y las tres
+// rutas responden 410 Gone. El aviso "quedó guardado sin firma ni validación" de
+// `LegalRepresentativesTab.tsx` ahora remite al módulo Identidad en vez de disparar el correo.

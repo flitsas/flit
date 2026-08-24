@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using QuestPDF;
 using QuestPDF.Fluent;
@@ -34,10 +35,14 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
         // Antes salía a nombre del radicador (el comprador), declarando por la parte equivocada.
         var parte = data.Propietario;
         var esJuridica = parte?.EsJuridica ?? false;
-        // ADR-0050 — el rótulo legal es el NOMBRE del tipo; el literal heredado queda de respaldo.
-        var tramite = !string.IsNullOrWhiteSpace(data.TipoNombre)
-            ? data.TipoNombre!.Trim().ToUpperInvariant()
-            : data.RequiereVendedor ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
+        // ADR-0050 — el rótulo legal es el NOMBRE del tipo. Se resuelve con el mismo componente que
+        // el mandato: dos documentos del mismo expediente no pueden nombrar el trámite distinto.
+        var tramite = MandatoTramiteIdentity.NombreObjeto(
+            data.ProcedureTypeName,
+            data.ProcedureTypeCode,
+            data.ProcedureFamily,
+            data.TipologiaCodigo,
+            data.Modalidad);
 
         // HU #11016 — sin ciudad legible el encabezado es solo la fecha: antes se imprimía el código
         // DIVIPOLA del organismo («25286, 28 de julio de 2026»), que parecía pegado a la fecha.

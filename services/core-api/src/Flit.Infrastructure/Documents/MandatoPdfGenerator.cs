@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
-using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using QuestPDF;
 using QuestPDF.Fluent;
@@ -88,18 +87,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         var esJuridica = parte?.EsJuridica ?? false;
         var variante = MandatoTemplateResolver.Resolve(data.TemplateCode);
 
-        // ADR-0050 — lo declara el tipo, no un código concreto: un traspaso unilateral o una
-        // transferencia de dominio también tienen parte vendedora.
-        var esTraspaso = tramite.RequiereVendedor;
-        // HU #11206 — el objeto del contrato incluye las transformaciones del trámite. Se compone aquí,
-        // una sola vez, para que todas las familias de plantilla lo redacten idéntico (AC4). Sin
-        // transformaciones queda exactamente el texto de siempre (AC3).
-        // HU #11627 — también nombra la prenda si el trámite la tiene (agregado ProcedureInstancePrenda,
-        // ya resuelto en FurDocumentData.PrendaMarking; no viaja por field_values a propósito).
-        var nombreTramite = MandatoObjetoComposer.Componer(
-            RotuloTramite(tramite),
-            data.Transformaciones,
-            tramite.PrendaMarking);
+        // Objeto {{tramite}}: tres capas (docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md).
+        var nombreTramite = ComponerObjeto(data);
 
         var placa = Val(tramite.Placa, "___");
         var ot = Val(tramite.Organismo.Nombre, "___");
@@ -231,6 +220,24 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         return outMs.ToArray();
     }
 
+    internal static string ComponerObjeto(MandatoData data)
+    {
+        var tramite = data.Tramite;
+        var code = string.IsNullOrWhiteSpace(tramite.ProcedureTypeCode)
+            ? tramite.TipologiaCodigo
+            : tramite.ProcedureTypeCode;
+        return MandatoObjetoComposer.Componer(
+            MandatoTramiteIdentity.NombreObjeto(
+                tramite.ProcedureTypeName,
+                tramite.ProcedureTypeCode,
+                tramite.ProcedureFamily,
+                tramite.TipologiaCodigo,
+                tramite.Modalidad),
+            data.Transformaciones,
+            tramite.PrendaMarking,
+            code);
+    }
+
     /// <summary>
     /// Sustituye los placeholders <c>{{...}}</c> del cuerpo editado por el OT, línea por línea, marcando
     /// en negrita el VALOR sustituido (no el resto del texto libre del tenant).
@@ -247,13 +254,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
         var parte = tramite.Mandante;
-        // ADR-0050 — lo declara el tipo, no un código concreto: un traspaso unilateral o una
-        // transferencia de dominio también tienen parte vendedora.
-        var esTraspaso = tramite.RequiereVendedor;
-        var nombreTramite = MandatoObjetoComposer.Componer(
-            RotuloTramite(tramite),
-            data.Transformaciones,
-            tramite.PrendaMarking);
+        var nombreTramite = ComponerObjeto(data);
         var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
 
         var reemplazos = new (string Token, string Valor)[]
@@ -869,16 +870,4 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         string.IsNullOrWhiteSpace(reference)
             ? "sin_ref"
             : new string(reference.Trim().Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
-
-    /// <summary>
-    /// Rótulo legal del trámite en el mandato: el NOMBRE del tipo tal como está en el catálogo.
-    /// <para>Antes se elegía entre dos literales y todo lo que no fuera traspaso se firmaba como
-    /// "MATRÍCULA INICIAL", así que el mandato de un blindaje o de un levantamiento de prenda
-    /// nombraba un trámite distinto del que se estaba radicando. Se conserva el rótulo heredado como
-    /// respaldo para los documentos que aún no traen el nombre.</para>
-    /// </summary>
-    internal static string RotuloTramite(FurDocumentData tramite) =>
-        !string.IsNullOrWhiteSpace(tramite.TipoNombre)
-            ? tramite.TipoNombre!.Trim().ToUpperInvariant()
-            : tramite.RequiereVendedor ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
 }

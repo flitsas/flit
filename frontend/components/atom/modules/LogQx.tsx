@@ -1,165 +1,188 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Copy, Check, Search, Clock, Cpu, FileText } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { getToken } from "@/lib/api/client";
+import {
+  BadgeCheck,
+  Ban,
+  CheckCircle2,
+  ChevronRight,
+  CircleDashed,
+  Clock,
+  FileCheck2,
+  RefreshCw,
+  Search,
+  X,
+  XCircle,
+} from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
-import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
-import { Pagination } from "@/components/atom/Pagination";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import { PageNav } from "@/components/atom/PageNav";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
-import { fetchLogQx, type LogQxEntry, type LogQxEvent, type LogQxStatus } from "@/lib/api/admin-log-qx";
+import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
+import {
+  fetchLogQxBandeja,
+  type LogQxBandejaEntry,
+  type LogQxBandejaEstado,
+  type LogQxBandejaParams,
+} from "@/lib/api/admin-log-qx";
+import {
+  ESTADOS_BANDEJA,
+  ESTADO_BANDEJA,
+  esperaEsAlta,
+  formatEspera,
+  formatFecha,
+  Secretaria,
+  secretaria,
+} from "@/lib/logqx/labels";
 
 /**
- * Módulo "LOG QX" (HU #10795, Feature #10792). Pantalla de soporte/administración montada
- * DENTRO del Shell SPA (`?m=log-qx`), gateada por el permiso `logqx.read` (o SuperAdmin) en
- * el dock y en el render de `app/page.tsx`. Consume GET /api/v1/admin/log-qx (HU #10793 +
- * gate/enmascarado HU #10794): busca radicaciones Quipux por placa, id de trámite o radicado
- * y muestra la línea de tiempo de cada una con el detalle técnico expandible (visor JSON +
- * copia). 4 estados de UI (cargando/error/vacío/lleno) vía `UiStateBoundary` y
- * "sin payload disponible" para eventos históricos sin `detail`.
+ * Módulo "LOG QX" — bandeja (HU #11788, Feature #11784). Reemplaza la pantalla que exigía una
+ * búsqueda exacta por uno de tres ejes excluyentes para mostrar cualquier dato.
  *
- * HU #10796 (correlación): si se monta con `initialInstanceId` (deep-link
- * `/?m=log-qx&instanceId=…` desde el detalle de un trámite), auto-aplica la búsqueda por ese
- * trámite al montar. Cada radicación enlaza de vuelta a su trámite (`/tramites/{id}`).
+ * Tres cambios de fondo respecto de la anterior:
+ *  1. CARGA CON DATOS. No hay que buscar nada: entra y ve el periodo por defecto.
+ *  2. UNA FILA POR TRÁMITE, no por radicación (ADR-0051, D1). Un trámite con tres intentos aparece
+ *     una vez, con su contador de intentos.
+ *  3. INCLUYE LOS "SIN RADICAR": trámites elegibles que nunca se encolaron. Es el caso más caro
+ *     para soporte y hasta ahora era invisible, porque sin radicación no había fila que listar.
+ *
+ * El detalle vive en pantalla propia (`/log-qx/{submissionId}`); aquí solo el vistazo expandible,
+ * que resuelve el caso frecuente sin navegar ni perder los filtros.
  */
 
-/** Eje de búsqueda: los tres son excluyentes (se consulta por el elegido). */
-type SearchAxis = "placa" | "instanceId" | "radicado";
+const PAGE_SIZE = 25;
 
-const AXIS_META: Record<SearchAxis, { label: string; placeholder: string }> = {
-  placa: { label: "Placa", placeholder: "Ej. ABC123" },
-  instanceId: { label: "Trámite (ID)", placeholder: "UUID del trámite" },
-  radicado: { label: "Código QX", placeholder: "Ej. 81 (registro) · 2/3 (estado)" },
+/** Filtros que viajan en el estado y en el query string, para restituirlos al volver. */
+interface Filtros {
+  desde: string;
+  hasta: string;
+  placa: string;
+  referencia: string;
+  documento: string;
+  estado: LogQxBandejaEstado | "";
+  /**
+   * Acotado a un trámite concreto. No tiene campo en el formulario: llega por el deep-link
+   * `?m=log-qx&instanceId=…` desde el detalle del trámite (HU #10796). Se muestra como un chip
+   * retirable para que quede claro POR QUÉ la lista está acotada.
+   */
+  instanceId: string;
+}
+
+const FILTROS_VACIOS: Filtros = {
+  desde: "",
+  hasta: "",
+  placa: "",
+  referencia: "",
+  documento: "",
+  estado: "",
+  instanceId: "",
 };
 
 /**
- * El eje "Trámite (ID)" busca por el UUID del trámite (el backend lo enlaza como `Guid`). Un valor
- * que no es UUID hace fallar el binding con 400: se valida en el cliente para dar un aviso claro en
- * vez de un error crudo (p. ej. escribir un número teniendo seleccionado "Trámite (ID)").
+ * Restituye los filtros que viajan en el query string al volver de la trazabilidad. Devuelve null
+ * si la URL no trae ninguno, para que la bandeja caiga en su ventana por defecto.
  */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function leerFiltrosDeLaUrl(): Filtros | null {
+  if (typeof window === "undefined") return null;
+  const qs = new URLSearchParams(window.location.search);
 
-/** Tono del chip de estado por estado final de la radicación (tones HU #10844). */
-const STATUS_STYLE: Record<LogQxStatus, { label: string; tone: StatusTone }> = {
-  pendiente: { label: "Pendiente", tone: "info" },
-  registrado: { label: "Registrado", tone: "success" },
-  aprobado: { label: "Aprobado", tone: "success" },
-  rechazado: { label: "Rechazado", tone: "danger" },
-  fallido: { label: "Fallido", tone: "danger" },
-};
+  const estadoUrl = qs.get("estado") ?? "";
+  const filtros: Filtros = {
+    desde: qs.get("desde") ?? "",
+    hasta: qs.get("hasta") ?? "",
+    placa: qs.get("placa") ?? "",
+    referencia: qs.get("referencia") ?? "",
+    documento: qs.get("documento") ?? "",
+    // Un estado desconocido se descarta en vez de mandarse al backend, que respondería vacío.
+    estado: ESTADOS_BANDEJA.includes(estadoUrl as LogQxBandejaEstado)
+      ? (estadoUrl as LogQxBandejaEstado)
+      : "",
+    instanceId: qs.get("instanceId") ?? "",
+  };
 
-/** Etiquetas legibles de las etapas conocidas; las desconocidas se muestran tal cual. */
-const STAGE_LABEL: Record<string, string> = {
-  claimed: "Tomado de la cola",
-  consolidado_generado: "Consolidado generado",
-  s3_subido: "Documento subido",
-  registro_enviado: "Registro enviado",
-  registro_respuesta: "Respuesta de registro",
-  registro_error: "Error de registro",
-  consulta_enviada: "Consulta enviada",
-  consulta_respuesta: "Respuesta de consulta",
-  consulta_error: "Error de consulta",
-  aprobado: "Aprobado por el OT",
-  rechazado: "Rechazado por el OT",
-  dead_letter: "Enviado a dead-letter",
-  reintento_manual: "Reintento manual",
-  cancelado_manual: "Cancelado manualmente",
-};
-
-const OUTCOME_STYLE: Record<string, { label: string; color: string }> = {
-  ok: { label: "OK", color: "#5B8A1F" },
-  error_transitorio: { label: "Error transitorio", color: "#FF4E00" },
-  error_definitivo: { label: "Error definitivo", color: "#FF4E00" },
-  omitido: { label: "Omitido", color: "#8A94A6" },
-};
-
-const DEFAULT_PAGE_SIZE = 20;
-
-function formatFecha(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return Object.values(filtros).some(Boolean) ? filtros : null;
 }
 
-function formatDuration(ms: number | null): string | null {
-  if (ms == null) return null;
-  return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${ms} ms`;
+/** «Mostrando 26–50 de 300»; la bandeja pagina en servidor, así que el rango se calcula. */
+function resumenPagina(page: number, pageSize: number, total: number): string {
+  if (total === 0) return "Mostrando 0 de 0";
+  const desde = (page - 1) * pageSize + 1;
+  const hasta = Math.min(page * pageSize, total);
+  return `Mostrando ${desde}–${hasta} de ${total}`;
 }
 
-/**
- * Estado del trámite que devuelve Quipux en `estadoTramite.codigo`: 1 = no hay cambios (sigue en
- * trámite), 2 = aprobado, 3 = rechazado. Se muestra con su significado para que soporte no vea un
- * número pelado. Solo 2 y 3 son terminales; el 1 aparece en el detail de eventos de sondeo mientras
- * el organismo aún no resuelve. Otros códigos no documentados se muestran tal cual; ausente = "—".
- */
-function formatEstadoTramite(code: number | null | undefined): string {
-  if (code == null) return "—";
-  if (code === 1) return "1 — Sin cambios";
-  if (code === 2) return "2 — Aprobado";
-  if (code === 3) return "3 — Rechazado";
-  return code.toString();
+function hoyMenos(dias: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - dias);
+  return d.toISOString().slice(0, 10);
 }
 
 export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}) {
-  // Controles de búsqueda (UI) y la búsqueda efectivamente aplicada al backend.
-  const [axis, setAxis] = useState<SearchAxis>("placa");
-  const [text, setText] = useState("");
-  const [applied, setApplied] = useState<{ axis: SearchAxis; text: string } | null>(null);
+  const router = useRouter();
 
-  const [entries, setEntries] = useState<LogQxEntry[] | null>(null);
+  // Con deep-link se abre SIN rango de fechas: quien llega desde un trámite quiere ver ese trámite,
+  // y la ventana por defecto podría dejarlo fuera si es antiguo.
+  const [filtros, setFiltros] = useState<Filtros>(() => {
+    if (initialInstanceId) return { ...FILTROS_VACIOS, instanceId: initialInstanceId };
+
+    // Al volver de la trazabilidad, los filtros llegan en el query string (los arrastra el enlace
+    // «Volver a LOG QX»). Sin esto solo se leía `instanceId` y la bandeja se rearmaba con el rango
+    // por defecto: el enlace prometía «filtros conservados» y no conservaba ninguno.
+    const guardados = leerFiltrosDeLaUrl();
+    if (guardados) return guardados;
+
+    return {
+      ...FILTROS_VACIOS,
+      desde: hoyMenos(30),
+      hasta: new Date().toISOString().slice(0, 10),
+    };
+  });
+  const [aplicados, setAplicados] = useState<Filtros>(filtros);
+
+  // ¿SuperAdmin? Decide si al abrir un trámite se manda el tenant de la fila (?t=). El LOG QX
+  // lista trámites de CUALQUIER empresa, así que sin ese parámetro el detalle acaba pidiendo un
+  // `X-Tenant-Id` que no tiene. Se resuelve del JWT tras montar, igual que en el listado.
+  const [esAdmin, setEsAdmin] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
+
+  const [entries, setEntries] = useState<LogQxBandejaEntry[] | null>(null);
+  const [contadores, setContadores] = useState<Record<string, number>>({});
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
-
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [abierta, setAbierta] = useState<string | null>(null);
 
   // Guard anti-race: solo se aplica el resultado de la petición más reciente.
   const reqIdRef = useRef(0);
 
-  // HU #10796 (AC1) — deep-link: si llega `initialInstanceId` (desde el enlace "Ver LOG QX" del
-  // detalle de un trámite), auto-aplica la búsqueda por ese trámite UNA sola vez al montar. El
-  // efecto de fetch de abajo se dispara solo con `setApplied`. `seededRef` evita re-aplicar en
-  // el doble-mount de Strict Mode o en re-renders si la prop cambia de referencia.
-  const seededRef = useRef(false);
-  useEffect(() => {
-    if (seededRef.current || !initialInstanceId) return;
-    seededRef.current = true;
-    setAxis("instanceId");
-    setText(initialInstanceId);
-    setApplied({ axis: "instanceId", text: initialInstanceId });
-  }, [initialInstanceId]);
-
-  const load = useCallback(async (search: { axis: SearchAxis; text: string }, targetPage: number) => {
-    const value = search.text.trim() || undefined;
-
-    // Guard: el eje "Trámite (ID)" requiere un UUID. Sin esto, un valor no-UUID (p. ej. "3") revienta
-    // el binding Guid del backend con 400. Se avisa en el cliente y no se dispara la petición.
-    if (search.axis === "instanceId" && value && !UUID_RE.test(value)) {
-      reqIdRef.current++; // invalida cualquier respuesta en vuelo
-      setEntries(null);
-      setTotal(0);
-      setFetching(false);
-      setError(
-        'El identificador de trámite no tiene un formato válido. '
-          + 'Si buscas por número, cambia el eje a "Código QX".',
-      );
-      return;
-    }
-
+  const load = useCallback(async (f: Filtros, targetPage: number) => {
     const reqId = ++reqIdRef.current;
     setFetching(true);
     try {
-      const res = await fetchLogQx({
-        placa: search.axis === "placa" ? value : undefined,
-        instanceId: search.axis === "instanceId" ? value : undefined,
-        radicado: search.axis === "radicado" ? value : undefined,
+      const params: LogQxBandejaParams = {
+        desde: f.desde ? new Date(`${f.desde}T00:00:00`).toISOString() : undefined,
+        hasta: f.hasta ? new Date(`${f.hasta}T23:59:59`).toISOString() : undefined,
+        placa: f.placa || undefined,
+        referencia: f.referencia || undefined,
+        documento: f.documento || undefined,
+        estado: f.estado || undefined,
+        instanceId: f.instanceId || undefined,
         page: targetPage,
-        pageSize: DEFAULT_PAGE_SIZE,
-      });
-      if (reqId !== reqIdRef.current) return; // respuesta obsoleta
+        pageSize: PAGE_SIZE,
+      };
+      const res = await fetchLogQxBandeja(params);
+      if (reqId !== reqIdRef.current) return;
       setEntries(res.data);
       setTotal(res.totalCount);
+      setContadores(Object.fromEntries(res.contadores.map((c) => [c.estado, c.total])));
       setError(null);
     } catch (err) {
       if (reqId !== reqIdRef.current) return;
@@ -170,115 +193,296 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
     }
   }, []);
 
-  // Refetch cuando cambia la búsqueda aplicada o la página. Sincroniza con el backend
-  // (fuente externa), no deriva estado ya disponible en render (mismo patrón que Auditoria).
+  // Carga inicial y refetch. Sincroniza con el backend (fuente externa); no deriva estado ya
+  // disponible en render. Mismo patrón que Auditoria.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (applied) void load(applied, page);
-  }, [applied, page, load]);
+    void load(aplicados, page);
+  }, [aplicados, page, load]);
+
+  const aplicar = useCallback(
+    (f: Filtros) => {
+      setPage(1);
+      setAbierta(null);
+      setAplicados(f);
+    },
+    [],
+  );
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      setPage(1);
-      setApplied({ axis, text });
+      aplicar(filtros);
     },
-    [axis, text],
+    [aplicar, filtros],
   );
 
-  const handleRetry = useCallback(() => {
-    if (applied) void load(applied, page);
-  }, [applied, page, load]);
+  const limpiar = useCallback(() => {
+    const base = { ...FILTROS_VACIOS, desde: hoyMenos(30), hasta: new Date().toISOString().slice(0, 10) };
+    setFiltros(base);
+    aplicar(base);
+  }, [aplicar]);
 
-  // 4 estados de UI. Antes de la primera búsqueda: prompt inicial (empty con guía).
-  const notSearchedYet = applied === null;
-  const isEmpty = entries !== null && entries.length === 0;
-  const initialLoadFailed = error !== null && entries === null;
+  /** El contador actúa como filtro rápido; volver a pulsarlo lo retira. */
+  const alternarEstado = useCallback(
+    (estado: LogQxBandejaEstado) => {
+      const siguiente: Filtros = {
+        ...filtros,
+        estado: aplicados.estado === estado ? "" : estado,
+      };
+      setFiltros(siguiente);
+      aplicar(siguiente);
+    },
+    [aplicar, aplicados.estado, filtros],
+  );
 
-  const status: "loading" | "error" | "empty" | "ready" = fetching && entries === null
-    ? "loading"
-    : initialLoadFailed
-      ? "error"
-      : notSearchedYet || isEmpty
-        ? "empty"
-        : "ready";
+  const abrirTrazabilidad = useCallback(
+    (entry: LogQxBandejaEntry) => {
+      if (!entry.submissionId) return;
+      const qs = new URLSearchParams();
+      Object.entries(aplicados).forEach(([k, v]) => {
+        if (v) qs.set(k, String(v));
+      });
+      if (page > 1) qs.set("page", String(page));
+      // Los filtros viajan en la URL para poder restituirlos al volver de la trazabilidad.
+      router.push(`/log-qx/${entry.submissionId}?${qs.toString()}`);
+    },
+    [aplicados, page, router],
+  );
+
+  const status: "loading" | "error" | "empty" | "ready" =
+    fetching && entries === null
+      ? "loading"
+      : error !== null && entries === null
+        ? "error"
+        : entries !== null && entries.length === 0
+          ? "empty"
+          : "ready";
+
+  const hayFiltros = useMemo(
+    () =>
+      Boolean(
+        aplicados.placa || aplicados.referencia || aplicados.documento
+          || aplicados.estado || aplicados.instanceId,
+      ),
+    [aplicados],
+  );
+
+  const quitarTramite = useCallback(() => {
+    const siguiente: Filtros = {
+      ...filtros,
+      instanceId: "",
+      desde: filtros.desde || hoyMenos(30),
+      hasta: filtros.hasta || new Date().toISOString().slice(0, 10),
+    };
+    setFiltros(siguiente);
+    aplicar(siguiente);
+  }, [aplicar, filtros]);
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
         title="LOG QX"
-        subtitle="Trazabilidad de punta a punta de la integración Quipux: busca por placa, trámite o código QX y consulta la línea de tiempo de la radicación con su detalle técnico."
+        subtitle="Trámites con integración Quipux. Filtra por fecha, placa, documento o estado, y abre la trazabilidad completa del que necesites."
       />
+
+      {aplicados.instanceId && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.07] px-3 py-2 text-xs">
+          <span>
+            Mostrando solo el trámite{" "}
+            <span className="font-mono">{aplicados.instanceId}</span>
+          </span>
+          <button
+            type="button"
+            onClick={quitarTramite}
+            className="inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 px-2 py-0.5 font-medium text-[#557EFF] hover:bg-[#557EFF]/10"
+          >
+            <X className="h-3 w-3" aria-hidden="true" /> Ver todos
+          </button>
+        </div>
+      )}
+
+      {/* Tira de contadores por estado, con la misma presentación que los KPIs de Trámites
+          (`EstadoFunnel`): una tarjeta única dividida en columnas, con icono en pastilla del tono
+          del estado, etiqueta y conteo. Antes eran siete cajas grises indistinguibles entre sí. */}
+      <div
+        role="group"
+        aria-label="Contadores por estado"
+        className="grid shrink-0 grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+      >
+        {ESTADOS_BANDEJA.map((estado) => {
+          const meta = ESTADO_BANDEJA[estado];
+          const Icon = ESTADO_ICON[estado];
+          const activo = aplicados.estado === estado;
+          const total = contadores[estado] ?? 0;
+          return (
+            <button
+              key={estado}
+              type="button"
+              aria-label={`${meta.label}: ${total} trámite${total === 1 ? "" : "s"}`}
+              aria-pressed={activo}
+              onClick={() => alternarEstado(estado)}
+              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+              style={activo ? { background: meta.style.bg } : undefined}
+            >
+              {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
+              <span
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                style={{ background: meta.style.bg }}
+              >
+                <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
+              </span>
+              <span className="max-w-full truncate text-xs font-medium text-[#162744]/70 dark:text-white/70">
+                {meta.label}
+              </span>
+              <span
+                className="text-xl font-bold leading-none tabular-nums text-[#162744] dark:text-white"
+                aria-hidden="true"
+              >
+                {total}
+              </span>
+              {/* El filtro activo no depende solo del fondo. */}
+              <span
+                className="h-0.5 w-6 rounded-full"
+                style={{ background: activo ? meta.style.color : "transparent" }}
+                aria-hidden="true"
+              />
+            </button>
+          );
+        })}
+      </div>
 
       <form
         onSubmit={handleSubmit}
-        className="flex flex-wrap items-end gap-2 shrink-0"
+        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-[#DFE5ED] dark:border-white/10 bg-white dark:bg-[#0B0F14] p-3"
         role="search"
-        aria-label="Búsqueda del LOG QX"
+        aria-label="Filtros del LOG QX"
       >
-        <label className="flex flex-col gap-1 text-[11px]">
-          <span className="opacity-60">Buscar por</span>
-          <select
-            value={axis}
-            onChange={(e) => setAxis(e.target.value as SearchAxis)}
-            aria-label="Eje de búsqueda"
-            className="rounded-lg border bg-white px-2 py-2 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
-          >
-            {(Object.keys(AXIS_META) as SearchAxis[]).map((k) => (
-              <option key={k} value={k}>
-                {AXIS_META[k].label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] flex-1 min-w-[200px]">
-          <span className="opacity-60">{AXIS_META[axis].label}</span>
+        <Campo label="Desde" htmlFor="lq-desde">
           <input
-            type="text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={AXIS_META[axis].placeholder}
-            aria-label={`Valor de búsqueda: ${AXIS_META[axis].label}`}
-            className="rounded-lg border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
+            id="lq-desde"
+            type="date"
+            value={filtros.desde}
+            onChange={(e) => setFiltros({ ...filtros, desde: e.target.value })}
+            className={inputCls}
           />
-        </label>
+        </Campo>
+        <Campo label="Hasta" htmlFor="lq-hasta">
+          <input
+            id="lq-hasta"
+            type="date"
+            value={filtros.hasta}
+            onChange={(e) => setFiltros({ ...filtros, hasta: e.target.value })}
+            className={inputCls}
+          />
+        </Campo>
+        <Campo label="Placa" htmlFor="lq-placa">
+          <input
+            id="lq-placa"
+            type="text"
+            placeholder="ABC123"
+            value={filtros.placa}
+            onChange={(e) => setFiltros({ ...filtros, placa: e.target.value })}
+            className={`${inputCls} w-[110px]`}
+          />
+        </Campo>
+        <Campo label="Trámite" htmlFor="lq-ref">
+          <input
+            id="lq-ref"
+            type="text"
+            placeholder="TRM-2026-…"
+            value={filtros.referencia}
+            onChange={(e) => setFiltros({ ...filtros, referencia: e.target.value })}
+            className={`${inputCls} w-[150px]`}
+          />
+        </Campo>
+        <Campo label="Documento QX" htmlFor="lq-doc">
+          <input
+            id="lq-doc"
+            type="text"
+            placeholder="placa o VIN"
+            value={filtros.documento}
+            onChange={(e) => setFiltros({ ...filtros, documento: e.target.value })}
+            className={`${inputCls} w-[150px]`}
+          />
+        </Campo>
+        <span className="flex-1" />
+        {(hayFiltros || fetching) && (
+          <button type="button" onClick={limpiar} className={ghostCls}>
+            <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+          </button>
+        )}
         <button
           type="submit"
           disabled={fetching}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-          style={{ background: "#557EFF" }}
+          className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ background: WIZARD_CTA_GRADIENT }}
         >
-          <Search className="h-3.5 w-3.5" /> Buscar
+          <Search className="h-3.5 w-3.5" aria-hidden="true" /> Aplicar
         </button>
       </form>
 
       <UiStateBoundary
         status={status}
-        skeletonRows={5}
+        skeletonRows={6}
         errorMessage={error ?? "No se pudo cargar el LOG QX."}
-        onRetry={handleRetry}
-        emptyMessage={
-          notSearchedYet
-            ? "Ingresa una placa, un id de trámite o un código QX y presiona Buscar para consultar el LOG QX."
-            : "Ninguna radicación Quipux coincide con la búsqueda. Verifica el valor o cambia el eje de búsqueda."
-        }
+        onRetry={() => void load(aplicados, page)}
+        emptyMessage="Ningún trámite con integración Quipux coincide con los filtros. Amplía el rango de fechas o quita algún filtro."
       >
         {entries && entries.length > 0 && (
           <>
-            <ul className="space-y-3 shrink-0" aria-label="Radicaciones del LOG QX">
-              {entries.map((entry) => (
-                <LogQxEntryCard key={entry.id} entry={entry} />
-              ))}
-            </ul>
-            {total > DEFAULT_PAGE_SIZE && (
-              <Pagination
-                page={page}
-                pageSize={DEFAULT_PAGE_SIZE}
-                totalCount={total}
-                onPageChange={(p) => setPage(Math.max(1, p))}
-                className="mt-0 justify-end"
-              />
-            )}
+            {/* Tabla en el patrón del resto de la consola (companies / trámites): cabecera en
+                pastilla #DFE5ED y cada fila como tarjeta blanca separada, no una rejilla de
+                bordes. */}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1040px] border-separate border-spacing-y-2 text-xs">
+                <thead>
+                  <tr
+                    className="text-left text-[10px] font-semibold uppercase"
+                    style={{ color: "#162744" }}
+                  >
+                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: "#DFE5ED", width: 34 }}>
+                      <span className="sr-only">Detalle</span>
+                    </th>
+                    {COLUMNAS.map((c) => (
+                      <th key={c} className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                        {c}
+                      </th>
+                    ))}
+                    <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                      Antigüedad
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <FilaTramite
+                      key={entry.procedureInstanceId}
+                      entry={entry}
+                      abierta={abierta === entry.procedureInstanceId}
+                      onToggle={() =>
+                        setAbierta(
+                          abierta === entry.procedureInstanceId ? null : entry.procedureInstanceId,
+                        )
+                      }
+                      onAbrir={() => abrirTrazabilidad(entry)}
+                      esAdmin={esAdmin}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Misma paginación numerada del listado de trámites (`PageNav`). */}
+            <PageNav
+              page={page}
+              totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+              resumen={resumenPagina(page, PAGE_SIZE, total)}
+              ariaLabel="Paginación del LOG QX"
+              onPageChange={(p) => {
+                setAbierta(null);
+                setPage(Math.max(1, p));
+              }}
+            />
           </>
         )}
       </UiStateBoundary>
@@ -286,158 +490,327 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   );
 }
 
-/** Tarjeta de una radicación: cabecera con estado/códigos + línea de tiempo de eventos. */
-function LogQxEntryCard({ entry }: { entry: LogQxEntry }) {
-  const st = STATUS_STYLE[entry.status] ?? {
-    label: entry.status,
-    tone: "neutral" as StatusTone,
-  };
+const inputCls =
+  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20";
 
+const ghostCls =
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-[#557EFF]";
+
+/** Cabeceras entre el chevron y «Antigüedad»; el orden lo fijó el PO. */
+const COLUMNAS = [
+  "Trámite",
+  "Placa",
+  "Tipo",
+  "Estado",
+  "Empresa",
+  "Secretaría",
+  "Documento QX",
+  "Última actividad",
+] as const;
+
+/** Icono por estado, en la línea de `ESTADO_ICON` de la tira de KPIs de trámites. */
+const ESTADO_ICON: Record<LogQxBandejaEstado, typeof CircleDashed> = {
+  sin_radicar: CircleDashed,
+  pendiente: FileCheck2,
+  radicado: BadgeCheck,
+  en_tramite: RefreshCw,
+  aprobado: CheckCircle2,
+  rechazado: XCircle,
+  fallido: Ban,
+};
+
+const tdCls = "border-y px-4 py-3 align-middle";
+
+function Campo({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
   return (
-    <li className="rounded-2xl border bg-white dark:bg-[#0B0F14] border-[#DFE5ED] dark:border-white/10 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[#DFE5ED] dark:border-white/10">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm">{entry.referenceNumber}</span>
-            <StatusBadge label={st.label} tone={st.tone} />
-          </div>
-          <p className="text-[11px] opacity-70 mt-0.5 truncate">
-            {entry.procedureTypeName} · {entry.clientTenantName}
-            {entry.plate ? ` · Placa ${entry.plate}` : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <dl className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-            <MetaField label="Código registro (QX)" value={entry.qxRegisterCode?.toString() ?? "—"} />
-            <MetaField label="Estado trámite (QX)" value={formatEstadoTramite(entry.qxProcedureCode)} />
-            <MetaField label="DIVIPO" value={entry.divipoCode ?? "—"} />
-            <MetaField label="Creado" value={formatFecha(entry.createdAt)} />
-          </dl>
-          {/* HU #10796 (AC2) — correlación de vuelta al detalle del trámite. */}
-          <Link
-            href={`/tramites/${entry.procedureInstanceId}`}
-            aria-label={`Ver el trámite ${entry.referenceNumber}`}
-            className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] dark:border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-[#557EFF] hover:bg-[#557EFF]/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            <FileText className="h-3.5 w-3.5" aria-hidden="true" /> Ver trámite
-          </Link>
-        </div>
-      </div>
-
-      {entry.rejectionReason && (
-        <p
-          className="px-4 py-2 text-[11px] border-b border-[#DFE5ED] dark:border-white/10"
-          style={{ color: "#FF4E00", background: "rgba(255,78,0,0.06)" }}
-        >
-          Motivo de rechazo: {entry.rejectionReason}
-        </p>
-      )}
-
-      <ol className="divide-y divide-[#DFE5ED] dark:divide-white/10" aria-label="Línea de tiempo de la radicación">
-        {entry.events.map((ev, i) => (
-          <LogQxEventRow key={`${entry.id}-${i}`} event={ev} index={i} />
-        ))}
-      </ol>
-    </li>
+    <label htmlFor={htmlFor} className="flex flex-col gap-1 text-[10px]">
+      <span className="font-semibold uppercase tracking-wider opacity-55">{label}</span>
+      {children}
+    </label>
   );
 }
 
-function MetaField({ label, value }: { label: string; value: string }) {
+/** Fila del trámite + su vistazo expandible. */
+function FilaTramite({
+  entry,
+  abierta,
+  onToggle,
+  onAbrir,
+  esAdmin,
+}: {
+  entry: LogQxBandejaEntry;
+  abierta: boolean;
+  onToggle: () => void;
+  onAbrir: () => void;
+  esAdmin: boolean;
+}) {
+  const meta = ESTADO_BANDEJA[entry.estado] ?? { label: entry.estado, tone: "neutral" as const };
+  const espera = formatEspera(entry.horasEsperando);
+  const alta = esperaEsAlta(entry.horasEsperando);
+
   return (
-    <div className="flex flex-col leading-tight">
-      <dt className="opacity-55">{label}</dt>
-      <dd className="font-mono">{value}</dd>
+    <>
+      <tr
+        className={`cursor-pointer transition ${
+          abierta ? "bg-[#557EFF]/[0.06]" : "bg-white hover:bg-[#557EFF]/[0.04] dark:bg-[#0B0F14]"
+        }`}
+        onClick={onToggle}
+        tabIndex={0}
+        role="button"
+        aria-expanded={abierta}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+      >
+        <td className={`${tdCls} rounded-l-xl border-l px-3`}>
+          <ChevronRight
+            className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierta ? "rotate-90" : ""}`}
+            aria-hidden="true"
+          />
+        </td>
+        <td className={tdCls}>
+          <span className="font-mono font-semibold text-[#557EFF]">{entry.referenceNumber}</span>
+          {entry.intentos > 1 && (
+            <span className="ml-1.5 rounded-full bg-[#FF4E00]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#C2410C]">
+              {entry.intentos} intentos
+            </span>
+          )}
+        </td>
+        <td className={tdCls}>
+          {entry.plate ? (
+            <span className="rounded border border-[#D9DEE8] bg-[#F4F6FA] px-1.5 py-0.5 font-mono font-bold tracking-wide dark:border-white/15 dark:bg-white/5">
+              {entry.plate}
+            </span>
+          ) : (
+            <span className="opacity-40">sin placa</span>
+          )}
+        </td>
+        <td className={tdCls}>{entry.procedureTypeName}</td>
+        <td className={tdCls}>
+          {/* Mismo chip que el listado de trámites: la paleta por estado, no los cinco tonos
+              semánticos, que dejaban tres de estos siete estados con el mismo color. */}
+          <StatusBadge
+            label={meta.label}
+            bg={meta.style.bg}
+            color={meta.style.color}
+            border={meta.style.border}
+          />
+        </td>
+        <td className={`${tdCls} opacity-75`}>{entry.clientTenantName}</td>
+        <td className={`${tdCls} opacity-75`}>{entry.transitOfficeName}</td>
+        <td className={tdCls}>
+          {entry.documentoQx ? (
+            <span className="font-mono opacity-80" title={entry.documentoQx}>
+              {entry.documentoQx.length > 26
+                ? `…${entry.documentoQx.slice(-24)}`
+                : entry.documentoQx}
+            </span>
+          ) : (
+            <span className="opacity-40">—</span>
+          )}
+        </td>
+        <td className={`${tdCls} whitespace-nowrap opacity-75`}>
+          {entry.ultimaActividad ? formatFecha(entry.ultimaActividad) : "—"}
+        </td>
+        <td className={`${tdCls} rounded-r-xl border-r`}>
+          {espera ? (
+            <span
+              className={`whitespace-nowrap font-mono tabular-nums ${alta ? "font-bold text-[#C2410C]" : ""}`}
+            >
+              {espera}
+              {alta ? " ⚠" : ""}
+            </span>
+          ) : (
+            <span className="opacity-40">—</span>
+          )}
+        </td>
+      </tr>
+      {abierta && (
+        <tr>
+          {/* El detalle es su propia tarjeta, coherente con las filas-tarjeta de la tabla. */}
+          <td colSpan={10} className="rounded-xl border bg-[#F4F7FC] p-0 dark:bg-white/[0.03]">
+            <Vistazo entry={entry} onAbrir={onAbrir} esAdmin={esAdmin} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/**
+ * El vistazo: qué pasó, en una frase, más los pasos alcanzados. Deliberadamente SIN payloads —
+ * quien necesita el detalle técnico abre la trazabilidad.
+ */
+function Vistazo({
+  entry,
+  onAbrir,
+  esAdmin,
+}: {
+  entry: LogQxBandejaEntry;
+  onAbrir: () => void;
+  esAdmin: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-start gap-5 px-8 py-4">
+      <div className="min-w-[380px] flex-1">
+        <p className="max-w-[70ch] text-[13px] leading-relaxed">{resumen(entry)}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {pasos(entry).map((p) => (
+            <span
+              key={p.label}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#DFE5ED] bg-white px-2.5 py-1 text-[11px] font-medium dark:border-white/10 dark:bg-[#0B0F14]"
+            >
+              <p.Icon className="h-3.5 w-3.5" style={{ color: p.color }} aria-hidden="true" />
+              {p.label}
+            </span>
+          ))}
+        </div>
+        {entry.rejectionReason && (
+          <p className="mt-3 rounded-lg border-l-2 border-[#FF4E00] bg-[#FF4E00]/[0.08] px-3 py-2 text-xs text-[#C2410C]">
+            Motivo del rechazo: {entry.rejectionReason}
+          </p>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        {entry.submissionId ? (
+          <button
+            type="button"
+            onClick={onAbrir}
+            className="whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            style={{ background: WIZARD_CTA_GRADIENT }}
+          >
+            Ver trazabilidad completa
+          </button>
+        ) : (
+          <span className="max-w-[220px] text-[11px] italic opacity-55">
+            Todavía no hay radicación que trazar.
+          </span>
+        )}
+        <Link
+          href={hrefTramite(entry.procedureInstanceId, entry.clientTenantId, esAdmin)}
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent"
+        >
+          Ver trámite
+        </Link>
+      </div>
     </div>
   );
 }
 
-/** Fila de evento con detalle expandible (visor JSON + copia). */
-function LogQxEventRow({ event, index }: { event: LogQxEvent; index: number }) {
-  const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const detailId = `logqx-event-detail-${index}`;
+/**
+ * Enlace al detalle del trámite. Para el SuperAdmin lleva el tenant de la FILA en `?t=`, que el
+ * detalle traduce a la cabecera `X-Tenant-Id`: el LOG QX lista trámites de cualquier empresa, y sin
+ * ese parámetro el detalle fallaba con «Falta header X-Tenant-Id». Mismo criterio que el listado
+ * de trámites.
+ */
+function hrefTramite(instanceId: string, tenantId: string, esAdmin: boolean): string {
+  return esAdmin && tenantId
+    ? `/tramites/${instanceId}?t=${encodeURIComponent(tenantId)}`
+    : `/tramites/${instanceId}`;
+}
 
-  const stageLabel = STAGE_LABEL[event.stage] ?? event.stage;
-  const outcome = OUTCOME_STYLE[event.outcome] ?? { label: event.outcome, color: "#8A94A6" };
-  const duration = formatDuration(event.durationMs);
-  const hasDetail = event.detail !== null && event.detail !== undefined;
-  const detailJson = hasDetail ? JSON.stringify(event.detail, null, 2) : "";
+/**
+ * El resumen en lenguaje natural: lo que un agente de soporte le repite al cliente por teléfono.
+ * Antes había que deducirlo leyendo JSON.
+ */
+function resumen(e: LogQxBandejaEntry): string {
+  const espera = formatEspera(e.horasEsperando);
 
-  const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(detailJson);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard no disponible (p. ej. contexto no seguro): se ignora silenciosamente.
-    }
-  }, [detailJson]);
+  switch (e.estado) {
+    case "sin_radicar":
+      return `Este trámite cumple los requisitos para ir a Quipux${
+        espera ? ` desde hace ${espera}` : ""
+      }, pero todavía no se ha encolado. Conviene revisar que ${secretaria(
+        e.transitOfficeName,
+      )} tenga el DIVIPO configurado y la integración activa para este tipo de trámite.`;
 
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={detailId}
-        className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition"
-      >
-        {open ? (
-          <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
-        ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
-        )}
-        <span className="text-xs font-medium min-w-0 truncate">{stageLabel}</span>
-        <span className="text-[10px] font-semibold shrink-0" style={{ color: outcome.color }}>
-          {outcome.label}
-        </span>
-        <span className="ml-auto flex items-center gap-3 text-[10px] opacity-70 shrink-0">
-          {event.responseCode != null && <span className="font-mono">HTTP {event.responseCode}</span>}
-          {duration && (
-            <span className="inline-flex items-center gap-1">
-              <Clock className="h-3 w-3" aria-hidden="true" />
-              {duration}
-            </span>
-          )}
-          {event.origin && (
-            <span className="inline-flex items-center gap-1">
-              <Cpu className="h-3 w-3" aria-hidden="true" />
-              {event.origin}
-            </span>
-          )}
-          <span>{formatFecha(event.occurredAt)}</span>
-        </span>
-      </button>
+    case "pendiente":
+      return `Está en cola para radicarse en Quipux${
+        espera ? `, esperando desde hace ${espera}` : ""
+      }. Aún no se ha enviado a ${secretaria(e.transitOfficeName)}.`;
 
-      {open && (
-        <div id={detailId} className="px-4 pb-3 pl-10">
-          {hasDetail ? (
-            <div className="relative rounded-lg border border-[#DFE5ED] dark:border-white/10 bg-[#F5F7FB] dark:bg-white/5">
-              <button
-                type="button"
-                onClick={handleCopy}
-                aria-label="Copiar detalle JSON"
-                className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-[#DFE5ED] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2 py-1 text-[10px] font-semibold"
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-3 w-3" aria-hidden="true" /> Copiado
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" aria-hidden="true" /> Copiar
-                  </>
-                )}
-              </button>
-              <pre className="overflow-x-auto p-3 pr-20 text-[11px] font-mono leading-relaxed whitespace-pre">
-                {detailJson}
-              </pre>
-            </div>
-          ) : (
-            <p className="text-[11px] italic opacity-60">Sin payload disponible.</p>
-          )}
-        </div>
-      )}
-    </li>
-  );
+    case "radicado":
+      return `Radicado en Quipux como ${e.documentoQx}. Todavía no se ha ejecutado la primera consulta de estado a ${secretaria(e.transitOfficeName)}.`;
+
+    case "en_tramite":
+      return `Radicado en Quipux como ${e.documentoQx}. ${Secretaria(
+        e.transitOfficeName,
+      )} aún no lo resuelve${espera ? `: llevamos ${espera} esperando` : ""}, con ${
+        e.pollCount
+      } consultas de estado realizadas.`;
+
+    case "aprobado":
+      return `${Secretaria(e.transitOfficeName)} lo aprobó. Se radicó como ${e.documentoQx} y el trámite quedó resuelto.`;
+
+    case "rechazado":
+      return `${Secretaria(e.transitOfficeName)} lo rechazó${
+        e.rejectionReason ? "" : " sin dejar un motivo registrado"
+      }. Se había radicado como ${e.documentoQx}.`;
+
+    case "fallido":
+      return `La radicación falló tras ${e.attempts} ${
+        e.attempts === 1 ? "intento" : "intentos"
+      }${
+        e.intentos > 1 ? ` y ${e.intentos} radicaciones` : ""
+      }. Este trámite nunca llegó a ${secretaria(e.transitOfficeName)}.`;
+
+    default:
+      return `Estado ${e.estado} en ${secretaria(e.transitOfficeName)}.`;
+  }
+}
+
+/**
+ * Los pasos alcanzados, sin entrar en el detalle técnico.
+ *
+ * Los iconos son del set de la app (lucide) y no glifos sueltos (⏳, ✓, ○): esos se renderizan
+ * como emoji, con su propio color y su propia caja, y desentonan con el resto de la consola.
+ */
+function pasos(e: LogQxBandejaEntry): { Icon: typeof CircleDashed; color: string; label: string }[] {
+  const gris = ESTADO_BANDEJA.sin_radicar.style.accent;
+  const espera = ESTADO_BANDEJA.en_tramite.style.accent;
+  const ok = ESTADO_BANDEJA.aprobado.style.accent;
+  const mal = ESTADO_BANDEJA.rechazado.style.accent;
+
+  if (e.estado === "sin_radicar") {
+    return [
+      { Icon: CircleDashed, color: gris, label: "Sin encolar" },
+      { Icon: Clock, color: espera, label: "Elegible, a la espera" },
+    ];
+  }
+
+  const out: { Icon: typeof CircleDashed; color: string; label: string }[] = [];
+
+  if (e.estado === "pendiente") {
+    out.push({ Icon: CircleDashed, color: gris, label: "En cola" });
+  } else if (e.estado !== "fallido") {
+    out.push({ Icon: BadgeCheck, color: ok, label: "Radicado" });
+  }
+
+  if (e.pollCount > 0) {
+    out.push({ Icon: RefreshCw, color: espera, label: `${e.pollCount} consultas` });
+  }
+
+  if (e.estado === "en_tramite") out.push({ Icon: Clock, color: espera, label: "Sin decisión" });
+  if (e.estado === "radicado") {
+    out.push({ Icon: Clock, color: espera, label: "Primera consulta pendiente" });
+  }
+  if (e.estado === "aprobado") out.push({ Icon: CheckCircle2, color: ok, label: "Aprobado" });
+  if (e.estado === "rechazado") out.push({ Icon: XCircle, color: mal, label: "Rechazado" });
+  if (e.estado === "fallido") {
+    out.push({ Icon: Ban, color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });
+  }
+
+  return out;
 }
