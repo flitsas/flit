@@ -16,9 +16,10 @@ import {
  * Línea de hitos de una radicación (HU #11789). El servidor ya devuelve las rachas de sondeo
  * colapsadas; aquí solo se dibujan.
  *
- * La decisión visual que sostiene la pantalla: los HITOS son tarjetas sólidas y el SONDEO es una
- * banda hundida y punteada. El ruido tiene que parecer ruido de fondo antes de que nadie lea una
- * palabra — con 1.065 consultas, si se dibujan igual que los hitos vuelve a ser la v1.
+ * La decisión visual que sostiene la pantalla: los HITOS son tarjetas sólidas y blancas, y el
+ * SONDEO es una banda hundida y de borde discontinuo. El ruido tiene que parecer ruido de fondo
+ * antes de que nadie lea una palabra — con 1.065 consultas, si se dibuja igual que los hitos
+ * vuelve a ser la v1.
  */
 export function HitosTimeline({
   hitos,
@@ -154,13 +155,9 @@ function BloqueSondeo({ hito, indice }: { hito: LogQxHito; indice: number }) {
   const detalleId = `logqx-sondeo-${indice}`;
 
   return (
-    <div
-      className="min-w-0 rounded-[9px] border border-dashed border-[#C9D6EA] px-3.5 py-2.5 dark:border-white/15"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(135deg, rgba(85,126,255,0.05) 0 9px, transparent 9px 18px)",
-      }}
-    >
+    // El bloque se distingue del hito por el borde discontinuo y el fondo hundido, sin rayado:
+    // la trama diagonal competía con el texto y ensuciaba la pantalla más de lo que separaba.
+    <div className="min-w-0 rounded-[9px] border border-dashed border-[#C9D6EA] bg-[#F4F7FC] px-3.5 py-2.5 dark:border-white/15 dark:bg-white/[0.03]">
       <div className="flex flex-wrap items-baseline gap-2.5">
         <h3 className="text-[13px] font-semibold opacity-75">Consultando estado del trámite</h3>
         <time className="ml-auto font-mono text-[11.5px] tabular-nums opacity-55">
