@@ -1,5 +1,6 @@
 using Flit.Ict.Application.Register;
 using Flit.Ict.Domain.Abstractions;
+using Flit.Ict.Domain.Trazabilidad;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Ict.Infrastructure.ExternalClients;
 using Flit.Ict.Infrastructure.Jobs;
@@ -67,6 +68,9 @@ public static class IctInfrastructureExtensions
         services.AddScoped<IIntegrationLogWriter>(sp => sp.GetRequiredService<IntegrationLogRepository>());
         services.AddScoped<IIntegrationLogQuery>(sp => sp.GetRequiredService<IntegrationLogRepository>());
         services.AddScoped<IIctAlertMetricsQuery, IctAlertMetricsQuery>();
+
+        // Trazabilidad ICT por trámite (Feature #11814). Solo lectura.
+        services.AddScoped<ITrazabilidadBandejaQuery, DbTrazabilidadBandejaRepository>();
 
         // Seguridad (login ICT independiente).
         services.AddSingleton(sp => new IctJwtKeyMaterial(sp.GetRequiredService<IOptions<IctJwtSettings>>().Value));
