@@ -50,11 +50,14 @@ export function VehicleTransformationsCard({
   readOnly,
   saving,
   onPatch,
+  hideHeader = false,
 }: {
   fieldValues: FieldValue[];
   readOnly: boolean;
   saving: boolean;
   onPatch: (items: { fieldKey: string; valueText: string }[]) => Promise<void>;
+  /** Omite WizardCardHeader interno — útil cuando la tarjeta vive dentro de un WizardAccordion. */
+  hideHeader?: boolean;
 }) {
   // Hooks primero, SIEMPRE — el `return null` de abajo (sin datos de vehículo) es condicional y
   // React exige que el orden de hooks no dependa de una rama.
@@ -191,11 +194,13 @@ export function VehicleTransformationsCard({
       aria-labelledby={headingId}
       className="space-y-3 rounded-2xl border bg-white p-4 dark:bg-[#162744]"
     >
-      <WizardCardHeader
-        id={headingId}
-        title="Trámites Simultáneos (Opcional)"
-        subtitle="Al seleccionar un trámite simultáneo se habilita de inmediato su documento soporte. Se declara frente al RUNT y se registra en el FUR."
-      />
+      {!hideHeader && (
+        <WizardCardHeader
+          id={headingId}
+          title="Trámites Simultáneos (Opcional)"
+          subtitle="Al seleccionar un trámite simultáneo se habilita de inmediato su documento soporte. Se declara frente al RUNT y se registra en el FUR."
+        />
+      )}
 
       <div>
         <label htmlFor="tramite-simultaneo-agregar" className="mb-1.5 block text-xs font-semibold">
@@ -259,10 +264,21 @@ export function VehicleTransformationsCard({
         )}
       </div>
 
-      {/* Bajo los chips, un bloque por subtrámite seleccionado con su campo de valor. La propuesta
-          no lo tiene —sus chips son decorativos—, pero FLIT necesita capturar el valor efectivo. */}
+      {/* Bajo los chips, un bloque por subtrámite seleccionado con su campo de valor.
+          Grilla dinámica: 1 item → 1 col; 2 → 2 cols en sm+; 3 → 3 cols en lg+.
+          La propuesta no tiene este bloque —sus chips son decorativos—, pero FLIT
+          necesita capturar el valor efectivo de cada transformación. */}
       {seleccionados.length > 0 && (
-        <div className="space-y-2.5">
+        <div
+          className={cn(
+            'grid gap-2.5',
+            seleccionados.length >= 3
+              ? 'sm:grid-cols-2 lg:grid-cols-3'
+              : seleccionados.length === 2
+                ? 'sm:grid-cols-2'
+                : '',
+          )}
+        >
           {seleccionados.map((s) => (
             <SubtramiteValueBlock key={s.key} item={s} disabled={disabled} />
           ))}

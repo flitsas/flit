@@ -12,7 +12,7 @@ import { prendaDocTipoFor } from './prenda-document-tipos';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
-import { WizardCardHeader, WizardSegmented, WizardSelectCards } from './wizard-atoms';
+import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type PrendaFormHandle = WizardStepFormHandle;
@@ -37,6 +37,16 @@ const REQUIERE_DOCUMENTO: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>(
 const CAPTURA_ACREEDOR: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
   'solicitar',
   'registrar',
+]);
+
+/**
+ * Decisiones que muestran la sección de acreedor (PDF ajuste P0):
+ * `levantar` también la muestra, pero con los campos inhabilitados.
+ */
+const MUESTRA_ACREEDOR: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
+  'solicitar',
+  'registrar',
+  'levantar',
 ]);
 
 /** En matrícula la prenda es declarativa: registrar o sin prenda. */
@@ -309,6 +319,9 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   }, [instanceId, runtHasGravamen, offersRegistrar]);
 
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
+  /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */
+  const muestraAcreedor = decision !== '' && MUESTRA_ACREEDOR.has(decision);
+  const acreedorReadOnly = decision === 'levantar';
   const requiereDocumento = decision !== '' && REQUIERE_DOCUMENTO.has(decision);
   const documentGateReady = !requiereDocumento || !documentRequired || docSatisfied;
 
@@ -505,20 +518,73 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
       <fieldset disabled={readOnly} className="contents">
         <div className="grid grid-cols-1 gap-4">
-          <div>
-            {/* Matrícula (2 opciones cortas) usa el segmentado; traspaso (3-4, con rótulos de hasta
-                42 caracteres como "Continuar sin gestionar (asumo el riesgo)") no cabe en una
-                pista y pasa a tarjetas de selección — la norma FLIT del "select tipo tarjeta". */}
-            {decisions.length > 2 ? (
-              <WizardSelectCards<PrendaDecision | ''>
-                label="¿Al vehículo se le asociará una prenda?"
-                name="prenda-decision"
-                value={decision}
-                onChange={handleDecisionChange}
-                disabled={readOnly}
-                options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
-              />
-            ) : (
+          {/* PDF ajuste P0: traspaso → select + Acreedor + documento en la misma fila.
+              Matrícula (2 opciones) conserva segmentado; acreedor debajo si aplica. */}
+          {decisions.length > 2 ? (
+            <div className={`grid grid-cols-1 gap-4 items-end ${muestraAcreedor ? 'md:grid-cols-3' : ''}`}>
+              <div className="min-w-0">
+                <label htmlFor="prenda-decision-select" className="text-xs font-semibold mb-1.5 block">
+                  ¿Al vehículo se le asociará una prenda?
+                </label>
+                <select
+                  id="prenda-decision-select"
+                  value={decision}
+                  onChange={(e) => handleDecisionChange(e.target.value as PrendaDecision | '')}
+                  disabled={readOnly}
+                  className={`${INPUT_BASE} disabled:opacity-60`}
+                >
+                  <option value="">Seleccionar…</option>
+                  {decisions.map((d) => (
+                    <option key={d} value={d}>{PRENDA_DECISION_LABELS[d]}</option>
+                  ))}
+                </select>
+              </div>
+              {muestraAcreedor && (
+                <>
+                  <div className="min-w-0">
+                    <label htmlFor="prenda-acreedor-nombre" className="text-xs font-semibold mb-1.5 block">
+                      Acreedor (beneficiario)
+                    </label>
+                    <input
+                      id="prenda-acreedor-nombre"
+                      type="text"
+                      value={acreedorNombre}
+                      onChange={(e) => { if (!acreedorReadOnly) setAcreedorNombre(e.target.value); }}
+                      readOnly={acreedorReadOnly}
+                      disabled={acreedorReadOnly}
+                      placeholder="Ej. Banco XYZ"
+                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
+                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label htmlFor="prenda-acreedor-doc" className="text-xs font-semibold mb-1.5 block">
+                      NIT / documento del acreedor
+                    </label>
+                    <input
+                      id="prenda-acreedor-doc"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      value={acreedorDocumento}
+                      onChange={(e) => { if (!acreedorReadOnly) setAcreedorDocumento(digitsOnly(e.target.value)); }}
+                      readOnly={acreedorReadOnly}
+                      disabled={acreedorReadOnly}
+                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
+                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    />
+                  </div>
+                </>
+              )}
+              {acreedorReadOnly && (
+                <p className="md:col-span-3 text-xs opacity-70 -mt-2">
+                  Al levantar el gravamen, Acreedor y documento quedan inhabilitados.
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
               <WizardSegmented<PrendaDecision | ''>
                 label="¿Al vehículo se le asociará una prenda?"
                 value={decision}
@@ -526,40 +592,45 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                 disabled={readOnly}
                 options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
               />
-            )}
-          </div>
-
-          {capturaAcreedor && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="prenda-acreedor-nombre" className="text-xs font-semibold mb-1.5 block">
-                  Acreedor (beneficiario)
-                </label>
-                <input
-                  id="prenda-acreedor-nombre"
-                  type="text"
-                  value={acreedorNombre}
-                  onChange={(e) => setAcreedorNombre(e.target.value)}
-                  placeholder="Ej. Banco XYZ"
-                  className={INPUT_BASE}
-                />
-              </div>
-              <div>
-                <label htmlFor="prenda-acreedor-doc" className="text-xs font-semibold mb-1.5 block">
-                  NIT / documento del acreedor
-                </label>
-                <input
-                  id="prenda-acreedor-doc"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="off"
-                  value={acreedorDocumento}
-                  onChange={(e) => setAcreedorDocumento(digitsOnly(e.target.value))}
-                  className={INPUT_BASE}
-                />
-              </div>
-            </div>
+              {muestraAcreedor && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="prenda-acreedor-nombre" className="text-xs font-semibold mb-1.5 block">
+                      Acreedor (beneficiario)
+                    </label>
+                    <input
+                      id="prenda-acreedor-nombre"
+                      type="text"
+                      value={acreedorNombre}
+                      onChange={(e) => { if (!acreedorReadOnly) setAcreedorNombre(e.target.value); }}
+                      readOnly={acreedorReadOnly}
+                      disabled={acreedorReadOnly}
+                      placeholder="Ej. Banco XYZ"
+                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
+                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="prenda-acreedor-doc" className="text-xs font-semibold mb-1.5 block">
+                      NIT / documento del acreedor
+                    </label>
+                    <input
+                      id="prenda-acreedor-doc"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      value={acreedorDocumento}
+                      onChange={(e) => { if (!acreedorReadOnly) setAcreedorDocumento(digitsOnly(e.target.value)); }}
+                      readOnly={acreedorReadOnly}
+                      disabled={acreedorReadOnly}
+                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
+                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {requiereDocumento && decision && prendaDocTipoFor(decision) && (

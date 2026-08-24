@@ -109,9 +109,28 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
           </ul>
 
           {sugerido != null && accepted && (
-            <p className="mt-3 text-right text-xs opacity-70" role="status">
-              Valor sugerido aceptado.
-            </p>
+            <div className="mt-3 flex justify-end" role="status" aria-live="polite">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
+                style={{
+                  background: 'rgba(22,163,74,0.10)',
+                  color: '#16a34a',
+                  border: '1px solid rgba(22,163,74,0.25)',
+                }}
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 shrink-0"
+                  fill="none"
+                  viewBox="0 0 16 16"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l3.5 3.5 6.5-7" />
+                </svg>
+                Valor sugerido aceptado
+              </span>
+            </div>
           )}
 
           {sugerido != null && !accepted && (

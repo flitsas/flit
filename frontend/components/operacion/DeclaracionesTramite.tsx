@@ -46,6 +46,8 @@ export function DeclaracionesTramite({
   modalidad,
   onChanged,
   onTipoServicioGateChange,
+  hideTransformaciones = false,
+  noCardWrapper = false,
 }: {
   instanceId: string | null;
   modalidad: WizardModalidad;
@@ -53,6 +55,17 @@ export function DeclaracionesTramite({
   onChanged?: () => void;
   /** Informa al pie si el tipo de servicio está completo (gate de "Continuar", solo matrícula). */
   onTipoServicioGateChange?: (ok: boolean) => void;
+  /**
+   * Oleada 2 (PDF 20/08) — cuando TramiteWizard mueve VehicleTransformationsCard al paso de
+   * documentos después del checklist, ocultar la tarjeta aquí para no duplicarla. Sin esto
+   * permanece el comportamiento original (útil en tests unitarios de DeclaracionesTramite).
+   */
+  hideTransformaciones?: boolean;
+  /**
+   * Oleada 2 — cuando el componente vive DENTRO de un WizardAccordion que ya actúa como
+   * contenedor (borde + fondo), omite el div de tarjeta interno para evitar "card en card".
+   */
+  noCardWrapper?: boolean;
 }) {
   const readOnly = useWizardReadOnly();
   // Tipo de servicio: solo matrícula inicial. En traspaso `vehicle_service` lo hidrata el RUNT como
@@ -270,11 +283,13 @@ export function DeclaracionesTramite({
           <select> simple es más accesible y más rápido de operar que un combobox con buscador
           (SearchableSelect), pensado para catálogos largos. */}
       {esMatricula && (
-        <div className="rounded-2xl border bg-white p-4 dark:bg-[#162744] space-y-3">
-          <WizardCardHeader
-            title="Tipo de servicio del vehículo"
-            subtitle="Determina la casilla 18 del FUR. Con servicio público hay que identificar además la empresa vinculadora."
-          />
+        <div className={noCardWrapper ? 'space-y-3' : 'rounded-2xl border bg-white p-4 dark:bg-[#162744] space-y-3'}>
+          {!noCardWrapper && (
+            <WizardCardHeader
+              title="Tipo de servicio del vehículo"
+              subtitle="Determina la casilla 18 del FUR. Con servicio público hay que identificar además la empresa vinculadora."
+            />
+          )}
 
           {tiposServicioLoading ? (
             <p className="text-xs opacity-70" role="status" aria-live="polite">
@@ -285,131 +300,120 @@ export function DeclaracionesTramite({
               {tiposServicioError}
             </p>
           ) : (
-            <div className="sm:max-w-xs">
-              <label htmlFor="tramite-tipo-servicio" className="mb-1.5 block text-xs font-semibold">
-                Tipo de servicio
-              </label>
-              <select
-                id="tramite-tipo-servicio"
-                value={tipoServicioCode}
-                onChange={(e) => void handleTipoServicioChange(e.target.value)}
-                disabled={readOnly || saving}
-                className={`${inputClass} disabled:opacity-60`}
-              >
-                <option value="">Selecciona…</option>
-                {tiposServicio.map((t) => (
-                  <option key={t.id} value={t.code}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Empresa vinculadora: dos columnas alineadas. El botón va PEGADO al NIT porque actúa
-              sobre él, y el error se pinta bajo ese mismo campo — no suelto al final de la tarjeta,
-              donde el operador no sabía a cuál de los dos campos se refería. */}
-          {tipoServicioCode === 'PUBLICO' && (
-            <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="tramite-empresa-vinculadora-nit"
-                  className="mb-1.5 block text-xs font-semibold"
-                >
-                  NIT empresa vinculadora
+            /* Oleada 2 — cuando el tipo es PÚBLICO, selector + NIT+Buscar + Razón social
+               quedan en la MISMA FILA (flex-wrap) para que el gestor los vea juntos sin
+               desplazarse entre secciones distantes. Layout Lovable: MatriculaInicial Step 3. */
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="min-w-[160px]">
+                <label htmlFor="tramite-tipo-servicio" className="mb-1.5 block text-xs font-semibold">
+                  Tipo de servicio
                 </label>
-                <div className="flex items-stretch gap-2">
-                  <input
-                    id="tramite-empresa-vinculadora-nit"
-                    type="text"
-                    inputMode="numeric"
-                    value={empresaVinculadoraNit}
-                    onChange={(e) => handleEmpresaVinculadoraNitChange(e.target.value)}
-                    disabled={readOnly}
-                    className={`${inputClass} min-w-0 flex-1 disabled:opacity-60`}
-                    placeholder="Ej. 900123456"
-                    aria-describedby={ruesError ? 'tramite-rues-error' : undefined}
-                    aria-invalid={ruesError ? true : undefined}
-                  />
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={() => void handleConsultarRues()}
-                      disabled={ruesLoading || !empresaVinculadoraNit.trim()}
-                      className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                      aria-label="Buscar empresa en RUES"
-                    >
-                      <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                      {ruesLoading ? 'Consultando…' : 'Buscar'}
-                    </button>
-                  )}
-                </div>
-                {ruesError && (
-                  <p
-                    id="tramite-rues-error"
-                    className="mt-1.5 text-xs font-medium leading-tight"
-                    style={{ color: '#FF4E00' }}
-                    role="alert"
-                    aria-live="polite"
-                  >
-                    {ruesError}
-                  </p>
-                )}
+                <select
+                  id="tramite-tipo-servicio"
+                  value={tipoServicioCode}
+                  onChange={(e) => void handleTipoServicioChange(e.target.value)}
+                  disabled={readOnly || saving}
+                  className={`${inputClass} disabled:opacity-60`}
+                >
+                  <option value="">Selecciona…</option>
+                  {tiposServicio.map((t) => (
+                    <option key={t.id} value={t.code}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Fila completa: las razones sociales del RUES llegan largas (la de Bancolombia son
-                  79 caracteres, con su cláusula de denominación alterna) y a media rejilla no se
-                  leen. */}
-              {/* El campo NO existe hasta que se consulta. Un recuadro vacío con "la trae el RUES"
-                  ocupa sitio para no decir nada y se lee como un dato pendiente de llenar, cuando en
-                  realidad no hay nada que el gestor pueda hacer ahí: aparece solo, con el nombre
-                  dentro, en cuanto el directorio o el RUES responden. `null` es exactamente eso —
-                  "todavía no se ha consultado" — y vuelve a null al cambiar el NIT, así que el campo
-                  también desaparece si el gestor corrige el número. */}
-              {empresaVinculadoraRazonSocial !== null && (
-                <div className="sm:col-span-2">
-                  <label
-                    htmlFor="tramite-empresa-vinculadora-razon-social"
-                    className="mb-1.5 block text-xs font-semibold"
-                  >
-                    Razón social
-                  </label>
-                  {/* `output`, no `input`: el dato NO se edita, y un campo de una línea recorta el
-                      nombre dejando el resto accesible solo moviendo el cursor — en un campo de solo
-                      lectura, inalcanzable. `output` envuelve el texto, es etiquetable (conserva el
-                      `htmlFor` de arriba) y su rol implícito `status` anuncia el valor cuando el RUES
-                      responde, que es justo cuando el gestor quiere oírlo. */}
-                  <output
-                    id="tramite-empresa-vinculadora-razon-social"
-                    aria-describedby={
-                      razonSocialDesdeDirectorio ? 'tramite-razon-social-origen' : undefined
-                    }
-                    className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#EEF5FF] px-3 py-2 text-xs leading-relaxed dark:bg-[#162744] ${
-                      empresaVinculadoraRazonSocial ? '' : 'opacity-70'
-                    }`}
-                  >
-                    {/* Aquí ya se consultó (el `null` no llega: el campo entero no se pinta). Falta
-                        distinguir el otro vacío, que sí es un resultado: el RUES respondió `found` SIN
-                        razón social, y la consulta lo guarda como cadena vacía. Sin este `||` el
-                        recuadro aparecería colapsado a puro padding justo cuando hay algo que explicar. */}
-                    {empresaVinculadoraRazonSocial || 'El RUES no reportó razón social para este NIT'}
-                  </output>
-                  {/* De dónde salió el dato, con el mismo criterio honesto del actor jurídico: si vino
-                      del directorio NO se consultó el RUES, y el gestor tiene derecho a saberlo. */}
-                  {razonSocialDesdeDirectorio && (
-                    <p
-                      id="tramite-razon-social-origen"
-                      className="mt-1.5 flex items-center gap-1 text-xs leading-tight"
-                      style={{ color: '#557EFF' }}
-                      role="status"
-                      aria-live="polite"
+              {/* Empresa vinculadora: pegada al selector de tipo para que el gestor perciba la
+                  relación NIT ↔ tipo PÚBLICO. El botón actúa sobre el NIT; el error se pinta bajo
+                  ese mismo campo. La razón social queda en una segunda línea (flex-wrap) para las
+                  razones sociales largas del RUES (Bancolombia: 79 caracteres). */}
+              {tipoServicioCode === 'PUBLICO' && (
+                <>
+                  <div>
+                    <label
+                      htmlFor="tramite-empresa-vinculadora-nit"
+                      className="mb-1.5 block text-xs font-semibold"
                     >
-                      <Info className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      Precargado desde el directorio de la compañía
-                    </p>
+                      NIT empresa vinculadora
+                    </label>
+                    <div className="flex items-stretch gap-2">
+                      <input
+                        id="tramite-empresa-vinculadora-nit"
+                        type="text"
+                        inputMode="numeric"
+                        value={empresaVinculadoraNit}
+                        onChange={(e) => handleEmpresaVinculadoraNitChange(e.target.value)}
+                        disabled={readOnly}
+                        className={`${inputClass} min-w-0 w-40 flex-none disabled:opacity-60`}
+                        placeholder="Ej. 900123456"
+                        aria-describedby={ruesError ? 'tramite-rues-error' : undefined}
+                        aria-invalid={ruesError ? true : undefined}
+                      />
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => void handleConsultarRues()}
+                          disabled={ruesLoading || !empresaVinculadoraNit.trim()}
+                          className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                          aria-label="Buscar empresa en RUES"
+                        >
+                          <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                          {ruesLoading ? 'Consultando…' : 'Buscar'}
+                        </button>
+                      )}
+                    </div>
+                    {ruesError && (
+                      <p
+                        id="tramite-rues-error"
+                        className="mt-1.5 text-xs font-medium leading-tight"
+                        style={{ color: '#FF4E00' }}
+                        role="alert"
+                        aria-live="polite"
+                      >
+                        {ruesError}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* El campo NO existe hasta que se consulta — `null` es "todavía sin consultar".
+                      Ocupa una fila completa (w-full) porque las razones sociales del RUES llegan
+                      largas y a media rejilla no se leen. */}
+                  {empresaVinculadoraRazonSocial !== null && (
+                    <div className="w-full sm:min-w-[280px] sm:flex-1">
+                      <label
+                        htmlFor="tramite-empresa-vinculadora-razon-social"
+                        className="mb-1.5 block text-xs font-semibold"
+                      >
+                        Razón social
+                      </label>
+                      <output
+                        id="tramite-empresa-vinculadora-razon-social"
+                        aria-describedby={
+                          razonSocialDesdeDirectorio ? 'tramite-razon-social-origen' : undefined
+                        }
+                        className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#EEF5FF] px-3 py-2 text-xs leading-relaxed dark:bg-[#162744] ${
+                          empresaVinculadoraRazonSocial ? '' : 'opacity-70'
+                        }`}
+                      >
+                        {empresaVinculadoraRazonSocial || 'El RUES no reportó razón social para este NIT'}
+                      </output>
+                      {razonSocialDesdeDirectorio && (
+                        <p
+                          id="tramite-razon-social-origen"
+                          className="mt-1.5 flex items-center gap-1 text-xs leading-tight"
+                          style={{ color: '#557EFF' }}
+                          role="status"
+                          aria-live="polite"
+                        >
+                          <Info className="h-3 w-3 shrink-0" aria-hidden="true" />
+                          Precargado desde el directorio de la compañía
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           )}
@@ -444,28 +448,30 @@ export function DeclaracionesTramite({
         </div>
       )}
 
-      {/* Trámites simultáneos: la tarjeta de la propuesta (`MatriculaInicial`, Step 3) sobre la
-          funcionalidad que FLIT ya tenía —declarar color/combustible/carrocería frente al RUNT—.
-          No es una función nueva: es la misma bandera+valor (`cambio_*`/`vehicle_*`) con otra
-          gramática (selector + chips en vez de casillas de verificación). Ya no vive en un
-          acordeón: la propuesta la pone como tarjeta siempre visible. */}
-      <VehicleTransformationsCard
-        fieldValues={fieldValues}
-        readOnly={readOnly}
-        saving={saving}
-        onPatch={saveTransformacion}
-      />
+      {/* Trámites simultáneos: la tarjeta de la propuesta (`MatriculaInicial`, Step 3).
+          Oleada 2 (PDF 20/08) — TramiteWizard puede moverla después del checklist de documentos
+          pasando hideTransformaciones=true. Sin ese prop se mantiene aquí (tests unitarios). */}
+      {!hideTransformaciones && (
+        <VehicleTransformationsCard
+          fieldValues={fieldValues}
+          readOnly={readOnly}
+          saving={saving}
+          onPatch={saveTransformacion}
+        />
+      )}
 
       {/* Leasing: condición del vehículo (solo traspaso), no un trámite simultáneo — no comparte
           el selector de arriba. Antes vivía como casilla suelta dentro del mismo acordeón que las
           transformaciones; con tarjeta propia queda con su propio encabezado real, independiente
           de la sección vecina. */}
       {!esMatricula && (
-        <div className="space-y-2 rounded-2xl border bg-white p-4 dark:bg-[#162744]">
-          <WizardCardHeader
-            title="Condiciones del trámite"
-            subtitle="Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente."
-          />
+        <div className={noCardWrapper ? 'space-y-2' : 'space-y-2 rounded-2xl border bg-white p-4 dark:bg-[#162744]'}>
+          {!noCardWrapper && (
+            <WizardCardHeader
+              title="Condiciones del trámite"
+              subtitle="Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente."
+            />
+          )}
           <label className="flex items-start gap-2.5">
             <input
               type="checkbox"

@@ -31,6 +31,7 @@ import { blockerCopy, identidadAutomaticaCopy, stepLabelCopy } from './wizard-co
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { DeclaracionesTramite } from './DeclaracionesTramite';
+import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { EstadoAcciones } from './EstadoAcciones';
 import { WizardStepTracker } from './WizardStepTracker';
 import { Modal } from '@/components/atom/Modal';
@@ -484,7 +485,7 @@ export function TramiteWizard(props: Props) {
     referencia: string | null;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // Confirmación de "Cancelar trámite" (propuesta): salir pierde lo no guardado, y el botón vive
+  // Confirmación de "Anular trámite" (propuesta): salir pierde lo no guardado, y el botón vive
   // junto al de avance, donde un clic de más es fácil.
   const [confirmCancel, setConfirmCancel] = useState(false);
   // Confirmación de "Finalizar y enviar trámite" (propuesta, MatriculaInicial.tsx:1111-1121): la
@@ -1404,7 +1405,7 @@ export function TramiteWizard(props: Props) {
 
           {/* Acción terminal del asistente (propuesta: MatriculaInicial.tsx:1100-1109) — vive en el
               CUERPO del paso de decisión, no en el pie. Es la ÚNICA pieza que se mueve: "Anterior",
-              EstadoAcciones y "Cancelar trámite" son función existente del pie y se quedan ahí; el
+              EstadoAcciones y "Anular trámite" son función existente del pie y se quedan ahí; el
               pie de FLIT tampoco desaparece en este paso como en la propuesta, porque sigue
               haciendo falta para navegar hacia atrás y para cancelar.
               Cubre las tres variantes que antes vivían en el pie con el rótulo "Radicar trámite"
@@ -1461,7 +1462,7 @@ export function TramiteWizard(props: Props) {
             </div>
 
             {/* `gap-3` como el pie de la propuesta: sin él los botones quedaban pegados y se leían
-                como una sola pieza, con "Cancelar trámite" y el avance sin aire entre medias. */}
+                como una sola pieza, con "Anular trámite" y el avance sin aire entre medias. */}
             <div className="flex flex-wrap items-center justify-end gap-3">
             {/* Acción derecha del footer:
                 · Preparado o borrador con identidad OK / en borrador finalizado: la acción terminal
@@ -1531,10 +1532,10 @@ export function TramiteWizard(props: Props) {
               </button>
             ) : (
               <>
-                {/* Cancelar trámite (propuesta): acción destructiva en naranja de alerta, junto al
+                {/* Anular trámite (propuesta): acción destructiva en naranja de alerta, junto al
                     avance y no escondida en la cabecera, con confirmación porque se pierde lo no
                     guardado. Solo mientras el trámite se está capturando: ya radicado no hay nada
-                    que cancelar desde aquí. */}
+                    que anular desde aquí. */}
                 {!fullReadOnly && (
                   <button
                     type="button"
@@ -1542,7 +1543,7 @@ export function TramiteWizard(props: Props) {
                     className={`${WIZARD_BTN} text-white focus-visible:ring-[#FF4E00]`}
                     style={{ background: '#FF4E00' }}
                   >
-                    Cancelar trámite
+                    Anular trámite
                   </button>
                 )}
                 <button
@@ -1562,9 +1563,9 @@ export function TramiteWizard(props: Props) {
         </section>
 
       {confirmCancel && (
-        <WizardModal title="Cancelar trámite" onClose={() => setConfirmCancel(false)}>
+        <WizardModal title="Anular trámite" onClose={() => setConfirmCancel(false)}>
           <p className="text-xs leading-relaxed opacity-80">
-            ¿Deseas cancelar el trámite en curso? Los datos no guardados se perderán.
+            ¿Deseas anular el trámite en curso? Los datos no guardados se perderán.
           </p>
           <div className="mt-6 flex justify-end gap-2">
             <button
@@ -1584,7 +1585,7 @@ export function TramiteWizard(props: Props) {
               className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
               style={{ background: '#FF4E00' }}
             >
-              Sí, cancelar
+              Sí, anular
             </button>
           </div>
         </WizardModal>
@@ -1813,9 +1814,11 @@ function VehicleDataCard({
         </div>
       )}
 
-      {/* Hero: placa + marca/línea/modelo + estado */}
+      {/* Hero: placa + marca/línea/modelo + estado. En bare (traspaso) el bloque SOAT/TM
+          se integra a la derecha del hero para que la franja superior quede completa sin
+          desplazarse, como pide el PDF (Oleada 2). Sin hasSoatRtm no se pinta nada extra. */}
       <div
-        className={`flex flex-wrap items-center gap-4 ${bare ? 'pb-4' : 'px-4 py-4'}`}
+        className={`flex flex-wrap items-start gap-4 ${bare ? 'pb-4' : 'px-4 py-4'}`}
       >
         {plate && (
           <div
@@ -1845,6 +1848,36 @@ function VehicleDataCard({
             {validadoEnRunt && <StatusBadge label="Validado en RUNT" tone="success" />}
           </div>
         </div>
+
+        {/* SOAT / TM en el hero solo en bare (traspaso): quedan a la derecha de la placa,
+            en la misma franja superior, como Lovable. En !bare se pinta la sección aparte. */}
+        {bare && hasSoatRtm && (
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {(soatVencimiento || soatAseguradora) && (
+              <div className="flex min-w-0 items-start gap-1.5 rounded-xl border px-2.5 py-1.5">
+                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>SOAT</p>
+                  {soatVencimiento && (
+                    <p className="text-xs font-semibold">Vence: {formatDateOnly(soatVencimiento)}</p>
+                  )}
+                  {soatAseguradora && (
+                    <p className="truncate max-w-[120px] text-xs opacity-60">{soatAseguradora}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {rtmVencimiento && (
+              <div className="flex min-w-0 items-start gap-1.5 rounded-xl border px-2.5 py-1.5">
+                <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--flit-success-ink)' }} />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--flit-success-ink)' }}>TM</p>
+                  <p className="text-xs font-semibold">Vence: {formatDateOnly(rtmVencimiento)}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Retícula de pares rótulo/valor de la propuesta: 2 columnas en móvil, 3 en tablet, 5 en
@@ -1862,26 +1895,20 @@ function VehicleDataCard({
         </div>
       )}
 
-      {/* Sección SOAT / RTM */}
-      {hasSoatRtm && (
-        <div className={bare ? 'mt-4 border-t pt-3' : 'border-t px-4 py-3'}>
+      {/* Sección SOAT / RTM — solo en !bare; en bare se pinta en el hero (oleada 2). */}
+      {hasSoatRtm && !bare && (
+        <div className="border-t px-4 py-3">
           <p className="mb-2 text-xs font-semibold uppercase opacity-50">
             Documentos del vehículo
           </p>
           <div className="flex flex-wrap gap-3">
             {(soatVencimiento || soatAseguradora) && (
-              <div
-                className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
-              >
+              <div className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2">
                 <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>
-                    SOAT
-                  </p>
+                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>SOAT</p>
                   {soatVencimiento && (
-                    <p className="text-xs font-semibold">
-                      Vence: {formatDateOnly(soatVencimiento)}
-                    </p>
+                    <p className="text-xs font-semibold">Vence: {formatDateOnly(soatVencimiento)}</p>
                   )}
                   {soatAseguradora && (
                     <p className="truncate text-xs opacity-60">{soatAseguradora}</p>
@@ -1890,17 +1917,13 @@ function VehicleDataCard({
               </div>
             )}
             {rtmVencimiento && (
-              <div
-                className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
-              >
+              <div className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2">
                 <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--flit-success-ink)' }} />
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase" style={{ color: 'var(--flit-success-ink)' }}>
                     Tecno-mecánica
                   </p>
-                  <p className="text-xs font-semibold">
-                    Vence: {formatDateOnly(rtmVencimiento)}
-                  </p>
+                  <p className="text-xs font-semibold">Vence: {formatDateOnly(rtmVencimiento)}</p>
                 </div>
               </div>
             )}
@@ -1935,7 +1958,17 @@ function vehicleStateBlockMessage(vehicleStatus: string): string {
  * Lee/escribe `fur_observations` vía field_values — el mismo campo que usa FirmaFurStep.
  * Se guarda en el blur del textarea (best-effort, igual que FirmaFurStep.guardarCampos).
  */
-function TramiteObservacionesField({ instanceId }: { instanceId: string | null }) {
+function TramiteObservacionesField({
+  instanceId,
+  hideCardWrapper = false,
+}: {
+  instanceId: string | null;
+  /**
+   * Oleada 2 — cuando el campo vive dentro de un WizardAccordion que ya actúa como contenedor,
+   * no repetir la tarjeta (borde + fondo + padding). El contenido se renderiza sin envoltorio.
+   */
+  hideCardWrapper?: boolean;
+}) {
   const readOnly = useWizardReadOnly();
   const [observaciones, setObservaciones] = useState('');
   const [saving, setSaving] = useState(false);
@@ -1979,12 +2012,14 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
     }
   };
 
-  return (
-    <div className="rounded-2xl border bg-white p-4 dark:bg-[#162744] space-y-2">
-      <WizardCardHeader
-        title="Observaciones del trámite"
-        subtitle="Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso final antes de preparar el expediente."
-      />
+  const content = (
+    <div className="space-y-2">
+      {!hideCardWrapper && (
+        <WizardCardHeader
+          title="Observaciones del trámite"
+          subtitle="Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso final antes de preparar el expediente."
+        />
+      )}
       <textarea
         id="tramite-observaciones"
         aria-label="Observaciones del trámite"
@@ -2001,11 +2036,7 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
           Guardando…
         </p>
       )}
-      {/* Espejo de solo lectura del recuadro del FUR: lo escrito arriba —en vivo, sin esperar al
-          guardado— y detrás lo que el backend añade solo, en el mismo orden en que él los une. El
-          texto automático NO se precarga dentro del textarea a propósito: el backend lo anexa al
-          generar el FUR, así que saldría duplicado, y el gestor podría borrar sin querer un dato que
-          el formulario necesita. */}
+      {/* Espejo de solo lectura del recuadro del FUR. */}
       {(preview.manual || preview.auto.length > 0) && (
         <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
           <p className="text-xs font-bold uppercase opacity-55">Así quedarán en el FUR</p>
@@ -2013,7 +2044,6 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
             {preview.manual && (
               <p className="whitespace-pre-line break-words">{preview.manual}</p>
             )}
-            {/* Atenuadas: son las que el gestor no escribió y no puede editar aquí. */}
             {preview.auto.map((segment) => (
               <p key={segment} className="opacity-70">
                 {segment}
@@ -2023,6 +2053,73 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         </div>
       )}
     </div>
+  );
+
+  if (hideCardWrapper) return content;
+  return (
+    <div className="rounded-2xl border bg-white p-4 dark:bg-[#162744]">{content}</div>
+  );
+}
+
+/**
+ * Trámites Simultáneos autónomo (Oleada 2 · PDF 20/08).
+ * Wrapper de VehicleTransformationsCard con su propio ciclo de carga y persistencia,
+ * para poder situarlo en el paso de documentos DESPUÉS del checklist y ANTES de las
+ * observaciones, sin depender del estado de DeclaracionesTramite.
+ */
+function TramiteSimultaneosField({
+  instanceId,
+  hideHeader = false,
+}: {
+  instanceId: string | null;
+  hideHeader?: boolean;
+}) {
+  const readOnly = useWizardReadOnly();
+  const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    void tramitesClient
+      .getInstance(instanceId)
+      .then((d) => {
+        if (active) setFieldValues(d?.fieldValues ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  const handlePatch = async (items: { fieldKey: string; valueText: string }[]) => {
+    if (!instanceId || items.length === 0) return;
+    setSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(
+        instanceId,
+        items.map((i) => ({
+          formFieldId: null,
+          fieldKey: i.fieldKey,
+          valueText: i.valueText,
+          valueJson: null,
+        })),
+      );
+      const updated = await tramitesClient.getInstance(instanceId).catch(() => null);
+      if (updated?.fieldValues) setFieldValues(updated.fieldValues);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <VehicleTransformationsCard
+      fieldValues={fieldValues}
+      readOnly={readOnly}
+      saving={saving}
+      onPatch={handlePatch}
+      hideHeader={hideHeader}
+    />
   );
 }
 
@@ -2126,6 +2223,10 @@ function ConsultaStep({
    * dónde verlos ni cómo corregirlos sin llegar al paso del FUR.
    */
   const muestraRadicacion = isVin;
+  /** Traspaso: nombre del organismo de tránsito devuelto por el RUNT (read-only en paso 1). */
+  const transitOfficeNombreTraspaso = !isVin
+    ? fieldValues.find((f) => f.fieldKey === 'transit_office_name')?.valueText?.trim() ?? null
+    : null;
   const [secretarias, setSecretarias] = useState<TransitOfficeOption[]>([]);
   const [secretariasError, setSecretariasError] = useState<string | null>(null);
   const [transitOfficeId, setTransitOfficeId] = useState('');
@@ -2755,11 +2856,8 @@ function ConsultaStep({
           trámite no existe (creación diferida): ahí cambiar de tipo es navegar al otro, no hay nada
           creado que migrar. Con el trámite ya creado la modalidad gobierna sus pasos y documentos,
           así que queda fija y las demás tarjetas se apagan. */}
-      <div className={WIZARD_CARD}>
-        <WizardCardHeader
-          title="Configuración del Trámite"
-          subtitle="Define el trámite principal que se radicará con este expediente."
-        />
+      <WizardAccordion title="Configuración del Trámite" defaultOpen>
+        <p className="text-xs opacity-70 mb-3">Define el trámite principal que se radicará con este expediente.</p>
         <fieldset className="mt-4">
           <legend className="text-xs font-semibold">Tipo de Trámite Principal</legend>
           <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -2801,16 +2899,13 @@ function ConsultaStep({
             })}
           </div>
         </fieldset>
-      </div>
+      </WizardAccordion>
 
       {/* 2ª tarjeta: Consulta del Vehículo. En la propuesta la consulta tiene su propia tarjeta,
           con el identificador y el CTA en una línea. Los campos son los que pide cada modalidad:
           el VIN en matrícula; placa, tipo y número de documento del propietario en traspaso. */}
-      <div className={WIZARD_CARD}>
-        <WizardCardHeader
-          title="Consulta del Vehículo"
-          subtitle={`Validamos ${isVin ? 'el VIN' : 'la placa'} en el RUNT antes de configurar el trámite.`}
-        />
+      <WizardAccordion title="Consulta del Vehículo" defaultOpen>
+        <p className="text-xs opacity-70 mb-3">{`Validamos ${isVin ? 'el VIN' : 'la placa'} en el RUNT antes de configurar el trámite.`}</p>
 
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
@@ -2947,7 +3042,7 @@ function ConsultaStep({
             <VehicleDataCard fieldValues={fieldValues} bare validadoEnRunt />
           </div>
         )}
-      </div>
+      </WizardAccordion>
 
       {/* 3ª tarjeta: Organismo de Tránsito y Radicación (HU #11199 — solo matrícula y solo mientras
           el trámite no existe). La propuesta le da tarjeta propia después de la consulta: es una
@@ -2957,11 +3052,8 @@ function ConsultaStep({
           vive en la creación (`CreateFromConsultaCommand`) y, en pantalla, en el gate de
           "Continuar y guardar". */}
       {muestraRadicacion && hasVehicleData && (
-        <div className={WIZARD_CARD}>
-          <WizardCardHeader
-            title="Organismo de Tránsito y Radicación"
-            subtitle="Selecciona la secretaría donde se radicará el expediente."
-          />
+        <WizardAccordion title="Organismo de Tránsito y Radicación" defaultOpen>
+          <p className="text-xs opacity-70 mb-3">Selecciona la secretaría donde se radicará el expediente.</p>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="min-w-0">
             <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>
@@ -3053,7 +3145,23 @@ function ConsultaStep({
           </div>
 
           </div>
-        </div>
+        </WizardAccordion>
+      )}
+
+      {/* Traspaso: Organismo de Tránsito del RUNT (read-only). En matrícula el organismo se elige
+          en la tarjeta de radicación de arriba; en traspaso viene del RUNT y es de solo lectura. */}
+      {!isVin && hasVehicleData && transitOfficeNombreTraspaso && (
+        <WizardAccordion title="Organismo de Tránsito" defaultOpen>
+          <p className="text-xs opacity-70 mb-3">Organismo de tránsito registrado en el RUNT para este vehículo (solo lectura).</p>
+          <div
+            className="mt-2 flex items-center gap-3 rounded-xl border px-4 py-3"
+            style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.04)' }}
+          >
+            <span className="text-xs font-semibold" style={{ color: '#162744' }}>
+              {transitOfficeNombreTraspaso}
+            </span>
+          </div>
+        </WizardAccordion>
       )}
 
       {/* Trámite prioritario (HU #10536). Vivía DENTRO de la tarjeta de organismo, que solo existe
@@ -3062,13 +3170,10 @@ function ConsultaStep({
           expediente (`procedure_instances.prioritario`) con su propio endpoint. Sale a su propia
           tarjeta y existe en las dos modalidades, en el mismo sitio. */}
       {hasVehicleData && (
-        <div className={WIZARD_CARD}>
+        <WizardAccordion title="Trámite prioritario" defaultOpen>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <span id="consulta-prioritario-label" className="text-sm font-bold" style={{ color: '#557EFF' }}>
-                Trámite prioritario
-              </span>
-              <p id="consulta-prioritario-nota" className="mt-1 text-xs leading-tight opacity-70">
+              <p id="consulta-prioritario-nota" className="text-xs leading-tight opacity-70">
                 Prioriza la gestión de este expediente: el organismo lo revisa con primacía.{' '}
                 {deferred
                   ? 'Se aplica al crear el trámite y podrás cambiarlo después desde el listado.'
@@ -3080,7 +3185,6 @@ function ConsultaStep({
               onClick={() => handlePrioritario(!prioritarioVigente)}
               disabled={readOnly}
               aria-pressed={prioritarioVigente}
-              aria-labelledby="consulta-prioritario-label"
               aria-describedby="consulta-prioritario-nota"
               className="flex h-[38px] shrink-0 items-center justify-between gap-3 rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#162744]"
               style={prioritarioVigente ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
@@ -3099,7 +3203,7 @@ function ConsultaStep({
               </span>
             </button>
           </div>
-        </div>
+        </WizardAccordion>
       )}
 
       {error && (
@@ -3369,77 +3473,97 @@ function StepBody({
         />
       );
 
-    // Paso 2 de ambas modalidades = Datos y Documentos del Trámite (traspaso ya no usa 'validacion':
-    // el semáforo del preflight vive en el paso 1). hideHeader: el h2 + subtítulo
-    // ya pintan el título del paso.
-    // Orden del repo de diseño (MatriculaInicial, Step 3): Tipo de servicio → Transformaciones y
-    // condiciones → Prenda (radios) → Observaciones → Checklist documentos.
+    // Paso 2 de ambas modalidades = Datos y Documentos del Trámite.
+    // Orden PDF/Lovable (Oleada 2): Tipo servicio → Comercial (traspaso) → Prenda → Gestión docs
+    // → Trámites simultáneos → Observaciones.
     case 'documentos':
       return (
-        <div className="space-y-4">
-          {/* Tipo de servicio (casilla 18) y transformaciones/condiciones del vehículo. Vivían en el
-              paso 1; aquí es donde las pone el diseño y donde tienen sentido: son requisitos que se
-              declaran sobre el vehículo ya consultado y ajustan el checklist de abajo. */}
-          <DeclaracionesTramite
-            instanceId={instanceId}
-            modalidad={modalidad}
-            onChanged={() => {
-              onMarkDirty?.();
-              onRefresh?.();
-            }}
-            onTipoServicioGateChange={onTipoServicioGateChange}
-          />
-          {/* Datos comerciales del traspaso. Tenían paso propio; ahora viven aquí, porque son
-              requisitos de la operación igual que el tipo de servicio o la prenda, y porque el
-              hueco que dejaban lo ocupa la validación de identidad de las dos partes. Así las dos
-              modalidades recorren los mismos cinco pasos. El guardado sigue colgando del pie
-              ("Continuar y guardar") vía `stepFormRef`, sin botón propio. */}
-          {modalidad === 'traspaso' && (
-            <CommercialForm
-              key="comercial-en-requisitos"
-              ref={stepFormRef}
+        <div className="space-y-3">
+          {/* Tipo de servicio (casilla 18) — solo matrícula. En traspaso solo leasing.
+              hideTransformaciones=true: VehicleTransformationsCard se pinta más abajo,
+              después del checklist, como pide el PDF. */}
+          <WizardAccordion
+            title={
+              modalidad === 'traspaso' ? 'Condiciones del trámite' : 'Tipo de servicio del vehículo'
+            }
+            defaultOpen
+            level="h3"
+          >
+            <DeclaracionesTramite
               instanceId={instanceId}
-              onSaved={onRefresh}
-              hideHeader={false}
-              embeddedInWizard
+              modalidad={modalidad}
+              onChanged={() => {
+                onMarkDirty?.();
+                onRefresh?.();
+              }}
+              onTipoServicioGateChange={onTipoServicioGateChange}
+              hideTransformaciones
+              noCardWrapper
             />
-          )}
-          {/* Prenda. La decisión es la misma pieza en las dos modalidades, con distinto alcance:
-              en matrícula es declarativa (informativa, no bloquea la radicación, HU #10596) y en
-              traspaso es un gate con decisiones de gestión (HU #10598, CF-06 #10881). Antes vivían
-              en pasos distintos; ahora comparten sitio, que es lo que el gestor espera. */}
-          {(() => {
-            const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
-            const esTraspaso = modalidad === 'traspaso';
-            return (
-              <PrendaForm
-                ref={prendaFormRef}
+          </WizardAccordion>
+
+          {/* Datos comerciales del traspaso. Sin paso propio desde que se movió aquí; el guardado
+              cuelga del pie ("Continuar y guardar") vía stepFormRef. */}
+          {modalidad === 'traspaso' && (
+            <WizardAccordion title="Datos comerciales y avalúo" defaultOpen level="h3">
+              <CommercialForm
+                key="comercial-en-requisitos"
+                ref={stepFormRef}
                 instanceId={instanceId}
                 onSaved={onRefresh}
+                hideHeader
                 embeddedInWizard
-                modalidad={esTraspaso ? 'traspaso' : 'matricula_inicial'}
-                decisions={esTraspaso ? traspasoDecisions(prendaDocumentRequired) : undefined}
-                documentRequired={prendaDocumentRequired}
-                onDocumentGateChange={onPrendaDocumentGateChange}
-                runtHasGravamen={gravamen?.status === 'warn'}
-                runtGravamenMessage={gravamen?.message}
               />
-            );
-          })()}
-          <DocumentChecklist
-            instanceId={instanceId}
-            onChanged={() => {
-              onMarkDirty?.();
-              onRefresh?.();
-            }}
-            hideHeader
-            modalidad={modalidad}
-          />
-          {/* P6 — observaciones del trámite; escribe `fur_observations` (mismo campo que FirmaFurStep).
-              Van al final, como en la propuesta: es el cierre del paso, lo que el gestor escribe una
-              vez ya sabe qué documentos quedaron adjuntos. Antes salía entre la prenda y el
-              checklist y cortaba en dos la parte documental. */}
-          <TramiteObservacionesField instanceId={instanceId} />
+            </WizardAccordion>
+          )}
+
+          {/* Prenda: declarativa en matrícula; gate con decisiones en traspaso. */}
+          <WizardAccordion title="Prenda e inscripción" defaultOpen level="h3">
+            {(() => {
+              const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
+              const esTraspaso = modalidad === 'traspaso';
+              return (
+                <PrendaForm
+                  ref={prendaFormRef}
+                  instanceId={instanceId}
+                  onSaved={onRefresh}
+                  embeddedInWizard
+                  modalidad={esTraspaso ? 'traspaso' : 'matricula_inicial'}
+                  decisions={esTraspaso ? traspasoDecisions(prendaDocumentRequired) : undefined}
+                  documentRequired={prendaDocumentRequired}
+                  onDocumentGateChange={onPrendaDocumentGateChange}
+                  runtHasGravamen={gravamen?.status === 'warn'}
+                  runtGravamenMessage={gravamen?.message}
+                  hideHeader
+                />
+              );
+            })()}
+          </WizardAccordion>
+
+          {/* Gestión de documentos. */}
+          <WizardAccordion title="Documentos del trámite" defaultOpen level="h3">
+            <DocumentChecklist
+              instanceId={instanceId}
+              onChanged={() => {
+                onMarkDirty?.();
+                onRefresh?.();
+              }}
+              hideHeader
+              modalidad={modalidad}
+            />
+          </WizardAccordion>
+
+          {/* Trámites simultáneos (PDF: después de Docs, antes de Observaciones).
+              TramiteSimultaneosField maneja su propio estado para no acoplarse a
+              DeclaracionesTramite. Solo se pinta cuando el vehículo ya tiene datos. */}
+          <WizardAccordion title="Trámites Simultáneos (Opcional)" level="h3">
+            <TramiteSimultaneosField instanceId={instanceId} hideHeader />
+          </WizardAccordion>
+
+          {/* Observaciones — cierre del paso, después de los documentos. */}
+          <WizardAccordion title="Observaciones del trámite" level="h3">
+            <TramiteObservacionesField instanceId={instanceId} hideCardWrapper />
+          </WizardAccordion>
         </div>
       );
 

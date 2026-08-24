@@ -1284,7 +1284,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // ── Selector de tipo de persona (HU #10543) ───────────────────────────────
   // Persona natural: el documento de identidad se incorpora desde la validación
   // biométrica, por lo que el checklist no ofrece la carga manual de cédula.
-  const personTypeSelector = (index: number) => {
+
+  /** PDF ajuste P0: consulta RUNT exitosa → nombre bloqueado; vendedor desde placa también bloquea PN/PJ. */
+  const isRuntFound = (index: number) => runt[index]?.status === 'found';
+  const isNameLockedByRunt = (index: number, actor: ProcedureActor) =>
+    isRuntFound(index) && !isJuridical(actor);
+  const isPersonTypeLockedByRunt = (index: number) => autoConsultRunt && isRuntFound(index);
+
+  const personTypeSelector = (index: number, locked = false) => {
     const current = actors[index].personType ?? 'natural';
     return (
       <div>
@@ -1292,7 +1299,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           label="Tipo de persona"
           value={current}
           options={PERSON_TYPE_OPTIONS}
+          disabled={readOnly || locked}
           onChange={(value) => {
+            if (locked) return;
             // Jurídica ⇒ documento NIT (RUES). Volver a natural desde NIT ⇒ CC por defecto.
             const patch: Partial<ProcedureActor> = { personType: value };
             if (value === 'juridical') patch.tipoDocumento = 'NIT';
@@ -1303,6 +1312,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         {current === 'natural' && (
           <p className="text-xs mt-1 opacity-60">
             La cédula se toma de la validación de identidad; no se carga manualmente.
+          </p>
+        )}
+        {locked && (
+          <p className="text-xs mt-1 opacity-60">
+            Tipo de persona fijado por la consulta RUNT — no editable.
           </p>
         )}
       </div>
@@ -2028,11 +2042,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 type="text"
                 value={actor.nombreCompleto}
                 onChange={(e) => updateActor(0, { nombreCompleto: e.target.value })}
-                readOnly={razonLocked}
+                readOnly={razonLocked || isNameLockedByRunt(0, actor)}
                 aria-invalid={!!errors.nombreCompleto}
                 aria-describedby={errors.nombreCompleto ? 'comprador-nombre-err' : undefined}
-                className={`${INPUT_BASE}${razonLocked ? ' opacity-80' : ''}`}
-                style={razonLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                className={`${INPUT_BASE}${razonLocked || isNameLockedByRunt(0, actor) ? ' opacity-80' : ''}`}
+                style={razonLocked || isNameLockedByRunt(0, actor) ? { background: 'rgba(223,229,237,0.35)' } : undefined}
               />
               {errors.nombreCompleto && (
                 <p id="comprador-nombre-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
@@ -2263,9 +2277,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   action={<StatusBadge label={statusPill.text} tone={statusPill.tone} />}
                 />
               </div>
-              <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
-                {/* Tipo de persona (HU #10543) */}
-                <div className="sm:col-span-2">{personTypeSelector(index)}</div>
+                <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+                {/* Tipo de persona (HU #10543) — PDF P0: locked si RUNT encontrado en paso vendedor */}
+                <div className="sm:col-span-2">{personTypeSelector(index, isPersonTypeLockedByRunt(index))}</div>
                 {/* Tipo de documento */}
                 <div>
                   <label htmlFor={`${prefix}-tipoDoc`} className={`${WIZARD_LABEL} mb-1.5`}>
@@ -2326,7 +2340,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   )}
                 </div>
 
-                {/* Nombre / razón social */}
+                {/* Nombre / razón social — PDF P0: readOnly si RUNT encontrado en paso vendedor */}
                 <div className="sm:col-span-2">
                   <label htmlFor={`${prefix}-nombre`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     {isJuridical(actor) ? 'Razón social' : 'Nombre completo'}
@@ -2337,11 +2351,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     type="text"
                     value={actor.nombreCompleto}
                     onChange={(e) => updateActor(index, { nombreCompleto: e.target.value })}
-                    readOnly={razonLocked}
+                    readOnly={razonLocked || isNameLockedByRunt(index, actor)}
                     aria-invalid={!!errors.nombreCompleto}
                     aria-describedby={errors.nombreCompleto ? `${prefix}-nombre-err` : undefined}
-                    className={`${INPUT_BASE}${razonLocked ? ' opacity-80' : ''}`}
-                    style={razonLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    className={`${INPUT_BASE}${razonLocked || isNameLockedByRunt(index, actor) ? ' opacity-80' : ''}`}
+                    style={razonLocked || isNameLockedByRunt(index, actor) ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.nombreCompleto && (
                     <p id={`${prefix}-nombre-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>

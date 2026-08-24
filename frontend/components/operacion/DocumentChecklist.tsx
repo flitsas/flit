@@ -557,12 +557,10 @@ export function DocumentSlot({
       )}
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
-        {/* Tintado y no de relleno pleno con texto blanco: el verde de marca sobre blanco da 2.05:1
-            y el sistema prohíbe expresamente ese badge. `StatusBadge` resuelve tono y contraste. */}
-        <StatusBadge
-          label={done ? 'Adjunto' : 'Sin adjuntar'}
-          tone={done ? 'success' : 'neutral'}
-        />
+        {/* Solo se muestra el badge cuando hay adjunto (PDF ajuste P0): el slot vacío ya usa
+            borde punteado naranja como señal visual de "falta algo"; el badge "Sin adjuntar" era
+            redundante y generaba ruido en la grilla. */}
+        {done && <StatusBadge label="Adjunto" tone="success" />}
 
         {readOnly ? (
           attachment && onPreview ? (
@@ -936,9 +934,7 @@ export function DocumentChecklist({
               ? 'grid-cols-1'
               : items.length === 2
                 ? 'grid-cols-1 sm:grid-cols-2'
-                : items.length === 3
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                  : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
           }`}
           aria-label="Checklist de documentos"
         >

@@ -406,13 +406,11 @@ export function BiometricStep({
   );
 
   if (pagePanel) {
+    // PDF oleada 3: título DENTRO del mismo contenedor que las partes (no card aparte).
     return (
-      <div className="space-y-4">
-        <div className={WIZARD_CARD}>
-          <WizardCardHeader title={heading ?? ''} subtitle={headingSubtitle} action={refreshButton} />
-          {error && <InlineAlert tone="error">{error}</InlineAlert>}
-        </div>
-
+      <div className={`${WIZARD_CARD} space-y-4`}>
+        <WizardCardHeader title={heading ?? ''} subtitle={headingSubtitle} action={refreshButton} />
+        {error && <InlineAlert tone="error">{error}</InlineAlert>}
         {partesContent}
       </div>
     );
@@ -505,36 +503,27 @@ function ParteBlock({
   embedded?: boolean;
 }) {
   return (
-    <div>
-      {/* Embebido en el resumen: el rol ya lo dice la tarjeta de `ActorBlock` que lo envuelve
-          (Vendedor/Comprador); repetirlo aquí era un tercer rótulo para el mismo actor. */}
+    <div className={embedded ? undefined : WIZARD_CARD}>
+      {/* PDF oleada 3: un contenedor por parte, título interno azul, contenido a 2 columnas
+          con la misma altura (ValidacionCard del prototipo). */}
       {!embedded && (
-        <h3 className="mb-2 text-xs font-bold uppercase tracking-wide opacity-70">
-          {PARTE_LABEL[parte]}
+        <h3 className="mb-3 text-sm font-bold" style={{ color: '#557EFF' }}>
+          Validación — {PARTE_LABEL[parte]}
         </h3>
       )}
-      {/* Reparto 2/5 + 3/5 y `items-start`, no 50/50 estirado. La tarjeta de firma es SIEMPRE una
-          cabecera y una frase; la biometrica puede traer QR, enlace, botones e historial. Con la
-          rejilla anterior -mitad y mitad, y con el estirado por defecto de grid- la de firma se
-          inflaba hasta igualar el alto de la otra y dejaba un bloque en blanco. Ahora cada una
-          ocupa el alto de su contenido y el ancho que le corresponde, en las dos modalidades. */}
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
-        <div className="lg:col-span-2">
-          <SignatureCard parte={parte} actor={actor} vaultCovered={vaultCovered} embedded={embedded} />
-        </div>
-        <div className="lg:col-span-3">
-          <ParteCard
-            parte={parte}
-            instanceId={instanceId}
-            provider={provider}
-            validation={validation}
-            actor={actor}
-            historial={historial}
-            vaultCovered={vaultCovered}
-            onChanged={onChanged}
-            embedded={embedded}
-          />
-        </div>
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+        <SignatureCard parte={parte} actor={actor} vaultCovered={vaultCovered} embedded />
+        <ParteCard
+          parte={parte}
+          instanceId={instanceId}
+          provider={provider}
+          validation={validation}
+          actor={actor}
+          historial={historial}
+          vaultCovered={vaultCovered}
+          onChanged={onChanged}
+          embedded
+        />
       </div>
     </div>
   );

@@ -49,7 +49,7 @@ export const WIZARD_CARD = 'rounded-2xl border bg-white p-4 dark:bg-[#162744]';
  * segundo botón a `px-5 py-2`/12px en 6 de las 8 ramas del footer, que quedó unificado a este.
  *
  * NO trae un `focus-visible:ring-[hex]` por defecto a propósito: el pie combina botones de tono
- * distinto (el CTA azul, "Cancelar trámite" en rojo, "Anterior" en navy) y dos utilidades
+ * distinto (el CTA azul, "Anular trámite" en rojo, "Anterior" en navy) y dos utilidades
  * `ring-color` con el mismo valor arbitrary-value en el mismo elemento no tienen un orden de
  * cascada garantizado por el nombre de la clase en Tailwind 4 (depende del orden de generación del
  * CSS, no del orden en el `className`). Cada uso de `WIZARD_BTN` DEBE declarar su propio
