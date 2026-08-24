@@ -130,4 +130,80 @@ public sealed class CatalogoParametrizadoCompletoTests
 
         sql.Should().NotContain("wizard_enabled", "el seed no toca la barrera de operación");
     }
+
+    [Fact]
+    public void LaFamiliaOtrosPideUnSoloActor_ElTitular()
+    {
+        // Regla de negocio: en OTROS interviene un único actor —el dueño, que no vende ni compra— y
+        // se persiste con el ActorType 'comprador' porque el modelo no tiene rol 'propietario'.
+        // El perfil debe declararlo, o el paso de actores no exigiría nada y quedaría siempre
+        // completo (que es justo el defecto que tenía la primera versión de este seed).
+        var seed = Ddl("82-parametrizacion-catalogo-completo.sql");
+
+        foreach (var code in new[] { "BLINDAJE", "CAMBIO_COLOR", "CONVERSION_COMBUSTIBLE", "DUPLICADO_TARJETA" })
+        {
+            var linea = seed.Split('\n').FirstOrDefault(l =>
+                l.Contains($"('{code}'", StringComparison.Ordinal) && l.Contains("entryMode", StringComparison.Ordinal));
+
+            linea.Should().NotBeNull($"{code} debe tener perfil");
+            linea!.Should().Contain("\"requiresBuyer\":true", $"{code} exige el titular del vehículo");
+            linea.Should().NotContain("\"requiresSeller\":true", $"{code} no tiene parte vendedora");
+            linea.Should().Contain("\"entryMode\":\"PLATE\"", $"{code} entra por placa: el vehículo ya está matriculado");
+        }
+    }
+
+    [Fact]
+    public void EnOtrosSePidePlacaYDuenoAntesQueLosDocumentos()
+    {
+        // El orden lo fijó negocio: primero la placa y el dueño, después los documentos del trámite.
+        var seed = Ddl("82-parametrizacion-catalogo-completo.sql");
+        var recorrido = seed.Split('\n')
+            .Where(l => l.TrimStart().StartsWith("('NOVEDAD'", StringComparison.Ordinal))
+            .ToList();
+
+        recorrido.Should().HaveCount(5, "consulta, propietario, documentos, identidad y FUR");
+
+        var orden = recorrido.Select(l => l.Split('\'').ElementAt(3)).ToList();
+        orden.Should().ContainInOrder("consulta", "propietario", "documentos", "identidad", "fur");
+    }
+
+    [Fact]
+    public void LaSeccionDelTitularSeCodificaComoCompradorYSeTitulaPropietario()
+    {
+        // El código de sección es lo que el motor usa para saber qué actor exigir; el título es lo
+        // que lee el operador. En OTROS divergen a propósito.
+        var linea = Ddl("82-parametrizacion-catalogo-completo.sql").Split('\n')
+            .FirstOrDefault(l => l.Contains("('NOVEDAD'", StringComparison.Ordinal)
+                                 && l.Contains("'propietario'", StringComparison.Ordinal));
+
+        linea.Should().NotBeNull();
+        linea!.Should().Contain("'Propietario'", "es la etiqueta que ve el operador");
+        linea.Should().Contain("'COMPRADOR'", "es el rol con el que se persiste el titular");
+    }
+
+    [Fact]
+    public void LaMatrizDocumentalUsaSoloCodigosDelCatalogo()
+    {
+        // Inventar un code de documento haría que el JOIN del seed no encuentre fila y el requisito
+        // se pierda en silencio.
+        var conocidos = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "tarjeta_propiedad", "doc_identidad_propietario", "soat", "paz_salvo", "factura_carroceria",
+            "impronta", "certificado_ambiental", "otro", "cert_tradicion", "oficio_judicial",
+            "paz_salvo_prenda", "inscripcion_prenda", "limitacion_propiedad", "contrato_leasing",
+            "factura", "doc_identidad_comprador", "aduana", "compraventa", "doc_identidad_vendedor",
+            "transferencia_dominio",
+        };
+
+        var seed = Ddl("82-parametrizacion-catalogo-completo.sql");
+        var bloque = seed[seed.IndexOf("CREATE TEMP TABLE _requisitos", StringComparison.Ordinal)..];
+
+        var usados = Regex.Matches(bloque, @"'([a-z_]{4,40})',\s*(?:true|false)")
+            .Select(m => m.Groups[1].Value)
+            .Distinct()
+            .ToList();
+
+        usados.Should().NotBeEmpty();
+        usados.Should().OnlyContain(c => conocidos.Contains(c));
+    }
 }

@@ -23,6 +23,14 @@ public sealed record DynamicWizardStep(string StepCode, IReadOnlyList<string> Se
     public IReadOnlyList<string> SectionCodes { get; init; } = [];
 
     /// <summary>
+    /// Título configurado del paso. Es lo que el operador lee, y por eso lo decide el catálogo y no
+    /// el <c>section_type</c>: dos pasos <c>actor_form</c> del mismo trámite son "Vendedor" y
+    /// "Comprador", y en la familia OTROS el mismo tipo de sección se presenta como "Propietario".
+    /// Vacío = el cliente cae a la etiqueta genérica por tipo de sección.
+    /// </summary>
+    public string? StepTitle { get; init; }
+
+    /// <summary>
     /// Renderer principal del paso: la primera sección. Es lo que viaja en el contrato como
     /// <c>sectionType</c>; el detalle completo va en <c>sectionTypes</c>.
     /// </summary>
@@ -38,6 +46,9 @@ public sealed record DynamicWizardStepResult(
     string Status,   // complete | incomplete | locked
     IReadOnlyList<string> Reasons)
 {
+    /// <summary>Título configurado del paso; <c>null</c> si el catálogo no lo define.</summary>
+    public string? Title { get; init; }
+
     /// <summary>Todas las secciones del paso, en orden. El frontend renderiza esta lista completa.</summary>
     public IReadOnlyList<string> SectionTypes { get; init; } = [SectionType];
 }
@@ -182,6 +193,7 @@ public static class DynamicGateEvaluator
                 index, StepKey(step, index), step.PrimarySectionType, status, reasons)
             {
                 SectionTypes = step.SectionTypes,
+                Title = step.StepTitle,
             });
             index++;
         }

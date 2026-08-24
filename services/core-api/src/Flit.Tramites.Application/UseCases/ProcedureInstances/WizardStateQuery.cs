@@ -383,7 +383,11 @@ public sealed class GetWizardStateHandler(
                     }
                 }
 
-                steps.Add(new DynamicWizardStep(stepCode, sectionTypes) { SectionCodes = sectionCodes });
+                steps.Add(new DynamicWizardStep(stepCode, sectionTypes)
+                {
+                    SectionCodes = sectionCodes,
+                    StepTitle = (stepObj["stepTitle"] as JsonValue)?.ToString(),
+                });
             }
         }
 
@@ -404,6 +408,7 @@ public sealed class GetWizardStateHandler(
                 [.. st.Sections.OrderBy(sec => sec.SortOrder).Select(sec => sec.SectionType)])
             {
                 SectionCodes = [.. st.Sections.OrderBy(sec => sec.SortOrder).Select(sec => sec.Code)],
+                StepTitle = st.Title,
             })
             .Where(st => st.SectionTypes.Count > 0)
             .ToList();
@@ -495,7 +500,12 @@ public sealed class GetWizardStateHandler(
         var result = DynamicGateEvaluator.Evaluate(gateProfile, steps, ctx);
 
         var wizardSteps = result.Steps
-            .Select(s => new WizardStepDto(s.Index, s.Key, SectionLabel(s.SectionType), s.Status, s.Reasons)
+            .Select(s => new WizardStepDto(
+                s.Index, s.Key,
+                // El título configurado manda: es el que distingue "Vendedor" de "Comprador", y
+                // "Propietario" en la familia OTROS. SectionLabel es solo el respaldo genérico.
+                string.IsNullOrWhiteSpace(s.Title) ? SectionLabel(s.SectionType) : s.Title,
+                s.Status, s.Reasons)
             {
                 SectionType = s.SectionType,
                 SectionTypes = s.SectionTypes,
