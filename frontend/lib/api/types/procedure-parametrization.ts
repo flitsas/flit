@@ -255,3 +255,23 @@ export interface UpdateProcedureTypeRequest {
 export interface WizardEnabledNotReady {
   motivos: string[];
 }
+
+/**
+ * Equivalencia del tipo con Quipux — el bloque `external_refs.quipux`.
+ *
+ * `tipoTramite`, `tipoRequisito` y `prefijo` los asigna la SECRETARÍA: no son derivables de nada que
+ * FLIT sepa. El resto sí se puede proponer desde la parametrización del tipo.
+ */
+export interface MapeoQuipux {
+  /** Taxonomía de la secretaría: MATRICULA | TRASPASO | OTROS. No tiene por qué coincidir con la de FLIT. */
+  familia: string;
+  tipoTramite: number;
+  tipoRequisito: number;
+  prefijo: string;
+  /** Field value del que sale la placa, o null si el trámite no la usa. */
+  campoPlaca: string | null;
+  /** Field value del que sale el VIN, o null si el trámite no lo usa. */
+  campoVin: string | null;
+  maxLongitudEmpresa: number;
+}
+

@@ -10,16 +10,20 @@ import { TipoTramiteBarrera } from './TipoTramiteBarrera';
 import { TipoTramiteCapacidades } from './TipoTramiteCapacidades';
 import { TipoTramiteDocumentos } from './TipoTramiteDocumentos';
 import { TipoTramiteIdentidad } from './TipoTramiteIdentidad';
+import { TipoTramiteQuipux } from './TipoTramiteQuipux';
 import { TipoTramiteRecorrido } from './TipoTramiteRecorrido';
 import { useDetalleTipo, useTiposTramite } from './useTiposTramite';
 
-type Pestana = 'identidad' | 'capacidades' | 'recorrido' | 'documentos';
+type Pestana = 'identidad' | 'capacidades' | 'recorrido' | 'documentos' | 'quipux';
 
 const PESTANAS: { id: Pestana; label: string }[] = [
   { id: 'identidad', label: 'Identidad' },
   { id: 'capacidades', label: 'Capacidades' },
   { id: 'recorrido', label: 'Recorrido' },
   { id: 'documentos', label: 'Documentos' },
+  // La radicación es una faceta más del tipo, no un catálogo aparte: por eso vive aquí y no en
+  // una pantalla de Quipux.
+  { id: 'quipux', label: 'Radicación' },
 ];
 
 /**
@@ -270,6 +274,13 @@ export function TiposTramitePanel() {
                   )}
                   {pestana === 'documentos' && detalle && (
                     <TipoTramiteDocumentos perfil={detalle.perfil} onGuardado={recargarDetalle} />
+                  )}
+                  {pestana === 'quipux' && detalle && (
+                    <TipoTramiteQuipux
+                      procedureTypeId={tipo.id}
+                      familiaFlit={tipo.family}
+                      gateProfile={detalle.perfil.gateProfile}
+                    />
                   )}
                 </>
               )}

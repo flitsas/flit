@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
+using Flit.Modules.Quipux.Application.UseCases.MapeoTipoTramite;
+
 namespace Flit.Api.Endpoints.SuperAdmin;
 
 internal static class ProcedureTypeEndpoints
@@ -124,6 +126,42 @@ internal static class ProcedureTypeEndpoints
                 _ => Results.Ok(result)
             };
         }).WithName("SetProcedureTypeWizardEnabled");
+
+        // ── Equivalencias con sistemas externos (ADR-0050) ────────────────────
+        // Viven en `procedure_types.external_refs`, con el resto de la parametrización del tipo: un
+        // solo punto de configuración en vez de un catálogo por integración.
+
+        group.MapGet("/procedure-types/{id:guid}/quipux-mapping", async (
+            Guid id,
+            ObtenerMapeoQuipuxHandler handler,
+            CancellationToken ct) =>
+        {
+            var (mapeo, error) = await handler.HandleAsync(id, ct);
+            if (error == "not_found")
+                return Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found.");
+
+            // Sin bloque, el tipo no se radica en la secretaría. Es un estado legítimo, no un vacío
+            // que haya que reportar como error.
+            return mapeo is null ? Results.NoContent() : Results.Ok(mapeo);
+        }).WithName("GetProcedureTypeQuipuxMapping");
+
+        group.MapPut("/procedure-types/{id:guid}/quipux-mapping", async (
+            Guid id,
+            MapeoQuipuxDto? body,
+            GuardarMapeoQuipuxHandler handler,
+            CancellationToken ct) =>
+        {
+            var (mapeo, error) = await handler.HandleAsync(id, body, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
+                GuardarMapeoQuipuxHandler.NoUtilizable => Results.Problem(
+                    statusCode: 422,
+                    title: "Unprocessable Entity",
+                    detail: "El mapeo está incompleto: revise familia, código de trámite, código de requisito, prefijo y tope de empresa. Un bloque a medias deja el trámite sin radicar."),
+                _ => mapeo is null ? Results.NoContent() : Results.Ok(mapeo),
+            };
+        }).WithName("SetProcedureTypeQuipuxMapping");
 
         group.MapGet("/procedure-types/{id:guid}/conformation-rules", async (
             Guid id,

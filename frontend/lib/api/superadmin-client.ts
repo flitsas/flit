@@ -12,6 +12,7 @@ import type {
   ConformationProfile,
   UpdateConformationProfileRequest,
   UpdateProcedureTypeRequest,
+  MapeoQuipux,
 } from './types/procedure-parametrization';
 import { getToken } from './client';
 
@@ -235,6 +236,22 @@ export const superadminClient = {
     request<ProcedureTypeSummary>(
       `/api/v1/superadmin/procedure-types/${id}/wizard-enabled`,
       { method: 'PUT', body: JSON.stringify({ enabled }) },
+    ),
+
+  /**
+   * Equivalencia del tipo con Quipux. `undefined` = el tipo no se radica en la secretaría, que es
+   * un estado legítimo y no un error (el backend responde 204).
+   */
+  getQuipuxMapping: (id: string) =>
+    request<MapeoQuipux | undefined>(
+      `/api/v1/superadmin/procedure-types/${id}/quipux-mapping`,
+    ),
+
+  /** Guarda la equivalencia, o la retira enviando `null`. */
+  setQuipuxMapping: (id: string, mapeo: MapeoQuipux | null) =>
+    request<MapeoQuipux | undefined>(
+      `/api/v1/superadmin/procedure-types/${id}/quipux-mapping`,
+      { method: 'PUT', body: JSON.stringify(mapeo) },
     ),
 
   /** Perfil completo: capacidades, actores, fuentes externas y matriz documental. */

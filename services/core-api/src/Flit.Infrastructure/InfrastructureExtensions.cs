@@ -1086,6 +1086,11 @@ public static class InfrastructureExtensions
         // Configuración y secretos. El protector cifra password_enc / aws_secret_access_key_enc con
         // Data Protection (keyring ya persistido en Postgres): el claro nunca toca la BD.
         services.AddSingleton<IQuipuxSecretProtector, DataProtectionQuipuxSecretProtector>();
+        // ADR-0050 — parametrización Quipux del tipo, editable desde el configurador. Vive en el
+        // módulo porque la validación es suya: el bloque tiene que sobrevivir al mismo Parse que
+        // aplica el worker al radicar.
+        services.AddScoped<Flit.Modules.Quipux.Application.UseCases.MapeoTipoTramite.ObtenerMapeoQuipuxHandler>();
+        services.AddScoped<Flit.Modules.Quipux.Application.UseCases.MapeoTipoTramite.GuardarMapeoQuipuxHandler>();
         services.AddScoped<IQuipuxSettingsRepository, QuipuxSettingsRepository>();
 
         // Estado de la radicación y trazabilidad.

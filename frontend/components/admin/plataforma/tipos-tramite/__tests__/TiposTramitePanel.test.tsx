@@ -33,6 +33,8 @@ const { mocks, ApiError } = vi.hoisted(() => {
       updateProcedureType: vi.fn(),
       createProcedureType: vi.fn(),
       retirar: vi.fn(),
+      getQuipuxMapping: vi.fn(),
+      setQuipuxMapping: vi.fn(),
     },
   };
 });
@@ -76,6 +78,7 @@ beforeEach(() => {
   });
   mocks.getSteps.mockResolvedValue([]);
   mocks.validate.mockResolvedValue({ isValid: true, errors: [] });
+  mocks.getQuipuxMapping.mockResolvedValue(undefined);
 });
 
 describe('Configurador de tipos de trámite', () => {
@@ -229,5 +232,70 @@ describe('Configurador de tipos de trámite', () => {
     // menciona los trámites, y buscarlo por texto suelto pasaría aunque el error no se pintara.
     const aviso = await screen.findByRole('alert');
     expect(aviso).toHaveTextContent('No se puede retirar un tipo que tiene trámites.');
+  });
+
+  // ── Radicación (Quipux) ───────────────────────────────────────────────────
+
+  it('un tipo sin equivalencia dice que no se radica, sin tratarlo como error', async () => {
+    const user = userEvent.setup();
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Blindaje/ }));
+    await user.click(screen.getByRole('button', { name: 'Radicación' }));
+
+    // La ausencia de bloque es un estado legítimo del catálogo: ese trámite no va a la secretaría.
+    expect(await screen.findByText(/no se radica en la secretaría/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('propone el identificador y el tope desde la parametrización del tipo', async () => {
+    const user = userEvent.setup();
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Blindaje/ }));
+    await user.click(screen.getByRole('button', { name: 'Radicación' }));
+    await user.click(await screen.findByRole('button', { name: /Configurar radicación/ }));
+
+    // El perfil del tipo dice entryMode PLATE, así que el identificador es la placa y el tope 35.
+    expect(await screen.findByLabelText('Identificador del vehículo')).toHaveValue('plate');
+    expect(screen.getByLabelText('Tope del nombre de empresa')).toHaveValue(35);
+  });
+
+  it('no deja guardar sin los códigos que asigna la secretaría', async () => {
+    const user = userEvent.setup();
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Blindaje/ }));
+    await user.click(screen.getByRole('button', { name: 'Radicación' }));
+    await user.click(await screen.findByRole('button', { name: /Configurar radicación/ }));
+
+    // Guardar un bloque a medias dejaría al administrador creyendo que configuró algo que el worker
+    // descarta en silencio.
+    expect(screen.getByRole('button', { name: 'Guardar equivalencia' })).toBeDisabled();
+    expect(screen.getByText(/Faltan los códigos de la secretaría/)).toBeInTheDocument();
+  });
+
+  it('guarda la equivalencia con los códigos de la secretaría', async () => {
+    const user = userEvent.setup();
+    mocks.setQuipuxMapping.mockResolvedValue({
+      familia: 'OTROS', tipoTramite: 42, tipoRequisito: 51, prefijo: 'BL',
+      campoPlaca: 'plate', campoVin: null, maxLongitudEmpresa: 35,
+    });
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Blindaje/ }));
+    await user.click(screen.getByRole('button', { name: 'Radicación' }));
+    await user.click(await screen.findByRole('button', { name: /Configurar radicación/ }));
+
+    await user.type(screen.getByLabelText('Código de trámite en la secretaría'), '42');
+    await user.type(screen.getByLabelText('Prefijo del documento radicado'), 'BL');
+    await user.click(screen.getByRole('button', { name: 'Guardar equivalencia' }));
+
+    await waitFor(() =>
+      expect(mocks.setQuipuxMapping).toHaveBeenCalledWith(
+        'id-blindaje',
+        expect.objectContaining({ tipoTramite: 42, prefijo: 'BL', campoPlaca: 'plate' }),
+      ),
+    );
   });
 });
