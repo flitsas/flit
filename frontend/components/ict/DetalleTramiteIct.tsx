@@ -91,31 +91,43 @@ export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; e
   );
 }
 
-/** Carga perezosa compartida: cada pestaña pide lo suyo la primera vez que se abre, no antes. */
-function usarCarga<T>(cargar: (signal: AbortSignal) => Promise<T>, deps: unknown[]) {
+/**
+ * Carga perezosa compartida: cada pestaña pide lo suyo la primera vez que se abre, no antes.
+ *
+ * Recibe la FUNCIÓN del cliente de API, no un cierre. Las cuatro (`fetchRecorridoIct`,
+ * `fetchConsultasFuenteIct`, …) comparten firma y son de módulo, así que su identidad es estable y
+ * la lista de dependencias puede escribirse como literal —que es lo que exigen las reglas de
+ * hooks—. Con un cierre en línea la identidad cambiaría en cada render y el efecto se repetiría sin
+ * fin.
+ */
+function useCargaPerezosa<T>(
+  pedir: (numero: number, signal?: AbortSignal) => Promise<T>,
+  numero: number,
+) {
   const [dato, setDato] = useState<T | null>(null);
   const [status, setStatus] = useState<UiStatus>("loading");
 
   const ejecutar = useCallback(() => {
     const controller = new AbortController();
     setStatus("loading");
-    cargar(controller.signal)
+    pedir(numero, controller.signal)
       .then((d) => {
         if (controller.signal.aborted) return;
         setDato(d);
+        // Una lista vacía es un estado legítimo con su propio mensaje, no un fallo.
         setStatus(Array.isArray(d) && d.length === 0 ? "empty" : "ready");
       })
       .catch(() => {
         if (!controller.signal.aborted) setStatus("error");
       });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [pedir, numero]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
-    return ejecutar();
-  }, [ejecutar]);
+  // `ejecutar` pone el estado en «cargando» ANTES de lanzar la petición: sin eso la pestaña se
+  // vería vacía mientras llega la respuesta, que es justo cuando el usuario necesita ver que algo
+  // está pasando. Devuelve la función de aborto, así que el efecto también limpia al desmontar.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => ejecutar(), [ejecutar]);
 
   return { dato, status, reintentar: ejecutar };
 }
@@ -131,10 +143,7 @@ function PanelRecorrido({
   tramite: TramiteIct;
   esAdmin: boolean;
 }) {
-  const { dato, status, reintentar } = usarCarga<RecorridoTramiteIct>(
-    (signal) => fetchRecorridoIct(numero, signal),
-    [numero],
-  );
+  const { dato, status, reintentar } = useCargaPerezosa<RecorridoTramiteIct>(fetchRecorridoIct, numero);
 
   return (
     <UiStateBoundary
@@ -262,10 +271,7 @@ function hrefTramite(instanceId: string, tenantId: string, esAdmin: boolean): st
 // ── Consultas al RUNT ────────────────────────────────────────────────────────
 
 function PanelConsultas({ numero }: { numero: number }) {
-  const { dato, status, reintentar } = usarCarga<ConsultaFuenteIct[]>(
-    (signal) => fetchConsultasFuenteIct(numero, signal),
-    [numero],
-  );
+  const { dato, status, reintentar } = useCargaPerezosa<ConsultaFuenteIct[]>(fetchConsultasFuenteIct, numero);
   const [abierta, setAbierta] = useState<string | null>(null);
 
   const bloqueante = dato?.find((c) => c.bloquea);
@@ -375,10 +381,7 @@ function formatearJson(texto: string | null | undefined): string {
 // ── Datos recibidos ──────────────────────────────────────────────────────────
 
 function PanelDatos({ numero }: { numero: number }) {
-  const { dato, status, reintentar } = usarCarga<DatosTramiteIct>(
-    (signal) => fetchDatosTramiteIct(numero, signal),
-    [numero],
-  );
+  const { dato, status, reintentar } = useCargaPerezosa<DatosTramiteIct>(fetchDatosTramiteIct, numero);
 
   // HU #11820. El revelado es una acción explícita y su resultado NO sustituye a la carga normal:
   // se guarda aparte para poder volver a tapar sin repetir la petición ni el registro de auditoría.
@@ -498,10 +501,7 @@ function PanelDatos({ numero }: { numero: number }) {
 // ── Log técnico ──────────────────────────────────────────────────────────────
 
 function PanelLog({ numero }: { numero: number }) {
-  const { dato, status, reintentar } = usarCarga<EventoLogTramiteIct[]>(
-    (signal) => fetchLogTramiteIct(numero, signal),
-    [numero],
-  );
+  const { dato, status, reintentar } = useCargaPerezosa<EventoLogTramiteIct[]>(fetchLogTramiteIct, numero);
 
   return (
     <UiStateBoundary

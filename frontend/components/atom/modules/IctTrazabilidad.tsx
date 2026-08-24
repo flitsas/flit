@@ -98,6 +98,9 @@ export function IctTrazabilidad() {
   // el resto lo deriva su sesión. Se resuelve tras montar: en el servidor no hay localStorage.
   const [esAdmin, setEsAdmin] = useState(false);
   useEffect(() => {
+    // El JWT vive en localStorage y no existe en el servidor: leerlo durante el render rompería la
+    // hidratación. Mismo patrón que LogQx.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
   }, []);
 
@@ -122,7 +125,10 @@ export function IctTrazabilidad() {
   }, []);
 
   useEffect(() => {
-    // Todas las actualizaciones de estado ocurren tras el await, nunca de forma síncrona en el efecto.
+    // `cargar` marca el indicador de carga ANTES de esperar la respuesta; hacerlo después dejaría
+    // la pantalla sin señal de que está trabajando durante toda la consulta, que es cuando más
+    // falta hace.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void cargar(aplicados, page);
   }, [cargar, aplicados, page]);
 
