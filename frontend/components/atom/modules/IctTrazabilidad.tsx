@@ -4,7 +4,7 @@
 // capa técnica de bajo nivel, ni a «Reportes ICT», que sigue siendo la vista agregada por compañía.
 // Lo que aporta es el nivel que faltaba: el trámite.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileSpreadsheet, Search, X } from "lucide-react";
+import { ChevronRight, FileSpreadsheet, Search, X } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
 import { PageNav } from "@/components/atom/PageNav";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
@@ -24,6 +24,9 @@ import {
   type EstadoIct,
 } from "@/lib/ict/trazabilidad";
 import { bogotaClock, buildXlsx, XLSX_MIME, type XlsxCell } from "@/lib/xlsx";
+import { DetalleTramiteIct } from "@/components/ict/DetalleTramiteIct";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { getToken } from "@/lib/api/client";
 
 const TAMANO_PAGINA = 25;
 
@@ -90,6 +93,13 @@ export function IctTrazabilidad() {
   const [pagina, setPagina] = useState<PaginaTramitesIct | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [abierto, setAbierto] = useState<number | null>(null);
+  // El enlace al trámite solo necesita el tenant de la fila cuando quien mira es SuperAdmin; para
+  // el resto lo deriva su sesión. Se resuelve tras montar: en el servidor no hay localStorage.
+  const [esAdmin, setEsAdmin] = useState(false);
+  useEffect(() => {
+    setEsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
 
   // Evita que una respuesta lenta de una búsqueda anterior pise a la de la búsqueda actual.
   const peticion = useRef(0);
@@ -119,6 +129,7 @@ export function IctTrazabilidad() {
   const aplicar = useCallback((f: Filtros) => {
     setAplicados(f);
     setPage(1);
+    setAbierto(null);
   }, []);
 
   const limpiar = useCallback(() => {
@@ -309,6 +320,9 @@ export function IctTrazabilidad() {
                     className="text-left text-[10px] font-semibold uppercase"
                     style={{ color: "#162744" }}
                   >
+                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: "#DFE5ED", width: 34 }}>
+                      <span className="sr-only">Detalle</span>
+                    </th>
                     {COLUMNAS.map((c) => (
                       <th key={c} className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
                         {c}
@@ -321,7 +335,13 @@ export function IctTrazabilidad() {
                 </thead>
                 <tbody>
                   {items.map((t) => (
-                    <FilaTramite key={t.id} tramite={t} />
+                    <FilaTramite
+                      key={t.id}
+                      tramite={t}
+                      esAdmin={esAdmin}
+                      abierta={abierto === t.numero}
+                      onToggle={() => setAbierto(abierto === t.numero ? null : t.numero)}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -360,7 +380,17 @@ function Campo({
   );
 }
 
-function FilaTramite({ tramite }: { tramite: TramiteIct }) {
+function FilaTramite({
+  tramite,
+  esAdmin,
+  abierta,
+  onToggle,
+}: {
+  tramite: TramiteIct;
+  esAdmin: boolean;
+  abierta: boolean;
+  onToggle: () => void;
+}) {
   const meta = ESTADO_ICT[tramite.estado];
   const estilo = meta?.style;
   const alta =
@@ -372,8 +402,29 @@ function FilaTramite({ tramite }: { tramite: TramiteIct }) {
 
   return (
     <>
-      <tr className="bg-white text-[#162744] border-[#DFE5ED] dark:bg-[#162744] dark:text-white dark:border-white/10">
-        <td className={`${tdCls} rounded-l-xl border-l`}>
+      <tr
+        className={`cursor-pointer bg-white text-[#162744] transition dark:bg-[#162744] dark:text-white ${
+          abierta ? "border-[#557EFF]/40" : "border-[#DFE5ED] dark:border-white/10"
+        }`}
+        onClick={onToggle}
+        tabIndex={0}
+        role="button"
+        aria-expanded={abierta}
+        aria-label={`Trámite ${tramite.numero}, placa ${tramite.placa}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+      >
+        <td className={`${tdCls} rounded-l-xl border-l px-3`}>
+          <ChevronRight
+            className={`h-3.5 w-3.5 text-[#557EFF] transition-transform ${abierta ? "rotate-90" : ""}`}
+            aria-hidden="true"
+          />
+        </td>
+        <td className={tdCls}>
           <span className="font-mono font-semibold text-[#557EFF]">{tramite.numero}</span>
         </td>
         <td className={tdCls}>
@@ -422,6 +473,13 @@ function FilaTramite({ tramite }: { tramite: TramiteIct }) {
           </span>
         </td>
       </tr>
+      {abierta && (
+        <tr>
+          <td colSpan={COLUMNAS.length + 2} className="px-0 pb-2 pt-0">
+            <DetalleTramiteIct tramite={tramite} esAdmin={esAdmin} />
+          </td>
+        </tr>
+      )}
     </>
   );
 }

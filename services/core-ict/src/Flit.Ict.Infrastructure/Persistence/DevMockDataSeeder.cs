@@ -55,6 +55,12 @@ public sealed partial class DevMockDataSeeder(
                 Log.SeededTrazabilidad(logger);
             }
 
+            if (!await YaSembradoAsync(connection, "SELECT count(*) FROM ict.external_integration_actors", cancellationToken))
+            {
+                await EjecutarAsync(connection, ActoresMockSql, tenantId.Value, cancellationToken);
+                Log.SeededActores(logger);
+            }
+
             if (!await YaSembradoAsync(connection, "SELECT count(*) FROM ict.external_integration_source_query", cancellationToken))
             {
                 await EjecutarAsync(connection, ConsultasFuenteMockSql, tenantId.Value, cancellationToken);
@@ -185,6 +191,29 @@ public sealed partial class DevMockDataSeeder(
     /// una consulta de identidad sin resolver tras tres intentos: es el escenario que justifica la
     /// pestaña, porque explica un atasco que el estado por sí solo no explica.
     /// </summary>
+    /// <summary>
+    /// Actores de los pre-trámites de muestra (HU #11819). Se siembran con los datos personales EN
+    /// CLARO a propósito: el enmascarado es responsabilidad de la consulta y solo se puede comprobar
+    /// si el dato guardado no viene ya tapado.
+    /// </summary>
+    private const string ActoresMockSql = """
+        INSERT INTO ict.external_integration_actors
+            (master_id, tenant_id, actor_type, document_type, document_number, name,
+             first_last_name, second_last_name, phone, email, city, state, address)
+        SELECT m.id, m.tenant_id, v.actor_type, v.document_type, v.document_number, v.name,
+               v.first_last_name, v.second_last_name, v.phone, v.email, v.city, v.state, v.address
+        FROM ict.external_integration_master m
+        CROSS JOIN (VALUES
+            ('seller', 'NIT', '890903938', 'BANCOLOMBIA S.A.', '', '', '6045115516',
+             'notificaciones@bancolombia.com.co', 'MEDELLÍN', 'Antioquia', 'CR 48 26 85'),
+            ('buyer', 'CC', '43128877', 'ANA MARIA', 'RESTREPO', 'OCHOA', '3104558812',
+             'amrestrepo@correo.co', 'VALLEDUPAR', 'Cesar', 'CALLE 1C No 25-85 MZ G CA8')
+        ) AS v(actor_type, document_type, document_number, name, first_last_name, second_last_name,
+               phone, email, city, state, address)
+        WHERE m.tenant_id = @tenant
+          AND m.manager_id_transaction IN ('MOCK-STUCK-1', 'MOCK-NOV-1', 'MOCK-DRAFT-1');
+        """;
+
     private const string ConsultasFuenteMockSql = """
         INSERT INTO ict.external_integration_source_query
             (eim_id, tenant_id, actor_level, query_type, document_type, document_number,
@@ -264,6 +293,9 @@ public sealed partial class DevMockDataSeeder(
 
         [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: consultas a fuentes de muestra creadas.")]
         public static partial void SeededConsultas(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: actores de muestra creados.")]
+        public static partial void SeededActores(ILogger logger);
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev mock seed: no hay tenants; se omite.")]
         public static partial void NoTenant(ILogger logger);

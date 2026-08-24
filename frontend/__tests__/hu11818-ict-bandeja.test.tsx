@@ -12,12 +12,11 @@ vi.mock("@/lib/api/ict-trazabilidad", async (importOriginal) => {
   return { ...actual, fetchTramitesIct: mocks.fetchTramitesIct };
 });
 
-// La exportación construye un Blob y dispara una descarga; en jsdom no hay ninguna de las dos.
-vi.stubGlobal("URL", {
-  ...URL,
-  createObjectURL: () => "blob:prueba",
-  revokeObjectURL: () => undefined,
-});
+// La exportación crea un object URL y en jsdom no existe. Se parchean SOLO esos dos métodos: en un
+// intento anterior se sustituyó el objeto URL entero y eso rompió su uso como constructor, que sí
+// se necesita en cuanto la fila monta el detalle.
+URL.createObjectURL = () => "blob:prueba";
+URL.revokeObjectURL = () => undefined;
 
 import { IctTrazabilidad } from "@/components/atom/modules/IctTrazabilidad";
 

@@ -73,6 +73,9 @@ public static class IctInfrastructureExtensions
         services.AddScoped<ITrazabilidadBandejaQuery, DbTrazabilidadBandejaRepository>();
         services.AddScoped<IRecorridoTramiteQuery, DbRecorridoTramiteRepository>();
         services.AddScoped<IConsultasFuenteQuery, DbConsultasFuenteRepository>();
+        services.AddScoped<DbDetalleTramiteRepository>();
+        services.AddScoped<IDatosTramiteQuery>(sp => sp.GetRequiredService<DbDetalleTramiteRepository>());
+        services.AddScoped<ILogTramiteQuery>(sp => sp.GetRequiredService<DbDetalleTramiteRepository>());
 
         // Seguridad (login ICT independiente).
         services.AddSingleton(sp => new IctJwtKeyMaterial(sp.GetRequiredService<IOptions<IctJwtSettings>>().Value));

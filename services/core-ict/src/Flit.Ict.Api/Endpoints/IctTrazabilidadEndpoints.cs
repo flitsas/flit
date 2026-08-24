@@ -104,6 +104,48 @@ public static class IctTrazabilidadEndpoints
                 : Results.Ok(consultas);
         });
 
+        // HU #11819 — datos recibidos, agrupados por secciones de negocio.
+        group.MapGet("/tramites/{numero:long}/datos", async (
+            HttpContext context,
+            IDatosTramiteQuery query,
+            long numero,
+            CancellationToken ct) =>
+        {
+            var access = PlatformAccessReader.Read(context);
+            if (!access.HasIctLogsAccess)
+            {
+                return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            var datos = await query.ConsultarAsync(
+                numero, access.IsSuperAdmin ? null : access.TenantId, ct);
+
+            return datos is null
+                ? Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound)
+                : Results.Ok(datos);
+        });
+
+        // HU #11819 — log HTTP acotado a las peticiones que tocan a este trámite.
+        group.MapGet("/tramites/{numero:long}/log", async (
+            HttpContext context,
+            ILogTramiteQuery query,
+            long numero,
+            CancellationToken ct) =>
+        {
+            var access = PlatformAccessReader.Read(context);
+            if (!access.HasIctLogsAccess)
+            {
+                return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            var eventos = await query.ConsultarAsync(
+                numero, access.IsSuperAdmin ? null : access.TenantId, ct);
+
+            return eventos is null
+                ? Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound)
+                : Results.Ok(eventos);
+        });
+
         return app;
     }
 

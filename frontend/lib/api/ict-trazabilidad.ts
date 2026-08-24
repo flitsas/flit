@@ -153,3 +153,51 @@ export function fetchConsultasFuenteIct(
     { signal },
   );
 }
+
+/** Un dato del trámite, ya con su etiqueta en lenguaje de usuario y su valor formateado. */
+export interface DatoTramite {
+  etiqueta: string;
+  valor: string | null;
+  /** Dato personal: llega enmascarado y la pantalla lo marca como tal. */
+  esSensible: boolean;
+}
+
+export interface SeccionDatos {
+  titulo: string;
+  datos: DatoTramite[];
+}
+
+export interface DatosTramiteIct {
+  numero: number;
+  secciones: SeccionDatos[];
+}
+
+export function fetchDatosTramiteIct(numero: number, signal?: AbortSignal): Promise<DatosTramiteIct> {
+  return apiFetch<DatosTramiteIct>(
+    `/api/v1/ict/trazabilidad/tramites/${numero}/datos`,
+    { signal },
+  );
+}
+
+export interface EventoLogTramiteIct {
+  id: string;
+  ocurrido: string;
+  tipo: string;
+  direccion: string;
+  metodo: string;
+  ruta: string;
+  codigo: number;
+  duracionMs: number;
+  /** Cuántos trámites viajaban en la misma petición. Explica por qué el log crudo es ilegible. */
+  tramitesEnLaPeticion: number;
+}
+
+export function fetchLogTramiteIct(
+  numero: number,
+  signal?: AbortSignal,
+): Promise<EventoLogTramiteIct[]> {
+  return apiFetch<EventoLogTramiteIct[]>(
+    `/api/v1/ict/trazabilidad/tramites/${numero}/log`,
+    { signal },
+  );
+}
