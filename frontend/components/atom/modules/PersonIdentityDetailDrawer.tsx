@@ -3,15 +3,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   AlertCircle,
-  Calendar,
   ChevronDown,
-  FileText,
-  Hash,
-  Mail,
   RefreshCw,
   ScanFace,
-  ShieldCheck,
-  User,
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -21,8 +15,10 @@ import {
   AssociatedProceduresList,
   buildAssociatedProcedures,
 } from '@/components/atom/modules/AssociatedProceduresList';
-import { IdentityCaptureLinkBlock } from '@/components/atom/modules/IdentityCaptureLinkBlock';
-import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
+import {
+  hasKyverumCaptureQr,
+  IdentityCaptureLinkBlock,
+} from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { FLIT } from '@/lib/flit-design-tokens';
 import type {
   BiometricEstado,
@@ -41,7 +37,7 @@ const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> 
   en_proceso: { label: 'En proceso', tone: 'warning' },
   aprobado: { label: 'Aprobado', tone: 'success' },
   rechazado: { label: 'Rechazado', tone: 'danger' },
-  expirado: { label: 'Expirado', tone: 'neutral' },
+  expirado: { label: 'Expirado', tone: 'warning' },
   pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
   error_envio: { label: 'Error de envío', tone: 'danger' },
 };
@@ -162,63 +158,53 @@ export function PersonIdentityDetailDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="person-identity-process-title"
     >
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        className="absolute inset-0"
+        style={{ background: 'rgba(22, 39, 68, 0.45)', backdropFilter: 'blur(6px)' }}
         aria-label="Cerrar panel"
         onClick={onClose}
       />
-      <aside className="relative z-10 flex h-full w-full max-w-xl flex-col border-l bg-white shadow-2xl dark:bg-[#0B0F14]">
-        <header className="flex shrink-0 items-center justify-between border-b px-5 py-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl"
-              style={{ background: FLIT.blueAlpha(0.12), color: FLIT.brand.blue }}
-              aria-hidden
-            >
-              <ScanFace className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <h2
-                id="person-identity-process-title"
-                className="truncate text-sm font-bold text-[#162744] dark:text-white"
-              >
-                Proceso de validación
-              </h2>
-              {data && (
-                <p className="text-[10px] opacity-60">
-                  {data.total} validación{data.total === 1 ? '' : 'es'}
-                  {data.allTerminal ? ' · historial terminal' : ' · actualizando…'}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
+      <div
+        className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[18px] border bg-white shadow-2xl dark:bg-[#0B0F14]"
+        style={{ borderColor: FLIT.border.soft }}
+      >
+        <header className="flex shrink-0 items-center justify-between gap-3 px-6 py-4">
+          <h2
+            id="person-identity-process-title"
+            className="min-w-0 truncate text-base font-bold"
+            style={{ color: FLIT.brand.blue }}
+          >
+            Historial y tracking de identidad
+          </h2>
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => void load()}
-              className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-[rgba(79,116,201,0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
-              aria-label="Actualizar historial"
+              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{ background: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
+              aria-label="Actualizar estado"
             >
-              <RefreshCw className={`h-4 w-4 opacity-70 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              Actualizar estado
             </button>
             <button
               type="button"
               onClick={onClose}
               aria-label="Cerrar proceso"
-              className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-[rgba(79,116,201,0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
+              className="grid h-8 w-8 place-items-center rounded-lg hover:bg-[rgba(79,116,201,0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
             >
               <X className="h-4 w-4 opacity-70" aria-hidden="true" />
             </button>
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-5">
           {loading && !data && !error && (
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-3">
               <span className="sr-only">Cargando proceso…</span>
@@ -251,39 +237,38 @@ export function PersonIdentityDetailDrawer({
 
           {data && latest && latestMeta && (
             <div className="space-y-4 text-xs">
-              {/* Cabecera personal — mismo diseño que develop (PrevalidacionDetailDrawer) */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                {awaiting ? (
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: FLIT.brand.blue }} aria-hidden />
-                    <p className="text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
-                      Esperando validación de {personName}
+              <div
+                className="rounded-xl border bg-white px-4 py-3"
+                style={{ borderColor: FLIT.border.soft }}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {awaiting ? (
+                    <div className="flex min-w-0 items-center gap-2">
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: FLIT.brand.blue }} aria-hidden />
+                      <p className="text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
+                        Esperando validación de {personName}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[15px] font-bold uppercase tracking-wide text-[#162744] dark:text-white">
+                      {personName}
                     </p>
-                  </div>
-                ) : (
-                  <p className="text-sm font-semibold text-[#162744] dark:text-white">{personName}</p>
-                )}
-                <StatusBadge
-                  label={latestMeta.label}
-                  tone={latestMeta.tone}
-                  ariaLabel={`Estado de la última validación: ${latestMeta.label}`}
-                />
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <IdentityInfoTile icon={User} label="Persona" value={personName} />
-                <IdentityInfoTile
-                  icon={FileText}
-                  label="Documento"
-                  value={`${latest.documentType} ${latest.documentNumber}`}
-                  mono
-                />
-                <IdentityInfoTile
-                  icon={Mail}
-                  label="Correo"
-                  value={latest.email || '—'}
-                  className="sm:col-span-2"
-                />
+                  )}
+                  <span
+                    className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold"
+                    style={{ background: FLIT.blueAlpha(0.12), color: FLIT.brand.blue }}
+                  >
+                    {latest.documentType} {latest.documentNumber}
+                  </span>
+                  <StatusBadge
+                    label={latestMeta.label}
+                    tone={latestMeta.tone}
+                    ariaLabel={`Estado de la última validación: ${latestMeta.label}`}
+                  />
+                </div>
+                <p className="mt-1 text-[12px]" style={{ color: FLIT.text.secondary }}>
+                  {latest.email || '—'}
+                </p>
               </div>
 
               {/* Acordeón: un ítem por validación (más reciente → más antigua) */}
@@ -302,7 +287,7 @@ export function PersonIdentityDetailDrawer({
             </div>
           )}
         </div>
-      </aside>
+      </div>
     </div>
   );
 }
@@ -310,7 +295,6 @@ export function PersonIdentityDetailDrawer({
 function ValidationAccordionItem({
   validation: v,
   index,
-  total,
   defaultOpen,
   trackingTick,
 }: {
@@ -322,19 +306,10 @@ function ValidationAccordionItem({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const panelId = useId();
-  const meta = ESTADO_META[v.status] ?? ESTADO_META.enviado;
-  const showCaptura = Boolean(v.captureUrl && !isTerminal(v));
-  const title =
-    index === 0
-      ? 'Más reciente'
-      : index === total - 1
-        ? 'Más antigua'
-        : `Validación #${index + 1}`;
-  const subtitle = v.referenceNumber
-    ? v.referenceNumber
-    : v.procedureInstanceId
-      ? 'Con trámite'
-      : 'Prevalidación';
+  const showCaptura = hasKyverumCaptureQr(v.captureUrl);
+  const title = index === 0 ? 'Sesión más reciente' : 'Sesión anterior / Histórica';
+  const enlaceTone: StatusTone = v.expired ? 'warning' : 'success';
+  const enlaceEstado = v.expired ? 'Vencido' : 'Vigente';
 
   const associated = buildAssociatedProcedures({
     instanceId: v.procedureInstanceId,
@@ -347,50 +322,42 @@ function ValidationAccordionItem({
     <div className="rounded-xl border overflow-hidden" role="listitem" style={{ borderColor: FLIT.border.soft }}>
       <button
         type="button"
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-[rgba(79,116,201,0.05)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#4F74C9]"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[rgba(79,116,201,0.05)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#4F74C9]"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((o) => !o)}
       >
+        <span className="text-[13px] font-semibold text-[#162744] dark:text-white">{title}</span>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-0' : '-rotate-90'}`}
+          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
           style={{ color: FLIT.brand.blue }}
           aria-hidden
         />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold text-[#162744] dark:text-white">{title}</span>
-            <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
-          </div>
-          <p className="mt-0.5 truncate text-[10px] opacity-60">
-            <span className="font-mono font-semibold" style={{ color: FLIT.brand.blue }}>
-              {subtitle}
-            </span>
-            {' · Registro '}
-            {formatFecha(v.createdAt)}
-          </p>
-        </div>
       </button>
 
       {open && (
         <div id={panelId} className="space-y-3 border-t px-3 py-3" style={{ borderColor: FLIT.border.soft }}>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <IdentityInfoTile
-              icon={Hash}
-              label="Intentos Kyverum"
-              value={`${v.intentos} / ${v.maxIntentos}`}
+          <div
+            className="grid gap-3 rounded-xl border px-3 py-3 sm:grid-cols-3"
+            style={{ borderColor: FLIT.border.soft }}
+          >
+            <SessionStat
+              label="Asociado a trámite"
+              value={v.referenceNumber ?? '—'}
+              accent={Boolean(v.referenceNumber)}
             />
-            <IdentityInfoTile
-              icon={Calendar}
-              label="Enlace vigente hasta"
-              value={v.expired ? 'Vencido' : formatFecha(v.expiresAt)}
+            <SessionStat label="Fecha de registro" value={formatFecha(v.createdAt)} />
+            <SessionStat label="Intentos Kyverum" value={`${v.intentos} / ${v.maxIntentos}`} />
+            <SessionStat
+              label="Estado del enlace"
+              value={enlaceEstado}
+              badgeTone={enlaceTone}
             />
-            <IdentityInfoTile
-              icon={ShieldCheck}
-              label="Score"
+            <SessionStat
+              label="Score biométrico"
               value={v.score != null ? String(v.score) : '—'}
             />
-            <IdentityInfoTile icon={Calendar} label="Aprobación" value={formatFecha(v.validatedAt)} />
+            <SessionStat label="Fecha aprobación" value={formatFecha(v.validatedAt)} />
           </div>
 
           {associated.length > 0 && (
@@ -429,20 +396,52 @@ function ValidationAccordionItem({
 
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} />}
 
-          <div className="rounded-xl border p-3">
-            <p className="mb-1 text-[11px] font-semibold text-[#162744] dark:text-white">
-              Tracking del proceso
+          <div className="rounded-xl border p-3" style={{ borderColor: FLIT.border.soft }}>
+            <p className="mb-1 text-[13px] font-semibold text-[#162744] dark:text-white">
+              Tracking de auditoría y proceso (tiempo real)
             </p>
-            <p className="mb-2 text-[10px] opacity-60">
-              Etapas, reintentos y fallos registrados por el sistema (se actualiza en vivo).
+            <p className="mb-2 text-[11px]" style={{ color: FLIT.text.secondary }}>
+              Historial cronológico de eventos, cifrado y respuestas del proveedor.
             </p>
             <IdentityValidationTrackingPanel
               validationId={v.id}
               refreshKey={trackingTick}
               defaultOpen
+              embebido
+              detailLayout
             />
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function SessionStat({
+  label,
+  value,
+  accent = false,
+  badgeTone,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  badgeTone?: StatusTone;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-55">{label}</p>
+      {badgeTone ? (
+        <div className="mt-1">
+          <StatusBadge label={value} tone={badgeTone} ariaLabel={`${label}: ${value}`} />
+        </div>
+      ) : (
+        <p
+          className={`mt-0.5 truncate text-[12px] font-semibold ${accent ? 'font-mono' : ''}`}
+          style={{ color: accent ? FLIT.brand.blue : FLIT.text.primary }}
+        >
+          {value}
+        </p>
       )}
     </div>
   );
