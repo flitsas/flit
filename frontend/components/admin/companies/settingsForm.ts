@@ -3,7 +3,6 @@
 import type {
   EnrutamientoSMTP,
   FinesQuerySource,
-  NotificationTarget,
   TenantSettings,
   TenantSettingsUpdate,
 } from "@/lib/api/types";
@@ -128,7 +127,12 @@ export interface SettingsForm {
   plateFlowSkipToTerminado: boolean;
   validarSoatConRunt: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
-  notificationTarget: NotificationTarget;
+  avisosAprobacionActivos: boolean;
+  avisosRechazoActivos: boolean;
+  destinatarioComprador: boolean;
+  destinatarioVendedorOPropietario: boolean;
+  destinatarioRadicador: boolean;
+  destinatarioExtraEmail: string;
   metodosRecaudo: string[];
   // HU #10478 — proveedor PRIMARIO por tipo de consulta RUNT (el fallback se deriva).
   consultaVin: string;
@@ -140,8 +144,6 @@ export interface SettingsForm {
   avaluoPrimary: string;
   // FEATURE 02 — fuente de comparendos (internal | external).
   finesQuerySource: FinesQuerySource;
-  /** HU #11469 — avisos de correo al cambio de estado (default true). */
-  avisosCambioEstadoActivos: boolean;
 }
 
 /** Construye el estado del formulario a partir de la configuración cargada. */
@@ -165,7 +167,15 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     plateFlowSkipToTerminado: settings.plateFlowSkipToTerminado ?? false,
     validarSoatConRunt: settings.validarSoatConRunt ?? false,
     enrutamientoSMTP: settings.enrutamientoSMTP,
-    notificationTarget: settings.notificationTarget,
+    avisosAprobacionActivos:
+      settings.avisosAprobacionActivos ?? settings.avisosCambioEstadoActivos ?? true,
+    avisosRechazoActivos:
+      settings.avisosRechazoActivos ?? settings.avisosCambioEstadoActivos ?? true,
+    destinatarioComprador: settings.destinatariosNotificacion?.comprador ?? true,
+    destinatarioVendedorOPropietario:
+      settings.destinatariosNotificacion?.vendedorOPropietario ?? true,
+    destinatarioRadicador: settings.destinatariosNotificacion?.radicador ?? true,
+    destinatarioExtraEmail: settings.destinatariosNotificacion?.extraEmail ?? "",
     metodosRecaudo: [...settings.metodosRecaudo],
     consultaVin: cfg.vehicle_vin?.primary ?? DEFAULT_VEHICLE_PROVIDER,
     consultaPlaca: cfg.vehicle_plate?.primary ?? DEFAULT_VEHICLE_PROVIDER,
@@ -173,7 +183,6 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     runtFailoverTimeoutMs: settings.runtFailoverTimeoutMs ?? DEFAULT_FAILOVER_MS,
     ...avaluoFromSettings(settings.avaluoProviderConfig),
     finesQuerySource: settings.finesQuerySource ?? DEFAULT_FINES_QUERY_SOURCE,
-    avisosCambioEstadoActivos: settings.avisosCambioEstadoActivos ?? true,
   };
 }
 
@@ -213,7 +222,14 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
     plateFlowSkipToTerminado: form.plateFlowSkipToTerminado,
     validarSoatConRunt: form.validarSoatConRunt,
     enrutamientoSMTP: form.enrutamientoSMTP,
-    notificationTarget: form.notificationTarget,
+    avisosAprobacionActivos: form.avisosAprobacionActivos,
+    avisosRechazoActivos: form.avisosRechazoActivos,
+    destinatariosNotificacion: {
+      comprador: form.destinatarioComprador,
+      vendedorOPropietario: form.destinatarioVendedorOPropietario,
+      radicador: form.destinatarioRadicador,
+      extraEmail: form.destinatarioExtraEmail.trim() || null,
+    },
     metodosRecaudo: [...form.metodosRecaudo],
     runtFailoverTimeoutMs: form.runtFailoverTimeoutMs,
     consultationProviderConfig: {
@@ -226,7 +242,6 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
       enabled: normalizeAvaluoEnabled(form.avaluoEnabled),
     },
     finesQuerySource: form.finesQuerySource,
-    avisosCambioEstadoActivos: form.avisosCambioEstadoActivos,
   };
 }
 
@@ -335,17 +350,41 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     }),
   },
   {
-    key: "avisosCambioEstadoActivos",
+    key: "avisosAprobacionActivos",
     module: "Configuración Empresa",
-    label: "Avisos de correo al cambio de estado",
-    describe: (_i, c) => onOff(c.avisosCambioEstadoActivos),
+    label: "Avisos al aprobar trámite",
+    describe: (_i, c) => onOff(c.avisosAprobacionActivos),
   },
   {
-    key: "notificationTarget",
+    key: "avisosRechazoActivos",
     module: "Configuración Empresa",
-    label: "Destinatario de notificaciones",
+    label: "Avisos al rechazar trámite",
+    describe: (_i, c) => onOff(c.avisosRechazoActivos),
+  },
+  {
+    key: "destinatarioComprador",
+    module: "Configuración Empresa",
+    label: "Notificar al comprador",
+    describe: (_i, c) => onOff(c.destinatarioComprador),
+  },
+  {
+    key: "destinatarioVendedorOPropietario",
+    module: "Configuración Empresa",
+    label: "Notificar al vendedor o propietario",
+    describe: (_i, c) => onOff(c.destinatarioVendedorOPropietario),
+  },
+  {
+    key: "destinatarioRadicador",
+    module: "Configuración Empresa",
+    label: "Notificar al radicador",
+    describe: (_i, c) => onOff(c.destinatarioRadicador),
+  },
+  {
+    key: "destinatarioExtraEmail",
+    module: "Configuración Empresa",
+    label: "Correo adicional de avisos",
     describe: (i, c) => ({
-      detail: `${NOTIFICATION_TARGET_LABELS[i.notificationTarget]} → ${NOTIFICATION_TARGET_LABELS[c.notificationTarget]}`,
+      detail: `${i.destinatarioExtraEmail || "(vacío)"} → ${c.destinatarioExtraEmail || "(vacío)"}`,
       tone: "neutral",
     }),
   },
@@ -475,16 +514,6 @@ export const SMTP_LABELS: Record<EnrutamientoSMTP, string> = {
   TENANT_API: "API Renting cliente",
 };
 
-export const NOTIFICATION_TARGETS: NotificationTarget[] = ["COMPRADOR", "RADICADOR", "NINGUNO"];
-
-/** Etiquetas legibles para el destinatario de notificaciones (el valor enviado sigue siendo el enum). */
-export const NOTIFICATION_TARGET_LABELS: Record<NotificationTarget, string> = {
-  COMPRADOR: "Comprador del vehículo",
-  RADICADOR: "Radicador del trámite",
-  NINGUNO: "Sin notificaciones",
-};
-
-/** Opciones de fuente de comparendos (FEATURE 02). El valor enviado es el enum (internal|external). */
 export const FINES_QUERY_SOURCES: FinesQuerySource[] = ["internal", "external"];
 
 /** Etiquetas legibles para la fuente de comparendos. */

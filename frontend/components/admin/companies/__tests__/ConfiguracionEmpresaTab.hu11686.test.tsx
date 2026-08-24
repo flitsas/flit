@@ -69,6 +69,7 @@ describe("ConfiguracionEmpresaTab — HU #11686", () => {
 
     // Guardarraíl de alcance: ocultar el panel no puede llevarse por delante la configuración
     // de canal, que es de otra HU y sigue siendo editable.
-    expect(screen.getByLabelText(/avisos de correo al cambio de estado/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/avisos al aprobar trámite/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/avisos al rechazar trámite/i)).toBeInTheDocument();
   });
 });

@@ -167,6 +167,9 @@ export function CompanyConfigTabs({
         const mapped: Record<string, string> = {};
         for (const e of errors) {
           mapped[e.field] = e.message;
+          if (e.field === "destinatariosNotificacion.extraEmail") {
+            mapped.extraEmail = e.message;
+          }
         }
         setFieldErrors(mapped);
         setErrorBanner("Revisa los campos marcados: hay valores inválidos.");
