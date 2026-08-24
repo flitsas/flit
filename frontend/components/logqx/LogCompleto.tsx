@@ -5,7 +5,16 @@ import { ChevronRight, Download } from "lucide-react";
 import { Pagination } from "@/components/atom/Pagination";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { fetchLogQxEventos, type LogQxEvent, type LogQxEventosPage } from "@/lib/api/admin-log-qx";
-import { codigoQx, etapa, formatDuracion, formatFecha, origen, resultado } from "@/lib/logqx/labels";
+import {
+  CODIGO_QX,
+  codigoQx,
+  etapa,
+  formatDuracion,
+  formatFecha,
+  origen,
+  resultado,
+} from "@/lib/logqx/labels";
+import { bogotaClock, buildXlsx, XLSX_MIME, type XlsxCell } from "@/lib/xlsx";
 
 /**
  * Pestaña «Log completo» (HU #11790). Todos los eventos de la radicación, filtrados y paginados EN
@@ -122,7 +131,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
 
         <button
           type="button"
-          onClick={() => exportarCsv(data?.data ?? [], submissionId)}
+          onClick={() => exportar(data?.data ?? [], submissionId, ocultarSinNovedad, data)}
           disabled={!data || data.data.length === 0}
           className="inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] px-3 py-1.5 text-[12px] font-medium opacity-80 hover:opacity-100 disabled:opacity-40 dark:border-white/15"
         >
@@ -390,30 +399,65 @@ function formatValor(v: unknown): string {
 }
 
 /**
- * Exporta lo que está en pantalla, con los filtros vigentes. CSV y no XLSX porque un log de eventos
- * se abre igual en Excel y se pega en un ticket sin conversiones.
+ * Exporta lo que está en pantalla, con los filtros vigentes, usando el escritor XLSX propio del
+ * proyecto (`lib/xlsx.ts`, sin dependencias externas).
+ *
+ * Dos decisiones que evitan que el archivo mienta:
+ *  · Las fechas van como `bogotaClock`, no como texto ni como UTC. Excel no guarda husos, así que
+ *    un instante en UTC aparecería desplazado respecto de lo que la pantalla muestra en Bogotá.
+ *  · Si el interruptor está puesto, se anota AL PIE cuántas consultas quedaron fuera. El .xlsx es
+ *    lo que se reenvía por correo: sin ese aviso, quien lo recibe cuenta las filas y concluye que
+ *    la radicación solo tuvo esos eventos.
  */
-function exportarCsv(eventos: LogQxEvent[], submissionId: string) {
-  const cabecera = ["Fecha", "Etapa", "Resultado", "Codigo", "Significado", "Duracion_ms", "Origen"];
-  const filas = eventos.map((e) => [
-    e.occurredAt,
+function exportar(
+  eventos: LogQxEvent[],
+  submissionId: string,
+  ocultarSinNovedad: boolean,
+  page: LogQxEventosPage | null,
+): void {
+  const rows: XlsxCell[][] = eventos.map((e) => [
+    bogotaClock(e.occurredAt),
     etapa(e.stage),
     resultado(e.outcome).label,
-    e.responseCode ?? "",
-    e.responseCode != null ? codigoQx(e.responseCode).split(" · ")[1] ?? "" : "",
-    e.durationMs ?? "",
+    e.responseCode ?? null,
+    e.responseCode != null ? (CODIGO_QX[e.responseCode] ?? "") : "",
+    e.durationMs ?? null,
     origen(e.origin),
   ]);
 
-  const csv = [cabecera, ...filas]
-    .map((f) => f.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
-    .join("\n");
+  const notes: string[] = [];
+  if (page) {
+    notes.push(
+      `Exportado desde el LOG QX · radicación ${submissionId} · ${page.totalCount} de ${page.totalEventos} eventos.`,
+    );
+    if (ocultarSinNovedad && page.ocultosSinNovedad > 0) {
+      notes.push(
+        `Se ocultaron ${page.ocultosSinNovedad} consultas de estado sin novedad. `
+          + "Para incluirlas, desactiva «ocultar consultas sin novedad» y vuelve a exportar.",
+      );
+    }
+  }
 
-  const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" });
+  const xlsx = buildXlsx({
+    name: "Log QX",
+    columns: [
+      { header: "Fecha y hora", width: 20 },
+      { header: "Etapa", width: 28 },
+      { header: "Resultado", width: 18 },
+      { header: "Código", width: 9 },
+      { header: "Significado", width: 34 },
+      { header: "Duración (ms)", width: 14 },
+      { header: "Origen", width: 20 },
+    ],
+    rows,
+    notes,
+  });
+
+  const blob = new Blob([xlsx as BlobPart], { type: XLSX_MIME });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `log-qx-${submissionId}.csv`;
-  a.click();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `log-qx-${submissionId}.xlsx`;
+  anchor.click();
   URL.revokeObjectURL(url);
 }

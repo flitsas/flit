@@ -1,7 +1,7 @@
 // HU #11790 (Feature #11784) — pestaña «Log completo»: consultas ocultas de entrada (AC1),
 // totalidad recuperable (AC2), filtro de solo errores (AC3), envío y respuesta lado a lado (AC4),
 // códigos traducidos (AC5), evento sin payload (AC6), filtro sin coincidencias (AC7).
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { LogQxEvent, LogQxEventosPage } from "@/lib/api/admin-log-qx";
 
@@ -224,6 +224,33 @@ describe("LOG QX — log completo (HU #11790)", () => {
 
     expect(within(fila).getByText("Radicación")).toBeInTheDocument();
     expect(within(fila).queryByText("quipux_register")).not.toBeInTheDocument();
+  });
+
+  it("AC8: exportar entrega un XLSX con el nombre de la radicación", async () => {
+    mocks.fetchLogQxEventos.mockResolvedValue(page());
+
+    // jsdom no descarga: se observa el <a download> que el componente fabrica.
+    const clicks: string[] = [];
+    const original = document.createElement.bind(document);
+    const spy = vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const el = original(tag) as HTMLElement;
+      if (tag === "a") {
+        el.click = () => clicks.push((el as HTMLAnchorElement).download);
+      }
+      return el;
+    });
+    const objectUrl: Mock<(blob: Blob) => string> = vi.fn(() => "blob:log-qx");
+    Object.assign(URL, { createObjectURL: objectUrl, revokeObjectURL: vi.fn() });
+
+    render(<LogCompleto submissionId={SUB} />);
+    await screen.findByText(/Radicación enviada/);
+    fireEvent.click(screen.getByRole("button", { name: /Exportar/i }));
+
+    expect(clicks).toEqual([`log-qx-${SUB}.xlsx`]);
+    // El escritor propio del proyecto produce un binario, no texto plano.
+    expect(objectUrl).toHaveBeenCalledTimes(1);
+    expect(objectUrl.mock.calls[0]![0].type).toContain("spreadsheetml");
+    spy.mockRestore();
   });
 
   it("cambiar un filtro vuelve a la primera página", async () => {
