@@ -19,6 +19,22 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 {
+    /// <summary>
+    /// Normalización familia → categoría del contrato del frontend. Una sola definición: estaba
+    /// copiada en cinco consultas de este archivo más la vista BI, y la copia de más se nota cuando
+    /// una de ellas se queda atrás.
+    /// <para>ADR-0050 retiró la rama <c>VEHICULAR</c>: esa familia no existe en el catálogo ni en el
+    /// enum <c>ProcedureFamily</c> —era el residuo de un seed histórico— y desde el CHECK del DDL 79
+    /// la columna solo admite tres valores. La categoría <c>vehicular</c> no podía producirse ya, así
+    /// que mantenerla solo prometía un filtro vacío en la UI.</para>
+    /// </summary>
+    private const string CategoriaCase =
+        "CASE "
+        + "WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas' "
+        + "WHEN upper(pt.family) = 'TRASPASO' THEN 'traspasos' "
+        + "ELSE 'otros' "
+        + "END";
+
     // ── Overview ────────────────────────────────────────────────────────────────────────────────────
     // Consulta directa sobre tramites.procedure_instances (fuente de verdad) en lugar de las
     // tablas pre-agregadas analytics.* — éstas solo se poblaban mediante refresh_procedure_aggregates
@@ -26,14 +42,9 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 
     // En vivo: agrega procedure_instances (estado actual) por categoría y estado en el rango de creación.
     // La versión global omite el filtro de tenant (SuperAdmin: todas las compañías).
-    private const string OverviewSql = """
+    private const string OverviewSql = $"""
         SELECT
-            CASE
-                WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
-                WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
-                WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
-                ELSE 'otros'
-            END AS category,
+            {CategoriaCase} AS category,
             pi.status,
             count(*)::int AS total
         FROM tramites.procedure_instances pi
@@ -45,14 +56,9 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         ORDER BY 1, pi.status;
         """;
 
-    private const string OverviewGlobalSql = """
+    private const string OverviewGlobalSql = $"""
         SELECT
-            CASE
-                WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
-                WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
-                WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
-                ELSE 'otros'
-            END AS category,
+            {CategoriaCase} AS category,
             pi.status,
             count(*)::int AS total
         FROM tramites.procedure_instances pi
@@ -106,15 +112,10 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 
     // En vivo: trámites por año/mes/categoría a partir de la fecha de creación. La versión global omite
     // el filtro de tenant (SuperAdmin).
-    private const string MonthlyTrendWithTenantSql = """
+    private const string MonthlyTrendWithTenantSql = $"""
         SELECT EXTRACT(YEAR FROM pi.created_at)::int  AS year,
                EXTRACT(MONTH FROM pi.created_at)::int AS month,
-               CASE
-                   WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
-                   WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
-                   WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
-                   ELSE 'otros'
-               END AS category,
+               {CategoriaCase} AS category,
                count(*)::int AS total
         FROM tramites.procedure_instances pi
         JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
@@ -125,15 +126,10 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         ORDER BY 1, 2, 3;
         """;
 
-    private const string MonthlyTrendGlobalSql = """
+    private const string MonthlyTrendGlobalSql = $"""
         SELECT EXTRACT(YEAR FROM pi.created_at)::int  AS year,
                EXTRACT(MONTH FROM pi.created_at)::int AS month,
-               CASE
-                   WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
-                   WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
-                   WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
-                   ELSE 'otros'
-               END AS category,
+               {CategoriaCase} AS category,
                count(*)::int AS total
         FROM tramites.procedure_instances pi
         JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
@@ -147,16 +143,11 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 
     // CTE compartida: proyecta el detalle de trámites con la categoría normalizada y aplica
     // los filtros opcionales (category/status). Los cast ::text permiten parámetros NULL tipados.
-    private const string DetailsBaseCte = """
+    private const string DetailsBaseCte = $"""
         WITH base AS (
             SELECT pi.id, pi.reference_number,
                    pt.name AS procedure_type_name,
-                   CASE
-                       WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas'
-                       WHEN upper(pt.family) = 'TRASPASO'  THEN 'traspasos'
-                       WHEN upper(pt.family) = 'VEHICULAR' THEN 'vehicular'
-                       ELSE 'otros'
-                   END AS category,
+                   {CategoriaCase} AS category,
                    pi.status,
                    u.display_name AS created_by_display_name,
                    pi.submitted_at, pi.completed_at, pi.created_at

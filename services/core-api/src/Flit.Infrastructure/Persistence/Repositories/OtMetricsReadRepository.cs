@@ -850,7 +850,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             Vin: row.Instance.Vin,
             ClientTenantId: row.Instance.TenantId,
             ClientTenantName: names.GetValueOrDefault(row.Instance.TenantId, "(empresa desconocida)"),
-            Modalidad: row.Instance.Familia,
+            Familia: row.Instance.Familia,
             Status: row.Instance.Status,
             EstadoOt: row.EstadoOt,
             Prioritario: row.Instance.Prioritario,
@@ -1402,9 +1402,14 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 && p.TransitOfficeId == transitOfficeId
                 && tenantIds.Contains(p.TenantId));
 
-        if (!string.IsNullOrWhiteSpace(filter.Modalidad))
+        if (!string.IsNullOrWhiteSpace(filter.Familia))
         {
-            query = query.Where(p => (p.ProcedureType != null ? p.ProcedureType.Family : "") == filter.Modalidad);
+            query = query.Where(p => (p.ProcedureType != null ? p.ProcedureType.Family : "") == filter.Familia);
+        }
+
+        if (filter.ProcedureTypeId is Guid procedureTypeId && procedureTypeId != Guid.Empty)
+        {
+            query = query.Where(p => p.ProcedureTypeId == procedureTypeId);
         }
 
         if (filter.ClientTenantId is Guid clientTenantId && clientTenantId != Guid.Empty)

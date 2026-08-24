@@ -142,10 +142,10 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     defaultVisible: true,
   },
   {
-    id: "modalidad",
+    id: "familia",
     label: "Tipo de trámite",
     group: "Identificación",
-    value: (r) => familiaLabel(r.modalidad),
+    value: (r) => familiaLabel(r.familia),
     defaultVisible: true,
   },
   {
@@ -271,7 +271,7 @@ export const REPORT_PRESETS: ColumnPreset[] = [
     columns: [
       "referencia",
       "empresa",
-      "modalidad",
+      "familia",
       "placa",
       "estado",
       "radicado_en",
@@ -301,7 +301,7 @@ export const REPORT_PRESETS: ColumnPreset[] = [
     columns: [
       "referencia",
       "empresa",
-      "modalidad",
+      "familia",
       "estado",
       "devoluciones",
       "causales",

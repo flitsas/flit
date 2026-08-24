@@ -75,7 +75,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 ProcedureTypeId = p.ProcedureTypeId,
                                 ReferenceNumber = p.ReferenceNumber,
                                 Status = p.Status,
-                                ModalidadEntrada = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
+                                Familia = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                                 PlateFlowStatus = p.PlateFlowStatus,
                                 // HU #10804 — soat_estado por fila (para ocultar Aprobar/Rechazar en el frontend
                                 // hasta que la placa esté 'asignado' con SOAT 'vigente'). Lectura cross-tenant
@@ -730,7 +730,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         Status = p.Status,
                         // La modalidad gobierna qué causales de rechazo aplican: sin ella, el guard
                         // del rechazo descartaría causales válidas por creerlas de otro proceso.
-                        ModalidadEntrada = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
+                        Familia = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                         PlateFlowStatus = p.PlateFlowStatus,
                         // HU #10804 — soat_estado también en el detalle (mismo criterio de visibilidad).
                         SoatEstado = _context.ProcedureInstanceFieldValues
@@ -835,7 +835,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     ClientTenantName = mapped.ClientTenantName,
                     ReferenceNumber = mapped.ReferenceNumber,
                     Status = mapped.Status,
-                    ModalidadEntrada = mapped.ModalidadEntrada,
+                    Familia = mapped.Familia,
                     PlateFlowStatus = mapped.PlateFlowStatus,
                     SoatEstado = mapped.SoatEstado,
                     PlatePreferredLastDigit = mapped.PlatePreferredLastDigit,
@@ -1169,7 +1169,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         ProcedureTypeId = entity.ProcedureTypeId,
         ReferenceNumber = entity.ReferenceNumber,
         Status = entity.Status,
-        ModalidadEntrada = entity.ProcedureType != null ? entity.ProcedureType.Family : "",
+        Familia = entity.ProcedureType != null ? entity.ProcedureType.Family : "",
         PlateFlowStatus = entity.PlateFlowStatus,
         TransitOfficeId = entity.TransitOfficeId,
         CreatedAt = entity.CreatedAt,
@@ -1215,7 +1215,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 ProcedureTypeName = typeNames.GetValueOrDefault(item.ProcedureTypeId, "—"),
                 ReferenceNumber = item.ReferenceNumber,
                 Status = item.Status,
-                ModalidadEntrada = item.ModalidadEntrada,
+                Familia = item.Familia,
                 PlateFlowStatus = item.PlateFlowStatus,
                 SoatEstado = item.SoatEstado,
                 PlatePreferredLastDigit = item.PlatePreferredLastDigit,

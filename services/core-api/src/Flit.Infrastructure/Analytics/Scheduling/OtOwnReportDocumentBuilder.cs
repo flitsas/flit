@@ -35,10 +35,14 @@ internal sealed class OtOwnReportDocumentBuilder(IOtMetricsReadRepository repo)
         ["otro"] = "Otro",
     };
 
-    private static readonly Dictionary<string, string> ModalidadLabel = new(StringComparer.Ordinal)
+    // Familias del catálogo (ADR-0050). Antes eran las dos modalidades —matricula_inicial y
+    // traspaso—, que ya no coincidían con el dato que trae la fila: el reporte exportado imprimía el
+    // código crudo porque el diccionario nunca acertaba.
+    private static readonly Dictionary<string, string> FamiliaLabel = new(StringComparer.Ordinal)
     {
-        ["matricula_inicial"] = "Matrícula inicial",
-        ["traspaso"] = "Traspaso",
+        ["MATRICULAS"] = "Matrículas",
+        ["TRASPASO"] = "Traspaso",
+        ["OTROS"] = "Otros",
     };
 
     // ── "ot_analisis": causales de rechazo + desempeño (OtAnalysisTab.tsx) ──────────────────────
@@ -176,12 +180,12 @@ internal sealed class OtOwnReportDocumentBuilder(IOtMetricsReadRepository repo)
                     ]]),
             TabularWorkbookWriter.Sheet.OfText(
                 total > rows.Count ? $"Detalle (top {rows.Count} de {total})" : "Detalle",
-                ["Radicado", "Empresa", "Modalidad", "Placa", "VIN", "Estado", "Prioritario",
+                ["Radicado", "Empresa", "Familia", "Placa", "VIN", "Estado", "Prioritario",
                     "Radicado el", "Última radicación", "Decidido el", "Tiempo decisión (h)",
                     "Días en el organismo", "Decidido por", "Devoluciones", "Causales último rechazo"],
                 rows.Select(r => (IReadOnlyList<string>)
                 [
-                    r.ReferenceNumber, r.ClientTenantName, Label(ModalidadLabel, r.Modalidad),
+                    r.ReferenceNumber, r.ClientTenantName, Label(FamiliaLabel, r.Familia),
                     r.Placa ?? "", r.Vin ?? "", Label(EstadoLabel, r.EstadoOt), SiNo(r.Prioritario),
                     r.RadicadoEn.ToString("yyyy-MM-dd", Es),
                     r.UltimaRadicacionEn?.ToString("yyyy-MM-dd", Es) ?? "",

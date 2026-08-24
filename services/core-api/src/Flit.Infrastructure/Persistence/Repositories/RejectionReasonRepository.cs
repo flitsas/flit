@@ -16,15 +16,15 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
         _context = context ?? throw new ArgumentNullException(nameof(context));
 
     public async Task<IReadOnlyList<RejectionReasonItem>> ListAsync(
-        string? modalidad,
+        string? familia,
         bool includeInactive,
         CancellationToken cancellationToken = default)
     {
         var query = _context.RejectionReasons.AsNoTracking();
 
-        if (!string.IsNullOrWhiteSpace(modalidad))
+        if (!string.IsNullOrWhiteSpace(familia))
         {
-            query = query.Where(r => r.Family == modalidad);
+            query = query.Where(r => r.Family == familia);
         }
 
         if (!includeInactive)
@@ -67,7 +67,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
     public async Task<RejectionReasonItem> CreateAsync(
         string code,
         string description,
-        string modalidad,
+        string familia,
         int sortOrder,
         Guid? createdBy,
         CancellationToken cancellationToken = default)
@@ -77,7 +77,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
             Id = Guid.NewGuid(),
             Code = code,
             Description = description,
-            Family = modalidad,
+            Family = familia,
             SortOrder = sortOrder,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -94,7 +94,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
         Guid id,
         string code,
         string description,
-        string modalidad,
+        string familia,
         int sortOrder,
         Guid? updatedBy,
         CancellationToken cancellationToken = default)
@@ -110,7 +110,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
 
         entity.Code = code;
         entity.Description = description;
-        entity.Family = modalidad;
+        entity.Family = familia;
         entity.SortOrder = sortOrder;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.UpdatedBy = updatedBy;
@@ -144,7 +144,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
 
     public async Task<IReadOnlyList<Guid>> FilterValidIdsAsync(
         IReadOnlyList<Guid> candidateIds,
-        string modalidad,
+        string familia,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(candidateIds);
@@ -160,7 +160,7 @@ internal sealed class RejectionReasonRepository : IRejectionReasonRepository
 
         return await _context.RejectionReasons
             .AsNoTracking()
-            .Where(r => unique.Contains(r.Id) && r.IsActive && r.Family == modalidad)
+            .Where(r => unique.Contains(r.Id) && r.IsActive && r.Family == familia)
             .Select(r => r.Id)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
