@@ -28,6 +28,7 @@ import { TrazabilidadScreen } from "@/components/logqx/TrazabilidadScreen";
 
 const SUB = "11111111-1111-1111-1111-111111111111";
 const INSTANCE = "22222222-2222-2222-2222-222222222222";
+const TENANT = "33333333-3333-3333-3333-333333333333";
 
 function radicacion(over: Partial<LogQxRadicacion> = {}): LogQxRadicacion {
   return {
@@ -36,6 +37,7 @@ function radicacion(over: Partial<LogQxRadicacion> = {}): LogQxRadicacion {
     referenceNumber: "TRM-2026-000271",
     plate: "ABC123",
     procedureTypeName: "Matrícula inicial",
+    clientTenantId: TENANT,
     clientTenantName: "AutoFlota Antioquia S.A.S",
     transitOfficeName: "Ibagué",
     divipoCode: "17001",

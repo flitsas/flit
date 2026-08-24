@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { getToken } from "@/lib/api/client";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { HitosTimeline } from "./HitosTimeline";
@@ -44,6 +46,14 @@ export function TrazabilidadScreen({
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [pestana, setPestana] = useState<Pestana>("hitos");
+
+  // Igual que en la bandeja: el SuperAdmin abre trámites de otras empresas, así que el enlace
+  // necesita el tenant de la radicación en `?t=` para que el detalle tenga su `X-Tenant-Id`.
+  const [esAdmin, setEsAdmin] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
 
   const reqIdRef = useRef(0);
 
@@ -134,7 +144,11 @@ export function TrazabilidadScreen({
                 </dl>
 
                 <Link
-                  href={`/tramites/${r.procedureInstanceId}`}
+                  href={
+                    esAdmin && r.clientTenantId
+                      ? `/tramites/${r.procedureInstanceId}?t=${encodeURIComponent(r.clientTenantId)}`
+                      : `/tramites/${r.procedureInstanceId}`
+                  }
                   className="inline-flex items-center self-center rounded-lg border border-[#DFE5ED] px-3.5 py-2 text-[12.5px] font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15"
                 >
                   Ver trámite

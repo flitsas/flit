@@ -248,7 +248,10 @@ describe("LOG QX — log completo (HU #11790)", () => {
 
     render(<LogCompleto submissionId={SUB} />);
 
-    expect(await screen.findByText(/5 de 1.065 eventos de esta radicación/)).toBeInTheDocument();
+    // La cifra vive en el resumen de `PageNav`, la misma paginación del listado de trámites.
+    expect(
+      await screen.findByText(/1\.065 eventos en la radicación/),
+    ).toBeInTheDocument();
   });
 
   it("el origen se muestra en español, no con el nombre del worker", async () => {

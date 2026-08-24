@@ -147,6 +147,7 @@ public sealed class ConsultarHitosQuipuxHandler
             r.ReferenceNumber,
             r.Plate,
             r.ProcedureTypeName,
+            r.ClientTenantId,
             r.ClientTenantName,
             r.TransitOfficeName,
             r.DivipoCode,

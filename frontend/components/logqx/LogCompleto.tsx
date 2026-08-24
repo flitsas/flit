@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronRight, Download } from "lucide-react";
-import { Pagination } from "@/components/atom/Pagination";
+import { PageNav } from "@/components/atom/PageNav";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { fetchLogQxEventos, type LogQxEvent, type LogQxEventosPage } from "@/lib/api/admin-log-qx";
 import {
@@ -186,20 +186,20 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
               </table>
             </div>
 
-            <div className="px-4 pb-3 pt-1">
-              <Pagination
+            <div className="px-4 pb-3">
+              {/* Misma paginación numerada del listado de trámites (`PageNav`). El resumen dice
+                  además cuántos eventos tiene la radicación entera, para que una lista corta por
+                  el filtro no se lea como pérdida de datos. */}
+              <PageNav
                 page={page}
-                pageSize={PAGE_SIZE}
-                totalCount={data.totalCount}
+                totalPages={Math.max(1, Math.ceil(data.totalCount / PAGE_SIZE))}
+                resumen={`Mostrando ${data.data.length.toLocaleString("es-CO")} de ${data.totalCount.toLocaleString("es-CO")} · ${data.totalEventos.toLocaleString("es-CO")} eventos en la radicación`}
+                ariaLabel="Paginación del log"
                 onPageChange={(p) => {
                   setAbierto(null);
                   setPage(Math.max(1, p));
                 }}
               />
-              <p className="mt-1 text-center text-[11px] opacity-55">
-                {data.totalCount.toLocaleString("es-CO")} de{" "}
-                {data.totalEventos.toLocaleString("es-CO")} eventos de esta radicación
-              </p>
             </div>
           </>
         )}

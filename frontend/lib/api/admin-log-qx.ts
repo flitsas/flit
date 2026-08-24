@@ -113,6 +113,12 @@ export interface LogQxBandejaEntry {
   plate: string | null;
   procedureTypeName: string;
   estado: LogQxBandejaEstado;
+  /**
+   * Empresa dueña del trámite. Va aparte del nombre porque abrir el trámite desde el LOG QX
+   * exige mandar su tenant (`?t=` → `X-Tenant-Id`): la consola es multi-tenant y el tenant de
+   * la sesión no sirve.
+   */
+  clientTenantId: string;
   clientTenantName: string;
   transitOfficeName: string;
   divipoCode: string | null;
@@ -189,6 +195,12 @@ export interface LogQxRadicacion {
   referenceNumber: string;
   plate: string | null;
   procedureTypeName: string;
+  /**
+   * Empresa dueña del trámite. Va aparte del nombre porque abrir el trámite desde el LOG QX
+   * exige mandar su tenant (`?t=` → `X-Tenant-Id`): la consola es multi-tenant y el tenant de
+   * la sesión no sirve.
+   */
+  clientTenantId: string;
   clientTenantName: string;
   transitOfficeName: string;
   divipoCode: string | null;

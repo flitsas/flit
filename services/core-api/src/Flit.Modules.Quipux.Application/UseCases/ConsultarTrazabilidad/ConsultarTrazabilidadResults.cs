@@ -55,6 +55,7 @@ public sealed record QuipuxRadicacionView(
     string ReferenceNumber,
     string? Plate,
     string ProcedureTypeName,
+    Guid ClientTenantId,
     string ClientTenantName,
     string TransitOfficeName,
     string? DivipoCode,

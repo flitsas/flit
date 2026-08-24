@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { getToken } from "@/lib/api/client";
 import {
   BadgeCheck,
   Ban,
@@ -18,7 +20,7 @@ import {
 } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { Pagination } from "@/components/atom/Pagination";
+import { PageNav } from "@/components/atom/PageNav";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
@@ -80,6 +82,39 @@ const FILTROS_VACIOS: Filtros = {
   instanceId: "",
 };
 
+/**
+ * Restituye los filtros que viajan en el query string al volver de la trazabilidad. Devuelve null
+ * si la URL no trae ninguno, para que la bandeja caiga en su ventana por defecto.
+ */
+function leerFiltrosDeLaUrl(): Filtros | null {
+  if (typeof window === "undefined") return null;
+  const qs = new URLSearchParams(window.location.search);
+
+  const estadoUrl = qs.get("estado") ?? "";
+  const filtros: Filtros = {
+    desde: qs.get("desde") ?? "",
+    hasta: qs.get("hasta") ?? "",
+    placa: qs.get("placa") ?? "",
+    referencia: qs.get("referencia") ?? "",
+    documento: qs.get("documento") ?? "",
+    // Un estado desconocido se descarta en vez de mandarse al backend, que respondería vacío.
+    estado: ESTADOS_BANDEJA.includes(estadoUrl as LogQxBandejaEstado)
+      ? (estadoUrl as LogQxBandejaEstado)
+      : "",
+    instanceId: qs.get("instanceId") ?? "",
+  };
+
+  return Object.values(filtros).some(Boolean) ? filtros : null;
+}
+
+/** «Mostrando 26–50 de 300»; la bandeja pagina en servidor, así que el rango se calcula. */
+function resumenPagina(page: number, pageSize: number, total: number): string {
+  if (total === 0) return "Mostrando 0 de 0";
+  const desde = (page - 1) * pageSize + 1;
+  const hasta = Math.min(page * pageSize, total);
+  return `Mostrando ${desde}–${hasta} de ${total}`;
+}
+
 function hoyMenos(dias: number): string {
   const d = new Date();
   d.setDate(d.getDate() - dias);
@@ -91,16 +126,31 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 
   // Con deep-link se abre SIN rango de fechas: quien llega desde un trámite quiere ver ese trámite,
   // y la ventana por defecto podría dejarlo fuera si es antiguo.
-  const [filtros, setFiltros] = useState<Filtros>(() =>
-    initialInstanceId
-      ? { ...FILTROS_VACIOS, instanceId: initialInstanceId }
-      : {
-          ...FILTROS_VACIOS,
-          desde: hoyMenos(30),
-          hasta: new Date().toISOString().slice(0, 10),
-        },
-  );
+  const [filtros, setFiltros] = useState<Filtros>(() => {
+    if (initialInstanceId) return { ...FILTROS_VACIOS, instanceId: initialInstanceId };
+
+    // Al volver de la trazabilidad, los filtros llegan en el query string (los arrastra el enlace
+    // «Volver a LOG QX»). Sin esto solo se leía `instanceId` y la bandeja se rearmaba con el rango
+    // por defecto: el enlace prometía «filtros conservados» y no conservaba ninguno.
+    const guardados = leerFiltrosDeLaUrl();
+    if (guardados) return guardados;
+
+    return {
+      ...FILTROS_VACIOS,
+      desde: hoyMenos(30),
+      hasta: new Date().toISOString().slice(0, 10),
+    };
+  });
   const [aplicados, setAplicados] = useState<Filtros>(filtros);
+
+  // ¿SuperAdmin? Decide si al abrir un trámite se manda el tenant de la fila (?t=). El LOG QX
+  // lista trámites de CUALQUIER empresa, así que sin ese parámetro el detalle acaba pidiendo un
+  // `X-Tenant-Id` que no tiene. Se resuelve del JWT tras montar, igual que en el listado.
+  const [esAdmin, setEsAdmin] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
 
   const [entries, setEntries] = useState<LogQxBandejaEntry[] | null>(null);
   const [contadores, setContadores] = useState<Record<string, number>>({});
@@ -416,20 +466,22 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                         )
                       }
                       onAbrir={() => abrirTrazabilidad(entry)}
+                      esAdmin={esAdmin}
                     />
                   ))}
                 </tbody>
               </table>
             </div>
-            <Pagination
+            {/* Misma paginación numerada del listado de trámites (`PageNav`). */}
+            <PageNav
               page={page}
-              pageSize={PAGE_SIZE}
-              totalCount={total}
+              totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+              resumen={resumenPagina(page, PAGE_SIZE, total)}
+              ariaLabel="Paginación del LOG QX"
               onPageChange={(p) => {
                 setAbierta(null);
                 setPage(Math.max(1, p));
               }}
-              className="mt-0"
             />
           </>
         )}
@@ -492,11 +544,13 @@ function FilaTramite({
   abierta,
   onToggle,
   onAbrir,
+  esAdmin,
 }: {
   entry: LogQxBandejaEntry;
   abierta: boolean;
   onToggle: () => void;
   onAbrir: () => void;
+  esAdmin: boolean;
 }) {
   const meta = ESTADO_BANDEJA[entry.estado] ?? { label: entry.estado, tone: "neutral" as const };
   const espera = formatEspera(entry.horasEsperando);
@@ -586,7 +640,7 @@ function FilaTramite({
         <tr>
           {/* El detalle es su propia tarjeta, coherente con las filas-tarjeta de la tabla. */}
           <td colSpan={10} className="rounded-xl border bg-[#F4F7FC] p-0 dark:bg-white/[0.03]">
-            <Vistazo entry={entry} onAbrir={onAbrir} />
+            <Vistazo entry={entry} onAbrir={onAbrir} esAdmin={esAdmin} />
           </td>
         </tr>
       )}
@@ -598,7 +652,15 @@ function FilaTramite({
  * El vistazo: qué pasó, en una frase, más los pasos alcanzados. Deliberadamente SIN payloads —
  * quien necesita el detalle técnico abre la trazabilidad.
  */
-function Vistazo({ entry, onAbrir }: { entry: LogQxBandejaEntry; onAbrir: () => void }) {
+function Vistazo({
+  entry,
+  onAbrir,
+  esAdmin,
+}: {
+  entry: LogQxBandejaEntry;
+  onAbrir: () => void;
+  esAdmin: boolean;
+}) {
   return (
     <div className="flex flex-wrap items-start gap-5 px-8 py-4">
       <div className="min-w-[380px] flex-1">
@@ -636,7 +698,7 @@ function Vistazo({ entry, onAbrir }: { entry: LogQxBandejaEntry; onAbrir: () => 
           </span>
         )}
         <Link
-          href={`/tramites/${entry.procedureInstanceId}`}
+          href={hrefTramite(entry.procedureInstanceId, entry.clientTenantId, esAdmin)}
           onClick={(e) => e.stopPropagation()}
           className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent"
         >
@@ -645,6 +707,18 @@ function Vistazo({ entry, onAbrir }: { entry: LogQxBandejaEntry; onAbrir: () => 
       </div>
     </div>
   );
+}
+
+/**
+ * Enlace al detalle del trámite. Para el SuperAdmin lleva el tenant de la FILA en `?t=`, que el
+ * detalle traduce a la cabecera `X-Tenant-Id`: el LOG QX lista trámites de cualquier empresa, y sin
+ * ese parámetro el detalle fallaba con «Falta header X-Tenant-Id». Mismo criterio que el listado
+ * de trámites.
+ */
+function hrefTramite(instanceId: string, tenantId: string, esAdmin: boolean): string {
+  return esAdmin && tenantId
+    ? `/tramites/${instanceId}?t=${encodeURIComponent(tenantId)}`
+    : `/tramites/${instanceId}`;
 }
 
 /**

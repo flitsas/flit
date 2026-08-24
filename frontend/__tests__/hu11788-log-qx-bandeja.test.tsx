@@ -23,6 +23,15 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// El enlace "Ver trámite" manda el tenant de la fila solo si quien mira es SuperAdmin, así que
+// la identidad se mockea para poder ejercer los dos casos.
+const auth = vi.hoisted(() => ({ esSuperAdmin: true }));
+vi.mock("@/lib/api/client", () => ({ getToken: () => "token-de-prueba" }));
+vi.mock("@/lib/auth/jwt", () => ({
+  decodeJwtPayload: () => ({}),
+  isSuperAdmin: () => auth.esSuperAdmin,
+}));
+
 const mocks = vi.hoisted(() => ({ fetchLogQxBandeja: vi.fn() }));
 vi.mock("@/lib/api/admin-log-qx", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/admin-log-qx")>();
@@ -43,6 +52,7 @@ function contador(nombre: RegExp) {
 
 const INSTANCE = "22222222-2222-2222-2222-222222222222";
 const SUBMISSION = "11111111-1111-1111-1111-111111111111";
+const TENANT = "33333333-3333-3333-3333-333333333333";
 
 function entry(over: Partial<LogQxBandejaEntry> = {}): LogQxBandejaEntry {
   return {
@@ -50,6 +60,7 @@ function entry(over: Partial<LogQxBandejaEntry> = {}): LogQxBandejaEntry {
     referenceNumber: "TRM-2026-000271",
     plate: "ABC123",
     procedureTypeName: "Matrícula inicial",
+    clientTenantId: TENANT,
     estado: "en_tramite",
     clientTenantName: "AutoFlota Antioquia S.A.S",
     transitOfficeName: "Ibagué",
@@ -308,5 +319,79 @@ describe("LOG QX — estados de la bandeja (HU #11788)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /TRM-2026-000271/i }));
 
     expect(await screen.findByText(esperado)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Dos defectos detectados en la revisión en navegador, ambos de navegación entre la bandeja y el
+ * resto de la consola.
+ */
+describe("LOG QX — vuelta desde la trazabilidad y apertura del trámite (HU #11788)", () => {
+  beforeEach(() => {
+    mocks.fetchLogQxBandeja.mockReset();
+    push.mockReset();
+    auth.esSuperAdmin = true;
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("restituye los filtros que trae la URL al volver de la trazabilidad", async () => {
+    mocks.fetchLogQxBandeja.mockResolvedValue(page());
+    // Es lo que arrastra el enlace «Volver a LOG QX (filtros conservados)».
+    window.history.replaceState(
+      {},
+      "",
+      "/?m=log-qx&desde=2026-07-01&hasta=2026-07-31&placa=ABC123&estado=fallido",
+    );
+
+    render(<LogQx />);
+    await screen.findByText("TRM-2026-000271");
+
+    // Los filtros llegan al backend…
+    expect(mocks.fetchLogQxBandeja).toHaveBeenCalledWith(
+      expect.objectContaining({ placa: "ABC123", estado: "fallido" }),
+    );
+    // …y se ven en el formulario, para poder retocarlos sin volver a escribirlos.
+    expect(screen.getByLabelText(/Placa/i)).toHaveValue("ABC123");
+    expect(screen.getByLabelText(/Desde/i)).toHaveValue("2026-07-01");
+    expect(screen.getByLabelText(/Hasta/i)).toHaveValue("2026-07-31");
+  });
+
+  it("descarta un estado desconocido en la URL en vez de mandarlo al backend", async () => {
+    mocks.fetchLogQxBandeja.mockResolvedValue(page());
+    window.history.replaceState({}, "", "/?m=log-qx&estado=inventado");
+
+    render(<LogQx />);
+    await screen.findByText("TRM-2026-000271");
+
+    expect(mocks.fetchLogQxBandeja).toHaveBeenCalledWith(
+      expect.objectContaining({ estado: undefined }),
+    );
+  });
+
+  it("«Ver trámite» lleva el tenant de la fila cuando quien mira es SuperAdmin", async () => {
+    mocks.fetchLogQxBandeja.mockResolvedValue(page());
+
+    render(<LogQx />);
+    fireEvent.click(await screen.findByRole("button", { name: /TRM-2026-000271/i }));
+
+    // Sin `?t=`, el detalle del trámite responde «Falta header X-Tenant-Id»: la consola lista
+    // trámites de otras empresas y el tenant de la sesión no sirve.
+    expect(await screen.findByRole("link", { name: /Ver trámite/i })).toHaveAttribute(
+      "href",
+      `/tramites/${INSTANCE}?t=${TENANT}`,
+    );
+  });
+
+  it("sin ser SuperAdmin, «Ver trámite» no añade tenant alguno", async () => {
+    auth.esSuperAdmin = false;
+    mocks.fetchLogQxBandeja.mockResolvedValue(page());
+
+    render(<LogQx />);
+    fireEvent.click(await screen.findByRole("button", { name: /TRM-2026-000271/i }));
+
+    expect(await screen.findByRole("link", { name: /Ver trámite/i })).toHaveAttribute(
+      "href",
+      `/tramites/${INSTANCE}`,
+    );
   });
 });

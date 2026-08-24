@@ -30,6 +30,7 @@ public sealed record QuipuxBandejaEntryView(
     string? Plate,
     string ProcedureTypeName,
     string Estado,
+    Guid ClientTenantId,
     string ClientTenantName,
     string TransitOfficeName,
     string? DivipoCode,

@@ -89,6 +89,13 @@ public sealed class QuipuxBandejaEntry
     /// <summary>Estado de presentación; ver <see cref="QuipuxBandejaEstados"/>.</summary>
     public string Estado { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Empresa dueña del trámite. El id va aparte del nombre porque la consola es multi-tenant:
+    /// abrir el trámite desde aquí exige mandar su tenant (<c>?t=</c> → <c>X-Tenant-Id</c>), y el
+    /// de la sesión no sirve — soporte ve trámites de otras empresas.
+    /// </summary>
+    public Guid ClientTenantId { get; init; }
+
     public string ClientTenantName { get; init; } = string.Empty;
 
     public string TransitOfficeName { get; init; } = string.Empty;

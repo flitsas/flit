@@ -272,6 +272,7 @@ internal sealed class DbQuipuxBandejaRepository(FlitDbContext db) : IQuipuxBande
         Plate = GetNullableString(r, "placa"),
         ProcedureTypeName = r.GetString(r.GetOrdinal("tipo")),
         Estado = r.GetString(r.GetOrdinal("estado")),
+        ClientTenantId = r.GetGuid(r.GetOrdinal("tenant_id")),
         ClientTenantName = r.GetString(r.GetOrdinal("empresa")),
         TransitOfficeName = r.GetString(r.GetOrdinal("secretaria")),
         DivipoCode = GetNullableString(r, "divipo_code"),

@@ -125,6 +125,7 @@ public sealed class ConsultarBandejaQuipuxHandler
             e.Plate,
             e.ProcedureTypeName,
             e.Estado,
+            e.ClientTenantId,
             e.ClientTenantName,
             e.TransitOfficeName,
             e.DivipoCode,
