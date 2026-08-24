@@ -5,7 +5,7 @@
 **Deciders**: Líder Técnico FLIT (aceptación exclusiva humana — regla FLIT 15), equipo core-api, equipo frontend
 **Tags**: arquitectura, backend, frontend, quipux, log-qx, soporte, feature-11784
 **Relacionado**: Feature #10792 (HUs #10793 a #10796) — experiencia que este ADR reemplaza; `ADR-0024` (workers Quipux dentro de core-api con claim `FOR UPDATE SKIP LOCKED`); `ADR-0047-gate-navegacion-dock-igual-url.md` (gate del dock por permiso)
-**HU origen**: Feature #11784 — HUs #11785 a #11790
+**HU origen**: Feature #11784 — HUs #11786 a #11790 (la #11785 quedó cancelada; ver D4)
 
 ---
 
@@ -40,12 +40,16 @@ sondeo como si fuera un hito**.
    excluye únicamente las radicaciones en estado `pendiente` o `registrado`
    (`NOT EXISTS (... s.status IN ('pendiente','registrado'))`). Una radicación fallida o
    rechazada vuelve a hacer elegible el trámite y genera una radicación nueva.
-2. **El radicado de Quipux no se persiste.** FLIT 1.0 lo almacena y lo expone como `idQuipux`
-   (por ejemplo, 1974679 para el trámite 27172). FLIT 2.0 no guarda ese identificador, de modo
-   que no es posible buscar por él ni contrastar una radicación con la secretaría. El eje que la
-   interfaz actual denomina «Código QX» filtra en realidad por `qx_register_code`, por lo que
-   buscar `81` devuelve todas las radicaciones exitosas: es un filtro de estado presentado como
-   identificador.
+2. **Quipux no emite ningún radicado.** Verificado sobre el evento de radicación original del
+   trámite 27172: el envío contiene `vin`, `placa`, `documento`, `consumidor`, `tipoTramite`,
+   `codigoDivipo`, `documentoFlit`, `tipoRequisito`, `idRegistration` y los documentos de
+   propietario y funcionario; la respuesta contiene únicamente `codigo`, `descripcion` y
+   `status`. El valor `idQuipux` (1974679) aparece solo en el *request* de la consulta de estado
+   y es un identificador **interno de FLIT 1.0** — la clave primaria de su propia tabla de
+   radicaciones —, cuyo equivalente en FLIT 2.0 ya existe: `quipux_submissions.id`.
+   Aun así, la identificación ante la secretaría sigue sin resolverse en la interfaz vigente: el
+   eje que denomina «Código QX» filtra en realidad por `qx_register_code`, por lo que buscar `81`
+   devuelve todas las radicaciones exitosas. Es un filtro de estado presentado como identificador.
 3. **La antigüedad de un trámite elegible sin radicar sí es derivable.** Sale de
    `tramites.procedure_instance_status_history` (`to_status = 'preparado'`). No requiere
    persistencia adicional.
@@ -148,26 +152,41 @@ ambos sentidos entre la trazabilidad y el detalle del trámite.
 
 ---
 
-## D4 — Persistencia del radicado de Quipux
+## D4 — Cómo se identifica una radicación ante la secretaría
 
-### Alternativa A — No persistir (situación vigente)
+La formulación inicial de esta decisión era «persistir el radicado que devuelve Quipux». La
+verificación descrita en el contexto la invalidó: **ese radicado no existe**. La decisión real es
+qué dato cumple esa función.
 
-- **Pros**: ningún cambio en el worker de radicación.
-- **Contras**: imposibilita la búsqueda por radicado y el contraste con la secretaría, que es el
-  número por el que el organismo y el cliente identifican el trámite.
-- **Esfuerzo**: nulo. **Riesgo**: la carencia se vuelve más cara cuanto más tarde se corrija,
-  porque el histórico sin radicado crece.
+### Alternativa A — Persistir un identificador propio y exponerlo
 
-### Alternativa B — Persistir el identificador al radicar (elegida)
+- **Pros**: control total sobre el formato.
+- **Contras**: un identificador que solo conoce FLIT no sirve para contrastar con la secretaría,
+  que es justamente para lo que se necesita. Reproduce el `idQuipux` de FLIT 1.0, que tampoco
+  significaba nada fuera de FLIT.
+- **Esfuerzo**: bajo. **Riesgo**: resuelve la forma y no el problema.
 
-- **Pros**: habilita búsqueda y contraste; recupera la paridad con FLIT 1.0.
-- **Contras**: toca el worker de radicación y exige una migración.
-- **Esfuerzo**: bajo. **Riesgo**: bajo — el cambio se limita a leer un campo de la respuesta y
-  guardarlo, sin alterar el flujo.
+### Alternativa B — Exponer el nombre del documento, ya persistido (elegida)
 
-**Decisión: alternativa B.** Es el único cambio de este Feature que toca el worker. **Sin
-backfill**: las radicaciones anteriores a la migración quedan con el radicado vacío y la interfaz
-las presenta así, sin error.
+- **Pros**: es la llave real de correlación — Quipux localiza el trámite por `documento` más
+  organismo, y es el dato que viaja en el envío y en la consulta de estado. Ya está almacenado en
+  `quipux_submissions.document_name`. **No requiere migración, ni columna nueva, ni tocar el
+  worker.**
+- **Contras**: es una cadena larga (`TESLA_MI_20260811_1220_LRWYGCFJ3TC767907`), menos cómoda de
+  dictar por teléfono que un número corto. Se mitiga admitiendo búsqueda por fragmento.
+- **Esfuerzo**: nulo en persistencia; se resuelve dentro de la consulta de bandeja.
+
+**Decisión: alternativa B.** Se expone como **Documento QX** en la bandeja y en la cabecera de la
+trazabilidad, y se admite como filtro por coincidencia parcial.
+
+Consecuencia relevante: con esta decisión **el Feature #11784 queda íntegramente de solo lectura**
+y no toca la integración Quipux en ningún punto, ni modifica el esquema de datos.
+
+> FLIT 2.0 calcula `document_name` una sola vez y lo persiste, corrigiendo el defecto de FLIT 1.0
+> que lo regeneraba en cada intento con precisión de minuto. La evidencia está en el propio
+> trámite 27172: su evento de registro usa `TESLA_MI_20260811_1220_…` y los de sondeo
+> `TESLA_MI_20260818_1740_…`. Dos nombres para el mismo trámite, que en 1.0 lo volvían
+> inconsultable y podían duplicarlo en Quipux.
 
 ---
 
@@ -175,8 +194,8 @@ las presenta así, sin error.
 
 ### Backend (core-api)
 
-- Columna nueva en `tramites.quipux_submissions` con su migración EF, y lectura del identificador
-  en la respuesta de registro — HU #11785.
+- **Sin cambios de esquema y sin migraciones.** La HU #11785, que preveía una columna nueva y una
+  modificación del worker de radicación, quedó cancelada al invalidarse su premisa (ver D4).
 - Consulta de bandeja con agregación por trámite y unión de los elegibles sin radicación,
   replicando el predicado de elegibilidad del worker (`external_refs -> 'quipux'`, banderas
   `quipux_registration` / `quipux_transfer` / `quipux_other` de la secretaría y DIVIPO presente)
@@ -221,7 +240,7 @@ las presenta así, sin error.
 |---|---|
 | La regla de agrupación oculta un evento relevante porque un cambio de estado no se refleja en `estadoTramite` | El interruptor del log completo devuelve la totalidad de los eventos, y el filtro de solo errores los expone con independencia de la agrupación |
 | La consulta de bandeja es la más pesada del módulo (agregación, unión de elegibles y filtros combinables) | Revisar los índices sobre `procedure_instance_id` y `occurred_at` antes del despliegue a PDN; filtros y paginación resueltos en SQL, nunca en memoria |
-| El histórico sin radicado convive con el nuevo | La interfaz lo presenta vacío sin error (AC3 de la HU #11785); no se hace backfill |
+| El nombre del documento es largo y engorroso de dictar | La búsqueda admite coincidencia parcial, de modo que basta la placa o el VIN que el propio nombre incorpora |
 | Los datos de ejemplo del LOG QX pueden estar sembrados fuera de DEV | La migración `F11_LogQxMockSeed` se activa con `ASPNETCORE_ENVIRONMENT` en `Development`, valor que según `docker-compose.prod.yml` usan DEV, QA y PDN por igual. Verificar y, en su caso, retirar los registros `QXSEED` de los ambientes que no correspondan. Queda fuera del alcance de este Feature |
 
 ---
