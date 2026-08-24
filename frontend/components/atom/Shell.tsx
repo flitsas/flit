@@ -33,7 +33,6 @@ import {
   Sun,
   Moon,
   MoreVertical,
-  UserCog,
   KeyRound,
   LogOut,
   FolderCog,
@@ -484,10 +483,6 @@ export function Shell({
               <Moon className="h-3.5 w-3.5" />
             </span>
           </button>
-          <button className="relative p-2 rounded-xl" aria-label="Notificaciones">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 h-4 w-4 text-[9px] font-bold rounded-full grid place-items-center text-white" style={{ background: "#FF4E00" }}>1</span>
-          </button>
           <div className="hidden sm:flex flex-col items-end leading-tight">
             <span className="text-[10px] font-medium" style={{ color: "#557EFF" }}>
               {currentUser?.roleLabel ?? "—"}
@@ -529,7 +524,6 @@ export function Shell({
                   color: dark ? "#FFFFFF" : "#162744",
                 }}
               >
-                <MenuItem icon={UserCog} label="Actualización de la información" onClick={() => setMenuOpen(false)} />
                 <MenuItem
                   icon={KeyRound}
                   label="Cambio de contraseña"
