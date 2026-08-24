@@ -31,8 +31,7 @@ WHERE pt.code IN ('MATRICULA_NUEVA', 'TRASPASO_STANDARD')
       FROM tramites.procedure_steps ps
       JOIN tramites.procedure_sections sec ON sec.procedure_step_id = ps.id
       WHERE ps.procedure_type_id = pt.id
-        AND ps.deleted_at IS NULL
-        AND sec.deleted_at IS NULL
+        AND ps.is_active
   );
 
 -- Si los dos canónicos quedaron apagados, la operación queda muerta y en silencio:
