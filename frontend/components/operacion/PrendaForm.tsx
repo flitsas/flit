@@ -519,10 +519,10 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       <fieldset disabled={readOnly} className="contents">
         <div className="grid grid-cols-1 gap-4">
           {/* PDF ajuste P0: traspaso → select + Acreedor + documento en la misma fila.
-              Matrícula (2 opciones) conserva segmentado; acreedor debajo si aplica. */}
+              P1.10: PrendaDocumentUpload visualmente acoplado en la misma grilla (span-3). */}
           {decisions.length > 2 ? (
-            <div className={`grid grid-cols-1 gap-4 items-end ${muestraAcreedor ? 'md:grid-cols-3' : ''}`}>
-              <div className="min-w-0">
+            <div className={`grid grid-cols-1 gap-4 ${muestraAcreedor ? 'md:grid-cols-3' : ''}`}>
+              <div className="min-w-0 md:self-end">
                 <label htmlFor="prenda-decision-select" className="text-xs font-semibold mb-1.5 block">
                   ¿Al vehículo se le asociará una prenda?
                 </label>
@@ -541,7 +541,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               </div>
               {muestraAcreedor && (
                 <>
-                  <div className="min-w-0">
+                  <div className="min-w-0 md:self-end">
                     <label htmlFor="prenda-acreedor-nombre" className="text-xs font-semibold mb-1.5 block">
                       Acreedor (beneficiario)
                     </label>
@@ -557,7 +557,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                     />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 md:self-end">
                     <label htmlFor="prenda-acreedor-doc" className="text-xs font-semibold mb-1.5 block">
                       NIT / documento del acreedor
                     </label>
@@ -581,6 +581,20 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                 <p className="md:col-span-3 text-xs opacity-70 -mt-2">
                   Al levantar el gravamen, Acreedor y documento quedan inhabilitados.
                 </p>
+              )}
+              {/* P1.10: upload acoplado en la misma grilla, span completo */}
+              {requiereDocumento && decision && prendaDocTipoFor(decision) && (
+                <div className={muestraAcreedor ? 'md:col-span-3' : undefined}>
+                  <PrendaDocumentUpload
+                    instanceId={instanceId}
+                    decision={decision}
+                    docTipo={prendaDocTipoFor(decision)!}
+                    modalidad={modalidad}
+                    documentRequired={documentRequired}
+                    onSatisfiedChange={setDocSatisfied}
+                    onChanged={onSaved}
+                  />
+                </div>
               )}
             </div>
           ) : (
@@ -633,7 +647,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
             </>
           )}
 
-          {requiereDocumento && decision && prendaDocTipoFor(decision) && (
+          {/* Matrícula (2 decisiones): upload fuera del segmentado, a ancho completo */}
+          {decisions.length <= 2 && requiereDocumento && decision && prendaDocTipoFor(decision) && (
             <PrendaDocumentUpload
               instanceId={instanceId}
               decision={decision}

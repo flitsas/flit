@@ -42,6 +42,12 @@ interface Props {
   modalidad?: WizardModalidad;
 }
 
+/**
+ * Tipos de documento que el sistema genera automáticamente (mandato, trámite virtual).
+ * El operador no puede ni debe adjuntarlos; el slot muestra "Autogenerado por el sistema".
+ */
+const AUTO_DOC_TIPOS = new Set(['mandato', 'tramite_virtual']);
+
 /** MIME permitidos por el contrato. */
 export const ALLOWED_MIME = [
   'application/pdf',
@@ -438,6 +444,7 @@ export function DocumentSlot({
   const tipo = item.docTipo ?? item.key;
   const done = item.satisfied || !!attachment;
   const busy = uploading || analyzing || deleting;
+  const isAuto = AUTO_DOC_TIPOS.has(tipo);
 
   // La impronta es un documento que se genera en el paso de firma (FUR), no se carga aquí. Cuando es
   // obligatoria y aún no hay adjunto, el operador puede diferir su generación marcando este check
@@ -479,33 +486,40 @@ export function DocumentSlot({
     <li
       className={
         'flex h-full flex-col rounded-2xl bg-white p-4 transition dark:bg-[#162744] ' +
-        // La caja punteada del diseño es la señal de "aquí falta algo": se reserva para el slot
-        // vacío y desaparece en cuanto hay archivo, que pasa a borde sólido de tarjeta normal.
-        (done
+        // Documentos auto-generados: siempre borde sólido (no hay archivo que esperar).
+        // Documentos normales: borde punteado cuando falta adjunto → borde sólido al resolverse.
+        (isAuto || done
           ? 'border shadow-sm hover:shadow-md'
           : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#EFF6FF]')
       }
       style={{
-        borderColor: done
-          ? 'rgba(140,198,63,0.45)'
-          : item.obligatorio
-            ? 'rgba(255,78,0,0.35)'
-            : '#DFE5ED',
+        borderColor: isAuto
+          ? 'rgba(85,126,255,0.35)'
+          : done
+            ? 'rgba(140,198,63,0.45)'
+            : item.obligatorio
+              ? 'rgba(255,78,0,0.35)'
+              : '#DFE5ED',
       }}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-2.5">
           <FileText
             className="mt-0.5 h-4 w-4 shrink-0"
-            style={{ color: done ? '#8CC63F' : '#59677D' }}
+            style={{ color: isAuto ? '#557EFF' : done ? '#8CC63F' : '#59677D' }}
             aria-hidden="true"
           />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold leading-snug">{item.label}</p>
-            <p className="mt-1 text-xs opacity-70">
-              {ALLOWED_LABEL}
-              {item.maxSizeBytes ? ` · hasta ${formatSize(item.maxSizeBytes)}` : ''}
-            </p>
+            {!isAuto && (
+              <p
+                className="mt-1 text-xs opacity-70"
+                title="Formatos aceptados y tamaño máximo del archivo"
+              >
+                {ALLOWED_LABEL} · hasta{' '}
+                {item.maxSizeBytes ? formatSize(item.maxSizeBytes) : '20 MB'}
+              </p>
+            )}
             {attachment && (
               <p className="mt-1 truncate text-xs opacity-70">
                 {attachment.filename} · {formatSize(attachment.sizeBytes)}
@@ -516,21 +530,39 @@ export function DocumentSlot({
         {/* Insignias arriba a la derecha, como en la propuesta: el estado del documento se lee
             antes que su nombre cuando se barre la grilla en diagonal. */}
         <div className="flex shrink-0 flex-col items-end gap-1">
-          {item.obligatorio ? (
-            // B4 (guardián de diseño) — el badge iba en `#FF4E00` sobre `rgba(255,78,0,0.14)`
-            // (3.0:1). `StatusBadge tone="danger"` resuelve la paleta con contraste AA.
-            <StatusBadge
-              tone="danger"
-              className="uppercase tracking-wide"
-              label={
-                <span className="inline-flex items-center gap-1">
-                  <span aria-hidden="true">●</span>
-                  Obligatorio
-                </span>
-              }
-            />
+          {isAuto ? (
+            <span title="El sistema genera este documento automáticamente; no es necesario adjuntarlo">
+              <StatusBadge
+                tone="info"
+                className="uppercase tracking-wide"
+                ariaLabel="Autogenerado por el sistema"
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    <span aria-hidden="true">⚙</span>
+                    Autogenerado
+                  </span>
+                }
+              />
+            </span>
+          ) : item.obligatorio ? (
+            // B4 (guardián de diseño) — StatusBadge tone="danger" resuelve paleta con contraste AA.
+            <span title="Este documento es obligatorio para radicar el trámite">
+              <StatusBadge
+                tone="danger"
+                className="uppercase tracking-wide"
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    <span aria-hidden="true">●</span>
+                    Obligatorio
+                  </span>
+                }
+              />
+            </span>
           ) : (
-            <span className="whitespace-nowrap text-xs font-medium uppercase tracking-wide opacity-70">
+            <span
+              className="whitespace-nowrap text-xs font-medium uppercase tracking-wide opacity-70"
+              title="Este documento es opcional"
+            >
               Opcional
             </span>
           )}
@@ -557,6 +589,13 @@ export function DocumentSlot({
       )}
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
+        {isAuto ? (
+          // Documentos autogenerados: no hay archivo que adjuntar ni borrar.
+          <p className="text-xs opacity-60 italic">
+            Autogenerado por el sistema al radicar.
+          </p>
+        ) : (
+        <>
         {/* Solo se muestra el badge cuando hay adjunto (PDF ajuste P0): el slot vacío ya usa
             borde punteado naranja como señal visual de "falta algo"; el badge "Sin adjuntar" era
             redundante y generaba ruido en la grilla. */}
@@ -625,6 +664,8 @@ export function DocumentSlot({
               </button>
             )}
           </>
+        )}
+        </>
         )}
       </div>
 
@@ -927,8 +968,9 @@ export function DocumentChecklist({
         </p>
       ) : (
         <ul
-          // La propuesta llega a cuatro columnas en pantalla ancha; el checklist se quedaba en tres
-          // y dejaba una franja muerta a la derecha en trámites con muchos documentos.
+          // Grid parejo: 1 item → 1 col; 2 items → 2 cols; 3+ items → 3 cols (max).
+          // Para n=4 o n=5 la última fila queda 1 o 2 celdas anchas pero eso es correcto
+          // (CSS Grid rellena izquierda–derecha). Siempre 3 cols para n≥6 → grilla simétrica.
           className={`grid gap-3 ${
             items.length === 1
               ? 'grid-cols-1'

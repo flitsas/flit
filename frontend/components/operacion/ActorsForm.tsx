@@ -48,6 +48,7 @@ import {
   WIZARD_CTA_GRADIENT,
 } from './wizard-field-styles';
 import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
+import { WizardAccordion } from './WizardAccordion';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
@@ -1922,24 +1923,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
        <fieldset disabled={readOnly} className="space-y-5 min-w-0 border-0 p-0 m-0">
         {errorBanner}
 
-        {/* Sección A — Identificación. Cabecera con el átomo compartido (WizardCardHeader) y la
-            rejilla de 4 columnas de MatriculaInicial.tsx (Step2, diseño de referencia): documento +
-            botón de consulta a la misma altura ("items-end"), y la nota explicativa a ancho completo
-            debajo. Sigue sin ofrecer un selector de tipo de documento: en persona natural el tipo
-            viene de la validación de identidad (RUNT), no se captura a mano (nota bajo el
-            segmentado); en jurídica el documento siempre es NIT. */}
-        <section className={WIZARD_CARD}>
-          <WizardCardHeader
-            title={`Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
-            subtitle={
-              actor.rol === 'vendedor'
-                ? 'Registra la persona natural o jurídica que figura hoy como propietaria del vehículo.'
-                : 'Registra la persona natural o jurídica que figurará como propietaria del vehículo.'
-            }
-          />
+        {/* Sección A — Identificación. Layout 3 columnas (P1.8 MI): tipo | número | consultar.
+            Envuelta en WizardAccordion (P1.9) como el resto de secciones del wizard. */}
+        <WizardAccordion
+          title={`Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
+          defaultOpen
+        >
+          <p className="text-xs opacity-70 mb-3">
+            {actor.rol === 'vendedor'
+              ? 'Registra la persona natural o jurídica que figura hoy como propietaria del vehículo.'
+              : 'Registra la persona natural o jurídica que figurará como propietaria del vehículo.'}
+          </p>
           <div className="space-y-3">
             {personTypeSelector(0)}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
               {/* Tipo de documento. Faltaba en este layout: el actor nacía con 'CC' fijo y la
                   consulta salía al RUNT con ese tipo, así que un comprador con cédula de
                   extranjería o pasaporte se consultaba como si fuera cédula de ciudadanía. No era
@@ -1968,7 +1965,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   </select>
                 </div>
               )}
-              <div className={isJuridical(actor) ? 'lg:col-span-3' : 'lg:col-span-2'}>
+              <div className={isJuridical(actor) ? 'lg:col-span-2' : ''}>
                 <input
                   id="comprador-numeroDoc"
                   type="text"
@@ -2012,7 +2009,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       : 'Consultar RUNT'}
                 </button>
               )}
-              <p className="text-xs opacity-70 lg:col-span-4">
+              <p className="text-xs opacity-70 lg:col-span-3">
                 {isJuridical(actor)
                   ? `Consultamos el RUES para validar el registro mercantil del ${actor.rol} y precargar la razón social.`
                   : `Consultamos el RUNT para validar la identidad del ${actor.rol} y precargar sus datos.`}
@@ -2021,14 +2018,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             {runtResult(0)}
             {/* P4 — para persona jurídica el RL se mueve DESPUÉS de los datos de la empresa. */}
           </div>
-        </section>
+        </WizardAccordion>
 
         {/* Sección B — Datos de contacto */}
-        <section className={WIZARD_CARD}>
-          <WizardCardHeader
-            title="Datos de contacto"
-            subtitle="Confirma o edita la información de notificación del propietario."
-          />
+        <WizardAccordion title="Datos de contacto" defaultOpen>
+          <p className="text-xs opacity-70 mb-3">Confirma o edita la información de notificación del propietario.</p>
           <div className="text-xs opacity-70">{contactLookupHint(0)}</div>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Nombre / razón social */}
@@ -2044,13 +2038,25 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 onChange={(e) => updateActor(0, { nombreCompleto: e.target.value })}
                 readOnly={razonLocked || isNameLockedByRunt(0, actor)}
                 aria-invalid={!!errors.nombreCompleto}
-                aria-describedby={errors.nombreCompleto ? 'comprador-nombre-err' : undefined}
+                aria-describedby={
+                  errors.nombreCompleto
+                    ? 'comprador-nombre-err'
+                    : (runtState.status === 'error' || runtState.status === 'not_found')
+                      ? 'comprador-nombre-hint'
+                      : undefined
+                }
                 className={`${INPUT_BASE}${razonLocked || isNameLockedByRunt(0, actor) ? ' opacity-80' : ''}`}
                 style={razonLocked || isNameLockedByRunt(0, actor) ? { background: 'rgba(223,229,237,0.35)' } : undefined}
               />
               {errors.nombreCompleto && (
                 <p id="comprador-nombre-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                   {errors.nombreCompleto}
+                </p>
+              )}
+              {(runtState.status === 'error' || runtState.status === 'not_found') &&
+                !isJuridical(actor) && (
+                <p id="comprador-nombre-hint" className="text-xs mt-1 opacity-70">
+                  Consulta sin resultado — puedes ingresar el nombre manualmente.
                 </p>
               )}
             </div>
@@ -2179,12 +2185,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               />
             </div>
           </div>
-        </section>
+        </WizardAccordion>
 
-        {/* Sección C — Representante legal (P4: solo persona jurídica, después de contacto empresa).
-            `rlSection` ya monta su propia cabecera (título + nota); esta envoltura solo aporta la
-            tarjeta y el espaciado consistentes con las secciones A y B. */}
-        {isJuridical(actor) && <section className={WIZARD_CARD}>{rlSection(0)}</section>}
+        {/* Sección C — Representante legal (P4: solo persona jurídica, después de contacto empresa). */}
+        {isJuridical(actor) && (
+          <WizardAccordion title="Representante legal" defaultOpen>
+            {rlSection(0)}
+          </WizardAccordion>
+        )}
 
         {footer}
        </fieldset>
@@ -2228,7 +2236,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
       {errorBanner}
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <WizardAccordion title="Vendedor y comprador" defaultOpen>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch">
         {actors.map((actor, index) => {
           const errors = showErrors ? validation.byActor[index] : {};
           const prefix = `actor-${actor.rol}`;
@@ -2353,13 +2362,25 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     onChange={(e) => updateActor(index, { nombreCompleto: e.target.value })}
                     readOnly={razonLocked || isNameLockedByRunt(index, actor)}
                     aria-invalid={!!errors.nombreCompleto}
-                    aria-describedby={errors.nombreCompleto ? `${prefix}-nombre-err` : undefined}
+                    aria-describedby={
+                      errors.nombreCompleto
+                        ? `${prefix}-nombre-err`
+                        : (runtState.status === 'error' || runtState.status === 'not_found')
+                          ? `${prefix}-nombre-hint`
+                          : undefined
+                    }
                     className={`${INPUT_BASE}${razonLocked || isNameLockedByRunt(index, actor) ? ' opacity-80' : ''}`}
                     style={razonLocked || isNameLockedByRunt(index, actor) ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.nombreCompleto && (
                     <p id={`${prefix}-nombre-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                       {errors.nombreCompleto}
+                    </p>
+                  )}
+                  {(runtState.status === 'error' || runtState.status === 'not_found') &&
+                    !isJuridical(actor) && (
+                    <p id={`${prefix}-nombre-hint`} className="text-xs mt-1 opacity-70">
+                      Consulta sin resultado — puedes ingresar el nombre manualmente.
                     </p>
                   )}
                 </div>
@@ -2503,6 +2524,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           );
         })}
       </div>
+      </WizardAccordion>
 
       {footer}
      </fieldset>

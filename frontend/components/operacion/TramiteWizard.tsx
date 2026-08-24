@@ -2905,7 +2905,11 @@ function ConsultaStep({
           con el identificador y el CTA en una línea. Los campos son los que pide cada modalidad:
           el VIN en matrícula; placa, tipo y número de documento del propietario en traspaso. */}
       <WizardAccordion title="Consulta del Vehículo" defaultOpen>
-        <p className="text-xs opacity-70 mb-3">{`Validamos ${isVin ? 'el VIN' : 'la placa'} en el RUNT antes de configurar el trámite.`}</p>
+        <p className="text-xs opacity-70 mb-3">
+          {isVin
+            ? 'Validamos el VIN en el RUNT antes de configurar el trámite.'
+            : 'Ingresa la placa y el documento del propietario actual. Los datos del vehículo y el organismo de tránsito se toman automáticamente de la matrícula registrada en RUNT.'}
+        </p>
 
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
@@ -3042,6 +3046,77 @@ function ConsultaStep({
             <VehicleDataCard fieldValues={fieldValues} bare validadoEnRunt />
           </div>
         )}
+        {/* Traspaso — Propietario actual (P0.2-3): muestra los datos del propietario devueltos por el RUNT
+            tras la consulta, en bloque de solo lectura. La placa y tipo/nro documento los ingresó el
+            gestor; el nombre completo proviene del resultado de Verifik RNMC cuando está disponible. */}
+        {!isVin && hasVehicleData && (() => {
+          const byKey = (k: string) =>
+            fieldValues.find((f) => f.fieldKey === k)?.valueText?.trim() ?? '';
+          const ownerDocTypeResult = byKey('owner_document_type') || ownerDocType;
+          const ownerDocNro = byKey('owner_document_number') || ownerDocNumber;
+          const ownerFullName = byKey('owner_full_name');
+          if (!ownerDocNro && !ownerFullName) return null;
+          const nameParts = (ownerFullName || '').split(/\s+/).filter(Boolean);
+          const ownerNombres =
+            nameParts.length >= 2
+              ? nameParts.slice(0, Math.ceil(nameParts.length / 2)).join(' ')
+              : ownerFullName || '—';
+          const ownerApellidos =
+            nameParts.length >= 2
+              ? nameParts.slice(Math.ceil(nameParts.length / 2)).join(' ')
+              : '—';
+          return (
+            <div
+              className="mt-4 border-t pt-4"
+              aria-labelledby="propietario-actual-heading"
+            >
+              <p
+                id="propietario-actual-heading"
+                className="mb-2 text-xs font-semibold uppercase tracking-wide"
+                style={{ color: '#557EFF' }}
+              >
+                Propietario actual
+              </p>
+              <p className="mb-3 text-xs opacity-70">
+                Datos del propietario de la consulta. Campos informativos — no editables.
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <span className={WIZARD_LABEL}>Nombres</span>
+                  <p
+                    className="mt-1 rounded-lg px-3 py-2 text-xs font-semibold"
+                    style={{ background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+                  >
+                    {ownerNombres}
+                  </p>
+                </div>
+                <div>
+                  <span className={WIZARD_LABEL}>Apellidos</span>
+                  <p
+                    className="mt-1 rounded-lg px-3 py-2 text-xs font-semibold"
+                    style={{ background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+                  >
+                    {ownerApellidos}
+                  </p>
+                </div>
+                <div>
+                  <span className={WIZARD_LABEL}>Documento</span>
+                  <p
+                    className="mt-1 rounded-lg px-3 py-2 text-xs font-semibold"
+                    style={{ background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+                  >
+                    {[ownerDocTypeResult, ownerDocNro].filter(Boolean).join(' ') || '—'}
+                  </p>
+                </div>
+              </div>
+              {!ownerFullName && (
+                <p className="mt-1.5 text-xs opacity-60">
+                  El nombre completo no viene en esta consulta RUNT; el documento sí queda fijado.
+                </p>
+              )}
+            </div>
+          );
+        })()}
       </WizardAccordion>
 
       {/* 3ª tarjeta: Organismo de Tránsito y Radicación (HU #11199 — solo matrícula y solo mientras
@@ -3152,7 +3227,9 @@ function ConsultaStep({
           en la tarjeta de radicación de arriba; en traspaso viene del RUNT y es de solo lectura. */}
       {!isVin && hasVehicleData && transitOfficeNombreTraspaso && (
         <WizardAccordion title="Organismo de Tránsito" defaultOpen>
-          <p className="text-xs opacity-70 mb-3">Organismo de tránsito registrado en el RUNT para este vehículo (solo lectura).</p>
+          <p className="text-xs opacity-70 mb-3">
+            Se toma automáticamente de la matrícula registrada en RUNT. No es editable en este trámite.
+          </p>
           <div
             className="mt-2 flex items-center gap-3 rounded-xl border px-4 py-3"
             style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.04)' }}

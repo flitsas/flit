@@ -258,8 +258,12 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               setTasaText(raw);
               setData((d) => ({ ...d, tasaImpuesto: decimalOrNull(raw) }));
             }}
+            aria-describedby="comercial-tasa-hint"
             className={INPUT_BASE}
           />
+          <p id="comercial-tasa-hint" className="mt-1 text-xs opacity-60">
+            Porcentaje del impuesto de vehículos aplicado sobre el valor de venta (p. ej. 1.5 para 1,5%).
+          </p>
         </div>
 
         <div>
@@ -276,8 +280,12 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             onChange={(e) =>
               setData((d) => ({ ...d, derechos: integerOrNull(e.target.value) }))
             }
+            aria-describedby="comercial-derechos-hint"
             className={INPUT_BASE}
           />
+          <p id="comercial-derechos-hint" className="mt-1 text-xs opacity-60">
+            Derechos de tránsito (tarifa fija del organismo, independiente del valor de venta).
+          </p>
         </div>
 
         <div>

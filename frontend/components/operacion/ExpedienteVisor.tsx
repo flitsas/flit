@@ -238,7 +238,14 @@ function DocumentosCargadosCard({
         // Rejilla (propuesta, «Documentos cargados»): sigue siendo una lista semántica, la rejilla es
         // solo el `className` — `<ul>`/`<li>` no cambian.
         <ul
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          // Grilla dinámica simétrica (P1.13, paridad con DocumentChecklist): 1→1col, 2→2col, 3+→3col.
+          className={`grid gap-3 ${
+            checklist.length === 1
+              ? 'grid-cols-1'
+              : checklist.length === 2
+                ? 'grid-cols-1 sm:grid-cols-2'
+                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+          }`}
           aria-label="Documentos del expediente (visor)"
         >
           {checklist.map((item) => (

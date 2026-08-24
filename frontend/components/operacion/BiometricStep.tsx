@@ -406,10 +406,22 @@ export function BiometricStep({
   );
 
   if (pagePanel) {
-    // PDF oleada 3: título DENTRO del mismo contenedor que las partes (no card aparte).
+    // PDF: título DENTRO del mismo contenedor + aviso de flujo automático.
     return (
       <div className={`${WIZARD_CARD} space-y-4`}>
         <WizardCardHeader title={heading ?? ''} subtitle={headingSubtitle} action={refreshButton} />
+        <div
+          className="rounded-xl border px-3 py-2"
+          style={{ borderColor: 'rgba(85,126,255,0.25)', background: 'rgba(85,126,255,0.06)' }}
+        >
+          <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+            La validación se inicia automáticamente al continuar
+          </p>
+          <p className="mt-0.5 text-xs opacity-70">
+            Aquí monitoreas el estado. El enlace de captura se envía por correo cuando el flujo
+            automático lo dispara.
+          </p>
+        </div>
         {error && <InlineAlert tone="error">{error}</InlineAlert>}
         {partesContent}
       </div>
@@ -421,11 +433,20 @@ export function BiometricStep({
       {/* En resumen (hideIntro) no se muestra la franja vacía con solo "Actualizar":
           el polling / "Actualizar estado" por tarjeta bastan. */}
       {!hideIntro && (
-        <div className={`${WIZARD_CARD} flex items-start justify-between gap-3`}>
-          <p className="text-xs opacity-70">
-            Validación de identidad de cada parte. Al iniciarla, el cliente recibe el enlace de captura
-            por correo; el resultado se actualiza automáticamente.
-          </p>
+        <div
+          className={`${WIZARD_CARD} flex items-start justify-between gap-3`}
+          style={{ borderLeft: '3px solid #557EFF' }}
+        >
+          <div className="min-w-0 space-y-1">
+            <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+              La validación se inicia automáticamente al continuar
+            </p>
+            <p className="text-xs opacity-70">
+              Aquí solo monitoreas el estado. Si la validación se encaminó correctamente, el cliente
+              recibirá el enlace de captura por correo; el resultado se actualiza en tiempo real. Si
+              algo falla, puedes reiniciarla desde cada tarjeta.
+            </p>
+          </div>
           {refreshButton}
         </div>
       )}
@@ -508,7 +529,7 @@ function ParteBlock({
           con la misma altura (ValidacionCard del prototipo). */}
       {!embedded && (
         <h3 className="mb-3 text-sm font-bold" style={{ color: '#557EFF' }}>
-          Validación — {PARTE_LABEL[parte]}
+          Validación del {PARTE_LABEL[parte]}
         </h3>
       )}
       <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">

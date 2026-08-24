@@ -272,11 +272,11 @@ export function VehicleTransformationsCard({
         <div
           className={cn(
             'grid gap-2.5',
-            seleccionados.length >= 3
-              ? 'sm:grid-cols-2 lg:grid-cols-3'
-              : seleccionados.length === 2
-                ? 'sm:grid-cols-2'
-                : '',
+            seleccionados.length === 1 && 'grid-cols-1',
+            seleccionados.length === 2 && 'grid-cols-1 sm:grid-cols-2',
+            seleccionados.length === 3 && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+            seleccionados.length === 4 && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+            seleccionados.length >= 5 && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
           )}
         >
           {seleccionados.map((s) => (
