@@ -7,7 +7,6 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { LogQxEntry, LogQxPage } from "@/lib/api/admin-log-qx";
 
 // next/link → <a> simple para poder consultar el href sin router de Next.
 vi.mock("next/link", () => ({
@@ -42,41 +41,6 @@ import { LogQx } from "@/components/atom/modules/LogQx";
 
 const INSTANCE = "22222222-2222-2222-2222-222222222222";
 
-const ENTRY: LogQxEntry = {
-  id: "11111111-1111-1111-1111-111111111111",
-  procedureInstanceId: INSTANCE,
-  referenceNumber: "TRM-2026-000001",
-  procedureTypeName: "Traspaso",
-  clientTenantName: "Renting del Café S.A.S.",
-  plate: "ABC123",
-  documentName: "FLIT_TRM-2026-000001",
-  divipoCode: "05001",
-  status: "aprobado",
-  attempts: 1,
-  pollCount: 1,
-  qxRegisterCode: 81,
-  qxProcedureCode: 2,
-  rejectionReason: null,
-  createdAt: "2026-07-01T12:00:00Z",
-  registeredAt: null,
-  lastPolledAt: null,
-  completedAt: null,
-  updatedAt: null,
-  events: [
-    {
-      stage: "registro_respuesta",
-      outcome: "ok",
-      detail: { codigo: 81 },
-      durationMs: 1234,
-      origin: "quipux_register",
-      responseCode: 81,
-      correlationId: null,
-      occurredAt: "2026-07-01T12:00:00Z",
-    },
-  ],
-};
-
-const PAGE: LogQxPage = { data: [ENTRY], totalCount: 1, page: 1, pageSize: 20 };
 
 function setPerms(p: { permissions?: string[]; isSuperAdmin?: boolean }) {
   mocks.usePermissions.mockReturnValue({
