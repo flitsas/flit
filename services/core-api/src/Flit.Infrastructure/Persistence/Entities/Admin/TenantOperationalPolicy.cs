@@ -56,11 +56,18 @@ public sealed class TenantOperationalPolicy
     /// </summary>
     public bool PersonalizedDocumentsEnabled { get; set; }
 
+    /// <summary>Avisos de correo al aprobar un trámite. Default true.</summary>
+    public bool TramiteApprovedEmailsEnabled { get; set; } = true;
+
+    /// <summary>Avisos de correo al rechazar un trámite. Default true.</summary>
+    public bool TramiteRejectedEmailsEnabled { get; set; } = true;
+
     /// <summary>
-    /// HU #11469 — interruptor operativo de avisos de correo al cambio de estado.
-    /// Default <c>true</c>: avisos encendidos al desplegar. Lo evalúa el worker, no el sink.
+    /// Destinatarios combinables (jsonb). Forma:
+    /// <c>{"comprador":true,"vendedorOPropietario":true,"radicador":true,"extraEmail":null}</c>.
     /// </summary>
-    public bool TramiteStateEmailsEnabled { get; set; } = true;
+    public string TramiteStateEmailRecipients { get; set; } =
+        """{"comprador":true,"vendedorOPropietario":true,"radicador":true,"extraEmail":null}""";
 
     public string NotificationTarget { get; set; } = "submitter";
 
