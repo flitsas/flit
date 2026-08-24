@@ -89,6 +89,7 @@ export function NotificacionEnviarPruebaModal({
   useEffect(() => {
     if (!open) return;
 
+    /* eslint-disable react-hooks/set-state-in-effect -- reset de fase y selects al abrir el modal */
     if (!mailboxConfigured) {
       setPhase("mailbox-required");
       return;
@@ -106,6 +107,7 @@ export function NotificacionEnviarPruebaModal({
     }
 
     runSend();
+    /* eslint-enable react-hooks/set-state-in-effect */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mailboxConfigured, templateId, channel, requiresType, loadCatalog]);
 

@@ -79,6 +79,7 @@ export function NotificacionVistaPreviaModal({
 
   useEffect(() => {
     if (!open) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- reset de selects y muestra al abrir el modal */
     setFamily("");
     setTypeId("");
     setSample(null);
@@ -94,12 +95,12 @@ export function NotificacionVistaPreviaModal({
         setStatus(data.html.trim().length === 0 ? "empty" : "ready");
       })
       .catch(() => setStatus("error"));
-    // Carga al abrir / cambiar plantilla o canal; no incluir loadSample (recrea con typeId).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, templateId, channel, requiresType, loadCatalog]);
 
   useEffect(() => {
     if (!open || !requiresType || !typeId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async de la muestra al elegir tipo
     loadSample();
   }, [open, requiresType, typeId, loadSample]);
 
