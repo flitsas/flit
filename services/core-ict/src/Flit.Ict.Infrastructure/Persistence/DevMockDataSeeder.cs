@@ -55,6 +55,12 @@ public sealed partial class DevMockDataSeeder(
                 Log.SeededTrazabilidad(logger);
             }
 
+            if (!await YaSembradoAsync(connection, "SELECT count(*) FROM ict.external_integration_source_query", cancellationToken))
+            {
+                await EjecutarAsync(connection, ConsultasFuenteMockSql, tenantId.Value, cancellationToken);
+                Log.SeededConsultas(logger);
+            }
+
             if (await AlreadySeededAsync(connection, cancellationToken))
             {
                 return;
@@ -174,6 +180,52 @@ public sealed partial class DevMockDataSeeder(
         WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-VOID-1';
         """;
 
+    /// <summary>
+    /// Consultas al RUNT de los pre-trámites de muestra (HU #11817). El trámite atascado se queda con
+    /// una consulta de identidad sin resolver tras tres intentos: es el escenario que justifica la
+    /// pestaña, porque explica un atasco que el estado por sí solo no explica.
+    /// </summary>
+    private const string ConsultasFuenteMockSql = """
+        INSERT INTO ict.external_integration_source_query
+            (eim_id, tenant_id, actor_level, query_type, document_type, document_number,
+             plate_complete, vehicle_vin, is_data_queried, is_data_valid, attempts, created_at)
+        SELECT m.id, m.tenant_id, v.actor_level, v.query_type, v.document_type, v.document_number,
+               CASE WHEN v.query_type = 'VEHICLE' THEN m.plate ELSE '' END, '',
+               v.consultada, v.valida, v.intentos, m.created_at + interval '3 min'
+        FROM ict.external_integration_master m
+        CROSS JOIN (VALUES
+            ('MAIN', 'DRIVER',  'NIT', '811011779', true,  true,  1),
+            ('VEHI', 'VEHICLE', '',    '',          true,  true,  1),
+            ('LERE', 'DRIVER',  'CC',  '1193552679', true, true,  2),
+            ('LERE', 'VIDEN',   'CC',  '1193552679', false, false, 3)
+        ) AS v(actor_level, query_type, document_type, document_number, consultada, valida, intentos)
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-STUCK-1';
+
+        -- El trámite que llegó a borrador consultó lo mismo, pero todo le resolvió.
+        INSERT INTO ict.external_integration_source_query
+            (eim_id, tenant_id, actor_level, query_type, document_type, document_number,
+             plate_complete, vehicle_vin, is_data_queried, is_data_valid, attempts, created_at)
+        SELECT m.id, m.tenant_id, v.actor_level, v.query_type, v.document_type, v.document_number,
+               CASE WHEN v.query_type = 'VEHICLE' THEN m.plate ELSE '' END, '',
+               true, true, 1, m.created_at + interval '2 min'
+        FROM ict.external_integration_master m
+        CROSS JOIN (VALUES
+            ('MAIN', 'DRIVER',  'NIT', '811011779'),
+            ('VEHI', 'VEHICLE', '',    ''),
+            ('LERE', 'DRIVER',  'CC',  '1193552679')
+        ) AS v(actor_level, query_type, document_type, document_number)
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-DRAFT-1';
+
+        -- Respuesta cruda del RUNT, CON datos personales a propósito: el enmascarado se comprueba al
+        -- servir, no al sembrar. Si aquí ya llegara enmascarada, la prueba no probaría nada.
+        INSERT INTO ict.external_integration_source_response (eisq_id, tenant_id, query_response, created_at)
+        SELECT q.id, q.tenant_id,
+               '{"fullName": "DANIEL AMADO GARCIA", "documentType": "CC", "documentNumber": "1193552679", "phone": "3104558812", "municipality": "MEDELLIN PARA ANTIOQUIA", "licenses": [{"category": "A2", "status": "ACTIVA", "dueDate": "23/07/2032"}]}'::jsonb,
+               q.created_at + interval '4 s'
+        FROM ict.external_integration_source_query q
+        WHERE q.tenant_id = @tenant AND q.is_data_valid = true AND q.query_type = 'DRIVER';
+        """;
+
     private const string MockSql = """
         INSERT INTO ict.integration_log
             (tenant_id, log_type, direction, method, path, status_code, headers, request, response, correlation_id, duration_ms, usuario, created_at)
@@ -209,6 +261,9 @@ public sealed partial class DevMockDataSeeder(
 
         [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: etapas y marcas de trazabilidad creadas.")]
         public static partial void SeededTrazabilidad(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: consultas a fuentes de muestra creadas.")]
+        public static partial void SeededConsultas(ILogger logger);
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev mock seed: no hay tenants; se omite.")]
         public static partial void NoTenant(ILogger logger);

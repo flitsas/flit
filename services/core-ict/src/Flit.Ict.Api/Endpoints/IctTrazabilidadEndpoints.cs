@@ -81,6 +81,29 @@ public static class IctTrazabilidadEndpoints
                 : Results.Ok(recorrido);
         });
 
+        // HU #11817 — consultas a fuentes externas del trámite.
+        group.MapGet("/tramites/{numero:long}/consultas-fuente", async (
+            HttpContext context,
+            IConsultasFuenteQuery query,
+            long numero,
+            CancellationToken ct) =>
+        {
+            var access = PlatformAccessReader.Read(context);
+            if (!access.HasIctLogsAccess)
+            {
+                return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            var consultas = await query.ConsultarAsync(
+                numero, access.IsSuperAdmin ? null : access.TenantId, ct);
+
+            // Null es «no existe o no es tuyo»; lista vacía es «existe y aún no ha consultado nada».
+            // Confundirlos haría parecer roto un trámite que simplemente va por la primera etapa.
+            return consultas is null
+                ? Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound)
+                : Results.Ok(consultas);
+        });
+
         return app;
     }
 
