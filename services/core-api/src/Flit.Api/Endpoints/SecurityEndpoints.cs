@@ -1176,8 +1176,10 @@ public static class SecurityEndpoints
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Unsuspend, "user", "USER", "userId"));
 
         // DELETE /security/users/{userId} — elimina (soft-delete reversible) a un usuario.
-        // AdminCompany solo su tenant; SuperAdmin cualquiera. Restaurar sigue EXCLUSIVO de
-        // SuperAdmin — ver POST /api/v1/superadmin/users/{userId}/restore. rowVersion obligatorio.
+        // EXCLUSIVO de SuperAdmin (no AdminCompany): la restauración ya era solo SuperAdmin y
+        // el soft-delete debe tener el mismo nivel de restricción — ocultar-eliminar-admin-company.
+        // rowVersion obligatorio (concurrencia optimista). Restaurar sigue EXCLUSIVO de
+        // SuperAdmin — ver POST /api/v1/superadmin/users/{userId}/restore.
         group.MapDelete("/users/{userId:guid}", async (
             Guid userId,
             [FromBody] DeleteUserRequest request,
@@ -1232,7 +1234,7 @@ public static class SecurityEndpoints
                     new ErrorResponse("CONCURRENCY_CONFLICT", ex.Message),
                     statusCode: StatusCodes.Status409Conflict);
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.DeleteUser, "user", "USER", "userId"));
 
