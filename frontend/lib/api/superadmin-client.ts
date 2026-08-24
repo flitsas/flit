@@ -9,6 +9,9 @@ import type {
   ProcedureEntity,
   ExternalDataSource,
   ConsultationTemplate,
+  ConformationProfile,
+  UpdateConformationProfileRequest,
+  UpdateProcedureTypeRequest,
 } from './types/procedure-parametrization';
 import { getToken } from './client';
 
@@ -84,6 +87,24 @@ const JSON_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',
 };
 
+/**
+ * Error de la API de superadmin con el CUERPO ya interpretado.
+ *
+ * Antes se lanzaba un `Error` plano con el JSON del servidor concatenado al mensaje, así que un
+ * llamador que necesitara un dato de la respuesta —la lista de impedimentos de la barrera, por
+ * ejemplo— tenía que volver a parsear un texto que ya venía estructurado.
+ */
+export class SuperadminApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: unknown,
+    mensaje: string,
+  ) {
+    super(mensaje);
+    this.name = 'SuperadminApiError';
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== 'undefined' ? getToken() : null;
   // Path absoluto → toma el ORIGEN del base e ignora su path (evita duplicar /api/v1).
@@ -98,8 +119,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${res.statusText}${body ? ': ' + body : ''}`);
+    const texto = await res.text().catch(() => '');
+    let cuerpo: unknown = null;
+    try {
+      cuerpo = texto ? JSON.parse(texto) : null;
+    } catch {
+      cuerpo = texto || null;
+    }
+    // `detail` es el campo de ProblemDetails, que es lo que el backend devuelve en los errores
+    // explicados; sin él se cae al texto crudo, que al menos dice el código de estado.
+    const detalle = (cuerpo as { detail?: unknown })?.detail;
+    throw new SuperadminApiError(
+      res.status,
+      cuerpo,
+      typeof detalle === 'string' && detalle
+        ? detalle
+        : `${res.status} ${res.statusText}${texto ? ': ' + texto : ''}`,
+    );
   }
 
   if (res.status === 204) {
@@ -161,6 +197,51 @@ export const superadminClient = {
     request<ProcedureTypeSummary>(`/api/v1/superadmin/procedure-types/${id}/publish`, {
       method: 'POST',
     }),
+
+  // ── Configurador de tipos de trámite (ADR-0050) ────────────────────────────
+
+  /**
+   * Corrige la identidad del tipo: nombre, descripción, familia y si está activo.
+   *
+   * Funciona sobre tipos PUBLICADOS y sube su versión. El nombre es el rótulo legal del mandato y
+   * de la portada del expediente, así que corregirlo no es cosmético; la familia gobierna
+   * clasificación, filtros y causales de rechazo.
+   */
+  updateProcedureType: (id: string, body: UpdateProcedureTypeRequest) =>
+    request<ProcedureTypeSummary>(`/api/v1/superadmin/procedure-types/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  archive: (id: string) =>
+    request<ProcedureTypeSummary>(`/api/v1/superadmin/procedure-types/${id}/archive`, {
+      method: 'POST',
+    }),
+
+  /**
+   * Mueve la barrera de operación: si el gestor puede elegir este tipo al crear un trámite.
+   *
+   * Encender exige que el tipo esté listo (publicado, activo, con pasos y sin errores de
+   * validación); si no lo está responde 422 con la lista de lo que falta. Apagar no exige nada.
+   */
+  setWizardEnabled: (id: string, enabled: boolean) =>
+    request<ProcedureTypeSummary>(
+      `/api/v1/superadmin/procedure-types/${id}/wizard-enabled`,
+      { method: 'PUT', body: JSON.stringify({ enabled }) },
+    ),
+
+  /** Perfil completo: capacidades, actores, fuentes externas y matriz documental. */
+  getConformationProfile: (id: string) =>
+    request<ConformationProfile>(
+      `/api/v1/superadmin/procedure-types/${id}/conformation-profile`,
+    ),
+
+  /** Guarda el perfil. Las listas ausentes no se tocan; sobre un publicado sube la versión. */
+  updateConformationProfile: (id: string, body: UpdateConformationProfileRequest) =>
+    request<ConformationProfile>(
+      `/api/v1/superadmin/procedure-types/${id}/conformation-profile`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
 
   listProcedureEntities: () =>
     request<ProcedureEntity[]>('/api/v1/superadmin/procedure-entities'),

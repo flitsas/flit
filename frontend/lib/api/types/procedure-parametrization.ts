@@ -1,3 +1,4 @@
+import type { WizardSectionType } from './procedure-runtime';
 export type PublicationStatus = 'draft' | 'published' | 'archived';
 export type ProcedureFamily = 'MATRICULAS' | 'TRASPASO' | 'OTROS';
 export type ProcedureEntityCode = 'VEHICLE' | 'OWNER' | 'BUYER' | 'LESSEE';
@@ -72,6 +73,12 @@ export interface ProcedureSection {
   title: string;
   sortOrder: number;
   layout?: string;
+  /**
+   * CFD-09 / ADR-0050 — qué pinta la sección en el asistente. Es el contrato entre la
+   * parametrización y el `SectionRendererRegistry` del frontend: una sección sin tipo válido cae en
+   * el cuerpo genérico y no captura nada.
+   */
+  sectionType?: WizardSectionType;
   formFields: FormFieldItem[];
 }
 
@@ -140,6 +147,8 @@ export interface ProcedureSectionInput {
   title: string;
   sortOrder: number;
   layout?: string;
+  /** CFD-09 — qué pinta la sección. Sin él, el upsert lo deja en `generic_form`. */
+  sectionType?: WizardSectionType;
   formFields: FormFieldInput[];
 }
 
@@ -157,4 +166,90 @@ export interface FormFieldInput {
 export interface ApplyTemplateFieldsRequest {
   procedureTypeId: string;
   sectionId: string;
+}
+
+// ── Configurador de tipos de trámite (ADR-0050) ──────────────────────────────
+
+/**
+ * Capacidades del tipo, tal como viven en `procedure_types.gate_profile`.
+ *
+ * Es el mismo objeto que gobierna los gates del backend y que el asistente recibe en su estado. El
+ * configurador lo edita entero; las claves ausentes equivalen a «no exige».
+ */
+export interface GateProfile {
+  /** `VIN` (vehículo aún sin placa), `PLATE` o `BOTH`. */
+  entryMode?: string | null;
+  requiresSeller?: boolean;
+  requiresBuyer?: boolean;
+  allowsMultipleBuyer?: boolean;
+  allowsMultipleSeller?: boolean;
+  requiresCommercialValue?: boolean;
+  commercialValueSource?: string | null;
+  requiresBiometrics?: boolean;
+  /** Actores a validar: `OWNER`, `BUYER`. */
+  biometricActors?: string[];
+  requiresSignature?: boolean;
+  requiresPlateRequest?: boolean;
+  validateCompanyRule?: boolean;
+  validateOtOperability?: boolean;
+  validateDuplicateProcedure?: boolean;
+  validateSoat?: boolean;
+  validatePazSalvoImpuesto?: boolean;
+  hasPrendaGate?: boolean;
+  simitMode?: string | null;
+}
+
+/** Documento que el tipo exige (CFD-06). Se referencia por código del catálogo. */
+export interface ConformationDocumentRequirement {
+  documentTypeCode: string;
+  isRequired: boolean;
+  isDummy: boolean;
+  conditionGroup?: string | null;
+  sortOrder?: number;
+}
+
+/** Regla de conformación: qué actores intervienen y con qué perfil de validación. */
+export interface ConformationRuleProfile {
+  entityCode: string;
+  validationProfile: Record<string, unknown>;
+}
+
+/** Fuente externa que el tipo consulta (RUNT, SIMIT…), con su orden y configuración. */
+export interface ConformationSource {
+  sourceCode: string;
+  executionOrder: number;
+  config: Record<string, unknown>;
+}
+
+/** Perfil de conformación completo del tipo — lo que el configurador lee y escribe. */
+export interface ConformationProfile {
+  procedureTypeId: string;
+  code: string;
+  publicationStatus: PublicationStatus;
+  version: number;
+  gateProfile: GateProfile;
+  conformationRules: ConformationRuleProfile[];
+  sources: ConformationSource[];
+  documentRequirements: ConformationDocumentRequirement[];
+}
+
+/** Cuerpo del PUT del perfil. Cada lista ausente (`undefined`) significa «no tocar». */
+export interface UpdateConformationProfileRequest {
+  gateProfile?: GateProfile | null;
+  sources?: ConformationSource[];
+  conformationRules?: { entityCode: string; validationProfile?: Record<string, unknown>; isActive?: boolean; sortOrder?: number }[];
+  documentRequirements?: ConformationDocumentRequirement[];
+}
+
+/** Cuerpo del PUT de identidad del tipo. `family` ausente la deja como está. */
+export interface UpdateProcedureTypeRequest {
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  family?: ProcedureFamily;
+}
+
+/** Respuesta 422 al intentar habilitar un tipo que aún no está listo. */
+export interface WizardEnabledNotReady {
+  motivos: string[];
 }

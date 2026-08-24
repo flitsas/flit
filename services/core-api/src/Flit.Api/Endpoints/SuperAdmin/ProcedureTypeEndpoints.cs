@@ -49,6 +49,7 @@ internal static class ProcedureTypeEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
+                "invalid_family" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Familia inválida: use MATRICULAS, TRASPASO u OTROS."),
                 "conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Cannot update a published procedure type."),
                 _ => Results.Ok(result)
             };
