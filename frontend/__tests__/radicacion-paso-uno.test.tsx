@@ -95,7 +95,8 @@ function renderNuevo() {
   mocks.getWizardPreview.mockResolvedValue(wizard());
   return render(
     <TramiteWizard
-      modalidad="matricula_inicial"
+      procedureTypeCode="MATRICULA_NUEVA"
+        modalidad="matricula_inicial"
       title="Nuevo trámite"
       onCreated={() => {}}
       onExit={() => {}}
@@ -202,6 +203,7 @@ describe('Trámite prioritario — paso 1', () => {
     mocks.getWizardPreview.mockResolvedValue(wizard());
     render(
       <TramiteWizard
+        procedureTypeCode="MATRICULA_NUEVA"
         modalidad="matricula_inicial"
         title="Nuevo trámite"
         onCreated={onCreated}

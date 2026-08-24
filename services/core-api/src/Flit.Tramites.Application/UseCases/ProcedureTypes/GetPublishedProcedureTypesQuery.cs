@@ -12,7 +12,8 @@ public sealed record PublishedProcedureTypeDto(
     string Code,
     string Name,
     string Family,
-    int Version);
+    int Version,
+    bool WizardEnabled);
 
 /// <summary>
 /// Lista los tipos de trámite en <c>publication_status='published'</c> disponibles para operadores
@@ -24,7 +25,7 @@ public sealed class GetPublishedProcedureTypesHandler(IProcedureTypeRepository r
     {
         var types = await repository.ListAsync(family: null, publicationStatus: PublicationStatus.Published, ct);
         return types
-            .Select(t => new PublishedProcedureTypeDto(t.Id, t.Code, t.Name, t.Family, t.Version))
+            .Select(t => new PublishedProcedureTypeDto(t.Id, t.Code, t.Name, t.Family, t.Version, t.WizardEnabled))
             .ToList();
     }
 }

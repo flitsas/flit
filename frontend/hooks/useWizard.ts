@@ -31,18 +31,21 @@ export function useWizard(
   // instancias de su compañía real (creadas bajo su tenant del JWT, no bajo el "Flit Dev Tenant").
   tenantId?: string,
   // CF-02 (HU #10883, AC3) — sin instancia todavía (paso 1 antes de crear el trámite): se carga el
-  // ESQUELETO de pasos de la modalidad para pintar el wizard. `undefined` deja el hook inerte como
-  // siempre. En cuanto llega `instanceId`, manda el wizard real.
-  previewModalidad?: WizardModalidad,
+  // ESQUELETO de pasos del TIPO para pintar el wizard. `undefined` deja el hook inerte como siempre.
+  // En cuanto llega `instanceId`, manda el wizard real.
+  //
+  // ADR-0050 — antes se pedía por modalidad y solo existía para matrícula y traspaso; ahora es el
+  // `code` del tipo, así que el esqueleto existe para cualquier tipo parametrizado.
+  previewProcedureTypeCode?: string,
 ) {
   const [state, setState] = useState<WizardHookState>(INITIAL_STATE);
 
   const refresh = useCallback(async () => {
     if (!instanceId) {
-      if (!previewModalidad) return null;
+      if (!previewProcedureTypeCode) return null;
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const wizard = await tramitesClient.getWizardPreview(previewModalidad);
+        const wizard = await tramitesClient.getWizardPreview(previewProcedureTypeCode);
         setState((s) => ({ ...s, wizard, loading: false }));
         return wizard;
       } catch (err) {
@@ -68,7 +71,7 @@ export function useWizard(
       }));
       return null;
     }
-  }, [instanceId, tenantId, previewModalidad]);
+  }, [instanceId, tenantId, previewProcedureTypeCode]);
 
   // Carga inicial al tener instanceId.
   useEffect(() => {

@@ -40,9 +40,9 @@ describe("detailed report filters", () => {
 
 describe("groupProcedureTypes", () => {
   const types: ProcedureTypeSummary[] = [
-    { id: "1", code: "TRA", name: "Traspaso simple", family: "TRASPASO", publicationStatus: "published", isActive: true, publishedAt: null },
-    { id: "2", code: "MAT", name: "Matrícula inicial", family: "MATRICULAS", publicationStatus: "published", isActive: true, publishedAt: null },
-    { id: "3", code: "OTR", name: "Otro trámite", family: "OTROS", publicationStatus: "published", isActive: true, publishedAt: null },
+    { id: "1", code: "TRA", name: "Traspaso simple", family: "TRASPASO", publicationStatus: "published", isActive: true, wizardEnabled: true, publishedAt: null },
+    { id: "2", code: "MAT", name: "Matrícula inicial", family: "MATRICULAS", publicationStatus: "published", isActive: true, wizardEnabled: true, publishedAt: null },
+    { id: "3", code: "OTR", name: "Otro trámite", family: "OTROS", publicationStatus: "published", isActive: true, wizardEnabled: true, publishedAt: null },
   ];
 
   it("mapea familia a la categoría de la vista BI", () => {

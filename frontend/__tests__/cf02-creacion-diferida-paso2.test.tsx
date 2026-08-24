@@ -117,7 +117,8 @@ async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
 function renderNuevaMatricula() {
   return render(
     <TramiteWizard
-      modalidad="matricula_inicial"
+      procedureTypeCode="MATRICULA_NUEVA"
+        modalidad="matricula_inicial"
       title="Matrícula inicial"
       onCreated={(summary) => routerReplace(`/tramites/${summary.id}?t=${summary.tenantId}`)}
       onExit={() => {}}

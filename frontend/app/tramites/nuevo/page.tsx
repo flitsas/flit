@@ -1,51 +1,69 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
+import { SelectorTipoTramite, type FamiliasBloqueadas } from '@/components/operacion/SelectorTipoTramite';
 
 /**
- * `/tramites/nuevo` — entrada al asistente SIN modalidad en la URL.
+ * `/tramites/nuevo` — elección del trámite antes de abrir el asistente (ADR-0050).
  *
- * En la propuesta "Nuevo trámite" abre el asistente directamente y el tipo se elige DENTRO del
- * paso 1, con las tarjetas de "Configuración del Trámite". No hay pantalla intermedia de elección,
- * así que esta ruta no pinta nada: resuelve qué modalidad abrir y reemplaza la URL por
- * `/tramites/nuevo/[modalidad]`, que es donde vive el paso 1.
+ * Antes esta ruta no pintaba nada: resolvía una de las dos modalidades fijas y redirigía a
+ * `/tramites/nuevo/[modalidad]`. Con el catálogo como fuente de verdad hay 21 tipos en tres
+ * familias, así que la elección **familia → tipo** pasa a ser una pantalla propia y la URL del
+ * asistente lleva el `code` del tipo.
  *
- * La modalidad por defecto es matrícula inicial —la primera tarjeta del selector—, salvo que la
- * compañía la tenga bloqueada: en ese caso abre la primera que sí esté habilitada, para no llevar
- * al gestor a una pantalla de bloqueo que él no eligió. Si las dos están bloqueadas se abre
- * igualmente la de matrícula, que es la que explica el bloqueo y ofrece volver al listado.
- *
- * `replace`, no `push`: esta URL es solo un enrutamiento y el "atrás" del navegador debe volver al
- * listado, no rebotar aquí otra vez.
+ * Solo se ofrecen los tipos con la barrera de operación encendida, de modo que el gestor nunca
+ * elige un trámite sin recorrido, documentos ni causales.
  */
 export default function NuevoTramitePage() {
   const router = useRouter();
+  const [bloqueadas, setBloqueadas] = useState<FamiliasBloqueadas | undefined>(undefined);
+  const [cargandoConfig, setCargandoConfig] = useState(true);
 
   useEffect(() => {
     let active = true;
-    const abrir = (modalidad: string) => {
-      if (active) router.replace(`/tramites/nuevo/${modalidad}`);
-    };
     void tramitesClient
       .getConsultationConfig()
       .then((cfg) => {
-        const block = cfg.blockProcedureFamily;
-        abrir(block?.matriculas && !block?.traspaso ? 'traspaso' : 'matricula_inicial');
+        if (active) setBloqueadas(cfg.blockProcedureFamily ?? undefined);
       })
       .catch(() => {
-        // Sin config legible no se decide nada: el paso 1 y el backend cortan si aplica.
-        abrir('matricula_inicial');
+        // Sin config legible no se bloquea nada por adelantado: el gate del backend corta al crear.
+        if (active) setBloqueadas(undefined);
+      })
+      .finally(() => {
+        if (active) setCargandoConfig(false);
       });
     return () => {
       active = false;
     };
-  }, [router]);
+  }, []);
 
-  // La espera se pinta con el MISMO velo que las consultas al RUNT (`CarLoaderModal`): tarjeta
-  // blanca con el carrito sobre el fondo atenuado. Antes era un rótulo suelto, que en una ruta que
-  // no dibuja nada más dejaba la pantalla prácticamente en blanco.
-  return <CarLoaderModal label="Abriendo el asistente…" />;
+  if (cargandoConfig) {
+    return <CarLoaderModal label="Abriendo el asistente…" />;
+  }
+
+  return (
+    <main className="mx-auto w-full max-w-xl px-4 py-8">
+      <h1 className="text-lg font-semibold" style={{ color: '#162744' }}>Nuevo trámite</h1>
+      <p className="mt-1 text-sm opacity-70">Elige la familia y luego el trámite que vas a radicar.</p>
+
+      <div className="mt-5">
+        <SelectorTipoTramite
+          bloqueadas={bloqueadas}
+          onElegir={(code) => router.push(`/tramites/nuevo/${encodeURIComponent(code)}`)}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={() => router.push('/tramites')}
+        className="mt-6 text-xs font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+      >
+        Volver a trámites
+      </button>
+    </main>
+  );
 }

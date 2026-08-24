@@ -17,8 +17,33 @@ export interface ProcedureTypeSummary {
   family: ProcedureFamily;
   publicationStatus: PublicationStatus;
   isActive: boolean;
+  /**
+   * ADR-0050 — barrera de operación: el tipo puede elegirse al crear un trámite.
+   *
+   * Es independiente de `publicationStatus`, que solo gobierna la visibilidad en administración: un
+   * tipo puede estar publicado y aparecer en el catálogo sin tener todavía un recorrido operable.
+   * El selector de creación filtra por este campo; las pantallas de administración, no.
+   */
+  wizardEnabled: boolean;
   publishedAt: string | null;
 }
+
+/** Etiquetas de familia para el selector y los filtros. */
+export const FAMILY_LABEL: Record<ProcedureFamily, string> = {
+  MATRICULAS: 'Matrículas',
+  TRASPASO: 'Traspaso',
+  OTROS: 'Otros trámites',
+};
+
+/** Descripción de cada familia en el paso de selección. */
+export const FAMILY_DESCRIPTION: Record<ProcedureFamily, string> = {
+  MATRICULAS: 'Primera matrícula, leasing y cancelación',
+  TRASPASO: 'Cambio de propietario del vehículo',
+  OTROS: 'Cambios y novedades sobre un vehículo ya matriculado',
+};
+
+/** Orden de presentación de las familias. */
+export const FAMILY_ORDER: readonly ProcedureFamily[] = ['MATRICULAS', 'TRASPASO', 'OTROS'];
 
 export interface ConformationRuleItem {
   procedureEntityCode: ProcedureEntityCode;

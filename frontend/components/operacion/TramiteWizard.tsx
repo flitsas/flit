@@ -121,10 +121,16 @@ import { InlineAlert } from '@/components/atom/InlineAlert';
 type Props = {
   onExit: () => void;
 } & (
-  | { existingInstanceId: string; modalidad?: undefined; title?: undefined; configuration?: undefined; procedureTypeId?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
+  | { existingInstanceId: string; modalidad?: undefined; procedureTypeCode?: undefined; title?: undefined; configuration?: undefined; procedureTypeId?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
   | {
       modalidad: WizardModalidad;
       title: string;
+      /**
+       * ADR-0050 — `code` del tipo elegido. Con él se pide el esqueleto de pasos del paso 1, que el
+       * backend conforma desde el catálogo. La `modalidad` sigue gobernando el render del cuerpo
+       * hasta que el wizard se conforme también desde el tipo.
+       */
+      procedureTypeCode: string;
       /** CF-02 — el trámite acaba de crearse al avanzar al paso 2; la página navega a su ruta. */
       onCreated?: (summary: ProcedureInstanceSummary) => void;
       /** R3 (HU #10539) — vehículo sembrado desde el CTA "Iniciar traspaso": solo prellena el paso 1. */
@@ -134,7 +140,7 @@ type Props = {
       configuration?: undefined;
       procedureTypeId?: undefined;
     }
-  | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; modalidad?: undefined; title?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
+  | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; modalidad?: undefined; procedureTypeCode?: undefined; title?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
 );
 
 /**
@@ -306,6 +312,7 @@ export function TramiteWizard(props: Props) {
   const {
     procedureTypeId,
     modalidad: entryModalidad,
+    procedureTypeCode: entryProcedureTypeCode,
     existingInstanceId,
     onCreated,
     seedVin,
@@ -449,7 +456,7 @@ export function TramiteWizard(props: Props) {
     loading: wizardLoading,
     error: wizardError,
     refresh,
-  } = useWizard(instanceId, undefined, deferredCreation ? entryModalidad : undefined);
+  } = useWizard(instanceId, undefined, deferredCreation ? entryProcedureTypeCode : undefined);
 
   // N 03 — estado de negocio del trámite: manda el del wizard (se refresca tras cada acción);
   // fallback al fetch inicial de la instancia existente mientras el wizard carga.
@@ -2931,7 +2938,7 @@ function ConsultaStep({
   );
 
   // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
-  // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
+  // (placa/VIN) por query param; la ruta del tipo crea la instancia y persiste el seed.
   // Solo aplica a matrícula (isVin): el check `vin_matricula` únicamente lo agrega esa rama del preflight.
   const handleIniciarTraspaso = () => {
     const byKeyFv = (key: string) =>
@@ -2942,7 +2949,7 @@ function ConsultaStep({
     if (seedVin) params.set('seedVin', seedVin);
     if (seedPlaca) params.set('seedPlaca', seedPlaca);
     const qs = params.toString();
-    router.push(`/tramites/nuevo/traspaso${qs ? `?${qs}` : ''}`);
+    router.push(`/tramites/nuevo/TRASPASO_STANDARD${qs ? `?${qs}` : ''}`);
   };
 
   // Trámite principal que gobierna el paso. Con creación diferida la trae la ruta; con el trámite

@@ -1187,9 +1187,9 @@ export const tramitesClient = {
 
   // CF-02 (HU #10883, AC3) — esqueleto de pasos para pintar el wizard en el paso 1 mientras el
   // trámite aún no existe. Mismos pasos/etiquetas que el wizard real, con el resto bloqueado.
-  getWizardPreview: (modalidad: WizardModalidad) =>
+  getWizardPreview: (procedureTypeCode: string) =>
     request<WizardState>(
-      `/api/v1/tramites/wizard-preview?modalidad=${encodeURIComponent(modalidad)}`,
+      `/api/v1/tramites/wizard-preview?procedureTypeCode=${encodeURIComponent(procedureTypeCode)}`,
     ),
 
   /** Guía informativa de documentos (paso 1, sin instancia). */
