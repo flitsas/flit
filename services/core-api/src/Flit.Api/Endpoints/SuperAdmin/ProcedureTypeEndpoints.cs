@@ -24,8 +24,15 @@ internal static class ProcedureTypeEndpoints
             CreateProcedureTypeHandler handler,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(request, ct);
-            return Results.Created($"/api/v1/superadmin/procedure-types/{result.Id}", result);
+            var (result, error) = await handler.HandleAsync(request, ct);
+            return error switch
+            {
+                "invalid_code" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El código debe ir en MAYÚSCULAS, con letras, dígitos o guion bajo, y entre 3 y 60 caracteres. Es la llave con la que el tipo viaja a las integraciones."),
+                "invalid_name" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El nombre del tipo es obligatorio: es el rótulo del trámite en el mandato y en la portada del expediente."),
+                "invalid_family" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Familia inválida: use MATRICULAS, TRASPASO u OTROS."),
+                "code_taken" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe un tipo de trámite con ese código."),
+                _ => Results.Created($"/api/v1/superadmin/procedure-types/{result!.Id}", result),
+            };
         }).WithName("CreateProcedureType");
 
         group.MapGet("/procedure-types/{id:guid}", async (
@@ -64,7 +71,7 @@ internal static class ProcedureTypeEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
-                "conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Cannot delete a procedure type with active instances."),
+                "conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se puede retirar un tipo que tiene trámites: quedarían apuntando a un tipo archivado."),
                 _ => Results.NoContent()
             };
         }).WithName("DeleteProcedureType");

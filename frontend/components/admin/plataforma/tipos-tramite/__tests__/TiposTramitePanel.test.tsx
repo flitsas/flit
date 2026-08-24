@@ -17,7 +17,8 @@ const { mocks, ApiError } = vi.hoisted(() => {
       readonly status: number,
       readonly body: unknown,
     ) {
-      super('error');
+      // Igual que el real: el mensaje sale de `detail` de ProblemDetails.
+      super(String((body as { detail?: unknown })?.detail ?? 'error'));
       this.name = 'SuperadminApiError';
     }
   }
@@ -30,6 +31,8 @@ const { mocks, ApiError } = vi.hoisted(() => {
       validate: vi.fn(),
       setWizardEnabled: vi.fn(),
       updateProcedureType: vi.fn(),
+      createProcedureType: vi.fn(),
+      retirar: vi.fn(),
     },
   };
 });
@@ -157,5 +160,74 @@ describe('Configurador de tipos de trámite', () => {
     await user.click(await screen.findByRole('button', { name: /Blindaje/ }));
 
     expect(await screen.findByText(/exige al menos un actor/)).toBeInTheDocument();
+  });
+
+  // ── Alta y retiro ─────────────────────────────────────────────────────────
+
+  it('el alta avisa de que el código no se podrá cambiar y de que falta mapear las integraciones', async () => {
+    const user = userEvent.setup();
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Nuevo tipo/ }));
+
+    // Ambas cosas se descubren tarde si no se dicen aquí: el código viaja a ICT y a Quipux, y crear
+    // el tipo en FLIT no lo da de alta allí.
+    expect(await screen.findByText(/No se puede cambiar después/)).toBeInTheDocument();
+    expect(screen.getByText(/no lo da de alta en ICT ni en Quipux/)).toBeInTheDocument();
+  });
+
+  it('normaliza el código y lo muestra antes de crear', async () => {
+    const user = userEvent.setup();
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Nuevo tipo/ }));
+    await user.type(await screen.findByLabelText('Código'), 'cambio color');
+
+    expect(await screen.findByText(/CAMBIO_COLOR/)).toBeInTheDocument();
+  });
+
+  it('no deja crear con un código de forma inválida', async () => {
+    const user = userEvent.setup();
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Nuevo tipo/ }));
+    await user.type(await screen.findByLabelText('Código'), 'AB');
+    await user.type(screen.getByLabelText('Nombre del tipo'), 'Algo');
+
+    expect(screen.getByRole('button', { name: 'Crear tipo' })).toBeDisabled();
+  });
+
+  it('el retiro explica que archiva y no borra', async () => {
+    const user = userEvent.setup();
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Blindaje/ }));
+    await user.click(await screen.findByRole('button', { name: /Retirar del catálogo/ }));
+
+    // «Eliminar» sugiere una pérdida de datos que no ocurre, y eso cambia si el gestor se atreve.
+    const dialogo = await screen.findByRole('dialog', { name: /Retirar tipo/ });
+    expect(within(dialogo).getByText(/se archiva/)).toBeInTheDocument();
+    expect(within(dialogo).getByText(/no se borra/)).toBeInTheDocument();
+
+    await user.click(within(dialogo).getByRole('button', { name: /Sí, retirar/ }));
+    await waitFor(() => expect(mocks.retirar).toHaveBeenCalledWith('id-blindaje'));
+  });
+
+  it('un tipo con trámites no se retira y se dice por qué', async () => {
+    const user = userEvent.setup();
+    mocks.retirar.mockRejectedValue(
+      new ApiError(409, { detail: 'No se puede retirar un tipo que tiene trámites.' }),
+    );
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Blindaje/ }));
+    await user.click(await screen.findByRole('button', { name: /Retirar del catálogo/ }));
+    const dialogo = await screen.findByRole('dialog', { name: /Retirar tipo/ });
+    await user.click(within(dialogo).getByRole('button', { name: /Sí, retirar/ }));
+
+    // La aserción va sobre el elemento de ERROR, no sobre el texto del diálogo: este también
+    // menciona los trámites, y buscarlo por texto suelto pasaría aunque el error no se pintara.
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent('No se puede retirar un tipo que tiene trámites.');
   });
 });

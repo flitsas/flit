@@ -128,9 +128,11 @@ export interface ConsultationTemplate {
 }
 
 export interface CreateProcedureTypeRequest {
+  /** Llave del catálogo. No se puede cambiar después: viaja a ICT, a Quipux y a los snapshots. */
   code: string;
   name: string;
   family: ProcedureFamily;
+  description?: string | null;
 }
 
 /** Payload item for PUT /procedure-types/{id}/steps (array body, not wrapped). */

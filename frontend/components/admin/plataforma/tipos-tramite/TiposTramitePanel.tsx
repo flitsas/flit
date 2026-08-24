@@ -1,10 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
+import { NuevoTipoTramiteModal } from './NuevoTipoTramiteModal';
 import { TipoTramiteBarrera } from './TipoTramiteBarrera';
 import { TipoTramiteCapacidades } from './TipoTramiteCapacidades';
 import { TipoTramiteDocumentos } from './TipoTramiteDocumentos';
@@ -37,6 +38,10 @@ export function TiposTramitePanel() {
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [pestana, setPestana] = useState<Pestana>('identidad');
   const [filtro, setFiltro] = useState('');
+  const [creando, setCreando] = useState(false);
+  const [retirando, setRetirando] = useState(false);
+  const [confirmarRetiro, setConfirmarRetiro] = useState(false);
+  const [errorRetiro, setErrorRetiro] = useState<string | null>(null);
 
   const tipo = tipos.find((t) => t.id === seleccionado) ?? null;
   const { detalle, cargando: cargandoDetalle, error: errorDetalle, recargar: recargarDetalle } =
@@ -57,6 +62,22 @@ export function TiposTramitePanel() {
 
   const aplicar = (actualizado: ProcedureTypeSummary) =>
     setTipos((prev) => prev.map((t) => (t.id === actualizado.id ? actualizado : t)));
+
+  const retirar = async () => {
+    if (!tipo) return;
+    setRetirando(true);
+    setErrorRetiro(null);
+    try {
+      await superadminClient.retirar(tipo.id);
+      setConfirmarRetiro(false);
+      setSeleccionado(null);
+      await recargar();
+    } catch (e: unknown) {
+      setErrorRetiro(e instanceof Error ? e.message : 'No se pudo retirar el tipo.');
+    } finally {
+      setRetirando(false);
+    }
+  };
 
   if (cargando) {
     return (
@@ -92,14 +113,25 @@ export function TiposTramitePanel() {
         <p className="text-xs opacity-70">
           {tipos.length} tipos en el catálogo · <strong>{operables} operables</strong> en el asistente
         </p>
-        <input
-          type="search"
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          placeholder="Buscar por nombre, código o familia…"
-          aria-label="Buscar tipo de trámite"
-          className="w-full max-w-xs rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            placeholder="Buscar por nombre, código o familia…"
+            aria-label="Buscar tipo de trámite"
+            className="w-full max-w-xs rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          />
+          <button
+            type="button"
+            onClick={() => setCreando(true)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Nuevo tipo
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
@@ -165,6 +197,32 @@ export function TiposTramitePanel() {
                 </div>
                 <TipoTramiteBarrera tipo={tipo} onCambiado={aplicar} />
                 <Validacion detalle={detalle} />
+                {tipo.publicationStatus !== 'archived' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmarRetiro(true);
+                        setErrorRetiro(null);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold border-[#DFE5ED] transition hover:border-[#C2410C] dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                      style={{ color: '#C2410C' }}
+                    >
+                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                      Retirar del catálogo
+                    </button>
+                    {errorRetiro && (
+                      <span className="text-xs" role="alert" style={{ color: '#C2410C' }}>
+                        {errorRetiro}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {tipo.publicationStatus === 'archived' && (
+                  <p className="text-xs opacity-70">
+                    Este tipo está retirado del catálogo: no se puede elegir ni corregir.
+                  </p>
+                )}
               </header>
 
               <nav className="flex flex-wrap gap-1" aria-label="Configuración del tipo">
@@ -217,6 +275,81 @@ export function TiposTramitePanel() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {creando && (
+        <NuevoTipoTramiteModal
+          onCerrar={() => setCreando(false)}
+          onCreado={(nuevo) => {
+            setCreando(false);
+            setTipos((prev) => [...prev, nuevo]);
+            setSeleccionado(nuevo.id);
+            setPestana('capacidades');
+          }}
+        />
+      )}
+
+      {confirmarRetiro && tipo && (
+        <ConfirmarRetiro
+          nombre={tipo.name}
+          retirando={retirando}
+          onCancelar={() => setConfirmarRetiro(false)}
+          onConfirmar={() => void retirar()}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Confirmación del retiro. Dice qué hace de verdad —archivar, no borrar— porque «eliminar» sugiere
+ * una pérdida de datos que no ocurre, y saberlo cambia si el gestor se atreve a pulsar.
+ */
+function ConfirmarRetiro({
+  nombre,
+  retirando,
+  onCancelar,
+  onConfirmar,
+}: {
+  nombre: string;
+  retirando: boolean;
+  onCancelar: () => void;
+  onConfirmar: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(22,39,68,0.45)' }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Retirar tipo de trámite"
+    >
+      <div className="w-full max-w-md rounded-2xl border bg-white p-5 border-[#DFE5ED] dark:border-white/10 dark:bg-[#0B0F14]">
+        <h2 className="text-base font-semibold text-[#162744] dark:text-white">
+          Retirar «{nombre}» del catálogo
+        </h2>
+        <p className="mt-2 text-xs leading-relaxed opacity-80">
+          El tipo se archiva y deja de poder elegirse: no se borra, y su historial queda intacto. Si
+          tiene trámites, la operación se rechaza — quedarían apuntando a un tipo retirado.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="rounded-xl border px-4 py-2 text-xs font-medium border-[#DFE5ED] dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirmar}
+            disabled={retirando}
+            className="rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            style={{ background: '#C2410C' }}
+          >
+            {retirando ? 'Retirando…' : 'Sí, retirar'}
+          </button>
         </div>
       </div>
     </div>

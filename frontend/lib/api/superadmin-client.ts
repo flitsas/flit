@@ -213,6 +213,13 @@ export const superadminClient = {
       body: JSON.stringify(body),
     }),
 
+  /**
+   * Retira el tipo del catálogo. NO borra: lo archiva, y se niega con 409 si tiene trámites — de
+   * otro modo quedarían apuntando a un tipo archivado. Al archivar se apaga su barrera.
+   */
+  retirar: (id: string) =>
+    request<void>(`/api/v1/superadmin/procedure-types/${id}`, { method: 'DELETE' }),
+
   archive: (id: string) =>
     request<ProcedureTypeSummary>(`/api/v1/superadmin/procedure-types/${id}/archive`, {
       method: 'POST',
