@@ -95,6 +95,14 @@ public sealed class CreateProcedureInstanceHandler(
                 return (null, "modalidad_not_available");
         }
 
+        // ADR-0050 — barrera de operación del tipo. Publicado significa que existe en el catálogo;
+        // habilitado, que su recorrido ya se puede recorrer. Sin este corte la barrera era solo un
+        // filtro del selector: cualquier llamada directa —ICT, una integración, un enlace guardado—
+        // podía abrir un trámite de un tipo a medio parametrizar, y el gestor se encontraba con un
+        // asistente vacío y bloqueado en vez de con un rechazo que dice por qué.
+        if (!procedureType.WizardEnabled)
+            return (null, "procedure_type_not_enabled");
+
         // Compañía puede bloquear creación por familia (config admin → Trámites).
         var familyGate = familyCreationGate ?? new NullProcedureFamilyCreationGate();
         if (await familyGate.IsFamilyBlockedAsync(request.TenantId, procedureType.Family, ct))

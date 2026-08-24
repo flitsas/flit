@@ -47,6 +47,7 @@ public sealed class CreateProcedureInstanceTests
         Name = code,
         Family = family,
         PublicationStatus = PublicationStatus.Published,
+        WizardEnabled = true,
         CreatedAt = DateTimeOffset.UtcNow
     };
 
@@ -94,6 +95,7 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
@@ -126,6 +128,7 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
@@ -149,6 +152,7 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
@@ -240,6 +244,7 @@ public sealed class CreateProcedureInstanceTests
         Name = "X",
         Family = "matriculas",
         PublicationStatus = PublicationStatus.Published,
+        WizardEnabled = true,
         GateProfile = gateProfile,
         CreatedAt = DateTimeOffset.UtcNow
     };
@@ -429,5 +434,40 @@ public sealed class CreateProcedureInstanceTests
         error.Should().Be("modalidad_not_available");
         result.Should().BeNull();
         await _typeRepo.DidNotReceive().GetByCodePublishedAsync(Arg.Any<string>(), ct);
+    }
+
+    // ── ADR-0050: la barrera de operación corta en el servidor ───────────────────────────────────
+
+    [Fact]
+    public async Task TipoPublicadoPeroNoHabilitado_NoCreaElTramite()
+    {
+        // Publicado significa que existe en el catálogo; habilitado, que su recorrido se puede
+        // recorrer. Antes la barrera solo filtraba el selector, así que una llamada directa —ICT,
+        // una integración, un enlace guardado— abría trámites de tipos a medio parametrizar y el
+        // gestor se encontraba con un asistente vacío en vez de con un rechazo que dice por qué.
+        var ct = TestContext.Current.CancellationToken;
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        var typeRepo = Substitute.For<IProcedureTypeRepository>();
+        var pt = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "BLINDAJE",
+            Name = "Blindaje",
+            Family = "OTROS",
+            PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = false,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        typeRepo.GetByCodePublishedAsync("BLINDAJE", Arg.Any<CancellationToken>()).Returns(pt);
+
+        var (result, error) = await new CreateProcedureInstanceHandler(repo, typeRepo).HandleAsync(
+            new CreateProcedureInstanceRequest(
+                Guid.NewGuid(), null, Guid.NewGuid(), null, null, ProcedureTypeCode: "BLINDAJE"),
+            ct);
+
+        error.Should().Be("procedure_type_not_enabled");
+        result.Should().BeNull();
+        await repo.DidNotReceive().AddWithUniqueReferenceAsync(
+            Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 }

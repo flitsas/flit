@@ -97,6 +97,26 @@ internal static class ProcedureTypeEndpoints
             };
         }).WithName("ArchiveProcedureType");
 
+        // ADR-0050 — barrera de operación: si el gestor puede elegir este tipo al crear un trámite.
+        // Va aparte del PUT del tipo a propósito: aquel congela la definición al publicar, y los tipos
+        // del catálogo están publicados, así que por ahí la barrera nunca se habría podido mover.
+        group.MapPut("/procedure-types/{id:guid}/wizard-enabled", async (
+            Guid id,
+            SetWizardEnabledBody body,
+            SetWizardEnabledHandler handler,
+            CancellationToken ct) =>
+        {
+            var (result, error, detail) = await handler.HandleAsync(id, body.Enabled, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
+                // 422 y no 409: no es un conflicto de estado sino una precondición de negocio, y el
+                // cuerpo trae la lista de lo que falta para poder habilitarlo.
+                SetWizardEnabledHandler.NotReady => Results.UnprocessableEntity(detail),
+                _ => Results.Ok(result)
+            };
+        }).WithName("SetProcedureTypeWizardEnabled");
+
         group.MapGet("/procedure-types/{id:guid}/conformation-rules", async (
             Guid id,
             GetConformationRulesHandler handler,
@@ -201,3 +221,6 @@ internal static class ProcedureTypeEndpoints
         }).WithName("ValidateProcedureType");
     }
 }
+
+/// <summary>Cuerpo de PUT /procedure-types/{id}/wizard-enabled.</summary>
+internal sealed record SetWizardEnabledBody(bool Enabled);

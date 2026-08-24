@@ -100,6 +100,7 @@ public sealed class TramiteLifecycleServiceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         return i;
@@ -670,6 +671,7 @@ public sealed class TramiteLifecycleServiceTests
             Name = "Traspaso estándar",
             Family = "traspaso",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         return i;

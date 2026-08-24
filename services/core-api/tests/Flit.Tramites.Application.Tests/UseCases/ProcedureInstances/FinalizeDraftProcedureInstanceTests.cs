@@ -244,6 +244,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdAsync(id, tenant, ct).Returns(instance);
@@ -299,6 +300,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdAsync(id, tenant, ct).Returns(instance);
