@@ -48,7 +48,7 @@ function instancia(overrides: Partial<InstanceSummary> = {}): InstanceSummary {
   return {
     id: 'inst-0001',
     referenceNumber: 'TR-0001',
-    modalidad: 'traspaso',
+    modalidad: 'TRASPASO',
     estado: 'borrador',
     placa: 'P0001',
     vin: 'VIN-0001',

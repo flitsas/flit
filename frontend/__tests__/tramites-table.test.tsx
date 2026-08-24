@@ -52,7 +52,7 @@ function makeInstances(n: number): InstanceSummary[] {
     return {
       id: `inst-${num}`,
       referenceNumber: `TR-${num}`,
-      modalidad: 'traspaso',
+      modalidad: 'TRASPASO',
       estado: 'borrador',
       placa: `P${num}`,
       vin: `VIN-${num}`,
@@ -381,7 +381,7 @@ function superAdminToken(): string {
 
 function instance(over: Partial<InstanceSummary>): InstanceSummary {
   return {
-    id: 'i', referenceNumber: 'TR', modalidad: 'traspaso', estado: 'borrador',
+    id: 'i', referenceNumber: 'TR', modalidad: 'TRASPASO', estado: 'borrador',
     placa: 'P', vin: 'V', vehiculoMarca: 'M', vehiculoLinea: 'L',
     compradorNombre: 'C', compradorDocumento: '1', organismoTransito: null,
     pasoActual: 1, totalPasos: 6, createdAt: '2026-06-18T00:00:00Z',
@@ -514,7 +514,7 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
   it('en matrícula inicial (sin vendedor) la celda queda vacía sin romper la fila', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
-      { ...item, modalidad: 'matricula_inicial', vendedorNombre: null, vendedorDocumento: null },
+      { ...item, modalidad: 'MATRICULAS', vendedorNombre: null, vendedorDocumento: null },
     ]);
     render(<TramitesTable />);
 
@@ -629,7 +629,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     mocks.listInstances.mockResolvedValue([
       {
         ...item,
-        modalidad: 'traspaso',
+        modalidad: 'TRASPASO',
         firmaVendedorEstado: 'firmado',
         firmaCompradorEstado: 'rechazado',
       },
@@ -658,8 +658,8 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     // hay cabecera que comprobar (el caso se estaría midiendo contra el estado "Sin resultados").
     const [uno, dos] = makeInstances(2);
     mocks.listInstances.mockResolvedValue([
-      { ...uno, modalidad: 'matricula_inicial' },
-      { ...dos, modalidad: 'traspaso' },
+      { ...uno, modalidad: 'MATRICULAS' },
+      { ...dos, modalidad: 'TRASPASO' },
     ]);
     render(<TramitesTable />);
     await screen.findByText('P0001');
@@ -669,7 +669,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     // Pestaña "Todos": presente.
     expect(within(header()).getByText('Propietario / vendedor')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Matrícula inicial' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Matrículas' }));
     expect(within(header()).queryByText('Propietario / vendedor')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Traspaso' }));
@@ -685,7 +685,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     mocks.listInstances.mockResolvedValue([
       {
         ...item,
-        modalidad: 'matricula_inicial',
+        modalidad: 'MATRICULAS',
         vendedorNombre: null,
         firmaVendedorEstado: null,
         firmaCompradorEstado: null,
@@ -841,7 +841,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
         referenceNumber: 'MI-P',
         placa: 'PASO02',
         estado: 'entregado',
-        modalidad: 'matricula_inicial',
+        modalidad: 'MATRICULAS',
       },
     ]);
     render(<TramitesTable />);

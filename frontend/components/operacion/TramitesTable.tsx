@@ -64,6 +64,7 @@ import type {
   TramiteFuente,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
@@ -226,9 +227,10 @@ function vehiculo(item: InstanceSummary): string {
   return text || '—';
 }
 
-const MODALIDAD_SHORT: Record<WizardModalidad, string> = {
-  matricula_inicial: 'Matrícula',
-  traspaso: 'Traspaso',
+const MODALIDAD_SHORT: Record<ProcedureFamily, string> = {
+  OTROS: 'Otros',
+  MATRICULAS: 'Matrícula',
+  TRASPASO: 'Traspaso',
 };
 
 /**
@@ -237,15 +239,16 @@ const MODALIDAD_SHORT: Record<WizardModalidad, string> = {
  * (no se corrige backend en este track). El label es STEP_LABELS[modalidad]
  * [pasoActual - 1], o '—' si el índice no existe.
  */
-const STEP_LABELS: Record<WizardModalidad, string[]> = {
-  matricula_inicial: [
+const STEP_LABELS: Record<ProcedureFamily, string[]> = {
+  OTROS: [],
+  MATRICULAS: [
     'Consulta VIN',
     'Datos y Documentos del Trámite',
     'Comprador',
     'Identidad',
     'Resumen del trámite',
   ],
-  traspaso: [
+  TRASPASO: [
     'Consulta del vehículo',
     'Datos y Documentos del Trámite',
     'Vendedor',
@@ -319,7 +322,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [search, setSearch] = useState('');
   // Selector de modalidad del botón general "Nuevo trámite". La modalidad elegida se guarda
   // aparte del filtro `modalidad` del listado: son cosas distintas (crear vs filtrar).
-  const [modalidad, setModalidad] = useState<'' | WizardModalidad>('');
+  // ADR-0050 — el campo `modalidad` de la fila transporta ya la FAMILIA del tipo.
+  const [modalidad, setModalidad] = useState<'' | ProcedureFamily>('');
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   const [compania, setCompania] = useState('');
@@ -386,7 +390,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
    */
   const effectiveColumns = useMemo(
     () =>
-      modalidad === 'matricula_inicial'
+      // En matrículas el titular es el comprador y la columna 'propietario' sale vacía.
+      modalidad === 'MATRICULAS'
         ? visibleColumns.filter((k) => k !== 'propietario')
         : visibleColumns,
     [visibleColumns, modalidad],
@@ -627,7 +632,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setSearch(v);
     setPage(1);
   };
-  const handleModalidadChange = (v: '' | WizardModalidad) => {
+  const handleModalidadChange = (v: '' | ProcedureFamily) => {
     setModalidad(v);
     setPage(1);
   };
@@ -1906,7 +1911,7 @@ function TramiteRow({
     // una línea en un "No aplica" repetido en todas las filas.
     firmado: (
       <span className="grid min-w-0 grid-cols-[auto_auto] justify-start items-center gap-x-2 gap-y-1">
-        {item.modalidad === 'traspaso' ? (
+        {item.modalidad === 'TRASPASO' ? (
           <FirmaParteLinea rotulo="Vendedor" estado={item.firmaVendedorEstado} />
         ) : null}
         <FirmaParteLinea rotulo="Comprador" estado={item.firmaCompradorEstado} />

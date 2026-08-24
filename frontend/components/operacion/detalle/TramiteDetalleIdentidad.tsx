@@ -18,6 +18,7 @@ import {
   TarjetaDetalle,
   type SeccionDetalleProps,
 } from './primitivos';
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 /**
  * Sección «Validación de identidad» del modal de detalle (Frente C, «Tracking de validación
@@ -92,15 +93,15 @@ interface FilaIdentidad {
  * es información útil, no un hueco mudo.
  */
 function construirFilas(
-  modalidad: WizardModalidad,
+  modalidad: ProcedureFamily,
   validations: BiometricValidation[],
   firmaBaulPartes: string[],
 ): FilaIdentidad[] | null {
-  const partes = modalidad === 'traspaso' ? PARTES_TRASPASO : PARTES_MATRICULA;
+  const partes = modalidad === 'TRASPASO' ? PARTES_TRASPASO : PARTES_MATRICULA;
 
   const resueltas = partes.map((parte) => {
     const matches = validations.filter((v) =>
-      modalidad === 'traspaso'
+      modalidad === 'TRASPASO'
         ? v.partyRole === parte
         : v.partyRole === null || v.partyRole === 'comprador',
     );

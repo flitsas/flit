@@ -18,6 +18,7 @@ import {
   type ColumnPreset,
   type DataColumn,
 } from "@/components/consultas/columns";
+import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 // ── Estados ────────────────────────────────────────────────────────────────────
 
@@ -87,11 +88,6 @@ export function estadoMeta(estado: string): EstadoMeta {
   return ESTADO_META[estado] ?? { label: estado, color: "#CBD5E1", hint: "" };
 }
 
-const MODALIDAD_LABEL: Record<string, string> = {
-  matricula_inicial: "Matrícula inicial",
-  traspaso: "Traspaso",
-};
-
 // ── Formateo ───────────────────────────────────────────────────────────────────
 
 // `formatInt` y `plural` viven en el kit compartido: los usan las dos consolas de consultas, y dos
@@ -149,7 +145,7 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     id: "modalidad",
     label: "Tipo de trámite",
     group: "Identificación",
-    value: (r) => MODALIDAD_LABEL[r.modalidad] ?? r.modalidad,
+    value: (r) => familiaLabel(r.modalidad),
     defaultVisible: true,
   },
   {

@@ -82,7 +82,7 @@ function row(overrides: Partial<OtQueryRow> = {}): OtQueryRow {
     vin: "VIN0001",
     clientTenantId: "c1",
     clientTenantName: "Distribuidora del Valle S.A.S.",
-    modalidad: "matricula_inicial",
+    modalidad: "MATRICULAS",
     status: "entregado",
     estadoOt: "en_revision",
     prioritario: false,

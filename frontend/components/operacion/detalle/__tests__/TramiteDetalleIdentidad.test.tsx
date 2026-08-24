@@ -20,7 +20,7 @@ import { TramiteDetalleIdentidad } from '@/components/operacion/detalle/TramiteD
 const ITEM_TRASPASO: InstanceSummary = {
   id: 'inst-1',
   referenceNumber: 'TR-001',
-  modalidad: 'traspaso',
+  modalidad: 'TRASPASO',
   estado: 'entregado',
   placa: 'ABC123',
   vin: 'VIN-XYZ-001',
@@ -43,7 +43,7 @@ const ITEM_TRASPASO: InstanceSummary = {
 
 const ITEM_MATRICULA: InstanceSummary = {
   ...ITEM_TRASPASO,
-  modalidad: 'matricula_inicial',
+  modalidad: 'MATRICULAS',
   identityValidationStatus: null,
 };
 

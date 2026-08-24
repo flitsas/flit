@@ -22,7 +22,7 @@ import { TramiteDetalleDocumentos } from '@/components/operacion/detalle/Tramite
 const ITEM: InstanceSummary = {
   id: 'inst-1',
   referenceNumber: 'TR-001',
-  modalidad: 'traspaso',
+  modalidad: 'TRASPASO',
   estado: 'entregado',
   placa: 'ABC123',
   vin: 'VIN-XYZ-001',

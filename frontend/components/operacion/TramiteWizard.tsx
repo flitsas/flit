@@ -13,6 +13,7 @@ import {
   Shield,
   Wrench,
 } from 'lucide-react';
+import { resolveStepBody } from './sectionRendererRegistry';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
@@ -3627,15 +3628,16 @@ function StepBody({
   /** Feature #11066 — marca dirty en el shell (p.ej. checklist de docs editado). */
   onMarkDirty?: () => void;
 }) {
-  // Los datos comerciales dejaron de tener paso propio: viven en Requisitos. La clave `comercial`
-  // solo puede llegar desde un borrador antiguo que quedó apuntando ahí, así que se normaliza a
-  // `documentos` — el gestor encuentra lo que dejó a medias, en su nuevo sitio.
-  switch (step.key === 'comercial' ? 'documentos' : step.key) {
+  // ADR-0050 / CFD-09 — el cuerpo del paso lo decide el SectionRendererRegistry a partir del
+  // `section_type` que el tipo declara, no de la clave del paso. Antes este switch solo conocía las
+  // siete claves de matrícula y traspaso, así que un paso de otra familia —`propietario`, `prenda`—
+  // caía en el default y no pintaba nada. Las claves heredadas siguen resolviéndose para los
+  // expedientes cuyo estado aún no trae `sectionType`.
+  switch (resolveStepBody(step)) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
     // Persiste el identificador en field_values ANTES de correr el preflight,
     // de lo contrario el backend consulta RUNT sin datos (DS-4B-1).
     case 'consulta':
-    case 'consulta_vin':
       return (
         <ConsultaStep
           step={step}
@@ -3734,8 +3736,7 @@ function StepBody({
     // Traspaso: vendedor y comprador se unifican en un solo formulario (2 tarjetas).
     // Matrícula sigue con comprador en layout split. key estable `actores` evita remontar
     // al pasar del índice server vendedor↔comprador.
-    case 'comprador':
-    case 'vendedor': {
+    case 'actores': {
       if (modalidad === 'traspaso') {
         return (
           <ActorsForm

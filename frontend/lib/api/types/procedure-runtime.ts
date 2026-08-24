@@ -124,7 +124,12 @@ export interface CompletePlateFlowResult {
 export interface InstanceSummary {
   id: string;
   referenceNumber: string;
-  modalidad: WizardModalidad;
+  /**
+   * ADR-0050 — FAMILIA del tipo de trámite (`MATRICULAS` | `TRASPASO` | `OTROS`). Conserva el
+   * nombre `modalidad` porque así viaja en el contrato del listado; lo que cambió es su contenido,
+   * que antes era una de las dos modalidades de entrada.
+   */
+  modalidad: ProcedureFamily;
   estado: InstanceStatus;
   /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
   plateFlowStatus?: PlateFlowStatus | null;
@@ -928,6 +933,22 @@ export type WizardStepKey =
   | 'vendedor'
   | 'comercial';
 
+/**
+ * Renderer de una sección del paso (CFD-09). Catálogo CERRADO: espeja el CHECK de
+ * `tramites.procedure_sections.section_type` y las ramas de `DynamicGateEvaluator`. Añadir un valor
+ * exige PR coordinado backend + frontend + migración.
+ */
+export type WizardSectionType =
+  | 'vehicle_query'
+  | 'document_checklist'
+  | 'actor_form'
+  | 'commercial'
+  | 'biometric'
+  | 'signature_fur'
+  | 'plate_request'
+  | 'prenda_decision'
+  | 'generic_form';
+
 export interface WizardStep {
   index: number;
   key: WizardStepKey | string;
@@ -935,6 +956,16 @@ export interface WizardStep {
   status: WizardStepStatus;
   /** Códigos de razón de incompletitud (mapeados a copy en la UI). */
   reasons: string[];
+  /**
+   * ADR-0050 / CFD-09 — renderer principal del paso, decidido por la parametrización del tipo y no
+   * por su clave. Es lo que permite que un trámite de OTROS tenga recorrido propio sin que el
+   * cliente conozca su `key`.
+   */
+  sectionType?: WizardSectionType;
+  /** Todas las secciones del paso, en orden. Un paso puede tener más de una. */
+  sectionTypes?: WizardSectionType[];
+  /** Capacidades del tipo que la sección necesita para pintarse (entryMode, actores, firma…). */
+  sectionConfig?: Record<string, unknown> | null;
 }
 
 /** Respuesta de GET /instances/{id}/wizard. */
