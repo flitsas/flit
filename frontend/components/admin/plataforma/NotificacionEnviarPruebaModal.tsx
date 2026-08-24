@@ -1,20 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CircleCheck, Send, TriangleAlert } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
+import type { UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   sendNotificationTest,
   type NotificationTestChannel,
 } from "@/lib/api/admin-plataforma-notificaciones";
+import { superadminClient } from "@/lib/api/superadmin-client";
+import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 import {
   mapSendTestApiError,
   mapSendTestOutcome,
   type SendTestFailure,
   type SendTestOutcome,
 } from "@/lib/notificaciones/mensajes-envio-prueba";
+import {
+  isTramiteCambioEstadoTemplate,
+  NotificacionProcedureTypeFields,
+} from "./NotificacionProcedureTypeFields";
 
-type Phase = "mailbox-required" | "sending" | "result" | "failure";
+type Phase = "mailbox-required" | "select-type" | "sending" | "result" | "failure";
 
 export interface NotificacionEnviarPruebaModalProps {
   open: boolean;
@@ -23,20 +30,10 @@ export interface NotificacionEnviarPruebaModalProps {
   templateName: string;
   channel: NotificationTestChannel;
   channelLabel: string;
-  /** AC5 — si el buzón no está configurado, el modal NO ejecuta el envío. */
   mailboxConfigured: boolean;
-  /** Cierra este modal y lleva el foco a la sección de buzón de pruebas (AC5/AC6). */
   onRequestConfigureMailbox: () => void;
 }
 
-/**
- * SuperAdmin — Plataforma → Notificaciones → "Enviar prueba" (HU #11371, AC3/AC4/AC5).
- *
- * Uso de ejemplo:
- * <NotificacionEnviarPruebaModal open={open} onClose={close} templateId="security.invitation"
- *   templateName="Invitación a la plataforma" channel="FLIT_SMTP" channelLabel="Colas FLIT"
- *   mailboxConfigured={mailbox?.isConfigured ?? false} onRequestConfigureMailbox={focusBuzon} />
- */
 export function NotificacionEnviarPruebaModal({
   open,
   onClose,
@@ -47,36 +44,70 @@ export function NotificacionEnviarPruebaModal({
   mailboxConfigured,
   onRequestConfigureMailbox,
 }: NotificacionEnviarPruebaModalProps) {
+  const requiresType = isTramiteCambioEstadoTemplate(templateId);
   const [phase, setPhase] = useState<Phase>("sending");
   const [outcome, setOutcome] = useState<SendTestOutcome | null>(null);
   const [failure, setFailure] = useState<SendTestFailure | null>(null);
+  const [types, setTypes] = useState<ProcedureTypeSummary[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState<UiStatus>("loading");
+  const [family, setFamily] = useState("");
+  const [typeId, setTypeId] = useState("");
+
+  const loadCatalog = useCallback(() => {
+    setCatalogStatus("loading");
+    superadminClient
+      .listProcedureTypes()
+      .then((items) => {
+        const active = items.filter((t) => t.isActive);
+        setTypes(active);
+        setCatalogStatus(active.length === 0 ? "empty" : "ready");
+      })
+      .catch(() => setCatalogStatus("error"));
+  }, []);
+
+  const runSend = useCallback(
+    (procedureTypeId?: string) => {
+      setPhase("sending");
+      setOutcome(null);
+      setFailure(null);
+      const send = procedureTypeId
+        ? sendNotificationTest(templateId, channel, procedureTypeId)
+        : sendNotificationTest(templateId, channel);
+      send
+        .then((result) => {
+          setOutcome(mapSendTestOutcome(result));
+          setPhase("result");
+        })
+        .catch((err) => {
+          setFailure(mapSendTestApiError(err));
+          setPhase("failure");
+        });
+    },
+    [channel, templateId],
+  );
 
   useEffect(() => {
     if (!open) return;
 
-    // AC5 — sin buzón configurado, NO se ejecuta el envío; la pantalla lo solicita.
     if (!mailboxConfigured) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- decisión de fase al abrir
       setPhase("mailbox-required");
       return;
     }
 
-     
-    setPhase("sending");
+    setFamily("");
+    setTypeId("");
     setOutcome(null);
     setFailure(null);
 
-    sendNotificationTest(templateId, channel)
-      .then((result) => {
-        setOutcome(mapSendTestOutcome(result));
-        setPhase("result");
-      })
-      .catch((err) => {
-        setFailure(mapSendTestApiError(err));
-        setPhase("failure");
-      });
-     
-  }, [open, mailboxConfigured, templateId, channel]);
+    if (requiresType) {
+      setPhase("select-type");
+      loadCatalog();
+      return;
+    }
+
+    runSend();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mailboxConfigured, templateId, channel, requiresType, loadCatalog]);
 
   return (
     <Modal
@@ -84,7 +115,7 @@ export function NotificacionEnviarPruebaModal({
       onClose={onClose}
       title={`Enviar prueba — ${templateName}`}
       icon={Send}
-      size="sm"
+      size={requiresType ? "lg" : "sm"}
     >
       <div className="flex flex-col gap-3 text-sm" data-testid="notificaciones-enviar-prueba-modal">
         {phase === "mailbox-required" ? (
@@ -107,6 +138,30 @@ export function NotificacionEnviarPruebaModal({
               className="mt-1 w-fit rounded-full bg-gradient-to-r from-[#22D3C5] to-[#557EFF] px-3 py-1.5 text-[11px] font-semibold text-white"
             >
               Configurar buzón
+            </button>
+          </div>
+        ) : null}
+
+        {phase === "select-type" ? (
+          <div className="flex flex-col gap-3">
+            <NotificacionProcedureTypeFields
+              types={types}
+              catalogStatus={catalogStatus}
+              onRetryCatalog={loadCatalog}
+              family={family}
+              typeId={typeId}
+              onFamilyChange={setFamily}
+              onTypeIdChange={setTypeId}
+              idPrefix="notificaciones-envio"
+            />
+            <button
+              type="button"
+              disabled={!typeId}
+              onClick={() => runSend(typeId)}
+              className="w-fit rounded-full bg-gradient-to-r from-[#22D3C5] to-[#557EFF] px-3 py-1.5 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="notificaciones-enviar-prueba-confirmar"
+            >
+              Enviar
             </button>
           </div>
         ) : null}
@@ -159,7 +214,6 @@ export function NotificacionEnviarPruebaModal({
               {outcome.kind === "sent" ? "El transporte aceptó el correo" : "El transporte falló"}
             </p>
             <p>{outcome.productMessage}</p>
-            {/* AC3 — siempre se advierte que la aceptación del transporte no garantiza la entrega. */}
             <p className="opacity-80">{outcome.disclaimer}</p>
             {outcome.consoleTransportNotice ? (
               <p className="font-semibold" data-testid="notificaciones-enviar-prueba-consola">
