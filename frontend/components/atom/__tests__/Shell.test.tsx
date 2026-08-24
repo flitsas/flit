@@ -156,8 +156,7 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     renderShell();
     expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
 
-    // Se acota al dock: el topbar tiene un icono genérico "Notificaciones"
-    // (campana de alertas) ajeno a esta HU y siempre presente.
+    // Se acota al dock (la campana del topbar fue eliminada; aquí se verifica la entrada del dock).
     const dockNav = screen.getByRole("navigation", { name: "Navegación principal" });
     expect(within(dockNav).queryByRole("button", { name: "Plataforma" })).not.toBeInTheDocument();
     expect(
@@ -185,5 +184,35 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     renderShell();
     expect(screen.queryByRole("button", { name: "Improntas" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Shell — topbar (campana y menú de usuario)", () => {
+  afterEach(() => {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  });
+
+  it("la campana de notificaciones NO está en el topbar", () => {
+    renderShell();
+    // El botón de campana fue ocultado; no debe existir en el DOM.
+    expect(screen.queryByRole("button", { name: "Notificaciones" })).not.toBeInTheDocument();
+  });
+
+  it("al abrir el menú de usuario NO aparece 'Actualización de la información'", async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.queryByText("Actualización de la información")).not.toBeInTheDocument();
+  });
+
+  it("al abrir el menú de usuario SÍ aparece 'Cambio de contraseña'", async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.getByText("Cambio de contraseña")).toBeInTheDocument();
+  });
+
+  it("al abrir el menú de usuario SÍ aparece 'Salir de la plataforma'", async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.getByText("Salir de la plataforma")).toBeInTheDocument();
   });
 });

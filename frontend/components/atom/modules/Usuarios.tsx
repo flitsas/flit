@@ -27,8 +27,8 @@ import { resolveProfile, targetEntityTypeForProfile } from "@/lib/users/profiles
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { superadminClient } from "@/lib/api/superadmin-client";
 
-// HU #10623 (AC3/AC4): "Eliminados" solo se ofrece a SuperAdmin — AdminCompany/OtAdmin ven
-// "Eliminar" (AC1) pero nunca la vista de restauración, exclusiva de SuperAdmin.
+// HU #10623 (AC3/AC4): "Eliminados" solo se ofrece a SuperAdmin. AdminCompany puede
+// suspender/desactivar pero NO eliminar; el botón Eliminar y la pestaña Eliminados son SuperAdmin-only.
 const ALL_TABS = [
   { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "roles", label: "Roles y permisos", icon: Shield },
@@ -56,7 +56,8 @@ export function Usuarios() {
   const canManageIctClients = isSuperAdmin || permissions.includes(ICT_CLIENTS_MANAGE_PERMISSION);
   // Reset admin: SuperAdmin o AdminCompany (API acota al tenant).
   const canResetPassword = isSuperAdmin || isAdminCompany;
-  // Suspender / desactivar / eliminar: misma paridad AdminCompany en su empresa (API scoped).
+  // Suspender / desactivar / desbloquear: paridad AdminCompany en su empresa (API scoped).
+  // Eliminar: SuperAdmin-only (AdminCompany ya no tiene este permiso).
   // Ver eliminados / restaurar siguen exclusivos de SuperAdmin.
   const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
   const [open, setOpen] = useState(false);
@@ -264,9 +265,10 @@ export function Usuarios() {
       }
     }
 
-    // AC2 (HU #10623): eliminar lo puede hacer SuperAdmin o AdminCompany en su tenant, y nunca
-    // sobre la propia fila. Restaurar sigue siendo exclusivo de SuperAdmin.
-    if (!isInvitationRow(u) && canManageUserLifecycle && u.id !== currentUserId) {
+    // Eliminar: exclusivo de SuperAdmin; nunca sobre la propia fila.
+    // AdminCompany puede suspender/desactivar (canManageUserLifecycle) pero NO eliminar.
+    // Restaurar sigue siendo exclusivo de SuperAdmin (pestaña "Eliminados").
+    if (!isInvitationRow(u) && isSuperAdmin && u.id !== currentUserId) {
       actions.push({
         icon: Trash2,
         label: `Eliminar usuario ${u.fullName}`,

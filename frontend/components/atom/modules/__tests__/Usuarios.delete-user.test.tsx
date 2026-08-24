@@ -1,6 +1,6 @@
-// HU #10623 — Botón "Eliminar" del menú de acciones. Eliminar es EXCLUSIVO de SuperAdmin,
-// así que las acciones se prueban como SuperAdmin. AC1: confirmación clara (solo SuperAdmin
-// restaura). AC2: sin auto-eliminación. AC4: la pestaña "Eliminados" no la ve AdminCompany.
+// HU #10623 — Botón "Eliminar" del menú de acciones. Eliminar es EXCLUSIVO de SuperAdmin
+// (AdminCompany puede suspender/desactivar pero NO eliminar). AC1: confirmación clara (solo
+// SuperAdmin restaura). AC2: sin auto-eliminación. AC4: AdminCompany no ve Eliminar ni Eliminados.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -9,7 +9,7 @@ import { getUsers, deleteUser } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
 
 // Permisos mutables: la mayoría de los casos corren como SuperAdmin (única figura que puede
-// eliminar); el caso AC4 baja a AdminCompany para verificar que NO ve la pestaña "Eliminados".
+// eliminar); el caso AC4 baja a AdminCompany para verificar que NO ve Eliminar ni "Eliminados".
 const SUPER_ADMIN_PERMS = {
   isSuperAdmin: true,
   isAdminCompany: false,
@@ -133,11 +133,9 @@ describe("Usuarios — botón Eliminar (#10623, SuperAdmin)", () => {
     await waitFor(() => expect(getUsers).toHaveBeenCalledTimes(2));
   });
 
-  // La pestaña "Eliminados" (restaurar) sigue siendo exclusiva de SuperAdmin, pero eliminar
-  // dejó de serlo: HU-A/auth-parity reabrió suspender/desactivar/eliminar a AdminCompany dentro
-  // de su propia empresa (el API acota el alcance). Esta aserción quedó fijando el
-  // comportamiento anterior cuando cambió el de Usuarios.tsx.
-  it("AC4: un AdminCompany no ve la pestaña Eliminados, pero sí puede eliminar en su empresa", async () => {
+  // AdminCompany puede suspender/desactivar pero NO eliminar. La pestaña "Eliminados" (restaurar)
+  // y el botón Eliminar son exclusivos de SuperAdmin. auth-parity revirtió la apertura anterior.
+  it("AC4: un AdminCompany no ve la pestaña Eliminados ni el botón Eliminar", async () => {
     perms.current = { ...ADMIN_COMPANY_PERMS };
     vi.mocked(getUsers).mockResolvedValue([otherUser]);
     render(<Usuarios />);
@@ -145,7 +143,7 @@ describe("Usuarios — botón Eliminar (#10623, SuperAdmin)", () => {
     await screen.findByText("Ana Torres");
     expect(screen.queryByRole("button", { name: /^eliminados$/i })).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /eliminar usuario ana torres/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /eliminar usuario ana torres/i }),
+    ).not.toBeInTheDocument();
   });
 });
