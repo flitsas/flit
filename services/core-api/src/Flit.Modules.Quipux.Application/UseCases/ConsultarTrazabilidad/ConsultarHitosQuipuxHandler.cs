@@ -16,10 +16,14 @@ namespace Flit.Modules.Quipux.Application.UseCases.ConsultarTrazabilidad;
 public sealed class ConsultarHitosQuipuxHandler
 {
     private readonly IQuipuxTrazabilidadRepository _repository;
+    private readonly TimeProvider _clock;
 
-    public ConsultarHitosQuipuxHandler(IQuipuxTrazabilidadRepository repository)
+    public ConsultarHitosQuipuxHandler(
+        IQuipuxTrazabilidadRepository repository,
+        TimeProvider? clock = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _clock = clock ?? TimeProvider.System;
     }
 
     /// <summary>Devuelve <c>null</c> si la radicación no existe — el borde lo traduce a 404.</summary>
@@ -41,7 +45,7 @@ public sealed class ConsultarHitosQuipuxHandler
             .ConfigureAwait(false);
 
         return new ConsultarHitosQuipuxResult(
-            MapRadicacion(radicacion),
+            MapRadicacion(radicacion, _clock.GetUtcNow()),
             Agrupar(eventos));
     }
 
@@ -127,8 +131,17 @@ public sealed class ConsultarHitosQuipuxHandler
             DuracionMediaMs: media);
     }
 
-    private static QuipuxRadicacionView MapRadicacion(QuipuxTrazabilidadRadicacion r) =>
-        new(
+    private static QuipuxRadicacionView MapRadicacion(
+        QuipuxTrazabilidadRadicacion r, DateTimeOffset now)
+    {
+        // Solo los estados no terminales acumulan espera; en un aprobado o un rechazado la
+        // antigüedad no significa nada porque el trámite ya se resolvió.
+        DateTimeOffset? esperandoDesde = r.Status is "pendiente" or "registrado" ? r.CreatedAt : null;
+        double? horas = esperandoDesde is { } desde && desde <= now
+            ? (now - desde).TotalHours
+            : null;
+
+        return new QuipuxRadicacionView(
             r.Id,
             r.ProcedureInstanceId,
             r.ReferenceNumber,
@@ -149,9 +162,12 @@ public sealed class ConsultarHitosQuipuxHandler
             r.LastPolledAt,
             r.CompletedAt,
             r.UpdatedAt,
+            esperandoDesde,
+            horas,
             r.Intento,
             r.TotalIntentos,
             r.Hermanas
                 .Select(h => new QuipuxHermanaView(h.Id, h.Intento, h.Status, h.CreatedAt))
                 .ToList());
+    }
 }

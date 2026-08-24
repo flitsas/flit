@@ -41,7 +41,14 @@ public sealed record QuipuxHermanaView(
     string Status,
     DateTimeOffset CreatedAt);
 
-/// <summary>Cabecera de la radicación en la pantalla de trazabilidad.</summary>
+/// <summary>
+/// Cabecera de la radicación en la pantalla de trazabilidad.
+/// </summary>
+/// <param name="EsperandoDesde">Desde cuándo espera; null si la radicación ya se resolvió.</param>
+/// <param name="HorasEsperando">
+/// Horas de espera acumuladas, calculadas EN SERVIDOR — misma decisión que en la bandeja: la
+/// interfaz no debe depender del reloj ni de la zona horaria del navegador. Null en los terminales.
+/// </param>
 public sealed record QuipuxRadicacionView(
     Guid Id,
     Guid ProcedureInstanceId,
@@ -63,6 +70,8 @@ public sealed record QuipuxRadicacionView(
     DateTimeOffset? LastPolledAt,
     DateTimeOffset? CompletedAt,
     DateTimeOffset? UpdatedAt,
+    DateTimeOffset? EsperandoDesde,
+    double? HorasEsperando,
     int Intento,
     int TotalIntentos,
     IReadOnlyList<QuipuxHermanaView> Hermanas);

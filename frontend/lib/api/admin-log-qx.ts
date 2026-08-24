@@ -204,6 +204,9 @@ export interface LogQxRadicacion {
   lastPolledAt: string | null;
   completedAt: string | null;
   updatedAt: string | null;
+  esperandoDesde: string | null;
+  /** Horas de espera, calculadas en servidor. Null si la radicación ya se resolvió. */
+  horasEsperando: number | null;
   intento: number;
   totalIntentos: number;
   hermanas: LogQxHermana[];
