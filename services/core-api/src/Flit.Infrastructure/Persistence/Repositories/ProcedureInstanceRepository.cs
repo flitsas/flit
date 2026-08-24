@@ -18,6 +18,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     private const int MaxReferenceRetries = 5;
     public Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     // HU #10538 (R3) — invariante "un VIN → una matrícula": busca otras matrículas iniciales del tenant
@@ -128,6 +129,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.StatusHistory)
             .Include(x => x.Actors)
@@ -135,6 +137,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithActorsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Actors)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
@@ -148,11 +151,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Attachments)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public Task<ProcedureInstance?> GetByIdWithChecklistGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .AsSplitQuery()
             .Include(x => x.Attachments)
             .Include(x => x.Actors)
@@ -162,6 +167,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithActorsAndAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .AsSplitQuery()
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -169,6 +175,12 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithWizardGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            // ADR-0050 — el wizard se conforma con los pasos/secciones del tipo cuando la instancia
+            // no tiene snapshot congelado. Solo esta consulta los necesita: el resto se queda con la
+            // navegación simple para no encarecerlas.
+            .Include(x => x.ProcedureType)
+                .ThenInclude(t => t!.Steps)
+                    .ThenInclude(st => st.Sections)
             .AsSplitQuery()
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
@@ -184,11 +196,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithSignaturesAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Signatures)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -217,6 +231,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithCommercialAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Commercial)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
@@ -318,11 +333,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.BiometricValidations)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public Task<ProcedureInstance?> GetByIdWithBiometricsAndActorsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.BiometricValidations)
             .Include(x => x.Actors)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
@@ -1278,6 +1295,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Participants)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 

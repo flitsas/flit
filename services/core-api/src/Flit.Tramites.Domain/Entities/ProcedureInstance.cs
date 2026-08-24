@@ -9,9 +9,40 @@ public sealed class ProcedureInstance
     public string Status { get; set; } = Tramites.Estados.TramiteEstado.Borrador;
 
     // Rework trámites (Slice 1) — modalidad/tipología/checklist explícitos
+    //
+    // ADR-0050: ModalidadEntrada y TipologiaCodigo están EN RETIRADA. La clasificación del expediente
+    // se deriva del tipo (Family / TypeCode / TypeName, más abajo); estas dos columnas desaparecen con
+    // el DDL 80-tramites-reset-fuente-unica.sql. No añadir consumidores nuevos.
     public string ModalidadEntrada { get; set; } = "matricula_inicial";
     public string? TipologiaCodigo { get; set; }
     public string ChecklistEstado { get; set; } = "{}";
+
+    /// <summary>
+    /// Familia del expediente (ADR-0050), derivada del tipo. Sustituye a <see cref="ModalidadEntrada"/>,
+    /// que solo tenía dos valores y colapsaba OTROS en matrícula.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Si la navegación <see cref="ProcedureType"/> no está cargada. Se prefiere fallar ruidosamente a
+    /// devolver un default: un expediente clasificado por accidente como OTROS elegiría mal el flujo,
+    /// los documentos y las causales de rechazo.
+    /// </exception>
+    public Enums.ProcedureFamily Family =>
+        Enums.ProcedureFamilyCodes.FromCodeOrOtros(RequireProcedureType().Family);
+
+    /// <summary>
+    /// Código canónico del tipo (<c>MATRICULA_NUEVA</c>, <c>BLINDAJE</c>, …). Es también la tipología:
+    /// ADR-0050 elimina el catálogo de tipologías paralelo.
+    /// </summary>
+    public string TypeCode => RequireProcedureType().Code;
+
+    /// <summary>Etiqueta de negocio del tipo: la que deben rotular FUR, portada y mandato.</summary>
+    public string TypeName => RequireProcedureType().Name;
+
+    private ProcedureType RequireProcedureType() =>
+        ProcedureType ?? throw new InvalidOperationException(
+            $"La navegación ProcedureType no está cargada en la instancia {Id}. "
+            + "Usa un método del repositorio que la incluya (todos los GetBy* lo hacen desde ADR-0050) "
+            + "o carga el tipo antes de leer su clasificación.");
 
     public Guid? TransitOfficeId { get; set; }
 

@@ -5,7 +5,12 @@ using Flit.Tramites.Domain.Tramites.Enums;
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
-/// Punto único de cableado modalidad/tipología para runtime (Slice 4b).
+/// Deriva la modalidad de entrada al crear la instancia (Slice 4b).
+///
+/// <para>ADR-0050 — pieza EN RETIRADA. <c>ResolveCodigo</c> se eliminó: la tipología es el
+/// <c>code</c> del tipo (<c>ProcedureInstance.TypeCode</c>) y ya no hay que derivarla de la
+/// modalidad. Solo queda <see cref="FromFamily"/>, que sobrevive mientras la columna
+/// <c>modalidad_entrada</c> siga existiendo; desaparece con el DDL 80.</para>
 ///
 /// <para><b>Derivación al crear instancia</b> (<see cref="FromFamily"/>): mapea
 /// <see cref="ProcedureType.Family"/> → <c>(modalidad_entrada, tipologia_codigo)</c>.
@@ -14,13 +19,6 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// Criterio: solo TRASPASO tiene modalidad placa-first diferenciada en el MVP; el resto
 /// converge en matrícula inicial (modalidad por defecto histórica) hasta que se configuren
 /// las tipologías diferidas (sucesión, remate, importación, flota).</para>
-///
-/// <para><b>Default defensivo del resolver</b> (<see cref="ResolveCodigo"/>): para instancias
-/// que no tienen <c>tipologia_codigo</c> persistido (creadas antes de Slice 4b), resuelve el
-/// código de tipología MVP a partir de <c>modalidad_entrada</c>. Necesario porque la modalidad
-/// <c>traspaso</c> NO es un código de tipología válido (la tipología es <c>traspaso_standard</c>),
-/// así que el fallback ingenuo <c>tipologia_codigo ?? modalidad_entrada</c> dejaba el gating de
-/// traspaso inerte. Usado por wizard, GetChecklist y AutoMark para mantener consistencia.</para>
 /// </summary>
 public static class TipologiaResolver
 {
@@ -30,7 +28,7 @@ public static class TipologiaResolver
     /// </summary>
     public static (string ModalidadEntrada, string TipologiaCodigo) FromFamily(string? family)
     {
-        if (string.Equals(family, ProcedureFamily.Traspaso, StringComparison.OrdinalIgnoreCase))
+        if (ProcedureFamilyCodes.FromCode(family) == ProcedureFamily.Traspaso)
         {
             return (TramiteModalidadEntradaCodes.Traspaso, TramiteTipologiaCatalog.CodigoTraspasoStandard);
         }
@@ -39,26 +37,4 @@ public static class TipologiaResolver
         return (TramiteModalidadEntradaCodes.MatriculaInicial, TramiteTipologiaCatalog.CodigoMatriculaInicial);
     }
 
-    /// <summary>
-    /// Resuelve el código de tipología efectivo para checklist/gating.
-    /// Prioriza <c>tipologia_codigo</c> persistido; si es null/vacío, deriva el código MVP desde
-    /// <c>modalidad_entrada</c> (matrícula→<c>matricula_inicial</c>, traspaso→<c>traspaso_standard</c>).
-    /// Devuelve <c>null</c> solo si ninguno resuelve a una tipología del catálogo.
-    /// </summary>
-    public static string? ResolveCodigo(string? tipologiaCodigo, string? modalidadEntrada)
-    {
-        if (!string.IsNullOrEmpty(tipologiaCodigo) && TramiteTipologiaCatalog.IsValid(tipologiaCodigo))
-        {
-            return tipologiaCodigo;
-        }
-
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(modalidadEntrada);
-        return modalidad switch
-        {
-            TramiteModalidadEntrada.Traspaso => TramiteTipologiaCatalog.CodigoTraspasoStandard,
-            TramiteModalidadEntrada.MatriculaInicial => TramiteTipologiaCatalog.CodigoMatriculaInicial,
-            // Modalidad no canónica: último intento por si el código persistido coincide con el catálogo.
-            _ => TramiteTipologiaCatalog.IsValid(modalidadEntrada) ? modalidadEntrada : null,
-        };
-    }
 }

@@ -28,6 +28,12 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("borrador");
 
         // Rework trámites (Slice 1)
+        // ADR-0050 — clasificación derivada del tipo: se calcula desde la navegación
+        // ProcedureType, no son columnas.
+        builder.Ignore(x => x.Family);
+        builder.Ignore(x => x.TypeCode);
+        builder.Ignore(x => x.TypeName);
+
         builder.Property(x => x.ModalidadEntrada)
             .HasColumnName("modalidad_entrada")
             .HasMaxLength(20).IsRequired().HasDefaultValue("matricula_inicial");

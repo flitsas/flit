@@ -15,8 +15,12 @@ namespace Flit.Tramites.Domain.Tramites.Catalog;
 /// </summary>
 public static class TramiteTipologiaCatalog
 {
-    public const string CodigoMatriculaInicial = "matricula_inicial";
-    public const string CodigoTraspasoStandard = "traspaso_standard";
+    // ADR-0050 — la tipología ES el código del tipo (tramites.procedure_types.code). Antes eran un
+    // vocabulario aparte ('matricula_inicial' / 'traspaso_standard') que TipologiaResolver traducía
+    // desde la familia, colapsando OTROS en matrícula. Al unificarlos, instance.TypeCode entra
+    // directo en este catálogo y en ConditionalDocumentRules.
+    public const string CodigoMatriculaInicial = "MATRICULA_NUEVA";
+    public const string CodigoTraspasoStandard = "TRASPASO_STANDARD";
 
     private static readonly IReadOnlyList<TramiteTipologia> Tipologias =
     [
