@@ -194,10 +194,7 @@ public sealed class PutActorsHandler(
         }
 
         // 2. Roles permitidos según modalidad_entrada (matriz de dominio, no hardcode).
-        var journey = ResolveJourney(instance);
-        var allowedRoles = journey is null
-            ? new HashSet<ParteRol>()
-            : journey.Partes.Select(p => p.Rol).ToHashSet();
+        var allowedRoles = AllowedRoles(instance);
 
         var providedRoles = new List<ParteRol>();
         foreach (var a in inputs)
@@ -590,17 +587,23 @@ public sealed class PutActorsHandler(
             ciudad, direccion, existing.Phone);
     }
 
-    private static TipologiaJourney? ResolveJourney(ProcedureInstance instance)
+    /// <summary>
+    /// Roles de actor admitidos por el trámite (ADR-0050): los declara el <c>gate_profile</c> del
+    /// tipo, no un catálogo de journeys por modalidad.
+    /// <para>En la familia OTROS interviene un solo actor —el titular, que no vende ni compra— y se
+    /// persiste con el rol <see cref="ParteRol.Comprador"/>, igual que en matrícula inicial, porque
+    /// el modelo no tiene un rol de propietario.</para>
+    /// </summary>
+    private static HashSet<ParteRol> AllowedRoles(ProcedureInstance instance)
     {
-        // Preferir tipología si está set; si no, resolver el journey por modalidad_entrada.
-        var byTipologia = TipologiaMatrizCatalog.Get(instance.TipologiaCodigo);
-        if (byTipologia is not null)
-            return byTipologia;
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
-        return modalidad is null
-            ? null
-            : TipologiaMatrizCatalog.All.FirstOrDefault(j => j.Modalidad == modalidad.Value);
+        var roles = new HashSet<ParteRol>();
+        if (profile.RequiresBuyer)
+            roles.Add(ParteRol.Comprador);
+        if (profile.RequiresSeller)
+            roles.Add(ParteRol.Vendedor);
+        return roles;
     }
 
     private static ParteRol? ParseRol(string? rol) => rol?.Trim().ToLowerInvariant() switch

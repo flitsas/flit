@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Repositories;
 using Flit.Admin.Application.DocumentRequirements.PreviewInformativos;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
@@ -30,12 +31,25 @@ internal static class WizardEndpoints
 
         // CF-02 (HU #10883, AC3) — esqueleto de pasos para el PASO 1 cuando el trámite todavía no
         // existe. Mismos pasos/keys/etiquetas que el wizard real, con el paso 1 abierto y el resto
-        // bloqueado: el trámite se crea al avanzar al paso 2. Sin tenant: no lee datos de negocio.
-        group.MapGet("/wizard-preview", (string? modalidad) =>
+        // bloqueado: el trámite se crea al avanzar al paso 2. Sin tenant: el catálogo es global.
+        //
+        // ADR-0050 — se pide el CODE del tipo, no la modalidad: el preview existe para cualquier tipo
+        // parametrizado y no solo para matrícula y traspaso.
+        group.MapGet("/wizard-preview", async (
+            string? procedureTypeCode,
+            IProcedureTypeRepository types,
+            CancellationToken ct) =>
         {
-            var preview = GetWizardStateHandler.BuildPreview(modalidad);
+            if (string.IsNullOrWhiteSpace(procedureTypeCode))
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "procedureTypeCode requerido.");
+
+            var type = await types.GetByCodePublishedAsync(procedureTypeCode.Trim(), ct);
+            if (type is not null)
+                type.Steps = [.. await types.GetStepsWithDetailsAsync(type.Id, ct)];
+
+            var preview = GetWizardStateHandler.BuildPreview(type);
             return preview is null
-                ? Results.Problem(statusCode: 400, title: "Bad Request", detail: "Modalidad no válida.")
+                ? Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo de trámite no válido o sin pasos configurados.")
                 : Results.Ok(preview);
         }).WithName("GetProcedureWizardPreview");
 

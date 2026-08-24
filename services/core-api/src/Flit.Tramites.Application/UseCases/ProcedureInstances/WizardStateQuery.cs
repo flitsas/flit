@@ -140,6 +140,9 @@ public sealed class GetWizardStateHandler(
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
+
+    /// <summary>El tipo de trámite no tiene pasos configurados: no hay wizard que construir.</summary>
+    public const string TipoSinParametrizar = "tipo_sin_parametrizar";
     public const string FurPendiente = "fur_pendiente";
 
     // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → camino estático).
@@ -394,9 +397,12 @@ public sealed class GetWizardStateHandler(
         return steps.Count > 0 ? new WizardConformation(gateProfile, steps) : null;
     }
 
-    private static WizardConformation? FromCatalog(ProcedureInstance instance)
+    private static WizardConformation? FromCatalog(ProcedureInstance instance) =>
+        FromCatalogSteps(instance.ProcedureType);
+
+    /// <summary>Conformación desde los pasos del tipo; <c>null</c> si no tiene ninguno.</summary>
+    private static WizardConformation? FromCatalogSteps(ProcedureType? type)
     {
-        var type = instance.ProcedureType;
         if (type is null || type.Steps.Count == 0)
             return null;
 
@@ -741,8 +747,18 @@ public sealed class GetWizardStateHandler(
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
+        var conformation = FromCatalog(instance);
+
+        // Tipo sin pasos parametrizados. No debería ocurrir —los 21 del catálogo los tienen y hay un
+        // test que lo verifica— pero un tipo creado a mano desde el configurador puede quedarse sin
+        // ellos. Se devuelve un estado vacío y bloqueado en vez de inventar un recorrido: el
+        // expediente se ve, no avanza, y el motivo es explícito.
+        if (conformation is null)
+        {
+            return new WizardStateDto(
+                string.Empty, instance.TypeCode, 0, [], false, [TipoSinParametrizar],
+                instance.Status, TramiteStateMachine.TransitionsFrom(instance.Status));
+        }
 
         // Migración V1→V2 — un trámite MIGRADO en estado terminal es una FOTO de solo lectura: no se
         // capturó paso a paso en V2, así que no se somete al gating vivo del wizard (que exige datos
@@ -750,25 +766,15 @@ public sealed class GetWizardStateHandler(
         // expediente como completo/solo-lectura para que el visor lo muestre íntegro. Reutiliza
         // TramiteEstado.EsFinal (aprobado/anulado = inmutable, RF04) como predicado de "terminal".
         if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
-            return BuildReadonlySnapshot(instance, modalidad);
+            return BuildReadonlySnapshot(instance, conformation);
 
         // ADR-0050 — mismo motor que el detalle del wizard, conformado desde el catálogo del tipo.
         // El listado no resuelve por IO la matriz documental ni la prenda (una consulta por fila):
         // el gate de documentos cae entonces a la completitud agregada, que es lo que este camino
         // usaba antes de todos modos.
-        var conformation = FromCatalog(instance);
-        if (conformation is not null)
-        {
-            return BuildDynamicStateCore(
-                instance, conformation, identidadAprobadaPartes, prendaOtBlocker,
-                comparendosBloquean, runtExigido, documentRequirements: [], prendaVigente: null);
-        }
-
-        // Tipo sin pasos parametrizados: se conserva el recorrido histórico hasta que los 21 tipos
-        // estén sembrados. Es lo último que queda del camino estático.
-        return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaOtBlocker, runtExigido)
-            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride, runtExigido, prendaOtBlocker);
+        return BuildDynamicStateCore(
+            instance, conformation, identidadAprobadaPartes, prendaOtBlocker,
+            comparendosBloquean, runtExigido, documentRequirements: [], prendaVigente: null);
     }
 
     /// <summary>
@@ -779,302 +785,33 @@ public sealed class GetWizardStateHandler(
     /// devuelve [] para aprobado/anulado. No evalúa gates: el expediente ya vino tal cual de V1 y no debe
     /// someterse al gating del flujo vivo (que exige comercial/biométrica/FUR inexistentes en la foto).
     /// </summary>
+    /// <summary>
+    /// Foto de solo lectura de un trámite migrado en estado terminal: todos los pasos del tipo en
+    /// <c>complete</c> y sin acciones. Los pasos salen del catálogo, igual que en el camino vivo.
+    /// </summary>
     private static WizardStateDto BuildReadonlySnapshot(
-        ProcedureInstance instance, TramiteModalidadEntrada modalidad)
+        ProcedureInstance instance, WizardConformation conformation)
     {
-        var esTraspaso = modalidad == TramiteModalidadEntrada.Traspaso;
-        var totalPasos = esTraspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
-        var codigoTipologia = esTraspaso
-            ? TramiteTipologiaCatalog.CodigoTraspasoStandard
-            : TramiteTipologiaCatalog.CodigoMatriculaInicial;
-        var pasos = TipologiaMatrizCatalog.Get(codigoTipologia)?.Pasos ?? [];
-
-        var steps = new List<WizardStepDto>(totalPasos);
-        for (var p = 1; p <= totalPasos; p++)
-            steps.Add(new WizardStepDto(p, StepKey(esTraspaso, p), StepLabel(pasos, p), "complete", []));
+        var steps = conformation.Steps
+            .Select((st, i) => new WizardStepDto(
+                i + 1,
+                st.StepCode,
+                string.IsNullOrWhiteSpace(st.StepTitle) ? SectionLabel(st.PrimarySectionType) : st.StepTitle!,
+                "complete",
+                [])
+            {
+                SectionType = st.PrimarySectionType,
+                SectionTypes = st.SectionTypes,
+            })
+            .ToList();
 
         return new WizardStateDto(
-            esTraspaso ? TramiteModalidadEntradaCodes.Traspaso : TramiteModalidadEntradaCodes.MatriculaInicial,
-            instance.TipologiaCodigo,
-            totalPasos,
+            string.Empty,
+            instance.TypeCode,
+            steps.Count,
             steps,
             false,   // canSubmit: terminal, sin acciones
             [],      // blockers
-            instance.Status,
-            TramiteStateMachine.TransitionsFrom(instance.Status));
-    }
-
-    // ---- Matrícula inicial (5 pasos) ----------------------------------------
-
-    private static WizardStateDto BuildMatricula(
-        ProcedureInstance instance,
-        IReadOnlySet<string> identidadAprobadaPartes,
-        bool? docsCompletosOverride = null,
-        RuntConsultaExigida? runtExigido = null,
-        string? prendaOtBlocker = null)
-    {
-        var fv = FieldValues(instance);
-        var comprador = ParteOf(instance, "comprador");
-        var runtComprador = RuntOf(instance, "comprador", runtExigido);
-        var preflight = PreflightOf(instance);
-
-        var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
-        var riesgoAceptado = RiesgoAceptado(instance);
-
-        // Matrícula: la única parte (comprador) lleva la biométrica. Aprobación PER-PERSONA (documento),
-        // no por instancia: se referencia la identidad vigente de la persona en N trámites (HU #10350).
-        var identidadAprobada = identidadAprobadaPartes.Contains("comprador");
-
-        var ctx = new MatriculaGateContext
-        {
-            VehiculoConsultado = HasVehiculoConsulta(fv),
-            Preflight = preflight,
-            Comprador = comprador,
-            RuntComprador = runtComprador,
-            IdentidadAprobada = identidadAprobada,
-            DocumentosObligatoriosCompletos = docsCompletos,
-            ForzarContinuar = false,
-            RiesgoPreflightAceptado = riesgoAceptado,
-        };
-
-        var maxAlcanzable = MatriculaGates.MaxPasoAlcanzable(ctx);
-        // Datos (pasos 1-3) completos: maxAlcanzable >= 4 ⇒ Consulta+Documentos+Comprador OK. A partir
-        // de aquí los pasos diferidos (4 Identidad, 5 FUR) son ALCANZABLES aunque la identidad esté
-        // pendiente — desacople HU #10350: el gestor recorre hasta el último paso y finaliza el borrador.
-        var datosCompletos = maxAlcanzable >= 4;
-        var pasos = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoMatriculaInicial)?.Pasos
-                    ?? [];
-
-        var steps = new List<WizardStepDto>(MatriculaGates.TotalPasos);
-        for (var p = 1; p <= MatriculaGates.TotalPasos; p++)
-        {
-            var reasons = new List<string>();
-            string status;
-
-            // 4 = Identidad (biométrica, slice 6): refleja el estado real de la biométrica del comprador.
-            if (p == 4)
-            {
-                if (!datosCompletos)
-                {
-                    status = "locked";
-                }
-                else if (identidadAprobada)
-                {
-                    status = "complete";
-                }
-                else
-                {
-                    status = "incomplete";
-                    reasons.Add("identidad_pendiente");
-                    reasons.Add(PendienteBiometria);
-                }
-            }
-            // 5 = Generar FUR (slice 7): diferido. Alcanzable en cuanto los datos están completos AUNQUE
-            // la identidad siga pendiente (HU #10350), para que sea el ÚLTIMO paso del wizard donde el
-            // gestor finaliza/radica. El FUR se genera automáticamente al validar la identidad (#10349).
-            else if (p == 5)
-            {
-                if (!datosCompletos)
-                {
-                    status = "locked";
-                }
-                else if (FurGenerado(instance))
-                {
-                    status = "complete";
-                }
-                else
-                {
-                    status = "incomplete";
-                    reasons.Add(FurPendiente);
-                }
-            }
-            else
-            {
-                // Pasos de datos 1-3: cascada estándar por gate (no alcanzable ⇒ locked).
-                var gate = MatriculaGates.PasoCompleto(p, ctx);
-                if (p > maxAlcanzable)
-                {
-                    status = "locked";
-                }
-                else if (gate.Ok)
-                {
-                    status = "complete";
-                }
-                else
-                {
-                    status = "incomplete";
-                    if (gate.Code is not null)
-                        reasons.Add(gate.Code);
-                }
-            }
-
-            steps.Add(new WizardStepDto(p, StepKey(false, p), StepLabel(pasos, p), status, reasons));
-        }
-
-        // N 03 (RF03): canSubmit/blockers reflejan el gate borrador→preparado — identidad del
-        // comprador aprobada/vigente + documentos obligatorios. El FUR/firma (paso 5, slice 7)
-        // sigue diferido. El frontend nunca recalcula gates: solo pinta estos códigos.
-        // Compañía+OT: + documento de prenda cuando la política lo exige (cualquier modalidad).
-        var blockers = BlockersFrom(
-            preflight, docsCompletos, riesgoAceptado, identidadAprobada, prendaOtBlocker);
-        var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [4, 5]);
-
-        return new WizardStateDto(
-            TramiteModalidadEntradaCodes.MatriculaInicial,
-            instance.TipologiaCodigo,
-            MatriculaGates.TotalPasos,
-            steps,
-            canSubmit,
-            blockers,
-            instance.Status,
-            TramiteStateMachine.TransitionsFrom(instance.Status));
-    }
-
-    // ---- Traspaso estándar (6 pasos) ----------------------------------------
-
-    private static WizardStateDto BuildTraspaso(
-        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes,
-        bool? docsCompletosOverride = null, bool comparendosBloquean = true,
-        string? prendaOtBlocker = null, RuntConsultaExigida? runtExigido = null)
-    {
-        var fv = FieldValues(instance);
-        var vendedor = ParteOf(instance, "vendedor");
-        var comprador = ParteOf(instance, "comprador");
-        var runtVendedor = RuntOf(instance, "vendedor", runtExigido);
-        var runtComprador = RuntOf(instance, "comprador", runtExigido);
-        var preflight = PreflightOf(instance);
-        var simitComprador = SimitOf(instance, comprador, preflight);
-        var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
-        var riesgoAceptado = RiesgoAceptado(instance);
-
-        var ctx = new TraspasoGateContext
-        {
-            // El trámite ya existe (instancia creada) → radicado a efectos del wizard server-side.
-            TramiteRadicado = true,
-            // Consulta del vehículo por placa: sin ella el paso 1 queda incompleto (frontera),
-            // así un traspaso recién creado abre en el paso 1 y no en el 2.
-            VehiculoConsultado = HasVehiculoConsulta(fv),
-            Preflight = preflight,
-            PazSalvoImpuestoVerificado = PazSalvoVerificado(instance),
-            Vendedor = vendedor,
-            RuntVendedor = runtVendedor,
-            Comprador = comprador,
-            RuntComprador = runtComprador,
-            SimitComprador = simitComprador,
-            ValorVenta = instance.Commercial?.ValorVenta ?? 0m,
-            // Biométrica real (slice 6): traspaso requiere ambas partes. Aprobación PER-PERSONA (documento),
-            // referenciada de la identidad vigente de cada persona (HU #10350), no por instancia.
-            Biometria = new BiometriaSnapshot(
-                Vendedor: identidadAprobadaPartes.Contains("vendedor"),
-                Comprador: identidadAprobadaPartes.Contains("comprador")),
-            DocumentosObligatoriosCompletos = docsCompletos,
-            ForzarContinuar = false,
-            RiesgoPreflightAceptado = riesgoAceptado,
-            ComparendosBloquean = comparendosBloquean,
-        };
-
-        var maxAlcanzable = TraspasoGates.MaxPasoAlcanzable(ctx);
-        // Datos (pasos 1-4) completos: maxAlcanzable >= 5 ⇒ Consulta+Vendedor+Comprador+Documentos OK.
-        // A partir de aquí los pasos diferidos (5 Identidad, 6 FUR) son ALCANZABLES aunque la identidad
-        // esté pendiente — restituye el desacople HU #10350 (paridad con BuildMatricula): el gestor
-        // recorre hasta el último paso y finaliza el borrador; la identidad pendiente NO lo atrapa en
-        // el paso 5. PasoCompleto/GateFur (el gate de AVANCE y de radicación) no cambian.
-        var datosCompletos = maxAlcanzable >= 5;
-        var pasos = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoTraspasoStandard)?.Pasos
-                    ?? [];
-
-        var steps = new List<WizardStepDto>(TraspasoGates.TotalPasos);
-        for (var p = 1; p <= TraspasoGates.TotalPasos; p++)
-        {
-            var reasons = new List<string>();
-            string status;
-
-            // 5 = Identidad: biométrica de AMBAS partes (slice 6). Diferido (paridad con matrícula,
-            // paso 4): alcanzable en cuanto los datos (1-4) están completos AUNQUE la identidad siga
-            // pendiente. Se sigue exponiendo la MISMA reason "pendiente_biometria" que ya consumía.
-            if (p == 5)
-            {
-                if (!datosCompletos)
-                {
-                    status = "locked";
-                }
-                else if (TraspasoGates.PasoCompleto(5, ctx).Ok)
-                {
-                    status = "complete";
-                }
-                else
-                {
-                    status = "incomplete";
-                    reasons.Add(PendienteBiometria);
-                }
-            }
-            // 6 = Generar FUR (slice 7): diferido. Alcanzable en cuanto los datos están completos
-            // AUNQUE la identidad (5) siga pendiente (HU #10350), para que sea el ÚLTIMO paso del
-            // wizard donde el gestor finaliza/radica. Documentos (4) e identidad/biométrica (5) ya se
-            // exigen antes en la cascada de datos; aquí solo queda el FUR generado (IO).
-            else if (p == 6)
-            {
-                if (!datosCompletos)
-                {
-                    status = "locked";
-                }
-                else
-                {
-                    // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
-                    // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
-                    // firmas. El estado de firma queda informativo en el preflight `firma_compraventa`
-                    // (DerivaFirmaCompraventaCheck, warn/green), sin bloquear canSubmit.
-                    var furOk = FurGenerado(instance);
-                    if (!furOk)
-                        reasons.Add(FurPendiente);
-
-                    status = furOk ? "complete" : "incomplete";
-                }
-            }
-            else
-            {
-                // Pasos de datos 1-4: cascada estándar por gate (no alcanzable ⇒ locked).
-                var gate = TraspasoGates.PasoCompleto(p, ctx);
-                if (p > maxAlcanzable)
-                {
-                    status = "locked";
-                }
-                else if (gate.Ok)
-                {
-                    status = "complete";
-                }
-                else
-                {
-                    status = "incomplete";
-                    if (gate.Code is not null)
-                        reasons.Add(gate.Code);
-                }
-            }
-
-            steps.Add(new WizardStepDto(p, StepKey(true, p), StepLabel(pasos, p), status, reasons));
-        }
-
-        // N 03 (RF03): mismo gate de preparación que matrícula — la identidad exigida es la del
-        // comprador (endurecer vendedor+firma en traspaso sigue como deuda M5, ver SubmitGate).
-        // CF-06 (HU #10881): + override OT del documento de prenda (independiente del gravamen).
-        //
-        // deferredIndexes = [5, 6]: Identidad (5, biométrica de ambas partes) y FUR (6) quedan
-        // diferidos del cómputo "todos los pasos completos" de CanSubmit — EXACTAMENTE igual que
-        // antes, cuando comercial (5) exigía completarse para el submit pero Identidad/FUR (6, con la
-        // biométrica) NO. Ahora que comercial se folded al paso 4 y la biométrica es el gate propio
-        // del paso 5, diferir 5 preserva que el submit siga exigiendo lo mismo que hoy: SOLO la
-        // identidad del comprador (vía blocker) y NO la del vendedor.
-        var blockers = BlockersFrom(
-            preflight, docsCompletos, riesgoAceptado, ctx.Biometria.Comprador, prendaOtBlocker);
-        var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [5, 6]);
-
-        return new WizardStateDto(
-            TramiteModalidadEntradaCodes.Traspaso,
-            instance.TipologiaCodigo,
-            TraspasoGates.TotalPasos,
-            steps,
-            canSubmit,
-            blockers,
             instance.Status,
             TramiteStateMachine.TransitionsFrom(instance.Status));
     }
@@ -1387,9 +1124,6 @@ public sealed class GetWizardStateHandler(
 
     // ---- Etiquetas y keys de pasos ------------------------------------------
 
-    private static string StepLabel(IReadOnlyList<PasoTipologia> pasos, int index) =>
-        pasos.FirstOrDefault(p => p.Paso == index)?.Titulo ?? $"Paso {index}";
-
     /// <summary>
     /// HU #10879 — ¿la consulta del vehículo está completa? (VIN o placa hidratados en field_values).
     /// Es la MISMA señal que abre el paso 1 del wizard; se expone para el gate de "avanzar de paso"
@@ -1409,39 +1143,42 @@ public sealed class GetWizardStateHandler(
     /// </summary>
     /// <summary>
     /// CF-02 (HU #10883, AC3) — esqueleto del wizard para el paso 1 cuando el trámite AÚN NO EXISTE.
-    /// Mismos pasos, keys y etiquetas que el wizard real (misma fuente: el catálogo de la tipología),
-    /// con el paso 1 abierto y el resto bloqueado: la cascada de gates no es evaluable sin instancia,
-    /// y el trámite se crea justo al avanzar al paso 2. Devuelve <c>null</c> si la modalidad no existe.
+    /// Mismos pasos, claves y etiquetas que el wizard real —salen del mismo catálogo— con el paso 1
+    /// abierto y el resto bloqueado: la cascada de gates no es evaluable sin instancia, y el trámite
+    /// se crea justo al avanzar al paso 2.
+    /// <para>ADR-0050: se construye desde el TIPO, no desde la modalidad, así que el preview existe
+    /// para cualquier tipo parametrizado y no solo para matrícula y traspaso.</para>
     /// </summary>
-    public static WizardStateDto? BuildPreview(string? modalidadCodigo)
+    /// <param name="type">Tipo con sus pasos y secciones cargados.</param>
+    public static WizardStateDto? BuildPreview(ProcedureType? type)
     {
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(modalidadCodigo);
-        if (modalidad is null)
+        if (type is null)
             return null;
 
-        var traspaso = modalidad == TramiteModalidadEntrada.Traspaso;
-        var total = traspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
-        var pasos = TipologiaMatrizCatalog.Get(
-                        traspaso
-                            ? TramiteTipologiaCatalog.CodigoTraspasoStandard
-                            : TramiteTipologiaCatalog.CodigoMatriculaInicial)?.Pasos
-                    ?? [];
+        var conformation = FromCatalogSteps(type);
+        if (conformation is null)
+            return null;
 
-        var steps = new List<WizardStepDto>(total);
-        for (var p = 1; p <= total; p++)
-        {
-            steps.Add(new WizardStepDto(
-                p,
-                StepKey(traspaso, p),
-                StepLabel(pasos, p),
-                p == 1 ? "incomplete" : "locked",
-                []));
-        }
+        var steps = conformation.Steps
+            .Select((st, i) => new WizardStepDto(
+                i + 1,
+                st.StepCode,
+                string.IsNullOrWhiteSpace(st.StepTitle) ? SectionLabel(st.PrimarySectionType) : st.StepTitle!,
+                i == 0 ? "incomplete" : "locked",
+                [])
+            {
+                SectionType = st.PrimarySectionType,
+                SectionTypes = st.SectionTypes,
+                SectionConfig = BuildSectionConfig(
+                    new DynamicWizardStepResult(i + 1, st.StepCode, st.PrimarySectionType, "locked", []),
+                    conformation.GateProfile),
+            })
+            .ToList();
 
         return new WizardStateDto(
-            traspaso ? TramiteModalidadEntradaCodes.Traspaso : TramiteModalidadEntradaCodes.MatriculaInicial,
-            traspaso ? TramiteTipologiaCatalog.CodigoTraspasoStandard : TramiteTipologiaCatalog.CodigoMatriculaInicial,
-            total,
+            string.Empty,
+            type.Code,
+            steps.Count,
             steps,
             CanSubmit: false,
             Blockers: [],
@@ -1449,46 +1186,16 @@ public sealed class GetWizardStateHandler(
             AllowedTransitions: []);
     }
 
+    /// <summary>
+    /// HU #10879 — claves ORDENADAS de los pasos del wizard de la instancia, para validar que el paso
+    /// que se intenta persistir es uno legítimo. Salen del catálogo del tipo (ADR-0050), que es la
+    /// misma fuente que usa el motor: antes se derivaban de la modalidad y eran siempre 5 o 6.
+    /// </summary>
     public static IReadOnlyList<string> StepKeysFor(ProcedureInstance instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
-        var traspaso = modalidad == TramiteModalidadEntrada.Traspaso;
-        var total = traspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
-
-        var keys = new List<string>(total);
-        for (var p = 1; p <= total; p++)
-            keys.Add(StepKey(traspaso, p));
-        return keys;
+        var conformation = FromCatalog(instance);
+        return conformation is null ? [] : [.. conformation.Steps.Select(st => st.StepCode)];
     }
-
-    // HU #10935 — orden del wizard: los documentos van DESPUÉS de la información del comprador y/o
-    // vendedor. Paridad de pasos con matrícula (2026-08) — los datos comerciales se absorben en
-    // Documentos y el hueco lo ocupa Identidad (biométrica de ambas partes):
-    // traspaso: consulta → vendedor → comprador → documentos → identidad → fur;
-    // matrícula: consulta_vin → comprador → documentos → identidad → fur. Este mapeo índice→key
-    // debe seguir el MISMO orden que la cascada de gates (TraspasoGates/MatriculaGates.PasoCompleto).
-    private static string StepKey(bool traspaso, int index) =>
-        traspaso
-            ? index switch
-            {
-                1 => "consulta",
-                2 => "vendedor",
-                3 => "comprador",
-                4 => "documentos",
-                5 => "identidad",
-                6 => "fur",
-                _ => $"paso_{index}",
-            }
-            : index switch
-            {
-                1 => "consulta_vin",
-                2 => "comprador",
-                3 => "documentos",
-                4 => "identidad",
-                5 => "fur",
-                _ => $"paso_{index}",
-            };
 }
