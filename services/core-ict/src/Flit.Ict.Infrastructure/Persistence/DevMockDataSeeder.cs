@@ -67,6 +67,15 @@ public sealed partial class DevMockDataSeeder(
                 Log.SeededConsultas(logger);
             }
 
+            if (!await YaSembradoAsync(
+                    connection,
+                    "SELECT count(*) FROM ict.integration_log WHERE path LIKE '%MOCK-OK-1'",
+                    cancellationToken))
+            {
+                await EjecutarAsync(connection, LogPorTramiteMockSql, tenantId.Value, cancellationToken);
+                Log.SeededLogPorTramite(logger);
+            }
+
             if (await AlreadySeededAsync(connection, cancellationToken))
             {
                 return;
@@ -184,6 +193,30 @@ public sealed partial class DevMockDataSeeder(
                m.created_at + interval '3 min 31 s', 'ictdev', now()
         FROM ict.external_integration_master m
         WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-VOID-1';
+
+        -- El borrador se engancha a un trámite que EXISTE de verdad. Con un uuid inventado el enlace
+        -- «Ver trámite» se dibuja igual pero lleva a «Procedure instance not found», y entonces el
+        -- mock no sirve para probar el enlace: solo para probar que el enlace aparece.
+        --
+        -- El bloque va condicionado porque core-ict no es dueño del esquema `tramites`: en un entorno
+        -- donde ese esquema no esté montado, el seeder debe seguir funcionando y dejar el trámite sin
+        -- borrador asociado, no reventar.
+        DO $seed$
+        BEGIN
+            IF to_regclass('tramites.procedure_instances') IS NOT NULL THEN
+                EXECUTE $sql$
+                    UPDATE ict.external_integration_master m
+                    SET procedure_instance_id = p.id
+                    FROM tramites.procedure_instances p
+                    WHERE p.tenant_id = m.tenant_id
+                      AND m.manager_id_transaction = 'MOCK-DRAFT-1'
+                      AND p.id = (SELECT q.id FROM tramites.procedure_instances q
+                                  WHERE q.tenant_id = m.tenant_id
+                                  ORDER BY q.created_at DESC LIMIT 1)
+                $sql$;
+            END IF;
+        END
+        $seed$;
         """;
 
     /// <summary>
@@ -211,7 +244,8 @@ public sealed partial class DevMockDataSeeder(
         ) AS v(actor_type, document_type, document_number, name, first_last_name, second_last_name,
                phone, email, city, state, address)
         WHERE m.tenant_id = @tenant
-          AND m.manager_id_transaction IN ('MOCK-STUCK-1', 'MOCK-NOV-1', 'MOCK-DRAFT-1');
+          AND m.manager_id_transaction IN
+              ('MOCK-STUCK-1', 'MOCK-NOV-1', 'MOCK-OK-1', 'MOCK-DRAFT-1', 'MOCK-VOID-1');
         """;
 
     private const string ConsultasFuenteMockSql = """
@@ -245,6 +279,21 @@ public sealed partial class DevMockDataSeeder(
         ) AS v(actor_level, query_type, document_type, document_number)
         WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-DRAFT-1';
 
+        -- El trámite procesado también consultó: sin esto su pestaña de consultas sale vacía y
+        -- parecería que la etapa no ocurrió, que es justo lo que este módulo existe para desmentir.
+        INSERT INTO ict.external_integration_source_query
+            (eim_id, tenant_id, actor_level, query_type, document_type, document_number,
+             plate_complete, vehicle_vin, is_data_queried, is_data_valid, attempts, created_at)
+        SELECT m.id, m.tenant_id, v.actor_level, v.query_type, v.document_type, v.document_number,
+               CASE WHEN v.query_type = 'VEHICLE' THEN m.plate ELSE '' END, '',
+               true, true, 1, m.created_at + interval '2 min 40 s'
+        FROM ict.external_integration_master m
+        CROSS JOIN (VALUES
+            ('MAIN', 'DRIVER',  'NIT', '811011779'),
+            ('VEHI', 'VEHICLE', '',    '')
+        ) AS v(actor_level, query_type, document_type, document_number)
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-OK-1';
+
         -- Respuesta cruda del RUNT, CON datos personales a propósito: el enmascarado se comprueba al
         -- servir, no al sembrar. Si aquí ya llegara enmascarada, la prueba no probaría nada.
         INSERT INTO ict.external_integration_source_response (eisq_id, tenant_id, query_response, created_at)
@@ -253,6 +302,31 @@ public sealed partial class DevMockDataSeeder(
                q.created_at + interval '4 s'
         FROM ict.external_integration_source_query q
         WHERE q.tenant_id = @tenant AND q.is_data_valid = true AND q.query_type = 'DRIVER';
+        """;
+
+    /// <summary>
+    /// Una petición de consulta de estado por cada pre-trámite de muestra (HU #11819).
+    /// </summary>
+    /// <remarks>
+    /// El sembrado original solo dejaba rastro de dos de los cinco, y los otros tres mostraban el
+    /// «Log técnico» vacío. Eso confunde: un log vacío en esta pantalla significa «nadie preguntó
+    /// por este trámite», y no se distingue de «el mock no lo sembró». Se emparejan por la
+    /// referencia del cliente, que es como los correlaciona la consulta de verdad.
+    /// </remarks>
+    private const string LogPorTramiteMockSql = """
+        INSERT INTO ict.integration_log
+            (tenant_id, log_type, direction, method, path, status_code, headers, request, response,
+             correlation_id, duration_ms, usuario, created_at)
+        SELECT m.tenant_id, 'transaction', 'inbound', 'GET',
+               '/api/v1/status-process/byId/' || m.manager_id_transaction, 200,
+               '{"content-type":"application/json"}'::jsonb, NULL,
+               jsonb_build_object(
+                   'transactionFlit', m.manager_id_transaction,
+                   'statusValidation', m.process_status_id),
+               gen_random_uuid(), 11, 'ictdev', m.created_at + interval '15 min'
+        FROM ict.external_integration_master m
+        WHERE m.tenant_id = @tenant
+          AND m.manager_id_transaction IN ('MOCK-OK-1', 'MOCK-DRAFT-1', 'MOCK-VOID-1');
         """;
 
     private const string MockSql = """
@@ -296,6 +370,9 @@ public sealed partial class DevMockDataSeeder(
 
         [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: actores de muestra creados.")]
         public static partial void SeededActores(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: log por pre-trámite creado.")]
+        public static partial void SeededLogPorTramite(ILogger logger);
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev mock seed: no hay tenants; se omite.")]
         public static partial void NoTenant(ILogger logger);
