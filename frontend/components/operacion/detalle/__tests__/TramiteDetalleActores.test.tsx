@@ -19,7 +19,7 @@ import { TramiteDetalleActores } from '@/components/operacion/detalle/TramiteDet
 const BASE_ITEM: InstanceSummary = {
   id: 'inst-1',
   referenceNumber: 'TR-001',
-  modalidad: 'traspaso',
+  modalidad: 'TRASPASO',
   estado: 'entregado',
   placa: 'ABC123',
   vin: 'VIN-XYZ-001',
@@ -143,7 +143,7 @@ describe('TramiteDetalleActores', () => {
     render(
       <TramiteDetalleActores
         instanceId="inst-2"
-        item={{ ...BASE_ITEM, modalidad: 'matricula_inicial', firmaVendedorEstado: null }}
+        item={{ ...BASE_ITEM, modalidad: 'MATRICULAS', firmaVendedorEstado: null }}
       />,
     );
 
@@ -165,7 +165,7 @@ describe('TramiteDetalleActores', () => {
         instanceId="inst-3"
         item={{
           ...BASE_ITEM,
-          modalidad: 'matricula_inicial',
+          modalidad: 'MATRICULAS',
           firmaVendedorEstado: null,
           firmaCompradorEstado: null,
         }}

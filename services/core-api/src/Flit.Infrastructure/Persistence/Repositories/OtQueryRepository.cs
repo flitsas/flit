@@ -176,7 +176,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                 p.Plate,
                 p.Vin,
                 p.TenantId,
-                p.ModalidadEntrada,
+                (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                 p.Status,
                 p.PlateFlowStatus,
                 p.Prioritario,

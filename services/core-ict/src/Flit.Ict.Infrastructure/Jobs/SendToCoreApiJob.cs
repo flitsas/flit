@@ -52,9 +52,23 @@ public sealed class SendToCoreApiJob(
         // arrastrar entidades rastreadas por un DbContext entre scopes.
         var mappingRows = await db.ProcedureTypeMappings
             .AsNoTracking()
-            .Select(m => new { m.ExternalTransactionType, m.IsPublished, m.ProcedureTypeCode })
+            .Select(m => new
+            {
+                m.ExternalTransactionType,
+                m.IsPublished,
+                m.ProcedureTypeCode,
+                m.Family,
+                m.RequiresCommercialValue,
+                m.ResolvesTransitOfficeFromRunt,
+            })
             .ToListAsync(ct);
-        var mappings = mappingRows.ToDictionary(m => m.ExternalTransactionType, m => (m.IsPublished, m.ProcedureTypeCode));
+        var mappings = mappingRows.ToDictionary(
+            m => m.ExternalTransactionType,
+            m => (m.IsPublished, Type: new DraftProcedureType(
+                m.ProcedureTypeCode,
+                m.Family,
+                m.RequiresCommercialValue,
+                m.ResolvesTransitOfficeFromRunt)));
 
         // Solo masters cuyas fuentes externas ya fueron TODAS consultadas por el orquestador.
         var readyIds = await ReadReadyMasterIdsAsync(db, batchSize, ct);
@@ -75,7 +89,7 @@ public sealed class SendToCoreApiJob(
     private async Task ProcessMasterAsync(
         SemaphoreSlim gate,
         Guid masterId,
-        Dictionary<short, (bool IsPublished, string ProcedureTypeCode)> mappings,
+        Dictionary<short, (bool IsPublished, DraftProcedureType Type)> mappings,
         CancellationToken ct)
     {
         await gate.WaitAsync(ct);
@@ -100,7 +114,7 @@ public sealed class SendToCoreApiJob(
                 return;
             }
 
-            var result = await draftClient.CreateDraftAsync(master, mapping.ProcedureTypeCode, ct);
+            var result = await draftClient.CreateDraftAsync(master, mapping.Type, ct);
 
             if (result.ErrorCode == "grpc_unavailable")
             {

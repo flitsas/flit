@@ -83,7 +83,8 @@ public sealed class PrecedenciaBaulSobreIdentidadRegresionTests
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000002",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
+            // ADR-0050 — `modalidad_entrada` desapareció: la clasificación la deriva el tipo.
+            ProcedureType = ProcedureTypeFixture.Matricula,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue

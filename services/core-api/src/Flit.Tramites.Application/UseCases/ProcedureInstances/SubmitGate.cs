@@ -3,6 +3,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -48,12 +49,11 @@ public static class SubmitGate
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
+        var modalidad = instance.Family;
 
         var docsCompletos = documentosCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
 
-        return modalidad == TramiteModalidadEntrada.Traspaso
+        return modalidad == ProcedureFamily.Traspaso
             ? EvaluateTraspaso(instance, identidadAprobadaPartes, docsCompletos)
             : EvaluateMatricula(instance, identidadAprobadaPartes, docsCompletos);
     }
@@ -109,7 +109,7 @@ public static class SubmitGate
     {
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.Completo ?? true;
     }
@@ -141,7 +141,7 @@ public static class SubmitGate
     /// </summary>
     private static bool RequiereImpronta(ProcedureInstance instance)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var tip = TramiteTipologiaCatalog.Get(codigo);
         return tip is not null && tip.Checklist.Any(i => string.Equals(i.DocTipo, "impronta", StringComparison.OrdinalIgnoreCase));
     }

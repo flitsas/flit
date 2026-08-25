@@ -13,14 +13,38 @@ public sealed class PreviewDocumentosInformativosHandlerTests
     private static readonly Guid DocA = Guid.Parse("aaaa1111-1111-1111-1111-111111111111");
 
     [Fact]
-    public async Task ModalidadInvalida_WhenUnknown()
+    public async Task TipoDesconocido_ReportaQueNoExiste()
     {
+        // ADR-0050 — se acepta cualquier `code` del catálogo, así que un valor desconocido ya no es
+        // "modalidad inválida" sino un tipo que no existe. El diagnóstico es más preciso: antes
+        // cualquier trámite fuera de las dos modalidades se rechazaba por el vocabulario, no por el
+        // dato.
+        var catalog = Substitute.For<IProcedureTypeCatalog>();
+        catalog.ListActivePublishedAsync(Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureTypeCatalogItem>());
         var handler = new PreviewDocumentosInformativosHandler(
-            Substitute.For<IProcedureTypeCatalog>(),
+            catalog,
             Substitute.For<IResolvedDocumentMatrixResolver>());
 
         var result = await handler.HandleAsync(
-            new PreviewDocumentosInformativosQuery { Modalidad = "otro" },
+            new PreviewDocumentosInformativosQuery { Modalidad = "NO_EXISTE" },
+            TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(PreviewDocumentosInformativosOutcome.ProcedureTypeNotFound);
+    }
+
+    [Fact]
+    public async Task SinModalidad_SigueSiendoInvalida()
+    {
+        var catalog = Substitute.For<IProcedureTypeCatalog>();
+        catalog.ListActivePublishedAsync(Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureTypeCatalogItem>());
+        var handler = new PreviewDocumentosInformativosHandler(
+            catalog,
+            Substitute.For<IResolvedDocumentMatrixResolver>());
+
+        var result = await handler.HandleAsync(
+            new PreviewDocumentosInformativosQuery { Modalidad = "  " },
             TestContext.Current.CancellationToken);
 
         result.Outcome.Should().Be(PreviewDocumentosInformativosOutcome.ModalidadInvalida);

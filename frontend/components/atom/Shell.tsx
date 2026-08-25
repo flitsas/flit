@@ -49,6 +49,7 @@ import {
   FileText,
   ClipboardList,
   Tag,
+  ListChecks,
   Monitor,
   FileSignature,
 } from "lucide-react";
@@ -305,6 +306,13 @@ export function Shell({
         active: pathname.startsWith("/admin/plataforma"),
         onClick: () => undefined,
         children: [
+          {
+            key: "admin-tipos-tramite",
+            label: "Tipos de trámites",
+            icon: ListChecks,
+            active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
+            onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
+          },
           {
             key: "admin-mandatos",
             label: "Mandatos",

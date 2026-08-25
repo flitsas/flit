@@ -55,7 +55,7 @@ const entregado: OtClientProcedure = {
   procedureTypeName: "Matrícula inicial",
   referenceNumber: "RAD-2026-101",
   status: "entregado",
-  modalidadEntrada: "matricula_inicial",
+  familia: "MATRICULAS",
   createdAt: "2026-08-01T09:00:00Z",
 };
 
@@ -128,7 +128,7 @@ describe("ClientProceduresSection — rechazo con causales del catálogo", () =>
     // Las causales no son intercambiables: «manifiesto de aduana» no aplica a un traspaso.
     await waitFor(() =>
       expect(reasonMocks.fetchRejectionReasons).toHaveBeenCalledWith({
-        modalidad: "matricula_inicial",
+        family: "MATRICULAS",
       }),
     );
   });

@@ -80,13 +80,12 @@ public sealed class GenerarRuesAttachmentHandlerTests
         var tenantId = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000010",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         if (conActorNit)

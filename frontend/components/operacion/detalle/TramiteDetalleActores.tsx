@@ -167,8 +167,8 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
     );
   }
 
-  // Traspaso: vendedor + comprador. Matrícula inicial: solo comprador.
-  const esTraspaso = item.modalidad === 'traspaso';
+  // Solo la familia TRASPASO tiene parte vendedora; en las demás interviene un único titular.
+  const esTraspaso = item.modalidad === 'TRASPASO';
   const vendedor = esTraspaso ? actors.find((a) => a.rol === 'vendedor') : undefined;
   const comprador = actors.find((a) => a.rol === 'comprador');
 

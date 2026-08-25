@@ -4,13 +4,12 @@
 import type { AnalyticsCategory } from "@/lib/api/types";
 
 /** Orden estable en el que se pintan las categorías (RF01). "otros" cierra como catch-all. */
-export const CATEGORY_ORDER: readonly AnalyticsCategory[] = ["matriculas", "traspasos", "vehicular", "otros"];
+export const CATEGORY_ORDER: readonly AnalyticsCategory[] = ["matriculas", "traspasos", "otros"];
 
 /** Etiqueta legible + color de marca por categoría de trámite. */
 export const CATEGORY_META: Record<AnalyticsCategory, { label: string; color: string }> = {
   matriculas: { label: "Matrículas", color: "#557EFF" },
   traspasos: { label: "Traspasos", color: "#00DBD5" },
-  vehicular: { label: "Vehicular", color: "#9B8AFB" },
   otros: { label: "Otros", color: "#F9AC00" },
 };
 

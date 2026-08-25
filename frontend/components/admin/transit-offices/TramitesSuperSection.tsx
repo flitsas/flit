@@ -48,7 +48,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-  // Causales del catálogo para el modal de rechazo, según la modalidad del trámite.
+  // Causales del catálogo para el modal de rechazo, según la familia del trámite.
   const [rejectReasonCatalog, setRejectReasonCatalog] = useState<RejectionReason[]>([]);
   const [rejectReasonIds, setRejectReasonIds] = useState<string[]>([]);
   const [rejectCatalogError, setRejectCatalogError] = useState<string | null>(null);
@@ -220,7 +220,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     }
   };
 
-  // Abre el modal y trae las causales activas de la modalidad. Si el catálogo falla, el rechazo
+  // Abre el modal y trae las causales activas de la familia. Si el catálogo falla, el rechazo
   // NO se bloquea: la observación basta para radicar la decisión.
   const openReject = async (procedure: OtClientProcedure) => {
     setRejectTarget(procedure);
@@ -232,7 +232,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     // pintaría las causales del trámite equivocado.
     rejectCatalogRequestRef.current = procedure.id;
     try {
-      const catalog = await fetchRejectionReasons({ modalidad: procedure.modalidadEntrada });
+      const catalog = await fetchRejectionReasons({ family: procedure.familia });
       if (rejectCatalogRequestRef.current !== procedure.id) return;
       setRejectReasonCatalog(catalog);
     } catch {

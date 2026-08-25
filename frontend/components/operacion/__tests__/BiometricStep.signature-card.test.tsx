@@ -117,17 +117,17 @@ describe('BiometricStep — tarjeta de firma electrónica por parte', () => {
     expect(within(card).getByText('Sin firma registrada')).toBeInTheDocument();
   });
 
-  it('con cobertura por baúl: a la izquierda la firma activa, a la derecha el aviso de que no se requiere biométrica', async () => {
+  it('con cobertura por baúl: el grupo muestra el aviso de baúl (izquierda) y la firma activa (derecha)', async () => {
     renderStep({ modalidad: 'matricula_inicial', vaultCoveredPartes: ['comprador'] });
 
     const compradorGrupo = await screen.findByRole('group', { name: 'Biométrica Comprador' });
-    // Derecha (tarjeta biométrica, `role="group"`): sigue explicando por qué no hace falta validar.
+    // Izquierda (columna de identidad y acción): VaultCoveredView explica que no hace falta biométrica.
     expect(within(compradorGrupo).getByText('Firma electrónica (baúl)')).toBeInTheDocument();
     expect(
       within(compradorGrupo).getByText(/No requiere validación biométrica\./),
     ).toBeInTheDocument();
 
-    // Izquierda (tarjeta de firma): la misma parte se ve con firma activa.
+    // Derecha (columna de firma): badge "Firma electrónica activa" dentro del canvas de firma.
     const firma = screen.getByText('Firma electrónica');
     const signatureCard = signatureCardOf(firma);
     expect(within(signatureCard).getByText('Firma electrónica activa')).toBeInTheDocument();

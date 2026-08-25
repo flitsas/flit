@@ -55,9 +55,9 @@ describe("HU #10498 — AC2: wizard con scroll en main y tracker de seguimiento"
     expect(wizard).toMatch(/WizardStepTracker/);
     expect(wizard).toMatch(/tramite-wizard-scroll/);
     expect(wizard).not.toMatch(/overflow-y-auto overscroll-contain/);
-    // El título del chrome. Ya no se busca el literal "Nuevo Trámite": la propuesta titula con el
-    // trámite ("Matrícula Inicial"), y la referencia del expediente bajó a su propia franja.
+    // El título del chrome es sr-only (PDF: sin títulos arriba); displayTitle sigue en el árbol a11y.
     expect(wizard).toMatch(/\{displayTitle\}/);
+    expect(wizard).toMatch(/className="sr-only"/);
     expect(wizard).toMatch(/sticky top-0/);
     expect(tracker).toMatch(/aria-label="Asistente de seguimiento"/);
     expect(tracker).not.toMatch(/sticky top/);

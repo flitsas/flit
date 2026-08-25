@@ -43,7 +43,8 @@ public sealed class CreateProcedureInstanceFromConsultaHandlerTests
             _transitOfficeResolver);
 
         return new CreateProcedureInstanceFromConsultaHandler(
-            _repo, createHandler, patchHandler, preflightHandler, _previewStore, _transitOfficeResolver);
+            _repo, createHandler, patchHandler, preflightHandler, _previewStore, _transitOfficeResolver,
+            typeRepo: _typeRepo);
     }
 
     private void SetUpMatriculaHappyPathHastaLaValidacion(Guid tenantId, Guid transitOfficeId)
@@ -130,5 +131,84 @@ public sealed class CreateProcedureInstanceFromConsultaHandlerTests
         // Tampoco debió consultar la secretaría: eso es exclusivo de matrícula inicial.
         await _transitOfficeResolver.DidNotReceive()
             .ResolveEnabledByIdAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── ADR-0050: el tipo elegido decide, no la familia ──────────────────────────────────────────
+
+    [Fact]
+    public async Task UnCodeQueNoEstaEnElCatalogo_SeRechazaAntesDeCrearNada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _typeRepo.GetByCodePublishedAsync("NO_EXISTE", Arg.Any<CancellationToken>())
+            .Returns((ProcedureType?)null);
+
+        var request = new CreateFromConsultaRequest(
+            Guid.NewGuid(), Guid.NewGuid(), "OTROS",
+            Vin: null, Plate: "IWL38D",
+            OwnerDocumentType: "CC", OwnerDocumentNumber: "1020304050", PreviewToken: null,
+            ProcedureTypeCode: "NO_EXISTE");
+
+        var (_, error, _, _) = await BuildHandler().HandleAsync(request, ct);
+
+        error.Should().Be("procedure_type_not_found");
+        await _repo.DidNotReceive().AddAsync(Arg.Any<ProcedureInstance>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UnTramiteDeOtrosEntraPorPlacaYNoExigeVin()
+    {
+        // El defecto que ADR-0050 corrige: por familia, todo lo que no era traspaso entraba por VIN,
+        // así que un blindaje sobre un vehículo YA matriculado pedía un VIN y no dejaba avanzar.
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        _typeRepo.GetByCodePublishedAsync("BLINDAJE", Arg.Any<CancellationToken>())
+            .Returns(new ProcedureType
+            {
+                Id = Guid.NewGuid(),
+                Code = "BLINDAJE",
+                Name = "Blindaje",
+                Family = "OTROS",
+                GateProfile = """{"entryMode":"PLATE","requiresBuyer":true}""",
+            });
+        _repo.FindTramitesByPlacaAsync(tenantId, Arg.Any<string>(), Guid.Empty, Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        var request = new CreateFromConsultaRequest(
+            tenantId, Guid.NewGuid(), "OTROS",
+            Vin: null, Plate: "IWL38D",
+            OwnerDocumentType: "CC", OwnerDocumentNumber: "1020304050", PreviewToken: null,
+            ProcedureTypeCode: "BLINDAJE");
+
+        var (_, error, _, _) = await BuildHandler().HandleAsync(request, ct);
+
+        // Sin VIN y sin secretaría llegaría hasta aquí igualmente si se le tratara como matrícula.
+        error.Should().NotBe("identificador_requerido");
+        error.Should().NotBe(TransitOfficeSelectionPolicy.RequiredErrorCode);
+    }
+
+    [Fact]
+    public async Task SinPlaca_UnTramiteDeOtrosSiCortaPorIdentificador()
+    {
+        // La contraparte: el identificador que exige es el que declara el tipo, no «alguno».
+        var ct = TestContext.Current.CancellationToken;
+        _typeRepo.GetByCodePublishedAsync("BLINDAJE", Arg.Any<CancellationToken>())
+            .Returns(new ProcedureType
+            {
+                Id = Guid.NewGuid(),
+                Code = "BLINDAJE",
+                Name = "Blindaje",
+                Family = "OTROS",
+                GateProfile = """{"entryMode":"PLATE","requiresBuyer":true}""",
+            });
+
+        var request = new CreateFromConsultaRequest(
+            Guid.NewGuid(), Guid.NewGuid(), "OTROS",
+            Vin: "1HGCM82633A004352", Plate: null,
+            OwnerDocumentType: null, OwnerDocumentNumber: null, PreviewToken: null,
+            ProcedureTypeCode: "BLINDAJE");
+
+        var (_, error, _, _) = await BuildHandler().HandleAsync(request, ct);
+
+        error.Should().Be("identificador_requerido");
     }
 }

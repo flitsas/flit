@@ -206,13 +206,12 @@ public sealed class TraspasoOrganismoEnPasoUnoTests
         var tenant = Guid.NewGuid();
         var instancia = new Flit.Tramites.Domain.Entities.ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? TramiteModalidadEntradaCodes.Traspaso),
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRA-2026-000001",
             Status = Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.Traspaso,
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instancia.FieldValues.Add(new Flit.Tramites.Domain.Entities.ProcedureInstanceFieldValue

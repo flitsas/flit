@@ -62,10 +62,13 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
         new("cambio_combustible", "Cambio de combustible"),
     ];
 
+    // ADR-0050 — el filtro pasa a las tres familias del catálogo. Antes solo ofrecía las dos
+    // modalidades, así que los trámites de OTROS no se podían filtrar y se mezclaban con matrículas.
     private static readonly QueryFieldOptionDto[] TipoTramiteOptions =
     [
-        new("matricula_inicial", "Matrícula inicial"),
-        new("traspaso", "Traspaso"),
+        new("MATRICULAS", "Matrículas"),
+        new("TRASPASO", "Traspaso"),
+        new("OTROS", "Otros trámites"),
     ];
 
     private static readonly QueryFieldOptionDto[] EstadoOptions =

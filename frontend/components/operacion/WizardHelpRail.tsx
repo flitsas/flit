@@ -5,7 +5,6 @@ import { FileText, ListChecks } from 'lucide-react';
 import { WizardModal } from './WizardModal';
 import { ActiveDeedsList, useActiveDeeds } from './ActiveDeedsCollapse';
 import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformativo';
-import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
  * Carril de consulta del primer paso, en la disposición de la propuesta: dos iconos anclados al
@@ -22,11 +21,12 @@ import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
  * viewport y no quede anidado en un contenedor que no es la raíz del documento.
  */
 export function WizardHelpRail({
-  modalidad,
+  procedureTypeCode,
   transitOfficeId,
   tenantId,
 }: {
-  modalidad: WizardModalidad;
+  /** `code` del tipo en el catálogo: gobierna qué documentos se listan (ADR-0050). */
+  procedureTypeCode: string;
   transitOfficeId?: string;
   tenantId?: string;
 }) {
@@ -71,7 +71,7 @@ export function WizardHelpRail({
       )}
 
       <ProcedureDocsPreviewInformativo
-        modalidad={modalidad}
+        procedureTypeCode={procedureTypeCode}
         transitOfficeId={transitOfficeId}
         open={documentos}
         onOpenChange={setDocumentos}

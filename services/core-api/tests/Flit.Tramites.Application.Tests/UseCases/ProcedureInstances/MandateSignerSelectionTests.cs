@@ -48,12 +48,12 @@ public sealed class MandateSignerSelectionTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = Tenant,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "MAT-2026-000001",
             Status = estado,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             MandateSignerId = elegido,
             CreatedAt = DateTimeOffset.UtcNow,
         };

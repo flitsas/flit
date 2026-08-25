@@ -113,12 +113,12 @@ public sealed class MandatoApprovalFirmaBaulTests
         var id = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = Tenant,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Entregado,
-            ModalidadEntrada = "matricula_inicial",
             TransitOfficeId = OfficeId,
             MandateSignerId = SignerId,
             CreatedAt = DateTimeOffset.UtcNow,

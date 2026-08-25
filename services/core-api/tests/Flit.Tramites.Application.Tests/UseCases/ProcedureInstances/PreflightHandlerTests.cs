@@ -77,15 +77,41 @@ public sealed class PreflightHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = modalidad,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        foreach (var a in actors)
+            instance.Actors.Add(a);
+        return instance;
+    }
+
+    /// <summary>
+    /// ADR-0050 — instancia de un TIPO concreto, para las familias que la sobrecarga por modalidad no
+    /// sabe representar (`ProcedureTypeFixture.For` solo distingue matrícula de traspaso).
+    /// </summary>
+    private static ProcedureInstance InstanceOf(
+        ProcedureType type,
+        params ProcedureInstanceActor[] actors)
+    {
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = type,
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            ProcedureTypeId = type.Id,
+            ReferenceNumber = "TRM-2026-000001",
+            Status = TramiteEstado.Borrador,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        // Un trámite de OTROS entra por PLACA: el VIN NO se captura en su paso 1. Dejarlo fuera es
+        // parte del caso — si el preflight cayera en la rama de VIN, consultaría con la mano vacía.
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         foreach (var a in actors)
             instance.Actors.Add(a);
@@ -382,6 +408,115 @@ public sealed class PreflightHandlerTests
         // Matrícula: el operador elige libremente; el preflight NO consulta el resolver ni fija el id.
         resolver.LastName.Should().BeNull();
         instance.FieldValues.Should().NotContain(f => f.FieldKey == "transit_office_id");
+    }
+
+    // ── ADR-0050: la familia OTROS entra por PLACA ────────────────────────────
+    // Antes caía en el `else` de la rama de matrícula y se consultaba por VIN. Un blindaje o un
+    // duplicado de tarjeta nunca traen VIN —su paso 1 pide placa—, así que el pre-vuelo corría
+    // contra un identificador vacío y el semáforo salía en gris sin que nada fallara.
+
+    /// <summary>Cadena con un proveedor DISTINTO por identificador, para ver cuál se usó.</summary>
+    private static ConsultationTenantOverride CadenaPorIdentificador() =>
+        new(
+            new Dictionary<string, ConsultationChainSelection>(StringComparer.OrdinalIgnoreCase)
+            {
+                [ConsultationKindKeys.VehiclePlate] = new("proveedor_placa", []),
+                [ConsultationKindKeys.VehicleVin] = new("proveedor_vin", []),
+            },
+            FailoverTimeoutMs: 6000);
+
+    [Fact]
+    public async Task Post_Otros_ConsultaElVehiculoPorPlaca_NoPorVin()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = InstanceOf(ProcedureTypeFixture.Blindaje, Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var handler = HandlerWith(
+            CadenaPorIdentificador(),
+            ("proveedor_placa", new StubProvider("proveedor_placa", Result("green", Check("ok")))),
+            ("proveedor_vin", new StubProvider("proveedor_vin", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("proveedor_placa");
+        result.Provider.Should().NotContain("proveedor_vin");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_SigueConsultandoPorVin()
+    {
+        // REGRESIÓN de la rama que NO se tocó: la matrícula inicial es el único caso sin placa.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var handler = HandlerWith(
+            CadenaPorIdentificador(),
+            ("proveedor_placa", new StubProvider("proveedor_placa", Result("green", Check("ok")))),
+            ("proveedor_vin", new StubProvider("proveedor_vin", Result("green", Check("ok")))));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("proveedor_vin");
+    }
+
+    [Fact]
+    public async Task Post_Otros_ConsultaComparendosDelTitular_YNoDeUnVendedorQueNoInterviene()
+    {
+        // En OTROS interviene UN solo actor: el propietario inscrito, persistido como `comprador`.
+        // El expediente trae también un vendedor (residuo posible de un borrador o de una vía de
+        // entrada): no debe consultarse, porque en este trámite nadie vende.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = InstanceOf(
+            ProcedureTypeFixture.Blindaje, Actor("comprador", "111"), Actor("vendedor", "222"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var handler = HandlerWith(
+            ("kyverum_runt", new StubProvider("kyverum_runt", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().Contain(c => c.Key.StartsWith("simit_comprador", StringComparison.Ordinal));
+        result.Checks.Should().NotContain(c => c.Key.StartsWith("simit_vendedor", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Post_Otros_FijaElOrganismoDesdeElRunt()
+    {
+        // El vehículo ya está inscrito: el organismo lo fija el registro, no el operador. Estaba
+        // atado al código de traspaso_standard, así que la familia OTROS lo elegía a mano y podía
+        // escoger uno distinto al del RUNT.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = InstanceOf(ProcedureTypeFixture.Blindaje, Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var vehiculo = new StubProvider("kyverum_runt",
+            new ConsultationResult("kyverum_runt", "green", [Check("ok")],
+                [new HydratedField("transit_office_name", "SDM BOGOTÁ", null)]));
+        var officeId = Guid.NewGuid();
+        var resolver = new StubTransitOfficeResolver(
+            new ResolvedTransitOffice(officeId, "11001000", "SDM BOGOTÁ", "11001"));
+
+        var handler = BuildHandler(
+            null,
+            [
+                ("kyverum_runt", vehiculo),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ],
+            transitOfficeResolver: resolver);
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        resolver.LastName.Should().Be("SDM BOGOTÁ");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "transit_office_id" && f.ValueText == officeId.ToString());
     }
 
     // ── HU #10478: cadena Kyverum-first → Verifik ─────────────────────────────

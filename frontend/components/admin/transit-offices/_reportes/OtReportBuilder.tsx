@@ -23,7 +23,7 @@ import { ColumnPicker } from "@/components/consultas/ColumnPicker";
 import {
   DateRangeFields,
   EmpresaSelect,
-  ModalidadSelect,
+  FamiliaSelect,
   RangePresets,
   defaultRange,
   type DateRange,
@@ -75,7 +75,7 @@ interface ZoomState {
 export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderProps) {
   const [range, setRange] = useState<DateRange>(() => defaultRange());
   const [zoom, setZoom] = useState<ZoomState | null>(null);
-  const [modalidad, setModalidad] = useState("");
+  const [familia, setFamilia] = useState("");
   const [clientTenantId, setClientTenantId] = useState("");
 
   const [sortBy, setSortBy] = useState<OtReportSort>(OT_REPORT_SORT.radicado);
@@ -122,16 +122,16 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
     () => ({
       from: range.from,
       to: range.to,
-      modalidad: modalidad || undefined,
+      family: familia || undefined,
       clientTenantId: clientTenantId || undefined,
       transitOfficeId,
     }),
-    [range.from, range.to, modalidad, clientTenantId, transitOfficeId],
+    [range.from, range.to, familia, clientTenantId, transitOfficeId],
   );
 
   // Cambiar un filtro o el orden devuelve a la primera página: quedarse en la página 7 de un
   // informe que ahora tiene dos es una pantalla vacía que parece un fallo.
-  const filterKey = `${params.from}|${params.to}|${params.modalidad ?? ""}|${params.clientTenantId ?? ""}|${sortBy}|${desc}`;
+  const filterKey = `${params.from}|${params.to}|${params.family ?? ""}|${params.clientTenantId ?? ""}|${sortBy}|${desc}`;
   const lastFilterKey = useRef(filterKey);
   if (lastFilterKey.current !== filterKey && page !== 1) {
     lastFilterKey.current = filterKey;
@@ -273,7 +273,7 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
         <RangePresets range={range} onChange={changeRange} />
         <div className="flex flex-wrap items-end gap-3">
           <DateRangeFields range={range} onChange={changeRange} />
-          <ModalidadSelect value={modalidad} onChange={setModalidad} />
+          <FamiliaSelect value={familia} onChange={setFamilia} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Generando…" : "Actualizar"}

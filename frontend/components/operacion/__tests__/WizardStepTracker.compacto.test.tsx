@@ -58,7 +58,41 @@ describe('WizardStepTracker — modo condensado', () => {
     pintar(false);
     expect(screen.getByTitle('Consulta Vehículo').className).not.toContain('sr-only');
     expect(screen.getByTitle('Requisitos').className).not.toContain('sr-only');
-    // El motivo vuelve: en la cabecera completa hay sitio y es donde el gestor lo espera.
-    expect(screen.getByText(/^•/)).toBeInTheDocument();
+    // El motivo vuelve: en la cabecera completa hay sitio y es donde el gestor lo espera. Es UNA
+    // línea, no una lista de viñetas — la línea de tiempo resume y el detalle vive en el paso.
+    expect(screen.getByText('Consulta RUNT del comprador')).toBeInTheDocument();
+  });
+
+  it('con varios motivos resume en una sola línea en vez de volcarlos todos', () => {
+    // El caso real: el paso de requisitos llegaba con el agregado MÁS un código por cada documento
+    // que falta, y la línea de tiempo los pintaba los siete, en crudo y en mayúsculas.
+    render(
+      <WizardStepTracker
+        steps={[
+          { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
+          {
+            index: 1,
+            key: 'documentos',
+            label: 'Documentos',
+            status: 'incomplete',
+            reasons: [
+              'documentos_incompletos',
+              'DOCUMENT_COMPRAVENTA_REQUIRED',
+              'DOCUMENT_SOAT_REQUIRED',
+            ],
+          },
+        ]}
+        activeIndex={1}
+        onGoToStep={vi.fn()}
+        compacto={false}
+      />,
+    );
+
+    expect(screen.getByText('Faltan documentos obligatorios y 2 más')).toBeInTheDocument();
+    expect(screen.queryByText(/DOCUMENT COMPRAVENTA REQUIRED/)).toBeNull();
+    // El detalle no se pierde: queda en el title, al alcance sin ocupar la línea de tiempo.
+    expect(
+      screen.getByTitle(/Falta el documento: compraventa/),
+    ).toBeInTheDocument();
   });
 });

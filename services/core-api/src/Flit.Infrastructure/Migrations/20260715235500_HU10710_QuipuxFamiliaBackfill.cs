@@ -11,7 +11,7 @@ namespace Flit.Infrastructure.Migrations
     /// <remarks>
     /// Quipux (HU #10710) — rellena <c>external_refs-&gt;'quipux'-&gt;&gt;'familia'</c> en los tipos de
     /// trámite ya sembrados. La familia (MATRICULA | TRASPASO | OTROS) decide cuál de las tres
-    /// banderas de la secretaría destino manda (<c>quipux_matricula</c> / <c>_traspaso</c> /
+    /// banderas de la secretaría destino manda (<c>quipux_registration</c> / <c>_transfer</c> /
     /// <c>_otros</c>); sin ella el tipo NO es elegible, así que sin este backfill la integración
     /// quedaría inerte allí donde el seed ya había corrido.
     ///

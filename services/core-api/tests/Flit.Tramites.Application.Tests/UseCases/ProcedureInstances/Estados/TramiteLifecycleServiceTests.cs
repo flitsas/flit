@@ -54,13 +54,12 @@ public sealed class TramiteLifecycleServiceTests
         var tenantId = Guid.NewGuid();
         var i = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         if (conGates)
@@ -101,6 +100,7 @@ public sealed class TramiteLifecycleServiceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         return i;
@@ -598,13 +598,12 @@ public sealed class TramiteLifecycleServiceTests
         var tenantId = Guid.NewGuid();
         var i = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000900",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             TransitOfficeId = transitOfficeId,
             CreatedAt = createdAt,
         };
@@ -672,6 +671,7 @@ public sealed class TramiteLifecycleServiceTests
             Name = "Traspaso estándar",
             Family = "traspaso",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         return i;

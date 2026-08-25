@@ -405,8 +405,16 @@ public static class FurFieldMapper
         return null;
     }
 
+    /// <summary>
+    /// ¿El FUR lleva sección de parte vendedora? Lo declara el tipo (ADR-0050).
+    /// <para>Antes se decidía buscando la palabra "TRASPASO" dentro de la tipología o de la
+    /// modalidad. Además de dar por traspaso cualquier código que la contuviera, dejaba fuera los
+    /// tipos que sí tienen parte saliente sin llamarse así. Se conserva la heurística como respaldo
+    /// para los documentos que aún no traen la capacidad.</para>
+    /// </summary>
     private static bool IsTraspaso(FurDocumentData data) =>
-        Norm(data.TipologiaCodigo).Contains("TRASPASO")
+        data.RequiereVendedor
+        || Norm(data.TipologiaCodigo).Contains("TRASPASO")
         || Norm(data.Modalidad).Contains("TRASPASO");
 
     private static FurFieldValue Text(string? value) => new(Val(value));

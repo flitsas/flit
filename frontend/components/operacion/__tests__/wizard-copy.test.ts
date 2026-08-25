@@ -1,6 +1,6 @@
 // HU #10598 (R10) — copy del gate de prenda. HU #10697 (R19) — RNMC informativo (ya no bloquea).
 import { describe, expect, it } from 'vitest';
-import { blockerCopy, identidadAutomaticaCopy, reasonCopy } from '../wizard-copy';
+import { blockerCopy, identidadAutomaticaCopy, reasonCopy, reasonsSummary } from '../wizard-copy';
 
 // La cadena de identidad automática son cuatro llamadas; el mensaje tiene que decir cuál falló.
 describe('identidadAutomaticaCopy', () => {
@@ -76,5 +76,44 @@ describe('wizard-copy — medida correctiva RNMC informativa (HU #10697)', () =>
 
   it('humaniza códigos desconocidos como fallback legible', () => {
     expect(blockerCopy('codigo_raro')).toBe('Codigo Raro');
+  });
+});
+
+/**
+ * La línea de tiempo dice QUÉ paso falta y a grandes rasgos por qué. El detalle vive en el paso y en
+ * el pie de «Antes de enviar»: listar todos los motivos convertía un paso en un volcado de viñetas.
+ */
+describe('reasonsSummary — una línea para el seguimiento', () => {
+  it('con un solo motivo lo muestra tal cual', () => {
+    expect(reasonsSummary(['documentos_incompletos'])).toBe('Faltan documentos obligatorios');
+  });
+
+  it('con varios muestra el primero y cuántos quedan', () => {
+    // El backend emite el agregado ANTES de los códigos por documento, así que encabeza bien.
+    expect(
+      reasonsSummary([
+        'documentos_incompletos',
+        'DOCUMENT_COMPRAVENTA_REQUIRED',
+        'DOCUMENT_SOAT_REQUIRED',
+      ]),
+    ).toBe('Faltan documentos obligatorios y 2 más');
+  });
+
+  it('sin motivos no pinta nada', () => {
+    expect(reasonsSummary([])).toBeNull();
+  });
+});
+
+describe('documentos obligatorios faltantes', () => {
+  it('traduce el código por patrón en vez de escupirlo en mayúsculas', () => {
+    // Antes salía «DOCUMENT COMPRAVENTA REQUIRED»: la lista viene del catálogo documental y crece
+    // con él, así que no puede haber una entrada por documento en el diccionario.
+    expect(reasonCopy('DOCUMENT_COMPRAVENTA_REQUIRED')).toBe('Falta el documento: compraventa');
+    expect(reasonCopy('DOCUMENT_PAZ_SALVO_REQUIRED')).toBe('Falta el documento: paz salvo');
+    expect(blockerCopy('DOCUMENT_SOAT_REQUIRED')).toBe('Falta el documento: soat');
+  });
+
+  it('no se traga códigos que solo se le parecen', () => {
+    expect(reasonCopy('documentos_incompletos')).toBe('Faltan documentos obligatorios');
   });
 });

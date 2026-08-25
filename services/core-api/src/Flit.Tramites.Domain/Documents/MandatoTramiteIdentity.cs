@@ -65,7 +65,10 @@ public static class MandatoTramiteIdentity
         string? tipologiaCodigo,
         string? modalidad)
     {
-        if (EqualsFamily(family, ProcedureFamily.Traspaso))
+        // ADR-0050 — `ProcedureFamily` dejó de ser una clase de constantes y pasó a ser un enum;
+        // las constantes de texto viven ahora en `ProcedureFamilyCodes`. La comparación sigue siendo
+        // por cadena porque `family` llega tal cual está en la base.
+        if (EqualsFamily(family, ProcedureFamilyCodes.Traspaso))
             return true;
 
         if (EsCodigoTraspaso(procedureTypeCode)

@@ -27,7 +27,7 @@ import { activePreset } from "@/components/consultas/columns";
 import {
   DateRangeFields,
   EmpresaSelect,
-  ModalidadSelect,
+  FamiliaSelect,
   RangePresets,
   defaultRange,
   type DateRange,
@@ -62,7 +62,7 @@ export interface OtReviewersTabProps {
 
 export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtReviewersTabProps) {
   const [range, setRange] = useState<DateRange>(() => defaultRange());
-  const [modalidad, setModalidad] = useState("");
+  const [familia, setFamilia] = useState("");
   const [clientTenantId, setClientTenantId] = useState("");
   const [userIds, setUserIds] = useState<string[]>([]);
 
@@ -109,12 +109,12 @@ export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtRevi
     () => ({
       from: range.from,
       to: range.to,
-      modalidad: modalidad || undefined,
+      family: familia || undefined,
       clientTenantId: clientTenantId || undefined,
       transitOfficeId,
       userIds,
     }),
-    [range.from, range.to, modalidad, clientTenantId, transitOfficeId, userIds],
+    [range.from, range.to, familia, clientTenantId, transitOfficeId, userIds],
   );
 
   const load = useCallback(
@@ -204,7 +204,7 @@ export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtRevi
         <div className="flex flex-wrap items-end gap-3">
           <DateRangeFields range={range} onChange={setRange} />
           <ReviewerPicker selected={userIds} options={reviewers} onChange={setUserIds} />
-          <ModalidadSelect value={modalidad} onChange={setModalidad} />
+          <FamiliaSelect value={familia} onChange={setFamilia} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Generando…" : "Actualizar"}

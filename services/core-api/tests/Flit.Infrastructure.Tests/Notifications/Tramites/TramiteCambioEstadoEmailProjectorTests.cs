@@ -13,7 +13,7 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     {
         var instance = new ProcedureInstance
         {
-            ModalidadEntrada = "matricula_inicial",
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Plate = null,
         };
         var actors = new List<ProcedureInstanceActor>
@@ -42,7 +42,8 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     [Fact]
     public void CodigoDivipola_NoSeImprimeComoCiudad()
     {
-        var instance = new ProcedureInstance { ModalidadEntrada = "traspaso", Plate = "ABC123" };
+        var instance = new ProcedureInstance {
+        ProcedureType = ProcedureTypeFixture.For("traspaso"), Plate = "ABC123" };
         var fields = new Dictionary<string, string?>
         {
             ["transit_office_city"] = "25286",
@@ -59,7 +60,8 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     [Fact]
     public void CodigoDivipola_UsaCiudadDelCompradorEnMetadata()
     {
-        var instance = new ProcedureInstance { ModalidadEntrada = "matricula_inicial", Plate = "ABC123" };
+        var instance = new ProcedureInstance {
+        ProcedureType = ProcedureTypeFixture.For("matricula_inicial"), Plate = "ABC123" };
         var actors = new List<ProcedureInstanceActor>
         {
             new()
@@ -84,7 +86,8 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     [Fact]
     public void MatriculaInicial_NoExponeVendedorEnModelo()
     {
-        var instance = new ProcedureInstance { ModalidadEntrada = "matricula_inicial", Plate = "XYZ99" };
+        var instance = new ProcedureInstance {
+        ProcedureType = ProcedureTypeFixture.For("matricula_inicial"), Plate = "XYZ99" };
         var actors = new List<ProcedureInstanceActor>
         {
             new() { ActorType = "comprador", FullName = "Comprador" },
@@ -102,7 +105,8 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     [Fact]
     public void NombreTipoTramite_SeCopiaTalCualDelCatalogo()
     {
-        var instance = new ProcedureInstance { ModalidadEntrada = "traspaso", Plate = "ABC123" };
+        // ADR-0050 — la familia la deriva el tipo; `modalidad_entrada` ya no existe.
+        var instance = new ProcedureInstance { ProcedureType = ProcedureTypeFixture.Traspaso, Plate = "ABC123" };
 
         var model = TramiteCambioEstadoEmailProjector.Project(
             instance,
@@ -118,7 +122,8 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
     [Fact]
     public void Rechazado_MapeaCausalesYObservacion()
     {
-        var instance = new ProcedureInstance { ModalidadEntrada = "traspaso", Plate = "ABC123" };
+        var instance = new ProcedureInstance {
+        ProcedureType = ProcedureTypeFixture.For("traspaso"), Plate = "ABC123" };
         var causales = new[] { "Documentos ilegibles", "Improntas no coinciden" };
 
         var model = TramiteCambioEstadoEmailProjector.Project(

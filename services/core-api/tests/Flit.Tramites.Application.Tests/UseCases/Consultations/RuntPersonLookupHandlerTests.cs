@@ -55,6 +55,7 @@ public sealed class RuntPersonLookupHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

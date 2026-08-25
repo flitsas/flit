@@ -100,4 +100,101 @@ public sealed class FurNumeral3MarksTests
         Marks("TRASPASO_STANDARD", "TRASPASO", FurPrendaMarking.Ambos)
             .Should().BeEquivalentTo([2, 11, 12]);
     }
+
+    // ── ADR-0050: el fallback por familia ────────────────────────────────────────────────────────
+    // Antes, un código sin casilla propia caía por substring: cualquier cosa que contuviera
+    // "MATRICULA" acababa marcando la casilla 1 del formulario oficial.
+
+    [Fact]
+    public void CodigoDesconocidoDeLaFamiliaOtros_NoMarcaNingunaCasilla()
+    {
+        // Marcar mal una casilla del FUR es peor que no marcar ninguna: el organismo devuelve el
+        // trámite y el error es imputable a FLIT.
+        Marks("TRAMITE_QUE_NO_EXISTE", "OTROS").Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("MATRICULAS", 1)]
+    [InlineData("TRASPASO", 2)]
+    public void CodigoDesconocido_CaeEnLaCasillaDeSuFamilia(string familia, int casilla)
+    {
+        Marks("TIPO_NUEVO_SIN_CASILLA", familia).Should().BeEquivalentTo([casilla]);
+    }
+
+    [Fact]
+    public void UnCodigoQueContieneMatriculaPeroEsDeOtraFamilia_NoHeredaLaCasillaDeMatricula()
+    {
+        // El caso que rompía la heurística por substring.
+        Marks("REVISION_MATRICULA_ESPECIAL", "OTROS").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BlindajeNoMarcaTramiteSolicitado_AunqueSeaDeLaFamiliaOtros()
+    {
+        // El blindaje se declara en su propia casilla de vehículo blindado, no en la rejilla.
+        Marks("BLINDAJE", "OTROS").Should().BeEmpty();
+    }
+
+    // ── ADR-0050: la familia OTROS no acumula (tablas 2 y 3 no se aplican) ───────────────────────
+    // Un trámite de OTROS ES el cambio o ES el gravamen. Sumarle otro no es «acumular trámites del
+    // art. 5.1.8»: es meter dos trámites distintos en un FUR que el organismo devuelve.
+
+    [Fact]
+    public void Otros_NoSumaLaPrendaComplementaria()
+    {
+        // Un duplicado de tarjeta con un gravamen encima: la casilla 10 sí, la 11 NO.
+        Marks("DUPLICADO_TARJETA", "OTROS", FurPrendaMarking.Constitucion)
+            .Should().Equal(10);
+    }
+
+    [Fact]
+    public void Otros_NoSumaTransformacionesComplementarias()
+    {
+        // Un blindaje al que alguien le dejó declarado un cambio de color y de carrocería.
+        Marks(
+            "BLINDAJE",
+            "OTROS",
+            t: new FurTransformacionesDeclaradas(Color: true, Carroceria: true, Combustible: true))
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Otros_ElCambioDelTipoSiSeMarca_YSoloEse()
+    {
+        // CAMBIO_COLOR con carrocería declarada por encima: 5 (suya) y nunca 17.
+        Marks(
+            "CAMBIO_COLOR",
+            "OTROS",
+            t: new FurTransformacionesDeclaradas(Color: true, Carroceria: true))
+            .Should().Equal(5);
+    }
+
+    [Fact]
+    public void Otros_TipoPrendario_SiMarcaSuPropioGravamen()
+    {
+        // CAMBIO_ACREEDOR es prenda-base: su casilla base es la 18, y la decisión de gravamen que
+        // el propio trámite captura SÍ marca 11/12 — no es la tabla 2, es la tabla 1.
+        Marks("CAMBIO_ACREEDOR", "OTROS", FurPrendaMarking.Ambos)
+            .Should().BeEquivalentTo([18, 11, 12]);
+    }
+
+    [Fact]
+    public void MatriculaYTraspaso_ConservanLaAcumulacionDelArticulo518()
+    {
+        // Regresión: apagar los complementarios en OTROS no puede tocar a las familias que sí
+        // acumulan. Es el mismo ejemplo cerrado del artefacto, más el de matrícula.
+        Marks(
+            "MATRICULA_NUEVA",
+            "MATRICULAS",
+            FurPrendaMarking.Constitucion,
+            new FurTransformacionesDeclaradas(Color: true))
+            .Should().BeEquivalentTo([1, 11, 5]);
+
+        Marks(
+            "TRASPASO_STANDARD",
+            "TRASPASO",
+            FurPrendaMarking.Levantamiento,
+            new FurTransformacionesDeclaradas(Combustible: true))
+            .Should().BeEquivalentTo([2, 12, 18]);
+    }
 }

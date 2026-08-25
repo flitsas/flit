@@ -124,7 +124,7 @@ public sealed class RunPreflightHandler(
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft", null, null);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
+        var modalidad = instance.Family;
 
         var fieldValues = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
@@ -160,7 +160,7 @@ public sealed class RunPreflightHandler(
         // checks antes de componer el overall (ver AplicarPoliticaDeBloqueo).
         var blockingRules = await _blockingPolicy.GetAsync(tenantId, otId, ct);
 
-        if (modalidad == TramiteModalidadEntrada.Traspaso)
+        if (modalidad == ProcedureFamily.Traspaso)
         {
             // Vehículo por placa (requiere documento del propietario actual). El doc del
             // propietario se persiste en field_values en el paso "consulta" (puede llegar
@@ -176,6 +176,27 @@ public sealed class RunPreflightHandler(
             {
                 await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, tenantOverride, ct);
                 await RunSimitAsync(registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, tenantOverride, ct);
+            }
+        }
+        else if (modalidad == ProcedureFamily.Otros)
+        {
+            // ADR-0050 — la familia OTROS opera sobre un vehículo YA matriculado: entra por placa
+            // (gate_profile.entryMode = PLATE) igual que el traspaso. Antes caía en el `else` de
+            // abajo y se consultaba por VIN, de modo que un blindaje o un duplicado de tarjeta —que
+            // nunca traen VIN, porque el paso 1 pide placa— corrían el pre-vuelo contra un
+            // identificador vacío y el semáforo salía en gris sin que nada fallara.
+            //
+            // Interviene UN SOLO actor, el propietario inscrito, persistido como `comprador` (el
+            // modelo no tiene rol 'propietario'). No hay parte saliente que consultar: pedir un
+            // SIMIT de vendedor aquí devolvería siempre vacío y además insinuaría una compraventa.
+            vehicleFields = await RunVehiculoAsync(chainResolver, checks, providersUsed, ConsultationKind.VehiclePlate, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, precomputedVehicle, ct);
+            if (finesDisabled)
+            {
+                AddOmittedCheck(checks, CheckSimitOmitida, "Consulta de comparendos omitida", "No se consultaron los comparendos");
+            }
+            else
+            {
+                await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT propietario", comprador, tenantOverride, ct);
             }
         }
         else
@@ -198,10 +219,10 @@ public sealed class RunPreflightHandler(
         // consulta dedicada. Idempotente: upsert por field_key.
         UpsertHydratedFields(instance, tenantId, vehicleFields);
 
-        // B11 (HU #10659) — en TRASPASO el vehículo ya tiene OT en RUNT: tras hidratar
-        // transit_office_name, resolver el OT habilitado de la empresa y fijar también id/code/city.
-        // El OT queda fijado desde el RUNT (no editable manualmente; ver PatchFieldValuesHandler).
-        await AutoBindTransitOfficeForTraspasoAsync(instance, tenantId, ct);
+        // B11 (HU #10659) — en TRASPASO y en la familia OTROS el vehículo ya tiene OT en RUNT: tras
+        // hidratar transit_office_name, resolver el OT habilitado de la empresa y fijar también
+        // id/code/city. El OT queda fijado desde el RUNT.
+        await AutoBindTransitOfficeFromRuntAsync(instance, tenantId, ct);
 
         // FEATURE 05 — ajusta la severidad de cada criterio configurable (soat/rtm/estado/fines/rnmc)
         // según la política de la compañía para el OT destino. Va ANTES de la relajación de matrícula
@@ -267,13 +288,13 @@ public sealed class RunPreflightHandler(
     /// </summary>
     private async Task<Guid?> FindDuplicateActiveProcedureAsync(
         ProcedureInstance instance,
-        TramiteModalidadEntrada? modalidad,
+        ProcedureFamily? modalidad,
         Guid tenantId,
         string? vin,
         string? plate,
         CancellationToken ct)
     {
-        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad == ProcedureFamily.Matriculas)
         {
             var vinNorm = VinNormalizer.Normalize(vin);
             if (vinNorm is null)
@@ -284,7 +305,7 @@ public sealed class RunPreflightHandler(
                 existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
-        if (modalidad == TramiteModalidadEntrada.Traspaso)
+        if (modalidad == ProcedureFamily.Traspaso)
         {
             var placaNorm = plate?.Trim().ToUpperInvariant();
             if (string.IsNullOrEmpty(placaNorm))
@@ -419,10 +440,10 @@ public sealed class RunPreflightHandler(
     /// </summary>
     internal static VehicleStateBlock? EndurecerEstadoVehiculoMatricula(
         List<PreflightCheckDto> checks,
-        TramiteModalidadEntrada? modalidad,
+        ProcedureFamily? modalidad,
         TramiteValidationMode mode = TramiteValidationMode.Block)
     {
-        if (modalidad != TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad != ProcedureFamily.Matriculas)
             return null;
 
         for (var i = 0; i < checks.Count; i++)
@@ -900,20 +921,27 @@ public sealed class RunPreflightHandler(
     }
 
     /// <summary>
-    /// B11 (HU #10659) — SOLO en traspaso_standard: tras hidratar <c>transit_office_name</c> desde el
-    /// RUNT, resuelve el OT habilitado de la empresa (por nombre, case-insensitive) y fija también
-    /// <c>transit_office_id</c>, <c>transit_office_code</c> y <c>transit_office_city</c>
-    /// (Source="consultation"). Si el nombre RUNT NO coincide con ningún OT habilitado se conserva solo
-    /// <c>transit_office_name</c> y NO se inventa un id (el traspaso queda a la espera de que el
-    /// SuperAdmin habilite el grant correcto). En matrícula no hace nada (el operador elige libremente).
+    /// B11 (HU #10659) — cuando el vehículo YA está inscrito, el organismo lo fija el RUNT y no el
+    /// operador: tras hidratar <c>transit_office_name</c>, resuelve el OT habilitado de la empresa
+    /// (por nombre, case-insensitive) y fija también <c>transit_office_id</c>,
+    /// <c>transit_office_code</c> y <c>transit_office_city</c> (Source="consultation"). Si el nombre
+    /// RUNT NO coincide con ningún OT habilitado se conserva solo <c>transit_office_name</c> y NO se
+    /// inventa un id (el trámite queda a la espera de que el SuperAdmin habilite el grant correcto).
+    ///
+    /// <para>Aplica a traspaso_standard —donde nació— y a TODA la familia OTROS: un cambio de color o
+    /// un levantamiento de prenda se radican, por norma, ante el organismo donde el vehículo está
+    /// matriculado. Estaba atado al código de una sola tipología, así que la familia OTROS dejaba el
+    /// organismo sin resolver y el gestor lo elegía a mano, pudiendo escoger uno distinto al del RUNT.
+    /// En matrícula inicial no hace nada: allí no hay inscripción previa y el operador sí elige.</para>
     /// </summary>
-    private async Task AutoBindTransitOfficeForTraspasoAsync(
+    private async Task AutoBindTransitOfficeFromRuntAsync(
         ProcedureInstance instance,
         Guid tenantId,
         CancellationToken ct)
     {
-        var tipologia = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
-        if (!string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal))
+        var esTraspasoStandard = string.Equals(
+            instance.TypeCode, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal);
+        if (!esTraspasoStandard && instance.Family != ProcedureFamily.Otros)
             return;
 
         var runtName = instance.FieldValues

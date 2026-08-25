@@ -93,12 +93,12 @@ public sealed class GetPortalByTokenHandler(IProcedureInstanceRepository repo)
 
     internal static PortalViewDto BuildView(ProcedureInstanceParticipant p, ProcedureInstance instance)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var tipologia = TramiteTipologiaCatalog.Get(codigo);
 
         var summary = new PortalInstanceSummary(
             instance.ReferenceNumber,
-            instance.ModalidadEntrada,
+            instance.FamilyCode,
             codigo,
             tipologia?.Nombre);
 
@@ -348,7 +348,7 @@ public sealed class GetFirmaUrlPortalHandler(IProcedureInstanceRepository repo)
             return (null, "not_found");
 
         var instance = participant.ProcedureInstance!;
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var aplica = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase)
             && participant.Rol is ParticipantRoles.Comprador or ParticipantRoles.Vendedor;
         if (!aplica)

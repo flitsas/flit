@@ -122,7 +122,7 @@ beforeEach(() => {
 const INSTANCE_DRAFT: InstanceSummary = {
   id: 'inst-1',
   referenceNumber: 'TR-001',
-  modalidad: 'traspaso',
+  modalidad: 'TRASPASO',
   estado: 'borrador',
   placa: 'ABC123',
   vin: 'VIN-XYZ-001',
@@ -146,7 +146,7 @@ const INSTANCE_DRAFT: InstanceSummary = {
 const INSTANCE_SUBMITTED: InstanceSummary = {
   id: 'inst-2',
   referenceNumber: 'MA-002',
-  modalidad: 'matricula_inicial',
+  modalidad: 'MATRICULAS',
   estado: 'entregado',
   placa: null,
   vin: 'VIN-NEW-002',
@@ -243,8 +243,10 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     await screen.findByRole('table', { name: /Trámites en curso/ });
 
     // La modalidad se filtra con tabs (rol `tab`), no con chips toggle.
-    expect(screen.getByRole('tab', { name: 'Matrícula inicial' })).toBeInTheDocument();
+    // ADR-0050 — las pestañas son las tres familias del catálogo, no las dos modalidades.
+    expect(screen.getByRole('tab', { name: 'Matrículas' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Traspaso' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Otros trámites' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Todos' })).toBeInTheDocument();
     // El estado se filtra con la tira de KPIs; su nombre accesible lleva el conteo.
     for (const estado of ['Borrador', 'Entregado', 'Anulado']) {

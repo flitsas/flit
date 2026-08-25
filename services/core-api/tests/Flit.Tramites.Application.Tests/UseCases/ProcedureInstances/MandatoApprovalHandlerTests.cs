@@ -27,6 +27,7 @@ public sealed class MandatoApprovalHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = Guid.NewGuid(),
             TenantId = Tenant,
             TransitOfficeId = transitOffice ?? Office,
@@ -188,6 +189,7 @@ public sealed class MandatoApprovalHandlerTests
         // igual): si CUALQUIER adjunto de mandato no es "company", sigue exigiendo mandatario.
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = Guid.NewGuid(),
             TenantId = Tenant,
             TransitOfficeId = Office,

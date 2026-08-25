@@ -37,7 +37,6 @@ function normalizeCategories(data: AnalyticsOverviewResponse | null): Record<Ana
   const base: Record<AnalyticsCategory, CategoryMetrics> = {
     matriculas: { category: "matriculas", total: 0, byStatus: [] },
     traspasos: { category: "traspasos", total: 0, byStatus: [] },
-    vehicular: { category: "vehicular", total: 0, byStatus: [] },
     otros: { category: "otros", total: 0, byStatus: [] },
   };
   for (const cat of data?.categories ?? []) {
@@ -51,7 +50,6 @@ function categoryTotals(data: AnalyticsOverviewResponse | null): Record<Analytic
   const totals = {
     matriculas: byCat.matriculas.total,
     traspasos: byCat.traspasos.total,
-    vehicular: byCat.vehicular.total,
     otros: byCat.otros.total,
     total: 0,
   };
@@ -198,7 +196,6 @@ interface TrendRow {
   label: string;
   matriculas: number;
   traspasos: number;
-  vehicular: number;
   otros: number;
 }
 
@@ -209,7 +206,7 @@ function buildTrendRows(data: MonthlyTrendResponse | null): TrendRow[] {
     const key = `${point.year}-${String(point.month).padStart(2, "0")}`;
     let row = byMonth.get(key);
     if (!row) {
-      row = { label: key, matriculas: 0, traspasos: 0, vehicular: 0, otros: 0 };
+      row = { label: key, matriculas: 0, traspasos: 0, otros: 0 };
       byMonth.set(key, row);
     }
     row[point.category] += point.total;

@@ -137,12 +137,12 @@ public sealed class PredicadoActorJuridicoUnicoTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue

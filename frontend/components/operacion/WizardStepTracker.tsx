@@ -3,10 +3,10 @@
 import { useMemo } from 'react';
 import { Check, Lock } from 'lucide-react';
 import type { WizardStep, WizardStepStatus } from '@/lib/api/types/procedure-runtime';
-import { reasonCopy, stepLabelCopy } from './wizard-copy';
+import { reasonCopy, reasonsSummary, stepLabelCopy } from './wizard-copy';
 import { canNavigateToStep } from './wizard-navigation';
 import {
-  coalesceTraspasoActorSteps,
+  coalesceActorSteps,
   displayIndexForActive,
   sourceIndexForDisplayClick,
   type DisplayWizardStep,
@@ -122,7 +122,7 @@ export function WizardStepTracker({
   compacto = false,
 }: WizardStepTrackerProps) {
   const displaySteps: DisplayWizardStep[] = useMemo(
-    () => (coalesceActores ? coalesceTraspasoActorSteps(steps) : steps.map((s, i) => ({ ...s, sourceIndexes: [i] }))),
+    () => (coalesceActores ? coalesceActorSteps(steps) : steps.map((s, i) => ({ ...s, sourceIndexes: [i] }))),
     [steps, coalesceActores],
   );
   const displayActive = displayIndexForActive(displaySteps, activeIndex);
@@ -198,17 +198,13 @@ export function WizardStepTracker({
                       saltar el formulario entero al navegar. Qué falta se sigue diciendo en el pie
                       y en el propio paso. */}
                   {!compacto && isActive && s.status === 'incomplete' && s.reasons.length > 0 && (
-                    <span className="mt-1 block space-y-0.5">
-                      {s.reasons.map((r) => (
-                        <span
-                          key={r}
-                          className="block truncate text-xs"
-                          style={{ color: 'var(--badge-warning-fg)' }}
-                          title={reasonCopy(r)}
-                        >
-                          • {reasonCopy(r)}
-                        </span>
-                      ))}
+                    <span
+                      className="mt-1 block truncate text-xs"
+                      style={{ color: 'var(--badge-warning-fg)' }}
+                      // El detalle completo queda al alcance sin ocupar la línea de tiempo.
+                      title={s.reasons.map(reasonCopy).join(' · ')}
+                    >
+                      {reasonsSummary(s.reasons)}
                     </span>
                   )}
                 </span>

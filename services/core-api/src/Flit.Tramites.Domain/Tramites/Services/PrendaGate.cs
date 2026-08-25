@@ -44,6 +44,17 @@ public static class PrendaGate
     public static string? EvaluateMatriculaInicial(
         ProcedureInstancePrenda? prendaVigente,
         IReadOnlyCollection<string> docTipos)
+        => EvaluateDecision(prendaVigente, docTipos);
+
+    /// <summary>
+    /// El núcleo de R10 sin disparador: exige decisión vigente y, si la decisión lo requiere, su
+    /// documento y acreedor. Lo consume la sección <c>prenda_decision</c> del motor dinámico
+    /// (ADR-0050), donde el disparador ya no es la modalidad sino <c>gate_profile.hasPrendaGate</c>.
+    /// Mismo cuerpo que <see cref="EvaluateMatriculaInicial"/>, con un nombre que no presupone familia.
+    /// </summary>
+    public static string? EvaluateDecision(
+        ProcedureInstancePrenda? prendaVigente,
+        IReadOnlyCollection<string> docTipos)
         => EvaluateNucleo(prendaVigente, docTipos);
 
     private static string? EvaluateNucleo(

@@ -8,11 +8,11 @@ namespace Flit.Admin.Domain.RejectionReasons;
 public interface IRejectionReasonRepository
 {
     /// <summary>
-    /// Lista el catálogo ordenado por modalidad y orden de presentación.
-    /// <paramref name="modalidad"/> nula devuelve todas las modalidades.
+    /// Lista el catálogo ordenado por familia y orden de presentación.
+    /// <paramref name="familia"/> nula devuelve todas las modalidades.
     /// </summary>
     Task<IReadOnlyList<RejectionReasonItem>> ListAsync(
-        string? modalidad,
+        string? familia,
         bool includeInactive,
         CancellationToken cancellationToken = default);
 
@@ -27,7 +27,7 @@ public interface IRejectionReasonRepository
     Task<RejectionReasonItem> CreateAsync(
         string code,
         string description,
-        string modalidad,
+        string familia,
         int sortOrder,
         Guid? createdBy,
         CancellationToken cancellationToken = default);
@@ -36,7 +36,7 @@ public interface IRejectionReasonRepository
         Guid id,
         string code,
         string description,
-        string modalidad,
+        string familia,
         int sortOrder,
         Guid? updatedBy,
         CancellationToken cancellationToken = default);
@@ -52,11 +52,11 @@ public interface IRejectionReasonRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Resuelve qué ids del catálogo son válidos y están activos para la modalidad dada. Lo usa el
-    /// rechazo del OT para no persistir causales inventadas o de otra modalidad.
+    /// Resuelve qué ids del catálogo son válidos y están activos para la familia dada. Lo usa el
+    /// rechazo del OT para no persistir causales inventadas o de otra familia.
     /// </summary>
     Task<IReadOnlyList<Guid>> FilterValidIdsAsync(
         IReadOnlyList<Guid> candidateIds,
-        string modalidad,
+        string familia,
         CancellationToken cancellationToken = default);
 }

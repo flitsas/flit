@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<DeleteProcedureTypeHandler>();
         services.AddScoped<PublishProcedureTypeHandler>();
         services.AddScoped<ArchiveProcedureTypeHandler>();
+        services.AddScoped<SetWizardEnabledHandler>();
         services.AddScoped<ValidateProcedureTypeHandler>();
         services.AddScoped<GetConformationRulesHandler>();
         services.AddScoped<UpsertConformationRulesHandler>();

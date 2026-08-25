@@ -63,6 +63,7 @@ import type {
   TenantBiometricPersonFilters,
   TenantBiometricValidation,
 } from '@/lib/api/types/procedure-runtime';
+import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 /**
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
@@ -95,11 +96,6 @@ const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> 
   expirado: { label: 'Expirado', tone: 'neutral' },
   pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
   error_envio: { label: 'Error de envío', tone: 'danger' },
-};
-
-const MODALIDAD_LABEL: Record<string, string> = {
-  matricula_inicial: 'Matrícula inicial',
-  traspaso: 'Traspaso',
 };
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -1724,7 +1720,7 @@ function ValidacionRow({
     }
   }
   const modalidad = r.modalidad
-    ? (MODALIDAD_LABEL[r.modalidad] ?? r.modalidad)
+    ? (familiaLabel(r.modalidad))
     : 'Prevalidación';
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
   const parte = r.partyRole ? ` (${r.partyRole})` : '';

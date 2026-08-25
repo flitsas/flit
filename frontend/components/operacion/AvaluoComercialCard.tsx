@@ -7,8 +7,7 @@ import type {
   AvaluoSource,
   SuggestedCommercialValue,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_CARD } from './wizard-field-styles';
-import { WizardCardHeader } from './wizard-atoms';
+import { WIZARD_BTN_SOLID, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /** Etiquetas legibles por fuente; orden de render. */
 const SOURCE_LABELS: Record<string, string> = {
@@ -30,9 +29,8 @@ interface Props {
 }
 
 /**
- * Sección "Avalúo comercial" (Feature #10707): consulta el valor sugerido multi-fuente y permite
- * aceptarlo. Nunca bloquea el paso: si una fuente falla o no tiene datos, se muestra su estado y
- * las demás siguen disponibles.
+ * Columna "Avalúo Comercial" del prototipo Lovable (Traspaso · Datos Comerciales):
+ * caja «Sugerido Fasecolda» + badge/aceptar. Las demás fuentes quedan como detalle secundario.
  */
 export function AvaluoComercialCard({ instanceId, disabled = false, accepted = false, onAccept }: Props) {
   const [data, setData] = useState<SuggestedCommercialValue | null>(null);
@@ -63,55 +61,70 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
 
   const sugerido = data?.sugerido ?? null;
   const fuente = data?.fuentePrincipal ?? null;
+  const fuenteLabel = fuente ? (SOURCE_LABELS[fuente] ?? fuente) : 'Fasecolda';
 
   return (
-    <section className={WIZARD_CARD} aria-label="Avalúo comercial sugerido">
-      <WizardCardHeader
-        title="Avalúo comercial"
-        subtitle="Valor de venta sugerido a partir de fuentes de avalúo."
-        action={
-          sugerido != null ? (
-            <div className="text-right">
-              <div className="text-xs uppercase tracking-wide opacity-70">Sugerido</div>
-              <div className="text-sm font-bold font-mono" style={{ color: '#557EFF' }}>
-                {formatCOP(sugerido)}
-              </div>
-              {fuente && (
-                <div className="text-xs opacity-70">{SOURCE_LABELS[fuente] ?? fuente}</div>
-              )}
-            </div>
-          ) : undefined
-        }
-      />
+    <section className="h-full" aria-label="Avalúo comercial sugerido">
+      <h4 className="text-[13px] font-bold text-[#162744] dark:text-white">Avalúo Comercial</h4>
+      <p className="mt-1 text-[12.5px] text-[#59677D] dark:text-white/60">
+        Valor sugerido según tabla Fasecolda para el vehículo consultado.
+      </p>
 
       {loading ? (
-        <div className="space-y-2" aria-hidden="true">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-9 rounded-xl animate-pulse bg-black/5 dark:bg-white/5" />
-          ))}
-        </div>
+        <div className="mt-3 h-[72px] animate-pulse rounded-xl bg-black/5 dark:bg-white/5" aria-hidden="true" />
       ) : error ? (
-        <p className="text-xs opacity-70" role="status">
+        <p className="mt-3 text-xs text-[#59677D]" role="status">
           {error} Puedes ingresar el valor manualmente.
         </p>
       ) : (
         <>
-          <ul className="space-y-2">
-            {(data?.sources ?? []).map((s) => (
-              <SourceRow
-                key={s.source}
-                source={s}
-                disabled={disabled}
-                accepted={accepted}
-                onUse={() => s.value != null && onAccept(s.value, s.source, sugerido)}
-              />
-            ))}
-          </ul>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-4 dark:border-white/10 dark:bg-white/5">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[#59677D] dark:text-white/60">
+                Sugerido {fuenteLabel}
+              </p>
+              <p className="mt-0.5 text-xl font-bold text-[#162744] dark:text-white">
+                {sugerido != null ? formatCOP(sugerido) : '—'}
+              </p>
+            </div>
 
-          {sugerido != null && accepted && (
-            <p className="mt-3 text-right text-xs opacity-70" role="status">
-              Valor sugerido aceptado.
-            </p>
+            {sugerido != null && accepted && (
+              <span
+                className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold text-white"
+                style={{ background: '#8CC63F' }}
+                role="status"
+                aria-live="polite"
+              >
+                Valor sugerido aceptado
+              </span>
+            )}
+
+            {sugerido != null && !accepted && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onAccept(sugerido, fuente ?? 'fasecolda', sugerido)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                style={{ background: WIZARD_CTA_GRADIENT }}
+              >
+                Aceptar valor sugerido
+              </button>
+            )}
+          </div>
+
+          {/* Fuentes adicionales (Feature #10707): detalle bajo la caja principal del prototipo. */}
+          {(data?.sources?.length ?? 0) > 0 && (
+            <ul className="mt-3 space-y-2">
+              {(data?.sources ?? []).map((s) => (
+                <SourceRow
+                  key={s.source}
+                  source={s}
+                  disabled={disabled}
+                  accepted={accepted}
+                  onUse={() => s.value != null && onAccept(s.value, s.source, sugerido)}
+                />
+              ))}
+            </ul>
           )}
         </>
       )}
@@ -135,7 +148,7 @@ function SourceRow({
   const ok = source.status === 'ok' && source.value != null;
 
   return (
-    <li className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
+    <li className="flex items-center justify-between gap-3 rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/10">
       <div className="min-w-0">
         <div className="text-xs font-semibold">{label}</div>
         {source.source === 'mercado_libre' && source.muestras != null && ok && (
@@ -147,15 +160,15 @@ function SourceRow({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <span className="text-xs font-mono">{ok ? formatCOP(source.value!) : '—'}</span>
+      <div className="flex shrink-0 items-center gap-3">
+        <span className="font-mono text-xs">{ok ? formatCOP(source.value!) : '—'}</span>
         {ok && !accepted && (
           <button
             type="button"
             disabled={disabled}
             onClick={onUse}
             className="text-xs font-semibold disabled:opacity-40"
-            style={{ color: '#557EFF' }}
+            style={{ color: WIZARD_BTN_SOLID }}
           >
             Usar
           </button>

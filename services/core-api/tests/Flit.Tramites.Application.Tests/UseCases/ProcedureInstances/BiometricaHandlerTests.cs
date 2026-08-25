@@ -93,12 +93,12 @@ public sealed class BiometricaHandlerTests
         Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -713,10 +713,10 @@ public sealed class BiometricaHandlerTests
             CreatedAt = DateTimeOffset.UtcNow,
             ProcedureInstance = new ProcedureInstance
             {
+                ProcedureType = ProcedureTypeFixture.For(modalidad),
                 Id = Guid.NewGuid(),
                 TenantId = tenant,
                 ReferenceNumber = reference,
-                ModalidadEntrada = modalidad,
                 CreatedAt = DateTimeOffset.UtcNow,
             },
         };
@@ -753,7 +753,7 @@ public sealed class BiometricaHandlerTests
         result!.Validations.Should().HaveCount(2);
         var aprobada = result.Validations[0];
         aprobada.ReferenceNumber.Should().Be("TRM-2026-000001");
-        aprobada.Modalidad.Should().Be("traspaso");
+        aprobada.Modalidad.Should().Be("TRASPASO");
         aprobada.Status.Should().Be(BiometricEstados.Aprobado);
         aprobada.RejectionReason.Should().BeNull();
         result.Validations[1].RejectionReason.Should().Be("La verificación del documento no fue exitosa.");

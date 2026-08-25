@@ -188,7 +188,7 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             v.ProcedureInstanceId,
             // HU #10867 — null para prevalidaciones standalone; la FE muestra "—" / badge "Prevalidación".
             v.ProcedureInstance?.ReferenceNumber,
-            v.ProcedureInstance?.ModalidadEntrada,
+            (v.ProcedureInstance != null && v.ProcedureInstance.ProcedureType != null ? v.ProcedureInstance.ProcedureType.Family : ""),
             v.PartyRole,
             v.Name,
             v.DocumentType,

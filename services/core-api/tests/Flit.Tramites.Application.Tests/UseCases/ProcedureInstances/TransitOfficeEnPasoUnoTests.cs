@@ -311,6 +311,7 @@ public sealed class TransitOfficeEnPasoUnoTests
                 Name = "Matrícula nueva",
                 Family = "matriculas",
                 PublicationStatus = Flit.Tramites.Domain.Enums.PublicationStatus.Published,
+                WizardEnabled = true,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
 

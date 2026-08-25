@@ -24,14 +24,13 @@ public sealed class CompletePlateFlowSoatTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial" ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000100",
             Status = TramiteEstado.Entregado,
             PlateFlowStatus = PlateFlowStatus.Asignado,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetByIdWithDetailsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);

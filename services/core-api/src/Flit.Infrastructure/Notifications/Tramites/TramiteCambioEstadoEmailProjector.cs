@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Infrastructure.Notifications.Tramites;
 
@@ -22,10 +23,10 @@ public static class TramiteCambioEstadoEmailProjector
         ArgumentNullException.ThrowIfNull(actors);
         ArgumentNullException.ThrowIfNull(fieldValues);
 
-        var esTraspaso = string.Equals(
-            instance.ModalidadEntrada?.Trim(),
-            "traspaso",
-            StringComparison.OrdinalIgnoreCase);
+        // ADR-0050 — la familia del tipo decide si hay parte vendedora, no la difunta modalidad.
+        var esTraspaso = instance.ProcedureType is not null
+                         && ProcedureFamilyCodes.FromCode(instance.ProcedureType.Family)
+                            == ProcedureFamily.Traspaso;
 
         var comprador = FindActor(actors, "comprador");
         var vendedor = FindActor(actors, "vendedor");

@@ -66,8 +66,6 @@ public static class RegistrationMapper
             // Se inserta en borrador a propósito: el trigger de inmutabilidad solo permite escribir
             // field_values mientras el padre esté en borrador. El estado real se aplica al final.
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = ModalidadMatricula,
-            TipologiaCodigo = TipologiaMatricula,
             ChecklistEstado = "{}",
             CreatedByUserId = context.SystemUserId,
             CreatedAt = createdAt,

@@ -239,7 +239,6 @@ static FurDocumentData AutomotorTraspasoData() => AutomotorData() with
 {
     ReferenceNumber = "TRM-2026-IWL38D",
     Modalidad = "traspaso",
-    TipologiaCodigo = "traspaso_standard",
     Vehiculo = AutomotorData().Vehiculo with
     {
         Marca = "BAJAJ", Linea = "PULSAR 200", Modelo = "2023", Color = "NEGRO",
@@ -306,7 +305,6 @@ static FurDocumentData RemolquesData() => AutomotorData() with
 {
     ReferenceNumber = "TRM-2026-REM001",
     Modalidad = "traspaso",
-    TipologiaCodigo = "traspaso_standard",
     Vehiculo = AutomotorData().Vehiculo with
     {
         Marca = "PLANATRAILER",

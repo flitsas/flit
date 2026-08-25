@@ -117,13 +117,12 @@ public sealed class FurHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string tipologia) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? (tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial")),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial",
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

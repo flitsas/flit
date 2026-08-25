@@ -25,7 +25,31 @@ casillas numeral 3 = (tabla 1: tipo base)
 - **No duplicar.** Si el tipo base ya es `PRENDA_INSCRIPCION`, no vuelvas a aplicar la tabla 2. Si ya es `CAMBIO_COLOR`, no vuelvas a aplicar color en la tabla 3.
 - La casilla **1** es solo matrícula/registro. Un trámite de «otros» aislado **no** lleva 1.
 - La casilla **2** es solo familia Traspaso.
-- Varios trámites del mismo vehículo se acumulan (art. 5.1.8).
+- Varios trámites del mismo vehículo se acumulan (art. 5.1.8) **solo en las familias que acumulan**: ver el punto siguiente.
+
+### La familia OTROS no acumula (ADR-0050)
+
+Acumular es privilegio de `MATRICULAS` y `TRASPASO`. En la familia `OTROS` **las tablas 2 y 3 no se aplican**: el FUR lleva únicamente la capa del tipo base.
+
+```
+familia MATRICULAS | TRASPASO → tabla 1 ∪ tabla 2 ∪ tabla 3
+familia OTROS                 → tabla 1   (y nada más)
+```
+
+Motivo de producto: en OTROS el cambio o el gravamen **es** el trámite, no un añadido. Un `CAMBIO_COLOR` con una prenda y un blindaje encima no es un cambio de color con extras — son tres trámites distintos, y el organismo devuelve el FUR que los mezcla.
+
+Única excepción, y no es una excepción real: cuando el tipo base **es** de prenda (`PRENDA_INSCRIPCION`, `LEVANTAMIENTO_PRENDA`, `LEVANTAR_INSCRIBIR_PRENDA`, `CAMBIO_ACREEDOR`), su decisión de gravamen sí marca las casillas 11/12 — porque ahí la prenda no es la tabla 2, es la tabla 1. Por eso `CAMBIO_ACREEDOR`, cuya casilla base es la **18**, sigue marcando 11/12 desde su propia decisión.
+
+Dónde vive la regla (no reimplementarla suelta):
+
+| Pieza | Ruta |
+|-------|------|
+| Declaración por tipo | `tramites.procedure_types.gate_profile` → `allowsComplementaryTransformations`, `allowsComplementaryPrenda` (DDL `87-otros-sin-complementarios.sql`) |
+| Resolución perfil → familia | `ProcedureTypeGateProfile.ComplementaryTransformationsAllowed` / `ComplementaryPrendaAllowed` |
+| Qué capa es del tipo | `ProcedureTypeLayers.EsTipoPrendaBase` / `TransformacionDelTipo` |
+| Casillas | `FurNumeral3Marks.Resolve` (recibe la familia en `modalidad`) |
+
+**La llave ausente no es `false`**: significa «lo que diga la familia». Un perfil grabado antes del DDL 87 —o un snapshot ya congelado— resuelve igual, sin perder los simultáneos de un traspaso en curso.
 
 ### Recuadro OBSERVACIONES (párrafo 23) — concatenar, no reemplazar
 
@@ -92,7 +116,7 @@ Rótulos 6 (cambio de servicio) y 14 (cambio de placas) **no tienen tipo** en el
 
 ## Tabla 2 — Prenda complementaria
 
-Se **suma** al tipo de la tabla 1 cuando el expediente trae gravamen (wizard / simulador). No aplica si el tipo base ya es una prenda.
+Se **suma** al tipo de la tabla 1 cuando el expediente trae gravamen (wizard / simulador). No aplica si el tipo base ya es una prenda, **ni en la familia OTROS** (ver «La familia OTROS no acumula»).
 
 | Tipo de acción | Debe marcar (numeral 3) | Observación — estructura |
 |----------------|-------------------------|--------------------------|
@@ -107,7 +131,7 @@ Constantes de código: `FurPrendaObservation.Etiqueta` y `EtiquetaLevantamiento`
 
 ## Tabla 3 — Transformaciones complementarias
 
-Se **suma** al tipo de la tabla 1 cuando el gestor activa transformaciones o hay diff RUNT vs efectivo. No duplicar si el tipo base ya es ese cambio.
+Se **suma** al tipo de la tabla 1 cuando el gestor activa transformaciones o hay diff RUNT vs efectivo. No duplicar si el tipo base ya es ese cambio, y **no aplica en la familia OTROS** (ver «La familia OTROS no acumula»): allí `CAMBIO_COLOR`, `CAMBIO_CARROCERIA`, `CONVERSION_COMBUSTIBLE` y `BLINDAJE` traen su atributo desde la tabla 1 y ningún otro se les puede añadir.
 
 El recuadro de características del vehículo conserva el dato **RUNT original**; observaciones declaran solo el valor **nuevo** (mayúsculas).
 

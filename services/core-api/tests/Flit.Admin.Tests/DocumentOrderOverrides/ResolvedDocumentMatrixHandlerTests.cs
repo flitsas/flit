@@ -111,7 +111,8 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         var db = NewDbName();
         await using (var seed = NewContext(db))
         {
-            seed.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "X", Name = "X", IsActive = true });
+            seed.ProcedureTypes.Add(new ProcedureType {
+            Family = "MATRICULAS", Id = ProcedureTypeId, Code = "X", Name = "X", IsActive = true });
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -285,7 +286,8 @@ public sealed class ResolvedDocumentMatrixHandlerTests
     private static async Task SeedRequirementsAsync(string dbName)
     {
         await using var ctx = NewContext(dbName);
-        ctx.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+        ctx.ProcedureTypes.Add(new ProcedureType {
+        Family = "MATRICULAS", Id = ProcedureTypeId, Code = "traspaso", Name = "Traspaso", IsActive = true });
         ctx.DocumentTypes.AddRange(
             new DocumentType { Id = DocA, Code = "DOCA", Name = "Documento A", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
             new DocumentType { Id = DocB, Code = "DOCB", Name = "Documento B", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },

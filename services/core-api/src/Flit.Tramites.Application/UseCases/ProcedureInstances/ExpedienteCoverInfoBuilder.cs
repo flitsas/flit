@@ -29,7 +29,10 @@ public static class ExpedienteCoverInfoBuilder
         return new ExpedienteCoverInfo(
             CodigoTramite: instance.ReferenceNumber,
             Placa: Get(fv, "plate"),
-            TipoTramite: HumanizeModalidad(instance.ModalidadEntrada),
+            // ADR-0050 — el rótulo es el NOMBRE del tipo, tal como está en el catálogo. Antes se
+            // humanizaba la modalidad, así que la portada de un blindaje o de un levantamiento de
+            // prenda decía "Matricula inicial": el expediente afirmaba ser un trámite que no era.
+            TipoTramite: instance.TypeName,
             SecretariaTransito: Get(fv, "transit_office_name"),
             CompaniaRadicadora: Get(fv, "company_name")
                                 ?? Get(fv, "radicadora")
@@ -41,14 +44,4 @@ public static class ExpedienteCoverInfoBuilder
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
-
-    private static string HumanizeModalidad(string? modalidad)
-    {
-        if (string.IsNullOrWhiteSpace(modalidad))
-            return "-";
-
-        // "matricula_inicial" -> "Matricula inicial"; primera letra en mayúscula, guiones bajos a espacios.
-        var text = modalidad.Trim().Replace('_', ' ');
-        return char.ToUpperInvariant(text[0]) + text[1..];
-    }
 }

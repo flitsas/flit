@@ -27,13 +27,12 @@ public sealed class SubsanacionSinTransicionTests
     private static ProcedureInstance Rechazado(Guid id, Guid tenantId, bool subsanacionActiva = false) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso_standard" ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000042",
             Status = TramiteEstado.Rechazado,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = "traspaso_standard",
             SubsanacionActiva = subsanacionActiva,
             CreatedAt = DateTimeOffset.UtcNow,
         };

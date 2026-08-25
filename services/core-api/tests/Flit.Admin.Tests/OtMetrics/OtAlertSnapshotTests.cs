@@ -170,6 +170,7 @@ public sealed class OtAlertSnapshotTests
         });
         ctx.ProcedureTypes.Add(new ProcedureType
         {
+            Family = "MATRICULAS",
             Id = ProcedureType,
             Code = "MATRICULA_NUEVA",
             Name = "Matrícula inicial",
@@ -188,7 +189,6 @@ public sealed class OtAlertSnapshotTests
             ProcedureTypeId = ProcedureType,
             ReferenceNumber = reference,
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             TransitOfficeId = TransitOffice,
             CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
         });

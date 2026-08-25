@@ -68,7 +68,7 @@ describe('ActorsForm — AC1 (HU #10956) el check de Habeas Data ya no se ofrece
   it('matrícula (SPLIT, persona jurídica): tampoco muestra el checkbox', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+    await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
     expect(
       screen.queryByRole('checkbox', { name: /Autorizo la reutilización/i }),
     ).not.toBeInTheDocument();
@@ -167,7 +167,7 @@ describe('ActorsForm — AC2/AC3/AC4 (HU #10956) precarga de datos de contacto',
     });
 
     // El nombre viene del RUNT, nunca del lookup de contacto (que no lo expone).
-    expect(screen.getByLabelText(/Nombre completo/)).toHaveValue('JUAN CARLOS PEREZ GOMEZ');
+    expect(screen.getByLabelText(/Nombres y apellidos/)).toHaveValue('JUAN CARLOS PEREZ GOMEZ');
   });
 
   it('AC3: no pisa un campo que el operador ya había editado antes de que resuelva la precarga', async () => {

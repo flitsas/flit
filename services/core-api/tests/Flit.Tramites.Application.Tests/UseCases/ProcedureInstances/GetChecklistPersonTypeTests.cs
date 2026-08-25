@@ -34,13 +34,12 @@ public sealed class GetChecklistPersonTypeTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
-            ModalidadEntrada = "traspaso",
             CreatedAt = DateTimeOffset.UtcNow,
         };
         foreach (var pt in personTypes)

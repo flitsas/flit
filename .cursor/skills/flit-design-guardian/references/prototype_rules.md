@@ -11,8 +11,11 @@ La jerarquía es esta, y en este orden:
 | 1 | `frontend/app/globals.css` en `develop` | Valores reales: color, radios, sombras, motion, tema oscuro |
 | 2 | `flit_design_tokens.json` | Los mismos valores, documentados y auditables |
 | 3 | `prototipo flit 2.0 (v4).pdf` | **Composición y flujo**, no valores |
+| 3b | `20-agosto-notas-diseno-mi-traspasos.pdf` | **Botones de consulta y colores de badges/etiquetas** en el wizard MI/Traspaso — manda sobre el prototipo v4 cuando hay contradicción explícita (verde OK en vez de cian, consulta sólida en vez de degradada) |
 
 > El PDF dejó de ser autoridad sobre color y navegación. Sigue siendo autoridad sobre **cómo se compone una pantalla**: qué información va junta, qué jerarquía tiene y en qué orden ocurre un flujo. Cuando el PDF y el token file discrepen en un valor, manda el token file. Cuando discrepen en una composición, manda el PDF.
+
+> **Excepción para wizard MI/Traspaso:** las anotaciones del PDF 20 ago mandan sobre el prototipo v4 en dos áreas específicas: (a) colores de badges/etiquetas (`success = verde`, **NO cian**), y (b) jerarquía de botones de acción (consulta sólida vs CTA degradado). Fuera del wizard siguen vigentes las reglas generales.
 
 > Regla central, sin cambios: toda pantalla nueva debe declarar su patrón base. Si no existe pantalla exacta, debe componerse con patrones ya existentes.
 
@@ -25,7 +28,8 @@ La jerarquía es esta, y en este orden:
 | **Navegación principal** | **Dock inferior flotante** centrado, píldoras redondas, FAB central de marca. Ver Contrato D. |
 | Topbar | Logo a la izquierda; a la derecha toggle de tema, campana, rol, usuario/tenant y menú de tres puntos. |
 | Títulos | Título principal dentro de tarjeta blanca, color `#557EFF`, peso bold. |
-| Botones primarios | Pastilla con gradiente `#557EFF → #00DBD5`, texto blanco, radio 999px. |
+| Botones primarios (CTA avance/cierre) | Pastilla con gradiente `#557EFF → #00DBD5`, texto blanco, radio 999px. Solo para: Continuar, Radicar, Finalizar. |
+| **Botones de consulta** | **Azul sólido `#557EFF` SIN degradado** (PDF 20 ago). Aplica a: Consultar RUNT, Consultar RUES, Buscar, Actualizar (consulta). Implementar con `style={{ background: '#557EFF' }}` + clase Tailwind `bg-[#557EFF]`. Ver §Jerarquía de botones. |
 | Botones secundarios | Navy `#162744` para «Anterior», blanco con borde para opciones, `#FF4E00` para cancelar o alerta. |
 | Iconografía | Iconos lineales (lucide-react). No mezclar familias ni introducir iconos sólidos decorativos. |
 | Estados | Verde = válido/completo; azul = acción/proceso; ámbar = pendiente; naranja-rojo = alerta/rechazo; gris = inactivo/borrador. |
@@ -96,9 +100,9 @@ La sidebar vertical con gradiente del prototipo v4 es **histórica**. No reintro
 
 | Estado | Tono | Uso |
 |---|---|---|
-| Completado/válido/aprobado | `success` | Pasos completados, checks, estado vigente |
+| Completado/válido/aprobado | `success` | Pasos completados, checks, estado vigente. **Color: verde tintado (#F3FBE8/#4F7A12) — NO cian.** El cian es acento tecnológico, no semántica de éxito. |
 | Acción/proceso/activo | `info` | Botones de acción, estados en curso |
-| Pendiente | `warning` | Firma pendiente, documentos por cargar |
+| Pendiente | `warning` | Firma pendiente, documentos por cargar. Color: ámbar #F9AC00 familia. |
 | Alerta/rechazo/error | `danger` | Rechazados, no validado, multas, cancelar |
 | Borrador/inactivo | `neutral` | Borrador, pasos pendientes, textos auxiliares |
 
@@ -132,6 +136,32 @@ Campos blancos con bordes claros y radios medios. Iconos dentro del input o al i
 | Upload box | Borde punteado azul, icono centrado, texto azul, fondo blanco |
 | Password | Icono de ojo/seguridad si aplica |
 | Todos | `<label>` real o nombre accesible. Un `placeholder` **no** es un label |
+
+## Jerarquía de botones (PDF 20 ago — aplica especialmente en wizard MI/Traspaso)
+
+La distinción entre **consulta** y **acción primaria** es cromática y obligatoria:
+
+| Tipo de botón | Visual | Ejemplos | Token |
+|---|---|---|---|
+| **CTA de avance/cierre** | Degradado `#557EFF → #00DBD5` (o `#00DBD5 → #8CC63F` en último paso) | Continuar, Radicar, Finalizar | `component.button.primaryGradient` / `WIZARD_CTA_GRADIENT` |
+| **Consulta** | Azul sólido `#557EFF` **SIN degradado** | Consultar RUNT, Consultar RUES, Buscar, Actualizar (consulta) | `component.button.consultSolid` / `WIZARD_BTN_SOLID` + clase `bg-[#557EFF]` |
+| **Secundario/anterior** | Navy `#162744` con borde o texto | Anterior, cerrar | – |
+
+Regla de implementación: los botones de consulta **siempre** llevan `style={{ background: '#557EFF' }}` **y** la clase Tailwind `bg-[#557EFF]` para que el sólido gane sobre cualquier degradado residual por HMR o cascade.
+
+## Reglas de badges/etiquetas (PDF 20 ago)
+
+El badge `success` es **verde tintado**, NO cian. El cian (`#00DBD5`) es acento tecnológico (segundo stop de gradientes, chrome del dock); usarlo como success fue un error de implementación corregido en v2.1.0.
+
+| Badge | bg | fg | border | Uso |
+|---|---|---|---|---|
+| `success` | `#F3FBE8` | `#4F7A12` | `#CDEB9C` | Validado, vigente, OK, aprobado |
+| `warning` | `rgba(249,172,0,0.15)` | `#B45309` | `rgba(249,172,0,0.40)` | Pendiente, advertencia |
+| `danger` | – (sin cambio) | – | – | Rechazado, error |
+| `info` | – (sin cambio) | – | – | En proceso, dato reutilizado |
+| `neutral` | – (sin cambio) | – | – | Borrador, inactivo |
+
+Rechazar automáticamente: badge `success` con tint cian (`rgba(0,219,213,…)`); botón Consultar con degradado.
 
 ## Reglas de tablas
 
@@ -213,6 +243,8 @@ Rostros, documentos, firmas y datos personales son placeholders visuales. Descri
 | Modal sin `role="dialog"` y focus trap | Barrera de lector de pantalla |
 | Grilla de `div` sustituyendo una tabla de datos | Pérdida de semántica |
 | Badge sólido con texto blanco | No cumple contraste |
+| Badge `success` con tint cian | Incorrecto: success = verde tintado (`#F3FBE8`/`#4F7A12`). El cian es acento tecnológico, no semántica de éxito (PDF 20 ago) |
+| Botón Consultar/Buscar con degradado | Incorrecto: consulta = `#557EFF` sólido; degradado reservado a CTA de avance/cierre (PDF 20 ago) |
 | Reordenamiento de wizard sin HU | Rompe trazabilidad operativa |
 | Iconos de otra familia | Rompe consistencia visual |
 | Reintroducir la sidebar vertical | El patrón vigente es el dock; cambiarlo requiere decisión explícita |

@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.EntityFrameworkCore;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -233,7 +234,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
                 p.Vin,
                 p.TransitOfficeId,
                 p.ProcedureTypeId,
-                p.ModalidadEntrada,
+                (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                 p.Status,
                 p.Prioritario,
                 p.SubsanacionActiva,
@@ -492,7 +493,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         // En matrícula inicial no hay traspaso que clasificar: devolver «bilateral» ahí haría que un
         // filtro por bilateral arrastrara todas las matrículas.
         CompanyQueryFieldCatalog.TipoTraspaso => r =>
-            r.Instance.Modalidad == "traspaso" ? [r.TipoTraspaso] : [],
+            r.Instance.Modalidad == ProcedureFamilyCodes.Traspaso ? [r.TipoTraspaso] : [],
         _ => _ => [],
     };
 
@@ -570,7 +571,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             Transformaciones: row.Transformaciones,
             EsLeasing: row.EsLeasing,
             MetodoPago: row.MetodoPago,
-            TipoTraspaso: row.Instance.Modalidad == "traspaso" ? row.TipoTraspaso : string.Empty,
+            TipoTraspaso: row.Instance.Modalidad == ProcedureFamilyCodes.Traspaso ? row.TipoTraspaso : string.Empty,
             RadicadoPor: row.RadicadoPorNombre,
             CreadoEn: row.Instance.CreatedAt,
             EnviadoEn: row.Instance.SubmittedAt,

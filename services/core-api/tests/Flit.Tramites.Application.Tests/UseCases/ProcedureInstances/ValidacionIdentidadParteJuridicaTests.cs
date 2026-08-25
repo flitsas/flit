@@ -341,12 +341,12 @@ public sealed class ValidacionIdentidadParteJuridicaTests
         var tenant = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(instance);

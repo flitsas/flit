@@ -60,8 +60,6 @@ public static class TransferMapper
             // escribir field_values mientras el padre esté en borrador. El estado real se
             // aplica al final (ver ProcedureInstanceLoader).
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = ModalidadTraspaso,
-            TipologiaCodigo = TipologiaTraspaso,
             ChecklistEstado = "{}",
             CreatedByUserId = context.SystemUserId,
             CreatedAt = createdAt,

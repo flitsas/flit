@@ -71,12 +71,12 @@ public sealed class ConsolidadoMaestroHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000099",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

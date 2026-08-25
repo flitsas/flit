@@ -1116,6 +1116,7 @@ export const tramitesClient = {
       body: JSON.stringify({
         tenantId: tenantId ?? jwtTenantId() ?? DEV_TENANT_ID,
         modalidad: input.modalidad,
+        procedureTypeCode: input.procedureTypeCode ?? null,
         vin: input.vin ?? null,
         plate: input.plate ?? null,
         ownerDocumentType: input.ownerDocumentType ?? null,
@@ -1144,6 +1145,12 @@ export const tramitesClient = {
   // la consulta al proveedor externo; si expiró, el backend consulta de nuevo (no falla).
   createInstanceFromConsulta: async (
     input: ConsultaVehiculoInput & {
+      /**
+       * ADR-0050 — `code` del tipo elegido en el catálogo. Manda sobre `modalidad`, que queda como
+       * familia para el bloqueo por compañía. Sin él no hay forma de crear un trámite de OTROS: por
+       * modalidad todos caían en matrícula inicial.
+       */
+      procedureTypeCode?: string | null;
       previewToken?: string | null;
       /** Tipo de servicio elegido en el paso 1 (solo matrícula inicial, sección 18 del FUR). */
       tipoServicioCode?: string | null;
@@ -1164,6 +1171,7 @@ export const tramitesClient = {
         tenantId: tenantId ?? payload?.tenant_id ?? DEV_TENANT_ID,
         createdByUserId: payload?.sub ?? DEV_USER_ID,
         modalidad: input.modalidad,
+        procedureTypeCode: input.procedureTypeCode ?? null,
         vin: input.vin ?? null,
         plate: input.plate ?? null,
         ownerDocumentType: input.ownerDocumentType ?? null,
@@ -1187,17 +1195,21 @@ export const tramitesClient = {
 
   // CF-02 (HU #10883, AC3) — esqueleto de pasos para pintar el wizard en el paso 1 mientras el
   // trámite aún no existe. Mismos pasos/etiquetas que el wizard real, con el resto bloqueado.
-  getWizardPreview: (modalidad: WizardModalidad) =>
+  getWizardPreview: (procedureTypeCode: string) =>
     request<WizardState>(
-      `/api/v1/tramites/wizard-preview?modalidad=${encodeURIComponent(modalidad)}`,
+      `/api/v1/tramites/wizard-preview?procedureTypeCode=${encodeURIComponent(procedureTypeCode)}`,
     ),
 
   /** Guía informativa de documentos (paso 1, sin instancia). */
+  /**
+   * ADR-0050 — el checklist informativo se pide por `code` del tipo. Antes se pedía por modalidad,
+   * así que cualquier trámite de la familia OTROS recibía los documentos de un traspaso.
+   */
   fetchDocumentRequirementsPreview: async (
-    modalidad: WizardModalidad,
+    procedureTypeCode: string,
     transitOfficeId?: string,
   ): Promise<DocumentoInformativoPreviewItem[]> => {
-    const qs = new URLSearchParams({ modalidad });
+    const qs = new URLSearchParams({ procedureTypeCode });
     if (transitOfficeId) qs.set('transitOfficeId', transitOfficeId);
     const res = await request<{ items?: DocumentoInformativoPreviewItem[] }>(
       `/api/v1/tramites/document-requirements/preview?${qs.toString()}`,

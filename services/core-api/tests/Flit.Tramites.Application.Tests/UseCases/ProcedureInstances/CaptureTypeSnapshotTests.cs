@@ -27,6 +27,7 @@ public sealed class CaptureTypeSnapshotTests
         Version = version,
         GateProfile = gateProfile,
         PublicationStatus = PublicationStatus.Published,
+        WizardEnabled = true,
         CreatedAt = DateTimeOffset.UtcNow,
         ConformationRules =
         [

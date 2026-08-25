@@ -233,13 +233,12 @@ public sealed class FurOrganismoBackfillTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000042",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

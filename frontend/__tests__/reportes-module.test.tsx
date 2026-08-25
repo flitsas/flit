@@ -171,25 +171,28 @@ describe("Reportes — AC3 estados de UI (UiStateBoundary)", () => {
     expect(screen.getByTestId("donut-empty-otros")).toBeInTheDocument();
   });
 
-  it("Vehicular: pinta la categoría como donut de primer nivel (HU #10433)", async () => {
-    const withVehicular: AnalyticsOverviewResponse = {
+  // HU #10433 pedía que "Vehicular" fuera un donut de primer nivel en vez de perderse en "Otros".
+  // ADR-0050 eliminó esa categoría: `VEHICULAR` no existe en el catálogo —era el residuo de un seed—
+  // y el backend no puede producirla. Los 17 trámites que no son matrícula ni traspaso viven ahora en
+  // la familia OTROS, así que lo que debe pintarse de primer nivel, con su total propio, es "Otros".
+  it("Otros: pinta la categoría como donut de primer nivel con su total propio", async () => {
+    const conOtros: AnalyticsOverviewResponse = {
       ...FULL,
       categories: [
         { category: "matriculas", total: 10, byStatus: [{ status: "submitted", count: 10 }] },
         { category: "traspasos", total: 0, byStatus: [] },
-        { category: "vehicular", total: 45, byStatus: [{ status: "submitted", count: 45 }] },
-        { category: "otros", total: 0, byStatus: [] },
+        { category: "otros", total: 45, byStatus: [{ status: "submitted", count: 45 }] },
       ],
     };
-    mocks.fetchAnalyticsOverview.mockResolvedValue(withVehicular);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(conOtros);
 
     render(<Reportes />);
 
     await screen.findByText("Total trámites");
-    // total = 10 + 0 + 45 + 0 (vehicular ya NO se pierde en "otros")
     expect(screen.getByText("55")).toBeInTheDocument();
-    // La categoría Vehicular aparece como tarjeta/donut con su etiqueta de marca.
-    expect(screen.getAllByText("Vehicular").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Otros").length).toBeGreaterThan(0);
+    // Y con datos ya no muestra la nota de categoría vacía.
+    expect(screen.queryByTestId("donut-empty-otros")).not.toBeInTheDocument();
   });
 });
 

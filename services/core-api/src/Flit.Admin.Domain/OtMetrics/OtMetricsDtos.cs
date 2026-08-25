@@ -4,11 +4,23 @@ namespace Flit.Admin.Domain.OtMetrics;
 /// Filtros comunes de los reportes del organismo. El rango aplica a los HECHOS del periodo
 /// (entregas, decisiones); el panel de cola describe el estado ACTUAL y no lo usa.
 /// </summary>
+/// <param name="Familia">
+/// Familia del tipo de trámite (<c>MATRICULAS</c> / <c>TRASPASO</c> / <c>OTROS</c>). Se llamaba
+/// <c>Modalidad</c> y admitía dos literales de un vocabulario que ADR-0050 eliminó; el repositorio
+/// ya comparaba contra <c>procedure_types.family</c>, así que los valores que enviaba la UI
+/// (<c>matricula_inicial</c>, <c>traspaso</c>) no coincidían con ninguna fila y el filtro devolvía
+/// siempre cero.
+/// </param>
+/// <param name="ProcedureTypeId">
+/// Tipo concreto, para bajar de la familia al trámite. Es el mismo eje que ya ofrecen los reportes
+/// detallados de empresa; sin él, «Otros» agrupa diecisiete trámites distintos en una sola fila.
+/// </param>
 public sealed record OtMetricsFilter(
     DateOnly From,
     DateOnly To,
-    string? Modalidad = null,
-    Guid? ClientTenantId = null);
+    string? Familia = null,
+    Guid? ClientTenantId = null,
+    Guid? ProcedureTypeId = null);
 
 /// <summary>
 /// Foto instantánea para las alertas por umbral del organismo (Reportes 2.0, HU-D — alcance OT):
@@ -157,7 +169,7 @@ public sealed record OtDrilldownItemDto(
     Guid ClientTenantId,
     string ClientTenantName,
     string Status,
-    string? ModalidadEntrada,
+    string? Familia,
     bool Prioritario,
     double? DiasEsperando);
 
@@ -285,7 +297,7 @@ public sealed record OtReportRowDto(
     string? Vin,
     Guid ClientTenantId,
     string ClientTenantName,
-    string Modalidad,
+    string Familia,
     string Status,
     string EstadoOt,
     bool Prioritario,

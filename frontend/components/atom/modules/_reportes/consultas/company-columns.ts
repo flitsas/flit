@@ -15,6 +15,7 @@ import {
 import { formatDate, formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
 import type { CompanyQueryRow } from "@/lib/api/company-queries";
 import { bogotaClock, bogotaDay } from "@/lib/xlsx";
+import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 const ESTADO_LABEL: Record<string, string> = {
   borrador: "Borrador",
@@ -38,11 +39,6 @@ const ESTADO_COLOR: Record<string, string> = {
 export function estadoEmpresa(estado: string): { label: string; color: string } {
   return { label: ESTADO_LABEL[estado] ?? estado, color: ESTADO_COLOR[estado] ?? "#CBD5E1" };
 }
-
-const MODALIDAD_LABEL: Record<string, string> = {
-  matricula_inicial: "Matrícula inicial",
-  traspaso: "Traspaso",
-};
 
 const TRANSFORMACION_LABEL: Record<string, string> = {
   cambio_color: "Color",
@@ -124,7 +120,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     id: "modalidad",
     label: "Modalidad",
     group: GRUPO_TRAMITE,
-    value: (r) => MODALIDAD_LABEL[r.modalidad] ?? r.modalidad,
+    value: (r) => familiaLabel(r.modalidad),
     width: 16,
   },
   {

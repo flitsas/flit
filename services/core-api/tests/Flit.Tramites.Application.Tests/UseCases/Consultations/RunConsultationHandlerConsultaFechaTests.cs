@@ -49,6 +49,7 @@ public sealed class RunConsultationHandlerConsultaFechaTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

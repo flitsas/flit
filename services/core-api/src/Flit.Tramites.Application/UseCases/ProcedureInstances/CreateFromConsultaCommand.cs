@@ -1,9 +1,11 @@
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -16,6 +18,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed record CreateFromConsultaRequest(
     Guid TenantId,
     Guid CreatedByUserId,
+    /// <summary>
+    /// Familia heredada (<c>matricula_inicial</c> / <c>traspaso</c>). Se mantiene para los clientes
+    /// que aún no envían <see cref="ProcedureTypeCode"/>; ADR-0050 la sustituye por el código del
+    /// tipo, que es lo que el gestor eligió del catálogo.
+    /// </summary>
     string Modalidad,
     string? Vin,
     string? Plate,
@@ -45,7 +52,13 @@ public sealed record CreateFromConsultaRequest(
     /// queda en blanco (comportamiento por defecto, sin romper trámites existentes).
     /// </summary>
     string? EmpresaVinculadoraNit = null,
-    string? EmpresaVinculadoraRazonSocial = null);
+    string? EmpresaVinculadoraRazonSocial = null,
+    /// <summary>
+    /// ADR-0050 — <c>code</c> del tipo elegido en el catálogo. Cuando viene, MANDA sobre
+    /// <see cref="Modalidad"/>: es el único dato con el que se puede crear un trámite de la familia
+    /// OTROS, que por modalidad caía siempre en matrícula inicial.
+    /// </summary>
+    string? ProcedureTypeCode = null);
 
 public sealed record CreateFromConsultaResult(
     ProcedureInstanceSummary Instance,
@@ -69,7 +82,8 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     IPreflightPreviewStore previewStore,
     ITransitOfficeResolver transitOfficeResolver,
     TramiteValidationPolicy? validationPolicy = null,
-    IOtOperabilityGate? otOperability = null)
+    IOtOperabilityGate? otOperability = null,
+    IProcedureTypeRepository? typeRepo = null)
 {
     // HU #10970 — mismo modo por ambiente que el resto del flujo. Sin inyectar ⇒ bloqueo duro.
     private readonly TramiteValidationPolicy _validationPolicy =
@@ -85,15 +99,41 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(request.Modalidad);
+        // ADR-0050 — el tipo elegido manda. Sin él (clientes anteriores) se cae a la familia
+        // heredada, que solo sabe distinguir matrícula de traspaso.
+        ProcedureType? procedureType = null;
+        if (typeRepo is not null && !string.IsNullOrWhiteSpace(request.ProcedureTypeCode))
+        {
+            procedureType = await typeRepo
+                .GetByCodePublishedAsync(request.ProcedureTypeCode!.Trim(), ct)
+                .ConfigureAwait(false);
+            if (procedureType is null)
+                return (null, "procedure_type_not_found", null, null);
+        }
+
+        var modalidad = procedureType is not null
+            ? ProcedureFamilyCodes.FromCodeOrOtros(procedureType.Family)
+            : ProcedureFamilyCodes.FromCodeOrLegacyModalidad(request.Modalidad);
         if (modalidad is null)
             return (null, "modalidad_not_available", null, null);
 
-        var esMatricula = modalidad == TramiteModalidadEntrada.MatriculaInicial;
+        // Qué identificador exige el trámite lo declara el tipo (`entryMode`), no la familia: es la
+        // diferencia entre pedir el VIN de un vehículo sin placa y la placa de uno ya matriculado.
+        // Un trámite de la familia OTROS entra por placa, y por familia habría entrado por VIN.
+        var entraPorVin = procedureType is not null
+            ? string.Equals(
+                ProcedureTypeGateProfile.FromJson(procedureType.GateProfile).EntryMode,
+                "VIN",
+                StringComparison.OrdinalIgnoreCase)
+            : modalidad == ProcedureFamily.Matriculas;
+
+        // La secretaría y la casilla 18 siguen siendo cosa de los trámites que MATRICULAN el
+        // vehículo, que son exactamente los que entran por VIN.
+        var esMatricula = entraPorVin;
         var vin = Trim(request.Vin);
         var plate = Trim(request.Plate)?.ToUpperInvariant();
 
-        if (esMatricula ? vin is null : plate is null)
+        if (entraPorVin ? vin is null : plate is null)
             return (null, "identificador_requerido", null, null);
 
         // HU #11199 (AC1/AC3) — la secretaría elegida en el paso 1 se re-confirma aquí, no se copia del
@@ -143,7 +183,8 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
                 ProcedureTypeId: null,
                 request.CreatedByUserId,
                 request.TransitOfficeId,
-                Modalidad: request.Modalidad),
+                Modalidad: request.Modalidad,
+                ProcedureTypeCode: procedureType?.Code),
             ct);
 
         if (createError is not null || summary is null)
@@ -246,13 +287,13 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     }
 
     private async Task<Guid?> FindDuplicateAsync(
-        TramiteModalidadEntrada modalidad,
+        ProcedureFamily modalidad,
         Guid tenantId,
         string? vin,
         string? plate,
         CancellationToken ct)
     {
-        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad == ProcedureFamily.Matriculas)
         {
             var vinNorm = VinNormalizer.Normalize(vin);
             if (vinNorm is null)
@@ -263,7 +304,7 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
                 existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
-        if (modalidad == TramiteModalidadEntrada.Traspaso && !string.IsNullOrEmpty(plate))
+        if (modalidad == ProcedureFamily.Traspaso && !string.IsNullOrEmpty(plate))
         {
             var existentes = await repo.FindTramitesByPlacaAsync(tenantId, plate, Guid.Empty, ct);
             return DuplicateActiveProcedurePolicy.FindActiveDuplicate(

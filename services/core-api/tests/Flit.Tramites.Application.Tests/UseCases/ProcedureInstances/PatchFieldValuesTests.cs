@@ -22,6 +22,7 @@ public sealed class PatchFieldValuesTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -280,8 +281,7 @@ public sealed class PatchFieldValuesTests
     private static ProcedureInstance TraspasoInstance(Guid id, Guid tenantId, string status)
     {
         var instance = Instance(id, tenantId, status);
-        instance.ModalidadEntrada = "traspaso";
-        instance.TipologiaCodigo = "traspaso_standard";
+        instance.ProcedureType = ProcedureTypeFixture.For("traspaso");
         return instance;
     }
 

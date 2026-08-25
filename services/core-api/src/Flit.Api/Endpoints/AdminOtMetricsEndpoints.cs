@@ -129,7 +129,8 @@ public static class AdminOtMetricsEndpoints
         [FromQuery] string? bucket = null,
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
-        [FromQuery] string? modalidad = null,
+        [FromQuery] string? family = null,
+        [FromQuery] Guid? procedureTypeId = null,
         [FromQuery] Guid? clientTenantId = null,
         [FromQuery] Guid? transitOfficeId = null)
     {
@@ -141,7 +142,7 @@ public static class AdminOtMetricsEndpoints
         }
 
         var (context, error) = ResolveContext(
-            httpContext, transitOfficeCatalog, from, to, modalidad, clientTenantId, transitOfficeId);
+            httpContext, transitOfficeCatalog, from, to, family, procedureTypeId, clientTenantId, transitOfficeId);
         if (error is not null)
         {
             return error;
@@ -164,7 +165,7 @@ public static class AdminOtMetricsEndpoints
         // Reusa la resolución común con un rango cualquiera: aquí solo interesan tenant y override.
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var (context, error) = ResolveContext(
-            httpContext, transitOfficeCatalog, today, today, null, null, transitOfficeId);
+            httpContext, transitOfficeCatalog, today, today, null, null, null, transitOfficeId);
         if (error is not null)
         {
             return error;
@@ -184,7 +185,8 @@ public static class AdminOtMetricsEndpoints
         CancellationToken cancellationToken,
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
-        [FromQuery] string? modalidad = null,
+        [FromQuery] string? family = null,
+        [FromQuery] Guid? procedureTypeId = null,
         [FromQuery] Guid? clientTenantId = null,
         [FromQuery] Guid? transitOfficeId = null,
         [FromQuery] int? page = null,
@@ -193,7 +195,7 @@ public static class AdminOtMetricsEndpoints
         [FromQuery] bool desc = true)
     {
         var (context, error) = ResolveContext(
-            httpContext, transitOfficeCatalog, from, to, modalidad, clientTenantId, transitOfficeId);
+            httpContext, transitOfficeCatalog, from, to, family, procedureTypeId, clientTenantId, transitOfficeId);
         if (error is not null)
         {
             return error;
@@ -215,7 +217,8 @@ public static class AdminOtMetricsEndpoints
         CancellationToken cancellationToken,
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
-        [FromQuery] string? modalidad = null,
+        [FromQuery] string? family = null,
+        [FromQuery] Guid? procedureTypeId = null,
         [FromQuery] Guid? clientTenantId = null,
         [FromQuery] Guid? transitOfficeId = null,
         [FromQuery] Guid[]? userIds = null,
@@ -223,7 +226,7 @@ public static class AdminOtMetricsEndpoints
         [FromQuery] bool desc = true)
     {
         var (context, error) = ResolveContext(
-            httpContext, transitOfficeCatalog, from, to, modalidad, clientTenantId, transitOfficeId);
+            httpContext, transitOfficeCatalog, from, to, family, procedureTypeId, clientTenantId, transitOfficeId);
         if (error is not null)
         {
             return error;
@@ -249,7 +252,7 @@ public static class AdminOtMetricsEndpoints
         // resolución común pide un rango.
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var (context, error) = ResolveContext(
-            httpContext, transitOfficeCatalog, today, today, null, null, transitOfficeId);
+            httpContext, transitOfficeCatalog, today, today, null, null, null, transitOfficeId);
         if (error is not null)
         {
             return error;
@@ -269,12 +272,13 @@ public static class AdminOtMetricsEndpoints
         CancellationToken cancellationToken,
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
-        [FromQuery] string? modalidad = null,
+        [FromQuery] string? family = null,
+        [FromQuery] Guid? procedureTypeId = null,
         [FromQuery] Guid? clientTenantId = null,
         [FromQuery] Guid? transitOfficeId = null)
     {
         var (context, error) = ResolveContext(
-            httpContext, transitOfficeCatalog, from, to, modalidad, clientTenantId, transitOfficeId);
+            httpContext, transitOfficeCatalog, from, to, family, procedureTypeId, clientTenantId, transitOfficeId);
         if (error is not null)
         {
             return error;
@@ -294,12 +298,13 @@ public static class AdminOtMetricsEndpoints
         CancellationToken cancellationToken,
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
-        [FromQuery] string? modalidad = null,
+        [FromQuery] string? family = null,
+        [FromQuery] Guid? procedureTypeId = null,
         [FromQuery] Guid? clientTenantId = null,
         [FromQuery] Guid? transitOfficeId = null)
     {
         var (context, error) = ResolveContext(
-            httpContext, transitOfficeCatalog, from, to, modalidad, clientTenantId, transitOfficeId);
+            httpContext, transitOfficeCatalog, from, to, family, procedureTypeId, clientTenantId, transitOfficeId);
         if (error is not null)
         {
             return error;
@@ -319,12 +324,13 @@ public static class AdminOtMetricsEndpoints
         CancellationToken cancellationToken,
         [FromQuery] DateOnly? from = null,
         [FromQuery] DateOnly? to = null,
-        [FromQuery] string? modalidad = null,
+        [FromQuery] string? family = null,
+        [FromQuery] Guid? procedureTypeId = null,
         [FromQuery] Guid? clientTenantId = null,
         [FromQuery] Guid? transitOfficeId = null)
     {
         var (context, error) = ResolveContext(
-            httpContext, transitOfficeCatalog, from, to, modalidad, clientTenantId, transitOfficeId);
+            httpContext, transitOfficeCatalog, from, to, family, procedureTypeId, clientTenantId, transitOfficeId);
         if (error is not null)
         {
             return error;
@@ -346,7 +352,8 @@ public static class AdminOtMetricsEndpoints
         ITransitOfficeCatalog transitOfficeCatalog,
         DateOnly? from,
         DateOnly? to,
-        string? modalidad,
+        string? family,
+        Guid? procedureTypeId,
         Guid? clientTenantId,
         Guid? transitOfficeId)
     {
@@ -381,8 +388,12 @@ public static class AdminOtMetricsEndpoints
         var filter = new OtMetricsFilter(
             from!.Value,
             to!.Value,
-            string.IsNullOrWhiteSpace(modalidad) ? null : modalidad.Trim(),
-            clientTenantId);
+            // ADR-0050: la UI enviaba 'matricula_inicial'/'traspaso' contra una consulta que compara
+            // con procedure_types.family, así que el filtro no devolvía ninguna fila. Se normaliza a
+            // mayúsculas para que el valor de la UI y el de la columna sean el mismo dato.
+            string.IsNullOrWhiteSpace(family) ? null : family.Trim().ToUpperInvariant(),
+            clientTenantId,
+            procedureTypeId);
 
         return (new MetricsContext(tenantId, filter, scopedOfficeId), null);
     }

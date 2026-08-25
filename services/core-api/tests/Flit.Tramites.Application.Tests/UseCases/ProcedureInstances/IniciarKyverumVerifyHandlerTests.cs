@@ -36,12 +36,12 @@ public sealed class IniciarKyverumVerifyHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

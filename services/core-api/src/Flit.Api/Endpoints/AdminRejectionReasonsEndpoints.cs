@@ -32,7 +32,7 @@ public static class AdminRejectionReasonsEndpoints
         read.MapGet("/", ListAsync)
             .WithName("AdminRejectionReasonList")
             .WithSummary("Lista las causales de rechazo del catálogo")
-            .WithDescription("Filtra por modalidad (matricula_inicial | traspaso). Por defecto solo "
+            .WithDescription("Filtra por familia (MATRICULAS | TRASPASO | OTROS). Por defecto solo "
                 + "activas; includeInactive=true incluye las retiradas (necesario en la consola de "
                 + "administración para poder reactivarlas).")
             .Produces<IReadOnlyList<RejectionReasonResponse>>(StatusCodes.Status200OK)
@@ -77,11 +77,11 @@ public static class AdminRejectionReasonsEndpoints
     private static async Task<IResult> ListAsync(
         [FromServices] ListRejectionReasonsHandler handler,
         CancellationToken cancellationToken,
-        [FromQuery] string? modalidad = null,
+        [FromQuery] string? family = null,
         [FromQuery] bool? includeInactive = null)
     {
         var result = await handler
-            .HandleAsync(modalidad, includeInactive ?? false, cancellationToken)
+            .HandleAsync(family, includeInactive ?? false, cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(result);

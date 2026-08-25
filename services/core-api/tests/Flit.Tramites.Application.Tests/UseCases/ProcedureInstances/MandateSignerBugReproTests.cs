@@ -119,13 +119,12 @@ public sealed class MandateSignerBugReproTests
     /// </summary>
     private static ProcedureInstance NewInstance() => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
         Id = InstanceId,
         TenantId = TenantId,
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = "TRM-2026-000777",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = "matricula_inicial",
-        TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
         TransitOfficeId = Ot,
         MandateSignerId = null,
         CreatedAt = DateTimeOffset.UtcNow,
