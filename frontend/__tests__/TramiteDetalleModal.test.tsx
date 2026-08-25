@@ -14,7 +14,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 import { tramitesClient } from '@/lib/api/tramites-client';
 
-const ITEM: InstanceSummary = {
+const ITEM = {
   id: 'inst-1',
   referenceNumber: 'RAD-001',
   placa: 'ABC123',
@@ -25,16 +25,31 @@ const ITEM: InstanceSummary = {
   gestorNombre: 'Gestor Test',
   vehiculoMarca: 'Toyota',
   vehiculoLinea: 'Corolla',
+  compradorNombre: 'Comprador Test',
+  compradorDocumento: '1001',
+  vendedorNombre: 'Vendedor Test',
+  vendedorDocumento: '2001',
+  organismoTransito: 'Secretaría Test',
+  pasoActual: 3,
+  totalPasos: 5,
   createdAt: '2026-04-18T08:00:00Z',
   updatedAt: '2026-04-20T11:00:00Z',
+  draftFinalizedAt: null,
+  identityValidationStatus: null,
+  signaturePending: false,
+  canSubmit: false,
+  prioritario: false,
+  tenantId: '11111111-1111-1111-1111-111111111111',
+  companiaNombre: null,
   subsanacionActiva: false,
-  isPaused: false,
   plateFlowStatus: null,
   ultimoRechazoMotivo: null,
+  isPaused: false,
   pausedObservation: null,
   firmaVendedorEstado: 'firmado',
   firmaCompradorEstado: 'pendiente',
-};
+  consolidadoAttachmentId: null,
+} satisfies InstanceSummary;
 
 describe('TramiteDetalleModal', () => {
   beforeEach(() => {
@@ -49,7 +64,6 @@ describe('TramiteDetalleModal', () => {
     vi.mocked(tramitesClient.getAttachments).mockResolvedValue([]);
     vi.mocked(tramitesClient.listBiometricExpediente).mockResolvedValue({
       validations: [],
-      provider: 'kyverum',
       firmaBaulPartes: ['vendedor'],
     });
   });

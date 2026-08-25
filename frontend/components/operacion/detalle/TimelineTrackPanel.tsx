@@ -41,7 +41,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
   if (nodes.length === 0) {
     return (
       <div className={`${CARD} flex h-full flex-col p-5`}>
-        <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: BLUE }}>
+        <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
           {title}
         </h4>
         <p className="text-xs opacity-70">{emptyMessage ?? 'Sin eventos registrados todavía.'}</p>
