@@ -57,6 +57,7 @@ import {
   useAttachmentPreview,
 } from './TramiteDocumentosModal';
 import { TramiteDetalleModal } from './TramiteDetalleModal';
+import { TramiteTrackingModal } from './TramiteTrackingModal';
 import type {
   FirmaParteEstado,
   InstanceStatus,
@@ -440,6 +441,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
   // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
   const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
+  /** Click en badge Estado → modal de línea de tiempo del trámite (todas las modalidades). */
+  const [trackingTramite, setTrackingTramite] = useState<InstanceSummary | null>(null);
 
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
@@ -1120,6 +1123,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           onVerDocumentos={setDocsTramite}
           onVerConsolidado={setConsolidadoTramite}
           onOpenDetalle={setDetalleTramite}
+          onOpenTrackingTramite={setTrackingTramite}
         />
       </div>
 
@@ -1150,6 +1154,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         instanceId={detalleTramite?.id ?? null}
         tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
         item={detalleTramite}
+      />
+
+      <TramiteTrackingModal
+        open={trackingTramite !== null}
+        onClose={() => setTrackingTramite(null)}
+        instanceId={trackingTramite?.id ?? null}
+        tenantId={isAdmin ? trackingTramite?.tenantId : undefined}
+        titleHint={
+          trackingTramite
+            ? [trackingTramite.referenceNumber, trackingTramite.placa].filter(Boolean).join(' · ')
+            : null
+        }
       />
 
       {processTarget && (
@@ -1317,6 +1333,7 @@ function TableBody({
   onVerDocumentos,
   onVerConsolidado,
   onOpenDetalle,
+  onOpenTrackingTramite,
 }: {
   loading: boolean;
   error: string | null;
@@ -1350,6 +1367,8 @@ function TableBody({
   onVerConsolidado: (item: InstanceSummary) => void;
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
   onOpenDetalle: (item: InstanceSummary) => void;
+  /** Click en badge Estado → modal de línea de tiempo del trámite. */
+  onOpenTrackingTramite: (item: InstanceSummary) => void;
 }) {
   if (loading) {
     // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
@@ -1512,6 +1531,7 @@ function TableBody({
                 onVerDocumentos={onVerDocumentos}
                 onVerConsolidado={onVerConsolidado}
                 onOpenDetalle={onOpenDetalle}
+                onOpenTrackingTramite={onOpenTrackingTramite}
               />
             ))}
           </tbody>
@@ -1608,6 +1628,7 @@ function TramiteRow({
   onVerDocumentos,
   onVerConsolidado,
   onOpenDetalle,
+  onOpenTrackingTramite,
 }: {
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
@@ -1627,6 +1648,7 @@ function TramiteRow({
   onVerConsolidado: (item: InstanceSummary) => void;
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
   onOpenDetalle: (item: InstanceSummary) => void;
+  onOpenTrackingTramite: (item: InstanceSummary) => void;
 }) {
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
@@ -1891,15 +1913,26 @@ function TramiteRow({
     estado: (
       <span className="relative flex min-w-0 flex-col items-start gap-1">
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {ayudaIdentidad ? (
-            <IdentidadChip
-              chip={chip}
-              ayuda={ayudaIdentidad}
-              tipId={`identidad-ayuda-${item.id}`}
-            />
-          ) : (
-            <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenTrackingTramite(item);
+            }}
+            aria-label={`Ver trazabilidad del trámite ${item.referenceNumber}`}
+            title="Ver línea de tiempo del trámite"
+            className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+          >
+            {ayudaIdentidad ? (
+              <IdentidadChip
+                chip={chip}
+                ayuda={ayudaIdentidad}
+                tipId={`identidad-ayuda-${item.id}`}
+              />
+            ) : (
+              <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+            )}
+          </button>
           {showRejectPopover ? (
           <div ref={popoverRef} className="relative shrink-0">
             <button
