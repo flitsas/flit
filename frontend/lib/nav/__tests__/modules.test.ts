@@ -5,6 +5,7 @@ import {
   buildValidModules,
   parseModule,
   planSpaModuleAccess,
+  puedeDecidirAccesoAModulo,
   resolveNavigableModuleIds,
   UNIVERSAL_MODULE_IDS,
 } from "../modules";
@@ -112,6 +113,36 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
     expect(buildValidModules([])).toContain("ayuda");
     expect(buildValidModules([])).toContain("dashboard");
     expect(buildValidModules([])).not.toContain("rbac");
+  });
+});
+
+describe("nav/modules — puedeDecidirAccesoAModulo (rebote del deep-link)", () => {
+  it("no decide mientras la sesión no ha hidratado", () => {
+    expect(puedeDecidirAccesoAModulo({ hydrated: false, authed: false, modulesReady: false })).toBe(
+      false,
+    );
+  });
+
+  it("tampoco decide si hidrató pero todavía no hay sesión", () => {
+    expect(puedeDecidirAccesoAModulo({ hydrated: true, authed: false, modulesReady: false })).toBe(
+      false,
+    );
+  });
+
+  it("no decide con sesión pero sin que el catálogo haya resuelto todavía", () => {
+    // Este es el caso exacto del fallo. Con `authed` recién puesto en true, el catálogo aún no ha
+    // contestado pero `loading` sigue valiendo el `false` del render anterior: mirarlo daba «ya
+    // terminé» sobre una lista vacía, que deniega cualquier módulo y rebota al dashboard con un
+    // aviso de acceso falso. `ready` es lo único que distingue «no he preguntado» de «no hay nada».
+    expect(puedeDecidirAccesoAModulo({ hydrated: true, authed: true, modulesReady: false })).toBe(
+      false,
+    );
+  });
+
+  it("decide cuando hay sesión hidratada y el catálogo ya resolvió", () => {
+    expect(puedeDecidirAccesoAModulo({ hydrated: true, authed: true, modulesReady: true })).toBe(
+      true,
+    );
   });
 });
 

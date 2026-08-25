@@ -136,6 +136,32 @@ export type SpaModuleAccessPlan = {
  * Si `?m=` está denegado → dashboard; `shouldReplaceUrl` solo si la URL aún no es dashboard
  * (evita loop infinito de navegación con useSearchParams / replace).
  */
+/**
+ * Si ya se puede decidir sobre el acceso a un módulo, o hay que seguir esperando.
+ *
+ * <p>Existe como función propia porque el fallo no estaba en QUÉ se decidía sino en CUÁNDO. El
+ * guard esperaba a `modulesLoading`, y eso no basta por dos razones encadenadas:</p>
+ *
+ * <p>1. `useAccessibleModules(authed)` se llama con `authed` en false en el primer render —antes de
+ * que la sesión hidrate— y con `enabled` en false el hook se declara en
+ * `{ modules: [], loading: false }`: lista VACÍA anunciando que no está cargando.</p>
+ *
+ * <p>2. Y cuando `authed` pasa a true, el `setState` que pone `loading` en true ocurre DENTRO de un
+ * efecto, así que en ese mismo render `modulesLoading` sigue valiendo el `false` anterior. Mirar
+ * `loading` no distingue «no he preguntado» de «pregunté y no hay nada»; `ready` sí.</p>
+ *
+ * <p>El síntoma era entrar por URL directa a `/?m=reportes` y rebotar al dashboard con un aviso de
+ * «no tienes acceso» falso, mientras que desde el dock funcionaba —ahí el catálogo ya resolvió—,
+ * lo que hacía que pareciera aleatorio.</p>
+ */
+export function puedeDecidirAccesoAModulo(estado: {
+  hydrated: boolean;
+  authed: boolean;
+  modulesReady: boolean;
+}): boolean {
+  return estado.hydrated && estado.authed && estado.modulesReady;
+}
+
 export function planSpaModuleAccess(
   raw: string | null,
   navigableIds: readonly ModuleId[],
