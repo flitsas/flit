@@ -97,10 +97,30 @@ public sealed record DynamicWizardContext
 
     /// <summary>
     /// Decisión de prenda vigente de la instancia, para la sección <c>prenda_decision</c>. <c>null</c>
-    /// = sin decisión registrada, que es justo lo que el gate bloquea cuando el tipo declara
-    /// <c>hasPrendaGate</c>.
+    /// = sin decisión registrada, que es justo lo que el gate bloquea cuando hay prenda que resolver.
     /// </summary>
     public ProcedureInstancePrenda? PrendaVigente { get; init; }
+
+    /// <summary>
+    /// El RUNT reportó un gravamen o una prenda sobre ESTE vehículo (<c>runt_tiene_prendas</c> /
+    /// <c>runt_tiene_gravamenes</c> en field_values, que hidratan los tres mappers de consulta).
+    ///
+    /// <para>Es el disparador real de la decisión de prenda, en lugar de una marca del tipo. La
+    /// prenda no es una propiedad del TIPO de trámite —un traspaso no gestiona prenda por ser
+    /// traspaso— sino un hecho del VEHÍCULO: la gestiona si ese carro tiene una.</para>
+    ///
+    /// <para>Y es dato de la INSTANCIA, no del catálogo, así que no viaja en el snapshot congelado
+    /// del tipo: un expediente ya abierto lo evalúa con lo que el RUNT respondió, sin quedarse con
+    /// una copia vieja de la configuración.</para>
+    /// </summary>
+    public bool RuntReportaGravamen { get; init; }
+
+    /// <summary>
+    /// <c>code</c> del tipo con el que se conformó el expediente. Lo necesita la regla de prenda para
+    /// reconocer los trámites que SON el gravamen (inscribir / levantar / cambiar acreedor), donde el
+    /// disparador no puede ser lo que el RUNT reporte.
+    /// </summary>
+    public string? TypeCode { get; init; }
 
     /// <summary>Tipos de adjunto cargados; <see cref="PrendaGate"/> verifica contra ellos el
     /// documento que exige la decisión de prenda.</summary>
@@ -304,10 +324,9 @@ public static class DynamicGateEvaluator
                 return plate.Ok ? Complete() : Incomplete(reasons, PlateRequestGate.PlateRequestPending);
 
             case "prenda_decision":
-                // Antes ambas ramas devolvían Complete(): el gate no bloqueaba nunca. Ahora delega en
-                // PrendaGate, el mismo núcleo R10 del camino estático, disparado por hasPrendaGate en
-                // lugar de por la modalidad del trámite (ADR-0050).
-                if (!profile.HasPrendaGate)
+                // R10, disparado por lo que HAY que resolver —el tipo es de prenda, o el RUNT reportó
+                // un gravamen— y no por una marca del tipo. Ver ProcedureTypeLayers.ExigeDecisionDePrenda.
+                if (!ProcedureTypeLayers.ExigeDecisionDePrenda(ctx.TypeCode, ctx.RuntReportaGravamen))
                     return Complete();
                 var prendaError = PrendaGate.EvaluateDecision(ctx.PrendaVigente, ctx.AttachmentTipos);
                 return prendaError is null ? Complete() : Incomplete(reasons, prendaError);
@@ -388,7 +407,7 @@ public static class DynamicGateEvaluator
         }
         if (profile.RequiresBiometrics && !BiometricsOk(profile, ctx))
             blockers.Add(IdentidadNoAprobada);
-        if (profile.HasPrendaGate)
+        if (ProcedureTypeLayers.ExigeDecisionDePrenda(ctx.TypeCode, ctx.RuntReportaGravamen))
         {
             var prendaError = PrendaGate.EvaluateDecision(ctx.PrendaVigente, ctx.AttachmentTipos);
             if (prendaError is not null)

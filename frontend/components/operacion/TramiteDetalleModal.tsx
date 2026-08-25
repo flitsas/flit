@@ -206,7 +206,14 @@ export function TramiteDetalleModal({
     };
   }, [open, instanceId, tenantId, attReloadKey]);
 
-  const title = item ? MODALIDAD_TITLE[item.modalidad] : 'Detalle del trámite';
+  // ADR-0050 — en OTROS el título dice CUÁL trámite es. «Otros trámites» agrupa quince tipos, así
+  // que rotulaba igual un blindaje que un levantamiento de prenda; la familia sí identifica una
+  // matrícula o un traspaso. Sin nombre de tipo (expediente de un backend anterior), cae a la familia.
+  const title = !item
+    ? 'Detalle del trámite'
+    : item.modalidad === 'OTROS' && item.tipoNombre?.trim()
+      ? `Detalle de ${item.tipoNombre.trim().toLocaleLowerCase('es')}`
+      : MODALIDAD_TITLE[item.modalidad];
   // La matrícula inicial tiene CUATRO pasos y el traspaso cinco: es la secuencia de la norma, no
   // una simplificación (la matrícula no tiene datos comerciales).
   const pasos = item ? PASOS_POR_MODALIDAD[item.modalidad] : PASOS_POR_MODALIDAD.TRASPASO;

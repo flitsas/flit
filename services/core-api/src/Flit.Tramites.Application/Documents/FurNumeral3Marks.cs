@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.Documents;
@@ -24,7 +25,15 @@ public static class FurNumeral3Marks
         var code = Norm(tipologiaCodigo);
         var marks = new HashSet<int>(BaseBoxes(code, modalidad));
 
-        if (!IsPrendaBase(code))
+        // ADR-0050 — las tablas 2 y 3 son ACUMULACIÓN (art. 5.1.8), y acumular es privilegio de las
+        // familias que radican varios trámites en un FUR. La familia OTROS no: ahí el gravamen o el
+        // cambio ES el trámite, así que solo entra la capa que le pertenece al tipo. `modalidad`
+        // trae la familia del expediente desde ADR-0050 (FurCommand la puebla con FamilyCode).
+        var acumula = ProcedureTypeLayers.FamiliaAcumulaComplementarios(modalidad);
+
+        // La prenda de un tipo prendario NO es complementaria: es el trámite. Por eso CAMBIO_ACREEDOR
+        // —cuya casilla base es la 18— sigue marcando 11/12 desde su propia decisión de gravamen.
+        if (!IsPrendaBase(code) && (acumula || ProcedureTypeLayers.EsTipoPrendaBase(code)))
         {
             if (prenda is FurPrendaMarking.Constitucion or FurPrendaMarking.Ambos)
                 marks.Add(11);
@@ -32,12 +41,17 @@ public static class FurNumeral3Marks
                 marks.Add(12);
         }
 
-        if (!IsColorBase(code) && transformaciones.Color)
-            marks.Add(5);
-        if (!IsCarroceriaBase(code) && transformaciones.Carroceria)
-            marks.Add(17);
-        if (!IsCombustibleBase(code) && transformaciones.Combustible)
-            marks.Add(18);
+        // En OTROS la casilla del cambio ya la puso BaseBoxes (5 / 17 / 18, o ninguna en blindaje):
+        // la tabla 3 solo podría añadir la de OTRO cambio, que es justo lo que no puede acumularse.
+        if (acumula)
+        {
+            if (!IsColorBase(code) && transformaciones.Color)
+                marks.Add(5);
+            if (!IsCarroceriaBase(code) && transformaciones.Carroceria)
+                marks.Add(17);
+            if (!IsCombustibleBase(code) && transformaciones.Combustible)
+                marks.Add(18);
+        }
 
         return marks;
     }

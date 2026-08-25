@@ -89,8 +89,16 @@ interface Props {
    */
   seedDocumentoFromOwner?: boolean;
   /**
-   * Paso vendedor (traspaso): si ya hay número de documento (seed o rehidratación),
-   * consulta RUNT al montar, oculta el botón manual y deja el documento en solo lectura.
+   * Rol que ES el propietario inscrito en el RUNT y por tanto recibe la siembra y la consulta
+   * automática. `vendedor` en el traspaso (el propietario que sale); `comprador` donde no hay parte
+   * vendedora y el vehículo ya está matriculado (familia OTROS: el titular no vende ni compra, solo
+   * hace cambios sobre su vehículo, y se persiste como comprador porque el modelo no tiene rol
+   * 'propietario'). Default `vendedor`, que es como se comportaba cuando solo existía el traspaso.
+   */
+  rolDelPropietario?: ActorRol;
+  /**
+   * Paso del propietario: si ya hay número de documento (seed o rehidratación), consulta RUNT al
+   * montar, oculta el botón manual y deja el documento en solo lectura.
    * Sin documento: el campo sigue editable y no se dispara consulta.
    */
   autoConsultRunt?: boolean;
@@ -125,6 +133,7 @@ const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
 const ROL_LABEL: Record<ActorRol, string> = {
   comprador: 'Comprador',
   vendedor: 'Vendedor',
+  locatario: 'Locatario',
 };
 
 /** Roles requeridos por modalidad. Matrícula = solo comprador; traspaso = ambos. */
@@ -567,6 +576,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     embeddedInWizard = false,
     layout,
     seedDocumentoFromOwner = false,
+    rolDelPropietario = 'vendedor',
     autoConsultRunt = false,
     rnmcEnabled = false,
     onConsultationGateChange,
@@ -752,7 +762,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [ownerSeedRetry, setOwnerSeedRetry] = useState(0);
 
   // Carga el documento del propietario desde los field_values de la instancia.
-  // Solo aplica cuando `seedDocumentoFromOwner` (paso vendedor del traspaso).
+  // Solo aplica cuando `seedDocumentoFromOwner` (paso del propietario inscrito).
   useEffect(() => {
     if (!seedDocumentoFromOwner || !instanceId) return;
     let active = true;
@@ -779,11 +789,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     };
   }, [seedDocumentoFromOwner, instanceId, ownerSeedRetry]);
 
-  // Aplica el documento del propietario (paso 1) SOLO al vendedor sin documento.
-  // No pisa un documento ya escrito/persistido y nunca siembra al comprador (en el
-  // formulario unificado vendedor+comprador ambos roles pasan por este helper).
+  // Aplica el documento del propietario (paso 1) SOLO al rol que ES ese propietario y solo si aún
+  // no tiene documento. No pisa un documento ya escrito/persistido, y en el formulario unificado
+  // vendedor+comprador —donde ambos roles pasan por este helper— sigue sembrando a uno solo.
   const withOwnerSeed = (a: ProcedureActor): ProcedureActor =>
-    ownerSeed && a.rol === 'vendedor' && !a.numeroDocumento.trim()
+    ownerSeed && a.rol === rolDelPropietario && !a.numeroDocumento.trim()
       ? withDerivedPersonType({
           ...a,
           numeroDocumento: ownerSeed.numero,
@@ -881,6 +891,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // Split implícito: un único comprador. Explícito: layout='split'.
   const isSplit =
     layout === 'split' || (roles.length === 1 && roles[0] === 'comprador');
+
+  /** Hay arrendatario en esta pantalla: entonces la contraparte es el arrendador (propietario). */
+  const hayLocatario = roles.includes('locatario');
 
   const validation = validateActors(actors, modalidad);
 
@@ -1184,35 +1197,35 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     });
   }, [instanceId, actors]);
 
-  // Paso vendedor: dispara la consulta en cuanto el documento está disponible (sembrado desde el
-  // paso 1 o rehidratado del backend), sin clic manual. HU #10906 — el cortocircuito de precarga por
-  // NIT vive dentro de handleIdentityLookup (rama jurídica).
-  // Split (un vendedor) o MULTI unificado (índice del rol vendedor).
+  // Paso del propietario: dispara la consulta en cuanto el documento está disponible (sembrado desde
+  // el paso 1 o rehidratado del backend), sin clic manual. HU #10906 — el cortocircuito de precarga
+  // por NIT vive dentro de handleIdentityLookup (rama jurídica).
+  // Split (una sola parte) o MULTI unificado (índice del rol propietario).
   // Si ya hay snapshot restaurado (`found`), no vuelve a consultar.
-  const vendedorIndex = actors.findIndex((a) => a.rol === 'vendedor');
-  const vendedorDoc = vendedorIndex >= 0 ? actors[vendedorIndex]?.numeroDocumento : undefined;
-  const vendedorTipo = vendedorIndex >= 0 ? actors[vendedorIndex]?.tipoDocumento : undefined;
-  const vendedorRuntStatus = vendedorIndex >= 0 ? runt[vendedorIndex]?.status : undefined;
+  const propietarioIndex = actors.findIndex((a) => a.rol === rolDelPropietario);
+  const propietarioDoc = propietarioIndex >= 0 ? actors[propietarioIndex]?.numeroDocumento : undefined;
+  const propietarioTipo = propietarioIndex >= 0 ? actors[propietarioIndex]?.tipoDocumento : undefined;
+  const propietarioRuntStatus = propietarioIndex >= 0 ? runt[propietarioIndex]?.status : undefined;
 
   useEffect(() => {
     if (!autoConsultRunt || !instanceId || readOnly) return;
-    if (vendedorIndex < 0) return;
-    if (isSplit && (actors.length !== 1 || actors[0]?.rol !== 'vendedor')) return;
+    if (propietarioIndex < 0) return;
+    if (isSplit && (actors.length !== 1 || actors[0]?.rol !== rolDelPropietario)) return;
 
-    const documentNumber = (vendedorDoc ?? '').trim();
+    const documentNumber = (propietarioDoc ?? '').trim();
     if (!documentNumber) return;
-    if ((vendedorRuntStatus ?? 'idle') !== 'idle') return;
-    const vendedor = actors[vendedorIndex];
-    const cached = vendedor ? restoreActorConsultation(instanceId, vendedor) : null;
+    if ((propietarioRuntStatus ?? 'idle') !== 'idle') return;
+    const propietario = actors[propietarioIndex];
+    const cached = propietario ? restoreActorConsultation(instanceId, propietario) : null;
     if (cached) {
-      setRuntFor(vendedorIndex, cached);
-      autoLookupTriggeredRef.current = `${vendedorTipo}:${documentNumber}`;
+      setRuntFor(propietarioIndex, cached);
+      autoLookupTriggeredRef.current = `${propietarioTipo}:${documentNumber}`;
       return;
     }
-    const lookupKey = `${vendedorTipo}:${documentNumber}`;
+    const lookupKey = `${propietarioTipo}:${documentNumber}`;
     if (autoLookupTriggeredRef.current === lookupKey) return;
     autoLookupTriggeredRef.current = lookupKey;
-    void handleIdentityLookup(vendedorIndex);
+    void handleIdentityLookup(propietarioIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleIdentityLookup lee actors actuales
   }, [
     autoConsultRunt,
@@ -1220,10 +1233,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     readOnly,
     isSplit,
     actors.length,
-    vendedorIndex,
-    vendedorDoc,
-    vendedorTipo,
-    vendedorRuntStatus,
+    rolDelPropietario,
+    propietarioIndex,
+    propietarioDoc,
+    propietarioTipo,
+    propietarioRuntStatus,
   ]);
 
   // ── HU #10886 (AC1) — aviso de reenvío al cambiar el correo del sujeto de identidad ────────────
@@ -2128,8 +2142,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const ciudades = filterCiudades(actor.ciudad ?? '');
     const showCiudades = !!ciudadOpen[0] && ciudades.length > 0;
     // Novedad nov.41 — este actor es el que recibe la precarga silenciosa del documento del
-    // propietario (paso 1). Solo aplica al vendedor del traspaso.
-    const seedingOwnerDoc = seedDocumentoFromOwner && actor.rol === 'vendedor';
+    // propietario (paso 1). Aplica al rol que ES ese propietario: el vendedor del traspaso, o el
+    // titular donde el vehículo ya está inscrito y no hay parte vendedora (familia OTROS).
+    const seedingOwnerDoc = seedDocumentoFromOwner && actor.rol === rolDelPropietario;
+    // El titular de un trámite sobre vehículo inscrito es QUIEN FIGURA en el RUNT: ni el documento,
+    // ni la identidad, ni el tipo de persona son suyos para cambiar. Cambiarlos no sería corregir un
+    // dato, sería cambiar de persona — y cambiar de propietario es un traspaso, no una novedad.
+    const esPropietarioInscrito = autoConsultRunt && actor.rol === rolDelPropietario;
+    // Nombre / razón social: con la consulta resuelta el dato es el del registro. `razonLocked` solo
+    // cubre la razón social que vino de RUES, y `isNameLockedByRunt` solo la persona natural, así
+    // que una jurídica resuelta por otra vía quedaba editable — y ahí es donde se cambia de titular.
+    const identidadDelRegistro = esPropietarioInscrito && runtState.status === 'found';
+    const nombreBloqueado = razonLocked || isNameLockedByRunt(0, actor) || identidadDelRegistro;
     const rnmcIssueDate = issueDateField(0);
     return (
       <>
@@ -2149,16 +2173,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             natural → CC por defecto (RUNT puede corregirlo); jurídica → NIT fijo.
             Rejilla: número (span 2) | Consultar (+ hint a lo ancho). */}
         <WizardAccordion
-          title={`Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
+          title={esPropietarioInscrito ? 'Datos del propietario actual' : `Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
           defaultOpen
         >
           <p className="text-xs opacity-70 mb-3">
-            {actor.rol === 'vendedor'
-              ? 'Registra la persona natural o jurídica que figura hoy como propietario del vehículo.'
-              : 'Registra la persona natural o jurídica que figurará como propietario del vehículo.'}
+            {esPropietarioInscrito
+              ? 'Los datos son los del propietario inscrito en el RUNT y no se pueden editar. Si el vehículo debe quedar a nombre de otra persona, el trámite es un traspaso.'
+              : actor.rol === 'locatario'
+                ? 'Registra la persona natural o jurídica que tiene el vehículo en arrendamiento. No firma el trámite: quien autoriza es el propietario.'
+                : actor.rol === 'vendedor'
+                  ? 'Registra la persona natural o jurídica que figura hoy como propietario del vehículo.'
+                  : 'Registra la persona natural o jurídica que figurará como propietario del vehículo.'}
           </p>
           <div className="space-y-3">
-            {personTypeSelector(0)}
+            {personTypeSelector(0, isPersonTypeLockedByRunt(0))}
             {/* Grid de identificación: sin selector de tipo — CC por defecto (RUNT puede corregirlo).
                 Rejilla: número (col-span-2) | Consultar RUNT | hint a lo ancho. */}
             {!isJuridical(actor) ? (
@@ -2245,9 +2273,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   </button>
                 )}
                 <p className="text-xs opacity-70 lg:col-span-3">
-                  {actor.rol === 'comprador'
-                    ? 'Consultamos el RUNT para autocompletar la información del comprador.'
-                    : `Consultamos el RUNT para autocompletar la información del ${actor.rol}.`}
+                  {esPropietarioInscrito
+                    ? 'Los datos de identidad se toman de la consulta al RUNT del propietario actual.'
+                    : actor.rol === 'comprador'
+                      ? 'Consultamos el RUNT para autocompletar la información del comprador.'
+                      : `Consultamos el RUNT para autocompletar la información del ${actor.rol}.`}
                 </p>
               </div>
             ) : (
@@ -2313,7 +2343,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
         {/* Sección B — Datos de contacto (prototipo MI: grilla 3×2) */}
         <WizardAccordion title="Datos de contacto" defaultOpen>
-          <p className="text-xs opacity-70 mb-3">Confirma o edita la información de notificación del propietario.</p>
+          {/* Art. 5.1.10 — la notificación SÍ es editable aunque la identidad esté bloqueada: el
+              RUNT puede traer un correo o una dirección desactualizados, y ahí es donde llegan los
+              avisos del trámite. Bloquear quién es no implica bloquear dónde se le notifica. */}
+          <p className="text-xs opacity-70 mb-3">
+            {esPropietarioInscrito
+              ? 'Confirma o corrige los datos de notificación del propietario. Estos sí son editables.'
+              : actor.rol === 'locatario'
+                // No es decorativo: el locatario recibe los correos de estado del trámite, y su
+                // dirección y ciudad se estampan en el FUR.
+                ? 'Datos de notificación del locatario: recibirá los avisos del trámite.'
+                : 'Confirma o edita la información de notificación del propietario.'}
+          </p>
           <div className="text-xs opacity-70">{contactLookupHint(0)}</div>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Fila 1: nombre | documento | correo */}
@@ -2327,7 +2368,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 type="text"
                 value={actor.nombreCompleto}
                 onChange={(e) => updateActor(0, { nombreCompleto: e.target.value })}
-                readOnly={razonLocked || isNameLockedByRunt(0, actor)}
+                readOnly={nombreBloqueado}
                 aria-invalid={!!errors.nombreCompleto}
                 aria-describedby={
                   errors.nombreCompleto
@@ -2336,8 +2377,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       ? 'comprador-nombre-hint'
                       : undefined
                 }
-                className={`${INPUT_BASE}${razonLocked || isNameLockedByRunt(0, actor) ? ' opacity-80' : ''}`}
-                style={razonLocked || isNameLockedByRunt(0, actor) ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                className={`${INPUT_BASE}${nombreBloqueado ? ' opacity-80' : ''}`}
+                style={nombreBloqueado ? { background: 'rgba(223,229,237,0.35)' } : undefined}
               />
               {errors.nombreCompleto && (
                 <p id="comprador-nombre-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
@@ -2546,8 +2587,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
       {errorBanner}
 
-      {/* Actores: AccordionRow sincronizado (prototipo Lovable) — un solo open para
-          Vendedor | Comprador; al colapsar/expandir cualquiera se mueven ambas. */}
+      {/* Actores: AccordionRow sincronizado (prototipo Lovable) — un solo open para las dos
+          tarjetas; al colapsar/expandir cualquiera se mueven ambas. */}
       <WizardAccordionRow defaultOpen>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 items-stretch">
         {actors.map((actor, index) => {
@@ -2557,14 +2598,21 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           const razonLocked = isRazonSocialLocked(actor, index);
           const docLocked =
             autoConsultRunt &&
-            actor.rol === 'vendedor' &&
+            actor.rol === rolDelPropietario &&
             !!actor.numeroDocumento.trim();
-          // Novedad nov.41 — este actor es el que recibe la precarga silenciosa del documento
-          // del propietario (paso 1). Solo aplica al vendedor del traspaso.
-          const seedingOwnerDoc = seedDocumentoFromOwner && actor.rol === 'vendedor';
+          // Novedad nov.41 — este actor es el que recibe la precarga silenciosa del documento del
+          // propietario (paso 1): el vendedor del traspaso, o el propietario inscrito allí donde no
+          // hay parte vendedora (familia OTROS, leasing).
+          const seedingOwnerDoc = seedDocumentoFromOwner && actor.rol === rolDelPropietario;
           const ciudadesSuggestions = filterCiudades(actor.ciudad ?? '');
           const showCiudadSuggestions = !!ciudadOpen[index] && ciudadesSuggestions.length > 0;
-          const isVendedor = actor.rol === 'vendedor';
+          // La tarjeta del PROPIETARIO INSCRITO: su identidad la trae el RUNT y no se teclea, frente
+          // a la tarjeta de captura libre de la otra parte. Era `rol === 'vendedor'`, que en un
+          // leasing dejaba al propietario con la tarjeta libre —la del comprador— y por tanto
+          // editable. El vendedor conserva su trato EXACTO (primer término, sin condición añadida):
+          // `ActorsForm` también se usa fuera del asistente, sin consulta automática.
+          const esPropietarioDelRegistro =
+            actor.rol === 'vendedor' || (actor.rol === rolDelPropietario && autoConsultRunt);
           // Píldora de estado de la cabecera (Vendedor sin autoConsultRunt) — tintada, no sólida.
           const statusPill: { text: string; tone: StatusTone } =
             runtState.status === 'found'
@@ -2574,25 +2622,31 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 : runtState.status === 'not_found' || runtState.status === 'error'
                   ? { text: 'No verificado', tone: 'danger' }
                   : { text: 'Pendiente', tone: 'neutral' };
+          // En una pantalla con locatario, la contraparte NO es un comprador: es el arrendador, o
+          // sea el PROPIETARIO. Llamarla «Comprador» al lado de «Locatario» describe mal el
+          // contrato — en un leasing nadie compra.
+          const rotulo = hayLocatario && actor.rol === 'comprador'
+            ? 'Propietario'
+            : ROL_LABEL[actor.rol];
           return (
             <div
               key={actor.rol}
               role="group"
-              aria-label={ROL_LABEL[actor.rol]}
+              aria-label={rotulo}
               className="flex h-full flex-col"
             >
             <WizardAccordion
-              title={ROL_LABEL[actor.rol]}
+              title={rotulo}
               level="h3"
-              regionLabel={ROL_LABEL[actor.rol]}
+              regionLabel={rotulo}
               className="flex h-full flex-col"
               subtitle={
-                isVendedor && autoConsultRunt
+                esPropietarioDelRegistro && autoConsultRunt
                   ? 'Los datos de identidad se toman automáticamente de la consulta en RUNT.'
                   : undefined
               }
               badge={
-                isVendedor ? (
+                esPropietarioDelRegistro ? (
                   autoConsultRunt && isRuntFound(index) ? (
                     <StatusBadge
                       tone={isJuridical(actor) ? 'info' : 'neutral'}
@@ -2621,12 +2675,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <div className="space-y-4">
 
                 {/* Vendedor sin RUNT fijo: puede elegir PN/PJ. Con RUNT OK el badge va en cabecera. */}
-                {isVendedor && !(autoConsultRunt && isRuntFound(index)) && (
+                {esPropietarioDelRegistro && !(autoConsultRunt && isRuntFound(index)) && (
                   personTypeSelector(index, isPersonTypeLockedByRunt(index))
                 )}
 
                 {/* ── Identificación ── */}
-                {!isVendedor ? (
+                {!esPropietarioDelRegistro ? (
                   /* Comprador: grid sm:grid-cols-3 — Tipo de doc | Número | Consultar (Lovable P1) */
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                     <div>
@@ -2959,7 +3013,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   </p>
                   {/* Precarga de contacto: solo vendedor. En comprador el prototipo no muestra
                       este aviso (ContactoBlock = copy de edición únicamente). */}
-                  {isVendedor && contactLookupHint(index) && (
+                  {esPropietarioDelRegistro && contactLookupHint(index) && (
                     <div>{contactLookupHint(index)}</div>
                   )}
                 </div>

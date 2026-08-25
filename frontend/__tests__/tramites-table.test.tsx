@@ -1346,3 +1346,90 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     });
   });
 });
+
+/**
+ * ADR-0050 — la fila dice QUÉ trámite es.
+ *
+ * La familia identifica bien una matrícula o un traspaso, pero «Otros» agrupa quince tipos: tres
+ * filas seguidas decían «Otros» y no había forma de distinguir un blindaje de un levantamiento de
+ * prenda sin abrirlas.
+ */
+describe('TramitesTable — rótulo del trámite', () => {
+  function conTipo(
+    modalidad: InstanceSummary['modalidad'],
+    tipoNombre: string | null,
+  ): InstanceSummary[] {
+    const [base] = makeInstances(1);
+    return [{ ...base, modalidad, tipoNombre }];
+  }
+
+  it('en OTROS muestra el nombre del tipo, no la familia', async () => {
+    mocks.listInstances.mockResolvedValue(conTipo('OTROS', 'Levantamiento de prenda'));
+    render(<TramitesTable />);
+
+    expect(await screen.findByText('Levantamiento de prenda')).toBeInTheDocument();
+    expect(screen.queryByText('Otros')).not.toBeInTheDocument();
+  });
+
+  it('sin nombre de tipo cae a la familia y nunca deja la celda vacía', async () => {
+    // Expediente servido por un backend anterior al campo.
+    mocks.listInstances.mockResolvedValue(conTipo('OTROS', null));
+    render(<TramitesTable />);
+
+    expect(await screen.findByText('Otros')).toBeInTheDocument();
+  });
+
+  it('matrícula y traspaso conservan el rótulo de familia (regresión)', async () => {
+    mocks.listInstances.mockResolvedValue(conTipo('MATRICULAS', 'Matrícula Leasing'));
+    const { unmount } = render(<TramitesTable />);
+    expect(await screen.findByText('Matrícula')).toBeInTheDocument();
+    expect(screen.queryByText('Matrícula Leasing')).not.toBeInTheDocument();
+    unmount();
+
+    mocks.listInstances.mockResolvedValue(conTipo('TRASPASO', 'Traspaso Unilateral'));
+    render(<TramitesTable />);
+    expect(await screen.findByText('Traspaso')).toBeInTheDocument();
+  });
+});
+
+/**
+ * ADR-0050 — el rótulo del paso sale del recorrido del TIPO, no de una lista por familia.
+ * La lista de OTROS estaba vacía, así que esas filas mostraban «—» pasara lo que pasara.
+ */
+describe('TramitesTable — paso en curso', () => {
+  function conPaso(
+    modalidad: InstanceSummary['modalidad'],
+    pasoNombre: string | null,
+    pasoActual = 2,
+  ): InstanceSummary[] {
+    const [base] = makeInstances(1);
+    return [{ ...base, modalidad, pasoNombre, pasoActual, totalPasos: 5 }];
+  }
+
+  it('muestra el nombre del paso que manda el servidor', async () => {
+    mocks.listInstances.mockResolvedValue(conPaso('OTROS', 'Decisión de prenda'));
+    render(<TramitesTable />);
+
+    // Acotado al bloque del progreso: hay otros «—» en la fila (vehículo, organismo).
+    const progreso = await screen.findByText('2/5');
+    expect(progreso.parentElement).toHaveTextContent('Decisión de prenda');
+  });
+
+  it('sin nombre del servidor cae al respaldo por familia', async () => {
+    // Expediente de un backend anterior al campo: matrícula sí tiene lista de respaldo.
+    mocks.listInstances.mockResolvedValue(conPaso('MATRICULAS', null, 1));
+    render(<TramitesTable />);
+
+    const progreso = await screen.findByText('1/5');
+    expect(progreso.parentElement).toHaveTextContent('Consulta VIN');
+  });
+
+  it('sin nombre y sin respaldo no rompe: muestra un guion', async () => {
+    mocks.listInstances.mockResolvedValue(conPaso('OTROS', null));
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const progreso = screen.getByText('2/5');
+    expect(progreso.parentElement?.textContent).toContain('—');
+  });
+});

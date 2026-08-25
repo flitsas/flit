@@ -235,12 +235,28 @@ const MODALIDAD_SHORT: Record<ProcedureFamily, string> = {
 };
 
 /**
- * Nombres de paso por modalidad, alineados con TipologiaMatrizCatalog. Solo
- * presentación: `pasoActual`/`totalPasos` se usan tal cual los entrega el API
- * (no se corrige backend en este track). El label es STEP_LABELS[modalidad]
- * [pasoActual - 1], o '—' si el índice no existe.
+ * Qué rotula la fila del listado.
+ *
+ * En MATRICULAS y TRASPASO la familia identifica bien el trámite. En OTROS no: agrupa quince tipos
+ * —blindaje, cambio de color, levantamiento de prenda, duplicado de tarjeta…— que se veían los tres
+ * igual, «Otros», sin forma de distinguirlos sin abrirlos. Ahí manda el nombre del tipo.
+ *
+ * Respaldo a la familia si el expediente viene de un backend anterior al campo, para que la celda
+ * nunca quede vacía.
  */
-const STEP_LABELS: Record<ProcedureFamily, string[]> = {
+function tramiteLabel(item: InstanceSummary): string {
+  const familia = MODALIDAD_SHORT[item.modalidad];
+  if (item.modalidad !== 'OTROS') return familia;
+  return item.tipoNombre?.trim() || familia;
+}
+
+/**
+ * Nombres de paso por familia — RESPALDO para expedientes servidos por un backend anterior a
+ * `pasoNombre`. No se amplía: desde ADR-0050 el recorrido lo define el TIPO, no la familia, así que
+ * una lista por familia no puede acertar en OTROS —quince tipos con recorridos distintos— y de hecho
+ * estaba VACÍA, que es por lo que esas filas mostraban «—».
+ */
+const STEP_LABELS_FALLBACK: Record<ProcedureFamily, string[]> = {
   OTROS: [],
   MATRICULAS: [
     'Consulta VIN',
@@ -259,8 +275,13 @@ const STEP_LABELS: Record<ProcedureFamily, string[]> = {
   ],
 };
 
+/** Rótulo del paso en curso: manda el que arma el recorrido del tipo en el servidor. */
 function stepLabel(item: InstanceSummary): string {
-  return STEP_LABELS[item.modalidad]?.[item.pasoActual - 1] ?? '—';
+  return (
+    item.pasoNombre?.trim() ||
+    STEP_LABELS_FALLBACK[item.modalidad]?.[item.pasoActual - 1] ||
+    '—'
+  );
 }
 
 /**
@@ -1828,8 +1849,13 @@ function TramiteRow({
     // reutilizar EXACTAMENTE la misma celda —popover de rechazo incluido— en vez de duplicarla.
     tramite: (
       <span className="flex min-w-0 flex-col items-start gap-1">
-        <span className="block truncate text-xs font-semibold text-[#162744] dark:text-white">
-          {MODALIDAD_SHORT[item.modalidad]}
+        <span
+          className="block truncate text-xs font-semibold text-[#162744] dark:text-white"
+          // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta: el
+          // truncado necesita que el nombre completo siga estando disponible al pasar por encima.
+          title={tramiteLabel(item)}
+        >
+          {tramiteLabel(item)}
         </span>
         {!shows('paso') ? (
           <span className="flex min-w-0 items-center gap-1 text-xs text-[#162744]/60 dark:text-white/50">

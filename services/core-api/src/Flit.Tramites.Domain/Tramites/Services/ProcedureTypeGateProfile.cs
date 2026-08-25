@@ -16,6 +16,14 @@ public sealed record ProcedureTypeGateProfile
     public string? EntryMode { get; init; }
     public bool RequiresSeller { get; init; }
     public bool RequiresBuyer { get; init; }
+
+    /// <summary>
+    /// El trámite interviene un ARRENDATARIO además del propietario (<c>LESSEE</c>). Es una parte
+    /// declarativa: se identifica, recibe los correos del trámite y se estampa en el FUR, pero no
+    /// valida identidad ni firma — eso lo hace el propietario. Que valide o no lo decide
+    /// <c>biometricActors</c>, no esta llave.
+    /// </summary>
+    public bool RequiresLessee { get; init; }
     public bool AllowsMultipleBuyer { get; init; }
     public bool AllowsMultipleSeller { get; init; }
     public bool RequiresCommercialValue { get; init; }
@@ -31,6 +39,26 @@ public sealed record ProcedureTypeGateProfile
     public bool ValidatePazSalvoImpuesto { get; init; }
     public bool HasPrendaGate { get; init; }
     public string? SimitMode { get; init; }
+
+    /// <summary>
+    /// El expediente admite declarar transformaciones (color / carrocería / combustible / blindaje)
+    /// POR ENCIMA del tipo base — los «trámites simultáneos» del art. 5.1.8.
+    ///
+    /// <para><c>null</c> (la llave no está en el JSON) NO significa <c>false</c>: significa «lo que
+    /// diga la familia», y por eso es anulable donde el resto del perfil son <c>bool</c>. Un perfil
+    /// grabado antes de esta llave —o el snapshot congelado de un borrador en curso— seguiría
+    /// comportándose como siempre en vez de perder los simultáneos en silencio. Resuélvelo SIEMPRE
+    /// con <see cref="ComplementaryTransformationsAllowed"/>, nunca leyendo la propiedad directa.</para>
+    /// </summary>
+    public bool? AllowsComplementaryTransformations { get; init; }
+
+    /// <summary>
+    /// El expediente admite un gravamen POR ENCIMA del tipo base. No se refiere a la prenda de un
+    /// tipo de prenda (ahí la prenda ES el trámite, ver <see cref="ProcedureTypeLayers.EsTipoPrendaBase"/>),
+    /// sino a la que se añade a un trámite de otra naturaleza. Misma semántica de <c>null</c> que
+    /// <see cref="AllowsComplementaryTransformations"/>.
+    /// </summary>
+    public bool? AllowsComplementaryPrenda { get; init; }
 
     /// <summary>Entrada por placa (vehículo ya matriculado).</summary>
     public const string EntryModePlate = "PLATE";
@@ -70,4 +98,15 @@ public sealed record ProcedureTypeGateProfile
     /// <summary><c>true</c> si <paramref name="value"/> es un modo de entrada válido (PLATE/VIN/BOTH).</summary>
     public static bool IsValidEntryMode(string? value) =>
         value is EntryModePlate or EntryModeVin or EntryModeBoth;
+
+    /// <summary>
+    /// ¿Este trámite admite transformaciones complementarias? Lo declarado en el perfil manda; sin
+    /// declaración, la familia decide (OTROS no acumula: el cambio ES el trámite).
+    /// </summary>
+    public bool ComplementaryTransformationsAllowed(string? familyCode) =>
+        AllowsComplementaryTransformations ?? ProcedureTypeLayers.FamiliaAcumulaComplementarios(familyCode);
+
+    /// <summary>¿Admite un gravamen complementario? Misma precedencia perfil → familia.</summary>
+    public bool ComplementaryPrendaAllowed(string? familyCode) =>
+        AllowsComplementaryPrenda ?? ProcedureTypeLayers.FamiliaAcumulaComplementarios(familyCode);
 }

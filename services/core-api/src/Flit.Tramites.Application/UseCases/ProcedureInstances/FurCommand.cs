@@ -711,13 +711,24 @@ public sealed class GenerarFurHandler(
             Nombre: Get(fv, "transit_office_name"),
             Ciudad: TransitOfficeCity.Legible(Get(fv, "transit_office_city")));
 
+        // ADR-0050 — en la familia OTROS solo entra la transformación que ES el trámite. Las banderas
+        // y el diff RUNT↔efectivo son las dos vías por las que una transformación complementaria se
+        // declaraba, y las dos quedan cerradas aquí: el PATCH ya no las acepta, pero un borrador
+        // creado antes de esa guarda puede traerlas persistidas y el FUR no debe imprimirlas.
+        var acumulaTransformaciones = ProcedureTypeGateProfile
+            .FromJson(instance.ProcedureType?.GateProfile)
+            .ComplementaryTransformationsAllowed(instance.ProcedureType?.Family);
+        bool DeclaradaOBase(string bandera, string claveRunt, string claveEfectiva, TransformacionBase cual)
+        {
+            if (ProcedureTypeLayers.TransformacionDelTipo(codigo) == cual)
+                return true;
+            return acumulaTransformaciones && Declarada(fv, bandera, claveRunt, claveEfectiva);
+        }
+
         var transformaciones = new FurTransformacionesDeclaradas(
-            Color: Declarada(fv, MandatoObjetoComposer.CambioColor, "vehicle_color_runt", "vehicle_color")
-                || string.Equals(codigo, "CAMBIO_COLOR", StringComparison.OrdinalIgnoreCase),
-            Carroceria: Declarada(fv, MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type_runt", "vehicle_body_type")
-                || string.Equals(codigo, "CAMBIO_CARROCERIA", StringComparison.OrdinalIgnoreCase),
-            Combustible: Declarada(fv, MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel")
-                || string.Equals(codigo, "CONVERSION_COMBUSTIBLE", StringComparison.OrdinalIgnoreCase));
+            Color: DeclaradaOBase(MandatoObjetoComposer.CambioColor, "vehicle_color_runt", "vehicle_color", TransformacionBase.Color),
+            Carroceria: DeclaradaOBase(MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type_runt", "vehicle_body_type", TransformacionBase.Carroceria),
+            Combustible: DeclaradaOBase(MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel", TransformacionBase.Combustible));
 
         return new FurDocumentData(
             ProcedureInstanceId: instance.Id,
@@ -991,16 +1002,25 @@ public sealed class GenerarFurHandler(
         FurDocumentData data)
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var clave in new[]
-                 {
-                     MandatoObjetoComposer.CambioColor,
-                     MandatoObjetoComposer.CambioCarroceria,
-                     MandatoObjetoComposer.CambioCombustible,
-                     MandatoObjetoComposer.Blindaje,
-                 })
+
+        // ADR-0050 — las banderas sueltas de field_values son la vía de los trámites simultáneos, y
+        // la familia OTROS no los tiene. Ahí el objeto del mandato lo compone SOLO la capa del tipo
+        // base (las tres líneas de `data.Transformaciones` de abajo, ya filtradas en AssembleData, y
+        // el blindaje por código): un mandato que autorice un cambio de color «además» del blindaje
+        // faculta al mandatario para un trámite que el poderdante no encargó.
+        if (ProcedureTypeLayers.FamiliaAcumulaComplementarios(data.ProcedureFamily))
         {
-            if (string.Equals(Get(fv, clave)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
-                keys.Add(clave);
+            foreach (var clave in new[]
+                     {
+                         MandatoObjetoComposer.CambioColor,
+                         MandatoObjetoComposer.CambioCarroceria,
+                         MandatoObjetoComposer.CambioCombustible,
+                         MandatoObjetoComposer.Blindaje,
+                     })
+            {
+                if (string.Equals(Get(fv, clave)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                    keys.Add(clave);
+            }
         }
 
         if (data.Transformaciones.Color)

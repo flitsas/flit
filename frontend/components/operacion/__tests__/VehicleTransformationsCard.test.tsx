@@ -314,3 +314,90 @@ describe('VehicleTransformationsCard — carrocería (P2/P3)', () => {
     expect(screen.getByText(/Carrocería: FURGON/)).toBeInTheDocument();
   });
 });
+
+/**
+ * ADR-0050 — modo TIPO BASE (familia OTROS): la tarjeta deja de ser el acumulador del art. 5.1.8 y
+ * pasa a capturar el único atributo que el trámite cambia por definición. Lo que desaparece es la
+ * acumulación; la captura del valor nuevo y su soporte se conservan intactas, porque es justo lo que
+ * el FUR tiene que imprimir.
+ */
+describe('VehicleTransformationsCard — modo tipo base (familia OTROS)', () => {
+  it('no ofrece agregar otro trámite simultáneo', () => {
+    render(
+      <VehicleTransformationsCard
+        fieldValues={runtBase}
+        readOnly={false}
+        saving={false}
+        onPatch={vi.fn()}
+        soloSubtramite="color"
+      />,
+    );
+
+    expect(screen.queryByLabelText('Agregar trámite simultáneo')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Trámites Simultáneos — Transformaciones del Vehículo'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('pinta el subtrámite del tipo YA activo, aunque no haya bandera ni cambio declarado', () => {
+    // El gestor no lo activó: lo trajo el trámite. Esperar a la bandera dejaba la tarjeta vacía.
+    render(
+      <VehicleTransformationsCard
+        fieldValues={runtBase}
+        readOnly={false}
+        saving={false}
+        onPatch={vi.fn()}
+        soloSubtramite="color"
+      />,
+    );
+
+    expect(screen.getByText('Cambio de Color')).toBeInTheDocument();
+    expect(screen.getByText('Soporte de cambio de color')).toBeInTheDocument();
+    expect(screen.getByText(/Escoge el nuevo color/)).toBeInTheDocument();
+  });
+
+  it('no deja quitar el cambio: quitarlo sería quedarse sin trámite', () => {
+    render(
+      <VehicleTransformationsCard
+        fieldValues={runtBase}
+        readOnly={false}
+        saving={false}
+        onPatch={vi.fn()}
+        soloSubtramite="color"
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Quitar Cambio de Color' })).not.toBeInTheDocument();
+  });
+
+  it('no pinta los otros dos atributos aunque estén declarados en field_values', () => {
+    // Residuo de un borrador anterior a la regla: el PATCH ya los rechaza, la pantalla no los repite.
+    const conResiduo: FieldValue[] = [
+      ...runtBase,
+      fv('cambio_combustible', 'true'),
+      fv('cambio_carroceria', 'true'),
+    ];
+    render(
+      <VehicleTransformationsCard
+        fieldValues={conResiduo}
+        readOnly={false}
+        saving={false}
+        onPatch={vi.fn()}
+        soloSubtramite="color"
+      />,
+    );
+
+    expect(screen.getByText('Cambio de Color')).toBeInTheDocument();
+    expect(screen.queryByText('Conversiones de Combustible')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cambio de Carrocería')).not.toBeInTheDocument();
+  });
+
+  it('sin modo tipo base, la tarjeta sigue siendo el acumulador de siempre (regresión)', () => {
+    renderCard(runtBase);
+
+    expect(screen.getByLabelText('Agregar trámite simultáneo')).toBeInTheDocument();
+    expect(
+      screen.getByText('Trámites Simultáneos — Transformaciones del Vehículo'),
+    ).toBeInTheDocument();
+  });
+});

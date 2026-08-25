@@ -177,8 +177,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public Task<ProcedureInstance?> GetByIdWithWizardGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             // ADR-0050 — el wizard se conforma con los pasos/secciones del tipo cuando la instancia
-            // no tiene snapshot congelado. Solo esta consulta los necesita: el resto se queda con la
-            // navegación simple para no encarecerlas.
+            // no tiene snapshot congelado. Los dos listados también los cargan —el progreso de cada
+            // fila sale del mismo motor—; el resto de consultas se queda con la navegación simple.
             .Include(x => x.ProcedureType)
                 .ThenInclude(t => t!.Steps)
                     .ThenInclude(st => st.Sections)
@@ -252,7 +252,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             // ADR-0050 — la clasificación del expediente (familia, código y nombre del trámite) se
             // deriva del tipo, así que el listado no puede proyectarse sin él: `ToSummary` lee
             // `e.Family` y sin esta carga revienta con «navegación no cargada».
-            .Include(x => x.ProcedureType)
+            //
+            // Y sus PASOS, porque desde ADR-0050 el progreso de la fila (`pasoActual/totalPasos`) y
+            // `canSubmit` los computa `GetWizardStateHandler.ComputeState`, que conforma el recorrido
+            // desde el catálogo del tipo. Sin los pasos, `FromCatalog` devuelve null, el estado sale
+            // vacío y TODA fila del listado —de cualquier familia— reportaba `0/0` y `canSubmit:false`
+            // sin que nada fallara: el listado se veía bien, solo mentía sobre el avance.
+            .Include(x => x.ProcedureType).ThenInclude(t => t!.Steps).ThenInclude(s => s.Sections)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -471,7 +477,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 InstanceId = v.ProcedureInstanceId!.Value,
                 v.ProcedureInstance!.ReferenceNumber,
                 v.ProcedureInstance.Status,
-                Modalidad = v.ProcedureInstance.FamilyCode,
+                // La familia se lee del TIPO dentro de la propia proyección, no vía instance.FamilyCode:
+                // esa propiedad es calculada y exige la navegación cargada, así que EF no la traduce, la
+                // evalúa en cliente sobre una instancia sin tipo y lanza InvalidOperationException (la
+                // pantalla de Validaciones devolvía 500 al abrir el detalle). Así sale como JOIN en SQL.
+                // La columna cruda equivale al código canónico: ck_procedure_types_family cierra el
+                // dominio a MATRICULAS/TRASPASO/OTROS.
+                Modalidad = v.ProcedureInstance!.ProcedureType!.Family,
             })
             .ToListAsync(ct);
 
@@ -491,7 +503,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 InstanceId = a.ProcedureInstanceId,
                 a.ProcedureInstance!.ReferenceNumber,
                 a.ProcedureInstance.Status,
-                Modalidad = a.ProcedureInstance.FamilyCode,
+                // Misma razón que arriba: por el tipo, para que lo traduzca EF y no el cliente.
+                Modalidad = a.ProcedureInstance!.ProcedureType!.Family,
             })
             .ToListAsync(ct);
 
@@ -715,7 +728,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     v.expires_at,
                     v.procedure_instance_id,
                     pi.reference_number,
-                    pi.modalidad_entrada AS modalidad,
+                    -- ADR-0050: modalidad_entrada murió con el corte de 80-tramites-reset-fuente-unica.
+                    -- La clasificación del expediente ahora la declara su TIPO. Este SQL crudo no lo
+                    -- vio el barrido de consumidores porque el compilador no mira dentro de la cadena,
+                    -- y la lista entera devolvía 500 (42703: no existe la columna pi.modalidad_entrada).
+                    -- El alias se conserva: `modalidad` viaja hasta el DTO y el front ya lo pasa por
+                    -- familiaLabel(), que rotula MATRICULAS/TRASPASO/OTROS.
+                    pt.family AS modalidad,
                     v.party_role,
                     v.email,
                     v.provider,
@@ -726,6 +745,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 FROM tramites.procedure_instance_biometric_validations v
                 LEFT JOIN tramites.procedure_instances pi
                     ON pi.id = v.procedure_instance_id
+                -- LEFT y no JOIN: una validación standalone (HU de prevalidación) no cuelga de ningún
+                -- expediente, y con JOIN desaparecería de su propia lista.
+                LEFT JOIN tramites.procedure_types pt
+                    ON pt.id = pi.procedure_type_id
                 WHERE v.tenant_id = {0}
                   AND v.deleted_at IS NULL
                   AND (v.procedure_instance_id IS NULL OR pi.deleted_at IS NULL)
@@ -1189,7 +1212,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         {
             var term = EscapeLike(filter.Modalidad.Trim());
             query = query.Where(v => v.ProcedureInstance != null
-                && EF.Functions.ILike(v.ProcedureInstance.FamilyCode, $"%{term}%", LikeEscapeChar));
+                // Por el TIPO, no por instance.FamilyCode: es calculada y EF no puede traducirla dentro
+                // de un Where, así que el filtro por familia reventaba en vez de filtrar.
+                && v.ProcedureInstance.ProcedureType != null
+                && EF.Functions.ILike(v.ProcedureInstance.ProcedureType.Family, $"%{term}%", LikeEscapeChar));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Name))
@@ -1672,7 +1698,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             // ADR-0050 — la clasificación del expediente (familia, código y nombre del trámite) se
             // deriva del tipo, así que el listado no puede proyectarse sin él: `ToSummary` lee
             // `e.Family` y sin esta carga revienta con «navegación no cargada».
-            .Include(x => x.ProcedureType)
+            //
+            // Y sus PASOS, porque desde ADR-0050 el progreso de la fila (`pasoActual/totalPasos`) y
+            // `canSubmit` los computa `GetWizardStateHandler.ComputeState`, que conforma el recorrido
+            // desde el catálogo del tipo. Sin los pasos, `FromCatalog` devuelve null, el estado sale
+            // vacío y TODA fila del listado —de cualquier familia— reportaba `0/0` y `canSubmit:false`
+            // sin que nada fallara: el listado se veía bien, solo mentía sobre el avance.
+            .Include(x => x.ProcedureType).ThenInclude(t => t!.Steps).ThenInclude(s => s.Sections)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)

@@ -205,11 +205,21 @@ public sealed class DynamicGateEvaluatorTests
     // bloqueaba nunca y ningún test lo cubría. Ahora delega en PrendaGate (mismo núcleo R10 del
     // camino estático), disparado por hasPrendaGate en vez de por la modalidad del trámite.
 
-    private static ProcedureTypeGateProfile PrendaProfile() => new()
-    {
-        EntryMode = "PLATE",
-        HasPrendaGate = true,
-    };
+    // El perfil ya NO dispara la prenda: el disparador vive en el CONTEXTO —el tipo ES el gravamen,
+    // o el RUNT reportó uno sobre el vehículo—. Ver ProcedureTypeLayers.ExigeDecisionDePrenda.
+    private static ProcedureTypeGateProfile PrendaProfile() => new() { EntryMode = "PLATE" };
+
+    /// <summary>Traspaso al que el RUNT le encontró un gravamen: el caso que dispara R10.</summary>
+    private static DynamicWizardContext ConGravamenDelRunt(
+        ProcedureInstancePrenda? prenda = null,
+        params string[] adjuntos) =>
+        new()
+        {
+            DocumentosCompletos = true,
+            RuntReportaGravamen = true,
+            PrendaVigente = prenda,
+            AttachmentTipos = adjuntos,
+        };
 
     private static List<DynamicWizardStep> PrendaSteps() =>
     [
@@ -219,9 +229,7 @@ public sealed class DynamicGateEvaluatorTests
     [Fact]
     public void PrendaDecision_TipoConGate_SinDecision_Incompleto_YBloqueaRadicacion()
     {
-        var ctx = new DynamicWizardContext { DocumentosCompletos = true };
-
-        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ConGravamenDelRunt());
 
         state.Steps[0].Status.Should().Be("incomplete");
         state.Steps[0].Reasons.Should().Contain(TramiteEstadoErrores.PrendaDecisionRequerida);
@@ -230,10 +238,10 @@ public sealed class DynamicGateEvaluatorTests
     }
 
     [Fact]
-    public void PrendaDecision_TipoSinGate_NoBloquea()
+    public void PrendaDecision_SinNadaQueResolver_NoBloquea()
     {
-        // El mismo contexto vacío, con un tipo que no declara hasPrendaGate, no debe bloquear:
-        // la sección solo aplica cuando el tipo la exige.
+        // Contexto vacío: ni el trámite es de prenda ni el RUNT reportó gravamen. La sección se pinta
+        // (el recorrido la trae) pero no exige nada, porque no hay gravamen del que decidir.
         var profile = new ProcedureTypeGateProfile { EntryMode = "PLATE" };
         var ctx = new DynamicWizardContext { DocumentosCompletos = true };
 
@@ -246,13 +254,9 @@ public sealed class DynamicGateEvaluatorTests
     [Fact]
     public void PrendaDecision_DecisionQueExigeDocumento_SinAdjunto_Incompleto()
     {
-        var ctx = new DynamicWizardContext
-        {
-            DocumentosCompletos = true,
-            PrendaVigente = new ProcedureInstancePrenda { Decision = PrendaDecision.Levantar },
-        };
-
-        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+        var state = DynamicGateEvaluator.Evaluate(
+            PrendaProfile(), PrendaSteps(),
+            ConGravamenDelRunt(new ProcedureInstancePrenda { Decision = PrendaDecision.Levantar }));
 
         state.Steps[0].Status.Should().Be("incomplete");
         state.Steps[0].Reasons.Should().Contain(TramiteEstadoErrores.PrendaDocumentoRequerido);
@@ -261,14 +265,11 @@ public sealed class DynamicGateEvaluatorTests
     [Fact]
     public void PrendaDecision_DecisionConAdjunto_Completo()
     {
-        var ctx = new DynamicWizardContext
-        {
-            DocumentosCompletos = true,
-            PrendaVigente = new ProcedureInstancePrenda { Decision = PrendaDecision.Levantar },
-            AttachmentTipos = [PrendaDocTipos.Levantamiento],
-        };
-
-        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+        var state = DynamicGateEvaluator.Evaluate(
+            PrendaProfile(), PrendaSteps(),
+            ConGravamenDelRunt(
+                new ProcedureInstancePrenda { Decision = PrendaDecision.Levantar },
+                PrendaDocTipos.Levantamiento));
 
         state.Steps[0].Status.Should().Be("complete");
         state.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
@@ -278,14 +279,44 @@ public sealed class DynamicGateEvaluatorTests
     public void PrendaDecision_Omitir_SatisfaceElGateSinDocumento()
     {
         // "omitir" es la vía asumo-el-riesgo: satisface R10 sin adjunto (paridad con PrendaGate).
-        var ctx = new DynamicWizardContext
-        {
-            DocumentosCompletos = true,
-            PrendaVigente = new ProcedureInstancePrenda { Decision = PrendaDecision.Omitir },
-        };
+        var state = DynamicGateEvaluator.Evaluate(
+            PrendaProfile(), PrendaSteps(),
+            ConGravamenDelRunt(new ProcedureInstancePrenda { Decision = PrendaDecision.Omitir }));
+
+        state.Steps[0].Status.Should().Be("complete");
+    }
+
+    // ── El disparador de R10: lo que HAY que resolver, no una marca del tipo ─────────────────────
+
+    [Fact]
+    public void PrendaDecision_TraspasoSinGravamen_NoPregunta()
+    {
+        // Nada que decidir: el RUNT no reportó gravamen y el trámite no es de prenda. Antes, con la
+        // marca del tipo, igual había que contestar sobre una prenda inexistente.
+        var ctx = new DynamicWizardContext { DocumentosCompletos = true };
 
         var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
 
         state.Steps[0].Status.Should().Be("complete");
+        state.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void PrendaDecision_TipoQueEsElGravamen_ExigeAunqueElRuntNoReporteNada()
+    {
+        // Inscribir prenda CREA un gravamen que todavía no existe, así que el RUNT no reporta nada:
+        // si el único disparador fuera lo que el RUNT encuentra, el paso desaparecería justo donde es
+        // obligatorio. Por eso el segundo disparador es lo que el trámite ES, por su código.
+        var ctx = new DynamicWizardContext
+        {
+            DocumentosCompletos = true,
+            TypeCode = "PRENDA_INSCRIPCION",
+            RuntReportaGravamen = false,
+        };
+
+        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+
+        state.Steps[0].Status.Should().Be("incomplete");
+        state.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDecisionRequerida);
     }
 }

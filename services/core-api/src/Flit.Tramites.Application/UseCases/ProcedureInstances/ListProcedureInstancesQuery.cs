@@ -67,7 +67,18 @@ public sealed record InstanceSummaryDto(
     string? FirmaCompradorEstado = null,
                                               // Expediente consolidado del wizard (adjunto tipo 'consolidado') ya generado. El
                                               // id viaja para que la fila lo previsualice sin consultar los adjuntos (HU #11055).
-    Guid? ConsolidadoAttachmentId = null);
+    Guid? ConsolidadoAttachmentId = null,
+                                              // ADR-0050 — identidad del TIPO, no solo su familia. En MATRICULAS y TRASPASO la
+                                              // familia alcanza para identificar la fila, pero OTROS agrupa quince tipos
+                                              // distintos: un blindaje, un cambio de color y un levantamiento de prenda se
+                                              // veían los tres como «Otros» y no había forma de distinguirlos sin abrirlos.
+                                              // La navegación del tipo ya viene cargada en el grafo del listado.
+    string? TipoNombre = null,
+    string? TipoCodigo = null,
+                                              // Rótulo del paso en curso, tomado del recorrido del TIPO. El frontend lo derivaba de
+                                              // un array de nombres por familia, que para OTROS estaba vacío —salía «—»— y que de
+                                              // todos modos no puede acertar: cada tipo tiene su propio recorrido desde ADR-0050.
+    string? PasoNombre = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -201,7 +212,14 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             TramiteFuente.Desde(e.Origin, e.IsMigrated),
             DeriveFirmaParte(e, modalidad, SellerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
             DeriveFirmaParte(e, modalidad, BuyerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
-            DeriveConsolidadoAttachmentId(e));
+            DeriveConsolidadoAttachmentId(e),
+            e.TypeName,
+            e.TypeCode,
+            // `pasoActual` es 1-based sobre el MISMO `state.Steps` del que sale, así que el rótulo
+            // es el de esa posición. Null si el tipo no tiene recorrido parametrizado.
+            pasoActual >= 1 && pasoActual <= state.Steps.Count
+                ? state.Steps[pasoActual - 1].Label
+                : null);
     }
 
     /// <summary>

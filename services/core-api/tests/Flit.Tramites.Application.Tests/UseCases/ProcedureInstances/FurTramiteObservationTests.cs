@@ -34,6 +34,23 @@ public sealed class FurTramiteObservationTests
     }
 
     [Fact]
+    public void Leasing_SinLocatario_SeQuedaSinSuBloqueObligatorio()
+    {
+        // Este era el estado REAL de producción antes de que el arrendatario fuera capturable:
+        // `ParteRol` no tenía `Locatario`, así que ningún actor podía persistirse con ese rol, la
+        // composición caía al comprador, detectaba que propietario y locatario eran la misma parte y
+        // callaba. Callar es lo correcto —imprimir «de X a X» sería peor—, pero el efecto es que la
+        // matrícula por leasing emitía el FUR SIN la observación que el artefacto marca como
+        // obligatoria (docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md, tabla 1).
+        //
+        // Se conserva como prueba porque el caso sigue siendo alcanzable: un expediente al que
+        // todavía no se le ha llenado el paso del locatario. Lo que cambió es que ahora HAY paso.
+        FurTramiteObservation.Compose("MATRICULA_LEASING",
+            [new DocumentParte("comprador", "BANCO LEASING S.A.", "800111222", null, "NIT")])
+            .Should().BeNull();
+    }
+
+    [Fact]
     public void OtroTipo_NoInventaBloque()
     {
         FurTramiteObservation.Compose("MATRICULA_NUEVA",

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -39,6 +40,9 @@ public sealed class RegistrarPrendaHandler(
     /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible.</summary>
     public const string OmitirNoAdmitidoError = "prenda_omitir_no_admitido";
 
+    /// <summary>Error: este tipo no tiene dimensión de gravamen (familia OTROS, tipo no prendario).</summary>
+    public const string PrendaNoAdmitidaError = "prenda_no_admitida_en_tipo";
+
     private readonly IPrendaDocumentRequirementPolicy _documentPolicy =
         prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
 
@@ -60,6 +64,18 @@ public sealed class RegistrarPrendaHandler(
         // modificar la elección de prenda.
         if (TramiteEstado.EsFinal(instance.Status))
             return (null, TramiteEstadoErrores.EstadoFinal);
+
+        // ADR-0050 — en la familia OTROS la prenda no es una capa que se añada: o el tipo ES el
+        // trámite de gravamen (inscribir, levantar, cambiar de acreedor) o el expediente no tiene
+        // dimensión de prenda en absoluto. Un duplicado de tarjeta con un gravamen encima son dos
+        // trámites, y el organismo devuelve el FUR que los mezcla. Matrícula y traspaso conservan la
+        // prenda complementaria del art. 5.1.8 y no pasan por aquí.
+        var perfil = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (!perfil.ComplementaryPrendaAllowed(instance.ProcedureType?.Family)
+            && !ProcedureTypeLayers.EsTipoPrendaBase(instance.ProcedureType?.Code))
+        {
+            return (null, PrendaNoAdmitidaError);
+        }
 
         var decision = input.Decision.Trim().ToLowerInvariant();
 

@@ -107,6 +107,10 @@ function buildOutcomeRows(
   // contra `'traspaso'` nunca acertaba: las validaciones del vendedor se atribuían al comprador.
   const dosPartes = esFamiliaTraspaso(familia);
   for (const actor of ordenarPartes(actors)) {
+    // El locatario no valida identidad: en el leasing quien firma es el propietario. Y con una sola
+    // parte biométrica el filtro de abajo acepta `partyRole === 'comprador'`, así que dejarlo pasar
+    // le habría atribuido al arrendatario las validaciones del propietario.
+    if (actor.rol === 'locatario') continue;
     const parte = actor.rol;
     const matches = validations.filter((v) =>
       dosPartes

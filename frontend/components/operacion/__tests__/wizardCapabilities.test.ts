@@ -2,10 +2,13 @@ import { describe, it, expect } from 'vitest';
 
 import {
   capacidadesEfectivas,
+  decisionesDelTipoDePrenda,
   esFamiliaTraspaso,
+  esTipoDePrenda,
   modalidadPorEntrada,
   modalidadPorPartes,
   rolesDeActores,
+  transformacionDelTipo,
 } from '../wizardCapabilities';
 import type { WizardCapabilities } from '@/lib/api/types/procedure-runtime';
 
@@ -103,6 +106,98 @@ describe('adaptadores a la modalidad heredada', () => {
     expect(modalidadPorPartes(capacidadesEfectivas(TRASPASO, 'TRASPASO'))).toBe('traspaso');
     // Aquí OTROS sí va del lado de la parte única: solo hay un titular que validar.
     expect(modalidadPorPartes(capacidadesEfectivas(OTROS, 'OTROS'))).toBe('matricula_inicial');
+  });
+});
+
+describe('trámites complementarios (art. 5.1.8)', () => {
+  it('la familia OTROS no acumula: ni transformaciones ni prenda por encima del tipo', () => {
+    const caps = capacidadesEfectivas(
+      { ...OTROS, allowsComplementaryTransformations: false, allowsComplementaryPrenda: false },
+      'OTROS',
+    );
+
+    expect(caps.permiteTransformacionesComplementarias).toBe(false);
+    expect(caps.permitePrendaComplementaria).toBe(false);
+  });
+
+  it('matrícula y traspaso conservan la acumulación', () => {
+    expect(
+      capacidadesEfectivas(TRASPASO, 'TRASPASO').permiteTransformacionesComplementarias,
+    ).toBe(true);
+    expect(capacidadesEfectivas(TRASPASO, 'TRASPASO').permitePrendaComplementaria).toBe(true);
+    expect(
+      capacidadesEfectivas(MATRICULA, 'MATRICULAS').permiteTransformacionesComplementarias,
+    ).toBe(true);
+  });
+
+  it('sin la llave en las capacidades, decide la familia', () => {
+    // Un borrador abierto antes de que estas llaves existieran no puede perder sus simultáneos:
+    // leer la ausencia como `false` se los apagaría a un traspaso en curso.
+    expect(capacidadesEfectivas(TRASPASO, 'TRASPASO').permiteTransformacionesComplementarias).toBe(true);
+    expect(capacidadesEfectivas(OTROS, 'OTROS').permiteTransformacionesComplementarias).toBe(false);
+  });
+
+  it('el respaldo sin capacidades también distingue la familia', () => {
+    expect(capacidadesEfectivas(null, 'OTROS').permitePrendaComplementaria).toBe(false);
+    expect(capacidadesEfectivas(null, 'TRASPASO').permitePrendaComplementaria).toBe(true);
+    expect(capacidadesEfectivas(null, 'MATRICULAS').permitePrendaComplementaria).toBe(true);
+  });
+});
+
+describe('capa que le pertenece al tipo', () => {
+  it('reconoce el atributo que cada tipo cambia por definición', () => {
+    expect(transformacionDelTipo('CAMBIO_COLOR')).toBe('color');
+    expect(transformacionDelTipo('CAMBIO_CARROCERIA')).toBe('carroceria');
+    expect(transformacionDelTipo('CONVERSION_COMBUSTIBLE')).toBe('combustible');
+    expect(transformacionDelTipo('BLINDAJE')).toBe('blindaje');
+    expect(transformacionDelTipo('DUPLICADO_PLACA')).toBeNull();
+    expect(transformacionDelTipo(null)).toBeNull();
+  });
+
+  it('distingue el trámite de prenda del gravamen añadido a otro trámite', () => {
+    expect(esTipoDePrenda('PRENDA_INSCRIPCION')).toBe(true);
+    expect(esTipoDePrenda('LEVANTAMIENTO_PRENDA')).toBe(true);
+    expect(esTipoDePrenda('CAMBIO_ACREEDOR')).toBe(true);
+    expect(esTipoDePrenda('TRASPASO_STANDARD')).toBe(false);
+    expect(esTipoDePrenda('BLINDAJE')).toBe(false);
+  });
+
+  it('la decisión de un tipo prendario es fija: la eligió quien eligió el trámite', () => {
+    // Ofrecer «omitir» en un levantamiento de prenda sería ofrecer no hacer el trámite que se radica.
+    expect(decisionesDelTipoDePrenda('PRENDA_INSCRIPCION')).toEqual(['registrar']);
+    expect(decisionesDelTipoDePrenda('LEVANTAMIENTO_PRENDA')).toEqual(['levantar']);
+    expect(decisionesDelTipoDePrenda('LEVANTAR_INSCRIBIR_PRENDA')).toEqual(['levantar', 'registrar']);
+    expect(decisionesDelTipoDePrenda('BLINDAJE')).toBeNull();
+    expect(decisionesDelTipoDePrenda('TRASPASO_STANDARD')).toBeNull();
+  });
+});
+
+describe('arrendatario (leasing)', () => {
+  const LEASING: WizardCapabilities = { ...MATRICULA, requiresLessee: true };
+
+  it('el locatario es una parte más que el tipo declara', () => {
+    expect(capacidadesEfectivas(LEASING, 'MATRICULAS').pideLocatario).toBe(true);
+    expect(rolesDeActores(capacidadesEfectivas(LEASING, 'MATRICULAS'))).toEqual([
+      'comprador',
+      'locatario',
+    ]);
+  });
+
+  it('sin la llave no hay locatario en ningún tipo actual', () => {
+    expect(capacidadesEfectivas(MATRICULA, 'MATRICULAS').pideLocatario).toBe(false);
+    expect(capacidadesEfectivas(TRASPASO, 'TRASPASO').pideLocatario).toBe(false);
+    expect(capacidadesEfectivas(OTROS, 'OTROS').pideLocatario).toBe(false);
+    expect(capacidadesEfectivas(null, 'MATRICULAS').pideLocatario).toBe(false);
+  });
+
+  it('propietario y locatario se capturan JUNTOS, como vendedor y comprador', () => {
+    // El catálogo los modela en un paso cada uno —el motor los exige por separado— pero la pantalla
+    // los muestra lado a lado, que es como el gestor los compara.
+    expect(rolesDeActores(capacidadesEfectivas(LEASING, 'MATRICULAS'))).toHaveLength(2);
+    expect(rolesDeActores(capacidadesEfectivas(TRASPASO, 'TRASPASO'))).toHaveLength(2);
+    // Un titular único sigue solo: matrícula y los OTROS sin arrendatario.
+    expect(rolesDeActores(capacidadesEfectivas(MATRICULA, 'MATRICULAS'))).toHaveLength(1);
+    expect(rolesDeActores(capacidadesEfectivas(OTROS, 'OTROS'))).toHaveLength(1);
   });
 });
 

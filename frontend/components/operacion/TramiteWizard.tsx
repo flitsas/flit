@@ -12,14 +12,23 @@ import {
   Shield,
   Wrench,
 } from 'lucide-react';
-import { resolveStepBody } from './sectionRendererRegistry';
+import { resolveActorRole, resolveStepBody } from './sectionRendererRegistry';
 import {
   capacidadesEfectivas,
+  decisionesDelTipoDePrenda,
   modalidadPorEntrada,
   modalidadPorPartes,
   rolesDeActores,
+  transformacionDelTipo,
   type CapacidadesEfectivas,
 } from './wizardCapabilities';
+
+/** Rótulo del acordeón cuando el cambio ES el trámite (familia OTROS). */
+const TITULO_CAMBIO_BASE = {
+  color: 'Cambio de color',
+  carroceria: 'Cambio de carrocería',
+  combustible: 'Conversión de combustible',
+} as const;
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
@@ -44,7 +53,7 @@ import { WizardStepTracker } from './WizardStepTracker';
 import { Modal } from '@/components/atom/Modal';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
-  isTraspasoActorStepKey,
+  esPasoDeActoresUnificado,
   nextIndexAfterUnifiedActores,
 } from './wizard-actores-coalesce';
 import { useToast } from '@/components/admin/Toast';
@@ -84,6 +93,7 @@ import {
 } from '@/lib/validation/fieldRules';
 import type {
   ActorDocumentType,
+  ActorRol,
   BiometricParte,
   FieldValue,
   FieldValueInput,
@@ -1061,19 +1071,21 @@ export function TramiteWizard(props: Props) {
   // `StepBody` lo normaliza a Requisitos: mismo cuerpo, mismo guardado.
   //
   // ADR-0050: lo que hace guardable ese paso es que lleve datos comerciales, no que sea un traspaso.
-  const isRequisitosConComercialStep =
-    caps.pideValorComercial &&
-    (activeStep?.key === 'documentos' || activeStep?.key === 'comercial');
-  const isSavableStep =
-    activeStep?.key === 'comprador' ||
-    activeStep?.key === 'vendedor' ||
-    isRequisitosConComercialStep;
-  const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
+  //
+  // ADR-0050 — estos predicados miran el CUERPO del paso, no su clave. Con las claves literales de
+  // matrícula y traspaso, el paso de actores de la familia OTROS —que se llama `propietario`— no era
+  // «guardable»: Continuar navegaba sin llamar a `ActorsForm.save()` y el titular no se persistía
+  // nunca. El registry ya traduce cada `section_type` a su cuerpo; usarlo aquí es lo que hace que un
+  // tipo nuevo funcione en cuanto está parametrizado, que es el punto del ADR.
+  const stepBody = activeStep ? resolveStepBody(activeStep) : null;
+  const isRequisitosConComercialStep = caps.pideValorComercial && stepBody === 'documentos';
+  const isActorStep = stepBody === 'actores';
+  const isSavableStep = isActorStep || isRequisitosConComercialStep;
   // La prenda vive en Requisitos en AMBAS modalidades: gate con decisiones de gestión en las dos
   // (HU #11592 invirtió la HU #10596 — matrícula deja de ser declarativa/informativa y también
   // bloquea sin decisión de prenda), así que su gate de documento aplica en el mismo paso para las dos.
-  const isPrendaStep =
-    activeStep?.key === 'documentos' || activeStep?.key === 'comercial';
+  // En la familia OTROS el tipo prendario tiene paso PROPIO de decisión: el gate lo acompaña ahí.
+  const isPrendaStep = stepBody === 'documentos' || stepBody === 'prenda';
   // El siguiente paso es navegable (no hay paso de datos incompleto por delante). Permite "Continuar"
   // desde un paso diferido incompleto (Identidad) hacia el FUR para finalizar/radicar.
   const nextStepNavigable = canNavigateToStep(steps, activeIndex + 1, navViewOnly);
@@ -1191,8 +1203,9 @@ export function TramiteWizard(props: Props) {
 
     if (!isSavableStep) {
       // Sin datos comerciales el paso no es "guardable", pero la prenda sigue viviendo ahí y se
-      // persiste al Continuar (sin botón aparte).
-      if (activeStep?.key === 'documentos' && !caps.pideValorComercial) {
+      // persiste al Continuar (sin botón aparte). En la familia OTROS el tipo prendario la tiene en
+      // su propio paso: mismo Continuar, misma persistencia, sin botón dedicado.
+      if ((stepBody === 'documentos' && !caps.pideValorComercial) || stepBody === 'prenda') {
         beginContinuing();
         setSubmitError(null);
         try {
@@ -1258,14 +1271,21 @@ export function TramiteWizard(props: Props) {
       // ADR-0050: se aseguran las partes que el TIPO declara. Un paso de actores unificado captura
       // las dos a la vez; donde no hay parte vendedora, asegurar «vendedor» crearía una validación
       // de identidad para alguien que no interviene en el trámite.
-      const partesIdentidad: BiometricParte[] =
-        caps.pideVendedor && isTraspasoActorStepKey(activeStep?.key)
-          ? ['vendedor', 'comprador']
-          : activeStep?.key === 'comprador'
-            ? ['comprador']
-            : activeStep?.key === 'vendedor'
-              ? ['vendedor']
-              : [];
+      // ADR-0050 — la parte la resuelve el ROL del paso, no su clave: el paso de la familia OTROS se
+      // llama `propietario` y su titular se persiste como comprador, así que comparar contra la
+      // clave literal dejaba a ese trámite sin asegurar la identidad de nadie.
+      // El locatario queda fuera a propósito: en el leasing quien valida identidad y firma es el
+      // propietario. El tipado lo hace explícito — `BiometricParte` no lo incluye.
+      // En una pantalla unificada se aseguran TODAS sus partes en el mismo Continuar (el gestor las
+      // llenó juntas); en una pantalla de una sola parte, solo esa.
+      const rolesDelPasoActivo: ActorRol[] = !isActorStep || !activeStep
+        ? []
+        : esPasoDeActoresUnificado(steps, activeIndex)
+          ? rolesDeActores(caps)
+          : [resolveActorRole(activeStep)];
+      const partesIdentidad: BiometricParte[] = rolesDelPasoActivo.filter(
+        (r): r is BiometricParte => r !== 'locatario',
+      );
       if (partesIdentidad.length > 0 && instanceId) {
         for (const parteIdentidad of partesIdentidad) {
           // Qué se estaba haciendo cuando falló. El catch de abajo cubre CUATRO llamadas y hasta
@@ -1325,14 +1345,13 @@ export function TramiteWizard(props: Props) {
       const fresh = await refresh();
       const freshSteps = fresh?.steps ?? steps;
       const currentComplete = freshSteps[activeIndex]?.status === 'complete';
-      // Actores unificados: también avanzar si ambos quedaron complete aunque el índice activo sea
-      // el del vendedor (el comprador server-side se completa en el mismo save). Solo hay dos partes
-      // que unificar donde el tipo declara parte vendedora.
+      // Actores unificados: también avanzar si TODA la tanda quedó complete aunque el índice activo
+      // sea el de la primera parte (las demás se completan server-side en el mismo save).
       const actoresBothComplete =
-        caps.pideVendedor &&
-        isTraspasoActorStepKey(activeStep?.key) &&
-        freshSteps.find((s) => s.key === 'vendedor')?.status === 'complete' &&
-        freshSteps.find((s) => s.key === 'comprador')?.status === 'complete';
+        esPasoDeActoresUnificado(freshSteps, activeIndex) &&
+        freshSteps
+          .filter((_, i) => esPasoDeActoresUnificado(freshSteps, i))
+          .every((s) => s.status === 'complete');
       if (currentComplete || actoresBothComplete) {
         // Reportes2 HU-A — guardado + avance con éxito = wizard_step_complete.
         telemetry.trackStepComplete();
@@ -1398,7 +1417,7 @@ export function TramiteWizard(props: Props) {
                 activeIndex={activeIndex}
                 onGoToStep={goToStep}
                 viewOnly={navViewOnly}
-                coalesceActores={caps.pideVendedor}
+                coalesceActores={rolesDeActores(caps).length > 1}
                 compacto={cabeceraCompacta}
               />
             )}
@@ -1555,7 +1574,7 @@ export function TramiteWizard(props: Props) {
                   rótulos seguidos diciendo lo mismo. Se conserva como encabezado accesible para no
                   dejar el cuerpo del paso sin nombre en el árbol de encabezados. */}
               <h2 className="sr-only">
-                {caps.pideVendedor && isTraspasoActorStepKey(activeStep.key)
+                {esPasoDeActoresUnificado(steps, activeIndex)
                   ? stepLabelCopy('actores', 'Actores')
                   : stepLabelCopy(activeStep.key, activeStep.label)}
               </h2>
@@ -2408,10 +2427,17 @@ function TramiteSimultaneosField({
   instanceId,
   hideHeader = false,
   onCompletenessChange,
+  soloSubtramite = null,
 }: {
   instanceId: string | null;
   hideHeader?: boolean;
   onCompletenessChange?: (complete: boolean) => void;
+  /**
+   * ADR-0050 — familia OTROS: la tarjeta captura el ÚNICO atributo que el tipo cambia, en vez de
+   * ofrecer el acumulador de simultáneos. No es «quitar los simultáneos»: la captura del valor
+   * nuevo y su soporte se conservan intactas, que es lo que el FUR necesita imprimir.
+   */
+  soloSubtramite?: 'color' | 'combustible' | 'carroceria' | null;
 }) {
   const readOnly = useWizardReadOnly();
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
@@ -2463,7 +2489,57 @@ function TramiteSimultaneosField({
       hideHeader={hideHeader}
       instanceId={instanceId}
       onCompletenessChange={onCompletenessChange}
+      soloSubtramite={soloSubtramite}
     />
+  );
+}
+
+/**
+ * Declaración de blindaje del tipo BLINDAJE (familia OTROS).
+ *
+ * El blindaje no tiene «valor nuevo» que escoger —es un SÍ/NO— ni casilla propia en el numeral 3:
+ * lo que el FUR marca es la casilla «vehículo blindado SI». Por eso no cabe en la tarjeta de
+ * transformaciones, que gira alrededor de un select de valor, y vive aquí: afirma el hecho y lo
+ * persiste (`blindaje = true`), que es lo único que el documento necesita. El certificado de
+ * blindaje se carga en el checklist de documentos, con el resto del expediente.
+ */
+function BlindajeDeclaracionField({ instanceId }: { instanceId: string | null }) {
+  const readOnly = useWizardReadOnly();
+  const [declarado, setDeclarado] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    void tramitesClient
+      .getInstance(instanceId)
+      .then((d) => {
+        if (!active) return;
+        const value = d?.fieldValues?.find((f) => f.fieldKey === 'blindaje')?.valueText?.trim();
+        setDeclarado(value === 'true');
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  // El trámite ES el blindaje: la bandera se afirma sola en cuanto se sabe que faltaba, sin pedirle
+  // al gestor que marque una casilla cuya única respuesta posible es «sí».
+  useEffect(() => {
+    if (!instanceId || readOnly || declarado !== false) return;
+    void tramitesClient
+      .patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'blindaje', valueText: 'true', valueJson: null },
+      ])
+      .then(() => setDeclarado(true))
+      .catch(() => {});
+  }, [instanceId, readOnly, declarado]);
+
+  return (
+    <p className="text-xs" role="status">
+      El FUR declarará el vehículo como <span className="font-semibold">BLINDADO (SÍ)</span>. Adjunta
+      el certificado de blindaje en la gestión de documentos.
+    </p>
   );
 }
 
@@ -4150,41 +4226,57 @@ function StepBody({
             </>
           ) : (
             <>
-              <WizardAccordion title="Tipo de servicio del vehículo" defaultOpen level="h3">
-                <DeclaracionesTramite
-                  instanceId={instanceId}
-                  modalidad={modalidadUi}
-                  onChanged={() => {
-                    onMarkDirty?.();
-                    onRefresh?.();
-                  }}
-                  onTipoServicioGateChange={onTipoServicioGateChange}
-                  hideTransformaciones
-                  noCardWrapper
-                />
-              </WizardAccordion>
+              {/* Solo donde el vehículo se matricula por primera vez.
+                  `DeclaracionesTramite` decide su contenido con `modalidad !== 'traspaso'`, y
+                  `modalidadUi` vale 'traspaso' para TODO lo que entra por placa — incluida la
+                  familia OTROS. Efecto: en OTROS el selector de tipo de servicio no se pintaba (bien:
+                  en un vehículo ya inscrito el dato lo trae el RUNT y no es una elección del gestor)
+                  pero SÍ se colaba el toggle «Vehículo en leasing», que es una condición de la
+                  compraventa. Quedaba un acordeón titulado «Tipo de servicio del vehículo» que no
+                  mostraba el tipo de servicio y sí ofrecía declarar un leasing que no viene al caso. */}
+              {caps.entraPorVin && (
+                <WizardAccordion title="Tipo de servicio del vehículo" defaultOpen level="h3">
+                  <DeclaracionesTramite
+                    instanceId={instanceId}
+                    modalidad={modalidadUi}
+                    onChanged={() => {
+                      onMarkDirty?.();
+                      onRefresh?.();
+                    }}
+                    onTipoServicioGateChange={onTipoServicioGateChange}
+                    hideTransformaciones
+                    noCardWrapper
+                  />
+                </WizardAccordion>
+              )}
 
-              {(() => {
-                const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
-                const esPuerta = caps.prendaEsPuerta;
-                return (
-                  <WizardAccordion title="Asignación de Prenda / Limitación a la Propiedad" defaultOpen level="h3">
-                    <PrendaForm
-                      ref={prendaFormRef}
-                      instanceId={instanceId}
-                      onSaved={onRefresh}
-                      embeddedInWizard
-                      modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
-                      decisions={esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined}
-                      documentRequired={prendaDocumentRequired}
-                      onDocumentGateChange={onPrendaDocumentGateChange}
-                      runtHasGravamen={gravamen?.status === 'warn'}
-                      runtGravamenMessage={gravamen?.message}
-                      hideHeader
-                    />
-                  </WizardAccordion>
-                );
-              })()}
+              {/* ADR-0050 — la prenda COMPLEMENTARIA solo existe donde el expediente acumula
+                  trámites (art. 5.1.8). En la familia OTROS o el tipo ES de prenda —y entonces
+                  tiene su propio paso, con la decisión fija— o el trámite no tiene gravamen que
+                  declarar. Ofrecerlo aquí dejaba salir un duplicado de tarjeta con una prenda
+                  encima. */}
+              {caps.permitePrendaComplementaria &&
+                (() => {
+                  const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
+                  const esPuerta = caps.prendaEsPuerta;
+                  return (
+                    <WizardAccordion title="Asignación de Prenda / Limitación a la Propiedad" defaultOpen level="h3">
+                      <PrendaForm
+                        ref={prendaFormRef}
+                        instanceId={instanceId}
+                        onSaved={onRefresh}
+                        embeddedInWizard
+                        modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
+                        decisions={esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined}
+                        documentRequired={prendaDocumentRequired}
+                        onDocumentGateChange={onPrendaDocumentGateChange}
+                        runtHasGravamen={gravamen?.status === 'warn'}
+                        runtGravamenMessage={gravamen?.message}
+                        hideHeader
+                      />
+                    </WizardAccordion>
+                  );
+                })()}
             </>
           )}
 
@@ -4218,16 +4310,45 @@ function StepBody({
             />
           </WizardAccordion>
 
-          <WizardAccordion
-            title="Trámites Simultáneos — Transformaciones del Vehículo"
-            level="h3"
-          >
-            <TramiteSimultaneosField
-              instanceId={instanceId}
-              hideHeader
-              onCompletenessChange={onSimultaneosGateChange}
-            />
-          </WizardAccordion>
+          {/* ADR-0050 — «Trámites Simultáneos» ES el acumulador del art. 5.1.8 y solo existe donde
+              la familia acumula. En OTROS se sustituye por la captura del ÚNICO atributo que el
+              tipo cambia (o por nada, si el tipo no cambia ninguno): el valor nuevo y su soporte
+              siguen capturándose igual —el FUR los necesita—, lo que desaparece es poder añadir
+              otro cambio encima. */}
+          {caps.permiteTransformacionesComplementarias ? (
+            <WizardAccordion
+              title="Trámites Simultáneos — Transformaciones del Vehículo"
+              level="h3"
+            >
+              <TramiteSimultaneosField
+                instanceId={instanceId}
+                hideHeader
+                onCompletenessChange={onSimultaneosGateChange}
+              />
+            </WizardAccordion>
+          ) : (
+            (() => {
+              const cambioBase = transformacionDelTipo(tipoCodigo);
+              if (!cambioBase) return null;
+              if (cambioBase === 'blindaje') {
+                return (
+                  <WizardAccordion title="Blindaje del vehículo" defaultOpen level="h3">
+                    <BlindajeDeclaracionField instanceId={instanceId} />
+                  </WizardAccordion>
+                );
+              }
+              return (
+                <WizardAccordion title={TITULO_CAMBIO_BASE[cambioBase]} defaultOpen level="h3">
+                  <TramiteSimultaneosField
+                    instanceId={instanceId}
+                    hideHeader
+                    onCompletenessChange={onSimultaneosGateChange}
+                    soloSubtramite={cambioBase}
+                  />
+                </WizardAccordion>
+              );
+            })()
+          )}
 
           <WizardAccordion title="Observaciones del trámite" level="h3">
             <TramiteObservacionesField instanceId={instanceId} hideCardWrapper />
@@ -4244,13 +4365,26 @@ function StepBody({
     // persistiéndose con el rol `comprador` —es el modelo de datos— pero es el paso el que se titula
     // «Propietario», como lo nombra el catálogo.
     case 'actores': {
+      // Todas las partes que el tipo declara se capturan JUNTAS: el catálogo las modela en un paso
+      // cada una —así el motor las exige por separado— pero el gestor las compara en una pantalla.
+      // Vale igual para vendedor+comprador del traspaso que para propietario+locatario del leasing.
       const roles = rolesDeActores(caps);
       const unificado = roles.length > 1;
       // El documento se siembra desde el propietario que devolvió el RUNT cuando el vehículo YA
       // tiene uno, que es justo lo que significa entrar por placa. En una matrícula inicial no hay
       // de dónde sembrarlo; en la familia OTROS el titular ES ese propietario, así que sembrarlo le
       // ahorra al gestor teclear un dato que la consulta ya trajo.
+      // La siembra apunta a UN rol (`rolDelPropietario`), así que en una pantalla con dos partes
+      // solo cae en la que de verdad es el propietario inscrito. Al locatario no se le precarga el
+      // documento de otra persona — y la guarda del servidor (locatario ≠ propietario) lo confirma.
       const hayPropietarioPrevio = !caps.entraPorVin;
+      // Qué rol RECIBE el documento del propietario del paso 1. En el traspaso es el vendedor —el
+      // propietario que sale—; donde no hay parte vendedora y el vehículo ya está inscrito, ese
+      // propietario ES el titular, y el titular se persiste como `comprador`. La siembra estaba
+      // clavada en 'vendedor', así que en la familia OTROS nunca caía: el gestor volvía a teclear un
+      // documento que la consulta ya había traído, y podía teclear OTRO —lo que convierte el trámite
+      // en un traspaso encubierto.
+      const rolDelPropietario: ActorRol = roles.includes('vendedor') ? 'vendedor' : 'comprador';
       return (
         <ActorsForm
           key={unificado ? 'actores-unificados' : step.key}
@@ -4261,11 +4395,46 @@ function StepBody({
           onSaved={onRefresh}
           embeddedInWizard
           seedDocumentoFromOwner={hayPropietarioPrevio}
+          rolDelPropietario={rolDelPropietario}
           autoConsultRunt={hayPropietarioPrevio}
           {...(unificado ? {} : { layout: 'split' as const })}
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
         />
+      );
+    }
+
+    // ADR-0050 — paso PROPIO de decisión de prenda: los tipos prendarios de la familia OTROS
+    // (`prenda_decision`). Antes esta sección caía en el cuerpo de documentos, así que el asistente
+    // repetía el paso de documentos entero donde el gestor esperaba el gravamen.
+    //
+    // La decisión no se elige: la eligió quien eligió el trámite. En un LEVANTAMIENTO_PRENDA la
+    // única acción es levantar, y ofrecer «omitir» sería ofrecer no hacer el trámite que se radica.
+    // Tampoco hay transformaciones aquí: en OTROS no se acumulan.
+    case 'prenda': {
+      const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
+      const decisiones = decisionesDelTipoDePrenda(tipoCodigo);
+      return (
+        <WizardAccordion
+          title="Decisión de prenda"
+          subtitle="Acreedor y certificado del gravamen que se está tramitando."
+          defaultOpen
+          level="h3"
+        >
+          <PrendaForm
+            ref={prendaFormRef}
+            instanceId={instanceId}
+            onSaved={onRefresh}
+            embeddedInWizard
+            modalidad={modalidadUi}
+            decisions={decisiones ?? traspasoDecisions(prendaDocumentRequired)}
+            documentRequired={prendaDocumentRequired}
+            onDocumentGateChange={onPrendaDocumentGateChange}
+            runtHasGravamen={gravamen?.status === 'warn'}
+            runtGravamenMessage={gravamen?.message}
+            hideHeader
+          />
+        </WizardAccordion>
       );
     }
 

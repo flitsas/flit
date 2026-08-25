@@ -1,4 +1,4 @@
-import type { WizardSectionType, WizardStep } from '@/lib/api/types/procedure-runtime';
+import type { ActorRol, WizardSectionType, WizardStep } from '@/lib/api/types/procedure-runtime';
 
 /**
  * Claves de cuerpo de paso que el asistente sabe renderizar.
@@ -10,6 +10,7 @@ export type StepBodyKind =
   | 'consulta'
   | 'documentos'
   | 'actores'
+  | 'prenda'
   | 'identidad'
   | 'fur'
   | 'generico';
@@ -32,7 +33,12 @@ const REGISTRY: Record<WizardSectionType, StepBodyKind> = {
   biometric: 'identidad',
   signature_fur: 'fur',
   commercial: 'documentos',
-  prenda_decision: 'documentos',
+  // La decisión de prenda tiene cuerpo PROPIO. Caía en `documentos`, y como los tipos de prenda de
+  // la familia OTROS traen los dos pasos (`documentos` y `prenda`), el asistente pintaba el paso de
+  // documentos DOS VECES: el gestor veía el checklist completo otra vez donde esperaba el gravamen.
+  // En matrícula y traspaso no cambia nada: sus recorridos no tienen sección `prenda_decision` —la
+  // prenda vive dentro del paso de requisitos, que es donde sigue.
+  prenda_decision: 'prenda',
   plate_request: 'generico',
   generic_form: 'generico',
 };
@@ -51,6 +57,8 @@ const LEGACY_KEYS: Record<string, StepBodyKind> = {
   comprador: 'actores',
   vendedor: 'actores',
   propietario: 'actores',
+  locatario: 'actores',
+  prenda: 'prenda',
   identidad: 'identidad',
   fur: 'fur',
 };
@@ -65,9 +73,16 @@ export function resolveStepBody(step: Pick<WizardStep, 'key' | 'sectionType'>): 
 
 /**
  * Rol de actor que le toca a un paso de actores. El backend nombra la sección con el rol
- * (COMPRADOR / VENDEDOR), y en la familia OTROS el titular se persiste como comprador aunque el
- * paso se titule "Propietario".
+ * (COMPRADOR / VENDEDOR / LOCATARIO), y en la familia OTROS el titular se persiste como comprador
+ * aunque el paso se titule "Propietario".
+ *
+ * <p>Resuelve por la CLAVE del paso y con `comprador` de respaldo — a propósito. Lo natural sería
+ * leer el código de sección, pero eso cambiaría cómo se resuelve el rol de TODOS los tipos ya en
+ * operación, y esta función es portante: de ella salen el guardado del paso y la parte a la que se
+ * le asegura la identidad. Añadir claves es aditivo y no toca ningún recorrido existente.</p>
  */
-export function resolveActorRole(step: Pick<WizardStep, 'key'>): 'comprador' | 'vendedor' {
-  return step.key === 'vendedor' ? 'vendedor' : 'comprador';
+export function resolveActorRole(step: Pick<WizardStep, 'key'>): ActorRol {
+  if (step.key === 'vendedor') return 'vendedor';
+  if (step.key === 'locatario') return 'locatario';
+  return 'comprador';
 }

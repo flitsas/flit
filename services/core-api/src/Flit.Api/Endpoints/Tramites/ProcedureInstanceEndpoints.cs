@@ -282,6 +282,8 @@ internal static class ProcedureInstanceEndpoints
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden modificar field_values en borrador o con subsanación activa."),
                 // B11 (HU #10659) — en traspaso el OT proviene del RUNT y no puede modificarse.
                 "ot_traspaso_no_modificable" => Results.Problem(statusCode: 409, title: "Conflict", detail: "En un traspaso el organismo de tránsito proviene del RUNT y no puede modificarse."),
+                // ADR-0050 — la familia OTROS no acumula trámites simultáneos: el cambio ES el trámite.
+                PatchFieldValuesHandler.ComplementoNoAdmitidoError => Results.Problem(statusCode: 409, title: PatchFieldValuesHandler.ComplementoNoAdmitidoError, detail: "Este tipo de trámite no admite declarar otra transformación del vehículo: radica un trámite aparte para ese cambio."),
                 "unknown_field" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "field_key no corresponde a ningún campo del tipo de trámite."),
                 _ => Results.Ok(result)
             };
@@ -338,6 +340,8 @@ internal static class ProcedureInstanceEndpoints
                 // elección disponible en ese trámite. 409 y no 400: la decisión es válida en general,
                 // lo que choca es la regla del OT.
                 RegistrarPrendaHandler.OmitirNoAdmitidoError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.OmitirNoAdmitidoError, detail: "El organismo de tránsito exige el certificado de prenda: registra o levanta la prenda, o declara que el vehículo no tiene."),
+                // ADR-0050 — el tipo no tiene dimensión de gravamen (familia OTROS que no es de prenda).
+                RegistrarPrendaHandler.PrendaNoAdmitidaError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.PrendaNoAdmitidaError, detail: "Este tipo de trámite no gestiona prenda: para inscribirla o levantarla radica el trámite de prenda correspondiente."),
                 // R17 (HU #10599) — un trámite en estado final no admite modificar la prenda.
                 TramiteEstadoErrores.EstadoFinal => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.EstadoFinal, detail: "El trámite está en estado final y no admite modificar la prenda."),
                 _ => Results.Ok(result)

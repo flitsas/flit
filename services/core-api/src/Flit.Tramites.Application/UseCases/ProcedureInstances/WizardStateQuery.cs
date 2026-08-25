@@ -133,31 +133,60 @@ public sealed record WizardStateDto(
 /// </param>
 /// <param name="RequiresSeller">Hay parte vendedora. En la familia OTROS el titular no vende.</param>
 /// <param name="RequiresBuyer">Hay parte compradora o titular.</param>
+/// <param name="RequiresLessee">
+/// Interviene un arrendatario además del propietario. Parte declarativa: se identifica y se notifica,
+/// pero no valida identidad ni firma (eso lo dice <paramref name="BiometricActors"/>, que no lo trae).
+/// </param>
 /// <param name="AllowsMultipleBuyer">La parte compradora admite varias personas.</param>
 /// <param name="RequiresCommercialValue">El trámite lleva valor y fecha de venta.</param>
 /// <param name="RequiresBiometrics">Se valida identidad.</param>
 /// <param name="BiometricActors">Actores a validar (<c>OWNER</c>, <c>BUYER</c>).</param>
 /// <param name="HasPrendaGate">La decisión de prenda es una puerta y no una declaración.</param>
+/// <param name="AllowsComplementaryTransformations">
+/// El expediente admite transformaciones POR ENCIMA del tipo base («trámites simultáneos»). Viaja ya
+/// resuelto: el asistente recibe la respuesta, no el perfil crudo ni la familia con la que deducirla.
+/// </param>
+/// <param name="AllowsComplementaryPrenda">Admite un gravamen por encima del tipo base.</param>
 public sealed record WizardCapabilitiesDto(
     string? EntryMode,
     bool RequiresSeller,
     bool RequiresBuyer,
+    bool RequiresLessee,
     bool AllowsMultipleBuyer,
     bool RequiresCommercialValue,
     bool RequiresBiometrics,
     IReadOnlyList<string> BiometricActors,
-    bool HasPrendaGate)
+    bool HasPrendaGate,
+    bool AllowsComplementaryTransformations,
+    bool AllowsComplementaryPrenda)
 {
-    internal static WizardCapabilitiesDto From(ProcedureTypeGateProfile profile) =>
+    /// <param name="familyCode">
+    /// Familia del expediente. Resuelve los dos flags de acumulación cuando el perfil no los declara
+    /// —el caso de todo tipo parametrizado antes de esta llave y de todo snapshot ya congelado—.
+    /// </param>
+    /// <param name="typeCode">Código del tipo, para reconocer los trámites que SON el gravamen.</param>
+    /// <param name="runtReportaGravamen">
+    /// El RUNT reportó prenda/gravamen sobre el vehículo. Con <c>typeCode</c> deriva
+    /// <c>HasPrendaGate</c>: el asistente recibe la RESPUESTA («hay prenda que gestionar»), no la
+    /// marca del catálogo que antes había que acordarse de poner y que además se congelaba.
+    /// </param>
+    internal static WizardCapabilitiesDto From(
+        ProcedureTypeGateProfile profile,
+        string? familyCode,
+        string? typeCode = null,
+        bool runtReportaGravamen = false) =>
         new(
             profile.EntryMode,
             profile.RequiresSeller,
             profile.RequiresBuyer,
+            profile.RequiresLessee,
             profile.AllowsMultipleBuyer,
             profile.RequiresCommercialValue,
             profile.RequiresBiometrics,
             profile.BiometricActors,
-            profile.HasPrendaGate);
+            ProcedureTypeLayers.ExigeDecisionDePrenda(typeCode, runtReportaGravamen),
+            profile.ComplementaryTransformationsAllowed(familyCode),
+            profile.ComplementaryPrendaAllowed(familyCode));
 }
 
 /// <summary>
@@ -551,6 +580,8 @@ public sealed class GetWizardStateHandler(
                 instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
             DocumentRequirements = documentRequirements,
             PrendaVigente = prendaVigente,
+            RuntReportaGravamen = RuntReportaGravamen(fv),
+            TypeCode = instance.ProcedureType?.Code,
             AttachmentTipos = instance.Attachments.Select(a => a.Tipo).ToList(),
             CompradorConComparendos = (simitComprador?.TotalComparendos ?? 0) > 0,
             ComparendosBloquean = comparendosBloquean,
@@ -597,7 +628,9 @@ public sealed class GetWizardStateHandler(
             // ADR-0050 — el mismo perfil que acaba de gobernar los gates viaja al asistente, para
             // que no vuelva a deducir por familia lo que el tipo ya declara.
             TypeName = instance.TypeName,
-            Capabilities = WizardCapabilitiesDto.From(conformation.GateProfile),
+            Capabilities = WizardCapabilitiesDto.From(
+                conformation.GateProfile, instance.FamilyCode,
+                instance.ProcedureType?.Code, RuntReportaGravamen(instance)),
         };
     }
 
@@ -709,6 +742,28 @@ public sealed class GetWizardStateHandler(
         if (approvedParties.Contains("locatario")) codes.Add("LESSEE");
         return codes;
     }
+
+    /// <summary>
+    /// El RUNT reportó gravamen o prenda sobre el vehículo. Lo hidratan los tres mappers de consulta
+    /// (Kyverum, Verifik, Intempo) en <c>field_values</c>, que es también de donde el asistente saca
+    /// la alerta amarilla y el detalle del acreedor: pantalla y gate leen el MISMO dato.
+    ///
+    /// <para>El RUNT contesta «SI»/«NO» en texto. Se acepta cualquier variante afirmativa razonable y
+    /// se ignora el resto: un dato ausente o ilegible NO inventa un gravamen —eso convertiría cada
+    /// consulta fallida en un bloqueo— pero tampoco lo oculta cuando sí vino.</para>
+    /// </summary>
+    private static bool RuntReportaGravamen(Dictionary<string, string?> fv) =>
+        EsAfirmativo(Get(fv, "runt_tiene_prendas")) || EsAfirmativo(Get(fv, "runt_tiene_gravamenes"));
+
+    /// <inheritdoc cref="RuntReportaGravamen(Dictionary{string, string})"/>
+    private static bool RuntReportaGravamen(ProcedureInstance instance) =>
+        instance.FieldValues.Any(f =>
+            (string.Equals(f.FieldKey, "runt_tiene_prendas", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(f.FieldKey, "runt_tiene_gravamenes", StringComparison.OrdinalIgnoreCase))
+            && EsAfirmativo(f.ValueText));
+
+    private static bool EsAfirmativo(string? valor) =>
+        valor?.Trim().ToUpperInvariant() is "SI" or "SÍ" or "S" or "TRUE" or "1";
 
     private static bool PlateRequestCompleted(Dictionary<string, string?> fv) =>
         string.Equals(Get(fv, "plate_request_completed"), "true", StringComparison.OrdinalIgnoreCase);
@@ -882,7 +937,9 @@ public sealed class GetWizardStateHandler(
             TramiteStateMachine.TransitionsFrom(instance.Status))
         {
             TypeName = instance.TypeName,
-            Capabilities = WizardCapabilitiesDto.From(conformation.GateProfile),
+            Capabilities = WizardCapabilitiesDto.From(
+                conformation.GateProfile, instance.FamilyCode,
+                instance.ProcedureType?.Code, RuntReportaGravamen(instance)),
         };
     }
 
@@ -1258,7 +1315,10 @@ public sealed class GetWizardStateHandler(
             // El paso 1 ya necesita saber por qué identificador entra el vehículo: es la diferencia
             // entre pedir VIN o placa, y era lo primero que el asistente deducía de la modalidad.
             TypeName = type.Name,
-            Capabilities = WizardCapabilitiesDto.From(conformation.GateProfile),
+            // Paso 1 sin expediente: todavía no hay consulta RUNT, así que la prenda solo la exige el
+            // tipo que ES el gravamen. En cuanto el vehículo se consulte, el estado se recalcula.
+            Capabilities = WizardCapabilitiesDto.From(
+                conformation.GateProfile, type.Family, type.Code, runtReportaGravamen: false),
         };
     }
 

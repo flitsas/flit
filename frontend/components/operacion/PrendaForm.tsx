@@ -275,6 +275,13 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [runtOpen, setRuntOpen] = useState(false);
   const [docSatisfied, setDocSatisfied] = useState(false);
   const offersRegistrar = decisions.includes('registrar');
+  /**
+   * ADR-0050 — una sola decisión ofrecida: el tipo de trámite YA la eligió (inscribir prenda,
+   * levantar prenda). No se pinta un control con una única opción que el gestor tenga que marcar
+   * para poder seguir: se afirma lo que va a pasar y se pide lo que sí hay que capturar (acreedor y
+   * certificado). Un selector de un solo valor es una pregunta cuya respuesta ya está dada.
+   */
+  const decisionFija = decisions.length === 1 ? decisions[0] : null;
 
   const applyRuntAcreedorIfEmpty = (
     summary: RuntPrendaSummary,
@@ -347,6 +354,14 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     };
     // `pending` es estable (instancia única por montaje): no re-dispara la carga.
   }, [instanceId, runtHasGravamen, offersRegistrar, pending]);
+
+  // Con decisión fija se aplica sola en cuanto la carga termina sin encontrar una guardada. NO marca
+  // cambio pendiente: el gestor no eligió nada: la eligió el tipo de trámite. El guardado lo dispara
+  // el Continuar del paso, como con cualquier otra decisión.
+  useEffect(() => {
+    if (!decisionFija || loading || decision !== '') return;
+    setDecision(decisionFija);
+  }, [decisionFija, loading, decision]);
 
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */
@@ -682,13 +697,21 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
             </div>
           ) : (
             <>
-              <WizardSegmented<PrendaDecision | ''>
-                label="¿Al vehículo se le asociará una prenda?"
-                value={decision}
-                onChange={handleDecisionChange}
-                disabled={readOnly}
-                options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
-              />
+              {decisionFija ? (
+                <p className="text-xs" role="status">
+                  Este trámite es{' '}
+                  <span className="font-semibold">{PRENDA_DECISION_LABELS[decisionFija].toLowerCase()}</span>
+                  : completa el acreedor y adjunta el certificado.
+                </p>
+              ) : (
+                <WizardSegmented<PrendaDecision | ''>
+                  label="¿Al vehículo se le asociará una prenda?"
+                  value={decision}
+                  onChange={handleDecisionChange}
+                  disabled={readOnly}
+                  options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
+                />
+              )}
               {muestraAcreedor && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>

@@ -1,69 +1,33 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { tramitesClient } from '@/lib/api/tramites-client';
-import { CarLoaderModal } from '@/components/atom/CarLoader';
-import { SelectorTipoTramite, type FamiliasBloqueadas } from '@/components/operacion/SelectorTipoTramite';
+import { NuevoTramiteSelector } from '@/components/operacion/NuevoTramiteSelector';
 
 /**
  * `/tramites/nuevo` — elección del trámite antes de abrir el asistente (ADR-0050).
  *
- * Antes esta ruta no pintaba nada: resolvía una de las dos modalidades fijas y redirigía a
- * `/tramites/nuevo/[modalidad]`. Con el catálogo como fuente de verdad hay 21 tipos en tres
- * familias, así que la elección **familia → tipo** pasa a ser una pantalla propia y la URL del
- * asistente lleva el `code` del tipo.
- *
- * Solo se ofrecen los tipos con la barrera de operación encendida, de modo que el gestor nunca
- * elige un trámite sin recorrido, documentos ni causales.
+ * La vía normal de llegar aquí es el modal sobre el listado (`/tramites`), que preserva filtros y
+ * scroll al cancelar. Esta ruta se conserva para lo que un modal no puede dar: enlace directo,
+ * marcador, abrir en pestaña nueva y botón atrás. Monta el MISMO componente que el modal, así que
+ * las dos presentaciones no pueden divergir.
  */
 export default function NuevoTramitePage() {
   const router = useRouter();
-  const [bloqueadas, setBloqueadas] = useState<FamiliasBloqueadas | undefined>(undefined);
-  const [cargandoConfig, setCargandoConfig] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    void tramitesClient
-      .getConsultationConfig()
-      .then((cfg) => {
-        if (active) setBloqueadas(cfg.blockProcedureFamily ?? undefined);
-      })
-      .catch(() => {
-        // Sin config legible no se bloquea nada por adelantado: el gate del backend corta al crear.
-        if (active) setBloqueadas(undefined);
-      })
-      .finally(() => {
-        if (active) setCargandoConfig(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  if (cargandoConfig) {
-    return <CarLoaderModal label="Abriendo el asistente…" />;
-  }
 
   return (
-    <main className="mx-auto w-full max-w-xl px-4 py-8">
-      <h1 className="text-lg font-semibold" style={{ color: '#162744' }}>Nuevo trámite</h1>
-      <p className="mt-1 text-sm opacity-70">Elige la familia y luego el trámite que vas a radicar.</p>
+    // El ancho lo pide la rejilla: `max-w-xl` dejaba las tres familias apiladas incluso en
+    // escritorio, que es justo lo que la composición de la propuesta resuelve poniéndolas en fila.
+    <main className="mx-auto w-full max-w-3xl px-4 py-8">
+      {/* El título de pantalla no flota sobre el fondo azul: va en tarjeta blanca, como el resto de
+          la app interna. Aquí lo pinta el propio selector dentro de la tarjeta, en un solo bloque. */}
+      <h1 className="sr-only">Nuevo trámite</h1>
 
-      <div className="mt-5">
-        <SelectorTipoTramite
-          bloqueadas={bloqueadas}
+      <div className="rounded-2xl border bg-white p-6 dark:bg-[#162744]" style={{ borderColor: '#DFE5ED' }}>
+        <NuevoTramiteSelector
           onElegir={(code) => router.push(`/tramites/nuevo/${encodeURIComponent(code)}`)}
+          onCancelar={() => router.push('/tramites')}
         />
       </div>
-
-      <button
-        type="button"
-        onClick={() => router.push('/tramites')}
-        className="mt-6 text-xs font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-      >
-        Volver a trámites
-      </button>
     </main>
   );
 }

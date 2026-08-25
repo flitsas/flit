@@ -1,4 +1,9 @@
-import type { WizardCapabilities, WizardModalidad } from '@/lib/api/types/procedure-runtime';
+import type {
+  ActorRol,
+  PrendaDecision,
+  WizardCapabilities,
+  WizardModalidad,
+} from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 /**
@@ -20,12 +25,28 @@ export interface CapacidadesEfectivas {
   pideVendedor: boolean;
   /** Hay parte compradora o titular. */
   pideComprador: boolean;
+  /**
+   * Interviene un arrendatario (leasing) además del propietario. Se captura en un paso propio: no se
+   * unifica con el propietario, porque son dos personas distintas del mismo trámite.
+   */
+  pideLocatario: boolean;
   /** El trámite lleva valor y fecha de venta. */
   pideValorComercial: boolean;
   /** La decisión de prenda bloquea, en vez de solo declararse. */
   prendaEsPuerta: boolean;
   /** Se valida la identidad de la parte saliente además de la entrante. */
   validaIdentidadDelVendedor: boolean;
+  /**
+   * El expediente admite declarar transformaciones POR ENCIMA del tipo base (los «trámites
+   * simultáneos» del art. 5.1.8). La familia OTROS no: allí el cambio ES el trámite, y agregar un
+   * color a un blindaje son dos trámites que el organismo devuelve.
+   */
+  permiteTransformacionesComplementarias: boolean;
+  /**
+   * Admite un gravamen por encima del tipo base. Ojo: es distinto de que el TIPO sea de prenda —eso
+   * lo responde {@link esTipoDePrenda} y ahí la prenda se pinta igual, porque es el trámite.
+   */
+  permitePrendaComplementaria: boolean;
 }
 
 /**
@@ -44,15 +65,25 @@ export function esFamiliaTraspaso(familia: string | null | undefined): boolean {
   return v === 'TRASPASO';
 }
 
+/** ¿La familia acumula trámites sobre el tipo base (art. 5.1.8)? OTROS no. */
+function familiaAcumula(familia: string | null | undefined): boolean {
+  return (familia ?? '').trim().toUpperCase() !== 'OTROS';
+}
+
 function desdeModalidad(familia: ProcedureFamily | WizardModalidad): CapacidadesEfectivas {
   const esTraspaso = esFamiliaTraspaso(familia);
   return {
     entraPorVin: !esTraspaso && familia !== 'OTROS',
     pideVendedor: esTraspaso,
     pideComprador: true,
+    // El respaldo no puede saber de locatarios: los tipos que lo llevan son posteriores a las dos
+    // ramas heredadas, así que un borrador sin capacidades nunca es uno de ellos.
+    pideLocatario: false,
     pideValorComercial: esTraspaso,
     prendaEsPuerta: esTraspaso,
     validaIdentidadDelVendedor: esTraspaso,
+    permiteTransformacionesComplementarias: familiaAcumula(familia),
+    permitePrendaComplementaria: familiaAcumula(familia),
   };
 }
 
@@ -70,24 +101,91 @@ export function capacidadesEfectivas(
     entraPorVin: (capabilities.entryMode ?? '').toUpperCase() === 'VIN',
     pideVendedor: capabilities.requiresSeller,
     pideComprador: capabilities.requiresBuyer,
+    pideLocatario: capabilities.requiresLessee ?? false,
     pideValorComercial: capabilities.requiresCommercialValue,
     prendaEsPuerta: capabilities.hasPrendaGate,
     // OWNER es la parte saliente. En la familia OTROS el titular se persiste como comprador y no
     // hay parte saliente que validar, así que la lista trae solo BUYER.
     validaIdentidadDelVendedor: capabilities.requiresBiometrics && actores.includes('OWNER'),
+    // El backend ya resolvió perfil → familia. Ausente ⇒ se cae a la familia, que es lo que hace
+    // falta para un borrador abierto antes de que estas llaves existieran: leerlo como `false` le
+    // apagaría los simultáneos a un traspaso en curso sin que nadie lo hubiera pedido.
+    permiteTransformacionesComplementarias:
+      capabilities.allowsComplementaryTransformations ?? familiaAcumula(familia),
+    permitePrendaComplementaria:
+      capabilities.allowsComplementaryPrenda ?? familiaAcumula(familia),
   };
+}
+
+/**
+ * Atributo del vehículo que un tipo cambia POR SÍ MISMO. Espejo de `ProcedureTypeLayers` en el
+ * dominio: los mismos códigos, para que la pantalla capture exactamente lo que el FUR va a imprimir.
+ */
+export type TransformacionBase = 'color' | 'carroceria' | 'combustible' | 'blindaje' | null;
+
+export function transformacionDelTipo(codigo: string | null | undefined): TransformacionBase {
+  switch ((codigo ?? '').trim().toUpperCase()) {
+    case 'CAMBIO_COLOR':
+      return 'color';
+    case 'CAMBIO_CARROCERIA':
+      return 'carroceria';
+    case 'CONVERSION_COMBUSTIBLE':
+      return 'combustible';
+    case 'BLINDAJE':
+      return 'blindaje';
+    default:
+      return null;
+  }
+}
+
+/**
+ * El trámite ES el gravamen: inscribirlo, levantarlo o cambiar de acreedor. No confundir con
+ * `permitePrendaComplementaria`, que es la prenda AÑADIDA a un trámite de otra naturaleza.
+ */
+export function esTipoDePrenda(codigo: string | null | undefined): boolean {
+  const v = (codigo ?? '').trim().toUpperCase();
+  return (
+    v === 'PRENDA_INSCRIPCION' ||
+    v === 'LEVANTAMIENTO_PRENDA' ||
+    v === 'LEVANTAR_INSCRIBIR_PRENDA' ||
+    v === 'CAMBIO_ACREEDOR'
+  );
+}
+
+/**
+ * Decisiones de prenda que ofrece un tipo PRENDARIO: son fijas, porque la acción ya la eligió quien
+ * eligió el trámite. Ofrecer «omitir» o «sin prenda» en un levantamiento de prenda sería ofrecer no
+ * hacer el trámite que se está radicando. `null` si el tipo no es de prenda.
+ */
+export function decisionesDelTipoDePrenda(
+  codigo: string | null | undefined,
+): PrendaDecision[] | null {
+  switch ((codigo ?? '').trim().toUpperCase()) {
+    case 'PRENDA_INSCRIPCION':
+      return ['registrar'];
+    case 'LEVANTAMIENTO_PRENDA':
+      return ['levantar'];
+    // Las DOS acciones son el trámite (casillas 11 + 12). El asistente captura una decisión por
+    // expediente, así que el gestor elige cuál declara; el FUR marca la casilla base de todos modos.
+    case 'LEVANTAR_INSCRIBIR_PRENDA':
+    case 'CAMBIO_ACREEDOR':
+      return ['levantar', 'registrar'];
+    default:
+      return null;
+  }
 }
 
 /**
  * Roles que captura el paso de actores. El orden importa: saliente antes que entrante, que es como
  * lo lee el gestor y como lo ordena el resto del expediente.
  */
-export function rolesDeActores(
-  caps: CapacidadesEfectivas,
-): ('vendedor' | 'comprador')[] {
-  const roles: ('vendedor' | 'comprador')[] = [];
+export function rolesDeActores(caps: CapacidadesEfectivas): ActorRol[] {
+  const roles: ActorRol[] = [];
   if (caps.pideVendedor) roles.push('vendedor');
   if (caps.pideComprador) roles.push('comprador');
+  // El locatario va al final y SIEMPRE en paso aparte (ver `rolesDelPasoDeActores`): no se unifica
+  // con el propietario porque son dos personas distintas, no las dos caras de una transferencia.
+  if (caps.pideLocatario) roles.push('locatario');
   // Un tipo sin ninguna parte declarada no existe en el catálogo, pero si llegara, capturar al
   // titular es más útil que pintar un paso vacío.
   return roles.length > 0 ? roles : ['comprador'];

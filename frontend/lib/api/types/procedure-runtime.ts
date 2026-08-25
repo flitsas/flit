@@ -137,6 +137,15 @@ export interface InstanceSummary {
    * que antes era una de las dos modalidades de entrada.
    */
   modalidad: ProcedureFamily;
+  /**
+   * ADR-0050 — nombre del TIPO en el catálogo («Blindaje», «Cambio de color», «Levantamiento de
+   * prenda»…). La familia sola identifica bien una matrícula o un traspaso, pero agrupa quince tipos
+   * bajo «Otros»: sin esto, tres trámites distintos se ven idénticos en el listado.
+   * Ausente en expedientes servidos por un backend anterior a este campo.
+   */
+  tipoNombre?: string | null;
+  /** `code` canónico del tipo, para decidir por tipo sin depender del nombre mostrado. */
+  tipoCodigo?: string | null;
   estado: InstanceStatus;
   /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
   plateFlowStatus?: PlateFlowStatus | null;
@@ -155,6 +164,13 @@ export interface InstanceSummary {
   organismoTransito: string | null;
   pasoActual: number;
   totalPasos: number;
+  /**
+   * Rótulo del paso en curso, tomado del recorrido del TIPO. Antes el cliente lo derivaba de una
+   * lista de nombres por familia: para OTROS estaba vacía —salía «—»— y de todos modos no puede
+   * acertar, porque desde ADR-0050 cada tipo tiene su propio recorrido.
+   * Ausente si el tipo no está parametrizado o el backend es anterior al campo.
+   */
+  pasoNombre?: string | null;
   createdAt: string;
   // HU #10350 — desacople de la validación de identidad async. Derivan los chips del listado
   // ("Pendiente validación" / "Pendiente firma") y la acción de la fila ("Radicar"/"Continuar").
@@ -372,7 +388,14 @@ export interface FieldValueInput {
 // La entidad `Actor` (arriba) es el espejo del detalle de instancia ya
 // existente; estos tipos modelan la captura/edición dedicada de actores.
 
-export type ActorRol = 'comprador' | 'vendedor';
+/**
+ * Rol de la parte en el trámite.
+ *
+ * `locatario` es el arrendatario del leasing (`LESSEE`). Se identifica y recibe los correos del
+ * trámite, pero NO valida identidad ni firma — eso es del propietario, y por eso no está en
+ * {@link BiometricParte}.
+ */
+export type ActorRol = 'comprador' | 'vendedor' | 'locatario';
 
 export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
 
@@ -994,6 +1017,11 @@ export interface WizardCapabilities {
   requiresSeller: boolean;
   /** Hay parte compradora o titular. */
   requiresBuyer: boolean;
+  /**
+   * Interviene un arrendatario además del propietario (leasing). Parte declarativa: se identifica y
+   * se le notifica, pero no valida identidad ni firma. Ausente ⇒ `false`.
+   */
+  requiresLessee?: boolean;
   allowsMultipleBuyer: boolean;
   requiresCommercialValue: boolean;
   requiresBiometrics: boolean;
@@ -1001,6 +1029,20 @@ export interface WizardCapabilities {
   biometricActors: string[];
   /** La decisión de prenda es una puerta y no una declaración. */
   hasPrendaGate: boolean;
+  /**
+   * ADR-0050 — el expediente admite declarar transformaciones POR ENCIMA del tipo base (los
+   * «trámites simultáneos» del art. 5.1.8). El backend lo entrega ya resuelto: la familia OTROS no
+   * acumula —ahí el cambio ES el trámite— y matrícula y traspaso sí.
+   *
+   * Ausente ⇒ se trata como `true` (un borrador abierto antes de esta llave no debe perder los
+   * simultáneos que ya tenía).
+   */
+  allowsComplementaryTransformations?: boolean;
+  /**
+   * Admite un gravamen por encima del tipo base. No se refiere a la prenda de un TIPO de prenda:
+   * ahí la prenda es el trámite y su paso se pinta igual. Ausente ⇒ `true`.
+   */
+  allowsComplementaryPrenda?: boolean;
 }
 
 export interface WizardState {

@@ -38,6 +38,70 @@ internal static class ProcedureTypeFixture
 
     public static ProcedureType Traspaso => TraspasoInstance;
 
+    // ── Familia OTROS (ADR-0050 / DDL 87) ────────────────────────────────────────────────────────
+    // Perfiles con los complementarios apagados, como los deja `87-otros-sin-complementarios.sql`.
+    // El recorrido es el NOVEDAD/PRENDA del DDL 82: el titular se captura en el paso «propietario»
+    // y su sección se codifica COMPRADOR (el ActorType con el que se persiste).
+    //
+    // Ninguno declara `hasPrendaGate`: la decisión de prenda ya no sale de una marca del tipo sino
+    // de si el trámite ES el gravamen o el RUNT reportó uno (ProcedureTypeLayers.ExigeDecisionDePrenda).
+
+    private static readonly ProcedureType BlindajeInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000a3"),
+        Code = "BLINDAJE",
+        Name = "Blindaje",
+        Family = "OTROS",
+        GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"allowsComplementaryTransformations":false,"allowsComplementaryPrenda":false}""",
+        Steps = NovedadSteps(),
+    };
+
+    private static readonly ProcedureType CambioColorInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000a4"),
+        Code = "CAMBIO_COLOR",
+        Name = "Cambio de color",
+        Family = "OTROS",
+        GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"allowsComplementaryTransformations":false,"allowsComplementaryPrenda":false}""",
+        Steps = NovedadSteps(),
+    };
+
+    private static readonly ProcedureType LevantamientoPrendaInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000a5"),
+        Code = "LEVANTAMIENTO_PRENDA",
+        Name = "Levantamiento de prenda",
+        Family = "OTROS",
+        GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"allowsComplementaryTransformations":false,"allowsComplementaryPrenda":false}""",
+        Steps = PrendaSteps(),
+    };
+
+    /// <summary>
+    /// Matrícula por leasing: propietario (entidad financiera) y arrendatario son partes DISTINTAS.
+    /// El locatario no entra en <c>biometricActors</c> — se identifica y se notifica, pero quien
+    /// valida identidad y firma es el propietario.
+    /// </summary>
+    private static readonly ProcedureType MatriculaLeasingInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000a6"),
+        Code = "MATRICULA_LEASING",
+        Name = "Matrícula Leasing",
+        Family = "MATRICULAS",
+        GateProfile = """{"entryMode":"VIN","requiresBuyer":true,"requiresLessee":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"requiresPlateRequest":true}""",
+        Steps = LeasingSteps(),
+    };
+
+    public static ProcedureType MatriculaLeasing => MatriculaLeasingInstance;
+
+    /// <summary>Tipo de OTROS que no cambia ningún atributo del vehículo ni gestiona gravamen.</summary>
+    public static ProcedureType Blindaje => BlindajeInstance;
+
+    /// <summary>Tipo de OTROS cuyo cambio de color ES el trámite (capa base, no complemento).</summary>
+    public static ProcedureType CambioColor => CambioColorInstance;
+
+    /// <summary>Tipo de OTROS prendario: la decisión de gravamen ES el trámite.</summary>
+    public static ProcedureType LevantamientoPrenda => LevantamientoPrendaInstance;
+
     /// <summary>
     /// Tipo equivalente a la modalidad que el test venía usando. Preserva la semántica de los
     /// fixtures previos a ADR-0050, incluidos los helpers que reciben la modalidad por parámetro.
@@ -59,6 +123,38 @@ internal static class ProcedureTypeFixture
         Step("documentos", "Documentos", 3, ("CHECKLIST", "document_checklist")),
         Step("identidad", "Identidad", 4, ("BIOMETRIA", "biometric")),
         Step("fur", "Resumen del trámite", 5, ("FUR", "signature_fur")),
+    ];
+
+    /// <summary>Recorrido NOVEDAD del DDL 82: consulta → propietario → documentos → identidad → FUR.</summary>
+    private static List<ProcedureStep> NovedadSteps() =>
+    [
+        Step("consulta", "Consulta del vehículo", 1, ("VEHICULO", "vehicle_query")),
+        Step("propietario", "Propietario", 2, ("COMPRADOR", "actor_form")),
+        Step("documentos", "Documentos", 3, ("CHECKLIST", "document_checklist")),
+        Step("identidad", "Identidad", 4, ("BIOMETRIA", "biometric")),
+        Step("fur", "Resumen del trámite", 5, ("FUR", "signature_fur")),
+    ];
+
+    /// <summary>Recorrido PRENDA: el de NOVEDAD más el paso propio de decisión de gravamen.</summary>
+    private static List<ProcedureStep> PrendaSteps() =>
+    [
+        Step("consulta", "Consulta del vehículo", 1, ("VEHICULO", "vehicle_query")),
+        Step("propietario", "Propietario", 2, ("COMPRADOR", "actor_form")),
+        Step("documentos", "Documentos", 3, ("CHECKLIST", "document_checklist")),
+        Step("prenda", "Decisión de prenda", 4, ("PRENDA", "prenda_decision")),
+        Step("identidad", "Identidad", 5, ("BIOMETRIA", "biometric")),
+        Step("fur", "Resumen del trámite", 6, ("FUR", "signature_fur")),
+    ];
+
+    /// <summary>Recorrido del leasing (DDL 88): el arrendatario va justo detrás del propietario.</summary>
+    private static List<ProcedureStep> LeasingSteps() =>
+    [
+        Step("consulta_vin", "Consulta VIN", 1, ("VEHICULO", "vehicle_query")),
+        Step("comprador", "Comprador", 2, ("COMPRADOR", "actor_form")),
+        Step("locatario", "Locatario", 3, ("LOCATARIO", "actor_form")),
+        Step("documentos", "Documentos", 4, ("CHECKLIST", "document_checklist")),
+        Step("identidad", "Identidad", 5, ("BIOMETRIA", "biometric")),
+        Step("fur", "Resumen del trámite", 6, ("FUR", "signature_fur")),
     ];
 
     private static List<ProcedureStep> TraspasoSteps() =>

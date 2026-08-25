@@ -139,6 +139,8 @@ public sealed class PutActorsHandler(
         {
             [ParteRol.Comprador] = "BUYER",
             [ParteRol.Vendedor] = "OWNER",
+            // El código ya existía en el catálogo («Arrendatario»); lo que faltaba era poder llegar a él.
+            [ParteRol.Locatario] = "LESSEE",
         };
 
     public async Task<(ActorsResponse? Result, string? Error)> HandleAsync(
@@ -216,6 +218,11 @@ public sealed class PutActorsHandler(
         // EFECTIVO: roles del request + actores existentes que se conservan. Así se
         // detecta el duplicado aunque cada parte se guarde en un PUT distinto.
         var error = ValidateTraspasoPartes(instance, inputs);
+        if (error is not null)
+            return (null, error);
+
+        // Mismo criterio de conjunto efectivo para el arrendatario: no puede ser el propietario.
+        error = ValidateLocatario(instance, inputs);
         if (error is not null)
             return (null, error);
 
@@ -347,8 +354,16 @@ public sealed class PutActorsHandler(
         Dictionary<ParteRol, ProcedureInstanceActor> newActorsByRol,
         CancellationToken ct)
     {
+        var rolesQueValidan = RolesQueValidanIdentidad(instance);
+
         foreach (var (rol, actor) in newActorsByRol)
         {
+            // Una parte que el tipo NO manda a validar no convoca validación de nadie, ni siquiera de
+            // su representante legal. Sin este corte, un locatario persona jurídica arrastraba a su
+            // representante a una biometría que el trámite no le pide.
+            if (rolesQueValidan is not null && !rolesQueValidan.Contains(rol))
+                continue;
+
             var subject = IdentitySubjectResolver.For(actor);
 
             // HU #11665 — el filtrado de datos vive en la regla compartida, no en una condición
@@ -560,6 +575,34 @@ public sealed class PutActorsHandler(
         return TraspasoPartes.MensajeDuplicadas(dup) is null ? null : "partes_duplicadas";
     }
 
+    /// <summary>Error: el arrendatario y el propietario resultaron ser la misma persona.</summary>
+    public const string LocatarioIgualAlPropietarioError = "locatario_igual_al_propietario";
+
+    /// <summary>
+    /// El locatario no puede ser el propietario. Si lo fueran, en un CAMBIO_LOCATARIO no habría nada
+    /// que cambiar y en una matrícula por leasing no habría leasing — y el FUR imprimiría «de X a X».
+    ///
+    /// <para>La comprobación vive aquí y no en el formulario porque las dos partes se capturan en
+    /// PASOS DISTINTOS: la pantalla del locatario nunca tiene al propietario a la vista. Se evalúa
+    /// sobre el conjunto EFECTIVO (lo que trae el request + los actores que se conservan), igual que
+    /// la regla de vendedor≠comprador, así que da lo mismo en qué orden se guarden.</para>
+    /// </summary>
+    private static string? ValidateLocatario(ProcedureInstance instance, IReadOnlyList<ActorInput> inputs)
+    {
+        var locatario = EffectiveParte(instance, inputs, ParteRol.Locatario);
+        var propietario = EffectiveParte(instance, inputs, ParteRol.Comprador);
+        if (locatario is null || propietario is null)
+            return null;
+
+        // Se compara el NÚMERO, que es lo que `ParteDatos` transporta y el mismo criterio con el que
+        // `TraspasoPartes` decide que vendedor y comprador son la misma persona.
+        var mismoDocumento =
+            !string.IsNullOrWhiteSpace(locatario.Documento)
+            && string.Equals(locatario.Documento.Trim(), propietario.Documento?.Trim(), StringComparison.Ordinal);
+
+        return mismoDocumento ? LocatarioIgualAlPropietarioError : null;
+    }
+
     /// <summary>
     /// Datos efectivos de un rol tras el upsert: el del request si viene en él; si no, el del
     /// actor ya persistido que se conservará. Permite validar vendedor≠comprador aunque cada
@@ -603,13 +646,44 @@ public sealed class PutActorsHandler(
             roles.Add(ParteRol.Comprador);
         if (profile.RequiresSeller)
             roles.Add(ParteRol.Vendedor);
+        if (profile.RequiresLessee)
+            roles.Add(ParteRol.Locatario);
         return roles;
+    }
+
+    /// <summary>
+    /// Roles que este tipo manda a VALIDAR IDENTIDAD, según <c>biometricActors</c> del perfil.
+    ///
+    /// <para>Existe porque el disparador de la validación del representante legal recorría TODOS los
+    /// actores guardados: con un locatario persona jurídica habría convocado una validación para su
+    /// representante, cuando en el leasing quien valida y firma es el propietario. La lista es la
+    /// misma que el motor usa para los gates, así que pantalla, gate y disparador no pueden discrepar.</para>
+    ///
+    /// <para>Un perfil SIN <c>biometricActors</c> devuelve <c>null</c> y el llamador no filtra nada:
+    /// es el comportamiento previo, y degradar a «ninguno» apagaría el disparador en todo tipo cuyo
+    /// perfil llegue vacío o corrupto.</para>
+    /// </summary>
+    private static HashSet<ParteRol>? RolesQueValidanIdentidad(ProcedureInstance instance)
+    {
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (profile.BiometricActors.Count == 0)
+            return null;
+
+        var codigos = profile.BiometricActors
+            .Select(a => a.Trim().ToUpperInvariant())
+            .ToHashSet(StringComparer.Ordinal);
+
+        return RolToEntityCode
+            .Where(kv => codigos.Contains(kv.Value))
+            .Select(kv => kv.Key)
+            .ToHashSet();
     }
 
     private static ParteRol? ParseRol(string? rol) => rol?.Trim().ToLowerInvariant() switch
     {
         "comprador" => ParteRol.Comprador,
         "vendedor" => ParteRol.Vendedor,
+        "locatario" => ParteRol.Locatario,
         _ => null,
     };
 
@@ -617,6 +691,8 @@ public sealed class PutActorsHandler(
     {
         ParteRol.Comprador => "comprador",
         ParteRol.Vendedor => "vendedor",
+        // El literal que ya leen FurCommand, el resolver de destinatarios y el ciclo de vida.
+        ParteRol.Locatario => "locatario",
         _ => rol.ToString().ToLowerInvariant(),
     };
 

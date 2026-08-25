@@ -16,6 +16,13 @@
 --
 -- Idempotente y reaplicable: borra y recrea los pasos de esos dos tipos. Si detecta form_fields
 -- locked (configuración hecha a mano desde el configurador) NO toca nada y lo avisa.
+--
+-- Orden vs DDL 80: esta migración corre ANTES del reset de expedientes. Los
+-- procedure_instance_field_values apuntan a form_fields con ON DELETE RESTRICT
+-- (06-HU10150), así que hay que soltar las instancias de estos dos tipos antes
+-- de borrar los pasos. Si no, AutoMigrate aborta el arranque (23503) en bases
+-- locales con trámites de prueba. El trigger de inmutabilidad permite el
+-- CASCADE cuando el padre ya no existe.
 
 DO $$
 DECLARE
@@ -37,6 +44,13 @@ BEGIN
         RAISE NOTICE 'ADR-0050: % campos locked en los tipos operativos; parametrización omitida para no destruir configuración manual.', v_locked;
         RETURN;
     END IF;
+
+    -- Liberar ON DELETE RESTRICT form_field_id → form_fields. El DDL 80 borra
+    -- el resto de expedientes después; aquí solo los de los tipos que se reescriben.
+    DELETE FROM tramites.procedure_instances
+     WHERE procedure_type_id IN (
+         SELECT id FROM tramites.procedure_types
+          WHERE code IN ('MATRICULA_NUEVA', 'TRASPASO_STANDARD'));
 
     -- Borrado en cascada de secciones y campos (FK ON DELETE CASCADE).
     DELETE FROM tramites.procedure_steps

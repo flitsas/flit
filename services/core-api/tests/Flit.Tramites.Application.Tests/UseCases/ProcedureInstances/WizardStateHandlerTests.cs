@@ -20,7 +20,14 @@ public sealed class WizardStateHandlerTests
 
     public WizardStateHandlerTests()
     {
-        _handler = new GetWizardStateHandler(_repo);
+        // R10 (HU #10598) — con `hasPrendaGate` sembrado en la familia TRASPASO, un traspaso NO es
+        // radicable mientras nadie declare qué pasa con el gravamen. El handler por defecto trae una
+        // decisión que satisface el gate (`omitir` no exige documento ni acreedor) para que los
+        // fixtures «listo para radicar» digan la verdad; los tests que ejercitan la prenda arman su
+        // propio stub. Sin esto, todo traspaso quedaba bloqueado por un motivo que no es el que el
+        // test mide, y el gate desactivado era justamente el defecto que esta tanda corrige.
+        _handler = new GetWizardStateHandler(
+            _repo, prendaRepo: new StubPrendaRepo(PrendaDecision.Omitir));
     }
 
     private static ProcedureInstance Base(string modalidad, string? tipologia = null) =>
@@ -157,7 +164,16 @@ public sealed class WizardStateHandlerTests
             Task.FromResult<ProcedureInstancePrenda?>(
                 decision is null
                     ? null
-                    : new ProcedureInstancePrenda { Decision = decision, Estado = PrendaEstado.Vigente });
+                    : new ProcedureInstancePrenda
+                    {
+                        Decision = decision,
+                        Estado = PrendaEstado.Vigente,
+                        // R10 (HU #11591/#11594): las decisiones que CONSTITUYEN gravamen exigen
+                        // acreedor. El stub las creaba sin él, así que una decisión «registrar»
+                        // nunca podía satisfacer el gate — daba igual el resto del expediente.
+                        AcreedorNombre = PrendaDecision.ImplicaGravamen(decision) ? "Banco XYZ" : null,
+                        AcreedorDocumento = PrendaDecision.ImplicaGravamen(decision) ? "900123456" : null,
+                    });
 
         public Task<IReadOnlyList<ProcedureInstancePrenda>> ListByInstanceAsync(
             Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default) =>
