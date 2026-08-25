@@ -455,17 +455,10 @@ function BiometricSkeleton({
 }
 
 /**
- * Bloque de UNA parte del trámite: paridad con la referencia del diseño (`ValidacionCard` del
- * prototipo Lovable, líneas 546-598). Una única card con:
- *  - Cabecera: "Validación del {Parte}" + badge de estado biométrico global (parteBadge).
- *  - Grid 2 columnas:
- *    - Izquierda: Datos de Identificación (nombre/doc) + Estado Biométrico + vistas de acción
- *      (VaultCoveredView / VerifiedView / KyverumPendingView / RejectedView / etc.).
- *    - Derecha: Método de Firma — canvas con "Firma electrónica", nombre con blur si no validado,
- *      badge de mecanismo (signatureBadge) y texto detalle; historial de validaciones al pie.
- *
- * El `role="group"` abarca todo el bloque (izquierda + derecha) para que los tests y lectores de
- * pantalla localicen todo el contexto de una parte bajo un único landmark accesible.
+ * Bloque de UNA parte del trámite. Un solo método visible (override vs mockup dual):
+ *  - Cubierta por baúl → solo «Método de Firma» / firma electrónica (sin bitácora Kyverum).
+ *  - Validación de identidad → Datos de Identificación + estado biométrico + acciones +
+ *    un disclosure «Ver trazabilidad de validación».
  */
 function ParteBlock({
   parte,
@@ -491,7 +484,6 @@ function ParteBlock({
   onChanged: () => void;
 }) {
   const estado = validation?.status;
-  const badge = parteBadge(validation, vaultCovered);
   const mecanismoFirma = actor?.representanteLegal?.mecanismoFirma;
   const sigBadge = signatureBadge(vaultCovered, mecanismoFirma);
   const bioBadge = biometricStateBadge(validation, vaultCovered);
@@ -503,117 +495,115 @@ function ParteBlock({
     ? `${PARTE_LABEL[parte]} firmará con el sello de la validación de identidad (biométrica) como mecanismo de firma.`
     : `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`;
 
-  // Nombre en el canvas: con blur si la parte NO está validada/firmada.
-  const isValidated =
-    vaultCovered || (validation?.status === 'aprobado' && !validation?.expired);
   const sigNombre = info?.nombre ?? PARTE_LABEL[parte];
 
-  const actionView = vaultCovered ? (
-    <VaultCoveredView />
-  ) : estado === 'aprobado' ? (
-    <VerifiedView validation={validation!} />
-  ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
-    <KyverumPendingView validation={validation} instanceId={instanceId} onChanged={onChanged} />
-  ) : estado === 'rechazado' || estado === 'expirado' || validation?.expired ? (
-    <RejectedView
-      validation={validation!}
-      parte={parte}
-      instanceId={instanceId}
-      provider={provider}
-      onChanged={onChanged}
-    />
-  ) : estado === 'error_envio' ? (
-    <SendFailedView
-      validation={validation!}
-      parte={parte}
-      instanceId={instanceId}
-      provider={provider}
-      onChanged={onChanged}
-    />
-  ) : estado === 'enviado' || estado === 'pendiente_envio' || estado === 'en_proceso' ? (
-    <SentPendingView
-      validation={validation!}
-      parte={parte}
-      instanceId={instanceId}
-      provider={provider}
-      onChanged={onChanged}
-    />
-  ) : (
-    <StartAction parte={parte} instanceId={instanceId} provider={provider} onStarted={onChanged} />
-  );
-
-  return (
-    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-        {/* ── Izquierda: identidad + estado biométrico + vistas de acción ── */}
-        <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-          <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
-            Datos de Identificación
-          </p>
-          {info && (
-            <>
-              <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
-                {info.nombre} — {PARTE_LABEL[parte]}
-              </p>
-              <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
-            </>
-          )}
-          <div className="mt-4">
+  // Un solo método visible: baúl → solo firma electrónica (sin bitácora Kyverum);
+  // identidad/biométrica → solo panel de validación + un disclosure de trazabilidad.
+  if (vaultCovered) {
+    return (
+      <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+        <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
+          Método de Firma
+        </p>
+        <div
+          className="flex items-center justify-center rounded-xl border p-5 text-center"
+          style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+        >
+          <div>
             <p
               className="text-[11px] font-medium uppercase tracking-wide"
               style={{ color: '#59677D' }}
             >
-              Estado Biométrico
+              Firma electrónica
+            </p>
+            <p
+              className="mt-2 select-none text-2xl font-semibold italic"
+              style={{ color: '#1A2B4C' }}
+            >
+              {sigNombre}
             </p>
             <div className="mt-2">
-              <StatusBadge label={bioBadge.label} tone={bioBadge.tone} />
+              <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
             </div>
+            <p className="mt-2 text-xs opacity-70">{sigDetalle}</p>
           </div>
-          {/* HU #11666 — por qué no salió la validación de identidad de esta parte. */}
-          {motivoNoEnvio && (
-            <div className="mt-3">
-              <MotivoNoEnvioAviso
-                parte={parte}
-                motivo={motivoNoEnvio}
-                onIrAActores={onIrAActores}
-              />
-            </div>
-          )}
-          <div className="mt-3">{actionView}</div>
         </div>
-
-        {/* ── Derecha: método de firma ── */}
-        <div className="flex flex-col rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-          <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
-            Método de Firma
-          </p>
-          <div
-            className="flex flex-1 items-center justify-center rounded-xl border p-5 text-center"
-            style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
-          >
-            <div>
-              <p
-                className="text-[11px] font-medium uppercase tracking-wide"
-                style={{ color: '#59677D' }}
-              >
-                Firma electrónica
-              </p>
-              <p
-                className="mt-2 select-none text-2xl font-semibold italic"
-                style={{ color: '#1A2B4C', filter: isValidated ? undefined : 'blur(4px)' }}
-              >
-                {sigNombre}
-              </p>
-              <div className="mt-2">
-                <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
-              </div>
-              <p className="mt-2 text-xs opacity-70">{sigDetalle}</p>
-            </div>
-          </div>
-          {!vaultCovered && (
-            <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
-          )}
+        <div className="mt-3">
+          <VaultCoveredView />
         </div>
       </div>
+    );
+  }
+
+  const actionView =
+    estado === 'aprobado' ? (
+      <VerifiedView validation={validation!} />
+    ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
+      <KyverumPendingView validation={validation} instanceId={instanceId} onChanged={onChanged} />
+    ) : estado === 'rechazado' || estado === 'expirado' || validation?.expired ? (
+      <RejectedView
+        validation={validation!}
+        parte={parte}
+        instanceId={instanceId}
+        provider={provider}
+        onChanged={onChanged}
+      />
+    ) : estado === 'error_envio' ? (
+      <SendFailedView
+        validation={validation!}
+        parte={parte}
+        instanceId={instanceId}
+        provider={provider}
+        onChanged={onChanged}
+      />
+    ) : estado === 'enviado' || estado === 'pendiente_envio' || estado === 'en_proceso' ? (
+      <SentPendingView
+        validation={validation!}
+        parte={parte}
+        instanceId={instanceId}
+        provider={provider}
+        onChanged={onChanged}
+      />
+    ) : (
+      <StartAction parte={parte} instanceId={instanceId} provider={provider} onStarted={onChanged} />
+    );
+
+  return (
+    <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+      <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
+        Datos de Identificación
+      </p>
+      {info && (
+        <>
+          <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
+            {info.nombre} — {PARTE_LABEL[parte]}
+          </p>
+          <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
+        </>
+      )}
+      <div className="mt-4">
+        <p
+          className="text-[11px] font-medium uppercase tracking-wide"
+          style={{ color: '#59677D' }}
+        >
+          Estado Biométrico
+        </p>
+        <div className="mt-2">
+          <StatusBadge label={bioBadge.label} tone={bioBadge.tone} />
+        </div>
+      </div>
+      {motivoNoEnvio && (
+        <div className="mt-3">
+          <MotivoNoEnvioAviso
+            parte={parte}
+            motivo={motivoNoEnvio}
+            onIrAActores={onIrAActores}
+          />
+        </div>
+      )}
+      <div className="mt-3">{actionView}</div>
+      <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
+    </div>
   );
 }
 

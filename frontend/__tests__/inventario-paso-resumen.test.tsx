@@ -403,6 +403,9 @@ describe('MatriculaResumen — inventario: actores del trámite', () => {
     const vendedor = screen.getByRole('region', { name: 'Vendedor' });
     expect(within(vendedor).getByText('Firma electrónica (baúl)')).toBeInTheDocument();
     expect(within(vendedor).queryByRole('button', { name: /Certificado ID/ })).toBeNull();
+    expect(
+      within(vendedor).queryByRole('button', { name: 'Ver trazabilidad de validación' }),
+    ).toBeNull();
   });
 });
 
@@ -779,6 +782,15 @@ describe('MatriculaResumen — inventario: trazabilidad de validación dentro de
   it('sin ninguna validación biométrica no hay nada que auditar', async () => {
     renderResumen({ compradorBio: null, vendedorBio: null });
     await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.queryByRole('button', { name: 'Ver trazabilidad de validación' })).toBeNull();
+  });
+
+  it('con firma del baúl no muestra Ver trazabilidad de validación (sin bitácora Kyverum)', async () => {
+    renderResumen({
+      firmaBaulPartes: ['vendedor', 'comprador'],
+      modalidad: 'traspaso',
+    });
+    await screen.findByRole('region', { name: 'Vendedor' });
     expect(screen.queryByRole('button', { name: 'Ver trazabilidad de validación' })).toBeNull();
   });
 

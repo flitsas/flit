@@ -49,6 +49,7 @@ import { PageNav } from '@/components/atom/PageNav';
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
+import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
 import {
@@ -57,7 +58,9 @@ import {
   useAttachmentPreview,
 } from './TramiteDocumentosModal';
 import { TramiteDetalleModal } from './TramiteDetalleModal';
+import { TramiteTrackingModal } from './TramiteTrackingModal';
 import type {
+  BiometricParte,
   FirmaParteEstado,
   InstanceStatus,
   InstanceSummary,
@@ -66,6 +69,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
+import { IdentidadParteTrackingModal } from './IdentidadParteTrackingModal';
 
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
@@ -440,6 +444,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
   // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
   const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
+  /** Click en badge Estado → modal de línea de tiempo del trámite (todas las modalidades). */
+  const [trackingTramite, setTrackingTramite] = useState<InstanceSummary | null>(null);
+  /** Click en línea Firmas → modal de tracking de identidad de esa parte. */
+  const [identidadTracking, setIdentidadTracking] = useState<{
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  } | null>(null);
 
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
@@ -569,9 +581,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     void load();
   }, [load, refreshKey]);
 
-  // Conteo por estado de negocio (para el funnel de estados). Se calcula sobre el
-  // total de trámites cargados, no sobre `filtered`, para que el embudo muestre
-  // siempre el panorama completo aunque haya un estado seleccionado.
+  // Conteo por estado para la tira KPI (`flit-tramites-chrome`): cambia con el tab de modalidad,
+  // no con búsqueda ni filtro de estado — mismo criterio que el mockup.
   const estadoCounts = useMemo(() => {
     const c: Record<EstadoTramite, number> = {
       borrador: 0,
@@ -580,15 +591,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       entregado: 0,
       aprobado: 0,
       rechazado: 0,
-      // HU #10874 — no tiene tarjeta propia en el funnel (FUNNEL_ORDER no la incluye), pero el
-      // tipo Record<EstadoTramite, number> exige la clave; se cuenta igual por completitud.
       subsanacion: 0,
     };
     for (const it of items) {
+      if (modalidad && it.modalidad !== modalidad) continue;
       if (it.estado in c) c[it.estado as EstadoTramite] += 1;
     }
     return c;
-  }, [items]);
+  }, [items, modalidad]);
 
   // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
   const companias = useMemo(() => {
@@ -926,69 +936,30 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setPage(1);
   };
 
+  /** Mockup chrome: Actualizar limpia búsqueda y filtro de estado, luego recarga. */
+  const handleRefresh = () => {
+    setSearch('');
+    setEstado('');
+    setPage(1);
+    void load();
+  };
+
   return (
     // Sin tarjeta blanca envolvente: en el diseño la pantalla es una pila de bloques sobre el
     // fondo azul claro (título en tarjeta, KPIs en tarjeta, tabs desnudos, filas como tarjetas).
     // Meter todo dentro de un contenedor blanco aplanaba esa jerarquía.
     <section className="flex min-w-0 flex-col gap-4">
-      {/* Título del módulo en tarjeta blanca (PageHeaderCard). */}
-      <div className="rounded-2xl border border-[#DFE5ED] bg-white px-5 py-3 dark:border-white/10 dark:bg-[#162744]">
-        <h1 className="text-2xl font-bold leading-tight" style={{ color: '#557EFF' }}>
-          Gestión integral de trámites
-        </h1>
-        <p className="mt-1 text-sm leading-snug text-[#162744]/70 dark:text-white/60">
-          Administra, monitorea y radica tus trámites ante organismos de tránsito en tiempo real.
-        </p>
-      </div>
+      <ModuleTitle
+        title="Gestión Integral de trámites"
+        subtitle="Administra, monitorea y radica tus trámites ante organismos de tránsito en tiempo real."
+      />
 
       <div className="flex min-w-0 flex-col gap-4">
-        {/* Tira de KPIs por estado + botón general "Nuevo trámite" a su derecha, como en el
-            diseño. Sustituye a la fila de botones por modalidad (Matrícula inicial / Traspaso
-            estándar) y a la píldora "Buscar": la modalidad se elige DENTRO del botón general y
-            la búsqueda vive en el panel de filtros. */}
-        {/* El botón se renderiza SIEMPRE, también con la lista vacía: es la única vía para crear
-            el primer trámite. La tira de KPIs sí es condicional (sin datos no hay nada que contar). */}
-        <div className="flex items-stretch justify-end gap-4">
-          {!loading && !error && items.length > 0 ? (
-            <div className="min-w-0 flex-1">
-              <EstadoFunnel
-                counts={estadoCounts}
-                active={estado}
-                onSelect={handleEstadoChange}
-              />
-            </div>
-          ) : null}
-          {/* Flujo del diseño: entra DIRECTO al asistente; el tipo de trámite se elige dentro del
-              paso 1, no en un diálogo previo. */}
-          <button
-            type="button"
-            onClick={() => onNewTramite?.()}
-            disabled={blockNew.matricula && blockNew.traspaso}
-            title={
-              blockNew.matricula && blockNew.traspaso
-                ? 'La compañía tiene bloqueada la creación de trámites.'
-                : undefined
-            }
-            // Sin icono: en la propuesta el botón es solo el rótulo en dos líneas. El "+" no añadía
-            // nada que el texto no dijera y competía con él por el centro del botón.
-            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-            style={{ background: WIZARD_CTA_GRADIENT }}
-          >
-            <span>
-              Nuevo
-              <br />
-              trámite
-            </span>
-          </button>
-        </div>
-
-        {/* Tabs de modalidad + fila de acciones compactas (búsqueda, Periodo, + Filtro, Columnas)
-            + estrella de prioritarios + actualizar. Reemplaza a la tarjeta blanca de filtros
-            SIEMPRE visible (~185px de alto, casi muda en reposo): la tabla queda como foco. */}
+        {/* flit-tramites-chrome: tabs + filtros ANTES de KPIs */}
         <TramitesListToolbar
           modalidad={modalidad}
           onModalidadChange={handleModalidadChange}
-          onRefresh={() => void load()}
+          onRefresh={handleRefresh}
           loading={loading}
           hasActiveFilters={hasActiveFilters}
           soloPrioritarios={soloPrioritarios}
@@ -1003,6 +974,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               rangoPropioHasta={rangoPropioHasta}
               onRangoPropioDesdeChange={setRangoPropioDesde}
               onRangoPropioHastaChange={setRangoPropioHasta}
+              estado={estado}
+              onEstadoChange={handleEstadoChange}
               filtrosEspecificos={filtrosEspecificos}
               onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
               placa={placaFilter}
@@ -1037,8 +1010,34 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           }
         />
 
-        {/* Tira de chips: SOLO existe si hay periodo o algún filtro específico activo — sin
-            tarjeta ni borde, `mt-2`. */}
+        {/* KPIs por estado (solo lectura) + CTA Nuevo trámite */}
+        <div className="flex items-stretch gap-4">
+          {!loading && !error ? (
+            <div className="min-w-0 flex-1">
+              <EstadoFunnel counts={estadoCounts} />
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => onNewTramite?.()}
+            disabled={blockNew.matricula && blockNew.traspaso}
+            title={
+              blockNew.matricula && blockNew.traspaso
+                ? 'La compañía tiene bloqueada la creación de trámites.'
+                : undefined
+            }
+            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
+            style={{ background: WIZARD_CTA_GRADIENT }}
+          >
+            <span>
+              Nuevo
+              <br />
+              trámite
+            </span>
+          </button>
+        </div>
+
+        {/* Tira de chips: SOLO existe si hay periodo o algún filtro específico activo */}
         <TramitesFiltrosChips
           periodo={periodo}
           filtrosEspecificos={filtrosEspecificos}
@@ -1120,6 +1119,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           onVerDocumentos={setDocsTramite}
           onVerConsolidado={setConsolidadoTramite}
           onOpenDetalle={setDetalleTramite}
+          onOpenTrackingTramite={setTrackingTramite}
+          onOpenIdentidadTracking={setIdentidadTracking}
         />
       </div>
 
@@ -1150,6 +1151,27 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         instanceId={detalleTramite?.id ?? null}
         tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
         item={detalleTramite}
+      />
+
+      <TramiteTrackingModal
+        open={trackingTramite !== null}
+        onClose={() => setTrackingTramite(null)}
+        instanceId={trackingTramite?.id ?? null}
+        tenantId={isAdmin ? trackingTramite?.tenantId : undefined}
+        titleHint={
+          trackingTramite
+            ? [trackingTramite.referenceNumber, trackingTramite.placa].filter(Boolean).join(' · ')
+            : null
+        }
+      />
+
+      <IdentidadParteTrackingModal
+        open={identidadTracking !== null}
+        onClose={() => setIdentidadTracking(null)}
+        instanceId={identidadTracking?.item.id ?? null}
+        tenantId={isAdmin ? identidadTracking?.item.tenantId : undefined}
+        parte={identidadTracking?.parte ?? 'comprador'}
+        rotulo={identidadTracking?.rotulo ?? 'Comprador'}
       />
 
       {processTarget && (
@@ -1317,6 +1339,8 @@ function TableBody({
   onVerDocumentos,
   onVerConsolidado,
   onOpenDetalle,
+  onOpenTrackingTramite,
+  onOpenIdentidadTracking,
 }: {
   loading: boolean;
   error: string | null;
@@ -1350,6 +1374,13 @@ function TableBody({
   onVerConsolidado: (item: InstanceSummary) => void;
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
   onOpenDetalle: (item: InstanceSummary) => void;
+  /** Click en badge Estado → modal de línea de tiempo del trámite. */
+  onOpenTrackingTramite: (item: InstanceSummary) => void;
+  onOpenIdentidadTracking: (target: {
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  }) => void;
 }) {
   if (loading) {
     // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
@@ -1512,6 +1543,8 @@ function TableBody({
                 onVerDocumentos={onVerDocumentos}
                 onVerConsolidado={onVerConsolidado}
                 onOpenDetalle={onOpenDetalle}
+                onOpenTrackingTramite={onOpenTrackingTramite}
+                onOpenIdentidadTracking={onOpenIdentidadTracking}
               />
             ))}
           </tbody>
@@ -1558,34 +1591,50 @@ function ActorCell({ nombre }: { nombre: string | null | undefined }) {
 function FirmaParteLinea({
   rotulo,
   estado,
+  onOpenTracking,
 }: {
   rotulo: string;
   estado?: FirmaParteEstado | null;
+  /** Click en el indicador → modal de tracking de identidad de esta parte. */
+  onOpenTracking?: () => void;
 }) {
   // Fragmento de DOS celdas, no una línea cerrada: la rejilla vive en el contenedor (ver la celda
   // `firmado`), y así el valor de vendedor y el de comprador quedan alineados en la misma columna.
   // Con la línea corrida anterior ("Vendedor: …" / "Comprador: …") los valores bailaban, porque
   // los dos rótulos no miden lo mismo, y la columna no se podía barrer en vertical.
+  const valor = estado ? (
+    <span
+      className="whitespace-nowrap text-xs font-semibold"
+      style={{ color: FIRMA_TEXTO[estado].color }}
+    >
+      {FIRMA_TEXTO[estado].label}
+    </span>
+  ) : (
+    <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
+      Sin registrar
+    </span>
+  );
+
   return (
     <>
-      {/* Ni el rótulo ni el valor se truncan: los dos salen de un conjunto cerrado y corto
-          (Vendedor/Comprador · Firmado/Sin firma/Rechazado/Sin registrar), y el ancho mínimo de la
-          columna está calculado para el peor caso. Un `truncate` aquí solo servía para esconder
-          que la columna iba estrecha, que es justo lo que pasaba. */}
       <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
         {rotulo}
       </span>
-      {estado ? (
-        <span
-          className="whitespace-nowrap text-xs font-semibold"
-          style={{ color: FIRMA_TEXTO[estado].color }}
+      {onOpenTracking ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenTracking();
+          }}
+          aria-label={`Ver tracking de identidad de ${rotulo}`}
+          title={`Ver tracking de identidad · ${rotulo}`}
+          className="rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
         >
-          {FIRMA_TEXTO[estado].label}
-        </span>
+          {valor}
+        </button>
       ) : (
-        <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
-          Sin registrar
-        </span>
+        valor
       )}
     </>
   );
@@ -1608,6 +1657,8 @@ function TramiteRow({
   onVerDocumentos,
   onVerConsolidado,
   onOpenDetalle,
+  onOpenTrackingTramite,
+  onOpenIdentidadTracking,
 }: {
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
@@ -1627,6 +1678,12 @@ function TramiteRow({
   onVerConsolidado: (item: InstanceSummary) => void;
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
   onOpenDetalle: (item: InstanceSummary) => void;
+  onOpenTrackingTramite: (item: InstanceSummary) => void;
+  onOpenIdentidadTracking: (target: {
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  }) => void;
 }) {
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
@@ -1840,9 +1897,21 @@ function TramiteRow({
     firmado: (
       <span className="grid min-w-0 grid-cols-[auto_auto] justify-start items-center gap-x-2 gap-y-1">
         {item.modalidad === 'TRASPASO' ? (
-          <FirmaParteLinea rotulo="Vendedor" estado={item.firmaVendedorEstado} />
+          <FirmaParteLinea
+            rotulo="Vendedor"
+            estado={item.firmaVendedorEstado}
+            onOpenTracking={() =>
+              onOpenIdentidadTracking({ item, parte: 'vendedor', rotulo: 'Vendedor' })
+            }
+          />
         ) : null}
-        <FirmaParteLinea rotulo="Comprador" estado={item.firmaCompradorEstado} />
+        <FirmaParteLinea
+          rotulo="Comprador"
+          estado={item.firmaCompradorEstado}
+          onOpenTracking={() =>
+            onOpenIdentidadTracking({ item, parte: 'comprador', rotulo: 'Comprador' })
+          }
+        />
       </span>
     ),
     // El chip de estado se inyecta más abajo (solo si la columna `estado` está oculta), para
@@ -1891,15 +1960,26 @@ function TramiteRow({
     estado: (
       <span className="relative flex min-w-0 flex-col items-start gap-1">
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {ayudaIdentidad ? (
-            <IdentidadChip
-              chip={chip}
-              ayuda={ayudaIdentidad}
-              tipId={`identidad-ayuda-${item.id}`}
-            />
-          ) : (
-            <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenTrackingTramite(item);
+            }}
+            aria-label={`Ver trazabilidad del trámite ${item.referenceNumber}`}
+            title="Ver línea de tiempo del trámite"
+            className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+          >
+            {ayudaIdentidad ? (
+              <IdentidadChip
+                chip={chip}
+                ayuda={ayudaIdentidad}
+                tipId={`identidad-ayuda-${item.id}`}
+              />
+            ) : (
+              <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+            )}
+          </button>
           {showRejectPopover ? (
           <div ref={popoverRef} className="relative shrink-0">
             <button

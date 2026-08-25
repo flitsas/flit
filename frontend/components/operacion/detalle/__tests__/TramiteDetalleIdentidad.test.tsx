@@ -226,6 +226,8 @@ describe('TramiteDetalleIdentidad', () => {
 
     const fila = (await screen.findByText('Comprador')).closest('li') as HTMLElement;
     expect(within(fila).getByText('Rechazado')).toBeInTheDocument();
-    expect(within(fila).queryByRole('button')).not.toBeInTheDocument();
+    expect(
+      within(fila).queryByRole('button', { name: /Descargar certificado/i }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -51,6 +51,12 @@ export interface ModalProps {
   busy?: boolean;
   /** Permite cerrar al hacer clic fuera del panel. `true` por defecto. */
   closeOnBackdrop?: boolean;
+  /** Reemplaza el encabezado por defecto. Puede ser nodo o función que recibe `titleId` para a11y. */
+  header?: React.ReactNode | ((ctx: { titleId: string }) => React.ReactNode);
+  /** Clases adicionales en el panel (ancho sigue gobernado por `size`). */
+  panelClassName?: string;
+  /** Clases adicionales en el contenedor scroll del cuerpo. */
+  bodyClassName?: string;
   children: React.ReactNode;
 }
 
@@ -66,6 +72,9 @@ export function Modal({
   zClassName = "z-[100]",
   busy = false,
   closeOnBackdrop = true,
+  header,
+  panelClassName = "",
+  bodyClassName = "",
   children,
 }: ModalProps) {
   const titleId = useId();
@@ -92,6 +101,13 @@ export function Modal({
     if (!busy) onClose();
   };
 
+  const resolvedHeader =
+    header === undefined
+      ? undefined
+      : typeof header === 'function'
+        ? header({ titleId })
+        : header;
+
   return createPortal(
     <div
       className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-y-auto bg-slate-900/50 px-4 py-6 backdrop-blur-md`}
@@ -103,37 +119,41 @@ export function Modal({
       }}
     >
       <div
-        className={`flex max-h-[calc(100dvh-3rem)] w-full ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-[#162744] shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white`}
+        className={`flex max-h-[calc(100dvh-3rem)] w-full ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-[#162744] shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white ${panelClassName}`}
       >
-        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            {Icon && (
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                style={{ background: iconBg }}
-              >
-                <Icon className="h-4.5 w-4.5 text-white" />
-              </span>
-            )}
-            <div className="min-w-0">
-              <h2 id={titleId} className={titleClassName}>
-                {title}
-              </h2>
-              {description && (
-                <p className="mt-0.5 text-xs opacity-70">{description}</p>
+        {resolvedHeader !== undefined ? (
+          <div className="mb-4 shrink-0">{resolvedHeader}</div>
+        ) : (
+          <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              {Icon && (
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                  style={{ background: iconBg }}
+                >
+                  <Icon className="h-4.5 w-4.5 text-white" />
+                </span>
               )}
+              <div className="min-w-0">
+                <h2 id={titleId} className={titleClassName}>
+                  {title}
+                </h2>
+                {description && (
+                  <p className="mt-0.5 text-xs opacity-70">{description}</p>
+                )}
+              </div>
             </div>
+            <button
+              type="button"
+              aria-label="Cerrar"
+              onClick={requestClose}
+              className="shrink-0 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            aria-label="Cerrar"
-            onClick={requestClose}
-            className="shrink-0 text-slate-400 hover:text-slate-700 dark:hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        )}
+        <div className={`min-h-0 flex-1 overflow-y-auto ${bodyClassName}`}>{children}</div>
       </div>
     </div>,
     document.body,

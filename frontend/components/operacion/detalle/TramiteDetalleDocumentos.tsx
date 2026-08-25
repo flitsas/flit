@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
-import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
   AttachmentPreview,
   useAttachmentPreview,
@@ -19,8 +18,10 @@ import {
   SeccionError,
   SeccionVacia,
   TarjetaDetalle,
+  DetalleBadgeSoft,
   type SeccionDetalleProps,
 } from './primitivos';
+import { DETALLE_BLUE, DETALLE_GREEN, DETALLE_GOLD } from './detalle-visual';
 
 /**
  * Sección «Documentos» del modal de detalle (Frente C, `Paso3` de la propuesta).
@@ -36,7 +37,7 @@ import {
  * se omite — ver respuesta del encargo.
  */
 
-const AZUL = '#557EFF';
+const AZUL = DETALLE_BLUE;
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '—';
@@ -96,9 +97,9 @@ function RequisitoRow({
         ) : null}
       </span>
       <span className="flex shrink-0 items-center gap-2">
-        <StatusBadge
-          tone={item.satisfied ? 'success' : 'warning'}
-          label={item.satisfied ? 'Cumplido' : 'Pendiente'}
+        <DetalleBadgeSoft
+          text={item.satisfied ? '✓ Adjunto' : 'Sin adjuntar'}
+          color={item.satisfied ? DETALLE_GREEN : DETALLE_GOLD}
         />
         {attachment ? (
           <DownloadButton filename={attachment.filename} onClick={() => onDownload(attachment)} />
@@ -172,7 +173,6 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
     };
   }, [instanceId, tenantId, reloadKey]);
 
-  const satisfiedCount = checklist.filter((i) => i.satisfied).length;
   const checklistDocTipos = new Set(checklist.map((i) => i.docTipo).filter(Boolean));
   const otrosAdjuntos = attachments.filter(
     (a) => a.source !== 'system' && !checklistDocTipos.has(a.tipo),
@@ -205,18 +205,11 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
 
   return (
     <div className="flex flex-col gap-4">
-      <TarjetaDetalle
-        titulo="Documentos del trámite"
-        accion={
-          <span className="shrink-0 text-xs font-semibold text-[#162744] dark:text-white">
-            {satisfiedCount} de {checklist.length} requisitos cumplidos
-          </span>
-        }
-      >
+      <TarjetaDetalle titulo="Documentos del trámite" className="h-full">
         {checklist.length === 0 ? (
           <SeccionVacia mensaje="Este trámite no tiene requisitos de documentos configurados." />
         ) : (
-          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2" aria-label="Requisitos del trámite">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Requisitos del trámite">
             {checklist.map((item) => {
               const attachment = item.docTipo
                 ? attachments.find((a) => a.tipo === item.docTipo)

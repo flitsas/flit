@@ -15,6 +15,7 @@ import {
   type PlateDetail,
 } from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
+import ExpedienteTimeline from './ExpedienteTimeline';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -705,9 +706,10 @@ export function FirmaFurStep({
         }}
       />
 
-      {/* La trazabilidad cronológica del trámite NO va en el resumen (decisión del usuario): este
-          paso es para revisar antes de radicar, no para consultar el historial. `ExpedienteTimeline`
-          se conserva sin montar aquí — es la pieza natural del modal de detalle del trámite. */}
+      {/* Borrador: la cronología vive en el resumen. Otros estados: modal de detalle / badge listado. */}
+      {(detail?.status ?? 'borrador') === 'borrador' ? (
+        <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
+      ) : null}
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
 

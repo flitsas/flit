@@ -1,7 +1,5 @@
-// Composición de dos tarjetas por parte (paridad con la referencia del diseño: `MatriculaInicial`
-// Step4, líneas 904-950). La tarjeta de firma electrónica es INFORMACIÓN (¿esta parte ya tiene firma
-// vigente?) y la biométrica es ACCIÓN (¿hace falta pedirla?); no son excluyentes entre sí — lo
-// excluyente es si la biométrica hace falta, no si ambas tarjetas se muestran.
+// Un solo método visible por parte: baúl → firma electrónica; identidad → biométrica + trazabilidad.
+// Ya no coexisten las dos columnas del mockup Step4 (override de producto).
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { BiometricStep } from '../BiometricStep';
@@ -22,15 +20,6 @@ vi.mock('@/lib/auth/jwt', () => ({
   decodeJwtPayload: () => null,
   isSuperAdmin: () => false,
 }));
-
-/** Localiza la tarjeta de firma ("Firma electrónica") ancestra al título dado, sin depender de un
- *  `data-testid` nuevo: la card es la propia `WIZARD_CARD` (`rounded-2xl`) más cercana, igual patrón
- *  que ya usan otras suites del repo (`tramite-wizard.test.tsx`). */
-function signatureCardOf(heading: HTMLElement): HTMLElement {
-  const card = heading.closest('div.rounded-2xl');
-  if (!card) throw new Error('No se encontró la tarjeta de firma electrónica.');
-  return card as HTMLElement;
-}
 
 const ACTOR_JURIDICA_IDENTIDAD: ProcedureActor = {
   rol: 'comprador',
@@ -72,64 +61,45 @@ beforeEach(() => {
   vi.mocked(tramitesClient.getActors).mockResolvedValue([]);
 });
 
-describe('BiometricStep — tarjeta de firma electrónica por parte', () => {
-  it('aparece una tarjeta "Firma electrónica" por cada parte (traspaso: vendedor y comprador)', async () => {
+describe('BiometricStep — un solo método visible por parte', () => {
+  it('sin baúl: muestra biométrica y NO el canvas de firma electrónica', async () => {
     renderStep();
     await screen.findByRole('group', { name: 'Biométrica Vendedor' });
 
-    const firmas = screen.getAllByText('Firma electrónica');
-    expect(firmas).toHaveLength(2);
+    expect(screen.getAllByText('Estado Biométrico')).toHaveLength(2);
+    expect(screen.queryByText('Firma electrónica')).toBeNull();
+    expect(screen.queryByText('Método de Firma')).toBeNull();
   });
 
-  it('cubierta por el baúl: badge "Firma electrónica activa" (tono éxito)', async () => {
-    renderStep({ vaultCoveredPartes: ['comprador'] });
+  it('cubierta por el baúl: solo firma electrónica activa (sin columna biométrica)', async () => {
+    renderStep({ modalidad: 'matricula_inicial', vaultCoveredPartes: ['comprador'] });
+
     const compradorGrupo = await screen.findByRole('group', { name: 'Biométrica Comprador' });
-    void compradorGrupo;
-
-    const [firmaComprador] = screen.getAllByText('Firma electrónica').slice(-1);
-    const card = signatureCardOf(firmaComprador);
-    expect(within(card).getByText('Firma electrónica activa')).toBeInTheDocument();
+    expect(within(compradorGrupo).getByText('Método de Firma')).toBeInTheDocument();
+    expect(within(compradorGrupo).getByText('Firma electrónica')).toBeInTheDocument();
+    expect(within(compradorGrupo).getByText('Firma electrónica activa')).toBeInTheDocument();
+    expect(within(compradorGrupo).getByText('Firma electrónica (baúl)')).toBeInTheDocument();
+    expect(within(compradorGrupo).queryByText('Estado Biométrico')).toBeNull();
     expect(
-      within(card).getByRole('status', { name: 'Estado: Firma electrónica activa' }),
-    ).toBeInTheDocument();
+      within(compradorGrupo).queryByRole('button', { name: /Ver trazabilidad de validación/ }),
+    ).toBeNull();
   });
 
-  it('mecanismoFirma "identidad": badge que dice que firmará con el sello de la validación de identidad (tono info)', async () => {
+  it('mecanismoFirma identidad sin baúl: panel biométrico, sin canvas de firma electrónica', async () => {
     vi.mocked(tramitesClient.getActors).mockResolvedValue([ACTOR_JURIDICA_IDENTIDAD]);
     renderStep({ modalidad: 'matricula_inicial' });
     await screen.findByRole('group', { name: 'Biométrica Comprador' });
 
-    const firma = screen.getByText('Firma electrónica');
-    const card = signatureCardOf(firma);
-    expect(within(card).getByText('Firmará con validación de identidad')).toBeInTheDocument();
-    expect(
-      within(card).getByText(/firmará con el sello de la validación de identidad/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Estado Biométrico')).toBeInTheDocument();
+    expect(screen.queryByText('Firma electrónica')).toBeNull();
   });
 
-  it('sin dato de firma: badge "Sin firma registrada" (tono neutral)', async () => {
+  it('sin baúl y sin mecanismo: biométrica pendiente, sin canvas de firma', async () => {
     vi.mocked(tramitesClient.getActors).mockResolvedValue([ACTOR_NATURAL_SIN_MECANISMO]);
     renderStep({ modalidad: 'matricula_inicial' });
     await screen.findByRole('group', { name: 'Biométrica Comprador' });
 
-    const firma = screen.getByText('Firma electrónica');
-    const card = signatureCardOf(firma);
-    expect(within(card).getByText('Sin firma registrada')).toBeInTheDocument();
-  });
-
-  it('con cobertura por baúl: el grupo muestra el aviso de baúl (izquierda) y la firma activa (derecha)', async () => {
-    renderStep({ modalidad: 'matricula_inicial', vaultCoveredPartes: ['comprador'] });
-
-    const compradorGrupo = await screen.findByRole('group', { name: 'Biométrica Comprador' });
-    // Izquierda (columna de identidad y acción): VaultCoveredView explica que no hace falta biométrica.
-    expect(within(compradorGrupo).getByText('Firma electrónica (baúl)')).toBeInTheDocument();
-    expect(
-      within(compradorGrupo).getByText(/No requiere validación biométrica\./),
-    ).toBeInTheDocument();
-
-    // Derecha (columna de firma): badge "Firma electrónica activa" dentro del canvas de firma.
-    const firma = screen.getByText('Firma electrónica');
-    const signatureCard = signatureCardOf(firma);
-    expect(within(signatureCard).getByText('Firma electrónica activa')).toBeInTheDocument();
+    expect(screen.getByText('Pendiente de validación')).toBeInTheDocument();
+    expect(screen.queryByText('Firma electrónica')).toBeNull();
   });
 });

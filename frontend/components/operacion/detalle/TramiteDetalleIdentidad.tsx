@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { formatFecha } from '@/lib/format/date';
 import type {
   BiometricEstado,
   BiometricParte,
   BiometricValidation,
-  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import {
   SeccionCargando,
@@ -21,28 +21,10 @@ import {
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 /**
- * Sección «Validación de identidad» del modal de detalle (Frente C, «Tracking de validación
- * Kyverum» de `Paso5` en la propuesta).
+ * Sección «Validación de identidad» del modal de detalle (Frente C).
  *
- * La propuesta pinta 4 hitos fijos e inventados (Recepción Kyverum / Validación biométrica / Firma
- * electrónica / Radicación organismo) con estados hardcodeados que no existen en ningún contrato.
- * Lo que SÍ expone el contrato es un estado de validación biométrica POR PARTE: comprador y vendedor
- * en traspaso, comprador único en matrícula inicial (`partyRole` es `null` ahí). Eso es lo que se
- * pinta: un renglón por parte, no por hito de un flujo que el backend no modela.
- *
- * Se usa `listBiometricExpediente` (no `getBiometricState`) porque además de las validaciones trae
- * `firmaBaulPartes`: partes acreditadas por la firma del baúl del representante legal en vez de por
- * una validación biométrica propia (ADR-0025 §4). Para esas partes NO hay certificado de identidad
- * que ofrecer — se rotula distinto, como ya hace el expediente.
- *
- * No se usa «Kyverum» como marca en la UI: el contrato no la expone en este DTO (`provider` es un
- * string libre — mock|kyverum|migracion_v1 — y no se pinta en ninguna otra sección del detalle).
- *
- * `IdentityStatusPanel` (historial de aprobaciones/rechazos, disclosure colapsado, polling en vivo)
- * no encajó aquí: es un panel de ACCIÓN con su propio ciclo de vida (abrir/cerrar, refrescos con
- * `setInterval`, alertas accionables) pensado para el wizard en curso, no un renglón de solo lectura
- * dentro de una tarjeta de detalle ya montada. Se construye el estado localmente reutilizando el
- * mismo criterio de mapeo estado→tono que ya usa ese panel.
+ * Estado por parte + descarga de certificado + bitácora Kyverum (`IdentityValidationTrackingPanel`)
+ * cuando hay `validationId`. Firma del baúl: sin tracking de identidad.
  */
 
 const AZUL = '#557EFF';
@@ -159,33 +141,38 @@ function FilaValidacion({
   onDescargar: (validationId: string, nombre: string) => void;
 }) {
   return (
-    <li
-      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
-    >
-      <span className="min-w-0">
-        <span className="block text-xs font-medium text-[#162744] dark:text-white">{fila.label}</span>
-        {fila.timestamp ? (
-          <span className="block text-xs text-[#162744]/70 dark:text-white/70">
-            {formatFecha(fila.timestamp)}
-          </span>
-        ) : null}
-      </span>
-      <span className="flex shrink-0 items-center gap-2">
-        <StatusBadge tone={fila.tone} label={fila.statusText} />
-        {fila.certificado && fila.validationId ? (
-          <button
-            type="button"
-            onClick={() => onDescargar(fila.validationId as string, fila.label)}
-            disabled={descargando}
-            aria-label={`Descargar certificado de ${fila.label}`}
-            title="Descargar certificado"
-            className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-40 border-[#DFE5ED] dark:border-white/10"
-            style={{ color: AZUL }}
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        ) : null}
-      </span>
+    <li className="space-y-2">
+      <div
+        className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+      >
+        <span className="min-w-0">
+          <span className="block text-xs font-medium text-[#162744] dark:text-white">{fila.label}</span>
+          {fila.timestamp ? (
+            <span className="block text-xs text-[#162744]/70 dark:text-white/70">
+              {formatFecha(fila.timestamp)}
+            </span>
+          ) : null}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <StatusBadge tone={fila.tone} label={fila.statusText} />
+          {fila.certificado && fila.validationId ? (
+            <button
+              type="button"
+              onClick={() => onDescargar(fila.validationId as string, fila.label)}
+              disabled={descargando}
+              aria-label={`Descargar certificado de ${fila.label}`}
+              title="Descargar certificado"
+              className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-40 border-[#DFE5ED] dark:border-white/10"
+              style={{ color: AZUL }}
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          ) : null}
+        </span>
+      </div>
+      {fila.validationId ? (
+        <IdentityValidationTrackingPanel validationId={fila.validationId} />
+      ) : null}
     </li>
   );
 }

@@ -14,16 +14,11 @@ import {
   ESTADO_LABELS,
   type EstadoTramite,
 } from '@/lib/tramites/estados';
-import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
-
 /**
  * Tira de KPIs por estado de la pantalla principal de trámites: una tarjeta única
- * dividida en columnas, con icono, etiqueta y conteo por estado, que además actúa
- * como filtro (toggle). La fuente de labels/colores es `lib/tramites/estados.ts`.
- *
- * Sustituye al embudo de 6 tarjetas sueltas: mismo rol funcional, presentación del
- * diseño vigente. Incorpora `subsanacion`, que el embudo anterior omitía pese a
- * estar en el vocabulario de estados desde la HU #10870/#10874.
+ * dividida en columnas, con icono, etiqueta y conteo por estado (solo lectura).
+ * El filtro por estado vive en el popover "+ Filtro" (`flit-tramites-chrome`).
+ * Labels/colores desde `lib/tramites/estados.ts`.
  */
 
 // Orden del ciclo de vida: borrador → preparado → entregado → aprobado, con la
@@ -53,59 +48,43 @@ const ESTADO_ICON: Record<EstadoTramite, typeof FileText> = {
 export interface EstadoFunnelProps {
   /** Conteo por estado (calculado sobre el total de trámites). */
   counts: Record<EstadoTramite, number>;
-  /** Estado activo del filtro ('' = todos). */
-  active: '' | InstanceStatus;
-  /** Alterna el filtro por estado. */
-  onSelect: (estado: '' | InstanceStatus) => void;
 }
 
-export function EstadoFunnel({ counts, active, onSelect }: EstadoFunnelProps) {
+/** Tira de KPIs display-only (`flit-tramites-chrome`): el filtro por estado vive en "+ Filtro". */
+export function EstadoFunnel({ counts }: EstadoFunnelProps) {
   return (
     <div
       role="group"
       aria-label="Estados de los trámites"
-      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
     >
       {FUNNEL_ORDER.map((estado) => {
         const style = ESTADO_CHIP_STYLES[estado];
         const Icon = ESTADO_ICON[estado];
-        const isActive = active === estado;
         const label = ESTADO_LABELS[estado];
         const count = counts[estado] ?? 0;
         return (
-          <button
+          <div
             key={estado}
-            type="button"
             aria-label={`${label}: ${count} trámite${count === 1 ? '' : 's'}`}
-            aria-pressed={isActive}
-            onClick={() => onSelect(isActive ? '' : estado)}
-            className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
-            style={isActive ? { background: style.bg } : undefined}
+            className="flex flex-col items-center gap-1 px-2 py-2"
           >
-            {/* Icono: elemento gráfico (umbral 3:1), así que lleva el tono PURO del diseño.
-                El texto del chip usa la variante oscurecida — ver ESTADO_CHIP_STYLES. */}
             <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
-              style={{ background: style.bg }}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
+              style={{ background: `${style.accent}1F` }}
             >
-              <Icon className="h-4 w-4" style={{ color: style.accent }} aria-hidden="true" />
+              <Icon className="h-3.5 w-3.5" style={{ color: style.accent }} aria-hidden="true" />
             </span>
-            <span className="max-w-full truncate text-xs font-medium text-[#162744]/70 dark:text-white/70">
+            <span className="max-w-full truncate text-[10px] font-medium opacity-70 text-[#162744] dark:text-white/70">
               {label}
             </span>
             <span
-              className="text-xl font-bold leading-none tabular-nums text-[#162744] dark:text-white"
+              className="text-lg font-bold leading-none tabular-nums text-[#1E293B] dark:text-white"
               aria-hidden="true"
             >
               {count}
             </span>
-            {/* Indicador de filtro activo que no depende solo del color de fondo. */}
-            <span
-              className="h-0.5 w-6 rounded-full"
-              style={{ background: isActive ? style.color : 'transparent' }}
-              aria-hidden="true"
-            />
-          </button>
+          </div>
         );
       })}
     </div>

@@ -123,7 +123,7 @@ describe('TramiteDetalleDocumentos', () => {
     ).toBeInTheDocument();
   });
 
-  it('el resumen cuenta N de M requisitos cumplidos sobre el checklist', async () => {
+  it('muestra badge mockup por requisito (Adjunto / Sin adjuntar)', async () => {
     mocks.getChecklist.mockResolvedValue(
       checklist([
         { key: 'soat', label: 'SOAT vigente', obligatorio: true, docTipo: 'soat', satisfied: true },
@@ -135,7 +135,8 @@ describe('TramiteDetalleDocumentos', () => {
 
     render(<TramiteDetalleDocumentos instanceId="inst-1" item={ITEM} />);
 
-    expect(await screen.findByText('1 de 3 requisitos cumplidos')).toBeInTheDocument();
+    expect(await screen.findByText('✓ Adjunto')).toBeInTheDocument();
+    expect(screen.getAllByText('Sin adjuntar')).toHaveLength(2);
   });
 
   it('el estado de un requisito sale de satisfied, no de si hay un adjunto cargado', async () => {
@@ -153,8 +154,8 @@ describe('TramiteDetalleDocumentos', () => {
     const fila = await screen.findByText('SOAT vigente');
     const li = fila.closest('li');
     expect(li).not.toBeNull();
-    expect(within(li as HTMLElement).getByText('Pendiente')).toBeInTheDocument();
-    expect(within(li as HTMLElement).queryByText('Cumplido')).not.toBeInTheDocument();
+    expect(within(li as HTMLElement).getByText('Sin adjuntar')).toBeInTheDocument();
+    expect(within(li as HTMLElement).queryByText('✓ Adjunto')).not.toBeInTheDocument();
     // El adjunto SÍ está cargado: el botón de descarga se ofrece igual, aunque el requisito no
     // esté satisfecho todavía.
     expect(
@@ -190,7 +191,7 @@ describe('TramiteDetalleDocumentos', () => {
 
     render(<TramiteDetalleDocumentos instanceId="inst-1" item={ITEM} />);
 
-    await screen.findByText('1 de 1 requisitos cumplidos');
+    await screen.findByText('SOAT vigente');
 
     const otros = screen.getByRole('region', { name: 'Otros adjuntos' });
     expect(within(otros).getByText(/factura_compra\.pdf/)).toBeInTheDocument();
@@ -210,7 +211,7 @@ describe('TramiteDetalleDocumentos', () => {
 
     render(<TramiteDetalleDocumentos instanceId="inst-1" item={ITEM} />);
 
-    await screen.findByText('1 de 1 requisitos cumplidos');
+    await screen.findByText('SOAT vigente');
     expect(screen.queryByRole('region', { name: 'Otros adjuntos' })).not.toBeInTheDocument();
   });
 });

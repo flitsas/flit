@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { SelectorTipoTramite, type FamiliasBloqueadas } from './SelectorTipoTramite';
+import {
+  NuevoTramiteModalContent,
+  type FamiliasBloqueadas,
+} from './NuevoTramiteModalContent';
 
 /**
  * Elección del trámite a crear, con la configuración de la compañía ya resuelta.
  *
- * Existe para que el selector se pueda presentar de las DOS formas sin duplicar nada: como modal
- * sobre el listado —que es de donde el gestor lo lanza— y como página en `/tramites/nuevo`, que se
- * conserva para enlaces directos y para el botón atrás. Cargar aquí el bloqueo por familia evita
- * que cada presentación repita el mismo `getConsultationConfig`.
+ * Presentaciones: modal sobre `/tramites` y página `/tramites/nuevo`. Ambas montan el mismo
+ * contenido mockup (`NuevoTramiteModalContent`) para no divergir.
  */
 export function NuevoTramiteSelector({
   onElegir,
@@ -33,7 +34,6 @@ export function NuevoTramiteSelector({
         if (active) setBloqueadas(cfg.blockProcedureFamily ?? undefined);
       })
       .catch(() => {
-        // Sin config legible no se bloquea nada por adelantado: el gate del backend corta al crear.
         if (active) setBloqueadas(undefined);
       })
       .finally(() => {
@@ -45,11 +45,11 @@ export function NuevoTramiteSelector({
   }, []);
 
   if (cargando) {
-    return <p className="text-sm opacity-70">Cargando tipos de trámite…</p>;
+    return <p className="text-xs opacity-70">Cargando tipos de trámite…</p>;
   }
 
   return (
-    <SelectorTipoTramite
+    <NuevoTramiteModalContent
       bloqueadas={bloqueadas}
       onElegir={onElegir}
       onCancelar={onCancelar}

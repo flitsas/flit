@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   downloadAttachment: vi.fn(),
   // Frente C, etapa 1 — modal de detalle de un trámite ya radicado.
   getInstance: vi.fn(),
+  listBiometricExpediente: vi.fn(),
   // ICT (PR #204) — pausa individual y masiva + cierre del subflujo de placa.
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
@@ -918,6 +919,58 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
     expect(within(dialog).getByText('Borrador')).toBeInTheDocument();
     expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
+  });
+
+  it('el badge de Estado abre el modal de línea de tiempo sin abrir el detalle ni navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-tl', referenceNumber: 'TR-TL', placa: 'RADTL1', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-tl',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
+      ],
+    });
+    render(<TramitesTable />);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ver trazabilidad del trámite TR-TL/i }),
+    );
+
+    expect(
+      await screen.findByRole('dialog', { name: /Línea de tiempo del trámite/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).toBeNull();
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Entregado desde Borrador/)).toBeInTheDocument();
+  });
+
+  it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'rad-id',
+        referenceNumber: 'TR-ID',
+        placa: 'RADID1',
+        estado: 'entregado',
+        firmaCompradorEstado: 'firmado',
+      },
+    ]);
+    mocks.listBiometricExpediente.mockResolvedValue({
+      validations: [],
+      firmaBaulPartes: ['comprador'],
+    });
+    render(<TramitesTable />);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ver tracking de identidad de Comprador/i }),
+    );
+
+    expect(
+      await screen.findByRole('dialog', { name: /Tracking de identidad · Comprador/i }),
+    ).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it('los archivos finales del sistema muestran su SHA-256 completo (y excluyen los de otro origen)', async () => {

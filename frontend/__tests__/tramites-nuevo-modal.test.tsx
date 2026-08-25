@@ -19,8 +19,6 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mocks.push, replace: vi.fn(), prefetch: vi.fn() }),
 }));
 
-// El listado entero no aporta a lo que se prueba aquí —que el disparador abre un diálogo en vez de
-// navegar— y arrastra tabla, KPIs y sus propias llamadas. Se sustituye por el botón.
 vi.mock('@/components/operacion/OperacionView', () => ({
   OperacionView: ({ onNewTramite }: { onNewTramite: () => void }) => (
     <button type="button" onClick={onNewTramite}>
@@ -32,12 +30,9 @@ vi.mock('@/components/operacion/OperacionView', () => ({
 import TramitesPage from '@/app/tramites/page';
 
 /**
- * «Nuevo trámite» abre la elección EN MODAL sobre el listado, no navegando a otra pantalla.
- *
- * Es el patrón de FLIT para lo que se lanza desde un listado, y sobre todo evita que cancelar cueste
- * el estado de la vista: al navegar y volver se perdían filtros, página y scroll.
+ * «Nuevo trámite» abre el selector mockup EN MODAL sobre el listado.
  */
-describe('/tramites — elección del trámite en modal', () => {
+describe('/tramites — modal Nuevo trámite (mockup)', () => {
   beforeEach(() => {
     mocks.listPublishedProcedureTypes.mockReset();
     mocks.getConsultationConfig.mockReset();
@@ -45,10 +40,30 @@ describe('/tramites — elección del trámite en modal', () => {
     mocks.getConsultationConfig.mockResolvedValue({ blockProcedureFamily: null });
     mocks.listPublishedProcedureTypes.mockResolvedValue([
       {
+        id: 'MATRICULA_NUEVA',
+        code: 'MATRICULA_NUEVA',
+        name: 'Matrícula inicial',
+        family: 'MATRICULAS',
+        publicationStatus: 'published',
+        isActive: true,
+        wizardEnabled: true,
+        publishedAt: null,
+      },
+      {
         id: 'BLINDAJE',
         code: 'BLINDAJE',
         name: 'Blindaje',
         family: 'OTROS',
+        publicationStatus: 'published',
+        isActive: true,
+        wizardEnabled: true,
+        publishedAt: null,
+      },
+      {
+        id: 'TRASPASO_STANDARD',
+        code: 'TRASPASO_STANDARD',
+        name: 'Traspaso',
+        family: 'TRASPASO',
         publicationStatus: 'published',
         isActive: true,
         wizardEnabled: true,
@@ -67,18 +82,16 @@ describe('/tramites — elección del trámite en modal', () => {
 
     const dialogo = await screen.findByRole('dialog');
     expect(dialogo).toBeInTheDocument();
-    // Lo que separa el modal de la ruta: el listado sigue montado detrás.
     expect(screen.getByRole('button', { name: 'Nuevo trámite' })).toBeInTheDocument();
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
-  it('el diálogo se anuncia con el título de la elección', async () => {
+  it('el diálogo se anuncia con el título Nuevo trámite', async () => {
     const user = userEvent.setup();
     render(<TramitesPage />);
     await user.click(screen.getByRole('button', { name: 'Nuevo trámite' }));
 
-    expect(await screen.findByRole('dialog', { name: /Selecciona el tipo de trámite/ }))
-      .toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /Nuevo trámite/ })).toBeInTheDocument();
   });
 
   it('cancelar cierra el diálogo sin salir del listado', async () => {
@@ -93,13 +106,27 @@ describe('/tramites — elección del trámite en modal', () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
-  it('elegir un trámite sí navega al asistente con el code del tipo', async () => {
+  it('iniciar con matrícula navega al code del catálogo', async () => {
     const user = userEvent.setup();
     render(<TramitesPage />);
     await user.click(screen.getByRole('button', { name: 'Nuevo trámite' }));
 
-    await user.click(await screen.findByRole('button', { name: /Otros trámites/ }));
-    await user.click(await screen.findByRole('button', { name: 'Blindaje' }));
+    await user.click(await screen.findByRole('button', { name: /Matrícula Inicial/ }));
+    await user.click(screen.getByRole('button', { name: 'Iniciar trámite' }));
+
+    expect(mocks.push).toHaveBeenCalledWith('/tramites/nuevo/MATRICULA_NUEVA');
+  });
+
+  it('Otros exige subtipo antes de iniciar y luego navega', async () => {
+    const user = userEvent.setup();
+    render(<TramitesPage />);
+    await user.click(screen.getByRole('button', { name: 'Nuevo trámite' }));
+
+    await user.click(await screen.findByRole('button', { name: /Otros Trámites/ }));
+    expect(screen.getByRole('button', { name: 'Iniciar trámite' })).toBeDisabled();
+
+    await user.selectOptions(screen.getByRole('combobox'), 'BLINDAJE');
+    await user.click(screen.getByRole('button', { name: 'Iniciar trámite' }));
 
     expect(mocks.push).toHaveBeenCalledWith('/tramites/nuevo/BLINDAJE');
   });
