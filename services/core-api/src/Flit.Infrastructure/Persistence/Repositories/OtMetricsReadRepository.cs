@@ -387,6 +387,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                         p.Vin,
                         p.TenantId,
                         (p.ProcedureType != null ? p.ProcedureType.Family : ""),
+                        (p.ProcedureType != null ? p.ProcedureType.Name : ""),
                         p.Status,
                         p.PlateFlowStatus,
                         p.Prioritario,
@@ -459,6 +460,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         string? Vin,
         Guid TenantId,
         string Familia,
+        string TipoTramite,
         string Status,
         string? PlateFlowStatus,
         bool Prioritario,
@@ -851,6 +853,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             ClientTenantId: row.Instance.TenantId,
             ClientTenantName: names.GetValueOrDefault(row.Instance.TenantId, "(empresa desconocida)"),
             Familia: row.Instance.Familia,
+            TipoTramite: row.Instance.TipoTramite,
             Status: row.Instance.Status,
             EstadoOt: row.EstadoOt,
             Prioritario: row.Instance.Prioritario,
@@ -1226,6 +1229,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                         p.TenantId,
                         p.Status,
                         Familia = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
+                        TipoTramite = (p.ProcedureType != null ? p.ProcedureType.Name : ""),
                         p.Prioritario,
                     })
                     .ToListAsync(cancellationToken)
@@ -1245,6 +1249,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                         names.TryGetValue(r.TenantId, out var n) ? n : "(empresa desconocida)",
                         r.Status,
                         r.Familia,
+                        r.TipoTramite,
                         r.Prioritario,
                         waiting.TryGetValue(r.Id, out var d) ? Math.Round(d, 1) : null))
                     .OrderByDescending(i => i.DiasEsperando ?? 0)

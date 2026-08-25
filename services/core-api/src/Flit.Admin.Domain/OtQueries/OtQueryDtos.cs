@@ -54,7 +54,11 @@ public sealed record OtQueryRowDto(
     string? Vin,
     Guid ClientTenantId,
     string ClientTenantName,
-    string Modalidad,
+    // Nombre del tipo concreto. Se llamaba `Modalidad` y traía la familia: con dos tipos en el
+    // catálogo eran lo mismo, con veintiuno la fila decía «Matrículas» tanto para una matrícula
+    // inicial como para una de leasing. La familia sigue existiendo, pero solo como agrupación del
+    // filtro — en pantalla el concepto es uno solo y se llama tipo de trámite.
+    string TipoTramite,
     string Status,
     string EstadoOt,
     bool Prioritario,

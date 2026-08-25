@@ -18,7 +18,6 @@ import {
   type ColumnPreset,
   type DataColumn,
 } from "@/components/consultas/columns";
-import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 // ── Estados ────────────────────────────────────────────────────────────────────
 
@@ -142,10 +141,12 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     defaultVisible: true,
   },
   {
-    id: "familia",
+    id: "tipo_tramite",
     label: "Tipo de trámite",
     group: "Identificación",
-    value: (r) => familiaLabel(r.familia),
+    // El nombre del tipo, no el de su familia: con veintiún tipos, «Matrículas» no dice si la fila
+    // es una matrícula inicial o una de leasing, que es justo lo que hay que decidir distinto.
+    value: (r) => r.tipoTramite,
     defaultVisible: true,
   },
   {
@@ -271,7 +272,7 @@ export const REPORT_PRESETS: ColumnPreset[] = [
     columns: [
       "referencia",
       "empresa",
-      "familia",
+      "tipo_tramite",
       "placa",
       "estado",
       "radicado_en",
@@ -301,7 +302,7 @@ export const REPORT_PRESETS: ColumnPreset[] = [
     columns: [
       "referencia",
       "empresa",
-      "familia",
+      "tipo_tramite",
       "estado",
       "devoluciones",
       "causales",

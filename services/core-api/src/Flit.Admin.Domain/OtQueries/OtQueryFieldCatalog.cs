@@ -62,15 +62,6 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
         new("cambio_combustible", "Cambio de combustible"),
     ];
 
-    // ADR-0050 — el filtro pasa a las tres familias del catálogo. Antes solo ofrecía las dos
-    // modalidades, así que los trámites de OTROS no se podían filtrar y se mezclaban con matrículas.
-    private static readonly QueryFieldOptionDto[] TipoTramiteOptions =
-    [
-        new("MATRICULAS", "Matrículas"),
-        new("TRASPASO", "Traspaso"),
-        new("OTROS", "Otros trámites"),
-    ];
-
     private static readonly QueryFieldOptionDto[] EstadoOptions =
     [
         new("en_revision", "En revisión"),
@@ -113,8 +104,12 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
         // Las opciones las pone el endpoint con las empresas del organismo.
         new(Empresa, "Empresa cliente", QueryFieldKind.Opcion, GrupoTramite, OpcionOperators, [],
             null, AdmiteLista: true),
+        // Las opciones las pone el repositorio: los tipos que este organismo ha recibido de verdad,
+        // agrupados bajo su familia y con una entrada «toda la familia» por grupo. Eran tres códigos
+        // fijos —las familias— y por eso el informe no distinguía una matrícula inicial de una de
+        // leasing, que para quien las decide son dos trámites distintos.
         new(TipoTramite, "Tipo de trámite", QueryFieldKind.Opcion, GrupoTramite,
-            OpcionOperators, TipoTramiteOptions, null, AdmiteLista: true),
+            OpcionOperators, [], null, AdmiteLista: true),
         new(Estado, "Estado en el organismo", QueryFieldKind.Opcion, GrupoTramite,
             OpcionOperators, EstadoOptions, null, AdmiteLista: true),
         // También lo rellena el endpoint: los revisores del organismo.

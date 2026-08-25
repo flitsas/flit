@@ -479,7 +479,10 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         CompanyQueryFieldCatalog.Vendedor => r => r.Vendedor,
         CompanyQueryFieldCatalog.Organismo => r =>
             r.Instance.TransitOfficeId is Guid id ? [id.ToString()] : [],
-        CompanyQueryFieldCatalog.TipoTramite => r => [r.Instance.ProcedureTypeId.ToString()],
+        // El tipo concreto y su familia, porque el desplegable ofrece los dos niveles en el mismo
+        // campo: «Toda la familia: Matrículas» tiene que coincidir con una matrícula de leasing.
+        CompanyQueryFieldCatalog.TipoTramite => r =>
+            [r.Instance.ProcedureTypeId.ToString(), r.Instance.Modalidad],
         CompanyQueryFieldCatalog.Estado => r => [r.Instance.Status],
         CompanyQueryFieldCatalog.RadicadoPor => r => [r.Instance.CreatedByUserId.ToString()],
         CompanyQueryFieldCatalog.Compania => r => [r.Instance.TenantId.ToString()],
@@ -558,7 +561,6 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             CompaniaNombre: empresas.GetValueOrDefault(row.Instance.TenantId, "(compañía retirada)"),
             ProcedureTypeId: row.Instance.ProcedureTypeId,
             ProcedureTypeName: row.TipoNombre,
-            Modalidad: row.Instance.Modalidad,
             Status: row.Instance.Status,
             Prioritario: row.Instance.Prioritario,
             SubsanacionActiva: row.Instance.SubsanacionActiva,
@@ -655,15 +657,14 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var tipoOptions = (await _context.ProcedureTypes
+        var tipoOptions = TipoTramiteOptionCatalog.Build(
+            (await _context.ProcedureTypes
                 .AsNoTracking()
                 .Where(t => tipoIds.Contains(t.Id))
-                .Select(t => new { t.Id, t.Name })
+                .Select(t => new { t.Id, t.Name, t.Family })
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
-            .Select(t => new QueryFieldOptionDto(t.Id.ToString(), t.Name))
-            .OrderBy(t => t.Label, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .Select(t => (t.Id, t.Name, (string?)t.Family)));
 
         var usuarioIds = await propios
             .Select(p => p.CreatedByUserId)

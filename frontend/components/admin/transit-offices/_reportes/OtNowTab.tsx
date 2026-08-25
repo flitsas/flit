@@ -11,6 +11,10 @@
 // DICE en la propia tarjeta, en vez de dejar que el usuario crea que la eligió él.
 
 import { useCallback, useEffect, useState } from "react";
+import type {
+  GrupoTiposTramite,
+  SeleccionTipoTramite,
+} from "@/components/consultas/tipo-tramite";
 import {
   fetchOtDrilldown,
   fetchOtOperationalPanel,
@@ -21,7 +25,7 @@ import {
   type OtOperationalPanel,
 } from "@/lib/api/ot-metrics";
 import { DrilldownPanel, type DrilldownState } from "./DrilldownPanel";
-import { EmpresaSelect, FamiliaSelect, defaultRange } from "./filters";
+import { EmpresaSelect, TipoTramiteFiltro, defaultRange } from "./filters";
 import { formatHours } from "./report-columns";
 import { Bar, Bucket, Empty, ErrorNotice, PrimaryButton, Section, SubTitle, Tile } from "./shared";
 
@@ -29,12 +33,14 @@ import { Bar, Bucket, Empty, ErrorNotice, PrimaryButton, Section, SubTitle, Tile
 const VENTANA_MEDIANA_DIAS = 30;
 
 export interface OtNowTabProps {
+  /** Catálogo agrupado para el filtro de tipo de trámite; lo resuelve la consola una sola vez. */
+  tiposTramite: GrupoTiposTramite[];
   transitOfficeId: string;
   companies: OtClientCompanyOption[];
 }
 
-export function OtNowTab({ transitOfficeId, companies }: OtNowTabProps) {
-  const [familia, setFamilia] = useState("");
+export function OtNowTab({ transitOfficeId, companies, tiposTramite }: OtNowTabProps) {
+  const [tipoTramite, setTipoTramite] = useState<SeleccionTipoTramite>({});
   const [clientTenantId, setClientTenantId] = useState("");
   const [panel, setPanel] = useState<OtOperationalPanel | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,11 +52,12 @@ export function OtNowTab({ transitOfficeId, companies }: OtNowTabProps) {
     return {
       from: range.from,
       to: range.to,
-      family: familia || undefined,
+      family: tipoTramite.familia,
+      procedureTypeId: tipoTramite.tipoId,
       clientTenantId: clientTenantId || undefined,
       transitOfficeId,
     };
-  }, [familia, clientTenantId, transitOfficeId]);
+  }, [tipoTramite, clientTenantId, transitOfficeId]);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -97,7 +104,7 @@ export function OtNowTab({ transitOfficeId, companies }: OtNowTabProps) {
         hint="Esta pestaña no lleva rango de fechas: siempre enseña el estado de este momento."
       >
         <div className="flex flex-wrap items-end gap-3">
-          <FamiliaSelect value={familia} onChange={setFamilia} />
+          <TipoTramiteFiltro value={tipoTramite} grupos={tiposTramite} onChange={setTipoTramite} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Cargando…" : "Actualizar"}

@@ -10,6 +10,10 @@
 // distintos, y en cuanto los dos difieren por un filtro, el reporte deja de merecer confianza.
 
 import { useCallback, useEffect, useState } from "react";
+import type {
+  GrupoTiposTramite,
+  SeleccionTipoTramite,
+} from "@/components/consultas/tipo-tramite";
 import {
   fetchOtPerformance,
   fetchOtRejectionReasons,
@@ -21,7 +25,7 @@ import {
 import {
   DateRangeFields,
   EmpresaSelect,
-  FamiliaSelect,
+  TipoTramiteFiltro,
   RangePresets,
   defaultRange,
   type DateRange,
@@ -29,13 +33,15 @@ import {
 import { Bar, Empty, ErrorNotice, PrimaryButton, Section, Table, Tile } from "./shared";
 
 export interface OtAnalysisTabProps {
+  /** Catálogo agrupado para el filtro de tipo de trámite; lo resuelve la consola una sola vez. */
+  tiposTramite: GrupoTiposTramite[];
   transitOfficeId: string;
   companies: OtClientCompanyOption[];
 }
 
-export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps) {
+export function OtAnalysisTab({ transitOfficeId, companies, tiposTramite }: OtAnalysisTabProps) {
   const [range, setRange] = useState<DateRange>(() => defaultRange());
-  const [familia, setFamilia] = useState("");
+  const [tipoTramite, setTipoTramite] = useState<SeleccionTipoTramite>({});
   const [clientTenantId, setClientTenantId] = useState("");
 
   const [performance, setPerformance] = useState<OtPerformance | null>(null);
@@ -49,7 +55,8 @@ export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps
     const params: OtMetricsParams = {
       from: range.from,
       to: range.to,
-      family: familia || undefined,
+      family: tipoTramite.familia,
+      procedureTypeId: tipoTramite.tipoId,
       clientTenantId: clientTenantId || undefined,
       transitOfficeId,
     };
@@ -66,7 +73,7 @@ export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps
     } finally {
       setBusy(false);
     }
-  }, [range.from, range.to, familia, clientTenantId, transitOfficeId]);
+  }, [range.from, range.to, tipoTramite, clientTenantId, transitOfficeId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: patrón del repo, skeleton inmediato antes del fetch
@@ -83,7 +90,7 @@ export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps
         <RangePresets range={range} onChange={setRange} />
         <div className="flex flex-wrap items-end gap-3">
           <DateRangeFields range={range} onChange={setRange} />
-          <FamiliaSelect value={familia} onChange={setFamilia} />
+          <TipoTramiteFiltro value={tipoTramite} grupos={tiposTramite} onChange={setTipoTramite} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Cargando…" : "Actualizar"}

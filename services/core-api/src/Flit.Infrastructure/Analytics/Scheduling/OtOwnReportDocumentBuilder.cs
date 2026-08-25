@@ -35,16 +35,6 @@ internal sealed class OtOwnReportDocumentBuilder(IOtMetricsReadRepository repo)
         ["otro"] = "Otro",
     };
 
-    // Familias del catálogo (ADR-0050). Antes eran las dos modalidades —matricula_inicial y
-    // traspaso—, que ya no coincidían con el dato que trae la fila: el reporte exportado imprimía el
-    // código crudo porque el diccionario nunca acertaba.
-    private static readonly Dictionary<string, string> FamiliaLabel = new(StringComparer.Ordinal)
-    {
-        ["MATRICULAS"] = "Matrículas",
-        ["TRASPASO"] = "Traspaso",
-        ["OTROS"] = "Otros",
-    };
-
     // ── "ot_analisis": causales de rechazo + desempeño (OtAnalysisTab.tsx) ──────────────────────
 
     public async Task<byte[]?> BuildAnalisisAsync(
@@ -180,12 +170,14 @@ internal sealed class OtOwnReportDocumentBuilder(IOtMetricsReadRepository repo)
                     ]]),
             TabularWorkbookWriter.Sheet.OfText(
                 total > rows.Count ? $"Detalle (top {rows.Count} de {total})" : "Detalle",
-                ["Radicado", "Empresa", "Familia", "Placa", "VIN", "Estado", "Prioritario",
+                ["Radicado", "Empresa", "Tipo de trámite", "Placa", "VIN", "Estado", "Prioritario",
                     "Radicado el", "Última radicación", "Decidido el", "Tiempo decisión (h)",
                     "Días en el organismo", "Decidido por", "Devoluciones", "Causales último rechazo"],
                 rows.Select(r => (IReadOnlyList<string>)
                 [
-                    r.ReferenceNumber, r.ClientTenantName, Label(FamiliaLabel, r.Familia),
+                    // El nombre del tipo, no el de la familia: el exportado tiene que decir lo mismo
+                    // que la pantalla, y ahí la columna es «Tipo de trámite».
+                    r.ReferenceNumber, r.ClientTenantName, r.TipoTramite,
                     r.Placa ?? "", r.Vin ?? "", Label(EstadoLabel, r.EstadoOt), SiNo(r.Prioritario),
                     r.RadicadoEn.ToString("yyyy-MM-dd", Es),
                     r.UltimaRadicacionEn?.ToString("yyyy-MM-dd", Es) ?? "",

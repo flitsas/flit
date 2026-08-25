@@ -17,7 +17,6 @@ import {
   type DataColumn,
 } from "@/components/consultas/columns";
 import { estadoMeta, formatDate, formatDateTime, formatHours, formatInt } from "./report-columns";
-import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 const TRANSFORMACION_LABEL: Record<string, string> = {
   cambio_color: "Color",
@@ -75,8 +74,10 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     id: "tipo_tramite",
     label: "Tipo de trámite",
     group: "Identificación",
-    value: (r) => familiaLabel(r.modalidad),
-    width: 16,
+    // El tipo concreto. Traía la familia, así que la consulta no podía separar un traspaso
+    // unilateral de uno estándar aunque el filtro sí los distinga.
+    value: (r) => r.tipoTramite,
+    width: 24,
     defaultVisible: true,
   },
 

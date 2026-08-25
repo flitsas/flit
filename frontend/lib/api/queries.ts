@@ -21,6 +21,12 @@ export type QueryOperator =
 export interface QueryFieldOption {
   value: string;
   label: string;
+  /**
+   * Encabezado bajo el que se agrupa la opción. Opcional: las listas cortas y planas (estados,
+   * sí/no) no lo llevan. El tipo de trámite sí, porque son veintiún tipos en tres familias y una
+   * lista plana obliga a saberse de memoria cuál pertenece a cuál.
+   */
+  group?: string | null;
 }
 
 export interface QueryField {

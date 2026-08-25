@@ -12,6 +12,10 @@
 // y mal.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type {
+  GrupoTiposTramite,
+  SeleccionTipoTramite,
+} from "@/components/consultas/tipo-tramite";
 import {
   fetchOtReviewers,
   OT_REVIEWER_SORT,
@@ -27,7 +31,7 @@ import { activePreset } from "@/components/consultas/columns";
 import {
   DateRangeFields,
   EmpresaSelect,
-  FamiliaSelect,
+  TipoTramiteFiltro,
   RangePresets,
   defaultRange,
   type DateRange,
@@ -55,14 +59,16 @@ import {
 const COLUMNS_STORAGE_KEY = "flit-ot-revisores-columnas";
 
 export interface OtReviewersTabProps {
+  /** Catálogo agrupado para el filtro de tipo de trámite; lo resuelve la consola una sola vez. */
+  tiposTramite: GrupoTiposTramite[];
   transitOfficeId: string;
   companies: OtClientCompanyOption[];
   reviewers: OtReviewerOption[];
 }
 
-export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtReviewersTabProps) {
+export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, reviewers }: OtReviewersTabProps) {
   const [range, setRange] = useState<DateRange>(() => defaultRange());
-  const [familia, setFamilia] = useState("");
+  const [tipoTramite, setTipoTramite] = useState<SeleccionTipoTramite>({});
   const [clientTenantId, setClientTenantId] = useState("");
   const [userIds, setUserIds] = useState<string[]>([]);
 
@@ -109,12 +115,13 @@ export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtRevi
     () => ({
       from: range.from,
       to: range.to,
-      family: familia || undefined,
+      family: tipoTramite.familia,
+      procedureTypeId: tipoTramite.tipoId,
       clientTenantId: clientTenantId || undefined,
       transitOfficeId,
       userIds,
     }),
-    [range.from, range.to, familia, clientTenantId, transitOfficeId, userIds],
+    [range.from, range.to, tipoTramite, clientTenantId, transitOfficeId, userIds],
   );
 
   const load = useCallback(
@@ -204,7 +211,7 @@ export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtRevi
         <div className="flex flex-wrap items-end gap-3">
           <DateRangeFields range={range} onChange={setRange} />
           <ReviewerPicker selected={userIds} options={reviewers} onChange={setUserIds} />
-          <FamiliaSelect value={familia} onChange={setFamilia} />
+          <TipoTramiteFiltro value={tipoTramite} grupos={tiposTramite} onChange={setTipoTramite} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Generando…" : "Actualizar"}

@@ -170,6 +170,11 @@ public sealed record OtDrilldownItemDto(
     string ClientTenantName,
     string Status,
     string? Familia,
+    // ADR-0050 dejó 21 tipos repartidos en tres familias. Mandar solo la familia obligaba a la
+    // pantalla a rotular «Matrículas» tanto una matrícula inicial como una de leasing, que para
+    // quien tiene que decidirlas son dos trámites distintos. La familia se conserva porque sigue
+    // siendo el eje por el que se agrupa y se filtra.
+    string? TipoTramite,
     bool Prioritario,
     double? DiasEsperando);
 
@@ -298,6 +303,10 @@ public sealed record OtReportRowDto(
     Guid ClientTenantId,
     string ClientTenantName,
     string Familia,
+    // Nombre del tipo concreto (procedure_types.name), no el de su familia: con 21 tipos, rotular
+    // la fila con la familia esconde de qué trámite se trata. La familia se mantiene aparte porque
+    // sigue siendo el eje de agrupación del filtro.
+    string TipoTramite,
     string Status,
     string EstadoOt,
     bool Prioritario,

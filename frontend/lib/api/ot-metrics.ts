@@ -141,6 +141,8 @@ export interface OtDrilldownItem {
   clientTenantName: string;
   status: string;
   familia: string | null;
+  /** Nombre del tipo concreto. La familia sola no distingue una matrícula inicial de una leasing. */
+  tipoTramite: string | null;
   prioritario: boolean;
   diasEsperando: number | null;
 }
@@ -230,6 +232,7 @@ export interface OtReportRow {
   clientTenantId: string;
   clientTenantName: string;
   familia: string;
+  tipoTramite: string;
   status: string;
   estadoOt: string;
   prioritario: boolean;

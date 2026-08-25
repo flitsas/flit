@@ -80,7 +80,6 @@ function row(overrides: Partial<CompanyQueryRow> = {}): CompanyQueryRow {
     companiaNombre: "Mi Empresa",
     procedureTypeId: "t1",
     procedureTypeName: "Traspaso de vehículo",
-    modalidad: "TRASPASO",
     status: "entregado",
     prioritario: false,
     subsanacionActiva: false,
@@ -333,8 +332,8 @@ describe("Columnas de la empresa", () => {
 
     // El backend manda cadena vacía cuando no aplica. Pintar «Bilateral» ahí se leería como un
     // dato del trámite y no como un «no aplica».
-    expect(columna.value(row({ modalidad: "MATRICULAS", tipoTraspaso: "" }))).toBe("—");
-    expect(columna.raw!(row({ modalidad: "MATRICULAS", tipoTraspaso: "" }))).toBeNull();
+    expect(columna.value(row({ tipoTraspaso: "" }))).toBe("—");
+    expect(columna.raw!(row({ tipoTraspaso: "" }))).toBeNull();
     expect(columna.value(row({ tipoTraspaso: "unilateral" }))).toBe("Unilateral");
   });
 

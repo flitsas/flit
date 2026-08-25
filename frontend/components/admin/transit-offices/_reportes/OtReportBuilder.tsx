@@ -11,6 +11,10 @@
 // suma de indicadores que no cuadran entre sí.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  GrupoTiposTramite,
+  SeleccionTipoTramite,
+} from "@/components/consultas/tipo-tramite";
 import {
   fetchOtReport,
   OT_REPORT_SORT,
@@ -23,7 +27,7 @@ import { ColumnPicker } from "@/components/consultas/ColumnPicker";
 import {
   DateRangeFields,
   EmpresaSelect,
-  FamiliaSelect,
+  TipoTramiteFiltro,
   RangePresets,
   defaultRange,
   type DateRange,
@@ -62,6 +66,8 @@ const EXPORT_PAGE_SIZE = 200;
 const COLUMNS_STORAGE_KEY = "flit-ot-informe-columnas";
 
 export interface OtReportBuilderProps {
+  /** Catálogo agrupado para el filtro de tipo de trámite; lo resuelve la consola una sola vez. */
+  tiposTramite: GrupoTiposTramite[];
   transitOfficeId: string;
   companies: OtClientCompanyOption[];
 }
@@ -72,10 +78,10 @@ interface ZoomState {
   volverA: DateRange;
 }
 
-export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderProps) {
+export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: OtReportBuilderProps) {
   const [range, setRange] = useState<DateRange>(() => defaultRange());
   const [zoom, setZoom] = useState<ZoomState | null>(null);
-  const [familia, setFamilia] = useState("");
+  const [tipoTramite, setTipoTramite] = useState<SeleccionTipoTramite>({});
   const [clientTenantId, setClientTenantId] = useState("");
 
   const [sortBy, setSortBy] = useState<OtReportSort>(OT_REPORT_SORT.radicado);
@@ -122,16 +128,17 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
     () => ({
       from: range.from,
       to: range.to,
-      family: familia || undefined,
+      family: tipoTramite.familia,
+      procedureTypeId: tipoTramite.tipoId,
       clientTenantId: clientTenantId || undefined,
       transitOfficeId,
     }),
-    [range.from, range.to, familia, clientTenantId, transitOfficeId],
+    [range.from, range.to, tipoTramite, clientTenantId, transitOfficeId],
   );
 
   // Cambiar un filtro o el orden devuelve a la primera página: quedarse en la página 7 de un
   // informe que ahora tiene dos es una pantalla vacía que parece un fallo.
-  const filterKey = `${params.from}|${params.to}|${params.family ?? ""}|${params.clientTenantId ?? ""}|${sortBy}|${desc}`;
+  const filterKey = `${params.from}|${params.to}|${params.family ?? ""}|${params.procedureTypeId ?? ""}|${params.clientTenantId ?? ""}|${sortBy}|${desc}`;
   const lastFilterKey = useRef(filterKey);
   if (lastFilterKey.current !== filterKey && page !== 1) {
     lastFilterKey.current = filterKey;
@@ -273,7 +280,7 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
         <RangePresets range={range} onChange={changeRange} />
         <div className="flex flex-wrap items-end gap-3">
           <DateRangeFields range={range} onChange={changeRange} />
-          <FamiliaSelect value={familia} onChange={setFamilia} />
+          <TipoTramiteFiltro value={tipoTramite} grupos={tiposTramite} onChange={setTipoTramite} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Generando…" : "Actualizar"}
