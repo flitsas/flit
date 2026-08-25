@@ -40,6 +40,7 @@ export function useTiposTramite() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial del catálogo vía API
     void recargar();
   }, [recargar]);
 
@@ -79,6 +80,7 @@ export function useDetalleTipo(id: string | null) {
   }, [id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga el detalle al abrir un tipo
     void recargar();
   }, [recargar]);
 

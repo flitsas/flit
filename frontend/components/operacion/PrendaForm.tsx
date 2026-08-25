@@ -336,6 +336,11 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
           setAcreedorNombre(filled.nombre);
           setAcreedorDocumento(filled.documento);
         }
+        // Tipo con una sola decisión: se afirma aquí, en la carga, no en un effect síncrono. Si la
+        // carga ya trajo una decisión (persistida o sugerida por el RUNT), el updater la conserva.
+        if (decisionFija) {
+          setDecision((current) => (current === '' ? decisionFija : current));
+        }
       } catch {
         /* sin decisión previa: el form queda vacío */
       } finally {
@@ -353,15 +358,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       active = false;
     };
     // `pending` es estable (instancia única por montaje): no re-dispara la carga.
-  }, [instanceId, runtHasGravamen, offersRegistrar, pending]);
-
-  // Con decisión fija se aplica sola en cuanto la carga termina sin encontrar una guardada. NO marca
-  // cambio pendiente: el gestor no eligió nada: la eligió el tipo de trámite. El guardado lo dispara
-  // el Continuar del paso, como con cualquier otra decisión.
-  useEffect(() => {
-    if (!decisionFija || loading || decision !== '') return;
-    setDecision(decisionFija);
-  }, [decisionFija, loading, decision]);
+  }, [instanceId, runtHasGravamen, offersRegistrar, pending, decisionFija]);
 
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */

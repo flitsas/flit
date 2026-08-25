@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2, Trash2 } from 'lucide-react';
 import { superadminClient } from '@/lib/api/superadmin-client';
 import type { ProcedureStep, ProcedureStepInput } from '@/lib/api/types/procedure-parametrization';
@@ -44,12 +44,6 @@ export function TipoTramiteRecorrido({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
-
-  useEffect(() => {
-    setBorrador(pasos);
-    setError(null);
-    setOk(false);
-  }, [pasos]);
 
   const tocar = (siguiente: ProcedureStep[]) => {
     setBorrador(siguiente);

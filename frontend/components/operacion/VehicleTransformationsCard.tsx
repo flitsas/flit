@@ -112,7 +112,8 @@ export function VehicleTransformationsCard({
 
   useEffect(() => {
     if (!instanceId || !hasVehicle) {
-      setAttachments([]);
+      // Sin vehículo no se limpia el estado: ya arranca vacío. El reset síncrono disparaba
+      // react-hooks/set-state-in-effect y el card no se pinta de todos modos (`return null`).
       return;
     }
     let active = true;

@@ -256,20 +256,29 @@ export function TiposTramitePanel() {
               ) : (
                 <>
                   {pestana === 'identidad' && (
-                    <TipoTramiteIdentidad tipo={tipo} onGuardado={aplicar} />
+                    <TipoTramiteIdentidad key={tipo.id} tipo={tipo} onGuardado={aplicar} />
                   )}
                   {pestana === 'capacidades' && detalle && (
-                    <TipoTramiteCapacidades perfil={detalle.perfil} onGuardado={recargarDetalle} />
+                    <TipoTramiteCapacidades
+                      key={tipo.id}
+                      perfil={detalle.perfil}
+                      onGuardado={recargarDetalle}
+                    />
                   )}
                   {pestana === 'recorrido' && detalle && (
                     <TipoTramiteRecorrido
+                      key={tipo.id}
                       procedureTypeId={tipo.id}
                       pasos={detalle.pasos}
                       onGuardado={recargarDetalle}
                     />
                   )}
                   {pestana === 'documentos' && detalle && (
-                    <TipoTramiteDocumentos perfil={detalle.perfil} onGuardado={recargarDetalle} />
+                    <TipoTramiteDocumentos
+                      key={tipo.id}
+                      perfil={detalle.perfil}
+                      onGuardado={recargarDetalle}
+                    />
                   )}
                 </>
               )}

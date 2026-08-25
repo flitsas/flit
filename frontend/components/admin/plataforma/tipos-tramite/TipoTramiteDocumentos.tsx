@@ -37,12 +37,6 @@ export function TipoTramiteDocumentos({
   const [ok, setOk] = useState(false);
 
   useEffect(() => {
-    setBorrador(perfil.documentRequirements ?? []);
-    setError(null);
-    setOk(false);
-  }, [perfil]);
-
-  useEffect(() => {
     let vivo = true;
     void fetchDocumentTypes({ pageSize: 300 })
       .then((r) => {

@@ -110,10 +110,8 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import {
   WIZARD_BTN,
-  WIZARD_CARD,
   WIZARD_CTA_GRADIENT,
   WIZARD_CTA_GRADIENT_DONE,
-  WIZARD_BTN_SOLID,
   WIZARD_INPUT,
   WIZARD_SELECT,
   WIZARD_LABEL,

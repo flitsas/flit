@@ -51,6 +51,7 @@ export function useTiposHabilitados() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial del catálogo operable
     void load();
   }, [load]);
 

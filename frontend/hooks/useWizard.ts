@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useRevalidateOnFocus } from './useRevalidateOnFocus';
-import type { WizardModalidad, WizardState } from '@/lib/api/types/procedure-runtime';
+import type { WizardState } from '@/lib/api/types/procedure-runtime';
 
 export interface WizardHookState {
   wizard: WizardState | null;

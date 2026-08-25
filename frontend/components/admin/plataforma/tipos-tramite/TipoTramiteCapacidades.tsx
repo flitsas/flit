@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { superadminClient } from '@/lib/api/superadmin-client';
 import type { ConformationProfile, GateProfile } from '@/lib/api/types/procedure-parametrization';
@@ -57,12 +57,6 @@ export function TipoTramiteCapacidades({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
-
-  useEffect(() => {
-    setBorrador(perfil.gateProfile ?? {});
-    setError(null);
-    setOk(false);
-  }, [perfil]);
 
   const cambiar = (parcial: Partial<GateProfile>) => {
     setBorrador((b) => ({ ...b, ...parcial }));

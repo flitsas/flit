@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { FAMILIA_OPCIONES } from '@/lib/api/types/familia-labels';
@@ -34,14 +34,6 @@ export function TipoTramiteIdentidad({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
-
-  useEffect(() => {
-    setNombre(tipo.name);
-    setFamilia(tipo.family);
-    setActivo(tipo.isActive);
-    setError(null);
-    setOk(false);
-  }, [tipo.id, tipo.name, tipo.family, tipo.isActive]);
 
   const sinCambios = nombre.trim() === tipo.name && familia === tipo.family && activo === tipo.isActive;
 
