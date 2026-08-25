@@ -15,6 +15,7 @@ import { Auditoria } from "@/components/atom/modules/Auditoria";
 import { LogQx } from "@/components/atom/modules/LogQx";
 import { IctLogs } from "@/components/atom/modules/IctLogs";
 import { IctReports } from "@/components/atom/modules/IctReports";
+import { IctTrazabilidad } from "@/components/atom/modules/IctTrazabilidad";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
@@ -164,6 +165,7 @@ function HomeContent() {
       )}
       {moduleReady && module === "ict-logs" && canIctLogs && <IctLogs />}
       {moduleReady && module === "ict-reportes" && canIctLogs && <IctReports />}
+      {moduleReady && module === "ict-trazabilidad" && canIctLogs && <IctTrazabilidad />}
     </Shell>
   );
 }

@@ -76,9 +76,12 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
     expect(
       resolveNavigableModuleIds({ ...base, canReadLogQx: true }),
     ).toContain("log-qx");
+    // Los tres espacios de ICT comparten el mismo gate: es el mismo público (Feature #11814).
     expect(
       resolveNavigableModuleIds({ ...base, canReadIctLogs: true }),
-    ).toContain("ict-logs");
+    ).toEqual(expect.arrayContaining(["ict-logs", "ict-reportes", "ict-trazabilidad"]));
+    // Y sin el permiso no se cuela ninguno.
+    expect(resolveNavigableModuleIds(base)).not.toContain("ict-trazabilidad");
   });
 
   it("OT admin omite SPA homónimas del hub (otAdminSpaOmit)", () => {

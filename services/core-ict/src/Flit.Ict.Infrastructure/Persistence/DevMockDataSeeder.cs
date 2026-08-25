@@ -39,15 +39,45 @@ public sealed partial class DevMockDataSeeder(
 
         try
         {
-            if (await AlreadySeededAsync(connection, cancellationToken))
-            {
-                return;
-            }
-
             var tenantId = await FirstTenantIdAsync(connection, cancellationToken);
             if (tenantId is null)
             {
                 Log.NoTenant(logger);
+                return;
+            }
+
+            // El bloque de trazabilidad se siembra por separado y con su propio guardián: las bases de
+            // desarrollo que ya recibieron el sembrado original se quedarían sin etapas para siempre si
+            // dependiera del mismo interruptor.
+            if (!await YaSembradoAsync(connection, "SELECT count(*) FROM ict.external_integration_process_status", cancellationToken))
+            {
+                await EjecutarAsync(connection, TrazabilidadMockSql, tenantId.Value, cancellationToken);
+                Log.SeededTrazabilidad(logger);
+            }
+
+            if (!await YaSembradoAsync(connection, "SELECT count(*) FROM ict.external_integration_actors", cancellationToken))
+            {
+                await EjecutarAsync(connection, ActoresMockSql, tenantId.Value, cancellationToken);
+                Log.SeededActores(logger);
+            }
+
+            if (!await YaSembradoAsync(connection, "SELECT count(*) FROM ict.external_integration_source_query", cancellationToken))
+            {
+                await EjecutarAsync(connection, ConsultasFuenteMockSql, tenantId.Value, cancellationToken);
+                Log.SeededConsultas(logger);
+            }
+
+            if (!await YaSembradoAsync(
+                    connection,
+                    "SELECT count(*) FROM ict.integration_log WHERE path LIKE '%MOCK-OK-1'",
+                    cancellationToken))
+            {
+                await EjecutarAsync(connection, LogPorTramiteMockSql, tenantId.Value, cancellationToken);
+                Log.SeededLogPorTramite(logger);
+            }
+
+            if (await AlreadySeededAsync(connection, cancellationToken))
+            {
                 return;
             }
 
@@ -81,6 +111,25 @@ public sealed partial class DevMockDataSeeder(
         return count is long l && l > 0;
     }
 
+    private static async Task<bool> YaSembradoAsync(DbConnection connection, string conteoSql, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = conteoSql;
+        var count = await cmd.ExecuteScalarAsync(ct);
+        return count is long l && l > 0;
+    }
+
+    private static async Task EjecutarAsync(DbConnection connection, string sql, Guid tenantId, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        var p = cmd.CreateParameter();
+        p.ParameterName = "tenant";
+        p.Value = tenantId;
+        cmd.Parameters.Add(p);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task<Guid?> FirstTenantIdAsync(DbConnection connection, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
@@ -88,6 +137,197 @@ public sealed partial class DevMockDataSeeder(
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is Guid id ? id : null;
     }
+
+    /// <summary>
+    /// Etapas y marcas de tiempo de los pre-trámites de muestra (Feature #11814). Sin esto, la pantalla
+    /// de trazabilidad en desarrollo enseña la bandeja pero el recorrido sale vacío, que es justo lo que
+    /// hay que poder mirar. Cubre los cinco desenlaces: en curso, atascado, con novedades, borrador y
+    /// anulado.
+    /// </summary>
+    private const string TrazabilidadMockSql = """
+        -- Marcas que faltaban en los tres pre-trámites originales.
+        UPDATE ict.external_integration_master SET
+            business_date_validation = created_at + interval '1 min 16 s',
+            external_date_validation = CASE WHEN external_validation >= 2
+                                            THEN created_at + interval '3 min 26 s' END
+        WHERE tenant_id = @tenant AND manager_id_transaction IN ('MOCK-STUCK-1', 'MOCK-NOV-1', 'MOCK-OK-1');
+
+        -- Dos desenlaces que no estaban representados: borrador creado y anulado.
+        INSERT INTO ict.external_integration_master
+            (tenant_id, manager_id_transaction, transaction_type, transaction_operation, plate, vin,
+             process_status_id, business_validation, external_validation, created_at,
+             business_date_validation, external_date_validation, procedure_instance_id,
+             traffic_secretary_code, runt_transit_office_name, manager_user)
+        VALUES
+            (@tenant, 'MOCK-DRAFT-1', 3, 1, 'JKL012', NULL, 3, 2, 2, now() - interval '3 h',
+             now() - interval '3 h' + interval '1 min 16 s', now() - interval '3 h' + interval '3 min 26 s',
+             gen_random_uuid(), '25286000', 'STRIA TTOyTTE MCPAL FUNZA', 'MADRID SALCEDO EDSON BRIAN'),
+            (@tenant, 'MOCK-VOID-1', 3, 1, 'MNO345', 'JALFVR347V7000402', 9, 2, 0, now() - interval '5 h',
+             now() - interval '5 h' + interval '1 min 16 s', NULL, NULL,
+             '', NULL, 'NIEVES TORO JHOANNA PAOLA');
+
+        -- Historial de etapas. Solo se registran las etapas de DESENLACE (con novedades, borrador,
+        -- anulado): las de tránsito ya viven en las columnas de fecha del master, que es de donde las
+        -- lee el recorrido.
+        INSERT INTO ict.external_integration_process_status
+            (id, id_eimas, tenant_id, id_parprosta, message_validation, status_process_status,
+             status_process_registrationdate, status_process_userregistered, created_at)
+        SELECT gen_random_uuid(), m.id, m.tenant_id, 4,
+               'CON NOVEDADES VALIDANDO REGLAS DE NEGOCIO: traffic_secretary_code no tiene un valor valido o no esta activa;',
+               0, m.created_at + interval '1 min 16 s', 'ictdev', now()
+        FROM ict.external_integration_master m
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-NOV-1';
+
+        INSERT INTO ict.external_integration_process_status
+            (id, id_eimas, tenant_id, id_parprosta, message_validation, status_process_status,
+             status_process_registrationdate, status_process_userregistered, created_at)
+        SELECT gen_random_uuid(), m.id, m.tenant_id, 5, '', 0,
+               m.created_at + interval '4 min 25 s', 'ictdev', now()
+        FROM ict.external_integration_master m
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-DRAFT-1';
+
+        INSERT INTO ict.external_integration_process_status
+            (id, id_eimas, tenant_id, id_parprosta, message_validation, status_process_status,
+             status_process_registrationdate, status_process_userregistered, created_at)
+        SELECT gen_random_uuid(), m.id, m.tenant_id, 6, 'Anulado a petición del cliente', 0,
+               m.created_at + interval '3 min 31 s', 'ictdev', now()
+        FROM ict.external_integration_master m
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-VOID-1';
+
+        -- El borrador se engancha a un trámite que EXISTE de verdad. Con un uuid inventado el enlace
+        -- «Ver trámite» se dibuja igual pero lleva a «Procedure instance not found», y entonces el
+        -- mock no sirve para probar el enlace: solo para probar que el enlace aparece.
+        --
+        -- El bloque va condicionado porque core-ict no es dueño del esquema `tramites`: en un entorno
+        -- donde ese esquema no esté montado, el seeder debe seguir funcionando y dejar el trámite sin
+        -- borrador asociado, no reventar.
+        DO $seed$
+        BEGIN
+            IF to_regclass('tramites.procedure_instances') IS NOT NULL THEN
+                EXECUTE $sql$
+                    UPDATE ict.external_integration_master m
+                    SET procedure_instance_id = p.id
+                    FROM tramites.procedure_instances p
+                    WHERE p.tenant_id = m.tenant_id
+                      AND m.manager_id_transaction = 'MOCK-DRAFT-1'
+                      AND p.id = (SELECT q.id FROM tramites.procedure_instances q
+                                  WHERE q.tenant_id = m.tenant_id
+                                  ORDER BY q.created_at DESC LIMIT 1)
+                $sql$;
+            END IF;
+        END
+        $seed$;
+        """;
+
+    /// <summary>
+    /// Consultas al RUNT de los pre-trámites de muestra (HU #11817). El trámite atascado se queda con
+    /// una consulta de identidad sin resolver tras tres intentos: es el escenario que justifica la
+    /// pestaña, porque explica un atasco que el estado por sí solo no explica.
+    /// </summary>
+    /// <summary>
+    /// Actores de los pre-trámites de muestra (HU #11819). Se siembran con los datos personales EN
+    /// CLARO a propósito: el enmascarado es responsabilidad de la consulta y solo se puede comprobar
+    /// si el dato guardado no viene ya tapado.
+    /// </summary>
+    private const string ActoresMockSql = """
+        INSERT INTO ict.external_integration_actors
+            (master_id, tenant_id, actor_type, document_type, document_number, name,
+             first_last_name, second_last_name, phone, email, city, state, address)
+        SELECT m.id, m.tenant_id, v.actor_type, v.document_type, v.document_number, v.name,
+               v.first_last_name, v.second_last_name, v.phone, v.email, v.city, v.state, v.address
+        FROM ict.external_integration_master m
+        CROSS JOIN (VALUES
+            ('seller', 'NIT', '890903938', 'BANCOLOMBIA S.A.', '', '', '6045115516',
+             'notificaciones@bancolombia.com.co', 'MEDELLÍN', 'Antioquia', 'CR 48 26 85'),
+            ('buyer', 'CC', '43128877', 'ANA MARIA', 'RESTREPO', 'OCHOA', '3104558812',
+             'amrestrepo@correo.co', 'VALLEDUPAR', 'Cesar', 'CALLE 1C No 25-85 MZ G CA8')
+        ) AS v(actor_type, document_type, document_number, name, first_last_name, second_last_name,
+               phone, email, city, state, address)
+        WHERE m.tenant_id = @tenant
+          AND m.manager_id_transaction IN
+              ('MOCK-STUCK-1', 'MOCK-NOV-1', 'MOCK-OK-1', 'MOCK-DRAFT-1', 'MOCK-VOID-1');
+        """;
+
+    private const string ConsultasFuenteMockSql = """
+        INSERT INTO ict.external_integration_source_query
+            (eim_id, tenant_id, actor_level, query_type, document_type, document_number,
+             plate_complete, vehicle_vin, is_data_queried, is_data_valid, attempts, created_at)
+        SELECT m.id, m.tenant_id, v.actor_level, v.query_type, v.document_type, v.document_number,
+               CASE WHEN v.query_type = 'VEHICLE' THEN m.plate ELSE '' END, '',
+               v.consultada, v.valida, v.intentos, m.created_at + interval '3 min'
+        FROM ict.external_integration_master m
+        CROSS JOIN (VALUES
+            ('MAIN', 'DRIVER',  'NIT', '811011779', true,  true,  1),
+            ('VEHI', 'VEHICLE', '',    '',          true,  true,  1),
+            ('LERE', 'DRIVER',  'CC',  '1193552679', true, true,  2),
+            ('LERE', 'VIDEN',   'CC',  '1193552679', false, false, 3)
+        ) AS v(actor_level, query_type, document_type, document_number, consultada, valida, intentos)
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-STUCK-1';
+
+        -- El trámite que llegó a borrador consultó lo mismo, pero todo le resolvió.
+        INSERT INTO ict.external_integration_source_query
+            (eim_id, tenant_id, actor_level, query_type, document_type, document_number,
+             plate_complete, vehicle_vin, is_data_queried, is_data_valid, attempts, created_at)
+        SELECT m.id, m.tenant_id, v.actor_level, v.query_type, v.document_type, v.document_number,
+               CASE WHEN v.query_type = 'VEHICLE' THEN m.plate ELSE '' END, '',
+               true, true, 1, m.created_at + interval '2 min'
+        FROM ict.external_integration_master m
+        CROSS JOIN (VALUES
+            ('MAIN', 'DRIVER',  'NIT', '811011779'),
+            ('VEHI', 'VEHICLE', '',    ''),
+            ('LERE', 'DRIVER',  'CC',  '1193552679')
+        ) AS v(actor_level, query_type, document_type, document_number)
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-DRAFT-1';
+
+        -- El trámite procesado también consultó: sin esto su pestaña de consultas sale vacía y
+        -- parecería que la etapa no ocurrió, que es justo lo que este módulo existe para desmentir.
+        INSERT INTO ict.external_integration_source_query
+            (eim_id, tenant_id, actor_level, query_type, document_type, document_number,
+             plate_complete, vehicle_vin, is_data_queried, is_data_valid, attempts, created_at)
+        SELECT m.id, m.tenant_id, v.actor_level, v.query_type, v.document_type, v.document_number,
+               CASE WHEN v.query_type = 'VEHICLE' THEN m.plate ELSE '' END, '',
+               true, true, 1, m.created_at + interval '2 min 40 s'
+        FROM ict.external_integration_master m
+        CROSS JOIN (VALUES
+            ('MAIN', 'DRIVER',  'NIT', '811011779'),
+            ('VEHI', 'VEHICLE', '',    '')
+        ) AS v(actor_level, query_type, document_type, document_number)
+        WHERE m.tenant_id = @tenant AND m.manager_id_transaction = 'MOCK-OK-1';
+
+        -- Respuesta cruda del RUNT, CON datos personales a propósito: el enmascarado se comprueba al
+        -- servir, no al sembrar. Si aquí ya llegara enmascarada, la prueba no probaría nada.
+        INSERT INTO ict.external_integration_source_response (eisq_id, tenant_id, query_response, created_at)
+        SELECT q.id, q.tenant_id,
+               '{"fullName": "DANIEL AMADO GARCIA", "documentType": "CC", "documentNumber": "1193552679", "phone": "3104558812", "municipality": "MEDELLIN PARA ANTIOQUIA", "licenses": [{"category": "A2", "status": "ACTIVA", "dueDate": "23/07/2032"}]}'::jsonb,
+               q.created_at + interval '4 s'
+        FROM ict.external_integration_source_query q
+        WHERE q.tenant_id = @tenant AND q.is_data_valid = true AND q.query_type = 'DRIVER';
+        """;
+
+    /// <summary>
+    /// Una petición de consulta de estado por cada pre-trámite de muestra (HU #11819).
+    /// </summary>
+    /// <remarks>
+    /// El sembrado original solo dejaba rastro de dos de los cinco, y los otros tres mostraban el
+    /// «Log técnico» vacío. Eso confunde: un log vacío en esta pantalla significa «nadie preguntó
+    /// por este trámite», y no se distingue de «el mock no lo sembró». Se emparejan por la
+    /// referencia del cliente, que es como los correlaciona la consulta de verdad.
+    /// </remarks>
+    private const string LogPorTramiteMockSql = """
+        INSERT INTO ict.integration_log
+            (tenant_id, log_type, direction, method, path, status_code, headers, request, response,
+             correlation_id, duration_ms, usuario, created_at)
+        SELECT m.tenant_id, 'transaction', 'inbound', 'GET',
+               '/api/v1/status-process/byId/' || m.manager_id_transaction, 200,
+               '{"content-type":"application/json"}'::jsonb, NULL,
+               jsonb_build_object(
+                   'transactionFlit', m.manager_id_transaction,
+                   'statusValidation', m.process_status_id),
+               gen_random_uuid(), 11, 'ictdev', m.created_at + interval '15 min'
+        FROM ict.external_integration_master m
+        WHERE m.tenant_id = @tenant
+          AND m.manager_id_transaction IN ('MOCK-OK-1', 'MOCK-DRAFT-1', 'MOCK-VOID-1');
+        """;
 
     private const string MockSql = """
         INSERT INTO ict.integration_log
@@ -121,6 +361,18 @@ public sealed partial class DevMockDataSeeder(
     {
         [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: logs, pre-trámites y webhook de muestra creados.")]
         public static partial void Seeded(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: etapas y marcas de trazabilidad creadas.")]
+        public static partial void SeededTrazabilidad(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: consultas a fuentes de muestra creadas.")]
+        public static partial void SeededConsultas(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: actores de muestra creados.")]
+        public static partial void SeededActores(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "ICT dev mock seed: log por pre-trámite creado.")]
+        public static partial void SeededLogPorTramite(ILogger logger);
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev mock seed: no hay tenants; se omite.")]
         public static partial void NoTenant(ILogger logger);

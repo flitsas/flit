@@ -48,7 +48,7 @@ import {
   type DataColumn,
 } from "./columns";
 import { CoverageNotice, coverageLines } from "./CoverageNotice";
-import { download, queryFileName } from "./export";
+import { download, EXPORT_BATCH_SIZE, exportarPorLotes, queryFileName } from "./export";
 import { decodeDefinition, encodeDefinition } from "./link-state";
 import { QueryFilterBar } from "./QueryFilterBar";
 import { SavedQueryList } from "./SavedQueryList";
@@ -70,7 +70,6 @@ const PAGE_SIZE = 25;
  * `..._parte_1_de_N`, `..._parte_2_de_N`, etc., en vez de forzar al usuario a acotar su búsqueda
  * para poder descargar el resto.
  */
-const EXPORT_BATCH_SIZE = 5000;
 
 /**
  * La huella de la PREGUNTA: fechas y condiciones, no columnas ni orden.
@@ -406,60 +405,40 @@ export function QueryConsole<TRow>({
       setExporting(true);
       setNotice(null);
       try {
-        const totalArchivos = Math.max(1, Math.ceil(result.total / EXPORT_BATCH_SIZE));
         const notas = coverageLines(result.cobertura, fields);
         const nombre = saved.find((q) => q.id === activeId)?.nombre ?? null;
 
-        let lote: TRow[] = [];
-        let numeroArchivo = 1;
-        let exportadas = 0;
-        let pagina = 1;
-
-        const volcarLote = () => {
-          if (lote.length === 0) return;
-          const fileName = queryFileName(
-            source.exportPrefix,
-            nombre,
-            result.desde,
-            result.hasta,
-            formato,
-            { numero: numeroArchivo, total: totalArchivos },
-          );
-
-          if (formato === "xlsx") {
-            download(
-              buildWorkbook(sheetName, allColumns, lote, visibleColumns, notas),
-              fileName,
-              XLSX_MIME,
+        const { exportadas, archivos: totalArchivos } = await exportarPorLotes<TRow>({
+          total: result.total,
+          pageSize: QUERY_MAX_PAGE_SIZE,
+          traerPagina: async (page, pageSize) =>
+            (await source.run(definition, { page, pageSize })).filas,
+          volcar: (lote, parte) => {
+            const fileName = queryFileName(
+              source.exportPrefix,
+              nombre,
+              result.desde,
+              result.hasta,
+              formato,
+              parte,
             );
-          } else {
-            const csv = buildCsv(allColumns, lote, visibleColumns);
-            const conNotas =
-              notas.length > 0
-                ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
-                : csv;
-            download(conNotas, fileName, "text/csv;charset=utf-8;");
-          }
 
-          exportadas += lote.length;
-          numeroArchivo += 1;
-          lote = [];
-        };
-
-        while (exportadas + lote.length < result.total) {
-          const data = await source.run(definition, {
-            page: pagina,
-            pageSize: QUERY_MAX_PAGE_SIZE,
-          });
-          if (data.filas.length === 0) break;
-          lote.push(...data.filas);
-          pagina += 1;
-
-          if (lote.length >= EXPORT_BATCH_SIZE) {
-            volcarLote();
-          }
-        }
-        volcarLote();
+            if (formato === "xlsx") {
+              download(
+                buildWorkbook(sheetName, allColumns, lote, visibleColumns, notas),
+                fileName,
+                XLSX_MIME,
+              );
+            } else {
+              const csv = buildCsv(allColumns, lote, visibleColumns);
+              const conNotas =
+                notas.length > 0
+                  ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
+                  : csv;
+              download(conNotas, fileName, "text/csv;charset=utf-8;");
+            }
+          },
+        });
 
         setNotice(
           totalArchivos > 1
