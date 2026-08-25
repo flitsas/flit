@@ -10,6 +10,11 @@ import { PageNav } from "@/components/atom/PageNav";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
+  TipoTramiteSelect,
+  agruparPorFamilia,
+} from "@/components/consultas/tipo-tramite";
+import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
+import {
   fetchTramitesIct,
   fetchTiposTramiteIct,
   type FiltrosTramitesIct,
@@ -71,6 +76,8 @@ interface Filtros {
   compania: string;
   /** id del tipo de trámite, como texto porque viene de un <select>. */
   tipo: string;
+  /** Familia (MATRICULAS | TRASPASO | OTROS) cuando se pidió la familia entera en vez de un tipo. */
+  familia: string;
 }
 
 const FILTROS_VACIOS: Filtros = {
@@ -81,6 +88,7 @@ const FILTROS_VACIOS: Filtros = {
   estado: "",
   compania: "",
   tipo: "",
+  familia: "",
 };
 
 function hoyMenos(dias: number): string {
@@ -107,6 +115,7 @@ function aParametros(f: Filtros, page: number, pageSize = TAMANO_PAGINA): Filtro
     estado: f.estado || undefined,
     compania: f.compania || undefined,
     tipo: f.tipo ? Number.parseInt(f.tipo, 10) : undefined,
+    familia: f.familia || undefined,
     page,
     pageSize,
   };
@@ -212,6 +221,26 @@ export function IctTrazabilidad() {
     return () => controller.abort();
   }, [filtros.compania]);
 
+  const grupos = useMemo(
+    () =>
+      agruparPorFamilia(
+        tipos.map((t) => ({ id: String(t.id), name: t.nombre, family: t.familia })),
+      ),
+    [tipos],
+  );
+
+  // Cómo se nombra el filtro de tipo en la nota que viaja dentro del .xlsx. El id crudo no le dice
+  // nada a quien recibe el archivo por correo sin haber ejecutado la búsqueda.
+  const etiquetaTipo = useMemo(() => {
+    if (aplicados.tipo) {
+      return tipos.find((t) => String(t.id) === aplicados.tipo)?.nombre ?? aplicados.tipo;
+    }
+    if (aplicados.familia) {
+      return grupos.find((g) => g.familia === aplicados.familia)?.label ?? aplicados.familia;
+    }
+    return "";
+  }, [aplicados.tipo, aplicados.familia, tipos, grupos]);
+
   const hayFiltros = useMemo(
     () =>
       Boolean(
@@ -219,7 +248,8 @@ export function IctTrazabilidad() {
           aplicados.numero ||
           aplicados.estado ||
           aplicados.compania ||
-          aplicados.tipo,
+          aplicados.tipo ||
+          aplicados.familia,
       ),
     [aplicados],
   );
@@ -237,7 +267,7 @@ export function IctTrazabilidad() {
     setExportando(true);
     setAvisoExport(null);
     try {
-      const { exportadas, archivos } = await exportar(aplicados, total);
+      const { exportadas, archivos } = await exportar(aplicados, total, etiquetaTipo);
       setAvisoExport(
         archivos > 1
           ? `Se exportaron ${exportadas} trámites en ${archivos} archivos de hasta ${EXPORT_BATCH_SIZE} filas cada uno.`
@@ -248,7 +278,7 @@ export function IctTrazabilidad() {
     } finally {
       setExportando(false);
     }
-  }, [aplicados, total]);
+  }, [aplicados, total, etiquetaTipo]);
 
 
   const status = cargando && pagina === null
@@ -379,27 +409,32 @@ export function IctTrazabilidad() {
             onChange={(tenantId) =>
               // Al cambiar de compañía se suelta el tipo: los tipos son los de la compañía anterior
               // y dejarlo puesto devolvería cero sin que se vea por qué.
-              setFiltros({ ...filtros, compania: tenantId, tipo: "" })
+              setFiltros({ ...filtros, compania: tenantId, tipo: "", familia: "" })
             }
             defaultLabel="Todas las compañías"
             id="it-compania"
           />
         )}
-        {tipos.length > 0 && (
+        {grupos.length > 0 && (
           <Campo label="Tipo de trámite" htmlFor="it-tipo">
-            <select
+            {/*
+              Los dieciséis tipos de transacción de la integración salían en lista plana, y no hay
+              forma de saber de memoria cuál cae en qué familia. Se agrupan con la familia que les
+              asigna `ict.procedure_type_mapping`, y cada grupo abre con «toda la familia» para poder
+              pedir «todos los traspasos» sin enumerarlos.
+            */}
+            <TipoTramiteSelect
               id="it-tipo"
-              value={filtros.tipo}
-              onChange={(e) => setFiltros({ ...filtros, tipo: e.target.value })}
+              grupos={grupos}
+              value={{
+                tipoId: filtros.tipo || undefined,
+                familia: (filtros.familia || undefined) as ProcedureFamily | undefined,
+              }}
+              onChange={(sel) =>
+                setFiltros({ ...filtros, tipo: sel.tipoId ?? "", familia: sel.familia ?? "" })
+              }
               className={`${inputCls} w-[190px]`}
-            >
-              <option value="">Todos</option>
-              {tipos.map((t) => (
-                <option key={t.id} value={String(t.id)}>
-                  {t.nombre}
-                </option>
-              ))}
-            </select>
+            />
           </Campo>
         )}
         <span className="flex-1" />
@@ -637,7 +672,7 @@ function FilaTramite({
  * Los filtros aplicados viajan DENTRO del archivo: el .xlsx es lo que se reenvía por correo a quien
  * no ejecutó la búsqueda, y sin esa nota no hay forma de saber sobre qué recorte se está mirando.
  */
-async function exportar(filtros: Filtros, total: number) {
+async function exportar(filtros: Filtros, total: number, etiquetaTipo: string) {
   const notasBase: string[] = [];
   const aplicados: string[] = [];
   if (filtros.desde || filtros.hasta) {
@@ -646,7 +681,7 @@ async function exportar(filtros: Filtros, total: number) {
   if (filtros.numero) aplicados.push(`n.º ${filtros.numero}`);
   if (filtros.placas) aplicados.push(`placas o VIN ${filtros.placas}`);
   if (filtros.estado) aplicados.push(`estado ${estadoIctLabel(filtros.estado)}`);
-  if (filtros.tipo) aplicados.push(`tipo de trámite ${filtros.tipo}`);
+  if (etiquetaTipo) aplicados.push(`tipo de trámite ${etiquetaTipo}`);
   if (filtros.compania) aplicados.push("una compañía concreta");
   if (aplicados.length > 0) notasBase.push(`Filtros aplicados: ${aplicados.join(" · ")}.`);
 

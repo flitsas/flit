@@ -56,6 +56,30 @@ public static class QuipuxBandejaEstados
 /// creación: soporte pregunta «qué se movió esta semana», no «qué se creó esta semana». El handler
 /// aplica el periodo por defecto cuando no vienen.
 /// </remarks>
+/// <summary>
+/// Familias admitidas en el filtro de la bandeja.
+/// </summary>
+/// <remarks>
+/// Son las tres de <c>procedure_types.family</c> (ADR-0050). Se validan aquí, en el dominio, y no en
+/// el borde HTTP porque el criterio —qué es una familia— es del dominio; el borde solo transporta.
+/// </remarks>
+public static class QuipuxFamilias
+{
+    public static readonly IReadOnlyList<string> Validas = ["MATRICULAS", "TRASPASO", "OTROS"];
+
+    /// <summary>Devuelve la familia en su forma canónica, o <c>null</c> si no pertenece al dominio.</summary>
+    public static string? Normalizar(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            return null;
+        }
+
+        var code = valor.Trim().ToUpperInvariant();
+        return Validas.Contains(code) ? code : null;
+    }
+}
+
 public sealed record QuipuxBandejaQuery(
     DateTimeOffset? Desde,
     DateTimeOffset? Hasta,
@@ -67,6 +91,10 @@ public sealed record QuipuxBandejaQuery(
     Guid? TransitOfficeId,
     Guid? TenantId,
     Guid? ProcedureTypeId,
+    // Familia del tipo (MATRICULAS | TRASPASO | OTROS). Convive con ProcedureTypeId porque el
+    // desplegable ofrece los dos niveles; si llegan ambos, ambos se aplican en AND y manda el más
+    // específico por construcción.
+    string? Family,
     int Page,
     int PageSize);
 

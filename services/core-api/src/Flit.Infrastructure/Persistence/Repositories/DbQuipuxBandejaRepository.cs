@@ -118,6 +118,7 @@ internal sealed class DbQuipuxBandejaRepository(FlitDbContext db) : IQuipuxBande
                    o.id                                       AS transit_office_id,
                    u.tenant_id,
                    u.procedure_type_id,
+                   pt.family                                  AS family,
                    COALESCE(ul.divipo_code, o.divipo_code)    AS divipo_code,
                    ul.document_name                           AS documento_qx,
                    ul.id                                      AS submission_id,
@@ -151,6 +152,29 @@ internal sealed class DbQuipuxBandejaRepository(FlitDbContext db) : IQuipuxBande
             LEFT JOIN preparado pr ON pr.procedure_instance_id = u.procedure_instance_id
         )
         """;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<QuipuxTipoTramiteOpcion>> ListProcedureTypesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!db.Database.IsRelational())
+        {
+            // Mismo motivo que SearchAsync: el predicado se apoya en el jsonb `external_refs`, que
+            // InMemory no sabe consultar. La cobertura real es de integración contra Postgres.
+            return [];
+        }
+
+        // El catálogo es global y no depende del tenant (ADR-0019), así que aquí no hay alcance que
+        // aplicar: lo que acota es la homologación Quipux, no quién pregunta.
+        return await db.ProcedureTypes
+            .AsNoTracking()
+            .Where(t => t.PublicationStatus == "published"
+                && EF.Functions.JsonExists(t.ExternalRefs, "quipux"))
+            .OrderBy(t => t.Name)
+            .Select(t => new QuipuxTipoTramiteOpcion(t.Id, t.Name, t.Family))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     public async Task<QuipuxBandejaPage> SearchAsync(
         QuipuxBandejaQuery query,
@@ -364,6 +388,12 @@ internal sealed class DbQuipuxBandejaRepository(FlitDbContext db) : IQuipuxBande
         {
             conditions.Add("procedure_type_id = @type_id");
             parameters.Add(("type_id", typeId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(q.Family))
+        {
+            conditions.Add("family = @family");
+            parameters.Add(("family", q.Family));
         }
 
         var sb = new StringBuilder(", filtradas AS (SELECT * FROM filas");

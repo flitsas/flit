@@ -43,6 +43,11 @@ public sealed class ConsultarBandejaQuipuxTests
             Recibida = query;
             return Task.FromResult(Respuesta);
         }
+
+        // El catálogo del desplegable no pasa por este handler: lo sirve el endpoint directamente.
+        public Task<IReadOnlyList<QuipuxTipoTramiteOpcion>> ListProcedureTypesAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<QuipuxTipoTramiteOpcion>>([]);
     }
 
     private static (ConsultarBandejaQuipuxHandler Handler, SpyRepository Repo) NewHandler()
@@ -63,10 +68,11 @@ public sealed class ConsultarBandejaQuipuxTests
         string? transitOfficeId = null,
         string? tenantId = null,
         string? procedureTypeId = null,
+        string? familia = null,
         int? page = null,
         int? pageSize = null) =>
         new(desde, hasta, placa, instanceId, referencia, documento, estado,
-            transitOfficeId, tenantId, procedureTypeId, page, pageSize);
+            transitOfficeId, tenantId, procedureTypeId, familia, page, pageSize);
 
     private static QuipuxBandejaEntry Entry(
         string estado, DateTimeOffset? esperandoDesde = null, string? documento = null) =>
@@ -165,6 +171,49 @@ public sealed class ConsultarBandejaQuipuxTests
 
         repo.Recibida!.DocumentoQx.Should().Be("LRWYGCFJ3TC767907");
         result.Data.Should().ContainSingle().Which.DocumentoQx.Should().Be(documento);
+    }
+
+    // ── Filtro por tipo de trámite y por familia ─────────────────────────────
+
+    [Fact]
+    public async Task La_familia_viaja_normalizada_a_su_forma_canonica()
+    {
+        var (handler, repo) = NewHandler();
+
+        await handler.HandleAsync(
+            Query(familia: "  traspaso  "), TestContext.Current.CancellationToken);
+
+        repo.Recibida!.Family.Should().Be("TRASPASO");
+    }
+
+    [Fact]
+    public async Task Una_familia_inexistente_se_descarta_en_vez_de_vaciar_la_bandeja()
+    {
+        // Mandarla al repositorio devolvería cero filas, y la bandeja vacía se leería como «no hay
+        // trámites de esa familia» cuando lo que pasó es que el valor no existe. Descartarla enseña
+        // de más, y que sobren filas se nota; que falten, no.
+        var (handler, repo) = NewHandler();
+
+        await handler.HandleAsync(
+            Query(familia: "VEHICULAR"), TestContext.Current.CancellationToken);
+
+        repo.Recibida!.Family.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task El_tipo_concreto_y_la_familia_conviven_en_la_misma_consulta()
+    {
+        // El desplegable ofrece los dos niveles en un solo control, así que el handler tiene que
+        // saber transportar ambos sin que uno anule al otro.
+        var tipo = Guid.NewGuid();
+        var (handler, repo) = NewHandler();
+
+        await handler.HandleAsync(
+            Query(procedureTypeId: tipo.ToString(), familia: "MATRICULAS"),
+            TestContext.Current.CancellationToken);
+
+        repo.Recibida!.ProcedureTypeId.Should().Be(tipo);
+        repo.Recibida.Family.Should().Be("MATRICULAS");
     }
 
     // ── AC6 — contadores ─────────────────────────────────────────────────────

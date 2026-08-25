@@ -89,6 +89,12 @@ public sealed class DbTrazabilidadBandejaRepository(IctDbContext db) : ITrazabil
               AND (@compania::uuid IS NULL OR m.tenant_id = @compania::uuid)
               AND (@numero::bigint IS NULL OR m.transaction_number = @numero::bigint)
               AND (@tipo::int IS NULL OR m.transaction_type = @tipo::int)
+              -- Familia: el desplegable ofrece «toda la familia» además de los tipos sueltos. El
+              -- mapeo es quien sabe a qué familia pertenece cada tipo de transacción de ICT.
+              AND (@familia::text IS NULL OR EXISTS (
+                  SELECT 1 FROM ict.procedure_type_mapping pm
+                   WHERE pm.external_transaction_type = m.transaction_type
+                     AND pm.family = @familia::text))
               AND (@operacion::int IS NULL OR m.transaction_operation = @operacion::int)
               AND (@desde::timestamptz IS NULL OR m.created_at >= @desde::timestamptz)
               AND (@hasta::timestamptz IS NULL OR m.created_at <= @hasta::timestamptz)
@@ -223,6 +229,7 @@ public sealed class DbTrazabilidadBandejaRepository(IctDbContext db) : ITrazabil
         AddParam(cmd, "compania", (object?)filtro.CompaniaTenantId ?? DBNull.Value);
         AddParam(cmd, "numero", (object?)filtro.Numero ?? DBNull.Value);
         AddParam(cmd, "tipo", (object?)filtro.TipoTramite ?? DBNull.Value);
+        AddParam(cmd, "familia", (object?)filtro.Familia ?? DBNull.Value);
         AddParam(cmd, "operacion", (object?)filtro.Operacion ?? DBNull.Value);
         AddParam(cmd, "desde", (object?)filtro.Desde ?? DBNull.Value);
         AddParam(cmd, "hasta", (object?)filtro.Hasta ?? DBNull.Value);
