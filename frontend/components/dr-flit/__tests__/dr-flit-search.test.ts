@@ -31,7 +31,7 @@ describe("dr-flit-search", () => {
       {
         id: "11111111-1111-4111-a111-111111111111",
         referenceNumber: "R-1",
-        modalidad: "traspaso",
+        modalidad: "TRASPASO",
         estado: "borrador",
         placa: "ABC123",
         vin: "VIN1",

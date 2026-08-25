@@ -166,12 +166,41 @@ function humanize(code: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * `DOCUMENT_{CODE}_REQUIRED` — un código por documento obligatorio que falta
+ * (`DocumentRequirementGate`). No están en los diccionarios porque la lista sale del catálogo
+ * documental y crece con él, así que `humanize` los escupía crudos y en mayúsculas:
+ * «DOCUMENT COMPRAVENTA REQUIRED». Se traducen por patrón, no una entrada por documento.
+ */
+const DOCUMENTO_REQUERIDO = /^DOCUMENT_(.+)_REQUIRED$/i;
+
+function documentoRequeridoCopy(code: string): string | null {
+  const match = DOCUMENTO_REQUERIDO.exec(code);
+  if (!match) return null;
+  const nombre = match[1].replace(/[_-]+/g, ' ').trim().toLocaleLowerCase('es');
+  return `Falta el documento: ${nombre}`;
+}
+
 export function reasonCopy(code: string): string {
-  return REASON_COPY[code] ?? humanize(code);
+  return REASON_COPY[code] ?? documentoRequeridoCopy(code) ?? humanize(code);
 }
 
 export function blockerCopy(code: string): string {
-  return BLOCKER_COPY[code] ?? humanize(code);
+  return BLOCKER_COPY[code] ?? documentoRequeridoCopy(code) ?? humanize(code);
+}
+
+/**
+ * UNA línea para el seguimiento: la línea de tiempo dice QUÉ paso falta y a grandes rasgos por qué;
+ * el detalle vive en el propio paso y en el pie de «Antes de enviar».
+ *
+ * Listar todos los motivos convertía un paso en un volcado de siete viñetas —la mayoría, un código
+ * por documento faltante— que además cambiaba de alto al navegar. El primero es el agregado (el
+ * backend emite `documentos_incompletos` antes que los códigos por documento), así que encabeza bien.
+ */
+export function reasonsSummary(reasons: readonly string[]): string | null {
+  if (reasons.length === 0) return null;
+  const primero = reasonCopy(reasons[0]);
+  return reasons.length === 1 ? primero : `${primero} y ${reasons.length - 1} más`;
 }
 
 /**

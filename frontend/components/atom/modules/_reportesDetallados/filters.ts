@@ -43,11 +43,10 @@ export function defaultDetailedFilters(reference: Date = new Date()): DetailedRe
 export const CATEGORY_LABELS: Record<string, string> = {
   matriculas: "Matrículas",
   traspasos: "Traspasos",
-  vehicular: "Vehicular",
   otros: "Otros",
 };
 
-const CATEGORY_ORDER = ["matriculas", "traspasos", "vehicular", "otros"];
+const CATEGORY_ORDER = ["matriculas", "traspasos", "otros"];
 
 // Estados de negocio del trámite (TramiteEstado / ADR-0022), en orden de ciclo de vida.
 // Coinciden con la columna `status` de la vista BI; las etiquetas legibles salen de statusLabel().

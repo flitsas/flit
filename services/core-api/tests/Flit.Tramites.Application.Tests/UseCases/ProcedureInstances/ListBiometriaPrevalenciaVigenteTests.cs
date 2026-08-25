@@ -48,11 +48,11 @@ public sealed class ListBiometriaPrevalenciaVigenteTests
     private static ProcedureInstance Instancia(Guid id, string modalidad) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = id,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000042",
-            ModalidadEntrada = modalidad,
             CreatedAt = Ayer,
         };
 

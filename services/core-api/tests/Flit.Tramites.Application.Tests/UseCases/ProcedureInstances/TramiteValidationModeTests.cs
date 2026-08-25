@@ -51,12 +51,12 @@ public sealed class TramiteValidationModeTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });

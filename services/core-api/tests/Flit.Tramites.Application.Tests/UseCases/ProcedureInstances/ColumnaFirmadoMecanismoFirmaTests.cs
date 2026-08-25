@@ -186,12 +186,12 @@ public sealed class ColumnaFirmadoMecanismoFirmaTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000042",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new ProcedureInstanceFieldValue

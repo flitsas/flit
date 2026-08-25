@@ -15,7 +15,40 @@ public static class FurTramiteObservation
             return ComposeLeasing(partes);
         if (code is "TRASPASO_UNILATERAL")
             return ComposeUnilateral(partes);
+        if (code is "CAMBIO_LOCATARIO")
+            return ComposeCambioLocatario(partes);
         return null;
+    }
+
+    /// <summary>
+    /// Casilla 18 (Otros): quién deja de ser arrendatario del vehículo y quién pasa a serlo.
+    /// <code>CAMBIO DE LOCATARIO por Leasing de {PROPIETARIO} a {LOCATARIO}, TIPO DE DOCUMENTO {TIPO},
+    /// NÚMERO DE DOCUMENTO {NUMERO}.</code>
+    /// </summary>
+    /// <remarks>
+    /// «Leasing de» es texto fijo de la plantilla, no parte de la razón social: es el mismo conector
+    /// que ya usa <see cref="ComposeLeasing"/>, de modo que los dos trámites de leasing se leen igual
+    /// en el formulario. El propietario va solo con su nombre; el tipo y el número de documento
+    /// acompañan únicamente al locatario, que es la parte que entra.
+    /// </remarks>
+    private static string? ComposeCambioLocatario(IReadOnlyList<DocumentParte> partes)
+    {
+        var propietario = Find(partes, "comprador");
+        var locatario = Find(partes, "locatario");
+
+        // Sin las DOS partes no se compone: aquí no cabe el fallback al comprador que sí usan leasing y
+        // unilateral, porque el trámite es precisamente el cambio de una por otra y con una sola parte
+        // la frase diría que alguien se sustituye a sí mismo. Regla del artefacto: faltan datos ⇒ sí
+        // casilla, sí tipo, NO se inventa el texto.
+        if (propietario is null || locatario is null)
+            return null;
+        if (string.IsNullOrWhiteSpace(propietario.Nombre) || string.IsNullOrWhiteSpace(locatario.Nombre))
+            return null;
+
+        var tipo = string.IsNullOrWhiteSpace(locatario.DocumentType) ? "-" : locatario.DocumentType.Trim();
+        var numero = string.IsNullOrWhiteSpace(locatario.Documento) ? "-" : locatario.Documento.Trim();
+        return $"CAMBIO DE LOCATARIO por Leasing de {propietario.Nombre.Trim()} a {locatario.Nombre.Trim()}, "
+             + $"TIPO DE DOCUMENTO {tipo}, NÚMERO DE DOCUMENTO {numero}.";
     }
 
     private static string? ComposeLeasing(IReadOnlyList<DocumentParte> partes)

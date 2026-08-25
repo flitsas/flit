@@ -257,7 +257,6 @@ public sealed class FurManifestGuardTests
     private static FurDocumentData SampleTraspaso() => SampleMatricula() with
     {
         Modalidad = "traspaso",
-        TipologiaCodigo = "traspaso_standard",
         Partes =
         [
             new DocumentParte("vendedor", "AMOR JIMENEZ GUERRA", "1000445459", null, DocumentType: "CC"),

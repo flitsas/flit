@@ -33,8 +33,10 @@ Este checklist es bloqueante. Debe usarse antes de entregar cualquier diseño, i
 | ¿La topbar conserva rol, usuario/tenant, notificaciones y menú? | Sí |
 | ¿Las tarjetas son blancas, con radio amplio y padding generoso? | Sí |
 | ¿Los CTA primarios usan pastilla degradada? | Sí |
+| ¿Los botones de **consulta** (Consultar RUNT/RUES/Buscar) usan azul sólido `#557EFF` sin degradado? | Sí |
 | ¿Los botones secundarios respetan navy, naranja-rojo o tarjeta blanca? | Sí |
 | ¿Los badges usan la forma tintada y no relleno sólido con texto blanco? | Sí |
+| ¿El badge `success` es verde tintado (`#F3FBE8`/`#4F7A12`), no cian? | Sí |
 | ¿Los formularios usan inputs blancos con iconos, bordes claros y `<label>` real? | Sí |
 | ¿Los modales tienen fondo desenfocado, contenedor claro y rol de diálogo? | Sí |
 | ¿Las tablas son `<table>` con cabecera `#DFE5ED` y acciones compactas? | Sí |

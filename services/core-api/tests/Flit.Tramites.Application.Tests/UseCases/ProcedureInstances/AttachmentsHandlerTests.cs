@@ -92,13 +92,12 @@ public sealed class AttachmentsHandlerTests
         bool subsanacionActiva = false) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             ChecklistEstado = checklistEstado,
             SubsanacionActiva = subsanacionActiva,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -738,12 +737,22 @@ public sealed class AttachmentsHandlerTests
     }
 
     [Fact]
-    public async Task Checklist_UnknownTipologia_Returns422()
+    public async Task Checklist_TipoSinChecklistConfigurado_Returns422()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        var instance = Instance(id, tenant, modalidad: "desconocida", tipologia: "no_existe");
+        // ADR-0050 — la tipología ya no es un string libre: es el code del tipo, garantizado por FK.
+        // El 422 solo puede darse ahora cuando el tipo existe pero aún no tiene checklist configurado
+        // en TramiteTipologiaCatalog, que es el caso de los tipos de la familia OTROS sin parametrizar.
+        var instance = Instance(id, tenant);
+        instance.ProcedureType = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "BLINDAJE",
+            Name = "Blindaje",
+            Family = ProcedureFamilyCodes.Otros,
+        };
         _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
         var (_, error) = await _checklist.HandleAsync(id, tenant, ct);

@@ -63,13 +63,12 @@ public sealed class PortalHandlerTests
     private static ProcedureInstance Instance(string tipologia = "traspaso_standard") =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? (tipologia == "traspaso_standard" ? "traspaso" : "matricula_inicial")),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000042",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = tipologia == "traspaso_standard" ? "traspaso" : "matricula_inicial",
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

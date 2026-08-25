@@ -36,6 +36,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId: () => null,
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => transitOfficeUnavailable.value,
+  isVehicleBodyTypeMissing: () => false,
 }));
 
 // HU #11628 — el dígito de preferencia de placa (mismo consumidor que HU #10805/#10806) exige
@@ -97,8 +98,10 @@ const PREVIEW_RESULT = {
 
 function renderNuevo(modalidad: 'matricula_inicial' | 'traspaso' = 'matricula_inicial') {
   mocks.getWizardPreview.mockResolvedValue(wizard(modalidad));
+  const family = modalidad === 'traspaso' ? 'TRASPASO' : 'MATRICULAS';
   return render(
-    <TramiteWizard modalidad={modalidad} title="Nuevo trámite" onCreated={() => {}} onExit={() => {}} />,
+    <TramiteWizard procedureTypeCode={modalidad === 'traspaso' ? 'TRASPASO_STANDARD' : 'MATRICULA_NUEVA'}
+        family={family} title="Nuevo trámite" onCreated={() => {}} onExit={() => {}} />,
   );
 }
 
@@ -177,10 +180,7 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 
     expect(
-      await screen.findByText(/Solo se muestran los organismos de tránsito activos en FLIT/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/solicita al administrador que lo agregue y lo active/),
+      await screen.findByText(/¿No encuentras el organismo\? Solicita al administrador la activación del convenio/),
     ).toBeInTheDocument();
   });
 
@@ -251,12 +251,12 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     const user = userEvent.setup();
     renderNuevo('traspaso');
 
-    await screen.findByLabelText('Placa');
+    await screen.findByLabelText('Placa del vehículo');
     expect(screen.queryByLabelText('Secretaría de tránsito')).not.toBeInTheDocument();
     expect(mocks.listTransitOffices).not.toHaveBeenCalled();
 
-    await user.type(screen.getByLabelText('Placa'), PLACA_VALIDA);
-    await user.type(screen.getByLabelText('Número documento propietario'), '1020304050');
+    await user.type(screen.getByLabelText('Placa del vehículo'), PLACA_VALIDA);
+    await user.type(screen.getByLabelText('Número documento del propietario'), '1020304050');
     const boton = screen.getByRole('button', { name: 'Consultar RUNT' });
     expect(boton).toBeEnabled();
   });

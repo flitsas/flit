@@ -25,13 +25,12 @@ public sealed class PauseProcedureInstanceTests
         Guid id, Guid tenantId, string status = TramiteEstado.Borrador, string? origin = "ict") =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso" ?? "traspaso_estandar"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "traspaso_estandar",
-            TipologiaCodigo = "traspaso",
             Origin = origin,
             CreatedAt = DateTimeOffset.UtcNow,
         };

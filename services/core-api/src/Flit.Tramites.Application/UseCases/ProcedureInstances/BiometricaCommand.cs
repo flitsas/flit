@@ -363,8 +363,8 @@ public sealed class ListBiometriaHandler(
         // parte pero la PERSONA (documento del actor) sí tiene una en otro trámite, se expone ESA (sin clonar)
         // para que la UI muestre "identidad verificada". La validación referenciada se rotula con la parte
         // actual (su PartyRole de origen puede diferir, p.ej. matrícula→traspaso).
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                         == TramiteModalidadEntrada.Traspaso;
+        var esTraspaso = instance.Family
+                         == ProcedureFamily.Traspaso;
         var partes = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
         var firmaBaulPartes = new List<string>(partes.Length);
         // Bug #11615 — identidad que PREVALECE por parte (aprobada + vigente, propia o referenciada) y

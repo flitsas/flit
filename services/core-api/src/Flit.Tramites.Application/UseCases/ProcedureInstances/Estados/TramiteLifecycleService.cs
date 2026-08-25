@@ -361,6 +361,20 @@ public sealed class TramiteLifecycleService(
         if (gateErrors.Count > 0)
             return (gateErrors[0], DetalleGatePreparacion(gateErrors));
 
+        // Precondición del tipo, no un requisito documental: un cambio de carrocería necesita una
+        // carrocería de partida. El preflight ya lo corta en el paso 1; esto cierra la puerta de atrás
+        // de un borrador abierto antes de que la guarda existiera, que llegaría hasta aquí intacto.
+        // Se mira el SNAPSHOT del RUNT y no el valor efectivo, que en este trámite lleva la carrocería
+        // NUEVA. En modo warn/off no bloquea (mismo interruptor por ambiente que el preflight).
+        if (_validationPolicy.VehicleBodyTypeRequired == TramiteValidationMode.Block
+            && VehicleBodyTypePolicy.ExigeCarroceriaPrevia(instance.TypeCode)
+            && string.IsNullOrWhiteSpace(FieldValue(instance, VehicleBodyTypePolicy.BodyTypeRuntFieldKey)))
+        {
+            return (VehicleBodyTypePolicy.ErrorCode,
+                "No se puede preparar el trámite: el vehículo no tiene carrocería registrada en el RUNT, "
+                + "así que no hay carrocería que cambiar. Vuelve a consultar el vehículo o radica el trámite que corresponda.");
+        }
+
         // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
         // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
         // la vía "asumo el riesgo" (decisión válida sin documento). Solo con el repo cableado.
@@ -473,6 +487,10 @@ public sealed class TramiteLifecycleService(
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
 
+    private static string? FieldValue(ProcedureInstance instance, string fieldKey) =>
+        instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase))?.ValueText;
+
     /// <summary>
     /// FEATURE-08 / HU-BE-06 (AC-06) — gate de preparación para tipos dinámicos: computa los blockers
     /// del submit con <see cref="DynamicGateEvaluator.CanSubmitBlockers"/> desde el gate_profile del
@@ -506,7 +524,7 @@ public sealed class TramiteLifecycleService(
     {
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.Completo ?? true;
     }
@@ -557,7 +575,7 @@ public sealed class TramiteLifecycleService(
         if (_validationPolicy.VehicleRegistrationState != TramiteValidationMode.Block)
             return null;
 
-        if (TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) != TramiteModalidadEntrada.MatriculaInicial)
+        if (instance.Family != ProcedureFamily.Matriculas)
             return null;
 
         var vin = instance.FieldValues.FirstOrDefault(f =>
@@ -609,10 +627,10 @@ public sealed class TramiteLifecycleService(
         if (_prendaRepo is null)
             return (null, null);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
+        var modalidad = instance.Family;
 
         // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda), solo traspaso.
-        if (modalidad == TramiteModalidadEntrada.Traspaso && HasGravamenWarn(instance))
+        if (modalidad == ProcedureFamily.Traspaso && HasGravamenWarn(instance))
         {
             return MapPrendaGateResult(
                 PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos),
@@ -626,7 +644,7 @@ public sealed class TramiteLifecycleService(
         // matrícula el vehículo es nuevo y el gravamen, si existe, se CONSTITUYE con el trámite —mismo
         // razonamiento que ya documenta EvaluateOtOverride para el override del OT). Sin decisión de
         // prenda vigente, no hay soporte del gravamen: no se puede preparar el trámite.
-        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad == ProcedureFamily.Matriculas)
         {
             return MapPrendaGateResult(
                 PrendaGate.EvaluateMatriculaInicial(prenda, docTipos),

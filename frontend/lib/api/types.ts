@@ -396,7 +396,14 @@ export interface AdminAuditLogQuery {
 
 // ── Analytics · Dashboard (HU #10243 / #10247) ──────────────────────────────
 /** Categoría de trámite normalizada por el backend (RF01). */
-export type AnalyticsCategory = "matriculas" | "traspasos" | "vehicular" | "otros";
+/**
+ * Categoría analítica de un trámite, derivada de `procedure_types.family`.
+ *
+ * ADR-0050 retiró `vehicular`: esa familia no existe en el catálogo —era el residuo de un seed
+ * histórico— y desde el CHECK del DDL 79 la columna solo admite tres valores, así que el backend no
+ * podía producir esa categoría. El filtro seguía ofreciéndose y devolvía siempre cero.
+ */
+export type AnalyticsCategory = "matriculas" | "traspasos" | "otros";
 
 /** Conteo de trámites en un estado concreto dentro de una categoría. */
 export interface StatusCount {

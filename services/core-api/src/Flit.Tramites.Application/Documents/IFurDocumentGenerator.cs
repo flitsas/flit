@@ -136,7 +136,16 @@ public sealed record FurDocumentData(
     /// <summary>Nombre de <c>tramites.procedure_types.name</c>. El mandato lo usa como objeto del contrato.</summary>
     string? ProcedureTypeName = null,
     /// <summary>Familia de <c>tramites.procedure_types.family</c> (<c>MATRICULAS</c> | <c>TRASPASO</c> | <c>OTROS</c>).</summary>
-    string? ProcedureFamily = null)
+    string? ProcedureFamily = null,
+    /// <summary>
+    /// ADR-0050 — el tipo declara si hay parte VENDEDORA (<c>gate_profile.requiresSeller</c>).
+    /// <para>Convive con <see cref="ProcedureFamily"/> y no lo duplica: la familia dice QUÉ ES el
+    /// trámite y esta bandera QUÉ EXIGE. Es la que decide si el FUR estampa sección de comprador y
+    /// si el mandato se redacta con parte otorgante, preguntas que son de capacidad. Sustituye a
+    /// deducirlo por substring sobre la tipología o la modalidad, que daba por traspaso cualquier
+    /// código que contuviera esa palabra.</para>
+    /// </summary>
+    bool RequiereVendedor = false)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;

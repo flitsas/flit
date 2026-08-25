@@ -26,12 +26,12 @@ public sealed class CommercialHandlerTests
         ProcedureInstanceCommercial? commercial = null) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "traspaso",
             Commercial = commercial,
             CreatedAt = DateTimeOffset.UtcNow,
         };

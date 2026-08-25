@@ -7,21 +7,21 @@ public sealed record RejectionReasonResponse(
     Guid Id,
     string Code,
     string Description,
-    string Modalidad,
+    string Familia,
     int SortOrder,
     bool IsActive);
 
-/// <summary>Alta de causal. <c>SortOrder</c> nulo la manda al final de su modalidad.</summary>
+/// <summary>Alta de causal. <c>SortOrder</c> nulo la manda al final de su familia.</summary>
 public sealed record CreateRejectionReasonRequest(
     string? Code,
     string? Description,
-    string? Modalidad,
+    string? Familia,
     int? SortOrder);
 
 public sealed record UpdateRejectionReasonRequest(
     string? Code,
     string? Description,
-    string? Modalidad,
+    string? Familia,
     int? SortOrder);
 
 /// <summary>Activación/desactivación. No hay borrado (ver <see cref="IRejectionReasonRepository"/>).</summary>
@@ -30,7 +30,7 @@ public sealed record SetRejectionReasonActiveRequest(bool IsActive);
 internal static class RejectionReasonMapper
 {
     public static RejectionReasonResponse ToResponse(RejectionReasonItem item) =>
-        new(item.Id, item.Code, item.Description, item.Modalidad, item.SortOrder, item.IsActive);
+        new(item.Id, item.Code, item.Description, item.Family, item.SortOrder, item.IsActive);
 }
 
 /// <summary>
@@ -43,7 +43,7 @@ internal static class RejectionReasonValidator
     public const int CodeMaxLength = 60;
     public const int DescriptionMaxLength = 150;
 
-    public static string? Validate(string? code, string? description, string? modalidad)
+    public static string? Validate(string? code, string? description, string? familia)
     {
         if (string.IsNullOrWhiteSpace(code))
         {
@@ -65,9 +65,11 @@ internal static class RejectionReasonValidator
             return $"La descripción no puede superar {DescriptionMaxLength} caracteres.";
         }
 
-        return RejectionReasonModalidades.EsValida(modalidad)
+        return RejectionReasonFamilies.EsValida(familia)
             ? null
-            : "La modalidad debe ser 'matricula_inicial' o 'traspaso'.";
+            // ADR-0050: el mensaje nombraba las dos modalidades desaparecidas, así que le decía al
+            // administrador que escribiera un valor que la validación rechaza.
+            : $"La familia debe ser una de: {string.Join(", ", RejectionReasonFamilies.Todas)}.";
     }
 
     public static string NormalizeCode(string code) =>

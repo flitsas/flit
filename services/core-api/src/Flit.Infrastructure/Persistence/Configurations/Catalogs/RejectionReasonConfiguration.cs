@@ -20,7 +20,7 @@ internal sealed class RejectionReasonConfiguration : IEntityTypeConfiguration<Re
 
         builder.Property(x => x.Code).HasColumnName("code").HasMaxLength(60).IsRequired();
         builder.Property(x => x.Description).HasColumnName("description").HasMaxLength(150).IsRequired();
-        builder.Property(x => x.Modalidad).HasColumnName("modalidad").HasMaxLength(40).IsRequired();
+        builder.Property(x => x.Family).HasColumnName("family").HasMaxLength(40).IsRequired();
         builder.Property(x => x.SortOrder).HasColumnName("sort_order").IsRequired();
         builder.Property(x => x.IsActive).HasColumnName("is_active").IsRequired().HasDefaultValue(true);
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();

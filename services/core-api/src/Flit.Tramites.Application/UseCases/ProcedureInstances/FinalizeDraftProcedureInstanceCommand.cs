@@ -31,9 +31,8 @@ public static class FinalizeDraftGate
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
-        var esTraspaso = modalidad == TramiteModalidadEntrada.Traspaso;
+        var modalidad = instance.Family;
+        var esTraspaso = modalidad == ProcedureFamily.Traspaso;
 
         var errors = new List<string>(3);
 
@@ -112,7 +111,7 @@ public sealed class FinalizeDraftProcedureInstanceHandler(
             Tipo = "draft_finalizado",
             Payload = JsonSerializer.Serialize(new
             {
-                modalidad = instance.ModalidadEntrada,
+                modalidad = instance.FamilyCode,
                 draft_finalized_at = now,
             }),
             CreatedAt = now,

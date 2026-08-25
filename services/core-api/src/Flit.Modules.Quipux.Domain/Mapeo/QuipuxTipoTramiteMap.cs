@@ -33,17 +33,20 @@ namespace Flit.Modules.Quipux.Domain.Mapeo;
 public sealed class QuipuxTipoTramiteMap
 {
     /// <summary>
-    /// Familia Quipux del trámite: decide CUÁL de las tres banderas de la secretaría manda
-    /// (<c>catalogs.transit_offices.quipux_matricula</c> / <c>_traspaso</c> / <c>_otros</c>).
+    /// Familia Quipux del trámite: designa CUÁL de las tres banderas de la secretaría corresponde
+    /// (<c>catalogs.transit_offices.quipux_registration</c> / <c>_transfer</c> / <c>_other</c>).
     /// Obligatorio. Ver <see cref="QuipuxFamilia"/>.
     /// </summary>
     /// <remarks>
-    /// Va aquí, en <c>external_refs</c>, y NO se deriva de <c>procedure_types.family</c>: esa
-    /// columna está inconsistente en la BD —conviven cuatro valores (<c>VEHICULAR</c>,
-    /// <c>MATRICULAS</c>, <c>TRASPASO</c>, <c>OTROS</c>) por tres seeds históricos solapados, y
-    /// <c>VEHICULAR</c> ni siquiera existe en el enum <c>ProcedureFamily</c>, aunque es donde caen
-    /// <c>TRASPASO</c> y <c>MATRICULA_INICIAL</c>—. Colgar de ella la decisión de a qué secretaría
-    /// se radica sería colgarla de un dato que hoy no es fiable.
+    /// Va aquí, en <c>external_refs</c>, y NO se deriva de <c>procedure_types.family</c>: es la
+    /// taxonomía de la secretaría, no la de FLIT, y un mismo trámite puede clasificarse distinto en
+    /// cada una. ADR-0050 saneó <c>family</c> (CHECK de tres valores, sin <c>VEHICULAR</c>), así que
+    /// ya no es la fiabilidad del dato lo que sostiene la separación; el DDL 83 verifica que ambas
+    /// no se contradigan donde sí deben corresponderse.
+    /// <para>NOTA: hoy ninguna de las tres banderas se consulta en el camino de radicación —
+    /// <c>EncolarEnvioQuipuxHandler</c> no las lee—, así que esta familia se transporta pero no
+    /// llega a decidir nada. Encender ese gate bloquearía radicaciones que hoy funcionan (las tres
+    /// columnas tienen DEFAULT false), por lo que es una decisión de negocio pendiente.</para>
     /// </remarks>
     [JsonPropertyName("familia")]
     public string Familia { get; init; } = string.Empty;

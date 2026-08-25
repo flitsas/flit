@@ -2,16 +2,18 @@
   "$schema": "https://www.designtokens.org/TR/drafts/format/",
   "meta": {
     "name": "FLIT Design Tokens",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "baseline": "frontend/app/globals.css @ develop",
     "sources": [
       "frontend/app/globals.css (fuente normativa: @theme inline, :root, .dark)",
       "GUIA-DOCK-INFERIOR-FLOTANTE — Contrato D (tokens --nav-*)",
       "HU #10844 — badges de estado y tabla card-list",
-      "prototipo flit 2.0 (v4).pdf (referencia histórica de composición)"
+      "prototipo flit 2.0 (v4).pdf (referencia histórica de composición)",
+      "20-agosto-notas-diseno-mi-traspasos.pdf (anotaciones de diseño MI/Traspaso — mandan en botones de consulta y colores de badges para wizard)"
     ],
     "purpose": "Fuente única de color, tipografía, radios, sombras y motion para diseño y frontend FLIT. Cuando este archivo y el PDF discrepen, MANDA ESTE ARCHIVO: el PDF documenta la composición original, no los valores vigentes.",
     "changelog": {
+      "2.1.0": "Alineación al PDF de anotaciones de diseño '20 agosto notas MI y Traspasos'. (1) color.badge.success pasa de CIAN (#00DBD5 tintado) a VERDE tintado: bg=#F3FBE8, fg=#4F7A12, border=#CDEB9C — alineado al prototipo Lovable OK-badge y al PDF 20 ago. El cian como success era un error de implementación; la semántica verde=válido/completo ya era correcta en prototype_rules.md. (2) dark.badge.success actualizado al verde equivalente oscuro. (3) color.badge.warning y dark.badge.warning alineados a #F9AC00 (ámbar FLIT del PDF). (4) Se agrega color.annotation.pdf20Ago con la paleta completa del PDF incluyendo #2E3192 documentado como propuesto (NO adoptado como brand sin decisión LT). (5) Se añade component.button.consultSolid para distinguir Consulta (sólido #557EFF) de CTA primario (degradado).",
       "2.0.0": "Alineación con la línea base de develop. (1) La paleta de marca pasa a los valores vigentes #557EFF/#00DBD5/#FF4E00/#8CC63F; los valores del prototipo v4 se conservan bajo `color.chrome` porque siguen vivos y citados por nombre en el Contrato D del dock. (2) Se agrega capa `dark`, que antes no existía y obligaba a inventar surfaces por componente. (3) Se incorporan `color.badge` (5 tonos accesibles) y `color.table` de la HU #10844. (4) Escala de radios corregida a la real (base 10px), antes desalineada. (5) `typography.fontSize.min` como piso explícito y auditable. (6) `component.dock` con el Contrato D completo.",
       "1.0.0": "Extracción visual del prototipo flit 2.0 (v4)."
     },
@@ -58,16 +60,16 @@
     },
 
     "badge": {
-      "$description": "Escala de badges de la HU #10844: forma tintada (fondo translúcido + texto + borde). Los `fg` están calculados para cumplir 4.5:1 sobre el `bg` correspondiente. Prohibido el badge de relleno sólido con texto blanco.",
+      "$description": "Escala de badges v2.1: forma tintada (fondo translúcido + texto + borde). Los `fg` están calculados para cumplir 4.5:1 sobre el `bg` correspondiente. Prohibido el badge de relleno sólido con texto blanco. SUCCESS: verde tintado (PDF 20 ago + prototipo Lovable OK-badge) — NO cian. El cian como success era un error de implementación; verde=válido/completo es la semántica correcta. WARNING: #F9AC00 familia (ámbar FLIT).",
       "success": {
-        "bg": { "$type": "color", "$value": "rgba(0, 219, 213, 0.15)" },
-        "fg": { "$type": "color", "$value": "#0F766E" },
-        "border": { "$type": "color", "$value": "rgba(0, 219, 213, 0.35)" }
+        "bg": { "$type": "color", "$value": "#F3FBE8", "$description": "Verde muy claro. PDF 20 ago / prototipo Lovable OK. Reemplaza el cian translúcido de v2.0 (error de implementación)." },
+        "fg": { "$type": "color", "$value": "#4F7A12", "$description": "Verde oscuro legible. 5.09:1 sobre blanco. Alias de --flit-success-ink ya presente en globals.css." },
+        "border": { "$type": "color", "$value": "#CDEB9C", "$description": "Verde de borde claro. Mismo sistema tintado que los demás tonos." }
       },
       "warning": {
-        "bg": { "$type": "color", "$value": "rgba(245, 158, 11, 0.15)" },
-        "fg": { "$type": "color", "$value": "#B45309" },
-        "border": { "$type": "color", "$value": "rgba(245, 158, 11, 0.35)" }
+        "bg": { "$type": "color", "$value": "rgba(249, 172, 0, 0.15)", "$description": "#F9AC00 familia (ámbar FLIT del PDF 20 ago)." },
+        "fg": { "$type": "color", "$value": "#B45309", "$description": "Ámbar oscuro legible." },
+        "border": { "$type": "color", "$value": "rgba(249, 172, 0, 0.40)" }
       },
       "danger": {
         "bg": { "$type": "color", "$value": "rgba(255, 78, 0, 0.12)" },
@@ -105,6 +107,25 @@
       "muted": { "$type": "color", "$value": "#7D8798" },
       "inverse": { "$type": "color", "$value": "#FFFFFF" },
       "brandTitle": { "$type": "color", "$value": "#557EFF" }
+    },
+
+    "annotation": {
+      "$description": "Paleta declarada en las anotaciones de diseño del PDF '20 agosto notas MI y Traspasos'. Son los colores de referencia del PDF; su adopción como token de código requiere decisión explícita por cada uso. NO sustituyen los tokens de marca sin aprobación del Líder Técnico.",
+      "pdf20Ago": {
+        "blue": { "$type": "color", "$value": "#557EFF", "$description": "Azul de marca — ya es `color.brand.blue`; coincide plenamente." },
+        "cyan": { "$type": "color", "$value": "#00DBD5", "$description": "Cian tecnológico — ya es `color.brand.cyan`." },
+        "alert": { "$type": "color", "$value": "#FF4E00", "$description": "Alerta/rechazo — ya es `color.brand.alert`." },
+        "white": { "$type": "color", "$value": "#FFFFFF" },
+        "green": { "$type": "color", "$value": "#8CC63F", "$description": "Verde completado — ya es `color.brand.green`." },
+        "appBg": { "$type": "color", "$value": "#EEF5FF", "$description": "Fondo de app — ya es `color.background.app`." },
+        "amber": { "$type": "color", "$value": "#F9AC00", "$description": "Ámbar alerta — adoptado en badge.warning y dark.badge.warning (v2.1.0)." },
+        "orange": { "$type": "color", "$value": "#F77A00", "$description": "Naranja alerta alternativo del PDF. No adoptado aún como token de badge; usar badge.warning o badge.danger según semántica." },
+        "deepBlue": {
+          "$type": "color",
+          "$value": "#2E3192",
+          "$description": "⚠️ PROPUESTO en PDF — NO adoptado como brand principal. El brand blue sigue siendo #557EFF. Cambiar el brand a #2E3192 requiere decisión explícita del Líder Técnico y afecta CTAs, títulos, activos y tokens en cascada. Documentado aquí para trazabilidad; NO usar como sustituto de #557EFF hasta aprobación formal."
+        }
+      }
     }
   },
 
@@ -135,14 +156,14 @@
     },
     "badge": {
       "success": {
-        "bg": { "$type": "color", "$value": "rgba(0, 219, 213, 0.18)" },
-        "fg": { "$type": "color", "$value": "#5EEAD4" },
-        "border": { "$type": "color", "$value": "rgba(0, 219, 213, 0.35)" }
+        "bg": { "$type": "color", "$value": "rgba(140, 198, 63, 0.22)", "$description": "Verde oscuro tintado. PDF 20 ago / prototipo Lovable OK dark." },
+        "fg": { "$type": "color", "$value": "#B8E986", "$description": "Verde claro legible sobre fondo oscuro." },
+        "border": { "$type": "color", "$value": "rgba(140, 198, 63, 0.45)" }
       },
       "warning": {
-        "bg": { "$type": "color", "$value": "rgba(245, 158, 11, 0.20)" },
+        "bg": { "$type": "color", "$value": "rgba(249, 172, 0, 0.20)", "$description": "#F9AC00 familia dark." },
         "fg": { "$type": "color", "$value": "#FBBF24" },
-        "border": { "$type": "color", "$value": "rgba(245, 158, 11, 0.40)" }
+        "border": { "$type": "color", "$value": "rgba(249, 172, 0, 0.40)" }
       },
       "danger": {
         "bg": { "$type": "color", "$value": "rgba(255, 78, 0, 0.20)" },
@@ -245,7 +266,16 @@
     "button": {
       "radius": { "$type": "dimension", "$value": "999px", "$description": "CTA primario: pastilla degradada. Los CTA rectangulares planos son desviación." },
       "height": { "$type": "dimension", "$value": "56px" },
-      "paddingInline": { "$type": "dimension", "$value": "32px" }
+      "paddingInline": { "$type": "dimension", "$value": "32px" },
+      "primaryGradient": {
+        "$description": "CTA de AVANCE/CIERRE (Continuar, Radicar, Finalizar): usa gradient.primary (#557EFF→#00DBD5) o gradient.success (#00DBD5→#8CC63F). NUNCA usar en botones de consulta.",
+        "background": { "$type": "gradient", "$value": "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)" }
+      },
+      "consultSolid": {
+        "$description": "Botones de CONSULTA (Consultar RUNT, Consultar RUES, Buscar, Actualizar consulta): azul pleno sólido SIN degradado. PDF 20 ago + prototipo Lovable. Implementar como style={{ background: '#557EFF' }} + clase Tailwind bg-[#557EFF] para evitar que un degradado residual gane por HMR/CSS cascade.",
+        "background": { "$type": "color", "$value": "#557EFF", "$description": "Sólido. Sin degradado." },
+        "tailwindClass": { "$type": "string", "$value": "bg-[#557EFF]", "$description": "Añadir SIEMPRE junto al style inline para prevenir override por degradado residual." }
+      }
     },
     "input": {
       "height": { "$type": "dimension", "$value": "48px" },

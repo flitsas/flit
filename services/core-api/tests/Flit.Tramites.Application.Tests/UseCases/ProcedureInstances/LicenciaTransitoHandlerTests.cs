@@ -62,12 +62,12 @@ public sealed class LicenciaTransitoHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000300",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -354,7 +354,6 @@ public sealed class LicenciaTransitoHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
         var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
-        instance.TipologiaCodigo = Flit.Tramites.Domain.Tramites.Catalog.TramiteTipologiaCatalog.CodigoMatriculaInicial;
         await AddPdf(instance, "factura");
         await AddPdf(instance, "aduana");
         await AddPdf(instance, "impronta");

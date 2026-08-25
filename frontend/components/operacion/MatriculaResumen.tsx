@@ -144,7 +144,7 @@ export function ResumenCard({
   className?: string;
 }) {
   return (
-    <section aria-label={title} className={`${WIZARD_CARD} ${className}`}>
+    <section aria-label={title} className={`${WIZARD_CARD} h-full ${className}`}>
       <div className="mb-3 flex items-center gap-2">
         <span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
         <WizardCardHeader title={title} level="h4" className="" />
@@ -761,7 +761,7 @@ export default function MatriculaResumen({
           ocupa la primera celda y Comprador la segunda, sin `col-span`; en traspaso Vendedor
           acompaña a Vehículo en la primera fila y Comprador cae debajo, en el flujo natural de la
           rejilla — «misma rejilla, mismo orden, mismos sitios» en las dos modalidades. */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch">
         <ResumenCard title="Vehículo">
           {placa ? (
             <div className="mb-3 flex flex-wrap items-center gap-3">

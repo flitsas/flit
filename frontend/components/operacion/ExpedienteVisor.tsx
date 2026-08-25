@@ -94,8 +94,14 @@ function VisorCard({
     <section aria-label={title} className={WIZARD_CARD}>
       <div className="mb-3 flex items-center gap-2">
         <span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
-        <WizardCardHeader title={title} subtitle={subtitle} action={action} className="" />
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+          <h3 className="text-[15px] font-bold leading-snug" style={{ color: INK_BLUE }}>
+            {title}
+          </h3>
+          {action}
+        </div>
       </div>
+      {subtitle && <p className="mb-3 text-xs opacity-70">{subtitle}</p>}
       {children}
     </section>
   );
@@ -241,7 +247,20 @@ function DocumentosCargadosCard({
         // Rejilla (propuesta, «Documentos cargados»): sigue siendo una lista semántica, la rejilla es
         // solo el `className` — `<ul>`/`<li>` no cambian.
         <ul
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          // PDF 20-agosto: 6 docs → 6 columnas en el visor del expediente (paso 5).
+          className={`grid gap-3 ${
+            checklist.length === 1
+              ? 'grid-cols-1'
+              : checklist.length === 2
+                ? 'grid-cols-1 sm:grid-cols-2'
+                : checklist.length <= 3
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                  : checklist.length === 4
+                    ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+                    : checklist.length === 6
+                      ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+                      : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+          }`}
           aria-label="Documentos del expediente (visor)"
         >
           {checklist.map((item) => (

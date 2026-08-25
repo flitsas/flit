@@ -21,7 +21,7 @@ import {
   type OtOperationalPanel,
 } from "@/lib/api/ot-metrics";
 import { DrilldownPanel, type DrilldownState } from "./DrilldownPanel";
-import { EmpresaSelect, ModalidadSelect, defaultRange } from "./filters";
+import { EmpresaSelect, FamiliaSelect, defaultRange } from "./filters";
 import { formatHours } from "./report-columns";
 import { Bar, Bucket, Empty, ErrorNotice, PrimaryButton, Section, SubTitle, Tile } from "./shared";
 
@@ -34,7 +34,7 @@ export interface OtNowTabProps {
 }
 
 export function OtNowTab({ transitOfficeId, companies }: OtNowTabProps) {
-  const [modalidad, setModalidad] = useState("");
+  const [familia, setFamilia] = useState("");
   const [clientTenantId, setClientTenantId] = useState("");
   const [panel, setPanel] = useState<OtOperationalPanel | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,11 +46,11 @@ export function OtNowTab({ transitOfficeId, companies }: OtNowTabProps) {
     return {
       from: range.from,
       to: range.to,
-      modalidad: modalidad || undefined,
+      family: familia || undefined,
       clientTenantId: clientTenantId || undefined,
       transitOfficeId,
     };
-  }, [modalidad, clientTenantId, transitOfficeId]);
+  }, [familia, clientTenantId, transitOfficeId]);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -97,7 +97,7 @@ export function OtNowTab({ transitOfficeId, companies }: OtNowTabProps) {
         hint="Esta pestaña no lleva rango de fechas: siempre enseña el estado de este momento."
       >
         <div className="flex flex-wrap items-end gap-3">
-          <ModalidadSelect value={modalidad} onChange={setModalidad} />
+          <FamiliaSelect value={familia} onChange={setFamilia} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Cargando…" : "Actualizar"}

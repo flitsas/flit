@@ -48,7 +48,7 @@ export interface OtClientProcedure {
   referenceNumber: string;
   status: string;
   /** `matricula_inicial` | `traspaso`. Determina qué causales de rechazo ofrece el modal. */
-  modalidadEntrada?: string;
+  familia?: string;
   /**
    * Sub-estado interno de la ruta de placa (null | preasignado | asignado | terminado),
    * ortogonal al status (que permanece en 'entregado').

@@ -76,13 +76,13 @@ public sealed class GetOtRejectionReasonsHandler(
             .GetRejectionReasonsAsync(otTenantId, filter, transitOfficeIdOverride, cancellationToken)
             .ConfigureAwait(false);
 
-        if (result is null || string.IsNullOrWhiteSpace(filter.Modalidad))
+        if (result is null || string.IsNullOrWhiteSpace(filter.Familia))
         {
             return result;
         }
 
         var vigentes = await catalog
-            .ListAsync(filter.Modalidad, includeInactive: false, cancellationToken)
+            .ListAsync(filter.Familia, includeInactive: false, cancellationToken)
             .ConfigureAwait(false);
 
         var presentes = result.Causales.Select(c => c.ReasonId).ToHashSet();

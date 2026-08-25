@@ -269,7 +269,8 @@ public sealed class DocumentTypeHandlerTests
         await using (var seed = NewContext(db))
         {
             seed.DocumentTypes.Add(new DocumentType { Id = docId, Code = "RUT", Name = "Doc", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
-            seed.ProcedureTypes.Add(new ProcedureType { Id = procId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+            seed.ProcedureTypes.Add(new ProcedureType {
+            Family = "MATRICULAS", Id = procId, Code = "traspaso", Name = "Traspaso", IsActive = true });
             seed.ProcedureDocumentRequirements.Add(new ProcedureDocumentRequirement
             {
                 Id = Guid.NewGuid(),
@@ -288,7 +289,7 @@ public sealed class DocumentTypeHandlerTests
 
         result.Outcome.Should().Be(DeleteDocumentTypeOutcome.HasAssociations);
         result.Associations.Should().ContainSingle();
-        result.Associations[0].Codigo.Should().Be("TRASPASO");
+        result.Associations[0].Codigo.Should().Be("traspaso");
         result.Associations[0].Nombre.Should().Be("Traspaso");
     }
 

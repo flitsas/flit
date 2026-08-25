@@ -38,6 +38,8 @@ internal sealed class ProcedureStateChangeEmailEnqueueNotifier(
 
         var instance = await db.ProcedureInstances
             .AsNoTracking()
+            // ADR-0050 — el proyector del correo decide por la familia del tipo.
+            .Include(i => i.ProcedureType)
             .Include(i => i.Actors)
             .Include(i => i.Participants)
             .FirstOrDefaultAsync(

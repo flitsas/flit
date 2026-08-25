@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { RefreshCw, Star } from 'lucide-react';
-import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
+import { FAMILIA_OPCIONES } from '@/lib/api/types/familia-labels';
 
 /**
  * Barra de tipo de trámite del listado (Track A). Tabs con subrayado por modalidad + slot de
@@ -10,13 +11,14 @@ import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
  * actualizar), en el estilo de la pantalla principal de trámites. El filtro por estado vive en la
  * tira de KPIs (EstadoFunnel). Es presentacional.
  *
- * Nota: el diseño dibuja además una pestaña "Otros trámites". No se incluye porque hoy
- * `WizardModalidad` solo tiene matrícula inicial y traspaso: una pestaña que no filtra
- * nada sería un control muerto. Entra cuando exista la modalidad en el backend.
+ * ADR-0050 — las pestañas son las tres FAMILIAS del catálogo. La de "Otros trámites" llevaba
+ * dibujada en el diseño desde el principio y no se incluía porque no existía como modalidad: los
+ * trámites de esa familia se mezclaban con las matrículas y no había forma de filtrarlos.
  */
 interface Props {
-  modalidad: '' | WizardModalidad;
-  onModalidadChange: (v: '' | WizardModalidad) => void;
+  /** Familia seleccionada; cadena vacía = todas. */
+  modalidad: '' | ProcedureFamily;
+  onModalidadChange: (v: '' | ProcedureFamily) => void;
   onRefresh: () => void;
   loading?: boolean;
   /** ¿Hay algún filtro activo (búsqueda/modalidad/estado/compañía)? Lo calcula el contenedor. */
@@ -29,10 +31,9 @@ interface Props {
   actions?: ReactNode;
 }
 
-const MODALIDAD_TABS: { value: '' | WizardModalidad; label: string }[] = [
+const MODALIDAD_TABS: { value: '' | ProcedureFamily; label: string }[] = [
   { value: '', label: 'Todos' },
-  { value: 'matricula_inicial', label: 'Matrícula inicial' },
-  { value: 'traspaso', label: 'Traspaso' },
+  ...FAMILIA_OPCIONES,
 ];
 
 export function TramitesListToolbar({

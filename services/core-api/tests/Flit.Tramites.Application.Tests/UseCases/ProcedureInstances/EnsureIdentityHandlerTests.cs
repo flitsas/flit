@@ -396,11 +396,11 @@ public sealed class EnsureIdentityHandlerTests
 
     private static ProcedureInstance MatriculaConComprador() => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
         Id = Guid.NewGuid(),
         TenantId = TenantId,
         ReferenceNumber = "TRM-2026-000100",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
         CreatedAt = DateTimeOffset.UtcNow,
         Actors =
         {

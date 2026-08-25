@@ -18,8 +18,8 @@ public sealed class OtClientProcedureResponse
 
     public string Status { get; init; } = string.Empty;
 
-    /// <summary>Modalidad (matricula_inicial | traspaso): determina qué causales de rechazo aplican.</summary>
-    public string ModalidadEntrada { get; init; } = string.Empty;
+    /// <summary>Familia del tipo (MATRICULAS | TRASPASO | OTROS): determina qué causales de rechazo aplican.</summary>
+    public string Familia { get; init; } = string.Empty;
 
     /// <summary>Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado).</summary>
     public string? PlateFlowStatus { get; init; }
@@ -127,7 +127,7 @@ internal static class OtClientProcedureMapper
             ClientTenantName = procedure.ClientTenantName,
             ReferenceNumber = procedure.ReferenceNumber,
             Status = procedure.Status,
-            ModalidadEntrada = procedure.ModalidadEntrada,
+            Familia = procedure.Familia,
             PlateFlowStatus = procedure.PlateFlowStatus,
             SoatEstado = procedure.SoatEstado,
             PlatePreferredLastDigit = procedure.PlatePreferredLastDigit,

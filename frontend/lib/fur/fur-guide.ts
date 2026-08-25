@@ -128,6 +128,11 @@ export function buildFurGuide(input: FurGuideInput): FurGuideResult {
     observaciones.push("Regrabación de motor: {MOTOR}. Regrabación de chasis: {CHASIS}.");
   }
 
+  // El blindaje SÍ tiene texto automático: la casilla del formulario es un SÍ/NO y no distingue el
+  // nivel instalado ni el desmonte, así que el detalle solo cabe en el párrafo 23.
+  const blindaje = input.blindaje || code.includes("BLINDAJE");
+  if (blindaje) observaciones.push("BLINDAJE NIVEL {NIVEL} — o DESMONTE DE BLINDAJE.");
+
   const notas: string[] = [];
   if (prendaInscribe) {
     notas.push("Numeral 20: marcar LIM. PROPIEDAD y escribir el acreedor en A FAVOR DE.");
@@ -135,8 +140,10 @@ export function buildFurGuide(input: FurGuideInput): FurGuideResult {
   if (prendaLevanta) {
     notas.push("Numeral 20: marcar OTRO y escribir el acreedor en A FAVOR DE.");
   }
-  if (input.blindaje || code.includes("BLINDAJE")) {
-    notas.push("Vehículo blindado: SI (características, no casilla del numeral 3).");
+  if (blindaje) {
+    notas.push(
+      "Vehículo blindado: SI con nivel 1/2/3, NO con desmonte (características, no casilla del numeral 3).",
+    );
   }
   if (code === "TRASPASO_UNILATERAL") {
     notas.push("El locatario / comprador no firma (art. 5.3.2.2).");

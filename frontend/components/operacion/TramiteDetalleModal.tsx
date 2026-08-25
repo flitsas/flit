@@ -39,6 +39,7 @@ import type {
   ProcedureInstanceDetail,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 /**
  * Frente C, etapa 1 — armazón del modal de detalle del trámite (cabecera + tarjeta de vehículo +
@@ -56,9 +57,10 @@ import type {
 const BLUE = '#557EFF';
 const NAVY = '#162744';
 
-const MODALIDAD_TITLE: Record<WizardModalidad, string> = {
-  matricula_inicial: 'Detalle de matrícula inicial',
-  traspaso: 'Detalle de traspaso',
+const MODALIDAD_TITLE: Record<ProcedureFamily, string> = {
+  OTROS: 'Otros trámites',
+  MATRICULAS: 'Detalle de matrícula inicial',
+  TRASPASO: 'Detalle de traspaso',
 };
 
 type SeccionId = 'vehiculo' | 'actores' | 'documentos' | 'comercial' | 'expediente';
@@ -78,17 +80,24 @@ type SeccionId = 'vehiculo' | 'actores' | 'documentos' | 'comercial' | 'expedien
  * construcción y lo único que varía es dónde está el expediente, que es el último paso.
  */
 const PASOS_POR_MODALIDAD: Record<
-  WizardModalidad,
+  ProcedureFamily,
   { id: SeccionId; label: string; Icon: typeof Clock }[]
 > = {
-  traspaso: [
+  TRASPASO: [
     { id: 'vehiculo', label: 'Trámite y vehículo', Icon: FileText },
     { id: 'actores', label: 'Actores y validación', Icon: Users },
     { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
     { id: 'comercial', label: 'Datos comerciales', Icon: Coins },
     { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
   ],
-  matricula_inicial: [
+  MATRICULAS: [
+    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: FileText },
+    { id: 'actores', label: 'Comprador y rep. legal', Icon: Users },
+    { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
+    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+  ],
+  // OTROS: mismo recorrido que matrículas —un solo titular, sin datos comerciales—.
+  OTROS: [
     { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: FileText },
     { id: 'actores', label: 'Comprador y rep. legal', Icon: Users },
     { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
@@ -197,10 +206,17 @@ export function TramiteDetalleModal({
     };
   }, [open, instanceId, tenantId, attReloadKey]);
 
-  const title = item ? MODALIDAD_TITLE[item.modalidad] : 'Detalle del trámite';
+  // ADR-0050 — en OTROS el título dice CUÁL trámite es. «Otros trámites» agrupa quince tipos, así
+  // que rotulaba igual un blindaje que un levantamiento de prenda; la familia sí identifica una
+  // matrícula o un traspaso. Sin nombre de tipo (expediente de un backend anterior), cae a la familia.
+  const title = !item
+    ? 'Detalle del trámite'
+    : item.modalidad === 'OTROS' && item.tipoNombre?.trim()
+      ? `Detalle de ${item.tipoNombre.trim().toLocaleLowerCase('es')}`
+      : MODALIDAD_TITLE[item.modalidad];
   // La matrícula inicial tiene CUATRO pasos y el traspaso cinco: es la secuencia de la norma, no
   // una simplificación (la matrícula no tiene datos comerciales).
-  const pasos = item ? PASOS_POR_MODALIDAD[item.modalidad] : PASOS_POR_MODALIDAD.traspaso;
+  const pasos = item ? PASOS_POR_MODALIDAD[item.modalidad] : PASOS_POR_MODALIDAD.TRASPASO;
   // El paso por defecto («expediente») existe en las dos modalidades, así que el índice siempre
   // resuelve; el `Math.max` solo cubre un id que dejara de existir en un cambio futuro.
   const pasoActivoIndex = Math.max(

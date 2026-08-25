@@ -33,6 +33,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId: () => null,
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => false,
+  isVehicleBodyTypeMissing: () => false,
 }));
 
 // El NIT del tenant sale del JWT; sin él no hay con qué precargar ni qué bloquear.
@@ -81,7 +82,8 @@ function configConPolitica(onlyOwnVehicles: boolean) {
 
 function renderTraspaso() {
   return render(
-    <TramiteWizard modalidad="traspaso" title="Traspaso" onCreated={() => {}} onExit={() => {}} />,
+    <TramiteWizard procedureTypeCode="TRASPASO_STANDARD"
+        family="TRASPASO" title="Traspaso" onCreated={() => {}} onExit={() => {}} />,
   );
 }
 
@@ -96,7 +98,7 @@ describe('FEATURE 02 — el propietario queda fijo cuando la compañía solo tra
     renderTraspaso();
 
     const numero = (await screen.findByLabelText(
-      'Número documento propietario',
+      'Número documento del propietario',
     )) as HTMLInputElement;
 
     // Se normaliza quitando separadores; el dígito de verificación se conserva
@@ -110,7 +112,7 @@ describe('FEATURE 02 — el propietario queda fijo cuando la compañía solo tra
     renderTraspaso();
 
     const numero = (await screen.findByLabelText(
-      'Número documento propietario',
+      'Número documento del propietario',
     )) as HTMLInputElement;
     await waitFor(() => expect(numero).toHaveValue('9001234567'));
 
@@ -145,7 +147,7 @@ describe('FEATURE 02 — el propietario queda fijo cuando la compañía solo tra
     renderTraspaso();
 
     const numero = (await screen.findByLabelText(
-      'Número documento propietario',
+      'Número documento del propietario',
     )) as HTMLInputElement;
 
     expect(numero).not.toHaveAttribute('readonly');

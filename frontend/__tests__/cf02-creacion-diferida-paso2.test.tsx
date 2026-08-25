@@ -35,6 +35,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId: () => null,
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => false,
+  isVehicleBodyTypeMissing: () => false,
 }));
 
 vi.mock('@/components/admin/Toast', () => ({
@@ -58,8 +59,9 @@ import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 
 // Esqueleto que devuelve GET /wizard-preview: paso 1 abierto, el resto bloqueado.
 const PREVIEW_MATRICULA: WizardState = {
-  modalidad: 'matricula_inicial',
-  tipologiaCodigo: 'matricula_inicial',
+  // ADR-0050 — el estado trae la FAMILIA en `modalidad` y el `code` canónico en `tipologiaCodigo`.
+  modalidad: 'MATRICULAS',
+  tipologiaCodigo: 'MATRICULA_NUEVA',
   totalSteps: 5,
   canSubmit: false,
   blockers: [],
@@ -101,7 +103,7 @@ const SECRETARIAS = [
 
 /** Deja el paso 1 listo para consultar: VIN escrito. */
 async function prepararConsulta(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+  await user.type(await screen.findByLabelText(/Ingrese el VIN o la placa/i), VIN_VALIDO);
 }
 
 /**
@@ -117,7 +119,8 @@ async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
 function renderNuevaMatricula() {
   return render(
     <TramiteWizard
-      modalidad="matricula_inicial"
+      procedureTypeCode="MATRICULA_NUEVA"
+        family="MATRICULAS"
       title="Matrícula inicial"
       onCreated={(summary) => routerReplace(`/tramites/${summary.id}?t=${summary.tenantId}`)}
       onExit={() => {}}
@@ -168,7 +171,11 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
 
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
     expect(mocks.runPreflightPreview).toHaveBeenCalledWith(
-      expect.objectContaining({ modalidad: 'matricula_inicial', vin: VIN_VALIDO }),
+      expect.objectContaining({
+        modalidad: 'MATRICULAS',
+        procedureTypeCode: 'MATRICULA_NUEVA',
+        vin: VIN_VALIDO,
+      }),
     );
     expect(mocks.createInstanceFromConsulta).not.toHaveBeenCalled();
     // El resultado de la consulta se pinta igual que con trámite creado.
@@ -264,7 +271,9 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalledTimes(1));
     expect(mocks.createInstanceFromConsulta).toHaveBeenCalledWith(
       expect.objectContaining({
-        modalidad: 'matricula_inicial',
+        modalidad: 'MATRICULAS',
+        // ADR-0050 — el `code` es lo que decide QUÉ trámite se crea; la familia solo el bloqueo.
+        procedureTypeCode: 'MATRICULA_NUEVA',
         vin: VIN_VALIDO,
         previewToken: 'token-abc',
       }),
@@ -341,7 +350,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
       expect(screen.getByRole('button', { name: /Continuar/ })).not.toBeDisabled(),
     );
 
-    await user.type(screen.getByLabelText('Número VIN'), '9');
+    await user.type(screen.getByLabelText(/Ingrese el VIN o la placa/i), '9');
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled());
     expect(mocks.createInstanceFromConsulta).not.toHaveBeenCalled();

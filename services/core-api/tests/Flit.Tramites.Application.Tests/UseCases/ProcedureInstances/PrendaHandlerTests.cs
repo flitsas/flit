@@ -53,6 +53,7 @@ public sealed class PrendaHandlerTests
         _instances.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(new ProcedureInstance
             {
+                ProcedureType = ProcedureTypeFixture.Matricula,
                 Id = id,
                 TenantId = tenantId,
                 ProcedureTypeId = Guid.NewGuid(),

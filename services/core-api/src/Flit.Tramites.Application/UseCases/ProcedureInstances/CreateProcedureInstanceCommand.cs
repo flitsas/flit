@@ -46,8 +46,12 @@ public sealed class CreateProcedureInstanceHandler(
     private static readonly Dictionary<string, string> ModalidadToCanonicalCode =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            [TramiteModalidadEntradaCodes.MatriculaInicial] = "MATRICULA_NUEVA",
-            [TramiteModalidadEntradaCodes.Traspaso] = "TRASPASO_STANDARD",
+            [ProcedureFamilyCodes.Matriculas] = "MATRICULA_NUEVA",
+            [ProcedureFamilyCodes.Traspaso] = "TRASPASO_STANDARD",
+            // PUENTE TEMPORAL — el cliente todavía envía la modalidad. Se retira cuando pase a
+            // enviar procedureTypeCode (HU del selector familia → tipo).
+            ["matricula_inicial"] = "MATRICULA_NUEVA",
+            ["traspaso"] = "TRASPASO_STANDARD",
         };
 
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
@@ -91,6 +95,14 @@ public sealed class CreateProcedureInstanceHandler(
                 return (null, "modalidad_not_available");
         }
 
+        // ADR-0050 — barrera de operación del tipo. Publicado significa que existe en el catálogo;
+        // habilitado, que su recorrido ya se puede recorrer. Sin este corte la barrera era solo un
+        // filtro del selector: cualquier llamada directa —ICT, una integración, un enlace guardado—
+        // podía abrir un trámite de un tipo a medio parametrizar, y el gestor se encontraba con un
+        // asistente vacío y bloqueado en vez de con un rechazo que dice por qué.
+        if (!procedureType.WizardEnabled)
+            return (null, "procedure_type_not_enabled");
+
         // Compañía puede bloquear creación por familia (config admin → Trámites).
         var familyGate = familyCreationGate ?? new NullProcedureFamilyCreationGate();
         if (await familyGate.IsFamilyBlockedAsync(request.TenantId, procedureType.Family, ct))
@@ -110,19 +122,17 @@ public sealed class CreateProcedureInstanceHandler(
         var now = DateTimeOffset.UtcNow;
         var year = now.Year;
 
-        // Slice 4b: deriva modalidad/tipología desde la familia del tipo elegido para que el
-        // wizard y el gating de documentos apliquen la modalidad correcta en runtime.
-        var (modalidad, tipologia) = TipologiaResolver.FromFamily(procedureType.Family);
-
         var instance = new ProcedureInstance
         {
             Id = Guid.NewGuid(),
             TenantId = request.TenantId,
             ProcedureTypeId = procedureType.Id,
+            // ADR-0050 — la instancia recién creada no viene del repositorio, así que hay que darle
+            // la navegación al tipo aquí: de ella dependen Family/TypeCode/TypeName, que los pasos
+            // posteriores de la creación (snapshot, field values, preflight) ya consultan.
+            ProcedureType = procedureType,
             ReferenceNumber = string.Empty, // generado de forma resiliente en el repo (retry ante colisión)
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             TransitOfficeId = request.TransitOfficeId,
             CreatedByUserId = request.CreatedByUserId,
             // ICT — correlación idempotente (null para trámites de plataforma). Van en el MISMO INSERT

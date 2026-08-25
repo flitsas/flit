@@ -147,7 +147,7 @@ const DRILLDOWN: OtDrilldown = {
       clientTenantId: "t1",
       clientTenantName: "Flota Andina S.A.S.",
       status: "aprobado",
-      modalidadEntrada: "matricula_inicial",
+      familia: "MATRICULAS",
       prioritario: false,
       diasEsperando: 1.5,
     },
@@ -159,7 +159,7 @@ const DRILLDOWN: OtDrilldown = {
       clientTenantId: "t1",
       clientTenantName: "Flota Andina S.A.S.",
       status: "rechazado",
-      modalidadEntrada: "matricula_inicial",
+      familia: "MATRICULAS",
       prioritario: true,
       diasEsperando: null,
     },
@@ -211,7 +211,7 @@ const REPORT: OtReport = {
       vin: "9BWZZZ377VT004251",
       clientTenantId: "c1",
       clientTenantName: "Distribuidora del Valle S.A.S.",
-      modalidad: "matricula_inicial",
+      familia: "MATRICULAS",
       status: "aprobado",
       estadoOt: "aprobado",
       prioritario: false,
@@ -232,7 +232,7 @@ const REPORT: OtReport = {
       vin: null,
       clientTenantId: "c2",
       clientTenantName: "Comercializadora Andina Ltda.",
-      modalidad: "traspaso",
+      familia: "TRASPASO",
       status: "rechazado",
       estadoOt: "en_subsanacion",
       prioritario: true,
@@ -892,3 +892,36 @@ describe("Excel del informe", () => {
     expect([bytes[0], bytes[1], bytes[2], bytes[3]]).toEqual([0x50, 0x4b, 0x03, 0x04]);
   });
 });
+
+// ── Filtro por familia ────────────────────────────────────────────────────────
+
+describe("Reportes del organismo — filtro por familia", () => {
+  // El selector ofrecía «Matrícula inicial» y «Traspaso», valores de un vocabulario que ADR-0050
+  // eliminó, contra una consulta que compara con `procedure_types.family`. Ninguno coincidía: elegir
+  // una opción vaciaba el informe sin decir por qué. Y faltaba «Otros», donde viven diecisiete de
+  // los veintiún tipos del catálogo.
+  it("ofrece las tres familias del catálogo", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    const select = await screen.findByLabelText("Familia");
+    const opciones = within(select).getAllByRole("option").map((o) => o.textContent);
+
+    expect(opciones).toEqual(["Todas las familias", "Matrículas", "Traspaso", "Otros trámites"]);
+  });
+
+  it("envía el código de familia que la consulta sabe comparar", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Informe/);
+
+    await user.selectOptions(await screen.findByLabelText("Familia"), "MATRICULAS");
+
+    await waitFor(() =>
+      expect(mocks.fetchOtReport).toHaveBeenCalledWith(
+        expect.objectContaining({ family: "MATRICULAS" }),
+        expect.anything(),
+      ),
+    );
+  });
+});
+

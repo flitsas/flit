@@ -16,6 +16,11 @@ public sealed class PreviewDocumentosInformativosHandler
     private const string CodigoProcedureMatricula = "MATRICULA_NUEVA";
     private const string CodigoProcedureTraspaso = "TRASPASO_STANDARD";
 
+    /// <summary>
+    /// PUENTE TEMPORAL — el cliente todavía pide la guía de documentos por modalidad. Desde ADR-0050
+    /// cualquier `code` del catálogo se acepta tal cual, así que la guía existe para los 21 tipos y
+    /// no solo para estos dos; el diccionario solo traduce los valores heredados.
+    /// </summary>
     private static readonly Dictionary<string, string> ModalidadToCanonicalCode =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -42,11 +47,18 @@ public sealed class PreviewDocumentosInformativosHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        if (string.IsNullOrWhiteSpace(query.Modalidad)
-            || !ModalidadToCanonicalCode.TryGetValue(query.Modalidad.Trim(), out var procedureCode))
+        if (string.IsNullOrWhiteSpace(query.Modalidad))
         {
             return PreviewDocumentosInformativosResult.ModalidadInvalida();
         }
+
+        // ADR-0050 — se acepta cualquier `code` del catálogo, no solo los dos que el diccionario
+        // traducía: la guía de documentos existe para los 21 tipos. Los valores heredados de
+        // modalidad siguen resolviéndose mientras el cliente los envíe.
+        var solicitado = query.Modalidad.Trim();
+        var procedureCode = ModalidadToCanonicalCode.TryGetValue(solicitado, out var canonico)
+            ? canonico
+            : solicitado.ToUpperInvariant();
 
         var catalog = await _procedureTypes
             .ListActivePublishedAsync(cancellationToken)

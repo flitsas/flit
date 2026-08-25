@@ -13,6 +13,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -117,13 +118,12 @@ public sealed class FurHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string tipologia) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? (tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial")),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial",
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -482,6 +482,96 @@ public sealed class FurHandlerTests
 
         error.Should().BeNull();
         capturing.Captured!.Transformaciones.Should().Be(default(FurTransformacionesDeclaradas));
+    }
+
+    // ── Blindaje: nivel y desmonte ───────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("NIVEL_1", "BLINDAJE NIVEL 1.")]
+    [InlineData("NIVEL_2", "BLINDAJE NIVEL 2.")]
+    [InlineData("NIVEL_3", "BLINDAJE NIVEL 3.")]
+    public async Task Generar_Blindaje_DeclaraElNivelYMarcaBlindadoSi(string opcion, string esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarBlindaje(ct, (BlindajeOpciones.FieldKey, opcion));
+
+        capturing.Captured!.Observaciones.Should().Be(esperado);
+        capturing.Captured.Transformaciones.Blindaje.Should().BeTrue(
+            "los tres niveles dejan el vehículo blindado");
+    }
+
+    [Fact]
+    public async Task Generar_Desmonte_DeclaraElRetiroYMarcaBlindadoNo()
+    {
+        // Es el caso que la casilla sola no puede expresar: cae en NO igual que un vehículo que nunca
+        // estuvo blindado, así que sin la observación el FUR no dice que hubo trámite.
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarBlindaje(ct, (BlindajeOpciones.FieldKey, "DESMONTE"));
+
+        capturing.Captured!.Observaciones.Should().Be("DESMONTE DE BLINDAJE.");
+        capturing.Captured.Transformaciones.Blindaje.Should().BeFalse(
+            "el desmonte deja el vehículo SIN blindaje, aunque el trámite sea un blindaje");
+    }
+
+    [Fact]
+    public async Task Generar_BlindajeSinOpcion_MarcaLaCasillaPeroNoInventaElTexto()
+    {
+        // Borrador abierto antes de que la opción existiera: el tipo basta para el SI, pero escribir
+        // un nivel por defecto declararía ante el organismo un blindaje que nadie eligió.
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarBlindaje(ct);
+
+        capturing.Captured!.Observaciones.Should().BeNull();
+        capturing.Captured.Transformaciones.Blindaje.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Generar_NivelResidualEnUnTipoQueNoEsBlindaje_NoSeImprime()
+    {
+        // Mismo criterio que las otras tres capas (ADR-0050): un valor persistido que el tipo no lleva
+        // no debe llegar al documento.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.ProcedureType = ProcedureTypeFixture.CambioColor;
+        WithOrganismo(instance);
+        AddFieldValue(instance, BlindajeOpciones.FieldKey, "NIVEL_3");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Observaciones.Should().NotContain("BLINDAJE NIVEL");
+        capturing.Captured.Transformaciones.Blindaje.Should().BeFalse();
+    }
+
+    /// <summary>Genera el FUR de un trámite del tipo <c>BLINDAJE</c> con los field_values indicados.</summary>
+    private async Task<CapturingFurGenerator> GenerarBlindaje(
+        CancellationToken ct, params (string Key, string Value)[] fieldValues)
+    {
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.ProcedureType = ProcedureTypeFixture.Blindaje;
+        WithOrganismo(instance);
+        foreach (var (key, value) in fieldValues)
+            AddFieldValue(instance, key, value);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        return capturing;
     }
 
     /// <summary>Generador FUR que captura el <see cref="FurDocumentData"/> ensamblado para aserciones.</summary>

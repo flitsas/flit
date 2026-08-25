@@ -28,12 +28,13 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("borrador");
 
         // Rework trámites (Slice 1)
-        builder.Property(x => x.ModalidadEntrada)
-            .HasColumnName("modalidad_entrada")
-            .HasMaxLength(20).IsRequired().HasDefaultValue("matricula_inicial");
-        builder.Property(x => x.TipologiaCodigo)
-            .HasColumnName("tipologia_codigo")
-            .HasMaxLength(40);
+        // ADR-0050 — clasificación derivada del tipo: se calcula desde la navegación
+        // ProcedureType, no son columnas.
+        builder.Ignore(x => x.Family);
+        builder.Ignore(x => x.TypeCode);
+        builder.Ignore(x => x.TypeName);
+        builder.Ignore(x => x.FamilyCode);
+
         builder.Property(x => x.ChecklistEstado)
             .HasColumnName("checklist_estado")
             .HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");

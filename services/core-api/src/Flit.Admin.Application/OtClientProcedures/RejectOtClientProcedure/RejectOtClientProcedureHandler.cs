@@ -70,7 +70,7 @@ public sealed class RejectOtClientProcedureHandler
             return RejectOtClientProcedureResult.InvalidState();
         }
 
-        // Causales del catálogo: se validan contra la modalidad del trámite y su estado activo. Una
+        // Causales del catálogo: se validan contra la familia del tipo y su estado activo. Una
         // causal ajena o retirada devuelve 422 en vez de descartarse en silencio — descartarla
         // dejaría al revisor creyendo que la registró, y al reporte sin ese motivo.
         var requestedReasonIds = command.Request.RejectionReasonIds?
@@ -82,7 +82,7 @@ public sealed class RejectOtClientProcedureHandler
         if (requestedReasonIds.Count > 0)
         {
             reasonIds = await _rejectionReasons
-                .FilterValidIdsAsync(requestedReasonIds, existing.ModalidadEntrada, cancellationToken)
+                .FilterValidIdsAsync(requestedReasonIds, existing.Familia, cancellationToken)
                 .ConfigureAwait(false);
 
             if (reasonIds.Count != requestedReasonIds.Count)
@@ -90,7 +90,7 @@ public sealed class RejectOtClientProcedureHandler
                 return RejectOtClientProcedureResult.ValidationFailed(
                     new FieldError(
                         "rejectionReasonIds",
-                        "Alguna causal no existe, está retirada o no corresponde a la modalidad del trámite."));
+                        "Alguna causal no existe, está retirada o no corresponde a la familia del trámite."));
             }
         }
 

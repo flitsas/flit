@@ -25,11 +25,13 @@ public sealed class RejectionReason
     public string Description { get; set; } = string.Empty;
 
     /// <summary>
-    /// Modalidad a la que aplica (<c>matricula_inicial</c> | <c>traspaso</c>). Las causales no son
+    /// Familia a la que aplica (ADR-0050: <c>MATRICULAS</c> | <c>TRASPASO</c> | <c>OTROS</c>).
+    /// Antes eran las dos modalidades, así que no había forma de parametrizar causales propias de
+    /// prenda, blindaje o duplicados. Las causales no son
     /// intercambiables: «manifiesto de aduana» no aplica a un traspaso ni «escritura del vendedor»
     /// a una matrícula inicial.
     /// </summary>
-    public string Modalidad { get; set; } = string.Empty;
+    public string Family { get; set; } = string.Empty;
 
     /// <summary>Orden de presentación en el modal de rechazo.</summary>
     public int SortOrder { get; set; }

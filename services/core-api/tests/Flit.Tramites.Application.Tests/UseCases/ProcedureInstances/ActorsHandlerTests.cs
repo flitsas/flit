@@ -62,13 +62,12 @@ public sealed class ActorsHandlerTests
         string? tipologia = null) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

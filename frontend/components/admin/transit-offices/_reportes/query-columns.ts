@@ -17,11 +17,7 @@ import {
   type DataColumn,
 } from "@/components/consultas/columns";
 import { estadoMeta, formatDate, formatDateTime, formatHours, formatInt } from "./report-columns";
-
-const MODALIDAD_LABEL: Record<string, string> = {
-  matricula_inicial: "Matrícula inicial",
-  traspaso: "Traspaso",
-};
+import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 const TRANSFORMACION_LABEL: Record<string, string> = {
   cambio_color: "Color",
@@ -79,7 +75,7 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     id: "tipo_tramite",
     label: "Tipo de trámite",
     group: "Identificación",
-    value: (r) => MODALIDAD_LABEL[r.modalidad] ?? r.modalidad,
+    value: (r) => familiaLabel(r.modalidad),
     width: 16,
     defaultVisible: true,
   },

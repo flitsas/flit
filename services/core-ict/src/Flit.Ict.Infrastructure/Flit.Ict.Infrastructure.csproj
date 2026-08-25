@@ -11,6 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Ict.Application.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Flit.Ict.Domain\Flit.Ict.Domain.csproj" />
     <ProjectReference Include="..\Flit.Ict.Application\Flit.Ict.Application.csproj" />
     <ProjectReference Include="..\Flit.Ict.Grpc.Contracts\Flit.Ict.Grpc.Contracts.csproj" />

@@ -69,7 +69,7 @@ public static class FurPreviewSample
     {
         var f = (family ?? string.Empty).Trim().ToUpperInvariant();
         var c = (code ?? string.Empty).Trim().ToUpperInvariant();
-        return f == ProcedureFamily.Traspaso || c.Contains("TRASPASO", StringComparison.Ordinal);
+        return f == ProcedureFamilyCodes.Traspaso || c.Contains("TRASPASO", StringComparison.Ordinal);
     }
 
     public static bool TryParsePrenda(string? raw, out FurPrendaMarking? marking)

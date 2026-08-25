@@ -50,6 +50,7 @@ public sealed class RunConsultationHandlerCacheTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -380,6 +381,7 @@ public sealed class RunConsultationHandlerCacheTests
         var tenantId = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

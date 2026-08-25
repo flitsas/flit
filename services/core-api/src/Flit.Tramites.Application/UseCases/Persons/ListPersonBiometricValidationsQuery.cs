@@ -102,7 +102,7 @@ public sealed class ListPersonBiometricValidationsHandler(IProcedureInstanceRepo
         {
             ProcedureInstanceId = v.ProcedureInstanceId,
             ReferenceNumber = v.ProcedureInstance?.ReferenceNumber,
-            Modalidad = v.ProcedureInstance?.ModalidadEntrada,
+            Modalidad = (v.ProcedureInstance != null && v.ProcedureInstance.ProcedureType != null ? v.ProcedureInstance.ProcedureType.Family : ""),
             LinkedProcedures = linkedOthers,
         };
     }

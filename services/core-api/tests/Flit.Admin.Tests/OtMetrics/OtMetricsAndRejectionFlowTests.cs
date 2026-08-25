@@ -90,7 +90,7 @@ public sealed class OtMetricsAndRejectionFlowTests
             SeedScope(seed);
             // El trámite es de matrícula inicial (modalidad por defecto del seed).
             SeedProcedure(seed, instanceId, TramiteEstado.Entregado);
-            causalDeTraspaso = SeedReason(seed, "soat_no_vigente", "SOAT no vigente", "traspaso");
+            causalDeTraspaso = SeedReason(seed, "soat_no_vigente", "SOAT no vigente", "TRASPASO");
         }
 
         await using var ctx = NewContext(db);
@@ -473,6 +473,7 @@ public sealed class OtMetricsAndRejectionFlowTests
         });
         ctx.ProcedureTypes.Add(new ProcedureType
         {
+            Family = "MATRICULAS",
             Id = ProcedureType,
             Code = "MATRICULA_NUEVA",
             Name = "Matrícula inicial",
@@ -489,7 +490,7 @@ public sealed class OtMetricsAndRejectionFlowTests
         string? plateFlowStatus = null,
         bool isPaused = false,
         bool prioritario = false,
-        string modalidad = "matricula_inicial")
+        string modalidad = "MATRICULAS")
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
@@ -498,7 +499,6 @@ public sealed class OtMetricsAndRejectionFlowTests
             ProcedureTypeId = ProcedureType,
             ReferenceNumber = reference,
             Status = status,
-            ModalidadEntrada = modalidad,
             PlateFlowStatus = plateFlowStatus,
             IsPaused = isPaused,
             Prioritario = prioritario,
@@ -513,14 +513,14 @@ public sealed class OtMetricsAndRejectionFlowTests
         FlitDbContext ctx,
         string code,
         string description,
-        string modalidad = "matricula_inicial")
+        string modalidad = "MATRICULAS")
     {
         var entity = new Flit.Infrastructure.Persistence.Entities.Catalogs.RejectionReason
         {
             Id = Guid.NewGuid(),
             Code = code,
             Description = description,
-            Modalidad = modalidad,
+            Family = modalidad,
             SortOrder = 10,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

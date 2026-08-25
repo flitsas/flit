@@ -21,7 +21,7 @@ public sealed class RejectionReasonsTests
         var handler = new CreateRejectionReasonHandler(new RejectionReasonRepository(ctx));
 
         var result = await handler.HandleAsync(
-            new CreateRejectionReasonRequest("SOAT No Vigente", "SOAT no vigente", "traspaso", null),
+            new CreateRejectionReasonRequest("SOAT No Vigente", "SOAT no vigente", "TRASPASO", null),
             null,
             TestContext.Current.CancellationToken);
 
@@ -39,10 +39,10 @@ public sealed class RejectionReasonsTests
         var ct = TestContext.Current.CancellationToken;
 
         await handler.HandleAsync(
-            new CreateRejectionReasonRequest("soat_no_vigente", "SOAT no vigente", "traspaso", null), null, ct);
+            new CreateRejectionReasonRequest("soat_no_vigente", "SOAT no vigente", "TRASPASO", null), null, ct);
 
         var duplicate = await handler.HandleAsync(
-            new CreateRejectionReasonRequest("SOAT no vigente", "Otra cosa", "traspaso", null), null, ct);
+            new CreateRejectionReasonRequest("SOAT no vigente", "Otra cosa", "TRASPASO", null), null, ct);
 
         duplicate.Outcome.Should().Be(RejectionReasonOutcome.ValidationFailed);
         duplicate.Error.Should().Contain("soat_no_vigente");
@@ -71,13 +71,13 @@ public sealed class RejectionReasonsTests
         var repo = new RejectionReasonRepository(ctx);
         var ct = TestContext.Current.CancellationToken;
 
-        var created = await repo.CreateAsync("improntas", "Improntas", "matricula_inicial", 10, null, ct);
+        var created = await repo.CreateAsync("improntas", "Improntas", "MATRICULAS", 10, null, ct);
         await new SetRejectionReasonActiveHandler(repo).HandleAsync(created.Id, false, null, ct);
 
         var activas = await new ListRejectionReasonsHandler(repo)
-            .HandleAsync("matricula_inicial", includeInactive: false, ct);
+            .HandleAsync("MATRICULAS", includeInactive: false, ct);
         var todas = await new ListRejectionReasonsHandler(repo)
-            .HandleAsync("matricula_inicial", includeInactive: true, ct);
+            .HandleAsync("MATRICULAS", includeInactive: true, ct);
 
         activas.Should().BeEmpty();
         todas.Should().ContainSingle().Which.IsActive.Should().BeFalse();
@@ -91,10 +91,10 @@ public sealed class RejectionReasonsTests
         var repo = new RejectionReasonRepository(ctx);
         var ct = TestContext.Current.CancellationToken;
 
-        await repo.CreateAsync("manifiesto_aduana", "Manifiesto de aduana", "matricula_inicial", 10, null, ct);
-        await repo.CreateAsync("soat_no_vigente", "SOAT no vigente", "traspaso", 10, null, ct);
+        await repo.CreateAsync("manifiesto_aduana", "Manifiesto de aduana", "MATRICULAS", 10, null, ct);
+        await repo.CreateAsync("soat_no_vigente", "SOAT no vigente", "TRASPASO", 10, null, ct);
 
-        var traspaso = await new ListRejectionReasonsHandler(repo).HandleAsync("traspaso", false, ct);
+        var traspaso = await new ListRejectionReasonsHandler(repo).HandleAsync("TRASPASO", false, ct);
 
         traspaso.Should().ContainSingle().Which.Description.Should().Be("SOAT no vigente");
     }
@@ -107,13 +107,13 @@ public sealed class RejectionReasonsTests
         var repo = new RejectionReasonRepository(ctx);
         var ct = TestContext.Current.CancellationToken;
 
-        var valida = await repo.CreateAsync("soat_no_vigente", "SOAT no vigente", "traspaso", 10, null, ct);
-        var otraModalidad = await repo.CreateAsync("improntas", "Improntas", "matricula_inicial", 10, null, ct);
-        var retirada = await repo.CreateAsync("impuestos", "Impuestos", "traspaso", 20, null, ct);
+        var valida = await repo.CreateAsync("soat_no_vigente", "SOAT no vigente", "TRASPASO", 10, null, ct);
+        var otraModalidad = await repo.CreateAsync("improntas", "Improntas", "MATRICULAS", 10, null, ct);
+        var retirada = await repo.CreateAsync("impuestos", "Impuestos", "TRASPASO", 20, null, ct);
         await repo.SetActiveAsync(retirada.Id, false, null, ct);
 
         var validas = await repo.FilterValidIdsAsync(
-            [valida.Id, otraModalidad.Id, retirada.Id], "traspaso", ct);
+            [valida.Id, otraModalidad.Id, retirada.Id], "TRASPASO", ct);
 
         validas.Should().BeEquivalentTo([valida.Id]);
     }

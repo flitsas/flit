@@ -305,13 +305,13 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         });
         db.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = InstanceId,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "DSP-1",
             Status = "aprobado",
             Plate = "ABC123",
-            ModalidadEntrada = "matricula_inicial",
             CreatedByUserId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow,
             Actors =
@@ -416,7 +416,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
                 Id = oldReasonId,
                 Code = "OLD",
                 Description = oldEvent.Causal,
-                Modalidad = "matricula_inicial",
+                Family = "MATRICULAS",
                 SortOrder = 1,
                 IsActive = true,
                 CreatedAt = now,
@@ -453,7 +453,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
                 Id = reasonId,
                 Code = $"NEW{i}",
                 Description = latest.Causales[i],
-                Modalidad = "matricula_inicial",
+                Family = "MATRICULAS",
                 SortOrder = 10 + i,
                 IsActive = true,
                 CreatedAt = now,

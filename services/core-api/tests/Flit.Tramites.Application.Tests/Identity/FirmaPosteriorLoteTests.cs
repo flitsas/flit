@@ -213,6 +213,7 @@ public sealed class FirmaPosteriorLoteTests
         var id = Guid.NewGuid();
         _repo.GetByIdAsync(id, Tenant, Arg.Any<CancellationToken>()).Returns(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = Tenant,
             ProcedureTypeId = Guid.NewGuid(),
@@ -220,7 +221,6 @@ public sealed class FirmaPosteriorLoteTests
             Status = status,
             SubsanacionActiva = subsanacion,
             // Matrícula: el camino de firma pasa por el FUR, no por la compraventa.
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         });
         return id;

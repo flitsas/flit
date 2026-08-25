@@ -174,12 +174,12 @@ public sealed class PreflightPreviewHandlerTests
         var tenant = Guid.NewGuid();
         var instance = new Flit.Tramites.Domain.Entities.ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "MAT-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.FieldValues.Add(new Flit.Tramites.Domain.Entities.ProcedureInstanceFieldValue

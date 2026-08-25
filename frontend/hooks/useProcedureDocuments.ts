@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useRevalidateOnFocus } from './useRevalidateOnFocus';
 import type {
   ChecklistView,
   DocumentOcrResult,
@@ -207,30 +208,57 @@ export function useProcedureDocuments(
   // instancia; en la modalidad VIN-first el paso de documentos viene después de consultar/persistir el VIN.
   const vinRef = useRef<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!instanceId) return;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const [checklist, attachments] = await Promise.all([
-        tramitesClient.getChecklist(instanceId, tenantId),
-        tramitesClient.getAttachments(instanceId, tenantId),
-      ]);
-      setState((s) => ({ ...s, checklist, attachments, loading: false }));
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : 'Error al cargar los documentos',
-      }));
-    }
-  }, [instanceId, tenantId]);
+  // Marca de refresco en vuelo: al volver a la pestaña pueden llegar `focus` y `visibilitychange`
+  // casi a la vez, y sin esto se pedirían dos checklists para la misma vuelta.
+  const refrescandoRef = useRef(false);
+
+  /**
+   * Relee checklist y adjuntos.
+   *
+   * En segundo plano (`background`) NO toca `loading` ni `error`: se dispara sola al recuperar el
+   * foco, y poner la vista en «cargando» o pintar un error mientras el gestor está capturando sería
+   * peor que el dato viejo que viene a corregir. Si falla, se conserva lo que ya está en pantalla.
+   */
+  const refresh = useCallback(
+    async (opts?: { background?: boolean }) => {
+      if (!instanceId) return;
+      if (refrescandoRef.current) return;
+      refrescandoRef.current = true;
+      if (!opts?.background) setState((s) => ({ ...s, loading: true, error: null }));
+      try {
+        const [checklist, attachments] = await Promise.all([
+          tramitesClient.getChecklist(instanceId, tenantId),
+          tramitesClient.getAttachments(instanceId, tenantId),
+        ]);
+        setState((s) => ({ ...s, checklist, attachments, loading: false }));
+      } catch (err) {
+        if (opts?.background) return;
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Error al cargar los documentos',
+        }));
+      } finally {
+        refrescandoRef.current = false;
+      }
+    },
+    [instanceId, tenantId],
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Un documento dado de alta en Documental mientras esta pantalla estaba abierta no llegaba hasta
+  // reabrir el trámite: sin casilla donde cargarlo y sin frenar el paso. Al volver a la pestaña se
+  // relee el checklist, que es donde el servidor ya declara el requisito nuevo.
+  const revalidarEnFoco = useCallback(() => {
+    void refresh({ background: true });
+  }, [refresh]);
+  useRevalidateOnFocus(revalidarEnFoco, Boolean(instanceId));
 
   // Lee el VIN de la instancia (best-effort; su fallo no bloquea el checklist).
   useEffect(() => {

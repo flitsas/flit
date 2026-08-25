@@ -22,8 +22,20 @@ export const WIZARD_INPUT =
   'aria-[invalid=true]:border-[#FF4E00] ' +
   'disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]';
 
-/** Igual que el campo de texto, para `<select>` nativos. */
-export const WIZARD_SELECT = WIZARD_INPUT;
+/**
+ * `<select>` nativo. Igual que el campo de texto, PERO con `[color-scheme:light]` forzado para
+ * que el dropdown nativo use tema claro en cualquier sistema operativo — sin esto, en OS con tema
+ * oscuro activado, el popup del `<select>` queda con fondo negro y texto negro, ilegible.
+ * También añade `hover:border-[#557EFF]` (señal de foco pre-click) y elimina
+ * `dark:bg-[#162744]` (el fondo oscuro del OS ya está cubierto por color-scheme:light en la caja).
+ */
+export const WIZARD_SELECT =
+  'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition ' +
+  'focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 ' +
+  'hover:border-[#557EFF] ' +
+  'aria-[invalid=true]:border-[#FF4E00] ' +
+  'disabled:cursor-not-allowed disabled:opacity-60 ' +
+  '[color-scheme:light]';
 
 /**
  * Etiqueta sobre el campo. 12px es el piso tipográfico del sistema.
@@ -49,7 +61,7 @@ export const WIZARD_CARD = 'rounded-2xl border bg-white p-4 dark:bg-[#162744]';
  * segundo botón a `px-5 py-2`/12px en 6 de las 8 ramas del footer, que quedó unificado a este.
  *
  * NO trae un `focus-visible:ring-[hex]` por defecto a propósito: el pie combina botones de tono
- * distinto (el CTA azul, "Cancelar trámite" en rojo, "Anterior" en navy) y dos utilidades
+ * distinto (el CTA azul, "Anular trámite" en rojo, "Anterior" en navy) y dos utilidades
  * `ring-color` con el mismo valor arbitrary-value en el mismo elemento no tienen un orden de
  * cascada garantizado por el nombre de la clase en Tailwind 4 (depende del orden de generación del
  * CSS, no del orden en el `className`). Cada uso de `WIZARD_BTN` DEBE declarar su propio
@@ -58,6 +70,13 @@ export const WIZARD_CARD = 'rounded-2xl border bg-white p-4 dark:bg-[#162744]';
 export const WIZARD_BTN =
   'h-11 w-auto rounded-xl px-6 text-[13px] font-semibold transition ' +
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2';
+
+/**
+ * Azul pleno de marca para botones de **consulta** (Consultar RUNT / RUES / Buscar).
+ * PDF anotaciones + prototipo Lovable: estos botones son `#557EFF` sólido, SIN degradado.
+ * El degradado (`WIZARD_CTA_GRADIENT`) queda reservado a CTAs de avance/cierre (Continuar, Radicar).
+ */
+export const WIZARD_BTN_SOLID = '#557EFF';
 
 /**
  * Degradado del CTA primario del asistente: token FLIT `gradient.primary` (azul→cian), el mismo

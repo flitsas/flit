@@ -29,6 +29,9 @@ public static class DocumentLabels
         ["factura"] = "Factura",
         ["aduana"] = "Declaración de importación",
         ["cedulas"] = "Documentos de identidad",
+        // Sin curar caería a «Certificado blindaje», que es lo que ya se leía en el pie del
+        // consolidado cuando el certificado viajaba como «Otro documento».
+        ["certificado_blindaje"] = "Certificado de blindaje",
     };
 
     public static string Display(string? tipo)

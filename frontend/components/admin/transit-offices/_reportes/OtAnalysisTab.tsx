@@ -21,7 +21,7 @@ import {
 import {
   DateRangeFields,
   EmpresaSelect,
-  ModalidadSelect,
+  FamiliaSelect,
   RangePresets,
   defaultRange,
   type DateRange,
@@ -35,7 +35,7 @@ export interface OtAnalysisTabProps {
 
 export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps) {
   const [range, setRange] = useState<DateRange>(() => defaultRange());
-  const [modalidad, setModalidad] = useState("");
+  const [familia, setFamilia] = useState("");
   const [clientTenantId, setClientTenantId] = useState("");
 
   const [performance, setPerformance] = useState<OtPerformance | null>(null);
@@ -49,7 +49,7 @@ export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps
     const params: OtMetricsParams = {
       from: range.from,
       to: range.to,
-      modalidad: modalidad || undefined,
+      family: familia || undefined,
       clientTenantId: clientTenantId || undefined,
       transitOfficeId,
     };
@@ -66,7 +66,7 @@ export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps
     } finally {
       setBusy(false);
     }
-  }, [range.from, range.to, modalidad, clientTenantId, transitOfficeId]);
+  }, [range.from, range.to, familia, clientTenantId, transitOfficeId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: patrón del repo, skeleton inmediato antes del fetch
@@ -83,7 +83,7 @@ export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps
         <RangePresets range={range} onChange={setRange} />
         <div className="flex flex-wrap items-end gap-3">
           <DateRangeFields range={range} onChange={setRange} />
-          <ModalidadSelect value={modalidad} onChange={setModalidad} />
+          <FamiliaSelect value={familia} onChange={setFamilia} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Cargando…" : "Actualizar"}

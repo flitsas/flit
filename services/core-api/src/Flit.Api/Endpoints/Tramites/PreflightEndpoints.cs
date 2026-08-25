@@ -48,6 +48,17 @@ internal static class PreflightEndpoints
                         ["vehicleStatus"] = vehicleState?.VehicleStatus,
                         ["procedureType"] = vehicleState?.ProcedureType,
                     }),
+                // Cambio de carrocería sobre un vehículo que el RUNT no reporta con ninguna: no hay
+                // atributo que sustituir. Bloqueo DURO, no subsanable — lo que corresponde es otro
+                // tipo de trámite, no completar este.
+                VehicleBodyTypePolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleBodyTypePolicy.ErrorCode,
+                    detail: "El vehículo no tiene carrocería registrada en el RUNT: no es posible radicar un cambio de carrocería.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["procedureType"] = VehicleBodyTypePolicy.ProcedureTypeCambioCarroceria,
+                    }),
                 _ => Results.Ok(result),
             };
         }).WithName("RunProcedureInstancePreflight");

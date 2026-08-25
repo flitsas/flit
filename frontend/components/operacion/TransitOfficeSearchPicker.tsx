@@ -125,8 +125,8 @@ export function TransitOfficeSearchPicker({
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border bg-white p-1 dark:bg-[#162744]"
-          style={{ boxShadow: '0 8px 24px rgba(15,23,20,0.12)' }}
+          className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border bg-white p-1 dark:bg-[#162744]"
+          style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.12)' }}
         >
           <ul id={listId} role="listbox" aria-label="Organismos de tránsito">
             {loading && (

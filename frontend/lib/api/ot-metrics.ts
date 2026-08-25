@@ -11,7 +11,10 @@ const reasonsBase = "/api/v1/admin/rejection-reasons";
 export interface OtMetricsParams {
   from: string;
   to: string;
-  modalidad?: string;
+  /** Familia del tipo: MATRICULAS | TRASPASO | OTROS. */
+  family?: string;
+  /** Tipo concreto, para bajar de la familia al trámite. */
+  procedureTypeId?: string;
   clientTenantId?: string;
   /** Override de SuperAdmin para ver el reporte de un organismo concreto. */
   transitOfficeId?: string;
@@ -137,7 +140,7 @@ export interface OtDrilldownItem {
   clientTenantId: string;
   clientTenantName: string;
   status: string;
-  modalidadEntrada: string | null;
+  familia: string | null;
   prioritario: boolean;
   diasEsperando: number | null;
 }
@@ -226,7 +229,7 @@ export interface OtReportRow {
   vin: string | null;
   clientTenantId: string;
   clientTenantName: string;
-  modalidad: string;
+  familia: string;
   status: string;
   estadoOt: string;
   prioritario: boolean;
@@ -274,7 +277,8 @@ export interface OtReportParams extends OtMetricsParams {
 
 function toQuery(params: OtMetricsParams): Record<string, string> {
   const query: Record<string, string> = { from: params.from, to: params.to };
-  if (params.modalidad) query.modalidad = params.modalidad;
+  if (params.family) query.family = params.family;
+  if (params.procedureTypeId) query.procedureTypeId = params.procedureTypeId;
   if (params.clientTenantId) query.clientTenantId = params.clientTenantId;
   if (params.transitOfficeId) query.transitOfficeId = params.transitOfficeId;
   return query;
@@ -328,11 +332,11 @@ export function fetchOtClientCompanies(
 // ── Catálogo de causales ────────────────────────────────────────────────────────
 
 export function fetchRejectionReasons(options?: {
-  modalidad?: string;
+  family?: string;
   includeInactive?: boolean;
 }): Promise<RejectionReason[]> {
   const query: Record<string, string> = {};
-  if (options?.modalidad) query.modalidad = options.modalidad;
+  if (options?.family) query.family = options.family;
   if (options?.includeInactive) query.includeInactive = "true";
   return apiFetch<RejectionReason[]>(reasonsBase, { query });
 }

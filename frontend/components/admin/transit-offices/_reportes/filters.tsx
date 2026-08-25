@@ -8,15 +8,19 @@
 // de lo que de verdad gobierna.
 
 import type { OtClientCompanyOption } from "@/lib/api/ot-metrics";
+import { FAMILIA_OPCIONES } from "@/lib/api/types/familia-labels";
 import { FIELD_CLS } from "./shared";
 
-// En pantalla esto se llama «tipo de trámite», que es como lo nombra quien opera el organismo.
-// `modalidad` sobrevive como nombre del campo porque así viaja en la API y así se llama en la
-// base; renombrarlo ahí sería tocar medio dominio de trámites para no cambiar nada visible.
-export const MODALIDADES = [
-  { value: "", label: "Todos los trámites" },
-  { value: "matricula_inicial", label: "Matrícula inicial" },
-  { value: "traspaso", label: "Traspaso" },
+// En pantalla esto se llama «familia», que es como el gestor elige al crear el trámite.
+//
+// Las opciones eran `matricula_inicial` y `traspaso`, de un vocabulario que ADR-0050 eliminó,
+// mientras la consulta del backend comparaba contra `procedure_types.family` (MATRICULAS /
+// TRASPASO / OTROS). Ningún valor coincidía: filtrar por «Matrícula inicial» devolvía cero filas
+// y el informe se veía vacío sin explicar por qué. Además faltaba OTROS, donde viven diecisiete
+// de los veintiún tipos del catálogo.
+export const FAMILIAS = [
+  { value: "", label: "Todas las familias" },
+  ...FAMILIA_OPCIONES,
 ];
 
 export interface DateRange {
@@ -145,7 +149,7 @@ export function DateRangeFields({
   );
 }
 
-export function ModalidadSelect({
+export function FamiliaSelect({
   value,
   onChange,
 }: {
@@ -154,9 +158,9 @@ export function ModalidadSelect({
 }) {
   return (
     <label className="flex flex-col gap-1 text-xs font-semibold">
-      Tipo de trámite
+      Familia
       <select value={value} onChange={(e) => onChange(e.target.value)} className={FIELD_CLS}>
-        {MODALIDADES.map((m) => (
+        {FAMILIAS.map((m) => (
           <option key={m.value} value={m.value}>
             {m.label}
           </option>

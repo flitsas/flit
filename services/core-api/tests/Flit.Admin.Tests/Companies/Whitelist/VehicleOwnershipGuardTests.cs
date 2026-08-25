@@ -4,6 +4,7 @@ using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
 using FluentAssertions;
 using Xunit;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Admin.Tests.Companies.Whitelist;
 
@@ -159,7 +160,7 @@ public sealed class VehicleOwnershipGuardTests
         };
 
         var context = new VehicleOwnershipCheckContext(
-            TenantId, "VIN123", "operador@empresa.com", policy, "MATRICULAS");
+            TenantId, "VIN123", "operador@empresa.com", policy, ProcedureFamilyCodes.Matriculas);
 
         var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
 
@@ -187,7 +188,7 @@ public sealed class VehicleOwnershipGuardTests
         };
 
         var context = new VehicleOwnershipCheckContext(
-            TenantId, "ABC123", "operador@empresa.com", policy, "TRASPASO");
+            TenantId, "ABC123", "operador@empresa.com", policy, ProcedureFamilyCodes.Traspaso);
 
         var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
 

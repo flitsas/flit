@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -43,8 +44,8 @@ public sealed class TramiteFirmaAplicador(
             return ("mandato", mandatoError);
         }
 
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-            == TramiteModalidadEntrada.Traspaso;
+        var esTraspaso = instance.Family
+            == ProcedureFamily.Traspaso;
 
         if (esTraspaso)
         {

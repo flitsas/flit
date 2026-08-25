@@ -25,7 +25,31 @@ casillas numeral 3 = (tabla 1: tipo base)
 - **No duplicar.** Si el tipo base ya es `PRENDA_INSCRIPCION`, no vuelvas a aplicar la tabla 2. Si ya es `CAMBIO_COLOR`, no vuelvas a aplicar color en la tabla 3.
 - La casilla **1** es solo matrícula/registro. Un trámite de «otros» aislado **no** lleva 1.
 - La casilla **2** es solo familia Traspaso.
-- Varios trámites del mismo vehículo se acumulan (art. 5.1.8).
+- Varios trámites del mismo vehículo se acumulan (art. 5.1.8) **solo en las familias que acumulan**: ver el punto siguiente.
+
+### La familia OTROS no acumula (ADR-0050)
+
+Acumular es privilegio de `MATRICULAS` y `TRASPASO`. En la familia `OTROS` **las tablas 2 y 3 no se aplican**: el FUR lleva únicamente la capa del tipo base.
+
+```
+familia MATRICULAS | TRASPASO → tabla 1 ∪ tabla 2 ∪ tabla 3
+familia OTROS                 → tabla 1   (y nada más)
+```
+
+Motivo de producto: en OTROS el cambio o el gravamen **es** el trámite, no un añadido. Un `CAMBIO_COLOR` con una prenda y un blindaje encima no es un cambio de color con extras — son tres trámites distintos, y el organismo devuelve el FUR que los mezcla.
+
+Única excepción, y no es una excepción real: cuando el tipo base **es** de prenda (`PRENDA_INSCRIPCION`, `LEVANTAMIENTO_PRENDA`, `LEVANTAR_INSCRIBIR_PRENDA`, `CAMBIO_ACREEDOR`), su decisión de gravamen sí marca las casillas 11/12 — porque ahí la prenda no es la tabla 2, es la tabla 1. Por eso `CAMBIO_ACREEDOR`, cuya casilla base es la **18**, sigue marcando 11/12 desde su propia decisión.
+
+Dónde vive la regla (no reimplementarla suelta):
+
+| Pieza | Ruta |
+|-------|------|
+| Declaración por tipo | `tramites.procedure_types.gate_profile` → `allowsComplementaryTransformations`, `allowsComplementaryPrenda` (DDL `87-otros-sin-complementarios.sql`) |
+| Resolución perfil → familia | `ProcedureTypeGateProfile.ComplementaryTransformationsAllowed` / `ComplementaryPrendaAllowed` |
+| Qué capa es del tipo | `ProcedureTypeLayers.EsTipoPrendaBase` / `TransformacionDelTipo` |
+| Casillas | `FurNumeral3Marks.Resolve` (recibe la familia en `modalidad`) |
+
+**La llave ausente no es `false`**: significa «lo que diga la familia». Un perfil grabado antes del DDL 87 —o un snapshot ya congelado— resuelve igual, sin perder los simultáneos de un traspaso en curso.
 
 ### Recuadro OBSERVACIONES (párrafo 23) — concatenar, no reemplazar
 
@@ -33,7 +57,7 @@ Varios bloques automáticos **se unen con un espacio**. Ninguno pisa al anterior
 
 Orden:
 
-1. Trámite de locatario (tabla 1: `MATRICULA_LEASING` / `TRASPASO_UNILATERAL`) — `FurTramiteObservation`
+1. Trámite de locatario (`MATRICULA_LEASING` y `TRASPASO_UNILATERAL` de tabla 1; `CAMBIO_LOCATARIO` de tabla 4) — `FurTramiteObservation`
 2. Gravamen (tabla 2 o tipo prenda) — `FurPrendaObservation`
 3. Transformaciones (tabla 3 o tipo cambio) — `FurTransformationObservations`
 4. Servicio + empresa vinculadora, **solo si hay razón social** — `FurServicioVinculadoraObservation`
@@ -82,8 +106,8 @@ Define `tramites.procedure_types.family` + `code`. Sin prenda ni transformacione
 | Otros | `DUPLICADO_PLACA` | Duplicado de placa | **15** Duplicado de placas | Sin bloque automático. |
 | Otros | `CAMBIO_CARROCERIA` | Cambio de carrocería | **17** Cambio de carrocería | Obligatoria: `Carroceria nueva(NUEVA CARROCERIA: {CARROCERIA_NUEVA})`. No sumar tabla 3. |
 | Otros | `CONVERSION_COMBUSTIBLE` | Conversiones de combustible | **18** Otros | Obligatoria: `COMBUSTIBLE_NUEVO: {COMBUSTIBLE_NUEVO}`. El blank no tiene casilla de combustible. |
-| Otros | `BLINDAJE` | Blindaje | Ninguna en numeral 3. Marcar **SI** vehículo blindado | Sin texto automático. El SI/NO es la declaración. |
-| Otros | `CAMBIO_LOCATARIO` | Cambio de locatario | **18** Otros | Recomendada: `CAMBIO DE LOCATARIO: {NOMBRE} - {DOC}.` FLIT aún no genera este bloque. Si el expediente es transferencia de dominio, usar `TRASPASO_TRANSFERENCIA_DE_DOMINIO` (casilla **2**). |
+| Otros | `BLINDAJE` | Blindaje | Ninguna en numeral 3. Marcar **SI** con nivel 1/2/3, **NO** con desmonte | Obligatoria: `BLINDAJE NIVEL 1.` / `BLINDAJE NIVEL 2.` / `BLINDAJE NIVEL 3.` / `DESMONTE DE BLINDAJE.` El trámite tiene cuatro opciones y la casilla es un SI/NO: sin este texto el formulario no distingue un nivel 1 de un nivel 3, y un desmonte sale idéntico a un vehículo que nunca estuvo blindado. Sin opción declarada NO se inventa el texto: sí casilla, no texto. El certificado de blindaje (`certificado_blindaje`) es obligatorio en las cuatro opciones. |
+| Otros | `CAMBIO_LOCATARIO` | Cambio de locatario | **18** Otros | Obligatoria: `CAMBIO DE LOCATARIO por Leasing de {PROPIETARIO} a {NOMBRE_LOCATARIO}, TIPO DE DOCUMENTO {TIPO_DOC_LOCATARIO}, NÚMERO DE DOCUMENTO {NUMERO_LOCATARIO}.` «Leasing de» es texto fijo, igual que en `MATRICULA_LEASING`; el propietario va solo con su nombre. Propietario y locatario son partes distintas y hacen falta las dos. Si el expediente es transferencia de dominio, usar `TRASPASO_TRANSFERENCIA_DE_DOMINIO` (casilla **2**). |
 | Otros | `CAMBIO_ACREEDOR` | Cambio acreedor *(inactivo)* | **18** Otros | Recomendada: `CAMBIO DE ACREEDOR PRENDARIO: {NOMBRE} - NIT {DOC}.` FLIT aún no genera este bloque. |
 
 Rótulos 6 (cambio de servicio) y 14 (cambio de placas) **no tienen tipo** en el catálogo. No marcarlos hasta que exista código + dictamen.
@@ -92,7 +116,7 @@ Rótulos 6 (cambio de servicio) y 14 (cambio de placas) **no tienen tipo** en el
 
 ## Tabla 2 — Prenda complementaria
 
-Se **suma** al tipo de la tabla 1 cuando el expediente trae gravamen (wizard / simulador). No aplica si el tipo base ya es una prenda.
+Se **suma** al tipo de la tabla 1 cuando el expediente trae gravamen (wizard / simulador). No aplica si el tipo base ya es una prenda, **ni en la familia OTROS** (ver «La familia OTROS no acumula»).
 
 | Tipo de acción | Debe marcar (numeral 3) | Observación — estructura |
 |----------------|-------------------------|--------------------------|
@@ -107,7 +131,7 @@ Constantes de código: `FurPrendaObservation.Etiqueta` y `EtiquetaLevantamiento`
 
 ## Tabla 3 — Transformaciones complementarias
 
-Se **suma** al tipo de la tabla 1 cuando el gestor activa transformaciones o hay diff RUNT vs efectivo. No duplicar si el tipo base ya es ese cambio.
+Se **suma** al tipo de la tabla 1 cuando el gestor activa transformaciones o hay diff RUNT vs efectivo. No duplicar si el tipo base ya es ese cambio, y **no aplica en la familia OTROS** (ver «La familia OTROS no acumula»): allí `CAMBIO_COLOR`, `CAMBIO_CARROCERIA`, `CONVERSION_COMBUSTIBLE` y `BLINDAJE` traen su atributo desde la tabla 1 y ningún otro se les puede añadir.
 
 El recuadro de características del vehículo conserva el dato **RUNT original**; observaciones declaran solo el valor **nuevo** (mayúsculas).
 
@@ -117,8 +141,8 @@ El recuadro de características del vehículo conserva el dato **RUNT original**
 | Cambio de color | **+5** | `Color nuevo(NUEVO COLOR: {COLOR_NUEVO})` |
 | Cambio de carrocería | **+17** | `Carroceria nueva(NUEVA CARROCERIA: {CARROCERIA_NUEVA})` |
 | Conversión de combustible | **+18** Otros | `COMBUSTIBLE_NUEVO: {COMBUSTIBLE_NUEVO}` |
-| Blindaje | No suma numeral 3. Marcar **SI** vehículo blindado | Sin texto automático en el párrafo 23. |
-| Varias a la vez | Unión de 5 y/o 17 y/o 18 (y SI blindado) | Orden fijo: color, carrocería, combustible. Ejemplo: `Color nuevo(NUEVO COLOR: MULTICOLOR CON AEROGRAFIAS) Carroceria nueva(NUEVA CARROCERIA: PICKUP) COMBUSTIBLE_NUEVO: DIESEL` |
+| Blindaje | No suma numeral 3. Marcar **SI** con nivel 1/2/3, **NO** con desmonte | `BLINDAJE NIVEL {1\|2\|3}.` o `DESMONTE DE BLINDAJE.` (ver tabla 1). |
+| Varias a la vez | Unión de 5 y/o 17 y/o 18 (y SI/NO blindado) | Orden fijo: color, carrocería, combustible, blindaje. Ejemplo: `Color nuevo(NUEVO COLOR: MULTICOLOR CON AEROGRAFIAS) Carroceria nueva(NUEVA CARROCERIA: PICKUP) COMBUSTIBLE_NUEVO: DIESEL` |
 
 ---
 

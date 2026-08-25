@@ -6,15 +6,15 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly } from '@/lib/format/currency';
 import { usePendingChanges } from './pending-changes';
 import { formatDateOnly } from '@/lib/format/date-only';
-import { InlineAlert } from '@/components/atom/InlineAlert';
+import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PrendaDocumentUpload } from './PrendaDocumentUpload';
 import { prendaDocTipoFor } from './prenda-document-tipos';
 import { blockerCopy } from './wizard-copy';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
-import { WizardCardHeader, WizardSegmented, WizardSelectCards } from './wizard-atoms';
+import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type PrendaFormHandle = WizardStepFormHandle;
@@ -39,6 +39,16 @@ const REQUIERE_DOCUMENTO: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>(
 const CAPTURA_ACREEDOR: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
   'solicitar',
   'registrar',
+]);
+
+/**
+ * Decisiones que muestran la sección de acreedor (PDF ajuste P0):
+ * `levantar` también la muestra, pero con los campos inhabilitados.
+ */
+const MUESTRA_ACREEDOR: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
+  'solicitar',
+  'registrar',
+  'levantar',
 ]);
 
 /** En matrícula la prenda es declarativa: registrar o sin prenda. */
@@ -188,6 +198,11 @@ function hasRuntAcreedorDetail(s: RuntPrendaSummary): boolean {
   return Boolean(s.prendario || s.nombreAcreedor || s.items.length > 0);
 }
 
+/** Hay detalle de acreedor en ítems: el resumen no debe repetir el mismo nombre. */
+function itemsHaveAcreedorDetail(s: RuntPrendaSummary): boolean {
+  return s.items.some((i) => Boolean(i.acreedor?.trim() || i.documentoAcreedor?.trim()));
+}
+
 /** Acreedor/NIT sugeridos por la consulta RUNT (primer ítem con dato, o campos resumen). */
 export function pickRuntAcreedor(
   summary: RuntPrendaSummary,
@@ -260,6 +275,13 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [runtOpen, setRuntOpen] = useState(false);
   const [docSatisfied, setDocSatisfied] = useState(false);
   const offersRegistrar = decisions.includes('registrar');
+  /**
+   * ADR-0050 — una sola decisión ofrecida: el tipo de trámite YA la eligió (inscribir prenda,
+   * levantar prenda). No se pinta un control con una única opción que el gestor tenga que marcar
+   * para poder seguir: se afirma lo que va a pasar y se pide lo que sí hay que capturar (acreedor y
+   * certificado). Un selector de un solo valor es una pregunta cuya respuesta ya está dada.
+   */
+  const decisionFija = decisions.length === 1 ? decisions[0] : null;
 
   const applyRuntAcreedorIfEmpty = (
     summary: RuntPrendaSummary,
@@ -314,6 +336,11 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
           setAcreedorNombre(filled.nombre);
           setAcreedorDocumento(filled.documento);
         }
+        // Tipo con una sola decisión: se afirma aquí, en la carga, no en un effect síncrono. Si la
+        // carga ya trajo una decisión (persistida o sugerida por el RUNT), el updater la conserva.
+        if (decisionFija) {
+          setDecision((current) => (current === '' ? decisionFija : current));
+        }
       } catch {
         /* sin decisión previa: el form queda vacío */
       } finally {
@@ -331,9 +358,12 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       active = false;
     };
     // `pending` es estable (instancia única por montaje): no re-dispara la carga.
-  }, [instanceId, runtHasGravamen, offersRegistrar, pending]);
+  }, [instanceId, runtHasGravamen, offersRegistrar, pending, decisionFija]);
 
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
+  /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */
+  const muestraAcreedor = decision !== '' && MUESTRA_ACREEDOR.has(decision);
+  const acreedorReadOnly = decision === 'levantar';
   const requiereDocumento = decision !== '' && REQUIERE_DOCUMENTO.has(decision);
   const documentGateReady = !requiereDocumento || !documentRequired || docSatisfied;
 
@@ -450,12 +480,18 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               'El vehículo tiene gravámenes o prendas según el RUNT. Revisa y declara la decisión correspondiente.'}
           </InlineAlert>
 
-          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(245,158,11,0.35)' }}>
+          <div
+            className="overflow-hidden rounded-xl border"
+            style={{ borderColor: INLINE_ALERT_TONES.warning.border }}
+          >
             <button
               type="button"
               onClick={() => setRuntOpen((o) => !o)}
               className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-xs font-semibold"
-              style={{ background: 'rgba(245,158,11,0.08)', color: 'var(--badge-warning-fg)' }}
+              style={{
+                background: INLINE_ALERT_TONES.warning.background,
+                color: INLINE_ALERT_TONES.warning.color,
+              }}
               aria-expanded={runtOpen}
               aria-controls={runtDetailId}
             >
@@ -469,17 +505,23 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               <div
                 id={runtDetailId}
                 className="space-y-3 border-t px-3 py-3 text-xs"
-                style={{ borderColor: 'rgba(245,158,11,0.25)' }}
+                style={{ borderColor: INLINE_ALERT_TONES.warning.border }}
                 role="region"
                 aria-label="Detalle de prenda reportado por el RUNT"
               >
                 {showDetailRows ? (
                   <>
+                    {/* Flags sí/no: info única. Acreedor/prendario del resumen se omiten si ya
+                        vienen en los ítems (evita SUZUKI… tres veces: resumen + PRENDA 1 + form). */}
                     <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <RuntField label="Tiene gravámenes" value={summary.tieneGravamenes} />
                       <RuntField label="Tiene prendas" value={summary.tienePrendas} />
-                      <RuntField label="Prendario" value={summary.prendario} />
-                      <RuntField label="Acreedor (RUNT)" value={summary.nombreAcreedor} />
+                      {!itemsHaveAcreedorDetail(summary) && (
+                        <>
+                          <RuntField label="Prendario" value={summary.prendario} />
+                          <RuntField label="Acreedor (RUNT)" value={summary.nombreAcreedor} />
+                        </>
+                      )}
                     </dl>
 
                     {summary.items.length > 0 && (
@@ -540,8 +582,12 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
       {error && (
         <div
-          className="rounded-xl p-3 text-xs border mb-3 flex items-center justify-between gap-3"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          className="mb-3 flex items-center justify-between gap-3 rounded-xl border p-3 text-xs"
+          style={{
+            borderColor: INLINE_ALERT_TONES.error.border,
+            background: INLINE_ALERT_TONES.error.background,
+            color: INLINE_ALERT_TONES.error.color,
+          }}
           role="alert"
           aria-live="polite"
         >
@@ -562,94 +608,192 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
       <fieldset disabled={readOnly} className="contents">
         <div className="grid grid-cols-1 gap-4">
-          <div>
-            {/* Matrícula (2 opciones cortas) usa el segmentado; traspaso (3-4, con rótulos de hasta
-                42 caracteres como "Continuar sin gestionar (asumo el riesgo)") no cabe en una
-                pista y pasa a tarjetas de selección — la norma FLIT del "select tipo tarjeta". */}
-            {decisions.length > 2 ? (
-              <WizardSelectCards<PrendaDecision | ''>
-                label="¿Al vehículo se le asociará una prenda?"
-                name="prenda-decision"
-                value={decision}
-                onChange={handleDecisionChange}
-                disabled={readOnly}
-                options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
-              />
-            ) : (
-              <WizardSegmented<PrendaDecision | ''>
-                label="¿Al vehículo se le asociará una prenda?"
-                value={decision}
-                onChange={handleDecisionChange}
-                disabled={readOnly}
-                options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
-              />
-            )}
-          </div>
-
-          {capturaAcreedor && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="prenda-acreedor-nombre" className={REQUIRED_LABEL}>
-                  Acreedor (beneficiario)
-                  {/* Decorativo: el `required` del input ya lo anuncia el lector de pantalla; el
-                      asterisco visual no debe alterar el nombre accesible de la etiqueta. */}
-                  <span style={{ color: '#FF4E00' }} aria-hidden="true">*</span>
+          {/* PDF ajuste P0: traspaso → select + Acreedor + documento en la misma fila.
+              P1.10: PrendaDocumentUpload visualmente acoplado en la misma grilla (span-3). */}
+          {decisions.length > 2 ? (
+            <div className={`grid grid-cols-1 gap-4 ${muestraAcreedor ? 'md:grid-cols-3' : ''}`}>
+              <div className="min-w-0 md:self-end">
+                <label htmlFor="prenda-decision-select" className="text-xs font-semibold mb-1.5 block">
+                  ¿Al vehículo se le asociará una prenda?
                 </label>
-                <input
-                  id="prenda-acreedor-nombre"
-                  type="text"
-                  required
-                  value={acreedorNombre}
-                  onChange={(e) => {
-                    pending.markDirty();
-                    setAcreedorNombre(e.target.value);
-                    if (fieldErrors.nombre) setFieldErrors((f) => ({ ...f, nombre: undefined }));
-                  }}
-                  placeholder="Ej. Banco XYZ"
-                  className={INPUT_BASE}
-                  aria-invalid={!!fieldErrors.nombre}
-                  aria-describedby={fieldErrors.nombre ? 'prenda-acreedor-nombre-err' : undefined}
-                />
-                {fieldErrors.nombre && (
-                  <p id="prenda-acreedor-nombre-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
-                    {fieldErrors.nombre}
-                  </p>
-                )}
+                <select
+                  id="prenda-decision-select"
+                  value={decision}
+                  onChange={(e) => handleDecisionChange(e.target.value as PrendaDecision | '')}
+                  disabled={readOnly}
+                  className={`${WIZARD_SELECT} disabled:opacity-60`}
+                >
+                  <option value="">Seleccionar…</option>
+                  {decisions.map((d) => (
+                    <option key={d} value={d}>{PRENDA_DECISION_LABELS[d]}</option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <label htmlFor="prenda-acreedor-doc" className={REQUIRED_LABEL}>
-                  NIT / documento del acreedor
-                  {/* Decorativo: el `required` del input ya lo anuncia el lector de pantalla; el
-                      asterisco visual no debe alterar el nombre accesible de la etiqueta. */}
-                  <span style={{ color: '#FF4E00' }} aria-hidden="true">*</span>
-                </label>
-                <input
-                  id="prenda-acreedor-doc"
-                  type="text"
-                  required
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="off"
-                  value={acreedorDocumento}
-                  onChange={(e) => {
-                    pending.markDirty();
-                    setAcreedorDocumento(digitsOnly(e.target.value));
-                    if (fieldErrors.documento) setFieldErrors((f) => ({ ...f, documento: undefined }));
-                  }}
-                  className={INPUT_BASE}
-                  aria-invalid={!!fieldErrors.documento}
-                  aria-describedby={fieldErrors.documento ? 'prenda-acreedor-doc-err' : undefined}
-                />
-                {fieldErrors.documento && (
-                  <p id="prenda-acreedor-doc-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
-                    {fieldErrors.documento}
-                  </p>
-                )}
-              </div>
+              {muestraAcreedor && (
+                <>
+                  <div className="min-w-0 md:self-end">
+                    <label htmlFor="prenda-acreedor-nombre" className="text-xs font-semibold mb-1.5 block">
+                      Acreedor (beneficiario)
+                    </label>
+                    <input
+                      id="prenda-acreedor-nombre"
+                      type="text"
+                      value={acreedorNombre}
+                      onChange={(e) => { if (!acreedorReadOnly) setAcreedorNombre(e.target.value); }}
+                      readOnly={acreedorReadOnly}
+                      disabled={acreedorReadOnly}
+                      placeholder="Ej. Banco XYZ"
+                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
+                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    />
+                  </div>
+                  <div className="min-w-0 md:self-end">
+                    <label htmlFor="prenda-acreedor-doc" className="text-xs font-semibold mb-1.5 block">
+                      NIT / documento del acreedor
+                    </label>
+                    <input
+                      id="prenda-acreedor-doc"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      value={acreedorDocumento}
+                      onChange={(e) => { if (!acreedorReadOnly) setAcreedorDocumento(digitsOnly(e.target.value)); }}
+                      readOnly={acreedorReadOnly}
+                      disabled={acreedorReadOnly}
+                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
+                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    />
+                  </div>
+                </>
+              )}
+              {muestraAcreedor && runtHasGravamen && !acreedorReadOnly && (
+                <p className="md:col-span-3 -mt-2 text-xs opacity-70">
+                  Acreedor y documento se precargaron desde el RUNT; puedes editarlos si aplica.
+                </p>
+              )}
+              {acreedorReadOnly && (
+                <p className="md:col-span-3 text-xs opacity-70 -mt-2">
+                  Al levantar el gravamen, Acreedor y documento quedan inhabilitados.
+                </p>
+              )}
+              {/* P1.10: upload acoplado en la misma grilla, span completo */}
+              {requiereDocumento && decision && prendaDocTipoFor(decision) && (
+                <div className={muestraAcreedor ? 'md:col-span-3' : undefined}>
+                  <PrendaDocumentUpload
+                    instanceId={instanceId}
+                    decision={decision}
+                    docTipo={prendaDocTipoFor(decision)!}
+                    modalidad={modalidad}
+                    documentRequired={documentRequired}
+                    onSatisfiedChange={setDocSatisfied}
+                    onChanged={onSaved}
+                  />
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              {decisionFija ? (
+                <p className="text-xs" role="status">
+                  Este trámite es{' '}
+                  <span className="font-semibold">{PRENDA_DECISION_LABELS[decisionFija].toLowerCase()}</span>
+                  : completa el acreedor y adjunta el certificado.
+                </p>
+              ) : (
+                <WizardSegmented<PrendaDecision | ''>
+                  label="¿Al vehículo se le asociará una prenda?"
+                  value={decision}
+                  onChange={handleDecisionChange}
+                  disabled={readOnly}
+                  options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
+                />
+              )}
+              {muestraAcreedor && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      htmlFor="prenda-acreedor-nombre"
+                      className={capturaAcreedor ? REQUIRED_LABEL : 'mb-1.5 block text-xs font-semibold'}
+                    >
+                      Acreedor (beneficiario)
+                      {capturaAcreedor && (
+                        <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                          *
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      id="prenda-acreedor-nombre"
+                      type="text"
+                      required={capturaAcreedor}
+                      value={acreedorNombre}
+                      onChange={(e) => {
+                        if (acreedorReadOnly) return;
+                        pending.markDirty();
+                        setAcreedorNombre(e.target.value);
+                        if (fieldErrors.nombre) setFieldErrors((f) => ({ ...f, nombre: undefined }));
+                      }}
+                      readOnly={acreedorReadOnly}
+                      disabled={acreedorReadOnly}
+                      placeholder="Ej. Banco XYZ"
+                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
+                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                      aria-invalid={!!fieldErrors.nombre}
+                      aria-describedby={fieldErrors.nombre ? 'prenda-acreedor-nombre-err' : undefined}
+                    />
+                    {fieldErrors.nombre && (
+                      <p id="prenda-acreedor-nombre-err" className="mt-1 text-xs" style={{ color: '#FF4E00' }}>
+                        {fieldErrors.nombre}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="prenda-acreedor-doc"
+                      className={capturaAcreedor ? REQUIRED_LABEL : 'mb-1.5 block text-xs font-semibold'}
+                    >
+                      NIT / documento del acreedor
+                      {capturaAcreedor && (
+                        <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                          *
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      id="prenda-acreedor-doc"
+                      type="text"
+                      required={capturaAcreedor}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      value={acreedorDocumento}
+                      onChange={(e) => {
+                        if (acreedorReadOnly) return;
+                        pending.markDirty();
+                        setAcreedorDocumento(digitsOnly(e.target.value));
+                        if (fieldErrors.documento) setFieldErrors((f) => ({ ...f, documento: undefined }));
+                      }}
+                      readOnly={acreedorReadOnly}
+                      disabled={acreedorReadOnly}
+                      className={`${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`}
+                      style={acreedorReadOnly ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                      aria-invalid={!!fieldErrors.documento}
+                      aria-describedby={fieldErrors.documento ? 'prenda-acreedor-doc-err' : undefined}
+                    />
+                    {fieldErrors.documento && (
+                      <p id="prenda-acreedor-doc-err" className="mt-1 text-xs" style={{ color: '#FF4E00' }}>
+                        {fieldErrors.documento}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
-          {requiereDocumento && decision && prendaDocTipoFor(decision) && (
+          {/* Matrícula (2 decisiones): upload fuera del segmentado, a ancho completo */}
+          {decisions.length <= 2 && requiereDocumento && decision && prendaDocTipoFor(decision) && (
             <PrendaDocumentUpload
               instanceId={instanceId}
               decision={decision}

@@ -386,7 +386,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                         p.Plate,
                         p.Vin,
                         p.TenantId,
-                        p.ModalidadEntrada,
+                        (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                         p.Status,
                         p.PlateFlowStatus,
                         p.Prioritario,
@@ -458,7 +458,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         string? Plate,
         string? Vin,
         Guid TenantId,
-        string ModalidadEntrada,
+        string Familia,
         string Status,
         string? PlateFlowStatus,
         bool Prioritario,
@@ -850,7 +850,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             Vin: row.Instance.Vin,
             ClientTenantId: row.Instance.TenantId,
             ClientTenantName: names.GetValueOrDefault(row.Instance.TenantId, "(empresa desconocida)"),
-            Modalidad: row.Instance.ModalidadEntrada,
+            Familia: row.Instance.Familia,
             Status: row.Instance.Status,
             EstadoOt: row.EstadoOt,
             Prioritario: row.Instance.Prioritario,
@@ -1225,7 +1225,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                         p.Vin,
                         p.TenantId,
                         p.Status,
-                        p.ModalidadEntrada,
+                        Familia = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                         p.Prioritario,
                     })
                     .ToListAsync(cancellationToken)
@@ -1244,7 +1244,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                         r.TenantId,
                         names.TryGetValue(r.TenantId, out var n) ? n : "(empresa desconocida)",
                         r.Status,
-                        r.ModalidadEntrada,
+                        r.Familia,
                         r.Prioritario,
                         waiting.TryGetValue(r.Id, out var d) ? Math.Round(d, 1) : null))
                     .OrderByDescending(i => i.DiasEsperando ?? 0)
@@ -1402,9 +1402,14 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 && p.TransitOfficeId == transitOfficeId
                 && tenantIds.Contains(p.TenantId));
 
-        if (!string.IsNullOrWhiteSpace(filter.Modalidad))
+        if (!string.IsNullOrWhiteSpace(filter.Familia))
         {
-            query = query.Where(p => p.ModalidadEntrada == filter.Modalidad);
+            query = query.Where(p => (p.ProcedureType != null ? p.ProcedureType.Family : "") == filter.Familia);
+        }
+
+        if (filter.ProcedureTypeId is Guid procedureTypeId && procedureTypeId != Guid.Empty)
+        {
+            query = query.Where(p => p.ProcedureTypeId == procedureTypeId);
         }
 
         if (filter.ClientTenantId is Guid clientTenantId && clientTenantId != Guid.Empty)

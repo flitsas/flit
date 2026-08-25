@@ -201,12 +201,12 @@ public sealed class ProcedureStateChangeEmailEnqueueNotifierTests
         await using var db = NewContext(dbName);
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
             Id = InstanceId,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "ENQ-1",
             Status = "entregado",
-            ModalidadEntrada = modalidad,
             CreatedByUserId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow,
         };

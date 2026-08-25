@@ -263,7 +263,6 @@ public sealed class SuperAdminQueryRepositoryTests
             ProcedureTypeId = TipoId,
             ReferenceNumber = reference,
             Status = "entregado",
-            ModalidadEntrada = "matricula_inicial",
             Plate = placa,
             TransitOfficeId = null,
             CreatedByUserId = Gustavo,

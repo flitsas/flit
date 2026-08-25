@@ -25,27 +25,29 @@ public sealed record RejectionReasonResult(
 }
 
 /// <summary>
-/// Lista el catálogo. El modal de rechazo del OT pide solo las activas de una modalidad; la
+/// Lista el catálogo. El modal de rechazo del OT pide solo las activas de una familia; la
 /// consola de SuperAdmin pide todas.
 /// </summary>
 public sealed class ListRejectionReasonsHandler(IRejectionReasonRepository repository)
 {
     public async Task<IReadOnlyList<RejectionReasonResponse>> HandleAsync(
-        string? modalidad,
+        string? familia,
         bool includeInactive,
         CancellationToken cancellationToken = default)
     {
         var items = await repository
-            .ListAsync(NormalizeModalidad(modalidad), includeInactive, cancellationToken)
+            .ListAsync(NormalizeFamilia(familia), includeInactive, cancellationToken)
             .ConfigureAwait(false);
 
         return items.Select(RejectionReasonMapper.ToResponse).ToList();
     }
 
-    // Una modalidad desconocida devuelve lista vacía en vez de todas: es preferible que el modal
+    // Una familia desconocida devuelve lista vacía en vez de todas: es preferible que el modal
     // se vea vacío (y se note) a que ofrezca causales de otro proceso.
-    private static string? NormalizeModalidad(string? modalidad) =>
-        string.IsNullOrWhiteSpace(modalidad) ? null : modalidad.Trim();
+    // Se normaliza a mayúsculas porque la comparación contra la columna es exacta: el mismo valor
+    // escrito en minúsculas habría vaciado el modal sin que nada lo explicara.
+    private static string? NormalizeFamilia(string? familia) =>
+        string.IsNullOrWhiteSpace(familia) ? null : familia.Trim().ToUpperInvariant();
 }
 
 public sealed class CreateRejectionReasonHandler(IRejectionReasonRepository repository)
@@ -58,7 +60,7 @@ public sealed class CreateRejectionReasonHandler(IRejectionReasonRepository repo
         ArgumentNullException.ThrowIfNull(request);
 
         var error = RejectionReasonValidator.Validate(
-            request.Code, request.Description, request.Modalidad);
+            request.Code, request.Description, request.Familia);
         if (error is not null)
         {
             return RejectionReasonResult.Invalid(error);
@@ -74,7 +76,7 @@ public sealed class CreateRejectionReasonHandler(IRejectionReasonRepository repo
             .CreateAsync(
                 code,
                 request.Description!.Trim(),
-                request.Modalidad!,
+                request.Familia!,
                 request.SortOrder ?? DefaultSortOrder,
                 createdBy,
                 cancellationToken)
@@ -104,7 +106,7 @@ public sealed class UpdateRejectionReasonHandler(IRejectionReasonRepository repo
         }
 
         var error = RejectionReasonValidator.Validate(
-            request.Code, request.Description, request.Modalidad);
+            request.Code, request.Description, request.Familia);
         if (error is not null)
         {
             return RejectionReasonResult.Invalid(error);
@@ -121,7 +123,7 @@ public sealed class UpdateRejectionReasonHandler(IRejectionReasonRepository repo
                 id,
                 code,
                 request.Description!.Trim(),
-                request.Modalidad!,
+                request.Familia!,
                 request.SortOrder ?? existing.SortOrder,
                 updatedBy,
                 cancellationToken)

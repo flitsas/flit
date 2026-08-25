@@ -96,7 +96,7 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
     expect(screen.getByText('Certificado / registro de prenda')).toBeInTheDocument();
     expect(screen.getByText(/Obligatorio/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Adjuntar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Adjuntar/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Subir Certificado/i)).toBeInTheDocument();
     await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
   });
@@ -171,34 +171,60 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByLabelText('NIT / documento del acreedor', { exact: false })).toHaveValue('900123456');
   });
 
-  it('en traspaso ofrece las 4 decisiones de gestión (sin "sin prenda") como radios', async () => {
+  it('en traspaso ofrece el select de gestión (solicitar/registrar/levantar/omitir)', async () => {
     render(
       <PrendaForm
         instanceId="abc"
+        modalidad="traspaso"
         decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
       />,
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    expect(screen.getByRole('radio', { name: 'Solicitar constitución de prenda' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Levantar gravamen' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Continuar sin gestionar (asumo el riesgo)' })).toBeInTheDocument();
-    expect(screen.queryByRole('radio', { name: 'Sin prenda' })).not.toBeInTheDocument();
+    const select = screen.getByLabelText('¿Al vehículo se le asociará una prenda?');
+    expect(select.tagName).toBe('SELECT');
+    expect(screen.getByRole('option', { name: 'Registrar prenda' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Levantar gravamen' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Continuar sin gestionar/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sí' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'No' })).not.toBeInTheDocument();
   });
 
-  it('con "omitir" no muestra el contenedor de carga', async () => {
+  it('en traspaso, al elegir registrar muestra acreedor', async () => {
     render(
       <PrendaForm
         instanceId="abc"
+        modalidad="traspaso"
         decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+        documentRequired={false}
       />,
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(
-      screen.getByRole('radio', { name: 'Continuar sin gestionar (asumo el riesgo)' }),
-    );
+    fireEvent.change(screen.getByLabelText('¿Al vehículo se le asociará una prenda?'), {
+      target: { value: 'registrar' },
+    });
 
+    expect(screen.getByLabelText('Acreedor (beneficiario)')).toBeInTheDocument();
+    expect(screen.getByLabelText(/documento del acreedor/i)).toBeInTheDocument();
+  });
+
+  it('en traspaso, con omitir no muestra acreedor ni carga de certificado', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        modalidad="traspaso"
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+        documentRequired={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText('¿Al vehículo se le asociará una prenda?'), {
+      target: { value: 'omitir' },
+    });
+
+    expect(screen.queryByLabelText('Acreedor (beneficiario)')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
   });
 
@@ -499,5 +525,69 @@ describe('parseRuntGravamenesJson / buildRuntPrendaSummary', () => {
       ],
     });
     expect(pick).toEqual({ nombre: 'BANCO ITEM', documento: '800111222' });
+  });
+});
+
+/**
+ * ADR-0050 — tipos prendarios de la familia OTROS: la decisión NO se elige, la eligió quien eligió
+ * el trámite. En un LEVANTAMIENTO_PRENDA la única acción posible es levantar, y ofrecer un control
+ * con una sola opción es una pregunta cuya respuesta ya está dada — además de un paso más que dar
+ * para poder continuar.
+ */
+describe('PrendaForm — decisión fija del tipo (familia OTROS)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client.getPrenda.mockResolvedValue(null);
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+    client.getAttachments.mockResolvedValue([]);
+    client.putPrenda.mockResolvedValue({
+      id: '1',
+      decision: 'levantar',
+      estado: 'vigente',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      createdAt: '2026-07-07T00:00:00Z',
+    } as never);
+  });
+
+  it('afirma el trámite en vez de pintar un selector de una sola opción', async () => {
+    render(<PrendaForm instanceId="i1" decisions={['levantar']} embeddedInWizard />);
+
+    expect(await screen.findByText(/Este trámite es/)).toBeInTheDocument();
+    expect(
+      screen.queryByText('¿Al vehículo se le asociará una prenda?'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('no ofrece omitir ni «sin prenda»: sería ofrecer no hacer el trámite que se radica', async () => {
+    render(<PrendaForm instanceId="i1" decisions={['levantar']} embeddedInWizard />);
+    await screen.findByText(/Este trámite es/);
+
+    expect(screen.queryByText('Continuar sin gestionar (asumo el riesgo)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sin prenda')).not.toBeInTheDocument();
+    expect(screen.queryByText('Registrar prenda')).not.toBeInTheDocument();
+  });
+
+  it('guarda la decisión del tipo sin que el gestor tenga que marcarla', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(<PrendaForm ref={ref} instanceId="i1" decisions={['levantar']} embeddedInWizard />);
+    await screen.findByText(/Este trámite es/);
+
+    await waitFor(async () => {
+      expect(await ref.current!.save()).toBe(true);
+    });
+    expect(client.putPrenda).toHaveBeenCalledWith(
+      'i1',
+      expect.objectContaining({ decision: 'levantar' }),
+    );
+  });
+
+  it('con varias decisiones ofrecidas sigue habiendo control de elección (regresión)', async () => {
+    render(<PrendaForm instanceId="i1" decisions={['registrar', 'sin_prenda']} embeddedInWizard />);
+
+    expect(
+      await screen.findByText('¿Al vehículo se le asociará una prenda?'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Este trámite es/)).not.toBeInTheDocument();
   });
 });

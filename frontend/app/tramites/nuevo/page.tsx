@@ -1,51 +1,33 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { tramitesClient } from '@/lib/api/tramites-client';
-import { CarLoaderModal } from '@/components/atom/CarLoader';
+import { NuevoTramiteSelector } from '@/components/operacion/NuevoTramiteSelector';
 
 /**
- * `/tramites/nuevo` — entrada al asistente SIN modalidad en la URL.
+ * `/tramites/nuevo` — elección del trámite antes de abrir el asistente (ADR-0050).
  *
- * En la propuesta "Nuevo trámite" abre el asistente directamente y el tipo se elige DENTRO del
- * paso 1, con las tarjetas de "Configuración del Trámite". No hay pantalla intermedia de elección,
- * así que esta ruta no pinta nada: resuelve qué modalidad abrir y reemplaza la URL por
- * `/tramites/nuevo/[modalidad]`, que es donde vive el paso 1.
- *
- * La modalidad por defecto es matrícula inicial —la primera tarjeta del selector—, salvo que la
- * compañía la tenga bloqueada: en ese caso abre la primera que sí esté habilitada, para no llevar
- * al gestor a una pantalla de bloqueo que él no eligió. Si las dos están bloqueadas se abre
- * igualmente la de matrícula, que es la que explica el bloqueo y ofrece volver al listado.
- *
- * `replace`, no `push`: esta URL es solo un enrutamiento y el "atrás" del navegador debe volver al
- * listado, no rebotar aquí otra vez.
+ * La vía normal de llegar aquí es el modal sobre el listado (`/tramites`), que preserva filtros y
+ * scroll al cancelar. Esta ruta se conserva para lo que un modal no puede dar: enlace directo,
+ * marcador, abrir en pestaña nueva y botón atrás. Monta el MISMO componente que el modal, así que
+ * las dos presentaciones no pueden divergir.
  */
 export default function NuevoTramitePage() {
   const router = useRouter();
 
-  useEffect(() => {
-    let active = true;
-    const abrir = (modalidad: string) => {
-      if (active) router.replace(`/tramites/nuevo/${modalidad}`);
-    };
-    void tramitesClient
-      .getConsultationConfig()
-      .then((cfg) => {
-        const block = cfg.blockProcedureFamily;
-        abrir(block?.matriculas && !block?.traspaso ? 'traspaso' : 'matricula_inicial');
-      })
-      .catch(() => {
-        // Sin config legible no se decide nada: el paso 1 y el backend cortan si aplica.
-        abrir('matricula_inicial');
-      });
-    return () => {
-      active = false;
-    };
-  }, [router]);
+  return (
+    // El ancho lo pide la rejilla: `max-w-xl` dejaba las tres familias apiladas incluso en
+    // escritorio, que es justo lo que la composición de la propuesta resuelve poniéndolas en fila.
+    <main className="mx-auto w-full max-w-3xl px-4 py-8">
+      {/* El título de pantalla no flota sobre el fondo azul: va en tarjeta blanca, como el resto de
+          la app interna. Aquí lo pinta el propio selector dentro de la tarjeta, en un solo bloque. */}
+      <h1 className="sr-only">Nuevo trámite</h1>
 
-  // La espera se pinta con el MISMO velo que las consultas al RUNT (`CarLoaderModal`): tarjeta
-  // blanca con el carrito sobre el fondo atenuado. Antes era un rótulo suelto, que en una ruta que
-  // no dibuja nada más dejaba la pantalla prácticamente en blanco.
-  return <CarLoaderModal label="Abriendo el asistente…" />;
+      <div className="rounded-2xl border bg-white p-6 dark:bg-[#162744]" style={{ borderColor: '#DFE5ED' }}>
+        <NuevoTramiteSelector
+          onElegir={(code) => router.push(`/tramites/nuevo/${encodeURIComponent(code)}`)}
+          onCancelar={() => router.push('/tramites')}
+        />
+      </div>
+    </main>
+  );
 }

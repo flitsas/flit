@@ -44,11 +44,11 @@ public sealed class ListProcedureInstancesTests
         // el wizard, Track B).
         var matriculaParcial = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
             FieldValues =
             {
@@ -72,11 +72,11 @@ public sealed class ListProcedureInstancesTests
         // Traspaso ya radicado (submitted) → PasoActual reporta TotalPasos (6).
         var traspasoSubmitted = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.Traspaso),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000002",
             Status = TramiteEstado.Entregado,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.Traspaso,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
             FieldValues =
             {
@@ -97,7 +97,7 @@ public sealed class ListProcedureInstancesTests
             Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
 
         var m = result.Single(x => x.ReferenceNumber == "TRM-2026-000001");
-        m.Modalidad.Should().Be("matricula_inicial");
+        m.Modalidad.Should().Be("MATRICULAS");
         m.Estado.Should().Be("borrador");
         m.Placa.Should().Be("ABC123");
         m.Vin.Should().Be("VIN123");
@@ -109,7 +109,7 @@ public sealed class ListProcedureInstancesTests
         m.PasoActual.Should().Be(2); // frontera = Documentos (paso 1 completo, paso 2 pendiente)
 
         var t = result.Single(x => x.ReferenceNumber == "TRM-2026-000002");
-        t.Modalidad.Should().Be("traspaso");
+        t.Modalidad.Should().Be("TRASPASO");
         t.Estado.Should().Be("entregado");
         t.Placa.Should().Be("XYZ789");
         t.Vin.Should().BeNull();
@@ -129,11 +129,11 @@ public sealed class ListProcedureInstancesTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000010",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             DraftFinalizedAt = finalizadoAt,
             CreatedAt = DateTimeOffset.UtcNow,
             BiometricValidations =
@@ -167,11 +167,11 @@ public sealed class ListProcedureInstancesTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000011",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             DraftFinalizedAt = DateTimeOffset.UtcNow.AddHours(-2),
             CreatedAt = DateTimeOffset.UtcNow,
             BiometricValidations =
@@ -202,11 +202,11 @@ public sealed class ListProcedureInstancesTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000012",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -229,11 +229,11 @@ public sealed class ListProcedureInstancesTests
 
         ProcedureInstance Inst(Guid tenant, string reference) => new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ReferenceNumber = reference,
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -261,11 +261,11 @@ public sealed class ListProcedureInstancesTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.Traspaso),
             Id = instanceId,
             TenantId = tenantId,
             ReferenceNumber = "TRM-2026-000020",
             Status = TramiteEstado.Rechazado,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.Traspaso,
             SubsanacionActiva = true,
             SubsanacionCount = 2,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -338,11 +338,11 @@ public sealed class ListProcedureInstancesTests
         var ct = TestContext.Current.CancellationToken;
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("traspaso"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ReferenceNumber = "TR-1",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "traspaso",
             CreatedAt = DateTimeOffset.UtcNow,
             Actors =
             {
@@ -378,11 +378,11 @@ public sealed class ListProcedureInstancesTests
         var ct = TestContext.Current.CancellationToken;
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ReferenceNumber = "MI-1",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
             Actors =
             {
@@ -408,11 +408,11 @@ public sealed class ListProcedureInstancesTests
     /// <summary>Traspaso base para los casos de firma/fuente/gestor; sin firmas ni adjuntos.</summary>
     private static ProcedureInstance Traspaso(Guid tenantId, string reference = "TRM-2026-000100") => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.Traspaso),
         Id = Guid.NewGuid(),
         TenantId = tenantId,
         ReferenceNumber = reference,
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = TramiteModalidadEntradaCodes.Traspaso,
         CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
     };
 
@@ -664,11 +664,11 @@ public sealed class ListProcedureInstancesTests
         var ct = TestContext.Current.CancellationToken;
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ReferenceNumber = "MI-2",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.Actors.Add(Actor("comprador", doc: "222"));

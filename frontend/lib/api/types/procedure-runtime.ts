@@ -60,7 +60,14 @@ export interface CreateInstanceRequest {
  * avanzar al paso 2 (`createInstanceFromConsulta`).
  */
 export interface ConsultaVehiculoInput {
-  modalidad: WizardModalidad;
+  /** Familia del trámite; gobierna el bloqueo por compañía. El nombre del campo es heredado. */
+  modalidad: ProcedureFamily | WizardModalidad;
+  /**
+   * ADR-0050 — `code` del tipo elegido en el catálogo. Manda sobre `modalidad`: decide qué
+   * identificador exige la consulta y qué trámite se crea. Sin él, todo lo que no fuera traspaso se
+   * consultaba y creaba como matrícula inicial.
+   */
+  procedureTypeCode?: string | null;
   vin?: string | null;
   plate?: string | null;
   ownerDocumentType?: string | null;
@@ -124,7 +131,21 @@ export interface CompletePlateFlowResult {
 export interface InstanceSummary {
   id: string;
   referenceNumber: string;
-  modalidad: WizardModalidad;
+  /**
+   * ADR-0050 — FAMILIA del tipo de trámite (`MATRICULAS` | `TRASPASO` | `OTROS`). Conserva el
+   * nombre `modalidad` porque así viaja en el contrato del listado; lo que cambió es su contenido,
+   * que antes era una de las dos modalidades de entrada.
+   */
+  modalidad: ProcedureFamily;
+  /**
+   * ADR-0050 — nombre del TIPO en el catálogo («Blindaje», «Cambio de color», «Levantamiento de
+   * prenda»…). La familia sola identifica bien una matrícula o un traspaso, pero agrupa quince tipos
+   * bajo «Otros»: sin esto, tres trámites distintos se ven idénticos en el listado.
+   * Ausente en expedientes servidos por un backend anterior a este campo.
+   */
+  tipoNombre?: string | null;
+  /** `code` canónico del tipo, para decidir por tipo sin depender del nombre mostrado. */
+  tipoCodigo?: string | null;
   estado: InstanceStatus;
   /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
   plateFlowStatus?: PlateFlowStatus | null;
@@ -143,6 +164,13 @@ export interface InstanceSummary {
   organismoTransito: string | null;
   pasoActual: number;
   totalPasos: number;
+  /**
+   * Rótulo del paso en curso, tomado del recorrido del TIPO. Antes el cliente lo derivaba de una
+   * lista de nombres por familia: para OTROS estaba vacía —salía «—»— y de todos modos no puede
+   * acertar, porque desde ADR-0050 cada tipo tiene su propio recorrido.
+   * Ausente si el tipo no está parametrizado o el backend es anterior al campo.
+   */
+  pasoNombre?: string | null;
   createdAt: string;
   // HU #10350 — desacople de la validación de identidad async. Derivan los chips del listado
   // ("Pendiente validación" / "Pendiente firma") y la acción de la fila ("Radicar"/"Continuar").
@@ -360,7 +388,14 @@ export interface FieldValueInput {
 // La entidad `Actor` (arriba) es el espejo del detalle de instancia ya
 // existente; estos tipos modelan la captura/edición dedicada de actores.
 
-export type ActorRol = 'comprador' | 'vendedor';
+/**
+ * Rol de la parte en el trámite.
+ *
+ * `locatario` es el arrendatario del leasing (`LESSEE`). Se identifica y recibe los correos del
+ * trámite, pero NO valida identidad ni firma — eso es del propietario, y por eso no está en
+ * {@link BiometricParte}.
+ */
+export type ActorRol = 'comprador' | 'vendedor' | 'locatario';
 
 export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
 
@@ -928,6 +963,22 @@ export type WizardStepKey =
   | 'vendedor'
   | 'comercial';
 
+/**
+ * Renderer de una sección del paso (CFD-09). Catálogo CERRADO: espeja el CHECK de
+ * `tramites.procedure_sections.section_type` y las ramas de `DynamicGateEvaluator`. Añadir un valor
+ * exige PR coordinado backend + frontend + migración.
+ */
+export type WizardSectionType =
+  | 'vehicle_query'
+  | 'document_checklist'
+  | 'actor_form'
+  | 'commercial'
+  | 'biometric'
+  | 'signature_fur'
+  | 'plate_request'
+  | 'prenda_decision'
+  | 'generic_form';
+
 export interface WizardStep {
   index: number;
   key: WizardStepKey | string;
@@ -935,12 +986,78 @@ export interface WizardStep {
   status: WizardStepStatus;
   /** Códigos de razón de incompletitud (mapeados a copy en la UI). */
   reasons: string[];
+  /**
+   * ADR-0050 / CFD-09 — renderer principal del paso, decidido por la parametrización del tipo y no
+   * por su clave. Es lo que permite que un trámite de OTROS tenga recorrido propio sin que el
+   * cliente conozca su `key`.
+   */
+  sectionType?: WizardSectionType;
+  /** Todas las secciones del paso, en orden. Un paso puede tener más de una. */
+  sectionTypes?: WizardSectionType[];
+  /** Capacidades del tipo que la sección necesita para pintarse (entryMode, actores, firma…). */
+  sectionConfig?: Record<string, unknown> | null;
 }
 
 /** Respuesta de GET /instances/{id}/wizard. */
+/**
+ * Capacidades del tipo con el que se conformó el expediente (ADR-0050).
+ *
+ * Es lo que le faltaba al asistente para dejar de decidir por modalidad: qué partes pide el trámite,
+ * si lleva datos comerciales, si la prenda es una puerta y por qué identificador entra el vehículo.
+ * Salen del mismo `gate_profile` que gobierna los gates del backend, congelado en el snapshot del
+ * expediente, así que el asistente y el servidor no pueden discrepar.
+ *
+ * Es una proyección PARCIAL a propósito: lo que solo afecta a validaciones del servidor no viaja,
+ * para que el frontend no pueda reimplementar un gate.
+ */
+export interface WizardCapabilities {
+  /** `VIN` (el vehículo aún no tiene placa) o `PLATE`. */
+  entryMode: string | null;
+  /** Hay parte vendedora. En la familia OTROS el titular no vende. */
+  requiresSeller: boolean;
+  /** Hay parte compradora o titular. */
+  requiresBuyer: boolean;
+  /**
+   * Interviene un arrendatario además del propietario (leasing). Parte declarativa: se identifica y
+   * se le notifica, pero no valida identidad ni firma. Ausente ⇒ `false`.
+   */
+  requiresLessee?: boolean;
+  allowsMultipleBuyer: boolean;
+  requiresCommercialValue: boolean;
+  requiresBiometrics: boolean;
+  /** Actores a validar: `OWNER`, `BUYER`. */
+  biometricActors: string[];
+  /** La decisión de prenda es una puerta y no una declaración. */
+  hasPrendaGate: boolean;
+  /**
+   * ADR-0050 — el expediente admite declarar transformaciones POR ENCIMA del tipo base (los
+   * «trámites simultáneos» del art. 5.1.8). El backend lo entrega ya resuelto: la familia OTROS no
+   * acumula —ahí el cambio ES el trámite— y matrícula y traspaso sí.
+   *
+   * Ausente ⇒ se trata como `true` (un borrador abierto antes de esta llave no debe perder los
+   * simultáneos que ya tenía).
+   */
+  allowsComplementaryTransformations?: boolean;
+  /**
+   * Admite un gravamen por encima del tipo base. No se refiere a la prenda de un TIPO de prenda:
+   * ahí la prenda es el trámite y su paso se pinta igual. Ausente ⇒ `true`.
+   */
+  allowsComplementaryPrenda?: boolean;
+}
+
 export interface WizardState {
-  modalidad: WizardModalidad;
+  /**
+   * ADR-0050 — familia del tipo (`MATRICULAS` | `TRASPASO` | `OTROS`). El nombre del campo es
+   * heredado; el backend escribe aquí `procedure_types.family` desde que se retiró
+   * `modalidad_entrada`, así que declararlo como `WizardModalidad` era una promesa falsa: ninguna
+   * comparación contra `'traspaso'` podía acertar.
+   */
+  modalidad: ProcedureFamily | WizardModalidad;
   tipologiaCodigo: string;
+  /** Nombre del tipo del catálogo, para titular el trámite que se está haciendo. */
+  typeName?: string | null;
+  /** Ausente solo si el tipo no tiene pasos parametrizados (el asistente pinta el bloqueo). */
+  capabilities?: WizardCapabilities | null;
   totalSteps: number;
   steps: WizardStep[];
   canSubmit: boolean;

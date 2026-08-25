@@ -37,6 +37,6 @@ internal sealed class ResolvedChecklistMatrixProvider : IResolvedChecklistMatrix
         }
 
         return [.. resolved.Select(r =>
-            new ResolvedChecklistDoc(r.Codigo, r.Nombre, r.Obligatorio, r.OrdenResuelto))];
+            new ResolvedChecklistDoc(r.Codigo, r.Nombre, r.Obligatorio, r.OrdenResuelto, r.EsDummy))];
     }
 }

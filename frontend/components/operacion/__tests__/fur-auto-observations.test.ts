@@ -62,6 +62,34 @@ describe('furAutoObservations', () => {
     ]);
   });
 
+  // ── Blindaje ───────────────────────────────────────────────────────────────
+
+  it.each([
+    ['NIVEL_1', 'BLINDAJE NIVEL 1.'],
+    ['NIVEL_2', 'BLINDAJE NIVEL 2.'],
+    ['NIVEL_3', 'BLINDAJE NIVEL 3.'],
+    ['DESMONTE', 'DESMONTE DE BLINDAJE.'],
+  ])('anuncia %s como %s', (opcion, esperado) => {
+    // La casilla del FUR es un SÍ/NO y no distingue el nivel; el detalle solo cabe aquí.
+    expect(furAutoObservations(fields({ blindaje_nivel: opcion }))).toEqual([esperado]);
+  });
+
+  it('sin opción de blindaje no anuncia nada', () => {
+    expect(furAutoObservations(fields({ blindaje: 'true' }))).toEqual([]);
+  });
+
+  it('el blindaje va después de las transformaciones, como lo une el backend', () => {
+    expect(
+      furAutoObservations(
+        fields({
+          vehicle_color_runt: 'AZUL',
+          vehicle_color: 'ROJO',
+          blindaje_nivel: 'NIVEL_3',
+        }),
+      ),
+    ).toEqual(['Color nuevo(NUEVO COLOR: ROJO)', 'BLINDAJE NIVEL 3.']);
+  });
+
   // ── Tipo de servicio + empresa vinculadora ─────────────────────────────────
 
   it('declara servicio, razón social y NIT', () => {

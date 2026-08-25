@@ -9,6 +9,7 @@ using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -18,6 +19,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     private const int MaxReferenceRetries = 5;
     public Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     // HU #10538 (R3) — invariante "un VIN → una matrícula": busca otras matrículas iniciales del tenant
@@ -36,7 +38,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Where(i => i.TenantId == tenantId
                 && i.DeletedAt == null
                 && i.Id != excludeInstanceId
-                && i.ModalidadEntrada == TramiteModalidadEntradaCodes.MatriculaInicial
+                && (i.ProcedureType != null ? i.ProcedureType.Family : "") == ProcedureFamilyCodes.Matriculas
                 && i.FieldValues.Any(f => f.FieldKey == "vin"
                     && f.ValueText != null
                     && f.ValueText.Trim().ToUpper() == vinNormalizado))
@@ -93,7 +95,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Where(i => i.TenantId == tenantId
                 && i.DeletedAt == null
                 && i.Id != excludeInstanceId
-                && i.ModalidadEntrada == TramiteModalidadEntradaCodes.Traspaso
+                && (i.ProcedureType != null ? i.ProcedureType.Family : "") == ProcedureFamilyCodes.Traspaso
                 && i.FieldValues.Any(f => f.FieldKey == "plate"
                     && f.ValueText != null
                     && f.ValueText.Trim().ToUpper() == placaNormalizada))
@@ -128,6 +130,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.StatusHistory)
             .Include(x => x.Actors)
@@ -135,6 +138,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithActorsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Actors)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
@@ -148,11 +152,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Attachments)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public Task<ProcedureInstance?> GetByIdWithChecklistGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .AsSplitQuery()
             .Include(x => x.Attachments)
             .Include(x => x.Actors)
@@ -162,6 +168,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithActorsAndAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .AsSplitQuery()
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -169,7 +176,17 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithWizardGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            // ADR-0050 — el wizard se conforma con los pasos/secciones del tipo cuando la instancia
+            // no tiene snapshot congelado. Los dos listados también los cargan —el progreso de cada
+            // fila sale del mismo motor—; el resto de consultas se queda con la navegación simple.
+            .Include(x => x.ProcedureType)
+                .ThenInclude(t => t!.Steps)
+                    .ThenInclude(st => st.Sections)
             .AsSplitQuery()
+            // ADR-0050 — la clasificación del expediente (familia, código y nombre del trámite) se
+            // deriva del tipo, así que el listado no puede proyectarse sin él: `ToSummary` lee
+            // `e.Family` y sin esta carga revienta con «navegación no cargada».
+            .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -184,11 +201,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithSignaturesAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Signatures)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -202,6 +221,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         Guid tenantId, string parte, string tipoDoc, string documento, CancellationToken ct)
     {
         return await db.ProcedureInstances
+            // ADR-0050 — el consumidor lee `instance.Family` para decidir el reparto por partes.
+            .Include(i => i.ProcedureType)
             .Include(i => i.Actors)
             .Where(i => i.TenantId == tenantId
                 && i.Status == TramiteEstado.Borrador
@@ -218,6 +239,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithCommercialAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Commercial)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
@@ -227,6 +249,16 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         // se hace antes (middleware): aquí null solo llega para un caller multi-tenant autorizado.
         var query = db.ProcedureInstances
             .AsSplitQuery()
+            // ADR-0050 — la clasificación del expediente (familia, código y nombre del trámite) se
+            // deriva del tipo, así que el listado no puede proyectarse sin él: `ToSummary` lee
+            // `e.Family` y sin esta carga revienta con «navegación no cargada».
+            //
+            // Y sus PASOS, porque desde ADR-0050 el progreso de la fila (`pasoActual/totalPasos`) y
+            // `canSubmit` los computa `GetWizardStateHandler.ComputeState`, que conforma el recorrido
+            // desde el catálogo del tipo. Sin los pasos, `FromCatalog` devuelve null, el estado sale
+            // vacío y TODA fila del listado —de cualquier familia— reportaba `0/0` y `canSubmit:false`
+            // sin que nada fallara: el listado se veía bien, solo mentía sobre el avance.
+            .Include(x => x.ProcedureType).ThenInclude(t => t!.Steps).ThenInclude(s => s.Sections)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -319,11 +351,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.BiometricValidations)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public Task<ProcedureInstance?> GetByIdWithBiometricsAndActorsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.BiometricValidations)
             .Include(x => x.Actors)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
@@ -443,7 +477,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 InstanceId = v.ProcedureInstanceId!.Value,
                 v.ProcedureInstance!.ReferenceNumber,
                 v.ProcedureInstance.Status,
-                Modalidad = v.ProcedureInstance.ModalidadEntrada,
+                // La familia se lee del TIPO dentro de la propia proyección, no vía instance.FamilyCode:
+                // esa propiedad es calculada y exige la navegación cargada, así que EF no la traduce, la
+                // evalúa en cliente sobre una instancia sin tipo y lanza InvalidOperationException (la
+                // pantalla de Validaciones devolvía 500 al abrir el detalle). Así sale como JOIN en SQL.
+                // La columna cruda equivale al código canónico: ck_procedure_types_family cierra el
+                // dominio a MATRICULAS/TRASPASO/OTROS.
+                Modalidad = v.ProcedureInstance!.ProcedureType!.Family,
             })
             .ToListAsync(ct);
 
@@ -463,7 +503,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 InstanceId = a.ProcedureInstanceId,
                 a.ProcedureInstance!.ReferenceNumber,
                 a.ProcedureInstance.Status,
-                Modalidad = a.ProcedureInstance.ModalidadEntrada,
+                // Misma razón que arriba: por el tipo, para que lo traduzca EF y no el cliente.
+                Modalidad = a.ProcedureInstance!.ProcedureType!.Family,
             })
             .ToListAsync(ct);
 
@@ -687,7 +728,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     v.expires_at,
                     v.procedure_instance_id,
                     pi.reference_number,
-                    pi.modalidad_entrada AS modalidad,
+                    -- ADR-0050: modalidad_entrada murió con el corte de 80-tramites-reset-fuente-unica.
+                    -- La clasificación del expediente ahora la declara su TIPO. Este SQL crudo no lo
+                    -- vio el barrido de consumidores porque el compilador no mira dentro de la cadena,
+                    -- y la lista entera devolvía 500 (42703: no existe la columna pi.modalidad_entrada).
+                    -- El alias se conserva: `modalidad` viaja hasta el DTO y el front ya lo pasa por
+                    -- familiaLabel(), que rotula MATRICULAS/TRASPASO/OTROS.
+                    pt.family AS modalidad,
                     v.party_role,
                     v.email,
                     v.provider,
@@ -698,6 +745,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 FROM tramites.procedure_instance_biometric_validations v
                 LEFT JOIN tramites.procedure_instances pi
                     ON pi.id = v.procedure_instance_id
+                -- LEFT y no JOIN: una validación standalone (HU de prevalidación) no cuelga de ningún
+                -- expediente, y con JOIN desaparecería de su propia lista.
+                LEFT JOIN tramites.procedure_types pt
+                    ON pt.id = pi.procedure_type_id
                 WHERE v.tenant_id = {0}
                   AND v.deleted_at IS NULL
                   AND (v.procedure_instance_id IS NULL OR pi.deleted_at IS NULL)
@@ -984,7 +1035,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     ExpiresAt = latest.ExpiresAt,
                     ProcedureInstanceId = latest.ProcedureInstanceId,
                     ReferenceNumber = latest.ProcedureInstance?.ReferenceNumber,
-                    Modalidad = latest.ProcedureInstance?.ModalidadEntrada,
+                    Modalidad = (latest.ProcedureInstance != null && latest.ProcedureInstance.ProcedureType != null ? latest.ProcedureInstance.ProcedureType.Family : ""),
                     PartyRole = latest.PartyRole,
                     Email = latest.Email,
                     Provider = latest.Provider,
@@ -1161,7 +1212,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         {
             var term = EscapeLike(filter.Modalidad.Trim());
             query = query.Where(v => v.ProcedureInstance != null
-                && EF.Functions.ILike(v.ProcedureInstance.ModalidadEntrada, $"%{term}%", LikeEscapeChar));
+                // Por el TIPO, no por instance.FamilyCode: es calculada y EF no puede traducirla dentro
+                // de un Where, así que el filtro por familia reventaba en vez de filtrar.
+                && v.ProcedureInstance.ProcedureType != null
+                && EF.Functions.ILike(v.ProcedureInstance.ProcedureType.Family, $"%{term}%", LikeEscapeChar));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Name))
@@ -1317,6 +1371,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstance?> GetByIdWithParticipantsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .Include(x => x.ProcedureType)
             .Include(x => x.Participants)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
@@ -1640,6 +1695,16 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         var items = await ordered
             .AsSplitQuery()
+            // ADR-0050 — la clasificación del expediente (familia, código y nombre del trámite) se
+            // deriva del tipo, así que el listado no puede proyectarse sin él: `ToSummary` lee
+            // `e.Family` y sin esta carga revienta con «navegación no cargada».
+            //
+            // Y sus PASOS, porque desde ADR-0050 el progreso de la fila (`pasoActual/totalPasos`) y
+            // `canSubmit` los computa `GetWizardStateHandler.ComputeState`, que conforma el recorrido
+            // desde el catálogo del tipo. Sin los pasos, `FromCatalog` devuelve null, el estado sale
+            // vacío y TODA fila del listado —de cualquier familia— reportaba `0/0` y `canSubmit:false`
+            // sin que nada fallara: el listado se veía bien, solo mentía sobre el avance.
+            .Include(x => x.ProcedureType).ThenInclude(t => t!.Steps).ThenInclude(s => s.Sections)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
             .Include(x => x.Attachments)
@@ -1706,7 +1771,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             query = query.Where(x =>
                 (x.Signatures.Any(s => s.Parte == SignatureRules.ParteComprador
                         && s.DocTipo == SignatureDocTipos.Compraventa && s.Estado == SignatureEstados.Firmada)
-                    && (x.ModalidadEntrada != TramiteModalidadEntradaCodes.Traspaso
+                    && ((x.ProcedureType != null ? x.ProcedureType.Family : "") != ProcedureFamilyCodes.Traspaso
                         || x.Signatures.Any(s => s.Parte == SignatureRules.ParteVendedor
                             && s.DocTipo == SignatureDocTipos.Compraventa && s.Estado == SignatureEstados.Firmada)))
                 == firmadoCompleto);

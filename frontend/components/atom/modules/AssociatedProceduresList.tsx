@@ -4,11 +4,7 @@ import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { LinkedProcedureRef } from '@/lib/api/types/procedure-runtime';
 import { FLIT } from '@/lib/flit-design-tokens';
-
-const MODALIDAD_LABEL: Record<string, string> = {
-  traspaso: 'Traspaso',
-  matricula_inicial: 'Matrícula inicial',
-};
+import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 export type AssociatedProcedureItem = {
   instanceId: string;
@@ -47,7 +43,7 @@ export function AssociatedProceduresList({
       {procedures.map((p) => {
         const tipo =
           p.modalidad != null && p.modalidad !== ''
-            ? (MODALIDAD_LABEL[p.modalidad] ?? p.modalidad)
+            ? (familiaLabel(p.modalidad))
             : null;
         return (
           <li key={p.instanceId}>

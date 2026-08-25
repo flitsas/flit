@@ -140,6 +140,7 @@ public sealed class CertificadoIdentidadHandlerTests
     private ProcedureInstance InstanceConActor(string tipoDoc = "CC", string documento = "1020304050") =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = _instance,
             TenantId = _tenant,
             Actors = [new ProcedureInstanceActor

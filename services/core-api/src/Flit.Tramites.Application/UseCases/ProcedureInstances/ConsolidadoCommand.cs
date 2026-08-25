@@ -400,7 +400,7 @@ public sealed class GenerarConsolidadoHandler(
 
         if (configurado.Count == 0)
             return SanitizeConsolidadoParts(
-                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada));
+                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.FamilyCode));
 
         return SanitizeConsolidadoParts(
             GenericConsolidadoOrdering.SelectByPrecedence(
@@ -467,7 +467,7 @@ public sealed class GenerarConsolidadoHandler(
     {
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.FaltanObligatorios ?? [];
     }

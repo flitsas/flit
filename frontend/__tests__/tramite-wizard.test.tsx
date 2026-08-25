@@ -114,6 +114,14 @@ function isTransitOfficeUnavailable(err: unknown): boolean {
   return (problem as { title?: unknown }).title === 'TRANSIT_OFFICE_NOT_AVAILABLE';
 }
 
+// Cambio de carrocería sobre un vehículo sin carrocería: misma reimplementación local, por la misma razón.
+function isVehicleBodyTypeMissing(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
+}
+
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   DEV_TENANT_ID: 'tenant-dev',
@@ -121,6 +129,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId,
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
+  isVehicleBodyTypeMissing,
   // Mismo duck-typing que la implementación real (`err.status === 503`): lo importa
   // DeclaracionesTramite, que el paso de requisitos monta siempre.
   isRuesPreviewUnavailable: (err: unknown) =>
@@ -952,9 +961,9 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
 
-    await user.type(screen.getByLabelText(/^Placa$/), 'ABC123');
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'ABC123');
     await user.type(
-      screen.getByLabelText(/Número documento propietario/),
+      screen.getByLabelText(/Número documento del propietario/),
       '1020304050',
     );
 
@@ -1137,6 +1146,41 @@ describe('TramiteWizard — bloqueo por estado del vehículo (HU #10884)', () =>
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/no fue posible confirmar el estado del vehículo en el runt/i);
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+  });
+
+  it('422 VEHICLE_BODY_TYPE_MISSING avisa que no hay carrocería que cambiar y bloquea el avance', async () => {
+    // El vehículo no tiene carrocería registrada en el RUNT: el cambio de carrocería no tiene qué
+    // sustituir. No es subsanable —falta el atributo, no un documento— así que el aviso dice qué
+    // hacer en su lugar y no se ofrece continuar.
+    const user = userEvent.setup();
+    mocks.runPreflight.mockRejectedValue(
+      new FakeTramitesApiError(
+        422,
+        'El vehículo no tiene carrocería registrada en el RUNT: no es posible radicar un cambio de carrocería.',
+        {
+          title: 'VEHICLE_BODY_TYPE_MISSING',
+          status: 422,
+          procedureType: 'cambio_carroceria',
+        },
+      ),
+    );
+    mocks.getWizardState.mockResolvedValue({
+      ...MATRICULA_WIZARD,
+      steps: MATRICULA_WIZARD.steps.map((s) =>
+        s.key === 'consulta_vin' ? { ...s, status: 'incomplete' as const, reasons: [] } : s,
+      ),
+    });
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
+
+    await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    expect(
+      await screen.findByText(/no tiene carrocería registrada en el RUNT/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No se pudo consultar\./)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
   });
 
@@ -1532,14 +1576,14 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
     await user.click(consultaTab);
     // Espera a que el form de placa (traspaso) se pinte.
-    await screen.findByLabelText('Placa');
+    await screen.findByLabelText('Placa del vehículo');
   }
 
   it('con Kyverum RUNT (default) NO pide el tipo, pero sí placa y número', async () => {
     await abrirPasoConsulta();
 
-    expect(screen.getByLabelText('Placa')).toBeInTheDocument();
-    expect(screen.getByLabelText('Número documento propietario')).toBeInTheDocument();
+    expect(screen.getByLabelText('Placa del vehículo')).toBeInTheDocument();
+    expect(screen.getByLabelText('Número documento del propietario')).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.queryByLabelText('Tipo documento propietario')).not.toBeInTheDocument(),
     );
@@ -1567,10 +1611,10 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
     // Instancia existente: reanuda en la frontera, así que hay que abrir el paso de consulta.
     await user.click(await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ }));
-    await screen.findByLabelText('Placa');
+    await screen.findByLabelText('Placa del vehículo');
 
-    await user.type(screen.getByLabelText(/^Placa$/), 'PWL160');
-    await user.type(screen.getByLabelText(/Número documento propietario/), '890903938');
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento del propietario/), '890903938');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
 
     await waitFor(() =>

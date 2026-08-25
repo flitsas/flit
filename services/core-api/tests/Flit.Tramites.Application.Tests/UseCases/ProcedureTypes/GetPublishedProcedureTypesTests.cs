@@ -30,6 +30,7 @@ public sealed class GetPublishedProcedureTypesTests
                 Family = "traspaso",
                 Version = 2,
                 PublicationStatus = PublicationStatus.Published,
+                WizardEnabled = true,
                 CreatedAt = DateTimeOffset.UtcNow
             },
         });

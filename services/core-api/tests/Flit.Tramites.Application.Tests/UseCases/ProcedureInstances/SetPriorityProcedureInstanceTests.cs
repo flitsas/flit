@@ -23,6 +23,7 @@ public sealed class SetPriorityProcedureInstanceTests
         Guid id, Guid tenant, bool prioritario = false, string status = TramiteEstado.Borrador) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),

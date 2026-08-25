@@ -47,6 +47,7 @@ public sealed class CreateProcedureInstanceTests
         Name = code,
         Family = family,
         PublicationStatus = PublicationStatus.Published,
+        WizardEnabled = true,
         CreatedAt = DateTimeOffset.UtcNow
     };
 
@@ -94,6 +95,7 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
@@ -126,6 +128,7 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
@@ -149,6 +152,7 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
@@ -164,37 +168,29 @@ public sealed class CreateProcedureInstanceTests
     }
 
     [Theory]
-    [InlineData("TRASPASO", "traspaso", "traspaso_standard")]
-    [InlineData("traspaso", "traspaso", "traspaso_standard")] // case-insensitive
-    [InlineData("MATRICULAS", "matricula_inicial", "matricula_inicial")]
-    [InlineData("OTROS", "matricula_inicial", "matricula_inicial")]
-    [InlineData("UNKNOWN_FAMILY", "matricula_inicial", "matricula_inicial")] // default defensivo
-    public async Task HandleAsync_SetsModalidadAndTipologiaFromFamily(
-        string family, string expectedModalidad, string expectedTipologia)
+    [InlineData("TRASPASO", "TRASPASO_STANDARD")]
+    [InlineData("traspaso", "TRASPASO_STANDARD")]
+    [InlineData("MATRICULAS", "MATRICULA_NUEVA")]
+    [InlineData("OTROS", "BLINDAJE")]
+    public async Task HandleAsync_LaInstanciaQuedaLigadaAlTipo_SinClasificacionPropia(
+        string family, string code)
     {
+        // ADR-0050 — la instancia ya no persiste modalidad ni tipología: su clasificación se deriva
+        // del tipo, así que basta con que el FK y la navegación queden bien puestos. Antes esta
+        // prueba verificaba la derivación familia → (modalidad, tipología), que ya no existe.
         var ct = TestContext.Current.CancellationToken;
-        var pt = new ProcedureType
-        {
-            Id = Guid.NewGuid(),
-            Code = "X",
-            Name = "X",
-            Family = family,
-            PublicationStatus = PublicationStatus.Published,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-        _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
-        StubReferenceGenerator();
+        var pt = PublishedType(code, family);
+        _typeRepo.GetByIdAsync(pt.Id, Arg.Any<CancellationToken>()).Returns(pt);
 
-        var (result, error) = await _sut.HandleAsync(Request(), ct);
+        var (result, error) = await _sut.HandleAsync(
+            new CreateProcedureInstanceRequest(Guid.NewGuid(), pt.Id, Guid.NewGuid(), null), ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
         await _repo.Received(1).AddWithUniqueReferenceAsync(
-            Arg.Is<ProcedureInstance>(i =>
-                i.ModalidadEntrada == expectedModalidad &&
-                i.TipologiaCodigo == expectedTipologia),
+            Arg.Is<ProcedureInstance>(i => i.ProcedureTypeId == pt.Id && i.TypeCode == code),
             Arg.Any<int>(),
-            ct);
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -214,8 +210,7 @@ public sealed class CreateProcedureInstanceTests
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
                 i.ProcedureTypeId == pt.Id &&
-                i.ModalidadEntrada == "matricula_inicial" &&
-                i.TipologiaCodigo == "matricula_inicial"),
+                i.TypeCode == "MATRICULA_NUEVA"),
             Arg.Any<int>(),
             ct);
     }
@@ -235,8 +230,7 @@ public sealed class CreateProcedureInstanceTests
         result!.ProcedureTypeId.Should().Be(pt.Id);
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
-                i.ModalidadEntrada == "traspaso" &&
-                i.TipologiaCodigo == "traspaso_standard"),
+                i.TypeCode == "TRASPASO_STANDARD"),
             Arg.Any<int>(),
             ct);
     }
@@ -250,6 +244,7 @@ public sealed class CreateProcedureInstanceTests
         Name = "X",
         Family = "matriculas",
         PublicationStatus = PublicationStatus.Published,
+        WizardEnabled = true,
         GateProfile = gateProfile,
         CreatedAt = DateTimeOffset.UtcNow
     };
@@ -439,5 +434,40 @@ public sealed class CreateProcedureInstanceTests
         error.Should().Be("modalidad_not_available");
         result.Should().BeNull();
         await _typeRepo.DidNotReceive().GetByCodePublishedAsync(Arg.Any<string>(), ct);
+    }
+
+    // ── ADR-0050: la barrera de operación corta en el servidor ───────────────────────────────────
+
+    [Fact]
+    public async Task TipoPublicadoPeroNoHabilitado_NoCreaElTramite()
+    {
+        // Publicado significa que existe en el catálogo; habilitado, que su recorrido se puede
+        // recorrer. Antes la barrera solo filtraba el selector, así que una llamada directa —ICT,
+        // una integración, un enlace guardado— abría trámites de tipos a medio parametrizar y el
+        // gestor se encontraba con un asistente vacío en vez de con un rechazo que dice por qué.
+        var ct = TestContext.Current.CancellationToken;
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        var typeRepo = Substitute.For<IProcedureTypeRepository>();
+        var pt = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "BLINDAJE",
+            Name = "Blindaje",
+            Family = "OTROS",
+            PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = false,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        typeRepo.GetByCodePublishedAsync("BLINDAJE", Arg.Any<CancellationToken>()).Returns(pt);
+
+        var (result, error) = await new CreateProcedureInstanceHandler(repo, typeRepo).HandleAsync(
+            new CreateProcedureInstanceRequest(
+                Guid.NewGuid(), null, Guid.NewGuid(), null, null, ProcedureTypeCode: "BLINDAJE"),
+            ct);
+
+        error.Should().Be("procedure_type_not_enabled");
+        result.Should().BeNull();
+        await repo.DidNotReceive().AddWithUniqueReferenceAsync(
+            Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 }
