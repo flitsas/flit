@@ -437,13 +437,10 @@ function ActorBlock({
         </div>
       ) : null}
       {/*
-       * Trazabilidad + enlace de captura (antes la tarjeta compartida «Estado de validación de
-       * identidad» — se eliminó por duplicar lo que ya vive aquí, en la sección del propio actor).
-       * Se conserva siempre que hay una validación que auditar: el banner de arriba (o, cuando
-       * `hideValidacion`, la biométrica embebida) ya dice si está pendiente o verificada, así que el
-       * badge solo se repite cuando NINGUNA de las dos lo hizo.
+       * Trazabilidad Kyverum solo si el método es validación de identidad. Con firma del baúl no
+       * hay bitácora de proveedor que mostrar (la electrónica no usa este historial).
        */}
-      {bio ? (
+      {bio && !firmaBaul ? (
         <IdentityTrackingBlock bio={bio} actorNombre={actor.nombre} showBadge={hideValidacion} />
       ) : null}
     </div>
