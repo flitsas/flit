@@ -664,7 +664,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
                 .Select(t => new { t.Id, t.Name, t.Family })
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
-            .Select(t => (t.Id, t.Name, (string?)t.Family)));
+            .Select(t => (t.Id.ToString(), t.Name, (string?)t.Family)));
 
         var usuarioIds = await propios
             .Select(p => p.CreatedByUserId)

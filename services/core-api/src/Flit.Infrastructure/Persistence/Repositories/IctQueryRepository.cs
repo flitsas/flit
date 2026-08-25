@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Globalization;
 using System.Text.Json;
 using Flit.Analytics.Application.IctQueries;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
@@ -101,7 +102,7 @@ internal sealed class IctQueryRepository : IIctQueryRepository
 
     private const string BaseSelect = """
         SELECT m.id, m.transaction_number, m.manager_id_transaction, m.plate, m.vin,
-               m.transaction_type, tm.description AS tipo_nombre,
+               m.transaction_type, tm.description AS tipo_nombre, tm.family AS tipo_familia,
                m.process_status_id, m.procedure_instance_id, m.priority,
                m.traffic_secretary_code, m.business_comments_validation,
                m.external_comments_validation, m.business_date_validation,
@@ -180,6 +181,7 @@ internal sealed class IctQueryRepository : IIctQueryRepository
             Vin: GetStringOrNull(reader, "vin"),
             TipoTramiteId: reader.GetInt32(reader.GetOrdinal("transaction_type")),
             TipoTramiteNombre: GetStringOrNull(reader, "tipo_nombre"),
+            TipoTramiteFamilia: GetStringOrNull(reader, "tipo_familia"),
             Estado: estado,
             TieneNovedades: processStatusId == 4,
             TieneBorrador: procedureInstanceId is not null,
@@ -246,7 +248,12 @@ internal sealed class IctQueryRepository : IIctQueryRepository
         IctQueryFieldCatalog.Radicado => r => Single(r.Radicado),
         IctQueryFieldCatalog.NumeroTransaccion => r => [r.TransactionNumber.ToString()],
         IctQueryFieldCatalog.Comentarios => r => Single(r.Comentarios),
-        IctQueryFieldCatalog.TipoTramite => r => [r.TipoTramiteId.ToString()],
+        // El tipo concreto y su familia: el desplegable ofrece los dos niveles en el mismo campo,
+        // así que «Toda la familia: Traspasos» tiene que casar con un traspaso unilateral.
+        IctQueryFieldCatalog.TipoTramite => r =>
+            r.TipoTramiteFamilia is { Length: > 0 } familia
+                ? [r.TipoTramiteId.ToString(CultureInfo.InvariantCulture), familia]
+                : [r.TipoTramiteId.ToString(CultureInfo.InvariantCulture)],
         IctQueryFieldCatalog.Estado => r => [r.Estado],
         IctQueryFieldCatalog.Secretaria => r => Single(r.Secretaria),
         IctQueryFieldCatalog.ClienteIntegracion => r =>
@@ -344,22 +351,31 @@ internal sealed class IctQueryRepository : IIctQueryRepository
             // Los tipos de trámite realmente usados por esta compañía. Ofrecer uno con el que nunca
             // ha integrado es ofrecer un filtro que solo puede devolver cero.
             cmd.CommandText = """
-                SELECT DISTINCT m.transaction_type, tm.description
+                SELECT DISTINCT m.transaction_type, tm.description, tm.family
                 FROM ict.external_integration_master m
                 LEFT JOIN ict.procedure_type_mapping tm ON tm.external_transaction_type = m.transaction_type
                 WHERE m.tenant_id = @tenant AND m.deleted_at IS NULL
-                ORDER BY tm.description NULLS LAST
                 """;
             AddParam(cmd, "tenant", tenantId);
+            var crudos = new List<(string Id, string Name, string? Family)>();
             await using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
             {
                 while (await reader.ReadAsync(ct).ConfigureAwait(false))
                 {
                     var tipoId = reader.GetInt32(0);
                     var label = reader.IsDBNull(1) ? $"Tipo {tipoId}" : reader.GetString(1);
-                    tipos.Add(new QueryFieldOptionDto(tipoId.ToString(), label));
+                    crudos.Add((
+                        tipoId.ToString(CultureInfo.InvariantCulture),
+                        label,
+                        reader.IsDBNull(2) ? null : reader.GetString(2)));
                 }
             }
+
+            // El orden y el agrupado los pone el catálogo compartido, no un ORDER BY: los tipos
+            // salen bajo el encabezado de su familia, igual que en los otros dos motores de
+            // consultas. ICT tiene su PROPIO catálogo de tipos de transacción, y `family` del mapeo
+            // es lo que los ata a las tres familias de FLIT.
+            tipos.AddRange(TipoTramiteOptionCatalog.Build(crudos));
 
             cmd.Parameters.Clear();
             cmd.CommandText = """
@@ -639,6 +655,7 @@ internal sealed class IctQueryRepository : IIctQueryRepository
         string? Vin,
         int TipoTramiteId,
         string? TipoTramiteNombre,
+        string? TipoTramiteFamilia,
         string Estado,
         bool TieneNovedades,
         bool TieneBorrador,

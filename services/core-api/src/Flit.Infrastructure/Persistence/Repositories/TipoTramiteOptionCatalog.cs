@@ -40,9 +40,12 @@ internal static class TipoTramiteOptionCatalog
     /// Los tipos presentes en los trámites que quien consulta puede ver, no el catálogo completo.
     /// Ofrecer los veintiún tipos daría dieciocho opciones que devuelven cero, y para una empresa
     /// además revelaría qué tramitan las demás.
+    /// <para>El identificador es <c>string</c> y no el tipo real porque los tres motores no
+    /// coinciden: los de FLIT usan el <c>Guid</c> de <c>procedure_types</c> y el de ICT el número de
+    /// transacción de su propio catálogo. La opción de un desplegable es texto en cualquier caso.</para>
     /// </param>
     public static IReadOnlyList<QueryFieldOptionDto> Build(
-        IEnumerable<(Guid Id, string Name, string? Family)> tipos)
+        IEnumerable<(string Id, string Name, string? Family)> tipos)
     {
         var porFamilia = tipos
             .GroupBy(t => ProcedureFamilyCodes.FromCode(t.Family) is ProcedureFamily f
@@ -63,7 +66,7 @@ internal static class TipoTramiteOptionCatalog
             opciones.Add(new QueryFieldOptionDto(code, $"Toda la familia: {label}", label));
             opciones.AddRange(delGrupo
                 .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(t => new QueryFieldOptionDto(t.Id.ToString(), t.Name, label)));
+                .Select(t => new QueryFieldOptionDto(t.Id, t.Name, label)));
         }
 
         return opciones;

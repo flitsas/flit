@@ -517,7 +517,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                         .Select(t => new { t.Id, t.Name, t.Family })
                         .ToListAsync(cancellationToken)
                         .ConfigureAwait(false))
-                    .Select(t => (t.Id, t.Name, (string?)t.Family)));
+                    .Select(t => (t.Id.ToString(), t.Name, (string?)t.Family)));
 
                 var revisorIds = await _context.ProcedureInstanceStatusHistories
                     .AsNoTracking()
