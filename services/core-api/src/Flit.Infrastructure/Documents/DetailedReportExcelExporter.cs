@@ -96,7 +96,7 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         r.TransformationDetail ?? string.Empty,
         r.IsLeasing ? "Sí" : "No",
         r.PaymentType,
-        r.TransferType,
+        r.TransferType ?? string.Empty,
         r.SubmittedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty,
         r.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty,
     ];

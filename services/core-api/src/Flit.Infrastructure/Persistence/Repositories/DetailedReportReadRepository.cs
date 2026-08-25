@@ -159,7 +159,9 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
             reader.IsDBNull(11) ? null : reader.GetString(11),
             reader.GetBoolean(12),
             reader.GetString(13),
-            reader.GetString(14));
+            // `transfer_type` es NULL fuera de la familia TRASPASO (DDL 90): ahí la pregunta no
+            // aplica, y una celda vacía lo dice mejor que inventarle una clase de traspaso.
+            reader.IsDBNull(14) ? null : reader.GetString(14));
 
     private static void BindFilter(DbCommand cmd, DetailedReportFilter filter)
     {
