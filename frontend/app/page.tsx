@@ -19,7 +19,11 @@ import { IctTrazabilidad } from "@/components/atom/modules/IctTrazabilidad";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
-import { planSpaModuleAccess, resolveNavigableModuleIds } from "@/lib/nav/modules";
+import {
+  planSpaModuleAccess,
+  puedeDecidirAccesoAModulo,
+  resolveNavigableModuleIds,
+} from "@/lib/nav/modules";
 import { trackModuleView } from "@/lib/telemetry"; // Reportes2 HU-A
 import { getToken } from "@/lib/api/client";
 import {
@@ -38,6 +42,7 @@ function HomeContent() {
   const {
     modules: accessibleModules,
     loading: modulesLoading,
+    ready: modulesReady,
     error: modulesError,
   } = useAccessibleModules(authed);
   // Claims JWT: lectura perezosa (no reactiva) — el token no cambia en la sesión SPA.
@@ -77,7 +82,9 @@ function HomeContent() {
   // Sync / revalidar ?m= cuando cambian rawModule O navigableIds (post-RBAC).
   // Importante: un solo replace por módulo denegado — sin loop de router.replace.
   useEffect(() => {
-    if (modulesLoading) return;
+    // Cuándo se puede decidir vive en `puedeDecidirAccesoAModulo`, con el porqué documentado allí:
+    // esperar solo a `modulesLoading` evaluaba el permiso contra una lista vacía.
+    if (!puedeDecidirAccesoAModulo({ hydrated, authed, modulesReady })) return;
 
     const plan = planSpaModuleAccess(rawModule, navigableIds);
 
@@ -103,7 +110,7 @@ function HomeContent() {
     lastDeniedRef.current = null;
     replaceIssuedRef.current = null;
     setModule((prev) => (prev === plan.module ? prev : plan.module));
-  }, [rawModule, navigableKey, navigableIds, modulesLoading, router, showToast]);
+  }, [rawModule, navigableKey, navigableIds, modulesReady, hydrated, authed, router, showToast]);
 
   // Reportes2 HU-A — telemetría solo tras módulo autorizado (no durante hold).
   useEffect(() => {
