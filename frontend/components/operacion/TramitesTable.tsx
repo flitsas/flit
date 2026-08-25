@@ -49,6 +49,7 @@ import { PageNav } from '@/components/atom/PageNav';
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
+import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
 import {
@@ -580,9 +581,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     void load();
   }, [load, refreshKey]);
 
-  // Conteo por estado de negocio (para el funnel de estados). Se calcula sobre el
-  // total de trámites cargados, no sobre `filtered`, para que el embudo muestre
-  // siempre el panorama completo aunque haya un estado seleccionado.
+  // Conteo por estado para la tira KPI (`flit-tramites-chrome`): cambia con el tab de modalidad,
+  // no con búsqueda ni filtro de estado — mismo criterio que el mockup.
   const estadoCounts = useMemo(() => {
     const c: Record<EstadoTramite, number> = {
       borrador: 0,
@@ -591,15 +591,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       entregado: 0,
       aprobado: 0,
       rechazado: 0,
-      // HU #10874 — no tiene tarjeta propia en el funnel (FUNNEL_ORDER no la incluye), pero el
-      // tipo Record<EstadoTramite, number> exige la clave; se cuenta igual por completitud.
       subsanacion: 0,
     };
     for (const it of items) {
+      if (modalidad && it.modalidad !== modalidad) continue;
       if (it.estado in c) c[it.estado as EstadoTramite] += 1;
     }
     return c;
-  }, [items]);
+  }, [items, modalidad]);
 
   // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
   const companias = useMemo(() => {
@@ -937,69 +936,30 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setPage(1);
   };
 
+  /** Mockup chrome: Actualizar limpia búsqueda y filtro de estado, luego recarga. */
+  const handleRefresh = () => {
+    setSearch('');
+    setEstado('');
+    setPage(1);
+    void load();
+  };
+
   return (
     // Sin tarjeta blanca envolvente: en el diseño la pantalla es una pila de bloques sobre el
     // fondo azul claro (título en tarjeta, KPIs en tarjeta, tabs desnudos, filas como tarjetas).
     // Meter todo dentro de un contenedor blanco aplanaba esa jerarquía.
     <section className="flex min-w-0 flex-col gap-4">
-      {/* Título del módulo en tarjeta blanca (PageHeaderCard). */}
-      <div className="rounded-2xl border border-[#DFE5ED] bg-white px-5 py-3 dark:border-white/10 dark:bg-[#162744]">
-        <h1 className="text-2xl font-bold leading-tight" style={{ color: '#557EFF' }}>
-          Gestión integral de trámites
-        </h1>
-        <p className="mt-1 text-sm leading-snug text-[#162744]/70 dark:text-white/60">
-          Administra, monitorea y radica tus trámites ante organismos de tránsito en tiempo real.
-        </p>
-      </div>
+      <ModuleTitle
+        title="Gestión Integral de trámites"
+        subtitle="Administra, monitorea y radica tus trámites ante organismos de tránsito en tiempo real."
+      />
 
       <div className="flex min-w-0 flex-col gap-4">
-        {/* Tira de KPIs por estado + botón general "Nuevo trámite" a su derecha, como en el
-            diseño. Sustituye a la fila de botones por modalidad (Matrícula inicial / Traspaso
-            estándar) y a la píldora "Buscar": la modalidad se elige DENTRO del botón general y
-            la búsqueda vive en el panel de filtros. */}
-        {/* El botón se renderiza SIEMPRE, también con la lista vacía: es la única vía para crear
-            el primer trámite. La tira de KPIs sí es condicional (sin datos no hay nada que contar). */}
-        <div className="flex items-stretch justify-end gap-4">
-          {!loading && !error && items.length > 0 ? (
-            <div className="min-w-0 flex-1">
-              <EstadoFunnel
-                counts={estadoCounts}
-                active={estado}
-                onSelect={handleEstadoChange}
-              />
-            </div>
-          ) : null}
-          {/* Flujo del diseño: entra DIRECTO al asistente; el tipo de trámite se elige dentro del
-              paso 1, no en un diálogo previo. */}
-          <button
-            type="button"
-            onClick={() => onNewTramite?.()}
-            disabled={blockNew.matricula && blockNew.traspaso}
-            title={
-              blockNew.matricula && blockNew.traspaso
-                ? 'La compañía tiene bloqueada la creación de trámites.'
-                : undefined
-            }
-            // Sin icono: en la propuesta el botón es solo el rótulo en dos líneas. El "+" no añadía
-            // nada que el texto no dijera y competía con él por el centro del botón.
-            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-            style={{ background: WIZARD_CTA_GRADIENT }}
-          >
-            <span>
-              Nuevo
-              <br />
-              trámite
-            </span>
-          </button>
-        </div>
-
-        {/* Tabs de modalidad + fila de acciones compactas (búsqueda, Periodo, + Filtro, Columnas)
-            + estrella de prioritarios + actualizar. Reemplaza a la tarjeta blanca de filtros
-            SIEMPRE visible (~185px de alto, casi muda en reposo): la tabla queda como foco. */}
+        {/* flit-tramites-chrome: tabs + filtros ANTES de KPIs */}
         <TramitesListToolbar
           modalidad={modalidad}
           onModalidadChange={handleModalidadChange}
-          onRefresh={() => void load()}
+          onRefresh={handleRefresh}
           loading={loading}
           hasActiveFilters={hasActiveFilters}
           soloPrioritarios={soloPrioritarios}
@@ -1014,6 +974,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               rangoPropioHasta={rangoPropioHasta}
               onRangoPropioDesdeChange={setRangoPropioDesde}
               onRangoPropioHastaChange={setRangoPropioHasta}
+              estado={estado}
+              onEstadoChange={handleEstadoChange}
               filtrosEspecificos={filtrosEspecificos}
               onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
               placa={placaFilter}
@@ -1048,8 +1010,34 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           }
         />
 
-        {/* Tira de chips: SOLO existe si hay periodo o algún filtro específico activo — sin
-            tarjeta ni borde, `mt-2`. */}
+        {/* KPIs por estado (solo lectura) + CTA Nuevo trámite */}
+        <div className="flex items-stretch gap-4">
+          {!loading && !error ? (
+            <div className="min-w-0 flex-1">
+              <EstadoFunnel counts={estadoCounts} />
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => onNewTramite?.()}
+            disabled={blockNew.matricula && blockNew.traspaso}
+            title={
+              blockNew.matricula && blockNew.traspaso
+                ? 'La compañía tiene bloqueada la creación de trámites.'
+                : undefined
+            }
+            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
+            style={{ background: WIZARD_CTA_GRADIENT }}
+          >
+            <span>
+              Nuevo
+              <br />
+              trámite
+            </span>
+          </button>
+        </div>
+
+        {/* Tira de chips: SOLO existe si hay periodo o algún filtro específico activo */}
         <TramitesFiltrosChips
           periodo={periodo}
           filtrosEspecificos={filtrosEspecificos}

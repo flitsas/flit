@@ -4,8 +4,8 @@ import { TramitesTable } from './TramitesTable';
 
 /**
  * M0 — Entrada por MODALIDAD (desligada de Parametrización). La vista es el
- * listado de trámites (TramitesTable), que ya hospeda —siguiendo el diseño— la tira
- * de KPIs por estado, los tabs por tipo y la búsqueda dentro de los filtros.
+ * listado de trámites (TramitesTable), que hospeda —según flit-tramites-chrome— título,
+ * tabs+filtros, KPIs por estado y la tabla.
  *
  * Flujo del diseño: "Nuevo trámite" entra DIRECTO al asistente (`/tramites/nuevo`) y el tipo se
  * elige dentro del paso 1. El listado ya no decide la modalidad.

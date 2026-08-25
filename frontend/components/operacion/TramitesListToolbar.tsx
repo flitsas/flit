@@ -6,14 +6,9 @@ import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization'
 import { FAMILIA_OPCIONES } from '@/lib/api/types/familia-labels';
 
 /**
- * Barra de tipo de trámite del listado (Track A). Tabs con subrayado por modalidad + slot de
- * acciones de filtros (búsqueda, Periodo, + Filtro, Columnas) + acciones de vista (prioritarios /
- * actualizar), en el estilo de la pantalla principal de trámites. El filtro por estado vive en la
- * tira de KPIs (EstadoFunnel). Es presentacional.
- *
- * ADR-0050 — las pestañas son las tres FAMILIAS del catálogo. La de "Otros trámites" llevaba
- * dibujada en el diseño desde el principio y no se incluía porque no existía como modalidad: los
- * trámites de esa familia se mezclaban con las matrículas y no había forma de filtrarlos.
+ * Barra de tipo de trámite del listado (`flit-tramites-chrome`). Tabs con subrayado
+ * alineado al borde inferior + slot de filtros (búsqueda, Periodo, + Filtro, Columnas)
+ * + prioritarios + actualizar, en la misma fila. Presentacional.
  */
 interface Props {
   /** Familia seleccionada; cadena vacía = todas. */
@@ -26,8 +21,7 @@ interface Props {
   /** HU #10536 — filtro "solo prioritarios". */
   soloPrioritarios: boolean;
   onPrioritariosChange: (v: boolean) => void;
-  /** Slot de acciones compactas (búsqueda, Periodo, + Filtro, Columnas), a la derecha de los tabs
-   *  y antes de la estrella de prioritarios / actualizar — separado de ellas por un divisor. */
+  /** Búsqueda, Periodo, + Filtro, Columnas — a la derecha de los tabs. */
   actions?: ReactNode;
 }
 
@@ -35,6 +29,9 @@ const MODALIDAD_TABS: { value: '' | ProcedureFamily; label: string }[] = [
   { value: '', label: 'Todos' },
   ...FAMILIA_OPCIONES,
 ];
+
+const CONTROL_CLS =
+  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white';
 
 export function TramitesListToolbar({
   modalidad,
@@ -46,9 +43,6 @@ export function TramitesListToolbar({
   onPrioritariosChange,
   actions,
 }: Props) {
-  // El RECUENTO ya no se anuncia aquí: lo dice "Mostrando X de Y" de `Pagination`, que es una
-  // región `status` por sí misma. Aquí queda solo el estado del filtrado, que no tiene
-  // equivalente visible en esta fila.
   const estadoFiltrado = [
     hasActiveFilters ? 'filtros activos' : null,
     soloPrioritarios ? 'solo prioritarios' : null,
@@ -58,10 +52,7 @@ export function TramitesListToolbar({
 
   return (
     <div className="flex min-w-0 flex-col">
-      {/* Tabs por modalidad + acciones de vista, DIRECTAMENTE sobre el fondo de la página: en el
-          diseño esta fila no vive dentro de una tarjeta, solo la separa un borde inferior. El tab
-          activo se marca con color Y con subrayado: el estado no depende solo del color. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DFE5ED] dark:border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
         <div
           className="flex flex-wrap items-center gap-1"
           role="tablist"
@@ -77,13 +68,12 @@ export function TramitesListToolbar({
                 aria-selected={active}
                 onClick={() => onModalidadChange(t.value)}
                 className="relative rounded-t-lg px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
-                style={active ? { color: '#557EFF' } : { color: '#162744', opacity: 0.65 }}
+                style={active ? { color: '#557EFF', opacity: 1 } : { color: '#162744', opacity: 0.65 }}
               >
                 {t.label}
                 {active ? (
                   <span
-                    className="absolute inset-x-2 -bottom-px h-0.5 rounded-full"
-                    style={{ background: '#557EFF' }}
+                    className="absolute inset-x-2 -bottom-2.5 h-0.5 rounded-full bg-[#557EFF]"
                     aria-hidden="true"
                   />
                 ) : null}
@@ -91,31 +81,23 @@ export function TramitesListToolbar({
             );
           })}
         </div>
-        <div className="flex flex-wrap items-center gap-2 pb-1">
-          {actions ? (
-            <>
-              {actions}
-              <span
-                className="h-5 w-px shrink-0 bg-[#DFE5ED] dark:bg-white/15"
-                aria-hidden="true"
-              />
-            </>
-          ) : null}
-          {/* HU #10536 — filtro "solo prioritarios". */}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
           <button
             type="button"
             onClick={() => onPrioritariosChange(!soloPrioritarios)}
             aria-pressed={soloPrioritarios}
             aria-label="Mostrar solo trámites prioritarios"
             title={soloPrioritarios ? 'Mostrando solo prioritarios' : 'Mostrar solo prioritarios'}
-            className="rounded-lg p-2 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#DFE5ED] bg-white transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14]"
           >
             <Star
               className="h-4 w-4"
               style={
                 soloPrioritarios
-                  ? { color: '#F59E0B', fill: '#F59E0B' }
-                  : { color: '#162744', opacity: 0.45 }
+                  ? { color: '#F9AC00', fill: '#F9AC00' }
+                  : { color: '#94A3B8', fill: 'transparent' }
               }
               aria-hidden="true"
             />
@@ -126,21 +108,14 @@ export function TramitesListToolbar({
             disabled={loading}
             aria-label="Actualizar listado de trámites"
             title="Actualizar"
-            className="rounded-lg p-2 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+            className={`${CONTROL_CLS} disabled:cursor-not-allowed disabled:opacity-50`}
           >
-            <RefreshCw
-              className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
-              style={{ color: '#162744', opacity: 0.55 }}
-              aria-hidden="true"
-            />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            Actualizar
           </button>
         </div>
       </div>
 
-      {/* Región viva SOLO para el estado del filtrado: que haya filtros aplicados o el modo "solo
-          prioritarios" no se lee en ningún sitio de esta fila. El recuento se quitó de aquí al
-          hacerse visible sobre la tabla — dos regiones `status` diciendo lo mismo se anunciaban
-          por duplicado en cada cambio de filtro. */}
       <p className="sr-only" role="status" aria-live="polite">
         {estadoFiltrado}
       </p>

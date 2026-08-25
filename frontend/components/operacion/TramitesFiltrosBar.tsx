@@ -3,6 +3,11 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ChevronDown, Search, X } from 'lucide-react';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import {
+  ESTADO_LABELS,
+  type EstadoTramite,
+} from '@/lib/tramites/estados';
+import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
 
 /**
  * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
@@ -68,16 +73,22 @@ const INPUT_CLS =
 const POPOVER_SURFACE_CLS =
   'rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#162744]';
 
-/** Botón disparador compacto compartido por los popovers "Periodo" y "+ Filtro": mismo tratamiento
- *  activo (borde/texto `#557EFF`/`#3B4FD6`) y neutro (`#DFE5ED`/`#162744`). */
-function popoverTriggerCls(activo: boolean): string {
-  return [
-    'inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border px-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2',
-    activo
-      ? 'border-[#557EFF] text-[#3B4FD6] hover:bg-[#557EFF]/10'
-      : 'border-[#DFE5ED] text-[#162744]/70 hover:bg-[#557EFF]/5 dark:border-white/15 dark:text-white/70',
-  ].join(' ');
-}
+const FILTRO_BTN_CLS =
+  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#557EFF] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14]';
+
+const COLS_BTN_CLS =
+  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white';
+
+/** Orden KPI / filtro por estado (mismo ciclo de vida que EstadoFunnel). */
+const ESTADO_FILTRO_ORDER: EstadoTramite[] = [
+  'borrador',
+  'preparado',
+  'entregado',
+  'aprobado',
+  'subsanacion',
+  'rechazado',
+  'anulado',
+];
 
 /**
  * Calcula el rango de fechas (local, `yyyy-mm-dd`) que corresponde a un periodo predefinido.
@@ -226,7 +237,7 @@ function PeriodoPopover({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        className={popoverTriggerCls(activo)}
+        className={activo ? `${COLS_BTN_CLS} border-[#557EFF] text-[#3B4FD6]` : COLS_BTN_CLS}
       >
         {activo ? periodo : 'Periodo'}
         <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -320,6 +331,8 @@ function PeriodoPopover({
 interface FiltroEspecificoPopoverProps {
   activos: ReadonlySet<FiltroEspecificoKey>;
   onToggle: (key: FiltroEspecificoKey) => void;
+  estado: '' | InstanceStatus;
+  onEstadoChange: (v: '' | InstanceStatus) => void;
   placa: string;
   onPlacaChange: (v: string) => void;
   vendedor: string;
@@ -343,6 +356,8 @@ interface FiltroEspecificoPopoverProps {
 function FiltroEspecificoPopover({
   activos,
   onToggle,
+  estado,
+  onEstadoChange,
   placa,
   onPlacaChange,
   vendedor,
@@ -386,7 +401,7 @@ function FiltroEspecificoPopover({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        className={popoverTriggerCls(count > 0)}
+        className={FILTRO_BTN_CLS}
       >
         {count > 0 ? `+ Filtro (${count})` : '+ Filtro'}
         <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -397,8 +412,47 @@ function FiltroEspecificoPopover({
           id={panelId}
           role="dialog"
           aria-label="Agregar filtro"
-          className={`absolute right-0 top-full z-30 mt-2 max-h-[420px] w-80 overflow-y-auto p-2 ${POPOVER_SURFACE_CLS}`}
+          className={`absolute right-0 top-full z-50 mt-2 max-h-[420px] w-60 overflow-y-auto rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]`}
         >
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[#1E293B] dark:text-white">
+            Filtrar por estado
+          </p>
+          <div className="mt-2 flex flex-col">
+            <button
+              type="button"
+              onClick={() => {
+                onEstadoChange('');
+                close();
+              }}
+              className="rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-[#EFF6FF] dark:hover:bg-white/5"
+              style={{
+                color: estado === '' ? '#557EFF' : '#334155',
+                fontWeight: estado === '' ? 700 : 500,
+              }}
+            >
+              Todos
+            </button>
+            {ESTADO_FILTRO_ORDER.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => {
+                  onEstadoChange(e);
+                  close();
+                }}
+                className="rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-[#EFF6FF] dark:hover:bg-white/5"
+                style={{
+                  color: estado === e ? '#557EFF' : '#334155',
+                  fontWeight: estado === e ? 700 : 500,
+                }}
+              >
+                {ESTADO_LABELS[e]}
+              </button>
+            ))}
+          </div>
+
+          <div className="my-3 border-t border-[#DFE5ED] dark:border-white/10" />
+
           {isAdmin && companias.length > 0 ? (
             <div className="border-b border-[#DFE5ED] pb-2 dark:border-white/10">
               <p className="select-none px-2 py-1 text-xs font-bold uppercase tracking-wide text-[#162744] dark:text-white">
@@ -540,6 +594,9 @@ export interface TramitesFiltrosBarProps {
   onRangoPropioDesdeChange: (v: string) => void;
   onRangoPropioHastaChange: (v: string) => void;
 
+  estado: '' | InstanceStatus;
+  onEstadoChange: (v: '' | InstanceStatus) => void;
+
   filtrosEspecificos: ReadonlySet<FiltroEspecificoKey>;
   onToggleFiltroEspecifico: (key: FiltroEspecificoKey) => void;
 
@@ -586,6 +643,8 @@ export function TramitesFiltrosBar({
   rangoPropioHasta,
   onRangoPropioDesdeChange,
   onRangoPropioHastaChange,
+  estado,
+  onEstadoChange,
   filtrosEspecificos,
   onToggleFiltroEspecifico,
   placa,
@@ -611,10 +670,10 @@ export function TramitesFiltrosBar({
 }: TramitesFiltrosBarProps) {
   return (
     <>
-      {/* Búsqueda: nunca se esconde, es el control más usado. Crece con el foco (w-56 → w-72). */}
-      <div className="group relative w-56 shrink-0 transition-[width] duration-150 focus-within:w-72">
+      {/* Búsqueda: ancho fijo w-64, icono marca — spec flit-tramites-chrome. */}
+      <div className="relative w-64 shrink-0">
         <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#59677D]"
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#557EFF]"
           aria-hidden="true"
         />
         <input
@@ -622,8 +681,8 @@ export function TramitesFiltrosBar({
           aria-label="Buscar trámites"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar…"
-          className={`${INPUT_CLS} w-full pl-8`}
+          placeholder="Buscar radicado, placa, VIN..."
+          className={`${INPUT_CLS} w-full pl-9`}
         />
       </div>
 
@@ -642,6 +701,8 @@ export function TramitesFiltrosBar({
       <FiltroEspecificoPopover
         activos={filtrosEspecificos}
         onToggle={onToggleFiltroEspecifico}
+        estado={estado}
+        onEstadoChange={onEstadoChange}
         placa={placa}
         onPlacaChange={onPlacaChange}
         vendedor={vendedor}
