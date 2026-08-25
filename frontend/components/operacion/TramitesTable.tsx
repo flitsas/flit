@@ -59,6 +59,7 @@ import {
 import { TramiteDetalleModal } from './TramiteDetalleModal';
 import { TramiteTrackingModal } from './TramiteTrackingModal';
 import type {
+  BiometricParte,
   FirmaParteEstado,
   InstanceStatus,
   InstanceSummary,
@@ -67,6 +68,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
+import { IdentidadParteTrackingModal } from './IdentidadParteTrackingModal';
 
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
@@ -443,6 +445,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
   /** Click en badge Estado → modal de línea de tiempo del trámite (todas las modalidades). */
   const [trackingTramite, setTrackingTramite] = useState<InstanceSummary | null>(null);
+  /** Click en línea Firmas → modal de tracking de identidad de esa parte. */
+  const [identidadTracking, setIdentidadTracking] = useState<{
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  } | null>(null);
 
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
@@ -1124,6 +1132,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           onVerConsolidado={setConsolidadoTramite}
           onOpenDetalle={setDetalleTramite}
           onOpenTrackingTramite={setTrackingTramite}
+          onOpenIdentidadTracking={setIdentidadTracking}
         />
       </div>
 
@@ -1166,6 +1175,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             ? [trackingTramite.referenceNumber, trackingTramite.placa].filter(Boolean).join(' · ')
             : null
         }
+      />
+
+      <IdentidadParteTrackingModal
+        open={identidadTracking !== null}
+        onClose={() => setIdentidadTracking(null)}
+        instanceId={identidadTracking?.item.id ?? null}
+        tenantId={isAdmin ? identidadTracking?.item.tenantId : undefined}
+        parte={identidadTracking?.parte ?? 'comprador'}
+        rotulo={identidadTracking?.rotulo ?? 'Comprador'}
       />
 
       {processTarget && (
@@ -1334,6 +1352,7 @@ function TableBody({
   onVerConsolidado,
   onOpenDetalle,
   onOpenTrackingTramite,
+  onOpenIdentidadTracking,
 }: {
   loading: boolean;
   error: string | null;
@@ -1369,6 +1388,11 @@ function TableBody({
   onOpenDetalle: (item: InstanceSummary) => void;
   /** Click en badge Estado → modal de línea de tiempo del trámite. */
   onOpenTrackingTramite: (item: InstanceSummary) => void;
+  onOpenIdentidadTracking: (target: {
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  }) => void;
 }) {
   if (loading) {
     // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
@@ -1532,6 +1556,7 @@ function TableBody({
                 onVerConsolidado={onVerConsolidado}
                 onOpenDetalle={onOpenDetalle}
                 onOpenTrackingTramite={onOpenTrackingTramite}
+                onOpenIdentidadTracking={onOpenIdentidadTracking}
               />
             ))}
           </tbody>
@@ -1578,34 +1603,50 @@ function ActorCell({ nombre }: { nombre: string | null | undefined }) {
 function FirmaParteLinea({
   rotulo,
   estado,
+  onOpenTracking,
 }: {
   rotulo: string;
   estado?: FirmaParteEstado | null;
+  /** Click en el indicador → modal de tracking de identidad de esta parte. */
+  onOpenTracking?: () => void;
 }) {
   // Fragmento de DOS celdas, no una línea cerrada: la rejilla vive en el contenedor (ver la celda
   // `firmado`), y así el valor de vendedor y el de comprador quedan alineados en la misma columna.
   // Con la línea corrida anterior ("Vendedor: …" / "Comprador: …") los valores bailaban, porque
   // los dos rótulos no miden lo mismo, y la columna no se podía barrer en vertical.
+  const valor = estado ? (
+    <span
+      className="whitespace-nowrap text-xs font-semibold"
+      style={{ color: FIRMA_TEXTO[estado].color }}
+    >
+      {FIRMA_TEXTO[estado].label}
+    </span>
+  ) : (
+    <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
+      Sin registrar
+    </span>
+  );
+
   return (
     <>
-      {/* Ni el rótulo ni el valor se truncan: los dos salen de un conjunto cerrado y corto
-          (Vendedor/Comprador · Firmado/Sin firma/Rechazado/Sin registrar), y el ancho mínimo de la
-          columna está calculado para el peor caso. Un `truncate` aquí solo servía para esconder
-          que la columna iba estrecha, que es justo lo que pasaba. */}
       <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
         {rotulo}
       </span>
-      {estado ? (
-        <span
-          className="whitespace-nowrap text-xs font-semibold"
-          style={{ color: FIRMA_TEXTO[estado].color }}
+      {onOpenTracking ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenTracking();
+          }}
+          aria-label={`Ver tracking de identidad de ${rotulo}`}
+          title={`Ver tracking de identidad · ${rotulo}`}
+          className="rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
         >
-          {FIRMA_TEXTO[estado].label}
-        </span>
+          {valor}
+        </button>
       ) : (
-        <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
-          Sin registrar
-        </span>
+        valor
       )}
     </>
   );
@@ -1629,6 +1670,7 @@ function TramiteRow({
   onVerConsolidado,
   onOpenDetalle,
   onOpenTrackingTramite,
+  onOpenIdentidadTracking,
 }: {
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
@@ -1649,6 +1691,11 @@ function TramiteRow({
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
   onOpenDetalle: (item: InstanceSummary) => void;
   onOpenTrackingTramite: (item: InstanceSummary) => void;
+  onOpenIdentidadTracking: (target: {
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  }) => void;
 }) {
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
@@ -1862,9 +1909,21 @@ function TramiteRow({
     firmado: (
       <span className="grid min-w-0 grid-cols-[auto_auto] justify-start items-center gap-x-2 gap-y-1">
         {item.modalidad === 'TRASPASO' ? (
-          <FirmaParteLinea rotulo="Vendedor" estado={item.firmaVendedorEstado} />
+          <FirmaParteLinea
+            rotulo="Vendedor"
+            estado={item.firmaVendedorEstado}
+            onOpenTracking={() =>
+              onOpenIdentidadTracking({ item, parte: 'vendedor', rotulo: 'Vendedor' })
+            }
+          />
         ) : null}
-        <FirmaParteLinea rotulo="Comprador" estado={item.firmaCompradorEstado} />
+        <FirmaParteLinea
+          rotulo="Comprador"
+          estado={item.firmaCompradorEstado}
+          onOpenTracking={() =>
+            onOpenIdentidadTracking({ item, parte: 'comprador', rotulo: 'Comprador' })
+          }
+        />
       </span>
     ),
     // El chip de estado se inyecta más abajo (solo si la columna `estado` está oculta), para

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   downloadAttachment: vi.fn(),
   // Frente C, etapa 1 — modal de detalle de un trámite ya radicado.
   getInstance: vi.fn(),
+  listBiometricExpediente: vi.fn(),
   // ICT (PR #204) — pausa individual y masiva + cierre del subflujo de placa.
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
@@ -943,6 +944,33 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).toBeNull();
     expect(routerPush).not.toHaveBeenCalled();
     expect(await screen.findByText(/Entregado desde Borrador/)).toBeInTheDocument();
+  });
+
+  it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'rad-id',
+        referenceNumber: 'TR-ID',
+        placa: 'RADID1',
+        estado: 'entregado',
+        firmaCompradorEstado: 'firmado',
+      },
+    ]);
+    mocks.listBiometricExpediente.mockResolvedValue({
+      validations: [],
+      firmaBaulPartes: ['comprador'],
+    });
+    render(<TramitesTable />);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ver tracking de identidad de Comprador/i }),
+    );
+
+    expect(
+      await screen.findByRole('dialog', { name: /Tracking de identidad · Comprador/i }),
+    ).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it('los archivos finales del sistema muestran su SHA-256 completo (y excluyen los de otro origen)', async () => {
