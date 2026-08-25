@@ -78,6 +78,26 @@ export function fetchTramitesIct(
   });
 }
 
+/** Una opción del desplegable «tipo de trámite». */
+export interface TipoTramiteOpcion {
+  id: number;
+  nombre: string;
+}
+
+/**
+ * Tipos de trámite para el filtro. El backend devuelve solo los que aparecen entre los trámites
+ * que quien pregunta puede ver, así que la lista cambia al cambiar de compañía.
+ */
+export function fetchTiposTramiteIct(
+  compania?: string,
+  signal?: AbortSignal,
+): Promise<TipoTramiteOpcion[]> {
+  return apiFetch<TipoTramiteOpcion[]>("/api/v1/ict/trazabilidad/tipos", {
+    query: { compania },
+    signal,
+  });
+}
+
 /** Resultado de una etapa del recorrido. */
 export type ResultadoHito = "ok" | "error" | "espera" | "anulado" | "pendiente";
 

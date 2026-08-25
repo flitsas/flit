@@ -71,6 +71,7 @@ public static class IctInfrastructureExtensions
 
         // Trazabilidad ICT por trámite (Feature #11814). Solo lectura.
         services.AddScoped<ITrazabilidadBandejaQuery, DbTrazabilidadBandejaRepository>();
+        services.AddScoped<ITiposTramiteQuery, DbTiposTramiteRepository>();
         services.AddScoped<IRecorridoTramiteQuery, DbRecorridoTramiteRepository>();
         services.AddScoped<IConsultasFuenteQuery, DbConsultasFuenteRepository>();
         services.AddScoped<DbDetalleTramiteRepository>();

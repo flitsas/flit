@@ -70,6 +70,23 @@ public interface ITrazabilidadBandejaQuery
     Task<TrazabilidadPagina> ConsultarAsync(TrazabilidadFiltro filtro, CancellationToken ct = default);
 }
 
+/// <summary>Un tipo de trámite del desplegable de la bandeja.</summary>
+public sealed record TipoTramiteOpcion(int Id, string Nombre);
+
+/// <summary>
+/// Catálogo de tipos de trámite para el filtro de la bandeja (HU #11815).
+/// </summary>
+/// <remarks>
+/// Devuelve solo los tipos que APARECEN en los trámites que quien pregunta puede ver, no los 20 del
+/// catálogo maestro. Un desplegable lleno de opciones que siempre devuelven cero le hace perder el
+/// tiempo a quien busca y, en el caso de una empresa, delataría qué trámites tramitan las demás.
+/// </remarks>
+public interface ITiposTramiteQuery
+{
+    Task<IReadOnlyList<TipoTramiteOpcion>> ConsultarAsync(
+        Guid? tenantId, Guid? companiaTenantId, CancellationToken ct = default);
+}
+
 /// <summary>
 /// Normaliza el campo libre «placas o VIN» de la bandeja.
 /// </summary>

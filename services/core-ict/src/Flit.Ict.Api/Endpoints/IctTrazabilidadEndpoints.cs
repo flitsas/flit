@@ -58,6 +58,26 @@ public static class IctTrazabilidadEndpoints
             return Results.Ok(resultado);
         });
 
+        // HU #11815 — catálogo del desplegable «tipo de trámite». Va aquí y no en un módulo de
+        // parámetros porque depende del alcance de quien pregunta: cada quien ve los tipos que
+        // realmente aparecen entre SUS trámites.
+        group.MapGet("/tipos", async (
+            HttpContext context,
+            ITiposTramiteQuery query,
+            Guid? compania,
+            CancellationToken ct) =>
+        {
+            var access = PlatformAccessReader.Read(context);
+            if (!access.HasIctLogsAccess)
+            {
+                return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            var tipos = await query.ConsultarAsync(
+                access.IsSuperAdmin ? null : access.TenantId, compania, ct);
+            return Results.Ok(tipos);
+        });
+
         // HU #11816 — recorrido de un trámite con los tiempos consumidos en cada etapa.
         group.MapGet("/tramites/{numero:long}/recorrido", async (
             HttpContext context,
