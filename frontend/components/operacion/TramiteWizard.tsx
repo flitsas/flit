@@ -49,6 +49,7 @@ import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { DeclaracionesTramite } from './DeclaracionesTramite';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
+import { BlindajeDeclaracionCard } from './BlindajeDeclaracionCard';
 import { WizardStepTracker } from './WizardStepTracker';
 import { Modal } from '@/components/atom/Modal';
 import { StatusBadge } from '@/components/atom/StatusBadge';
@@ -63,6 +64,7 @@ import {
   getDuplicateActiveProcedureId,
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
+  isVehicleBodyTypeMissing,
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
 // HU #10806 — ¿la ruta de preasignación de placa está activa para esta compañía en el organismo
@@ -202,6 +204,14 @@ const SECRETARIA_LISTA_AVISO =
  */
 const ORGANISMO_NO_DISPONIBLE =
   'No puedes radicar en este organismo de tránsito. El vehículo está matriculado en un organismo que no está activo en FLIT o no está habilitado para tu compañía. Solicita al administrador que lo active y lo habilite para tu compañía antes de continuar con el trámite.';
+
+/**
+ * Cambio de carrocería sobre un vehículo que el RUNT no reporta con ninguna. No es subsanable desde
+ * el trámite —lo que falta no es un documento, es el atributo que el trámite viene a sustituir—, así
+ * que el aviso dice qué hacer en su lugar: escoger otro tipo.
+ */
+const CARROCERIA_NO_REGISTRADA =
+  'Este vehículo no tiene carrocería registrada en el RUNT, así que no hay carrocería que cambiar. No es posible radicar un cambio de carrocería: verifica la placa o selecciona el tipo de trámite que corresponda.';
 
 /**
  * Subtítulo descriptivo por paso, mostrado UNA sola vez bajo el `h2` (título
@@ -2497,49 +2507,25 @@ function TramiteSimultaneosField({
 /**
  * Declaración de blindaje del tipo BLINDAJE (familia OTROS).
  *
- * El blindaje no tiene «valor nuevo» que escoger —es un SÍ/NO— ni casilla propia en el numeral 3:
- * lo que el FUR marca es la casilla «vehículo blindado SI». Por eso no cabe en la tarjeta de
- * transformaciones, que gira alrededor de un select de valor, y vive aquí: afirma el hecho y lo
- * persiste (`blindaje = true`), que es lo único que el documento necesita. El certificado de
- * blindaje se carga en el checklist de documentos, con el resto del expediente.
+ * El blindaje no tiene «valor nuevo» que escoger frente al RUNT, así que no cabe en la tarjeta de
+ * transformaciones —que gira alrededor de ese diff— y tiene la suya: qué se declara (nivel 1, 2, 3 o
+ * desmonte) y el certificado que lo acredita. Sigue sin tener casilla propia en el numeral 3; lo que
+ * el FUR marca es «vehículo blindado SI/NO» y el detalle viaja en las observaciones.
  */
-function BlindajeDeclaracionField({ instanceId }: { instanceId: string | null }) {
+function BlindajeDeclaracionField({
+  instanceId,
+  onCompletenessChange,
+}: {
+  instanceId: string | null;
+  onCompletenessChange?: (complete: boolean) => void;
+}) {
   const readOnly = useWizardReadOnly();
-  const [declarado, setDeclarado] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    if (!instanceId) return;
-    let active = true;
-    void tramitesClient
-      .getInstance(instanceId)
-      .then((d) => {
-        if (!active) return;
-        const value = d?.fieldValues?.find((f) => f.fieldKey === 'blindaje')?.valueText?.trim();
-        setDeclarado(value === 'true');
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [instanceId]);
-
-  // El trámite ES el blindaje: la bandera se afirma sola en cuanto se sabe que faltaba, sin pedirle
-  // al gestor que marque una casilla cuya única respuesta posible es «sí».
-  useEffect(() => {
-    if (!instanceId || readOnly || declarado !== false) return;
-    void tramitesClient
-      .patchFieldValues(instanceId, [
-        { formFieldId: null, fieldKey: 'blindaje', valueText: 'true', valueJson: null },
-      ])
-      .then(() => setDeclarado(true))
-      .catch(() => {});
-  }, [instanceId, readOnly, declarado]);
-
   return (
-    <p className="text-xs" role="status">
-      El FUR declarará el vehículo como <span className="font-semibold">BLINDADO (SÍ)</span>. Adjunta
-      el certificado de blindaje en la gestión de documentos.
-    </p>
+    <BlindajeDeclaracionCard
+      instanceId={instanceId}
+      readOnly={readOnly}
+      onCompletenessChange={onCompletenessChange}
+    />
   );
 }
 
@@ -2999,6 +2985,10 @@ function ConsultaStep({
       const duplicateId = getDuplicateActiveProcedureId(err);
       if (duplicateId) {
         setDuplicateInstanceId(duplicateId);
+      } else if (isVehicleBodyTypeMissing(err)) {
+        // El vehículo no tiene carrocería que cambiar. Se avisa aquí, con el trámite todavía sin
+        // crear, para que el gestor pueda escoger otro tipo sin arrastrar un expediente abierto.
+        setError(CARROCERIA_NO_REGISTRADA);
       } else if (isTransitOfficeUnavailable(err)) {
         // HU #11199 (AC3) / HU #11200 (AC2/AC3) — el organismo no es utilizable. No es subsanable
         // desde el trámite: hasta que el administrador lo active y lo habilite no hay nada que hacer
@@ -4333,7 +4323,12 @@ function StepBody({
               if (cambioBase === 'blindaje') {
                 return (
                   <WizardAccordion title="Blindaje del vehículo" defaultOpen level="h3">
-                    <BlindajeDeclaracionField instanceId={instanceId} />
+                    {/* Mismo gate que los otros cambios base: sin opción declarada y sin certificado
+                        el paso no está completo, porque es justo lo que el FUR necesita imprimir. */}
+                    <BlindajeDeclaracionField
+                      instanceId={instanceId}
+                      onCompletenessChange={onSimultaneosGateChange}
+                    />
                   </WizardAccordion>
                 );
               }

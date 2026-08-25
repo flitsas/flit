@@ -93,7 +93,7 @@ internal static class ProcedureTypeFixture
 
     public static ProcedureType MatriculaLeasing => MatriculaLeasingInstance;
 
-    /// <summary>Tipo de OTROS que no cambia ningún atributo del vehículo ni gestiona gravamen.</summary>
+    /// <summary>Tipo de OTROS cuyo blindaje ES el trámite (capa base); no gestiona gravamen.</summary>
     public static ProcedureType Blindaje => BlindajeInstance;
 
     /// <summary>Tipo de OTROS cuyo cambio de color ES el trámite (capa base, no complemento).</summary>

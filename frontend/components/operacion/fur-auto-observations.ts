@@ -1,4 +1,9 @@
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
+import {
+  BLINDAJE_NIVEL_FIELD_KEY,
+  blindajeObservacionFur,
+  parseBlindajeOpcion,
+} from '@/lib/catalogs/blindaje';
 
 /**
  * Texto que el backend AÑADE por su cuenta al recuadro de observaciones del FUR, para poder
@@ -62,6 +67,14 @@ export function furAutoObservations(fields: FieldValue[] | null | undefined): st
     cambios.push([true, `COMBUSTIBLE_NUEVO: ${display(valueOf(fields, 'vehicle_fuel'))}`]);
   }
   for (const [, texto] of cambios) segments.push(texto);
+
+  // Blindaje: el nivel (o el desmonte) no tiene casilla donde declararse —la del formulario es un
+  // SÍ/NO— así que el detalle vive aquí. `blindaje_nivel` solo lo escribe la tarjeta del tipo
+  // BLINDAJE, de modo que su presencia ya significa que el trámite lo lleva.
+  const blindaje = blindajeObservacionFur(
+    parseBlindajeOpcion(valueOf(fields, BLINDAJE_NIVEL_FIELD_KEY)),
+  );
+  if (blindaje) segments.push(blindaje);
 
   // Tipo de servicio + empresa vinculadora. Sin razón social no se imprime nada: el tipo de
   // servicio ya tiene su casilla propia y repetirlo solo gastaría renglones del recuadro.

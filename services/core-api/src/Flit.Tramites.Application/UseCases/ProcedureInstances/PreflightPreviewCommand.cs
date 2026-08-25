@@ -316,6 +316,29 @@ public sealed class RunPreflightPreviewHandler(
         if (vehicleStateBlock is not null)
             return (null, VehicleStatePolicy.ErrorCode, null, vehicleStateBlock);
 
+        // Cambio de carrocería sobre un vehículo que el RUNT no reporta con ninguna. Se comprueba AQUÍ
+        // y no solo al crear el trámite porque este es el momento en que el gestor todavía puede
+        // escoger otro tipo: enterarse después es enterarse con el expediente ya abierto. Sin respuesta
+        // del proveedor no se bloquea (ver VehicleBodyTypePolicy).
+        if (_validationPolicy.VehicleBodyTypeRequired != TramiteValidationMode.Off)
+        {
+            var bodyTypeBlock = VehicleBodyTypePolicy.Evaluar(
+                procedureType?.Code,
+                consultaRespondio: vehicleFields.Count > 0,
+                carroceriaReportada: vehicleFields
+                    .FirstOrDefault(f => string.Equals(
+                        f.FieldKey, VehicleBodyTypePolicy.BodyTypeFieldKey, StringComparison.OrdinalIgnoreCase))
+                    ?.ValueText);
+
+            if (bodyTypeBlock is not null)
+            {
+                if (_validationPolicy.VehicleBodyTypeRequired == TramiteValidationMode.Block)
+                    return (null, VehicleBodyTypePolicy.ErrorCode, null, null);
+
+                checks.Add(RunPreflightHandler.BuildCarroceriaAusenteCheck());
+            }
+        }
+
         // Segunda pasada: la llave pudo ocuparse mientras corría la consulta externa (otro operador
         // abriendo el mismo VIN/placa). Barato (solo BD) y cierra la ventana de carrera.
         // HU #10970 — en modo off no se evalúa; en modo warn el hallazgo va como check amarillo.

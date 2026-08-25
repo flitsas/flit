@@ -477,6 +477,9 @@ internal static class ProcedureInstanceEndpoints
                 // RUNT/FLIT), SEGUNDO momento (el estado pudo cambiar desde el preflight). Bloqueo DURO
                 // no subsanable.
                 VehicleStatePolicy.ErrorCode => Results.Problem(statusCode: 422, title: VehicleStatePolicy.ErrorCode, detail: "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite."),
+                // Precondición del cambio de carrocería, SEGUNDO momento: cierra la puerta de atrás de
+                // un borrador abierto antes de que la guarda del paso 1 existiera.
+                VehicleBodyTypePolicy.ErrorCode => Results.Problem(statusCode: 422, title: VehicleBodyTypePolicy.ErrorCode, detail: "El vehículo no tiene carrocería registrada en el RUNT: no es posible radicar un cambio de carrocería."),
                 _ => Results.Ok(result)
             };
         }).WithName("SubmitProcedureInstance");
@@ -771,6 +774,16 @@ internal static class ProcedureInstanceEndpoints
                     {
                         ["vehicleStatus"] = vehicleState?.VehicleStatus,
                         ["procedureType"] = vehicleState?.ProcedureType,
+                    }),
+                // El vehículo no tiene carrocería que cambiar. Se avisa aquí —con el trámite todavía
+                // sin crear— para que el gestor pueda escoger otro tipo sin arrastrar un expediente.
+                VehicleBodyTypePolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleBodyTypePolicy.ErrorCode,
+                    detail: "El vehículo no tiene carrocería registrada en el RUNT: no es posible radicar un cambio de carrocería.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["procedureType"] = VehicleBodyTypePolicy.ProcedureTypeCambioCarroceria,
                     }),
                 _ => Results.Ok(result),
             };

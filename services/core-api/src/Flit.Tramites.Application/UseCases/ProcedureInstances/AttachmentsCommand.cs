@@ -48,6 +48,10 @@ public static class AttachmentRules
         "prenda_solicitud", "prenda_registro", "prenda_levantamiento",
         // Trámites simultáneos / transformaciones (prototipo Lovable DocSlot + RF33 carrocería).
         "soporte_cambio_color", "soporte_conversion_combustible", "factura_carroceria",
+        // Certificado de blindaje: obligatorio en las cuatro opciones del tipo BLINDAJE (niveles y
+        // desmonte). El AttachmentValidator ya lo aceptaría por catálogo, pero la validación estática
+        // de la vía presigned solo mira este set.
+        "certificado_blindaje",
         // HU #10604 (R19) / #10697 — paz y salvo RNMC. RNMC ya NO bloquea el envío al OT (la medida
         // correctiva es informativa): este adjunto queda como OPCIONAL informativo, no como requisito.
         "paz_salvo_rnmc",

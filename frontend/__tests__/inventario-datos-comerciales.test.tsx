@@ -88,6 +88,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId: () => null,
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => false,
+  isVehicleBodyTypeMissing: () => false,
   isRuesPreviewUnavailable: (err: unknown) =>
     !!err && typeof err === 'object' && (err as { status?: unknown }).status === 503,
 }));

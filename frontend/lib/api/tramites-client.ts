@@ -342,6 +342,22 @@ export function getVehicleStateBlock(err: unknown): VehicleStateBlockInfo | null
  *
  * Duck-typing sobre `{ status, problem }`, mismo patrón que `getVehicleStateBlock`.
  */
+/**
+ * Detecta el bloqueo DURO «el vehículo no tiene carrocería que cambiar» (422
+ * `VEHICLE_BODY_TYPE_MISSING`) que devuelven la consulta previa del paso 1 y el preflight al crear
+ * el trámite. Booleano a propósito: solo aplica a un tipo de trámite (el cambio de carrocería) y lo
+ * que el gestor debe hacer es siempre lo mismo —escoger otro tipo—, así que no hay variantes de
+ * mensaje que distinguir como sí las tiene {@link getVehicleStateBlock}.
+ *
+ * Duck-typing sobre `{ status, problem }`, mismo patrón que {@link isTransitOfficeUnavailable}.
+ */
+export function isVehicleBodyTypeMissing(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
+}
+
 export function isTransitOfficeUnavailable(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const { status, problem } = err as { status?: unknown; problem?: unknown };

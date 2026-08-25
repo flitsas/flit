@@ -50,6 +50,70 @@ public sealed class FurTramiteObservationTests
             .Should().BeNull();
     }
 
+    /// <summary>
+    /// Frase acordada con negocio para la casilla 18: quién deja de ser arrendatario y quién pasa a
+    /// serlo. Se compara la cadena COMPLETA, no un fragmento: el texto se imprime en el formulario y
+    /// una coma o una mayúscula de más ya no es lo pactado.
+    /// </summary>
+    [Fact]
+    public void CambioLocatario_NombraAlPropietarioYAlLocatarioQueEntra()
+    {
+        var texto = FurTramiteObservation.Compose("CAMBIO_LOCATARIO",
+        [
+            new DocumentParte("comprador", "Renting Colombia S.A.S", "900123456", null, "NIT"),
+            new DocumentParte("locatario", "WILLYN LONDOÑO LONDOÑO", "1037669356", null, "CC"),
+        ]);
+
+        texto.Should().Be(
+            "CAMBIO DE LOCATARIO por Leasing de Renting Colombia S.A.S a WILLYN LONDOÑO LONDOÑO, "
+            + "TIPO DE DOCUMENTO CC, NÚMERO DE DOCUMENTO 1037669356.");
+    }
+
+    [Fact]
+    public void CambioLocatario_ElPropietarioVaSoloConSuNombre()
+    {
+        // El NIT del propietario está capturado y aun así NO se imprime: el tipo y el número de
+        // documento acompañan solo al locatario, que es la parte que entra.
+        FurTramiteObservation.Compose("CAMBIO_LOCATARIO",
+        [
+            new DocumentParte("comprador", "Renting Colombia S.A.S", "900123456", null, "NIT"),
+            new DocumentParte("locatario", "ANA LOCATARIA", "10203040", null, "CC"),
+        ])!.Should().NotContain("900123456");
+    }
+
+    [Fact]
+    public void CambioLocatario_SinLocatario_NoCaeAlCompradorNiSeInventa()
+    {
+        // Leasing y unilateral sí caen al comprador cuando falta el locatario. Aquí NO: el trámite es
+        // el cambio de una parte por otra, y con una sola la frase diría que alguien se sustituye a sí
+        // mismo. Regla del artefacto: faltan datos ⇒ sí casilla, sí tipo, no se inventa el texto.
+        FurTramiteObservation.Compose("CAMBIO_LOCATARIO",
+            [new DocumentParte("comprador", "Renting Colombia S.A.S", "900123456", null, "NIT")])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void CambioLocatario_SinPropietario_NoSeInventa()
+    {
+        FurTramiteObservation.Compose("CAMBIO_LOCATARIO",
+            [new DocumentParte("locatario", "ANA LOCATARIA", "10203040", null, "CC")])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void CambioLocatario_SinDocumentoDelLocatario_MarcaElHuecoYNoOmiteLaFrase()
+    {
+        var texto = FurTramiteObservation.Compose("CAMBIO_LOCATARIO",
+        [
+            new DocumentParte("comprador", "Renting Colombia S.A.S", "900123456", null, "NIT"),
+            new DocumentParte("locatario", "ANA LOCATARIA", "   ", null, "   "),
+        ]);
+
+        texto.Should().Be(
+            "CAMBIO DE LOCATARIO por Leasing de Renting Colombia S.A.S a ANA LOCATARIA, "
+            + "TIPO DE DOCUMENTO -, NÚMERO DE DOCUMENTO -.");
+    }
+
     [Fact]
     public void OtroTipo_NoInventaBloque()
     {

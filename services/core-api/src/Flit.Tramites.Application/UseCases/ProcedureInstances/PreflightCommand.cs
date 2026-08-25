@@ -84,6 +84,9 @@ public sealed class RunPreflightHandler(
     // HU #10970 — check de duplicidad en modo advertencia. NO está en CriterioDeCheck: no es un criterio
     // configurable de FEATURE 05, así que AplicarPoliticaDeBloqueo nunca reescribe su severidad.
     private const string CheckDuplicidadTramite = "duplicidad_tramite";
+    // Tampoco es un CriterioDeCheck: la ausencia de carrocería no es un hallazgo de proveedor que la
+    // compañía pueda relajar por OT, es una precondición del tipo de trámite.
+    private const string CheckCarroceriaAusente = "carroceria_ausente";
 
     // A4/B4 (HU #10673, ADR-0029) — atributos del vehículo que el operador puede TRANSFORMAR durante el
     // trámite (color/combustible). Cada valor efectivo (el que va al FUR) mapea con su flag de cambio
@@ -238,6 +241,30 @@ public sealed class RunPreflightHandler(
             checks, modalidad, _validationPolicy.VehicleRegistrationState);
         if (vehicleStateBlock is not null)
             return (null, VehicleStatePolicy.ErrorCode, null, vehicleStateBlock);
+
+        // Cambio de carrocería sobre un vehículo que el RUNT no reporta con ninguna: no hay atributo
+        // que sustituir, así que el trámite no puede radicarse. Se evalúa sobre lo que devolvió ESTA
+        // consulta (no sobre lo persistido) para no confundir «el RUNT dice que no tiene» con «el RUNT
+        // no contestó»: sin respuesta no se bloquea nunca. En modo warn el hallazgo viaja como check
+        // amarillo dentro del snapshot; en modo off ni se evalúa.
+        if (_validationPolicy.VehicleBodyTypeRequired != TramiteValidationMode.Off)
+        {
+            var bodyTypeBlock = VehicleBodyTypePolicy.Evaluar(
+                instance.ProcedureType?.Code,
+                consultaRespondio: vehicleFields.Count > 0,
+                carroceriaReportada: vehicleFields
+                    .FirstOrDefault(f => string.Equals(
+                        f.FieldKey, VehicleBodyTypePolicy.BodyTypeFieldKey, StringComparison.OrdinalIgnoreCase))
+                    ?.ValueText);
+
+            if (bodyTypeBlock is not null)
+            {
+                if (_validationPolicy.VehicleBodyTypeRequired == TramiteValidationMode.Block)
+                    return (null, VehicleBodyTypePolicy.ErrorCode, null, null);
+
+                checks.Add(BuildCarroceriaAusenteCheck());
+            }
+        }
 
         // CF-01 (HU #10876) — bloqueo DURO de duplicidad EN PROCESO por familia (VIN en Matrícula
         // Inicial, placa en Traspaso), evaluado ANTES de componer el overall y persistir el snapshot.
@@ -510,6 +537,20 @@ public sealed class RunPreflightHandler(
             SystemSource,
             "Ya existe un trámite en curso para la misma placa/VIN (id " +
             $"{existingProcedureInstanceId}). El bloqueo por duplicidad está en modo advertencia en este ambiente.");
+
+    /// <summary>
+    /// Bloqueo «sin carrocería que cambiar» en modo <c>warn</c>: el hallazgo no corta el flujo pero sí
+    /// pinta el semáforo en amarillo, para que el gestor sepa por qué el organismo puede devolverle el
+    /// expediente. En modo <c>block</c> este check no existe: allí viaja como 422 y el snapshot ni se
+    /// persiste.
+    /// </summary>
+    internal static PreflightCheckDto BuildCarroceriaAusenteCheck() =>
+        new(CheckCarroceriaAusente,
+            "Vehículo sin carrocería registrada",
+            "warn",
+            SystemSource,
+            "El RUNT no reporta carrocería para este vehículo, así que no hay carrocería que cambiar. "
+            + "El bloqueo está en modo advertencia en este ambiente.");
 
     /// <summary>
     /// Corre la consulta de vehículo a través de la CADENA de proveedores (HU #10478): Kyverum RUNT

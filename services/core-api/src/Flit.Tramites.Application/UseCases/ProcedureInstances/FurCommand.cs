@@ -725,10 +725,31 @@ public sealed class GenerarFurHandler(
             return acumulaTransformaciones && Declarada(fv, bandera, claveRunt, claveEfectiva);
         }
 
+        // El blindaje no tiene par RUNT/efectivo que comparar —no es un atributo con «valor nuevo»,
+        // es un hecho—, así que no pasa por DeclaradaOBase: su vía es la opción declarada, con la
+        // bandera suelta como respaldo para los borradores abiertos antes de que la opción existiera.
+        // Se descarta si el trámite no lo lleva, por la misma razón que las otras tres: un residuo
+        // persistido no debe imprimirse.
+        var blindajeOpcion = BlindajeOpciones.Parse(Get(fv, BlindajeOpciones.FieldKey));
+        var blindajeDelTramite =
+            ProcedureTypeLayers.TransformacionDelTipo(codigo) == TransformacionBase.Blindaje
+            || (acumulaTransformaciones
+                && string.Equals(Get(fv, MandatoObjetoComposer.Blindaje)?.Trim(), "true", StringComparison.OrdinalIgnoreCase));
+        if (!blindajeDelTramite)
+            blindajeOpcion = BlindajeOpcion.Ninguna;
+
         var transformaciones = new FurTransformacionesDeclaradas(
             Color: DeclaradaOBase(MandatoObjetoComposer.CambioColor, "vehicle_color_runt", "vehicle_color", TransformacionBase.Color),
             Carroceria: DeclaradaOBase(MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type_runt", "vehicle_body_type", TransformacionBase.Carroceria),
-            Combustible: DeclaradaOBase(MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel", TransformacionBase.Combustible));
+            Combustible: DeclaradaOBase(MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel", TransformacionBase.Combustible),
+            // La casilla «vehículo blindado» declara el estado con el que QUEDA el vehículo, no el
+            // trámite que se solicita: por eso el desmonte —que es un trámite de blindaje— la deja en
+            // NO. Sin opción declarada se conserva el criterio previo: el tipo (o la bandera) basta
+            // para el SI. Hasta aquí este campo nunca se poblaba, así que la casilla salía siempre en
+            // NO incluso en un blindaje.
+            Blindaje: blindajeDelTramite
+                && (blindajeOpcion == BlindajeOpcion.Ninguna
+                    || BlindajeOpciones.DejaElVehiculoBlindado(blindajeOpcion)));
 
         return new FurDocumentData(
             ProcedureInstanceId: instance.Id,
@@ -749,7 +770,8 @@ public sealed class GenerarFurHandler(
                 acreedorPrenda,
                 acreedorPrendaDocumento,
                 fv,
-                transformaciones),
+                transformaciones,
+                blindajeOpcion),
             FirmaImagenes: firmaImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
@@ -784,7 +806,8 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
-    /// Párrafo 23: concatena tipo (leasing/unilateral) + prenda + transformaciones + vinculadora + texto libre.
+    /// Párrafo 23: concatena tipo (leasing/unilateral) + prenda + transformaciones + blindaje +
+    /// vinculadora + texto libre.
     /// </summary>
     private static string? ComposeObservacionesP23(
         string? codigo,
@@ -793,7 +816,8 @@ public sealed class GenerarFurHandler(
         string? acreedorPrenda,
         string? acreedorPrendaDocumento,
         Dictionary<string, string?> fv,
-        FurTransformacionesDeclaradas transformaciones)
+        FurTransformacionesDeclaradas transformaciones,
+        BlindajeOpcion blindajeOpcion)
     {
         var automatico = FurPrendaObservation.Join(
             FurTramiteObservation.Compose(codigo, partes),
@@ -805,10 +829,14 @@ public sealed class GenerarFurHandler(
                         Get(fv, "vehicle_color"),
                         Get(fv, "vehicle_fuel"),
                         Get(fv, "vehicle_body_type")),
-                    FurServicioVinculadoraObservation.Compose(
-                        Get(fv, "vehicle_service"),
-                        Get(fv, "empresa_vinculadora_razon_social"),
-                        Get(fv, "empresa_vinculadora_nit")))));
+                    // El blindaje va junto a las demás transformaciones —es la capa del tipo, igual
+                    // que ellas— y antes de la vinculadora, que cierra el bloque automático.
+                    FurPrendaObservation.Join(
+                        FurBlindajeObservation.Compose(blindajeOpcion),
+                        FurServicioVinculadoraObservation.Compose(
+                            Get(fv, "vehicle_service"),
+                            Get(fv, "empresa_vinculadora_razon_social"),
+                            Get(fv, "empresa_vinculadora_nit"))))));
 
         return FurObservacionesComposer.Componer(automatico, Get(fv, "fur_observations"));
     }

@@ -35,6 +35,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId: () => null,
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => false,
+  isVehicleBodyTypeMissing: () => false,
 }));
 
 vi.mock('@/components/admin/Toast', () => ({

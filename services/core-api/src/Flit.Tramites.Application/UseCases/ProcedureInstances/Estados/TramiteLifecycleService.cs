@@ -361,6 +361,20 @@ public sealed class TramiteLifecycleService(
         if (gateErrors.Count > 0)
             return (gateErrors[0], DetalleGatePreparacion(gateErrors));
 
+        // Precondición del tipo, no un requisito documental: un cambio de carrocería necesita una
+        // carrocería de partida. El preflight ya lo corta en el paso 1; esto cierra la puerta de atrás
+        // de un borrador abierto antes de que la guarda existiera, que llegaría hasta aquí intacto.
+        // Se mira el SNAPSHOT del RUNT y no el valor efectivo, que en este trámite lleva la carrocería
+        // NUEVA. En modo warn/off no bloquea (mismo interruptor por ambiente que el preflight).
+        if (_validationPolicy.VehicleBodyTypeRequired == TramiteValidationMode.Block
+            && VehicleBodyTypePolicy.ExigeCarroceriaPrevia(instance.TypeCode)
+            && string.IsNullOrWhiteSpace(FieldValue(instance, VehicleBodyTypePolicy.BodyTypeRuntFieldKey)))
+        {
+            return (VehicleBodyTypePolicy.ErrorCode,
+                "No se puede preparar el trámite: el vehículo no tiene carrocería registrada en el RUNT, "
+                + "así que no hay carrocería que cambiar. Vuelve a consultar el vehículo o radica el trámite que corresponda.");
+        }
+
         // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
         // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
         // la vía "asumo el riesgo" (decisión válida sin documento). Solo con el repo cableado.
@@ -472,6 +486,10 @@ public sealed class TramiteLifecycleService(
 
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
+
+    private static string? FieldValue(ProcedureInstance instance, string fieldKey) =>
+        instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase))?.ValueText;
 
     /// <summary>
     /// FEATURE-08 / HU-BE-06 (AC-06) — gate de preparación para tipos dinámicos: computa los blockers
