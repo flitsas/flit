@@ -2,12 +2,9 @@
 
 import { useState } from 'react';
 import { CampoValorInline } from './primitivos';
+import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
 
-const BLUE = '#557EFF';
-const NAVY = '#162744';
-
-const CARD =
-  'rounded-[18px] bg-white dark:bg-[#162744] border border-[#DFE5ED] dark:border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.05)]';
+const CARD = `${DETALLE_CARD} flex h-full flex-col p-5`;
 
 export interface TimelineTrackNode {
   label: string;
@@ -56,7 +53,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
 
   return (
     <div className={`${CARD} flex h-full flex-col p-5`}>
-      <h4 className="mb-6 shrink-0 text-sm font-bold" style={{ color: BLUE }}>
+        <h4 className="mb-6 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
         {title}
       </h4>
       <div className="flex select-none items-start overflow-x-auto pb-2">
@@ -79,7 +76,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
               />
               <span
                 className="whitespace-nowrap text-[11px] transition"
-                style={{ color: open === i ? BLUE : NAVY, fontWeight: open === i ? 700 : 500 }}
+                style={{ color: open === i ? DETALLE_BLUE : DETALLE_NAVY, fontWeight: open === i ? 700 : 500 }}
               >
                 {n.label}
               </span>
@@ -97,7 +94,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
       <div className="mt-5 flex-1 rounded-xl border border-[#DFE5ED] p-4 dark:border-white/10">
         <div className="mb-2 flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full" style={{ background: active.color }} />
-          <p className="text-xs font-bold" style={{ color: NAVY }}>
+          <p className="text-xs font-bold" style={{ color: DETALLE_NAVY }}>
             {active.label}
           </p>
         </div>

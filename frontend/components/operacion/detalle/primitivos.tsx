@@ -2,6 +2,9 @@
 
 import type { ReactNode } from 'react';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
+import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
+
+export { DETALLE_CARD } from './detalle-visual';
 
 /**
  * Contrato ÚNICO de toda sección del modal de detalle. Las secciones se montan solo cuando su
@@ -29,29 +32,43 @@ export interface SeccionDetalleProps {
  * y aquí el piso es 12px (`text-xs`) y 0.7.
  */
 
-const NAVY = '#162744';
-const AZUL = '#557EFF';
+const NAVY = DETALLE_NAVY;
+const AZUL = DETALLE_BLUE;
 
-/** Tarjeta interior de una sección. Radio 18px y borde de marca, como el resto de tarjetas FLIT. */
+/** Badge soft del mockup detalle (`{color}22` fondo). */
+export function DetalleBadgeSoft({ text, color }: { text: string; color: string }) {
+  return (
+    <span
+      className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
+      style={{ background: `${color}22`, color }}
+    >
+      {text}
+    </span>
+  );
+}
+
+/** Tarjeta interior — spec flit-detalle-tramite (rounded-xl + sombra). */
 export function TarjetaDetalle({
   titulo,
   accion,
   children,
   className = '',
+  tituloAzul = false,
 }: {
   titulo: string;
-  /** Acción opcional a la derecha del título (p. ej. "Descargar paquete"). */
   accion?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Título azul marca (tarjetas de actor en mockup). */
+  tituloAzul?: boolean;
 }) {
   return (
-    <section
-      className={`rounded-[18px] border bg-white p-4 dark:bg-[#162744] ${className} border-[#DFE5ED] dark:border-white/10`}
-      aria-label={titulo}
-    >
+    <section className={`${DETALLE_CARD} h-full ${className}`} aria-label={titulo}>
       <div className="mb-3 flex items-start justify-between gap-3">
-        <h4 className="text-sm font-bold" style={{ color: NAVY }}>
+        <h4
+          className="text-sm font-semibold"
+          style={{ color: tituloAzul ? AZUL : NAVY }}
+        >
           <span className="dark:text-white">{titulo}</span>
         </h4>
         {accion ?? null}

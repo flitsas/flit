@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   Coins,
   Download,
   FileCheck2,
@@ -10,12 +11,20 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
-import { StepMarker } from './WizardStepTracker';
 import { plateFlowHint } from './TramitesTable';
 import { AttachmentPreview, useAttachmentPreview } from './TramiteDocumentosModal';
 import { SeccionCargando, SeccionError } from './detalle/primitivos';
+import { DetalleTramiteShell } from './detalle/DetalleTramiteShell';
+import { DetalleStepper } from './detalle/DetalleStepper';
+import { DetalleHistorialAuditoria } from './detalle/DetalleHistorialAuditoria';
+import { detalleEstadoHeader } from './detalle/detalle-estado-header';
+import {
+  DETALLE_BLUE,
+  DETALLE_CARD,
+  DETALLE_NAVY,
+  DETALLE_BORDER,
+} from './detalle/detalle-visual';
 import { TramiteDetalleDocumentos } from './detalle/TramiteDetalleDocumentos';
 import { TramiteDetalleActores } from './detalle/TramiteDetalleActores';
 import { TramiteDetalleVehiculo } from './detalle/TramiteDetalleVehiculo';
@@ -28,7 +37,6 @@ import {
   mapStatusHistoryToTimelineNodes,
 } from './detalle/timeline-mappers';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import type {
   BiometricValidation,
   InstanceSummary,
@@ -42,8 +50,8 @@ import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization'
  * canvas #EEF5FF, header compuesto, toggles de trazabilidad, grid 4/8 y stepper ADR-0050.
  */
 
-const BLUE = '#557EFF';
-const NAVY = '#162744';
+const BLUE = DETALLE_BLUE;
+const NAVY = DETALLE_NAVY;
 
 const MODALIDAD_TITLE: Record<ProcedureFamily, string> = {
   OTROS: 'Otros trámites',
@@ -215,8 +223,7 @@ export function TramiteDetalleModal({
   );
   const pasoActivo = pasos[pasoActivoIndex];
   const StepIcon = pasoActivo?.Icon ?? FileText;
-  const chip = item ? estadoChipStyle(item.estado) : null;
-  const chipLabel = item ? estadoLabel(item.estado) : '';
+  const estadoHdr = item ? detalleEstadoHeader(item.estado) : null;
   const plateHint = item ? plateFlowHint(item.plateFlowStatus) : null;
   const systemAttachments = attachments.filter((a) => a.source === 'system');
 
@@ -229,81 +236,84 @@ export function TramiteDetalleModal({
     setPanelTracking(null);
   };
 
+  const pasosStepper = pasos.map((paso, i) => {
+    const esUltimo = i === pasos.length - 1;
+    return {
+      id: paso.id,
+      label: paso.label,
+      Icon: paso.Icon,
+      completo: esUltimo ? (item?.estado === 'aprobado') : true,
+    };
+  });
+
   const header = item
     ? ({ titleId }: { titleId: string }) => (
-    <div className="flex flex-wrap items-start justify-between gap-3 px-1 py-1">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2
-            id={titleId}
-            className="text-[22px] font-bold leading-tight text-[#557EFF] dark:text-[#557EFF]"
-          >
-            {title}
-          </h2>
-          {chip ? (
-            <span
-              className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold text-white"
-              style={{ background: chip.accent }}
-            >
-              {chipLabel}
-            </span>
-          ) : null}
-        </div>
-        <p className="mt-1 text-[12px] text-slate-600 dark:text-white/70">
-          <span className="font-mono">{item.referenceNumber}</span> · {item.placa ?? '—'} ·{' '}
-          {item.gestorNombre ?? '—'}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {(
-          [
-            ['identidad', 'Trazabilidad de Identidad'],
-            ['timeline', 'Línea de Tiempo del Trámite'],
-          ] as const
-        ).map(([key, label]) => {
-          const active = panelTracking === key;
-          return (
+        <div className="flex flex-wrap items-start justify-between gap-3 px-1 py-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2
+                id={titleId}
+                className="text-[22px] font-bold leading-tight"
+                style={{ color: BLUE }}
+              >
+                {title}
+              </h2>
+              {estadoHdr ? (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-white"
+                  style={{ background: estadoHdr.color }}
+                >
+                  <estadoHdr.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  {estadoHdr.label}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-[12px]" style={{ color: '#475569' }}>
+              <span className="font-mono">{item.referenceNumber}</span> · {item.placa ?? '—'} ·
+              Responsable: {item.gestorNombre ?? '—'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {(
+              [
+                ['identidad', 'Trazabilidad de Identidad'],
+                ['timeline', 'Línea de Tiempo del Trámite'],
+              ] as const
+            ).map(([key, label]) => {
+              const active = panelTracking === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleTracking(key)}
+                  aria-pressed={active}
+                  className="rounded-xl border-2 px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+                  style={
+                    active
+                      ? { background: BLUE, borderColor: BLUE, color: '#fff' }
+                      : { borderColor: DETALLE_BORDER, color: NAVY, background: 'transparent' }
+                  }
+                >
+                  {label}
+                </button>
+              );
+            })}
             <button
-              key={key}
               type="button"
-              onClick={() => toggleTracking(key)}
-              aria-pressed={active}
-              className="rounded-xl border-2 px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-              style={
-                active
-                  ? { background: BLUE, borderColor: BLUE, color: '#fff' }
-                  : { borderColor: '#DFE5ED', color: NAVY }
-              }
+              onClick={onClose}
+              aria-label="Cerrar"
+              className="rounded-xl border border-[#DFE5ED] bg-white p-2 dark:border-white/5 dark:bg-[#0B0F14]"
             >
-              {label}
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar"
-          className="rounded-xl border border-[#DFE5ED] bg-white p-2 dark:border-white/10 dark:bg-[#162744]"
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-    )
+          </div>
+        </div>
+      )
     : undefined;
 
   return (
     <>
-      <Modal
-        open={open}
-        onClose={onClose}
-        title={title}
-        size="2xl"
-        header={header}
-        panelClassName="border-0 bg-[#EEF5FF] p-5 dark:bg-[#05060A] sm:p-5"
-        bodyClassName="overflow-visible"
-        zClassName="z-[1100]"
-      >
+      <DetalleTramiteShell open={open} onClose={onClose} title={title} header={header}>
         {!item ? (
           <p className="py-6 text-center text-xs opacity-70">No se encontró información del trámite.</p>
         ) : (
@@ -324,54 +334,42 @@ export function TramiteDetalleModal({
               </InlineAlert>
             ) : null}
             {plateHint ? <InlineAlert tone="info">{plateHint}</InlineAlert> : null}
+            {estadoHdr?.alert &&
+            !item.ultimoRechazoMotivo?.trim() &&
+            !item.subsanacionActiva &&
+            !item.isPaused ? (
+              <div
+                className="mt-2 flex items-center gap-2 rounded-xl px-4 py-2.5"
+                style={
+                  estadoHdr.pendiente
+                    ? { background: '#FEF9E7', border: '1px solid #F7E3A1' }
+                    : {
+                        background: `${estadoHdr.color}1F`,
+                        border: `1px solid ${estadoHdr.color}55`,
+                      }
+                }
+              >
+                <AlertTriangle
+                  className="h-4 w-4 shrink-0"
+                  style={{ color: estadoHdr.pendiente ? '#B7791F' : estadoHdr.color }}
+                  aria-hidden="true"
+                />
+                <p
+                  className="text-xs font-medium"
+                  style={{ color: estadoHdr.pendiente ? '#8A5E12' : estadoHdr.color }}
+                >
+                  {estadoHdr.alert}
+                </p>
+              </div>
+            ) : null}
 
-            <div
-              role="tablist"
-              aria-label="Pasos del trámite"
-              className="flex items-start overflow-x-auto rounded-[18px] border bg-white p-4 dark:bg-[#162744] border-[#DFE5ED] dark:border-white/10"
-            >
-              {pasos.map((paso, i) => {
-                const activa = paso.id === seccion && panelTracking === null;
-                const esUltimo = i === pasos.length - 1;
-                const completo = esUltimo ? item.estado === 'aprobado' : true;
-                return (
-                  <div key={paso.id} className="flex flex-1 items-center last:flex-none">
-                    <button
-                      type="button"
-                      role="tab"
-                      id={`detalle-tab-${paso.id}`}
-                      aria-selected={activa}
-                      aria-controls={`detalle-panel-${paso.id}`}
-                      aria-label={`Paso ${i + 1}: ${paso.label} — ${completo ? 'completado' : 'pendiente'}`}
-                      onClick={() => selectSeccion(paso.id)}
-                      className="flex shrink-0 flex-col items-center gap-1.5 rounded-xl px-2 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-                      style={activa ? { boxShadow: '0 0 0 1.5px #557EFF' } : undefined}
-                    >
-                      <StepMarker
-                        status={completo ? 'complete' : 'incomplete'}
-                        index={i}
-                        active={activa}
-                      />
-                      <span
-                        className="whitespace-nowrap text-xs font-medium"
-                        style={{ color: activa ? BLUE : completo ? NAVY : '#59677D' }}
-                      >
-                        {paso.label}
-                      </span>
-                    </button>
-                    {!esUltimo ? (
-                      <div
-                        className="mx-1 mt-[-18px] h-0.5 flex-1 rounded-full"
-                        style={{ background: completo ? '#8CC63F' : '#DFE5ED' }}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+            <DetalleStepper
+              pasos={pasosStepper}
+              pasoActivoId={panelTracking ? '' : seccion}
+              onSelect={(id) => selectSeccion(id as SeccionId)}
+            />
 
-            <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-12">
+            <div className="mt-3 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-12">
               {panelTracking === 'timeline' ? (
                 <div className="lg:col-span-12">
                   {loading ? (
@@ -430,7 +428,7 @@ export function TramiteDetalleModal({
                       role="tabpanel"
                       id={`detalle-panel-${seccion}`}
                       aria-labelledby={`detalle-tab-${seccion}`}
-                      className="flex min-w-0 flex-col gap-4"
+                      className={`flex min-w-0 flex-col gap-4 ${seccion !== 'expediente' ? '[&>*]:h-full' : ''}`}
                     >
                       {seccion !== 'expediente' && instanceId ? (
                         <>
@@ -482,8 +480,8 @@ export function TramiteDetalleModal({
                                 item={item}
                               />
                             ) : null}
-                            <div className="rounded-[18px] border bg-white p-4 dark:bg-[#162744] border-[#DFE5ED] dark:border-white/10">
-                              <h4 className="mb-3 text-sm font-bold" style={{ color: NAVY }}>
+                            <section className={`${DETALLE_CARD}`}>
+                              <h4 className="mb-3 text-sm font-semibold" style={{ color: NAVY }}>
                                 Archivos finales
                               </h4>
                               {attLoading ? (
@@ -533,7 +531,7 @@ export function TramiteDetalleModal({
                                   {preview.error}
                                 </p>
                               ) : null}
-                            </div>
+                            </section>
                           </div>
 
                           <div className="h-full min-h-0">
@@ -546,15 +544,11 @@ export function TramiteDetalleModal({
                                 onReintentar={() => setDetailReloadKey((k) => k + 1)}
                               />
                             ) : (
-                              <TimelineTrackPanel
-                                title="Historial de auditoría"
-                                nodes={mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? [])}
-                                emptyMessage="Sin eventos registrados todavía."
+                              <DetalleHistorialAuditoria
+                                statusHistory={detail?.statusHistory ?? []}
+                                referenceNumber={item.referenceNumber}
                               />
                             )}
-                            <p className="mt-2 font-mono text-[10px] opacity-60">
-                              Radicado: {item.referenceNumber}
-                            </p>
                           </div>
                         </div>
                       ) : null}
@@ -565,7 +559,7 @@ export function TramiteDetalleModal({
             </div>
           </div>
         )}
-      </Modal>
+      </DetalleTramiteShell>
 
       <AttachmentPreview preview={preview} />
     </>

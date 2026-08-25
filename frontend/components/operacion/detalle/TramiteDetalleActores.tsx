@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   FirmaParteEstado,
@@ -10,6 +9,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import {
   CampoValor,
+  DetalleBadgeSoft,
   ListaCampos,
   SeccionCargando,
   SeccionError,
@@ -17,6 +17,7 @@ import {
   TarjetaDetalle,
   type SeccionDetalleProps,
 } from './primitivos';
+import { DETALLE_GREEN, DETALLE_GOLD, DETALLE_RED, DETALLE_GREY } from './detalle-visual';
 
 /**
  * Sección «Actores» del modal de detalle (Frente C, `ActorCard` + `Paso2` de la propuesta).
@@ -46,16 +47,17 @@ import {
  */
 
 
-const FIRMA_META: Record<FirmaParteEstado, { label: string; tone: StatusTone }> = {
-  firmado: { label: 'Firmado', tone: 'success' },
-  pendiente: { label: 'Sin firma', tone: 'warning' },
-  rechazado: { label: 'Rechazado', tone: 'danger' },
+const FIRMA_SOFT: Record<FirmaParteEstado, { label: string; color: string }> = {
+  firmado: { label: 'Firmado', color: DETALLE_GREEN },
+  pendiente: { label: 'Sin firma', color: DETALLE_GOLD },
+  rechazado: { label: 'Rechazado', color: DETALLE_RED },
 };
 
-/** `null`/`undefined` = la parte existe pero no tiene acreditación registrada ("Sin registrar"). */
-function FirmaEstadoBadge({ estado }: { estado: FirmaParteEstado | null | undefined }) {
-  const meta = estado ? FIRMA_META[estado] : { label: 'Sin registrar', tone: 'neutral' as StatusTone };
-  return <StatusBadge tone={meta.tone} label={meta.label} />;
+function FirmaEstadoSoft({ estado }: { estado: FirmaParteEstado | null | undefined }) {
+  const meta = estado
+    ? FIRMA_SOFT[estado]
+    : { label: 'Sin registrar', color: DETALLE_GREY };
+  return <DetalleBadgeSoft text={meta.label} color={meta.color} />;
 }
 
 /** `${tipoDocumento} ${numeroDocumento}` — mismo formato que ya usa `BiometricStep`. */
@@ -80,7 +82,11 @@ function ActorCard({
   firmaEstado: FirmaParteEstado | null | undefined;
 }) {
   return (
-    <TarjetaDetalle titulo={titulo}>
+    <TarjetaDetalle
+      titulo={titulo}
+      tituloAzul
+      accion={<FirmaEstadoSoft estado={firmaEstado} />}
+    >
       <ListaCampos>
         <CampoValor campo="Nombre" valor={actor.nombreCompleto} />
         <CampoValor campo="Documento" valor={documentoValor(actor.tipoDocumento, actor.numeroDocumento)} />
@@ -89,10 +95,6 @@ function ActorCard({
         {actor.direccion ? <CampoValor campo="Dirección" valor={actor.direccion} /> : null}
         {actor.ciudad ? <CampoValor campo="Ciudad" valor={actor.ciudad} /> : null}
       </ListaCampos>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 border-[#DFE5ED] dark:border-white/10">
-        <span className="text-xs text-[#162744]/70 dark:text-white/70">Estado de la firma</span>
-        <FirmaEstadoBadge estado={firmaEstado} />
-      </div>
     </TarjetaDetalle>
   );
 }
