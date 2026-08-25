@@ -216,7 +216,7 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
         {checklist.length === 0 ? (
           <SeccionVacia mensaje="Este trámite no tiene requisitos de documentos configurados." />
         ) : (
-          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2" aria-label="Requisitos del trámite">
+          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3" aria-label="Requisitos del trámite">
             {checklist.map((item) => {
               const attachment = item.docTipo
                 ? attachments.find((a) => a.tipo === item.docTipo)

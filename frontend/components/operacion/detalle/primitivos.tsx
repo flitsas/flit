@@ -76,6 +76,24 @@ export function CampoValor({ campo, valor }: { campo: string; valor: ReactNode }
   );
 }
 
+/** Par campo/valor en fila flex (patrón mockup TimelineTrack). */
+export function CampoValorInline({
+  campo,
+  valor,
+  className = '',
+}: {
+  campo: string;
+  valor: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex gap-2 text-xs ${className}`}>
+      <dt className="w-28 shrink-0 font-medium opacity-60">{campo}</dt>
+      <dd className="min-w-0 break-all font-medium">{valor === null || valor === undefined || valor === '' ? '—' : valor}</dd>
+    </div>
+  );
+}
+
 /** Contenedor de `CampoValor`: rejilla de dos columnas, para que los valores queden alineados. */
 export function ListaCampos({ children }: { children: ReactNode }) {
   return <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5">{children}</dl>;
