@@ -6,11 +6,32 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { PaginaTramitesIct, TramiteIct } from "@/lib/api/ict-trazabilidad";
 
-const mocks = vi.hoisted(() => ({ fetchTramitesIct: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  fetchTramitesIct: vi.fn(),
+  fetchTiposTramiteIct: vi.fn(),
+  fetchCompaniesIndex: vi.fn(),
+}));
 vi.mock("@/lib/api/ict-trazabilidad", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/ict-trazabilidad")>();
-  return { ...actual, fetchTramitesIct: mocks.fetchTramitesIct };
+  return {
+    ...actual,
+    fetchTramitesIct: mocks.fetchTramitesIct,
+    fetchTiposTramiteIct: mocks.fetchTiposTramiteIct,
+  };
 });
+vi.mock("@/lib/api/admin-companies", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/admin-companies")>();
+  return { ...actual, fetchCompaniesIndex: mocks.fetchCompaniesIndex };
+});
+
+/**
+ * Token sin firma con el rol pedido. La bandeja solo lee el payload para decidir si enseña el
+ * selector de compañía; no valida nada, de eso se encarga el backend.
+ */
+function sesion(role: "SuperAdmin" | "Admin") {
+  const payload = btoa(JSON.stringify({ role, role_code: role, sub: "u-1" }));
+  window.localStorage.setItem("flit:jwt", `e30.${payload}.`);
+}
 
 // La exportación crea un object URL y en jsdom no existe. Se parchean SOLO esos dos métodos: en un
 // intento anterior se sustituyó el objeto URL entero y eso rompió su uso como constructor, que sí
@@ -73,7 +94,16 @@ function tira() {
 describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     mocks.fetchTramitesIct.mockResolvedValue(pagina());
+    mocks.fetchTiposTramiteIct.mockResolvedValue([
+      { id: 1, nombre: "Matrícula Inicial" },
+      { id: 3, nombre: "Traspaso" },
+    ]);
+    mocks.fetchCompaniesIndex.mockResolvedValue({
+      data: [{ id: TENANT, razonSocial: "Renting Colombia S.A.S.", nit: "900123456" }],
+      total: 1,
+    });
   });
 
   it("AC1: cada fila es un trámite, con su número, placa y estado", async () => {
@@ -81,7 +111,8 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
 
     await waitFor(() => expect(screen.getByText("10461")).toBeInTheDocument());
     expect(screen.getByText("NPV523")).toBeInTheDocument();
-    expect(screen.getByText("Traspaso")).toBeInTheDocument();
+    // Acotado a la tabla: «Traspaso» es también una opción del filtro de tipo.
+    expect(within(screen.getByRole("table")).getByText("Traspaso")).toBeInTheDocument();
     expect(screen.getByText("Renting Colombia S.A.S.")).toBeInTheDocument();
     // Ninguna columna habla de peticiones HTTP: ese es el cambio de eje frente al Log ICT.
     expect(screen.queryByText(/ruta|método|correlación/i)).not.toBeInTheDocument();
@@ -214,6 +245,22 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
+  it("un trámite pausado no se pinta como atascado, aunque lleve horas", async () => {
+    // La pausa la pidió el cliente. Marcarla en rojo acusaría a la integración de una demora que no
+    // es suya y dejaría la alerta sin significado.
+    mocks.fetchTramitesIct.mockResolvedValue(
+      pagina({
+        items: [tramite({ estado: "recibido", minutosEsperando: 252, pausado: true })],
+        total: 1,
+      }),
+    );
+    render(<IctTrazabilidad />);
+
+    await waitFor(() => expect(screen.getByText("4 h 12 min")).toBeInTheDocument());
+    expect(screen.getByText("4 h 12 min").className).not.toMatch(/text-\[#C2410C\]/);
+    expect(screen.getByText("Pausado")).toBeInTheDocument();
+  });
+
   it("muestra las señales de pausado y sin adjuntos cuando el trámite las trae", async () => {
     mocks.fetchTramitesIct.mockResolvedValue(
       pagina({ items: [tramite({ pausado: true, sinAdjuntos: true })], total: 1 }),
@@ -222,5 +269,96 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
 
     await waitFor(() => expect(screen.getByText("Pausado")).toBeInTheDocument());
     expect(screen.getByText("Sin adjuntos")).toBeInTheDocument();
+  });
+
+  it("el filtro de tipo solo ofrece los tipos que existen entre los trámites visibles", async () => {
+    // El catálogo maestro tiene una veintena de tipos. Ofrecerlos todos llena el desplegable de
+    // opciones que devuelven cero y, para una empresa, delata qué tramitan las demás.
+    render(<IctTrazabilidad />);
+
+    await waitFor(() => expect(mocks.fetchTiposTramiteIct).toHaveBeenCalled());
+    const select = await screen.findByLabelText("Tipo de trámite");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos",
+      "Matrícula Inicial",
+      "Traspaso",
+    ]);
+  });
+
+  it("al buscar por tipo se manda el identificador, no la etiqueta", async () => {
+    render(<IctTrazabilidad />);
+    const select = await screen.findByLabelText("Tipo de trámite");
+
+    fireEvent.change(select, { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+
+    await waitFor(() =>
+      expect(mocks.fetchTramitesIct).toHaveBeenLastCalledWith(
+        expect.objectContaining({ tipo: 3 }),
+      ),
+    );
+  });
+
+  it("el selector de compañía es solo del SuperAdmin", async () => {
+    // Para una empresa el desplegable tendría una sola opción, la suya, que el backend ya aplica;
+    // enseñarlo sugeriría que hay otras compañías que mirar.
+    sesion("Admin");
+    render(<IctTrazabilidad />);
+
+    await waitFor(() => expect(mocks.fetchTramitesIct).toHaveBeenCalled());
+    expect(screen.queryByLabelText("Compañía")).not.toBeInTheDocument();
+    expect(mocks.fetchCompaniesIndex).not.toHaveBeenCalled();
+  });
+
+  it("cambiar de compañía suelta el tipo elegido", async () => {
+    // Los tipos son los de la compañía anterior: dejarlo puesto devolvería cero sin que se vea
+    // por qué, y el usuario culparía a la búsqueda en vez del filtro.
+    sesion("SuperAdmin");
+    render(<IctTrazabilidad />);
+
+    const select = await screen.findByLabelText("Tipo de trámite");
+    fireEvent.change(select, { target: { value: "3" } });
+    expect((select as HTMLSelectElement).value).toBe("3");
+
+    // El selector de compañía es un combobox con buscador: se abre y se elige la opción.
+    fireEvent.click(await screen.findByRole("combobox", { name: /compañía/i }));
+    fireEvent.click(await screen.findByRole("option", { name: /renting colombia/i }));
+
+    await waitFor(() => expect((select as HTMLSelectElement).value).toBe(""));
+  });
+
+  it("AC5: la exportación se lleva TODO el resultado, repartido en varios archivos", async () => {
+    // Exportar solo los 25 de pantalla sería una trampa: el archivo parece completo y nadie lo
+    // comprueba. Y truncar a 5.000 obligaría a re-acotar la búsqueda para ver las últimas filas.
+    const pageSize = 200;
+    const total = pageSize * 26; // 5.200: pasa el lote de 5.000 y deja resto para un segundo archivo.
+    mocks.fetchTramitesIct.mockImplementation(
+      async ({ page = 1, pageSize: ps = 25 }: { page?: number; pageSize?: number }) => {
+        const quedan = total - (page - 1) * ps;
+        const cuantas = Math.max(0, Math.min(ps, quedan));
+        return pagina({
+          items: Array.from({ length: cuantas }, (_, i) =>
+            tramite({ numero: (page - 1) * ps + i + 1, placa: `P${page}${i}` }),
+          ),
+          total,
+        });
+      },
+    );
+
+    const descargas: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      descargas.push(this.download);
+    });
+
+    render(<IctTrazabilidad />);
+    await waitFor(() => expect(mocks.fetchTramitesIct).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole("button", { name: "Exportar a Excel" }));
+
+    await waitFor(() => expect(descargas).toHaveLength(2));
+    expect(descargas[0]).toContain("parte-1-de-2");
+    expect(descargas[1]).toContain("parte-2-de-2");
+    expect(await screen.findByText(/5200 trámites en 2 archivos/)).toBeInTheDocument();
   });
 });

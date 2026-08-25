@@ -223,7 +223,7 @@ describe("HU #11819 — detalle del trámite ICT", () => {
     render(<DetalleTramiteIct tramite={tramite} esAdmin />);
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: /ver trámite en flit/i })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: /ver trámite/i })).toHaveAttribute(
         "href",
         `/tramites/${INSTANCIA}?t=${encodeURIComponent(TENANT)}`,
       ),
@@ -234,7 +234,7 @@ describe("HU #11819 — detalle del trámite ICT", () => {
     render(<DetalleTramiteIct tramite={tramite} esAdmin={false} />);
 
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: /ver trámite en flit/i })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: /ver trámite/i })).toHaveAttribute(
         "href",
         `/tramites/${INSTANCIA}`,
       ),
@@ -301,7 +301,7 @@ describe("HU #11819 — detalle del trámite ICT", () => {
 
   it("AC8: una pestaña sin datos explica por qué, en vez de quedarse en blanco", async () => {
     mocks.fetchConsultasFuenteIct.mockResolvedValue([]);
-    render(<DetalleTramiteIct tramite={tramite} esAdmin={false} />);
+    render(<DetalleTramiteIct tramite={{ ...tramite, estado: "recibido" }} esAdmin={false} />);
     fireEvent.click(screen.getByRole("tab", { name: "Consultas al RUNT" }));
 
     await waitFor(() =>
@@ -309,6 +309,20 @@ describe("HU #11819 — detalle del trámite ICT", () => {
         screen.getByText(/todavía no ha llegado a la etapa de consulta a fuentes/i),
       ).toBeInTheDocument(),
     );
+  });
+
+  it("AC8: si el trámite YA pasó la etapa, el vacío no dice que no ha llegado", async () => {
+    // Decir «todavía no ha llegado» sobre un trámite que ya pasó por ahí taparía justo el hueco de
+    // trazabilidad que este módulo existe para destapar: la etapa ocurrió sin dejar registro.
+    mocks.fetchConsultasFuenteIct.mockResolvedValue([]);
+    render(<DetalleTramiteIct tramite={{ ...tramite, estado: "con_novedades" }} esAdmin={false} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Consultas al RUNT" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/no quedó registrada ninguna consulta a fuentes externas/i))
+        .toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/todavía no ha llegado/i)).not.toBeInTheDocument();
   });
 
   it("un fallo en una pestaña se explica y se puede reintentar sin cerrar el detalle", async () => {

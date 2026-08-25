@@ -83,7 +83,7 @@ export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; e
 
       <div className="p-4">
         {pestana === "recorrido" && <PanelRecorrido numero={tramite.numero} tramite={tramite} esAdmin={esAdmin} />}
-        {pestana === "consultas" && <PanelConsultas numero={tramite.numero} />}
+        {pestana === "consultas" && <PanelConsultas numero={tramite.numero} estado={tramite.estado} />}
         {pestana === "datos" && <PanelDatos numero={tramite.numero} />}
         {pestana === "log" && <PanelLog numero={tramite.numero} />}
       </div>
@@ -173,7 +173,7 @@ function PanelRecorrido({
                 href={hrefTramite(dato.procedureInstanceId, tramite.clientTenantId, esAdmin)}
                 className="inline-flex items-center rounded-lg bg-[#557EFF]/10 px-3 py-2 text-xs font-semibold text-[#557EFF] hover:bg-[#557EFF]/20"
               >
-                Ver trámite en FLIT
+                Ver trámite
               </Link>
               {dato.organismoTransito && (
                 <span className="text-xs opacity-70">
@@ -270,7 +270,18 @@ function hrefTramite(instanceId: string, tenantId: string, esAdmin: boolean): st
 
 // ── Consultas al RUNT ────────────────────────────────────────────────────────
 
-function PanelConsultas({ numero }: { numero: number }) {
+/**
+ * El mensaje de «no hay nada» tiene que decir la verdad. Un trámite que ya pasó por la etapa y no
+ * dejó consultas registradas NO es lo mismo que uno que todavía no ha llegado: contarlo igual
+ * escondería justo el hueco de trazabilidad que este módulo existe para destapar.
+ */
+function mensajeSinConsultas(estado: string): string {
+  return estado === "recibido" || estado === "en_validacion_negocio"
+    ? "Este trámite todavía no ha llegado a la etapa de consulta a fuentes externas."
+    : "El trámite pasó por esta etapa, pero no quedó registrada ninguna consulta a fuentes externas.";
+}
+
+function PanelConsultas({ numero, estado }: { numero: number; estado: string }) {
   const { dato, status, reintentar } = useCargaPerezosa<ConsultaFuenteIct[]>(fetchConsultasFuenteIct, numero);
   const [abierta, setAbierta] = useState<string | null>(null);
 
@@ -282,7 +293,7 @@ function PanelConsultas({ numero }: { numero: number }) {
       skeletonRows={3}
       errorMessage="No se pudieron cargar las consultas a fuentes de este trámite."
       onRetry={reintentar}
-      emptyMessage="Este trámite todavía no ha llegado a la etapa de consulta a fuentes externas."
+      emptyMessage={mensajeSinConsultas(estado)}
     >
       {dato && dato.length > 0 && (
         <div className="flex flex-col gap-3">

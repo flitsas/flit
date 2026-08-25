@@ -4,17 +4,22 @@
 // capa técnica de bajo nivel, ni a «Reportes ICT», que sigue siendo la vista agregada por compañía.
 // Lo que aporta es el nivel que faltaba: el trámite.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, FileSpreadsheet, Search, X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
 import { PageNav } from "@/components/atom/PageNav";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
   fetchTramitesIct,
+  fetchTiposTramiteIct,
   type FiltrosTramitesIct,
+  type TipoTramiteOpcion,
   type PaginaTramitesIct,
   type TramiteIct,
 } from "@/lib/api/ict-trazabilidad";
+import { CompanySelector } from "./_reportes/CompanySelector";
+import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import type { CompanyListItem } from "@/lib/api/types";
 import {
   ESTADOS_ICT,
   ESTADO_ICT,
@@ -24,11 +29,18 @@ import {
   type EstadoIct,
 } from "@/lib/ict/trazabilidad";
 import { bogotaClock, buildXlsx, XLSX_MIME, type XlsxCell } from "@/lib/xlsx";
+import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from "@/components/consultas/export";
 import { DetalleTramiteIct } from "@/components/ict/DetalleTramiteIct";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
 
 const TAMANO_PAGINA = 25;
+
+/**
+ * Tamaño de página al exportar. El backend acota el suyo a 200; pedir más no trae más filas y sí
+ * alarga cada consulta, así que se pide justo el máximo que sirve.
+ */
+const TAMANO_PAGINA_EXPORT = 200;
 
 /** Cabeceras de la tabla; la última («Esperando») se pinta aparte por el redondeo. */
 const COLUMNAS = [
@@ -55,9 +67,21 @@ interface Filtros {
   placas: string;
   numero: string;
   estado: string;
+  /** tenantId de la compañía. Solo lo usa el SuperAdmin; vacío = todas. */
+  compania: string;
+  /** id del tipo de trámite, como texto porque viene de un <select>. */
+  tipo: string;
 }
 
-const FILTROS_VACIOS: Filtros = { desde: "", hasta: "", placas: "", numero: "", estado: "" };
+const FILTROS_VACIOS: Filtros = {
+  desde: "",
+  hasta: "",
+  placas: "",
+  numero: "",
+  estado: "",
+  compania: "",
+  tipo: "",
+};
 
 function hoyMenos(dias: number): string {
   const d = new Date();
@@ -71,7 +95,7 @@ function filtrosIniciales(): Filtros {
   return { ...FILTROS_VACIOS, desde: hoyMenos(30), hasta: new Date().toISOString().slice(0, 10) };
 }
 
-function aParametros(f: Filtros, page: number): FiltrosTramitesIct {
+function aParametros(f: Filtros, page: number, pageSize = TAMANO_PAGINA): FiltrosTramitesIct {
   const numero = Number.parseInt(f.numero.trim(), 10);
   return {
     desde: f.desde || undefined,
@@ -81,8 +105,10 @@ function aParametros(f: Filtros, page: number): FiltrosTramitesIct {
     // no es un número de trámite, es un error de tecleo.
     numero: Number.isSafeInteger(numero) && numero > 0 ? numero : undefined,
     estado: f.estado || undefined,
+    compania: f.compania || undefined,
+    tipo: f.tipo ? Number.parseInt(f.tipo, 10) : undefined,
     page,
-    pageSize: TAMANO_PAGINA,
+    pageSize,
   };
 }
 
@@ -103,6 +129,22 @@ export function IctTrazabilidad() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
   }, []);
+
+  // Catálogo de compañías del selector, solo para SuperAdmin. Un fallo aquí no bloquea la bandeja:
+  // el selector queda vacío y se sigue viendo todo, que es el comportamiento sin filtro.
+  const [companias, setCompanias] = useState<CompanyListItem[]>([]);
+  useEffect(() => {
+    if (!esAdmin) return;
+    const controller = new AbortController();
+    fetchCompaniesIndex({ pageSize: 100, estadoActivo: true }, controller.signal)
+      .then((res) => {
+        if (!controller.signal.aborted) setCompanias(res.data);
+      })
+      .catch(() => {
+        /* silencioso */
+      });
+    return () => controller.abort();
+  }, [esAdmin]);
 
   // Evita que una respuesta lenta de una búsqueda anterior pise a la de la búsqueda actual.
   const peticion = useRef(0);
@@ -155,14 +197,59 @@ export function IctTrazabilidad() {
     [aplicar, filtros],
   );
 
+  // Los tipos dependen de la compañía elegida: al cambiarla, un tipo que ya no existe entre sus
+  // trámites dejaría el desplegable mostrando una opción que devuelve cero, así que se recarga.
+  const [tipos, setTipos] = useState<TipoTramiteOpcion[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchTiposTramiteIct(filtros.compania || undefined, controller.signal)
+      .then((res) => {
+        if (!controller.signal.aborted) setTipos(res);
+      })
+      .catch(() => {
+        /* silencioso: el filtro de tipo simplemente no se ofrece */
+      });
+    return () => controller.abort();
+  }, [filtros.compania]);
+
   const hayFiltros = useMemo(
-    () => Boolean(aplicados.placas || aplicados.numero || aplicados.estado),
+    () =>
+      Boolean(
+        aplicados.placas ||
+          aplicados.numero ||
+          aplicados.estado ||
+          aplicados.compania ||
+          aplicados.tipo,
+      ),
     [aplicados],
   );
 
   const items = pagina?.items ?? null;
   const total = pagina?.total ?? 0;
   const totalPaginas = Math.max(1, Math.ceil(total / TAMANO_PAGINA));
+
+  // El export recorre todas las páginas, así que puede tardar: sin señal, el usuario vuelve a
+  // pulsar y se lleva el mismo archivo dos veces.
+  const [exportando, setExportando] = useState(false);
+  const [avisoExport, setAvisoExport] = useState<string | null>(null);
+
+  const exportarTodo = useCallback(async () => {
+    setExportando(true);
+    setAvisoExport(null);
+    try {
+      const { exportadas, archivos } = await exportar(aplicados, total);
+      setAvisoExport(
+        archivos > 1
+          ? `Se exportaron ${exportadas} trámites en ${archivos} archivos de hasta ${EXPORT_BATCH_SIZE} filas cada uno.`
+          : `Se exportaron ${exportadas} trámites.`,
+      );
+    } catch {
+      setAvisoExport("No se pudo completar la exportación. Inténtalo de nuevo.");
+    } finally {
+      setExportando(false);
+    }
+  }, [aplicados, total]);
+
 
   const status = cargando && pagina === null
     ? "loading"
@@ -283,14 +370,47 @@ export function IctTrazabilidad() {
         <span id="it-placas-pista" className="sr-only">
           Puedes escribir varias separadas por coma.
         </span>
+        {/* Solo el SuperAdmin ve trámites de más de una compañía; para una empresa el selector
+            sería un desplegable de una sola opción, la suya, que ya está aplicada. */}
+        {esAdmin && (
+          <CompanySelector
+            companies={companias}
+            value={filtros.compania}
+            onChange={(tenantId) =>
+              // Al cambiar de compañía se suelta el tipo: los tipos son los de la compañía anterior
+              // y dejarlo puesto devolvería cero sin que se vea por qué.
+              setFiltros({ ...filtros, compania: tenantId, tipo: "" })
+            }
+            defaultLabel="Todas las compañías"
+            id="it-compania"
+          />
+        )}
+        {tipos.length > 0 && (
+          <Campo label="Tipo de trámite" htmlFor="it-tipo">
+            <select
+              id="it-tipo"
+              value={filtros.tipo}
+              onChange={(e) => setFiltros({ ...filtros, tipo: e.target.value })}
+              className={`${inputCls} w-[190px]`}
+            >
+              <option value="">Todos</option>
+              {tipos.map((t) => (
+                <option key={t.id} value={String(t.id)}>
+                  {t.nombre}
+                </option>
+              ))}
+            </select>
+          </Campo>
+        )}
         <span className="flex-1" />
         {items && items.length > 0 && (
           <button
             type="button"
-            onClick={() => exportar(items, aplicados, total)}
-            className={ghostCls}
+            onClick={() => void exportarTodo()}
+            disabled={exportando}
+            className={`${ghostCls} disabled:opacity-50`}
           >
-            <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" /> Exportar a Excel
+            {exportando ? "Exportando…" : "Exportar a Excel"}
           </button>
         )}
         {(hayFiltros || cargando) && (
@@ -304,9 +424,20 @@ export function IctTrazabilidad() {
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{ background: WIZARD_CTA_GRADIENT }}
         >
-          <Search className="h-3.5 w-3.5" aria-hidden="true" /> Buscar
+          Buscar
         </button>
       </form>
+
+      {avisoExport && (
+        // `role="status"` y no un texto suelto: el export termina sin cambiar nada en pantalla, así
+        // que quien navega con lector necesita que se le anuncie.
+        <p
+          role="status"
+          className="shrink-0 text-xs text-[#162744]/70 dark:text-white/70"
+        >
+          {avisoExport}
+        </p>
+      )}
 
       <UiStateBoundary
         status={status}
@@ -399,8 +530,14 @@ function FilaTramite({
 }) {
   const meta = ESTADO_ICT[tramite.estado];
   const estilo = meta?.style;
+  // Un trámite pausado lleva parado porque el cliente lo pidió así, no porque la integración se
+  // haya atascado. Pintarlo en rojo acusaría a la integración de una demora que no es suya, y la
+  // alerta perdería el sentido: lo que hay que mirar es lo que está esperando sin que nadie lo
+  // haya frenado. El tiempo se sigue mostrando, pero sin señal de alarma.
   const alta =
-    tramite.minutosEsperando !== null && tramite.minutosEsperando >= MINUTOS_ESPERA_ALTA;
+    !tramite.pausado &&
+    tramite.minutosEsperando !== null &&
+    tramite.minutosEsperando >= MINUTOS_ESPERA_ALTA;
 
   const señales: string[] = [];
   if (tramite.pausado) señales.push("Pausado");
@@ -493,29 +630,15 @@ function FilaTramite({
 /**
  * Exportación a XLSX con el escritor propio del repositorio (`lib/xlsx`), sin dependencias externas.
  *
- * Exporta la PÁGINA a la vista, y lo dice dentro del archivo: el .xlsx es lo que se reenvía por
- * correo a quien no ejecutó la búsqueda, así que la advertencia tiene que viajar con él y no
- * quedarse en la pantalla de quien lo generó.
+ * Recorre TODO el resultado filtrado, no la página a la vista, repartido en archivos de hasta
+ * `EXPORT_BATCH_SIZE` filas — la misma mecánica que la consola de Consultas, compartida en
+ * `exportarPorLotes` para que no puedan divergir.
+ *
+ * Los filtros aplicados viajan DENTRO del archivo: el .xlsx es lo que se reenvía por correo a quien
+ * no ejecutó la búsqueda, y sin esa nota no hay forma de saber sobre qué recorte se está mirando.
  */
-function exportar(items: TramiteIct[], filtros: Filtros, total: number) {
-  const rows: XlsxCell[][] = items.map((t) => [
-    t.numero,
-    t.placa,
-    t.vin ?? "",
-    t.tipoTramite ?? "",
-    t.operacion ?? "",
-    t.compania ?? "",
-    t.radicador || "",
-    estadoIctLabel(t.estado),
-    formatearEspera(t.minutosEsperando),
-    t.pausado ? "Sí" : "No",
-    t.sinAdjuntos ? "Sí" : "No",
-    bogotaClock(t.recibidoEn),
-  ]);
-
-  const notes: string[] = [
-    `Exportado desde Trazabilidad ICT · ${items.length} de ${total} trámites que cumplen los filtros.`,
-  ];
+async function exportar(filtros: Filtros, total: number) {
+  const notasBase: string[] = [];
   const aplicados: string[] = [];
   if (filtros.desde || filtros.hasta) {
     aplicados.push(`fechas ${filtros.desde || "sin inicio"} a ${filtros.hasta || "sin fin"}`);
@@ -523,38 +646,65 @@ function exportar(items: TramiteIct[], filtros: Filtros, total: number) {
   if (filtros.numero) aplicados.push(`n.º ${filtros.numero}`);
   if (filtros.placas) aplicados.push(`placas o VIN ${filtros.placas}`);
   if (filtros.estado) aplicados.push(`estado ${estadoIctLabel(filtros.estado)}`);
-  if (aplicados.length > 0) notes.push(`Filtros aplicados: ${aplicados.join(" · ")}.`);
-  if (total > items.length) {
-    notes.push(
-      "Solo se exportó la página a la vista. Para llevarte el resto, avanza de página y vuelve a exportar.",
-    );
-  }
+  if (filtros.tipo) aplicados.push(`tipo de trámite ${filtros.tipo}`);
+  if (filtros.compania) aplicados.push("una compañía concreta");
+  if (aplicados.length > 0) notasBase.push(`Filtros aplicados: ${aplicados.join(" · ")}.`);
 
-  const xlsx = buildXlsx({
-    name: "Trazabilidad ICT",
-    columns: [
-      { header: "N.º de trámite", width: 15 },
-      { header: "Placa", width: 11 },
-      { header: "VIN", width: 20 },
-      { header: "Tipo de trámite", width: 24 },
-      { header: "Operación", width: 13 },
-      { header: "Compañía", width: 30 },
-      { header: "Radicador", width: 28 },
-      { header: "Estado", width: 20 },
-      { header: "Esperando", width: 14 },
-      { header: "Pausado", width: 10 },
-      { header: "Sin adjuntos", width: 13 },
-      { header: "Recibido", width: 20 },
-    ],
-    rows,
-    notes,
+  return exportarPorLotes<TramiteIct>({
+    total,
+    // El backend acota el tamaño de página; pedir más no trae más y sí alarga cada consulta.
+    pageSize: TAMANO_PAGINA_EXPORT,
+    traerPagina: async (page, pageSize) =>
+      (await fetchTramitesIct(aParametros(filtros, page, pageSize))).items,
+    volcar: (lote, parte) => {
+      const rows: XlsxCell[][] = lote.map((t) => [
+        t.numero,
+        t.placa,
+        t.vin ?? "",
+        t.tipoTramite ?? "",
+        t.operacion ?? "",
+        t.compania ?? "",
+        t.radicador || "",
+        estadoIctLabel(t.estado),
+        formatearEspera(t.minutosEsperando),
+        t.pausado ? "Sí" : "No",
+        t.sinAdjuntos ? "Sí" : "No",
+        bogotaClock(t.recibidoEn),
+      ]);
+
+      const notes = [
+        parte.total > 1
+          ? `Exportado desde Trazabilidad ICT · archivo ${parte.numero} de ${parte.total} · ${lote.length} de ${total} trámites que cumplen los filtros.`
+          : `Exportado desde Trazabilidad ICT · ${lote.length} de ${total} trámites que cumplen los filtros.`,
+        ...notasBase,
+      ];
+
+      const xlsx = buildXlsx({
+        name: "Trazabilidad ICT",
+        columns: [
+          { header: "N.º de trámite", width: 15 },
+          { header: "Placa", width: 11 },
+          { header: "VIN", width: 20 },
+          { header: "Tipo de trámite", width: 24 },
+          { header: "Operación", width: 13 },
+          { header: "Compañía", width: 30 },
+          { header: "Radicador", width: 28 },
+          { header: "Estado", width: 20 },
+          { header: "Esperando", width: 14 },
+          { header: "Pausado", width: 10 },
+          { header: "Sin adjuntos", width: 13 },
+          { header: "Recibido", width: 20 },
+        ],
+        rows,
+        notes,
+      });
+
+      const sufijo = parte.total > 1 ? `-parte-${parte.numero}-de-${parte.total}` : "";
+      download(
+        xlsx as BlobPart,
+        `trazabilidad-ict-${filtros.desde}-a-${filtros.hasta}${sufijo}.xlsx`,
+        XLSX_MIME,
+      );
+    },
   });
-
-  const blob = new Blob([xlsx as BlobPart], { type: XLSX_MIME });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = "trazabilidad-ict.xlsx";
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
