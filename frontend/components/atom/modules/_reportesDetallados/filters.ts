@@ -1,4 +1,4 @@
-import type { ProcedureFamily, ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
+import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
 import { toIsoDate, type DateRange } from "../_reportes/range";
 
 export type TriState = "" | "true" | "false";
@@ -46,8 +46,6 @@ export const CATEGORY_LABELS: Record<string, string> = {
   otros: "Otros",
 };
 
-const CATEGORY_ORDER = ["matriculas", "traspasos", "otros"];
-
 // Estados de negocio del trámite (TramiteEstado / ADR-0022), en orden de ciclo de vida.
 // Coinciden con la columna `status` de la vista BI; las etiquetas legibles salen de statusLabel().
 export const PROCEDURE_STATUSES = [
@@ -69,28 +67,6 @@ export function familyToCategory(family: ProcedureFamily): string {
     default:
       return "otros";
   }
-}
-
-export interface ProcedureTypeGroup {
-  category: string;
-  label: string;
-  types: ProcedureTypeSummary[];
-}
-
-/** Agrupa los tipos de trámite por categoría, ordenados para el selector unificado. */
-export function groupProcedureTypes(types: ProcedureTypeSummary[]): ProcedureTypeGroup[] {
-  const byCategory = new Map<string, ProcedureTypeSummary[]>();
-  for (const type of types) {
-    const category = familyToCategory(type.family);
-    const bucket = byCategory.get(category);
-    if (bucket) bucket.push(type);
-    else byCategory.set(category, [type]);
-  }
-  return CATEGORY_ORDER.filter((category) => byCategory.has(category)).map((category) => ({
-    category,
-    label: CATEGORY_LABELS[category] ?? category,
-    types: (byCategory.get(category) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
-  }));
 }
 
 export function toQueryParams(

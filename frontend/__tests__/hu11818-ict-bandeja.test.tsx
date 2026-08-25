@@ -97,8 +97,9 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
     window.localStorage.clear();
     mocks.fetchTramitesIct.mockResolvedValue(pagina());
     mocks.fetchTiposTramiteIct.mockResolvedValue([
-      { id: 1, nombre: "Matrícula Inicial" },
-      { id: 3, nombre: "Traspaso" },
+      { id: 1, nombre: "Matrícula Inicial", familia: "MATRICULAS" },
+      { id: 2, nombre: "Matrícula Inicial Leasing", familia: "MATRICULAS" },
+      { id: 3, nombre: "Traspaso", familia: "TRASPASO" },
     ]);
     mocks.fetchCompaniesIndex.mockResolvedValue({
       data: [{ id: TENANT, razonSocial: "Renting Colombia S.A.S.", nit: "900123456" }],
@@ -279,9 +280,25 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
     await waitFor(() => expect(mocks.fetchTiposTramiteIct).toHaveBeenCalled());
     const select = await screen.findByLabelText("Tipo de trámite");
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
-      "Todos",
+      "Todos los tipos",
+      "Toda la familia: Matrículas",
       "Matrícula Inicial",
+      "Matrícula Inicial Leasing",
+      "Toda la familia: Traspasos",
       "Traspaso",
+    ]);
+  });
+
+  it("agrupa los tipos bajo su familia, sin encabezado para las que no tienen ninguno", async () => {
+    // Los dieciséis tipos de transacción en lista plana obligan a saberse de memoria cuál cae en
+    // qué familia. «Otros trámites» no aparece porque ningún trámite visible es de esa familia: un
+    // encabezado vacío ocupa sitio y no responde nada.
+    render(<IctTrazabilidad />);
+
+    const select = await screen.findByLabelText("Tipo de trámite");
+    expect(within(select).getAllByRole("group").map((g) => g.getAttribute("label"))).toEqual([
+      "Matrículas",
+      "Traspasos",
     ]);
   });
 
@@ -289,12 +306,28 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
     render(<IctTrazabilidad />);
     const select = await screen.findByLabelText("Tipo de trámite");
 
-    fireEvent.change(select, { target: { value: "3" } });
+    fireEvent.change(select, { target: { value: "tipo:3" } });
     fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
 
     await waitFor(() =>
       expect(mocks.fetchTramitesIct).toHaveBeenLastCalledWith(
-        expect.objectContaining({ tipo: 3 }),
+        expect.objectContaining({ tipo: 3, familia: undefined }),
+      ),
+    );
+  });
+
+  it("elegir la familia entera manda la familia y ningún tipo suelto", async () => {
+    // Es lo que no se podía pedir antes: «todas las matrículas» obligaba a hacer una búsqueda por
+    // cada tipo de la familia y sumar a mano.
+    render(<IctTrazabilidad />);
+    const select = await screen.findByLabelText("Tipo de trámite");
+
+    fireEvent.change(select, { target: { value: "fam:MATRICULAS" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+
+    await waitFor(() =>
+      expect(mocks.fetchTramitesIct).toHaveBeenLastCalledWith(
+        expect.objectContaining({ familia: "MATRICULAS", tipo: undefined }),
       ),
     );
   });
@@ -317,8 +350,8 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
     render(<IctTrazabilidad />);
 
     const select = await screen.findByLabelText("Tipo de trámite");
-    fireEvent.change(select, { target: { value: "3" } });
-    expect((select as HTMLSelectElement).value).toBe("3");
+    fireEvent.change(select, { target: { value: "tipo:3" } });
+    expect((select as HTMLSelectElement).value).toBe("tipo:3");
 
     // El selector de compañía es un combobox con buscador: se abre y se elige la opción.
     fireEvent.click(await screen.findByRole("combobox", { name: /compañía/i }));

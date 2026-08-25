@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
+import { agruparTiposTramite } from "@/components/consultas/tipo-tramite";
 import {
   defaultDetailedFilters,
   familyToCategory,
-  groupProcedureTypes,
   toQueryParams,
 } from "@/components/atom/modules/_reportesDetallados/filters";
 
@@ -38,7 +38,7 @@ describe("detailed report filters", () => {
   });
 });
 
-describe("groupProcedureTypes", () => {
+describe("agrupación de tipos de trámite", () => {
   const types: ProcedureTypeSummary[] = [
     { id: "1", code: "TRA", name: "Traspaso simple", family: "TRASPASO", publicationStatus: "published", isActive: true, wizardEnabled: true, publishedAt: null },
     { id: "2", code: "MAT", name: "Matrícula inicial", family: "MATRICULAS", publicationStatus: "published", isActive: true, wizardEnabled: true, publishedAt: null },
@@ -51,9 +51,15 @@ describe("groupProcedureTypes", () => {
     expect(familyToCategory("OTROS")).toBe("otros");
   });
 
-  it("agrupa por categoría en el orden canónico", () => {
-    const groups = groupProcedureTypes(types);
-    expect(groups.map((g) => g.category)).toEqual(["matriculas", "traspasos", "otros"]);
-    expect(groups[0].types[0].name).toBe("Matrícula inicial");
+  it("agrupa por familia en el orden del negocio, no en el alfabético", () => {
+    const grupos = agruparTiposTramite(types);
+    expect(grupos.map((g) => g.familia)).toEqual(["MATRICULAS", "TRASPASO", "OTROS"]);
+    expect(grupos[0].tipos[0].name).toBe("Matrícula inicial");
+  });
+
+  it("no produce grupo para una familia sin tipos", () => {
+    // Un encabezado vacío ocupa sitio en la lista y no responde nada.
+    const grupos = agruparTiposTramite(types.filter((t) => t.family !== "TRASPASO"));
+    expect(grupos.map((g) => g.familia)).toEqual(["MATRICULAS", "OTROS"]);
   });
 });

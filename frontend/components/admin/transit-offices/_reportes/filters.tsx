@@ -7,21 +7,13 @@
 // moverlo no cambiaba un solo número. Al partir los filtros por pestaña, cada control queda al lado
 // de lo que de verdad gobierna.
 
+import {
+  TipoTramiteSelect,
+  type GrupoTiposTramite,
+  type SeleccionTipoTramite,
+} from "@/components/consultas/tipo-tramite";
 import type { OtClientCompanyOption } from "@/lib/api/ot-metrics";
-import { FAMILIA_OPCIONES } from "@/lib/api/types/familia-labels";
 import { FIELD_CLS } from "./shared";
-
-// En pantalla esto se llama «familia», que es como el gestor elige al crear el trámite.
-//
-// Las opciones eran `matricula_inicial` y `traspaso`, de un vocabulario que ADR-0050 eliminó,
-// mientras la consulta del backend comparaba contra `procedure_types.family` (MATRICULAS /
-// TRASPASO / OTROS). Ningún valor coincidía: filtrar por «Matrícula inicial» devolvía cero filas
-// y el informe se veía vacío sin explicar por qué. Además faltaba OTROS, donde viven diecisiete
-// de los veintiún tipos del catálogo.
-export const FAMILIAS = [
-  { value: "", label: "Todas las familias" },
-  ...FAMILIA_OPCIONES,
-];
 
 export interface DateRange {
   from: string;
@@ -149,23 +141,28 @@ export function DateRangeFields({
   );
 }
 
-export function FamiliaSelect({
+/**
+ * Filtro por tipo de trámite: familias como encabezado y sus tipos debajo.
+ *
+ * <p>Ofrecía solo las tres familias, así que el informe no distinguía una matrícula inicial de una
+ * de leasing —dos trámites distintos para quien los decide— ni un traspaso bilateral de uno
+ * unilateral. Los veintiún tipos en una lista plana arreglaban eso y estropeaban otra cosa: quien
+ * consulta tendría que saberse de memoria a qué familia pertenece cada uno. Los dos niveles en un
+ * solo control resuelven las dos.</p>
+ */
+export function TipoTramiteFiltro({
   value,
+  grupos,
   onChange,
 }: {
-  value: string;
-  onChange: (value: string) => void;
+  value: SeleccionTipoTramite;
+  grupos: GrupoTiposTramite[];
+  onChange: (seleccion: SeleccionTipoTramite) => void;
 }) {
   return (
     <label className="flex flex-col gap-1 text-xs font-semibold">
-      Familia
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={FIELD_CLS}>
-        {FAMILIAS.map((m) => (
-          <option key={m.value} value={m.value}>
-            {m.label}
-          </option>
-        ))}
-      </select>
+      Tipo de trámite
+      <TipoTramiteSelect grupos={grupos} value={value} onChange={onChange} className={FIELD_CLS} />
     </label>
   );
 }

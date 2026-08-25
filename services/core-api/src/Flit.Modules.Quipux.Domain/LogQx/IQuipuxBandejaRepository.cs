@@ -17,4 +17,19 @@ public interface IQuipuxBandejaRepository
     Task<QuipuxBandejaPage> SearchAsync(
         QuipuxBandejaQuery query,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tipos de trámite que pueden aparecer en la bandeja, para el desplegable del filtro.
+    /// </summary>
+    /// <remarks>
+    /// Son los que tienen homologación Quipux (<c>procedure_types.external_refs -&gt; 'quipux'</c>),
+    /// que es el MISMO criterio con el que la bandeja arma su universo. Ofrecer el catálogo completo
+    /// daría diecisiete opciones que siempre devuelven cero, porque esos tipos no se radican por
+    /// Quipux: el desplegable estaría prometiendo un filtro que no existe.
+    /// </remarks>
+    Task<IReadOnlyList<QuipuxTipoTramiteOpcion>> ListProcedureTypesAsync(
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>Una opción del desplegable «tipo de trámite» del LOG QX, con la familia que la encabeza.</summary>
+public sealed record QuipuxTipoTramiteOpcion(Guid Id, string Nombre, string? Familia);

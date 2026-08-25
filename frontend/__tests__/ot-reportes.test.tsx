@@ -15,6 +15,10 @@ import type {
   OtRejectionReasons,
   OtReport,
 } from "@/lib/api/ot-metrics";
+import type {
+  ProcedureFamily,
+  ProcedureTypeSummary,
+} from "@/lib/api/types/procedure-parametrization";
 
 const mocks = vi.hoisted(() => ({
   fetchOtOperationalPanel: vi.fn(),
@@ -25,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   fetchOtReport: vi.fn(),
   // La consola pide el catálogo de revisores al montar; sin mock saldría una petición real.
   fetchOtReviewerOptions: vi.fn(),
+  // Y el catálogo global de tipos de trámite, que alimenta el filtro agrupado.
+  listPublishedProcedureTypes: vi.fn(),
 }));
 
 vi.mock("@/lib/api/ot-metrics", async (importOriginal) => {
@@ -38,6 +44,17 @@ vi.mock("@/lib/api/ot-metrics", async (importOriginal) => {
     fetchOtDrilldown: mocks.fetchOtDrilldown,
     fetchOtReport: mocks.fetchOtReport,
     fetchOtReviewerOptions: mocks.fetchOtReviewerOptions,
+  };
+});
+
+vi.mock("@/lib/api/tramites-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/tramites-client")>();
+  return {
+    ...actual,
+    tramitesClient: {
+      ...actual.tramitesClient,
+      listPublishedProcedureTypes: mocks.listPublishedProcedureTypes,
+    },
   };
 });
 
@@ -148,6 +165,7 @@ const DRILLDOWN: OtDrilldown = {
       clientTenantName: "Flota Andina S.A.S.",
       status: "aprobado",
       familia: "MATRICULAS",
+      tipoTramite: "Matrícula inicial",
       prioritario: false,
       diasEsperando: 1.5,
     },
@@ -160,6 +178,7 @@ const DRILLDOWN: OtDrilldown = {
       clientTenantName: "Flota Andina S.A.S.",
       status: "rechazado",
       familia: "MATRICULAS",
+      tipoTramite: "Matrícula inicial",
       prioritario: true,
       diasEsperando: null,
     },
@@ -212,6 +231,7 @@ const REPORT: OtReport = {
       clientTenantId: "c1",
       clientTenantName: "Distribuidora del Valle S.A.S.",
       familia: "MATRICULAS",
+      tipoTramite: "Matrícula Leasing",
       status: "aprobado",
       estadoOt: "aprobado",
       prioritario: false,
@@ -233,6 +253,7 @@ const REPORT: OtReport = {
       clientTenantId: "c2",
       clientTenantName: "Comercializadora Andina Ltda.",
       familia: "TRASPASO",
+      tipoTramite: "Traspaso Unilateral",
       status: "rechazado",
       estadoOt: "en_subsanacion",
       prioritario: true,
@@ -255,6 +276,19 @@ async function openTab(name: RegExp) {
   return user;
 }
 
+function tipo(id: string, code: string, name: string, family: ProcedureFamily): ProcedureTypeSummary {
+  return {
+    id,
+    code,
+    name,
+    family,
+    publicationStatus: "published",
+    isActive: true,
+    wizardEnabled: true,
+    publishedAt: null,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   // La consola guarda la pestaña activa en `?tab=`, y jsdom conserva la dirección entre pruebas del
@@ -267,6 +301,13 @@ beforeEach(() => {
   mocks.fetchOtDrilldown.mockResolvedValue(DRILLDOWN);
   mocks.fetchOtReport.mockResolvedValue(REPORT);
   mocks.fetchOtReviewerOptions.mockResolvedValue([]);
+  // Dos matrículas y un traspaso: lo justo para comprobar que agrupa, que ordena por nombre dentro
+  // del grupo y que una familia sin tipos (OTROS) no produce encabezado.
+  mocks.listPublishedProcedureTypes.mockResolvedValue([
+    tipo("mat-inicial", "MATRICULA_NUEVA", "Matrícula inicial", "MATRICULAS"),
+    tipo("mat-leasing", "MATRICULA_LEASING", "Matrícula Leasing", "MATRICULAS"),
+    tipo("tra-std", "TRASPASO_STANDARD", "Traspaso", "TRASPASO"),
+  ]);
 });
 
 // ── La pestaña activa vive en la dirección ────────────────────────────────────
@@ -895,30 +936,58 @@ describe("Excel del informe", () => {
 
 // ── Filtro por familia ────────────────────────────────────────────────────────
 
-describe("Reportes del organismo — filtro por familia", () => {
-  // El selector ofrecía «Matrícula inicial» y «Traspaso», valores de un vocabulario que ADR-0050
-  // eliminó, contra una consulta que compara con `procedure_types.family`. Ninguno coincidía: elegir
-  // una opción vaciaba el informe sin decir por qué. Y faltaba «Otros», donde viven diecisiete de
-  // los veintiún tipos del catálogo.
-  it("ofrece las tres familias del catálogo", async () => {
+describe("Reportes del organismo — filtro por tipo de trámite", () => {
+  // El selector ofrecía SOLO las tres familias, así que el informe no distinguía una matrícula
+  // inicial de una de leasing —dos trámites distintos para quien los decide— ni un traspaso
+  // estándar de uno unilateral. Poner los veintiún tipos en una lista plana arreglaba eso y
+  // estropeaba otra cosa: había que saberse de memoria qué tipo cae en qué familia. De ahí los dos
+  // niveles: cada familia encabeza su grupo y arrastra sus tipos.
+  it("agrupa los tipos bajo su familia, con la familia entera como primera opción del grupo", async () => {
     render(<OtReportsConsole transitOfficeId="ot-1" />);
     await openTab(/Informe/);
 
-    const select = await screen.findByLabelText("Familia");
-    const opciones = within(select).getAllByRole("option").map((o) => o.textContent);
+    const select = await screen.findByLabelText("Tipo de trámite");
+    const grupos = within(select)
+      .getAllByRole("group")
+      .map((g) => g.getAttribute("label"));
+    expect(grupos).toEqual(["Matrículas", "Traspasos"]);
 
-    expect(opciones).toEqual(["Todas las familias", "Matrículas", "Traspaso", "Otros trámites"]);
+    const opciones = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(opciones).toEqual([
+      "Todos los tipos",
+      "Toda la familia: Matrículas",
+      "Matrícula inicial",
+      "Matrícula Leasing",
+      "Toda la familia: Traspasos",
+      "Traspaso",
+    ]);
   });
 
-  it("envía el código de familia que la consulta sabe comparar", async () => {
+  it("elegir la familia entera manda el código que la consulta sabe comparar", async () => {
     render(<OtReportsConsole transitOfficeId="ot-1" />);
     const user = await openTab(/Informe/);
 
-    await user.selectOptions(await screen.findByLabelText("Familia"), "MATRICULAS");
+    await user.selectOptions(await screen.findByLabelText("Tipo de trámite"), "fam:MATRICULAS");
 
     await waitFor(() =>
       expect(mocks.fetchOtReport).toHaveBeenCalledWith(
-        expect.objectContaining({ family: "MATRICULAS" }),
+        expect.objectContaining({ family: "MATRICULAS", procedureTypeId: undefined }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("elegir un tipo concreto manda el id, no la familia", async () => {
+    // Es la diferencia que motivó todo esto: pedir «Matrícula Leasing» tiene que llegar al backend
+    // como ese tipo, no como «todas las matrículas».
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Informe/);
+
+    await user.selectOptions(await screen.findByLabelText("Tipo de trámite"), "tipo:mat-leasing");
+
+    await waitFor(() =>
+      expect(mocks.fetchOtReport).toHaveBeenCalledWith(
+        expect.objectContaining({ procedureTypeId: "mat-leasing", family: undefined }),
         expect.anything(),
       ),
     );

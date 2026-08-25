@@ -2,6 +2,7 @@ using Flit.Api.Authorization;
 using Flit.Modules.Quipux.Application.UseCases.ConsultarBandeja;
 using Flit.Modules.Quipux.Application.UseCases.ConsultarLog;
 using Flit.Modules.Quipux.Application.UseCases.ConsultarTrazabilidad;
+using Flit.Modules.Quipux.Domain.LogQx;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -53,6 +54,19 @@ public static class AdminLogQxEndpoints
                 + "Incluye los contadores por estado sobre el conjunto filtrado completo. Requiere "
                 + "el permiso logqx.read (SuperAdmin bypassa).")
             .Produces<ConsultarBandejaQuipuxResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // GET /api/v1/admin/log-qx/tipos — catálogo del desplegable «tipo de trámite».
+        group.MapGet("tipos", TiposAsync)
+            .RequirePermission("logqx.read")
+            .WithName("AdminLogQxTipos")
+            .WithSummary("Tipos de trámite que pueden aparecer en la bandeja")
+            .WithDescription("Solo los tipos publicados CON homologación Quipux, que es el mismo "
+                + "criterio con el que la bandeja arma su universo: ofrecer el catálogo completo "
+                + "daría opciones que siempre devuelven cero. Cada uno viaja con su familia para "
+                + "que el desplegable pueda agruparlos. Requiere el permiso logqx.read.")
+            .Produces<IReadOnlyList<QuipuxTipoTramiteOpcion>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
@@ -125,6 +139,7 @@ public static class AdminLogQxEndpoints
         [FromQuery] string? transitOfficeId = null,
         [FromQuery] string? tenantId = null,
         [FromQuery] string? procedureTypeId = null,
+        [FromQuery] string? familia = null,
         [FromQuery] int? page = null,
         [FromQuery] int? pageSize = null)
     {
@@ -132,11 +147,19 @@ public static class AdminLogQxEndpoints
             .HandleAsync(
                 new ConsultarBandejaQuipuxQuery(
                     desde, hasta, placa, instanceId, referencia, documento, estado,
-                    transitOfficeId, tenantId, procedureTypeId, page, pageSize),
+                    transitOfficeId, tenantId, procedureTypeId, familia, page, pageSize),
                 cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(result);
+    }
+
+    private static async Task<IResult> TiposAsync(
+        [FromServices] IQuipuxBandejaRepository repository,
+        CancellationToken cancellationToken)
+    {
+        var tipos = await repository.ListProcedureTypesAsync(cancellationToken).ConfigureAwait(false);
+        return Results.Ok(tipos);
     }
 
     private static async Task<IResult> HitosAsync(

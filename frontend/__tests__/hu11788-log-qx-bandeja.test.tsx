@@ -32,10 +32,15 @@ vi.mock("@/lib/auth/jwt", () => ({
   isSuperAdmin: () => auth.esSuperAdmin,
 }));
 
-const mocks = vi.hoisted(() => ({ fetchLogQxBandeja: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchLogQxBandeja: vi.fn(), fetchLogQxTipos: vi.fn() }));
 vi.mock("@/lib/api/admin-log-qx", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/admin-log-qx")>();
-  return { ...actual, fetchLogQxBandeja: mocks.fetchLogQxBandeja };
+  return {
+    ...actual,
+    fetchLogQxBandeja: mocks.fetchLogQxBandeja,
+    // La bandeja pide el catálogo de tipos al montar; sin mock saldría una petición real.
+    fetchLogQxTipos: mocks.fetchLogQxTipos,
+  };
 });
 
 import { LogQx } from "@/components/atom/modules/LogQx";
@@ -103,7 +108,58 @@ function page(over: Partial<LogQxBandejaPage> = {}): LogQxBandejaPage {
 describe("LOG QX — bandeja (HU #11788)", () => {
   beforeEach(() => {
     mocks.fetchLogQxBandeja.mockReset();
+    mocks.fetchLogQxTipos.mockReset();
+    // Solo los tipos con homologación Quipux: son los únicos que pueden salir en la bandeja.
+    mocks.fetchLogQxTipos.mockResolvedValue([
+      { id: "t-mat", nombre: "Matrícula inicial", familia: "MATRICULAS" },
+      { id: "t-lea", nombre: "Matrícula Leasing", familia: "MATRICULAS" },
+      { id: "t-tra", nombre: "Traspaso", familia: "TRASPASO" },
+    ]);
     push.mockReset();
+  });
+
+  it("el filtro de tipo agrupa por familia y solo ofrece los tipos con homologación Quipux", async () => {
+    // La bandeja no tenía este filtro pese a que el endpoint ya lo aceptaba. Las opciones NO son el
+    // catálogo completo: de los veintiún tipos, solo cuatro se radican por Quipux, así que el resto
+    // serían opciones que siempre devuelven cero.
+    mocks.fetchLogQxBandeja.mockResolvedValue(page());
+    render(<LogQx />);
+
+    const select = await screen.findByLabelText("Tipo de trámite");
+    expect(within(select).getAllByRole("group").map((g) => g.getAttribute("label"))).toEqual([
+      "Matrículas",
+      "Traspasos",
+    ]);
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos los tipos",
+      "Toda la familia: Matrículas",
+      "Matrícula inicial",
+      "Matrícula Leasing",
+      "Toda la familia: Traspasos",
+      "Traspaso",
+    ]);
+  });
+
+  it("elegir un tipo concreto lo manda como id; elegir la familia, como familia", async () => {
+    mocks.fetchLogQxBandeja.mockResolvedValue(page());
+    render(<LogQx />);
+
+    const select = await screen.findByLabelText("Tipo de trámite");
+    fireEvent.change(select, { target: { value: "tipo:t-lea" } });
+    fireEvent.click(screen.getByRole("button", { name: /aplicar/i }));
+    await waitFor(() =>
+      expect(mocks.fetchLogQxBandeja).toHaveBeenLastCalledWith(
+        expect.objectContaining({ procedureTypeId: "t-lea", familia: undefined }),
+      ),
+    );
+
+    fireEvent.change(select, { target: { value: "fam:MATRICULAS" } });
+    fireEvent.click(screen.getByRole("button", { name: /aplicar/i }));
+    await waitFor(() =>
+      expect(mocks.fetchLogQxBandeja).toHaveBeenLastCalledWith(
+        expect.objectContaining({ familia: "MATRICULAS", procedureTypeId: undefined }),
+      ),
+    );
   });
 
   it("AC1: carga con datos al montar, sin que nadie pulse Buscar", async () => {
@@ -329,6 +385,13 @@ describe("LOG QX — estados de la bandeja (HU #11788)", () => {
 describe("LOG QX — vuelta desde la trazabilidad y apertura del trámite (HU #11788)", () => {
   beforeEach(() => {
     mocks.fetchLogQxBandeja.mockReset();
+    mocks.fetchLogQxTipos.mockReset();
+    // Solo los tipos con homologación Quipux: son los únicos que pueden salir en la bandeja.
+    mocks.fetchLogQxTipos.mockResolvedValue([
+      { id: "t-mat", nombre: "Matrícula inicial", familia: "MATRICULAS" },
+      { id: "t-lea", nombre: "Matrícula Leasing", familia: "MATRICULAS" },
+      { id: "t-tra", nombre: "Traspaso", familia: "TRASPASO" },
+    ]);
     push.mockReset();
     auth.esSuperAdmin = true;
     window.history.replaceState({}, "", "/");

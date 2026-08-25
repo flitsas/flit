@@ -23,6 +23,10 @@ public sealed record TrazabilidadFiltro(
     IReadOnlyList<string>? PlacasOVins = null,
     Guid? CompaniaTenantId = null,
     int? TipoTramite = null,
+    // Familia del tipo (MATRICULAS | TRASPASO | OTROS), para poder pedir «todos los traspasos» sin
+    // enumerar sus tipos. Convive con TipoTramite porque el desplegable ofrece los dos niveles: si
+    // llegan ambos manda el tipo, que es el más específico.
+    string? Familia = null,
     int? Operacion = null,
     string? Estado = null,
     DateTime? Desde = null,
@@ -70,8 +74,14 @@ public interface ITrazabilidadBandejaQuery
     Task<TrazabilidadPagina> ConsultarAsync(TrazabilidadFiltro filtro, CancellationToken ct = default);
 }
 
-/// <summary>Un tipo de trámite del desplegable de la bandeja.</summary>
-public sealed record TipoTramiteOpcion(int Id, string Nombre);
+/// <summary>Un tipo de trámite del desplegable de la bandeja, con la familia que lo encabeza.</summary>
+/// <remarks>
+/// La familia sale de <c>ict.procedure_type_mapping</c>, que es donde ADR-0050 la dejó: ICT tiene su
+/// PROPIO catálogo —los tipos de transacción que manda la integración— y el mapeo es lo que los ata a
+/// las tres familias de FLIT. Sin ella el desplegable son dieciséis opciones en fila, y quien busca
+/// tiene que saberse de memoria cuál es cuál.
+/// </remarks>
+public sealed record TipoTramiteOpcion(int Id, string Nombre, string? Familia);
 
 /// <summary>
 /// Catálogo de tipos de trámite para el filtro de la bandeja (HU #11815).
@@ -95,6 +105,38 @@ public interface ITiposTramiteQuery
 /// de negocio propias (qué se considera un término válido) y la única que se puede probar sin base de
 /// datos. El repositorio solo la consume.
 /// </remarks>
+/// <summary>
+/// Normaliza la familia que llega por la petición.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Una familia desconocida se descarta (se devuelve <c>null</c>) en vez de pasarse tal cual a la
+/// consulta. Pasarla devolvería cero filas, y la bandeja vacía se leería como «esta empresa no tiene
+/// trámites de esa familia» cuando lo que pasó es que el valor no existe. Descartarla enseña todo, y
+/// que sobren filas se nota; que falten, no.
+/// </para>
+/// <para>
+/// Los tres códigos se repiten aquí y no se importan de core-api a propósito: ICT es un servicio
+/// aparte y no depende de su dominio. Lo que los ata es <c>ict.procedure_type_mapping.family</c>, que
+/// tiene su propio CHECK con estos mismos tres valores.
+/// </para>
+/// </remarks>
+public static class FamiliaFiltro
+{
+    public static readonly IReadOnlyList<string> Validas = ["MATRICULAS", "TRASPASO", "OTROS"];
+
+    public static string? Normalizar(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            return null;
+        }
+
+        var code = valor.Trim().ToUpperInvariant();
+        return Validas.Contains(code) ? code : null;
+    }
+}
+
 public static class PlacaVinFiltro
 {
     /// <summary>

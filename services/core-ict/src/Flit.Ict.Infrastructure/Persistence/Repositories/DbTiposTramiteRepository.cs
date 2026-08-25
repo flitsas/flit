@@ -37,9 +37,10 @@ public sealed class DbTiposTramiteRepository(IctDbContext db) : ITiposTramiteQue
         {
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = """
-                SELECT DISTINCT m.transaction_type, COALESCE(t.name, '')
+                SELECT DISTINCT m.transaction_type, COALESCE(t.name, ''), COALESCE(pm.family, '')
                 FROM ict.external_integration_master m
                 LEFT JOIN ict.external_integration_procedure_type t ON t.id = m.transaction_type
+                LEFT JOIN ict.procedure_type_mapping pm ON pm.external_transaction_type = m.transaction_type
                 WHERE m.deleted_at IS NULL
                   AND (@tenant::uuid IS NULL OR m.tenant_id = @tenant::uuid)
                   AND (@compania::uuid IS NULL OR m.tenant_id = @compania::uuid)
@@ -55,9 +56,14 @@ public sealed class DbTiposTramiteRepository(IctDbContext db) : ITiposTramiteQue
                 var nombre = reader.GetString(1);
                 // Un tipo sin nombre en el catálogo se muestra por su número en vez de como una
                 // opción en blanco: sigue siendo seleccionable y quien lo vea sabe qué reportar.
+                var familia = reader.GetString(2);
                 opciones.Add(new TipoTramiteOpcion(
                     reader.GetInt32(0),
-                    nombre.Length > 0 ? nombre : $"Tipo {reader.GetInt32(0)}"));
+                    nombre.Length > 0 ? nombre : $"Tipo {reader.GetInt32(0)}",
+                    // Un tipo sin mapeo cae en «otros» del lado del cliente. Aquí se devuelve vacío
+                    // en vez de inventar una familia: el hueco es del mapeo, y disimularlo lo
+                    // volvería invisible.
+                    familia.Length > 0 ? familia : null));
             }
 
             return opciones;

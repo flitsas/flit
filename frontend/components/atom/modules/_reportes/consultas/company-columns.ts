@@ -15,7 +15,6 @@ import {
 import { formatDate, formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
 import type { CompanyQueryRow } from "@/lib/api/company-queries";
 import { bogotaClock, bogotaDay } from "@/lib/xlsx";
-import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 const ESTADO_LABEL: Record<string, string> = {
   borrador: "Borrador",
@@ -115,13 +114,6 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     value: (r) => r.procedureTypeName,
     width: 24,
     defaultVisible: true,
-  },
-  {
-    id: "modalidad",
-    label: "Modalidad",
-    group: GRUPO_TRAMITE,
-    value: (r) => familiaLabel(r.modalidad),
-    width: 16,
   },
   {
     id: "estado",

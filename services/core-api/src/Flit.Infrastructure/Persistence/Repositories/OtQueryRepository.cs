@@ -176,7 +176,9 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                 p.Plate,
                 p.Vin,
                 p.TenantId,
+                p.ProcedureTypeId,
                 (p.ProcedureType != null ? p.ProcedureType.Family : ""),
+                (p.ProcedureType != null ? p.ProcedureType.Name : ""),
                 p.Status,
                 p.PlateFlowStatus,
                 p.Prioritario,
@@ -366,7 +368,12 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         OtQueryFieldCatalog.Comprador => r => r.Comprador,
         OtQueryFieldCatalog.Vendedor => r => r.Vendedor,
         OtQueryFieldCatalog.Empresa => r => [r.Instance.TenantId.ToString()],
-        OtQueryFieldCatalog.TipoTramite => r => [r.Instance.Modalidad],
+        // Dos valores a propósito: el desplegable ofrece «toda la familia» y los tipos concretos
+        // como opciones del MISMO campo, así que la fila tiene que coincidir por cualquiera de los
+        // dos. Es además lo que mantiene vivas las consultas guardadas que se armaron cuando la
+        // única opción era la familia.
+        OtQueryFieldCatalog.TipoTramite => r =>
+            [r.Instance.ProcedureTypeId.ToString(), r.Instance.Familia],
         OtQueryFieldCatalog.Estado => r => [r.EstadoOt],
         OtQueryFieldCatalog.Revisor => r => r.DecididoPor is Guid id ? [id.ToString()] : [],
         OtQueryFieldCatalog.Prioritario => r => [Bool(r.Instance.Prioritario)],
@@ -441,7 +448,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             Vin: row.Instance.Vin,
             ClientTenantId: row.Instance.TenantId,
             ClientTenantName: empresas.GetValueOrDefault(row.Instance.TenantId, "(empresa retirada)"),
-            Modalidad: row.Instance.Modalidad,
+            TipoTramite: row.Instance.TipoTramite,
             Status: row.Instance.Status,
             EstadoOt: row.EstadoOt,
             Prioritario: row.Instance.Prioritario,
@@ -489,12 +496,28 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                     .Select(t => new QueryFieldOptionDto(t.Id.ToString(), t.LegalName))
                     .ToList();
 
-                var instanceIds = _context.ProcedureInstances
+                var propios = _context.ProcedureInstances
                     .AsNoTracking()
                     .Where(p => p.DeletedAt == null
                         && p.TransitOfficeId == transitOfficeId
-                        && tenantIds.Contains(p.TenantId))
-                    .Select(p => p.Id);
+                        && tenantIds.Contains(p.TenantId));
+
+                var instanceIds = propios.Select(p => p.Id);
+
+                var tipoIds = await propios
+                    .Select(p => p.ProcedureTypeId)
+                    .Distinct()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var tipoOptions = TipoTramiteOptionCatalog.Build(
+                    (await _context.ProcedureTypes
+                        .AsNoTracking()
+                        .Where(t => tipoIds.Contains(t.Id))
+                        .Select(t => new { t.Id, t.Name, t.Family })
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false))
+                    .Select(t => (t.Id, t.Name, (string?)t.Family)));
 
                 var revisorIds = await _context.ProcedureInstanceStatusHistories
                     .AsNoTracking()
@@ -519,6 +542,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                     .Select(f => f.Id switch
                     {
                         OtQueryFieldCatalog.Empresa => f with { Options = empresaOptions },
+                        OtQueryFieldCatalog.TipoTramite => f with { Options = tipoOptions },
                         OtQueryFieldCatalog.Revisor => f with { Options = revisorOptions },
                         _ => f,
                     })
@@ -801,7 +825,9 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         string? Plate,
         string? Vin,
         Guid TenantId,
-        string Modalidad,
+        Guid ProcedureTypeId,
+        string Familia,
+        string TipoTramite,
         string Status,
         string? PlateFlowStatus,
         bool Prioritario,

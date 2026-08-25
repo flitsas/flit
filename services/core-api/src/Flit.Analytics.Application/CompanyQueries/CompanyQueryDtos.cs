@@ -81,7 +81,6 @@ public sealed record CompanyQueryRowDto(
     string CompaniaNombre,
     Guid ProcedureTypeId,
     string ProcedureTypeName,
-    string Modalidad,
     string Status,
     bool Prioritario,
     bool SubsanacionActiva,

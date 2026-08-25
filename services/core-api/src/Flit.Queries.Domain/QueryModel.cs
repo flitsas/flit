@@ -58,8 +58,15 @@ public static class QueryOperator
     public static bool IsUnary(string op) => op is EstaVacio or NoEstaVacio;
 }
 
-/// <summary>Una opción de un campo de lista cerrada.</summary>
-public sealed record QueryFieldOptionDto(string Value, string Label);
+/// <summary>
+/// Una opción de un campo de lista cerrada.
+///
+/// <para><see cref="Group"/> es el encabezado bajo el que la UI agrupa la opción, y es opcional: los
+/// campos cuyo catálogo es una lista corta y plana (estados, sí/no) no lo llevan. Existe porque el
+/// tipo de trámite dejó de ser una lista de dos: con veintiún tipos repartidos en tres familias, una
+/// lista plana obliga a quien consulta a saberse de memoria qué tipo pertenece a qué familia.</para>
+/// </summary>
+public sealed record QueryFieldOptionDto(string Value, string Label, string? Group = null);
 
 /// <summary>
 /// Un campo consultable, tal y como lo ve la UI.

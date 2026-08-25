@@ -15,12 +15,6 @@ internal static class OtQueryReportColumns
     private static readonly string[] DefaultColumns =
         ["referencia", "placa", "empresa", "tipo_tramite", "estado", "radicado_en"];
 
-    private static readonly Dictionary<string, string> ModalidadLabel = new(StringComparer.Ordinal)
-    {
-        ["matricula_inicial"] = "Matrícula inicial",
-        ["traspaso"] = "Traspaso",
-    };
-
     private static readonly Dictionary<string, string> TransformacionLabel = new(StringComparer.Ordinal)
     {
         ["cambio_color"] = "Color",
@@ -50,7 +44,7 @@ internal static class OtQueryReportColumns
         ["placa"] = new("Placa", 12, r => TextOrEmpty(r.Placa)),
         ["vin"] = new("VIN", 20, r => TextOrEmpty(r.Vin)),
         ["empresa"] = new("Empresa", 28, r => Text(r.ClientTenantName)),
-        ["tipo_tramite"] = new("Tipo de trámite", 16, r => Text(Label(ModalidadLabel, r.Modalidad))),
+        ["tipo_tramite"] = new("Tipo de trámite", 24, r => Text(r.TipoTramite)),
         ["estado"] = new("Estado", 18, r => Text(Label(EstadoLabel, r.EstadoOt))),
         ["prioritario"] = new("Prioritario", 11, r => Text(SiNo(r.Prioritario))),
         ["decidido_por"] = new("Decidido por", 24, r => TextOrEmpty(r.DecididoPor)),

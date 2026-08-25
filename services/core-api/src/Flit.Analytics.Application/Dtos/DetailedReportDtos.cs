@@ -16,7 +16,8 @@ public sealed record DetailedProcedureRowDto(
     string? TransformationDetail,
     bool IsLeasing,
     string PaymentType,
-    string TransferType);
+    // Nullable: solo los trámites de la familia TRASPASO tienen clase de traspaso.
+    string? TransferType);
 
 /// <summary>Totales agregados para KPIs del reporte detallado (HU #10819).</summary>
 public sealed record DetailedReportSummaryDto(

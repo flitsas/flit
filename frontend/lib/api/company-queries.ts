@@ -50,7 +50,6 @@ export interface CompanyQueryRow {
   companiaNombre: string;
   procedureTypeId: string;
   procedureTypeName: string;
-  modalidad: string;
   status: string;
   prioritario: boolean;
   subsanacionActiva: boolean;

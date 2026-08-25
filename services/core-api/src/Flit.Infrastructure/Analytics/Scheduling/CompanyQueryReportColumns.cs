@@ -33,12 +33,6 @@ internal static class CompanyQueryReportColumns
         ["anulado"] = "Anulado",
     };
 
-    private static readonly Dictionary<string, string> ModalidadLabel = new(StringComparer.Ordinal)
-    {
-        ["matricula_inicial"] = "Matrícula inicial",
-        ["traspaso"] = "Traspaso",
-    };
-
     private static readonly Dictionary<string, string> TransformacionLabel = new(StringComparer.Ordinal)
     {
         ["cambio_color"] = "Color",
@@ -65,7 +59,6 @@ internal static class CompanyQueryReportColumns
         ["vin"] = new("VIN", 20, r => TextOrEmpty(r.Vin)),
         ["organismo"] = new("Organismo", 28, r => TextOrEmpty(r.TransitOfficeName)),
         ["tipo"] = new("Tipo de trámite", 24, r => Text(r.ProcedureTypeName)),
-        ["modalidad"] = new("Modalidad", 16, r => Text(Label(ModalidadLabel, r.Modalidad))),
         ["estado"] = new("Estado", 14, r => Text(Label(EstadoLabel, r.Status))),
         ["prioritario"] = new("Prioritario", 11, r => Text(SiNo(r.Prioritario))),
         ["radicado_por"] = new("Radicado por", 22, r => Text(r.RadicadoPor)),

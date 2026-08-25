@@ -16,6 +16,7 @@ import {
   UNARY_OPERATORS,
   type QueryCondition,
   type QueryField,
+  type QueryFieldOption,
   type QueryOperator,
 } from "@/lib/api/queries";
 import { FIELD_CLS, plural } from "./ui";
@@ -231,6 +232,21 @@ function ConditionEditor({
     ? field.options.filter((o) => o.label.toLowerCase().includes(busqueda.trim().toLowerCase()))
     : field.options;
 
+  // Las opciones se pintan por grupos, en el orden en que las manda el servidor: para el tipo de
+  // trámite ese orden ES la información (la familia primero, sus tipos debajo), y reordenarlas
+  // aquí la destruiría. Un campo sin grupos produce un solo bloque sin encabezado, que es cómo se
+  // veían todos antes.
+  const grupos = useMemo(() => {
+    const bloques: { titulo: string | null; opciones: QueryFieldOption[] }[] = [];
+    for (const option of opciones) {
+      const titulo = option.group ?? null;
+      const ultimo = bloques.at(-1);
+      if (ultimo && ultimo.titulo === titulo) ultimo.opciones.push(option);
+      else bloques.push({ titulo, opciones: [option] });
+    }
+    return bloques;
+  }, [opciones]);
+
   function aplicar() {
     onApply({ fieldId: field.id, operator, values: esUnario ? [] : valores });
   }
@@ -291,25 +307,34 @@ function ConditionEditor({
             />
           )}
           <div className="max-h-48 overflow-y-auto">
-            {opciones.map((option) => (
-              <label
-                key={option.value}
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"
-              >
-                <input
-                  type="checkbox"
-                  checked={seleccion.includes(option.value)}
-                  onChange={() =>
-                    setSeleccion((prev) =>
-                      prev.includes(option.value)
-                        ? prev.filter((v) => v !== option.value)
-                        : [...prev, option.value],
-                    )
-                  }
-                  className="accent-[#557EFF]"
-                />
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
-              </label>
+            {grupos.map((bloque, i) => (
+              <div key={bloque.titulo ?? `sin-grupo-${i}`}>
+                {bloque.titulo && (
+                  <p className="mt-1.5 px-1.5 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-[#6B7280] first:mt-0 dark:text-white/50">
+                    {bloque.titulo}
+                  </p>
+                )}
+                {bloque.opciones.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={seleccion.includes(option.value)}
+                      onChange={() =>
+                        setSeleccion((prev) =>
+                          prev.includes(option.value)
+                            ? prev.filter((v) => v !== option.value)
+                            : [...prev, option.value],
+                        )
+                      }
+                      className="accent-[#557EFF]"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                  </label>
+                ))}
+              </div>
             ))}
           </div>
         </>

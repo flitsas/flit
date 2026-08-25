@@ -49,6 +49,8 @@ export interface FiltrosTramitesIct {
   placas?: string;
   compania?: string;
   tipo?: number;
+  /** Familia entera (MATRICULAS | TRASPASO | OTROS), alternativa a pedir un tipo suelto. */
+  familia?: string;
   operacion?: number;
   estado?: string;
   desde?: string;
@@ -67,6 +69,7 @@ export function fetchTramitesIct(
       placas: filtros.placas,
       compania: filtros.compania,
       tipo: filtros.tipo,
+      familia: filtros.familia,
       operacion: filtros.operacion,
       estado: filtros.estado,
       desde: filtros.desde,
@@ -82,6 +85,12 @@ export function fetchTramitesIct(
 export interface TipoTramiteOpcion {
   id: number;
   nombre: string;
+  /**
+   * Familia que encabeza al tipo en el desplegable. Sale de `ict.procedure_type_mapping`, que es lo
+   * que ata el catálogo propio de ICT a las tres familias de FLIT. Null si el tipo no está mapeado:
+   * el desplegable lo recoge bajo «otros trámites» en vez de esconderlo.
+   */
+  familia: string | null;
 }
 
 /**

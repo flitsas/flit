@@ -165,8 +165,26 @@ export interface LogQxBandejaParams {
   transitOfficeId?: string;
   tenantId?: string;
   procedureTypeId?: string;
+  /** Familia entera (MATRICULAS | TRASPASO | OTROS), alternativa a pedir un tipo suelto. */
+  familia?: string;
   page?: number;
   pageSize?: number;
+}
+
+/** Una opción del desplegable «tipo de trámite» de la bandeja. */
+export interface LogQxTipoOpcion {
+  id: string;
+  nombre: string;
+  familia: string | null;
+}
+
+/**
+ * Tipos que pueden aparecer en la bandeja: solo los publicados CON homologación Quipux, que es el
+ * mismo criterio con el que el backend arma el universo. El catálogo completo daría diecisiete
+ * opciones que siempre devuelven cero.
+ */
+export function fetchLogQxTipos(signal?: AbortSignal): Promise<LogQxTipoOpcion[]> {
+  return apiFetch<LogQxTipoOpcion[]>(`${base}/tipos`, { signal });
 }
 
 /**

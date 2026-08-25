@@ -56,7 +56,8 @@ export interface OtQueryRow {
   vin: string | null;
   clientTenantId: string;
   clientTenantName: string;
-  modalidad: string;
+  /** Nombre del tipo concreto de trámite. Se llamaba `modalidad` y traía la familia. */
+  tipoTramite: string;
   status: string;
   estadoOt: string;
   prioritario: boolean;

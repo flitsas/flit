@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { agruparTiposTramite, type GrupoTiposTramite } from "@/components/consultas/tipo-tramite";
+import { tramitesClient } from "@/lib/api/tramites-client";
 import { CalendarClock } from "lucide-react";
 import {
   fetchOtClientCompanies,
@@ -100,6 +102,7 @@ function initialTab(): TabId {
 export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
   const [tab, setTab] = useState<TabId>(initialTab);
   const [companies, setCompanies] = useState<OtClientCompanyOption[]>([]);
+  const [tiposTramite, setTiposTramite] = useState<GrupoTiposTramite[]>([]);
   const [reviewers, setReviewers] = useState<OtReviewerOption[]>([]);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
   // "Programar este informe" en una consulta guardada (Reportes 2.0, HU-D, tercera ola): mismo
@@ -107,8 +110,8 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
   // programa las suyas, no hay alcance cross-organismo equivalente al "superadmin" de compañía.
   const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
 
-  // Los dos catálogos se resuelven UNA vez por organismo y se reparten a las pestañas: ninguno
-  // cambia con el rango ni con la modalidad, y recargarlos en cada pestaña solo sumaría llamadas.
+  // Los catálogos se resuelven UNA vez por organismo y se reparten a las pestañas: ninguno cambia
+  // con el rango ni con el tipo de trámite, y recargarlos en cada pestaña solo sumaría llamadas.
   // Si alguno falla se deja vacío en vez de romper la consola: sin catálogo se pierde un filtro,
   // no el reporte.
   useEffect(() => {
@@ -119,6 +122,15 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
       .then(setReviewers)
       .catch(() => setReviewers([]));
   }, [transitOfficeId]);
+
+  // El catálogo de tipos NO depende del organismo: es global (ADR-0019), así que se pide una sola
+  // vez. Solo los publicados, que son los únicos que un trámite puede tener.
+  useEffect(() => {
+    tramitesClient
+      .listPublishedProcedureTypes()
+      .then((tipos) => setTiposTramite(agruparTiposTramite(tipos)))
+      .catch(() => setTiposTramite([]));
+  }, []);
 
   const selectTab = useCallback((id: TabId) => {
     setTab(id);
@@ -172,18 +184,31 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
       {/* Cada pestaña se monta y desmonta: son consultas distintas y mantenerlas vivas en segundo
           plano dejaría al organismo mirando cifras que se cargaron hace media hora. */}
       {tab === "ahora" && (
-        <OtNowTab transitOfficeId={transitOfficeId} companies={companies} />
+        <OtNowTab
+          transitOfficeId={transitOfficeId}
+          companies={companies}
+          tiposTramite={tiposTramite}
+        />
       )}
       {tab === "analisis" && (
-        <OtAnalysisTab transitOfficeId={transitOfficeId} companies={companies} />
+        <OtAnalysisTab
+          transitOfficeId={transitOfficeId}
+          companies={companies}
+          tiposTramite={tiposTramite}
+        />
       )}
       {tab === "informe" && (
-        <OtReportBuilder transitOfficeId={transitOfficeId} companies={companies} />
+        <OtReportBuilder
+          transitOfficeId={transitOfficeId}
+          companies={companies}
+          tiposTramite={tiposTramite}
+        />
       )}
       {tab === "revisores" && (
         <OtReviewersTab
           transitOfficeId={transitOfficeId}
           companies={companies}
+          tiposTramite={tiposTramite}
           reviewers={reviewers}
         />
       )}

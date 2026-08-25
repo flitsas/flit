@@ -18,6 +18,7 @@ public sealed record ConsultarBandejaQuipuxQuery(
     string? TransitOfficeId,
     string? TenantId,
     string? ProcedureTypeId,
+    string? Familia,
     int? Page,
     int? PageSize);
 
@@ -98,6 +99,10 @@ public sealed class ConsultarBandejaQuipuxHandler
             officeId,
             tenantId,
             typeId,
+            // Una familia desconocida se descarta en vez de mandarse: filtrar por ella devolvería
+            // cero filas, y una bandeja vacía se leería como «no hay trámites de esa familia»
+            // cuando lo que pasó es que el valor no existe.
+            QuipuxFamilias.Normalizar(query.Familia),
             page,
             pageSize);
 

@@ -25,10 +25,17 @@ import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
   fetchLogQxBandeja,
+  fetchLogQxTipos,
   type LogQxBandejaEntry,
   type LogQxBandejaEstado,
   type LogQxBandejaParams,
+  type LogQxTipoOpcion,
 } from "@/lib/api/admin-log-qx";
+import {
+  TipoTramiteSelect,
+  agruparPorFamilia,
+} from "@/components/consultas/tipo-tramite";
+import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
 import {
   ESTADOS_BANDEJA,
   ESTADO_BANDEJA,
@@ -64,6 +71,10 @@ interface Filtros {
   referencia: string;
   documento: string;
   estado: LogQxBandejaEstado | "";
+  /** Id del tipo de trámite concreto. Vacío si se pidió la familia entera o nada. */
+  procedureTypeId: string;
+  /** Familia (MATRICULAS | TRASPASO | OTROS) cuando se pidió la familia entera. */
+  familia: string;
   /**
    * Acotado a un trámite concreto. No tiene campo en el formulario: llega por el deep-link
    * `?m=log-qx&instanceId=…` desde el detalle del trámite (HU #10796). Se muestra como un chip
@@ -79,6 +90,8 @@ const FILTROS_VACIOS: Filtros = {
   referencia: "",
   documento: "",
   estado: "",
+  procedureTypeId: "",
+  familia: "",
   instanceId: "",
 };
 
@@ -101,6 +114,8 @@ function leerFiltrosDeLaUrl(): Filtros | null {
     estado: ESTADOS_BANDEJA.includes(estadoUrl as LogQxBandejaEstado)
       ? (estadoUrl as LogQxBandejaEstado)
       : "",
+    procedureTypeId: qs.get("procedureTypeId") ?? "",
+    familia: qs.get("familia") ?? "",
     instanceId: qs.get("instanceId") ?? "",
   };
 
@@ -174,6 +189,8 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         referencia: f.referencia || undefined,
         documento: f.documento || undefined,
         estado: f.estado || undefined,
+        procedureTypeId: f.procedureTypeId || undefined,
+        familia: f.familia || undefined,
         instanceId: f.instanceId || undefined,
         page: targetPage,
         pageSize: PAGE_SIZE,
@@ -259,11 +276,32 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
           ? "empty"
           : "ready";
 
+  // Catálogo del desplegable. Se pide una vez: no depende de los filtros ni del tenant. Si falla se
+  // queda vacío y el campo no se ofrece — se pierde un filtro, no la pantalla.
+  const [tipos, setTipos] = useState<LogQxTipoOpcion[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchLogQxTipos(controller.signal)
+      .then((res) => {
+        if (!controller.signal.aborted) setTipos(res);
+      })
+      .catch(() => {
+        /* silencioso: el filtro de tipo simplemente no se ofrece */
+      });
+    return () => controller.abort();
+  }, []);
+
+  const grupos = useMemo(
+    () => agruparPorFamilia(tipos.map((t) => ({ id: t.id, name: t.nombre, family: t.familia }))),
+    [tipos],
+  );
+
   const hayFiltros = useMemo(
     () =>
       Boolean(
         aplicados.placa || aplicados.referencia || aplicados.documento
-          || aplicados.estado || aplicados.instanceId,
+          || aplicados.estado || aplicados.procedureTypeId || aplicados.familia
+          || aplicados.instanceId,
       ),
     [aplicados],
   );
@@ -396,6 +434,31 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
             className={`${inputCls} w-[150px]`}
           />
         </Campo>
+        {grupos.length > 0 && (
+          <Campo label="Tipo de trámite" htmlFor="lq-tipo">
+            {/*
+              La bandeja no tenía filtro por tipo pese a que el endpoint ya lo aceptaba. Las opciones
+              NO salen del catálogo completo: solo los tipos con homologación Quipux, que son los
+              únicos que pueden aparecer aquí. Con los 21 habría 17 opciones que devuelven cero.
+            */}
+            <TipoTramiteSelect
+              id="lq-tipo"
+              grupos={grupos}
+              value={{
+                tipoId: filtros.procedureTypeId || undefined,
+                familia: (filtros.familia || undefined) as ProcedureFamily | undefined,
+              }}
+              onChange={(sel) =>
+                setFiltros({
+                  ...filtros,
+                  procedureTypeId: sel.tipoId ?? "",
+                  familia: sel.familia ?? "",
+                })
+              }
+              className={`${inputCls} w-[190px]`}
+            />
+          </Campo>
+        )}
         <Campo label="Documento QX" htmlFor="lq-doc">
           <input
             id="lq-doc"
