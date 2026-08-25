@@ -101,6 +101,7 @@ public static class DevelopmentAuthSeeder
         await SeedDetailedReportPermissionsAsync(db, cancellationToken);
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedIctLogsPermissionsAsync(db, cancellationToken);
+        await SeedIctPiiRevealPermissionAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
@@ -1234,6 +1235,84 @@ public static class DevelopmentAuthSeeder
         }
 
         // Grant a SuperAdmin (idempotente): solo si aún no lo tiene.
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Revelado de datos personales en la Trazabilidad ICT (Feature #11814, HU #11820) — permiso
+    /// <c>ict.pii.reveal</c> que protege <c>POST /api/v1/ict/trazabilidad/tramites/{numero}/datos/revelar</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Cuelga del módulo <c>ict-logs</c> que ya existe, y no de uno nuevo: es el mismo módulo que
+    /// gobierna la observabilidad ICT, así que quien administra roles encuentra «Ver logs ICT» y
+    /// «Revelar datos personales» uno al lado del otro, que es como se deciden juntos.
+    /// </para>
+    /// <para>
+    /// Es una acción DISTINTA de <c>ict.logs.read</c> a propósito: si se reutilizara aquel, cualquiera
+    /// que pudiera abrir la pantalla vería la PII en claro y el enmascarado no protegería de nada.
+    /// Al ser un permiso propio, el valor por defecto es «cerrado» —el correcto para datos
+    /// personales— y abrirlo es una decisión explícita de quien administra los roles.
+    /// </para>
+    /// <para>
+    /// Sin este seed el permiso solo existía dentro del código: ningún usuario que no fuera
+    /// SuperAdmin podía recibirlo por el flujo RBAC, ni siquiera el administrador de una empresa,
+    /// porque la acción no aparecía en el catálogo para poder concederla.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedIctPiiRevealPermissionAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        // El módulo lo crea SeedIctLogsPermissionsAsync, que corre justo antes. Si no estuviera, se
+        // omite en vez de crear un módulo suelto: un permiso huérfano no se puede administrar.
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "ict-logs" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            return;
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "ict.pii.reveal", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "ict.pii.reveal",
+                Name = "Revelar datos personales de un trámite ICT",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/ict/trazabilidad/tramites/{numero}/datos/revelar",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Solo a SuperAdmin (que además bypassa por rol). NO se concede a los roles de empresa: el
+        // acceso a datos personales lo abre quien administra los roles, caso por caso.
         var superAdminRoles = await db.Roles
             .Where(r => r.Code == "SuperAdmin")
             .ToListAsync(ct);
