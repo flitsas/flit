@@ -16,8 +16,9 @@ import {
 } from '@/lib/tramites/estados';
 /**
  * Tira de KPIs por estado de la pantalla principal de trámites: una tarjeta única
- * dividida en columnas, con icono, etiqueta y conteo por estado (solo lectura).
- * El filtro por estado vive en el popover "+ Filtro" (`flit-tramites-chrome`).
+ * dividida en columnas, con icono, etiqueta y conteo por estado. Clic en un KPI
+ * filtra la tabla por ese estado (toggle); sincronizado con el filtro de estado
+ * en "+ Filtro" vía la misma fuente de verdad en `TramitesTable`.
  * Labels/colores desde `lib/tramites/estados.ts`.
  */
 
@@ -48,10 +49,18 @@ const ESTADO_ICON: Record<EstadoTramite, typeof FileText> = {
 export interface EstadoFunnelProps {
   /** Conteo por estado (calculado sobre el total de trámites). */
   counts: Record<EstadoTramite, number>;
+  /** Estado seleccionado en el filtro client-side (null / ausente = sin filtro). */
+  selectedEstado?: EstadoTramite | null;
+  /** Clic en un KPI: el contenedor alterna filtro (segundo clic en el mismo = quitar). */
+  onEstadoClick?: (estado: EstadoTramite) => void;
 }
 
-/** Tira de KPIs display-only (`flit-tramites-chrome`): el filtro por estado vive en "+ Filtro". */
-export function EstadoFunnel({ counts }: EstadoFunnelProps) {
+function estadoAccessibleName(label: string, count: number): string {
+  return `${label}: ${count} trámite${count === 1 ? '' : 's'}`;
+}
+
+/** Tira de KPIs clicables: filtra el listado por estado (`flit-tramites-chrome`). */
+export function EstadoFunnel({ counts, selectedEstado = null, onEstadoClick }: EstadoFunnelProps) {
   return (
     <div
       role="group"
@@ -63,15 +72,30 @@ export function EstadoFunnel({ counts }: EstadoFunnelProps) {
         const Icon = ESTADO_ICON[estado];
         const label = ESTADO_LABELS[estado];
         const count = counts[estado] ?? 0;
+        const selected = selectedEstado === estado;
+        const accessibleName = estadoAccessibleName(label, count);
         return (
-          <div
+          <button
             key={estado}
-            aria-label={`${label}: ${count} trámite${count === 1 ? '' : 's'}`}
-            className="flex flex-col items-center gap-1 px-2 py-2"
+            type="button"
+            aria-label={accessibleName}
+            aria-pressed={onEstadoClick ? selected : undefined}
+            disabled={!onEstadoClick}
+            onClick={onEstadoClick ? () => onEstadoClick(estado) : undefined}
+            className="flex flex-col items-center gap-1 px-2 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-inset disabled:cursor-default"
+            style={
+              selected
+                ? {
+                    background: style.bg,
+                    boxShadow: `inset 0 0 0 2px ${style.border}`,
+                  }
+                : undefined
+            }
           >
             <span
               className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
               style={{ background: `${style.accent}1F` }}
+              aria-hidden="true"
             >
               <Icon className="h-3.5 w-3.5" style={{ color: style.accent }} aria-hidden="true" />
             </span>
@@ -84,7 +108,7 @@ export function EstadoFunnel({ counts }: EstadoFunnelProps) {
             >
               {count}
             </span>
-          </div>
+          </button>
         );
       })}
     </div>

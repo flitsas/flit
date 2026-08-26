@@ -1486,3 +1486,41 @@ describe('TramitesTable — paso en curso', () => {
     expect(progreso.parentElement?.textContent).toContain('—');
   });
 });
+
+describe('TramitesTable — filtro por KPI de estado (HU #11886)', () => {
+  it('clic en KPI filtra la tabla; segundo clic limpia; sincroniza con + Filtro', async () => {
+    const borrador = { ...makeInstances(1)[0], id: 'inst-b', referenceNumber: 'TR-BOR', placa: 'BOR001', estado: 'borrador' as const };
+    const preparado = {
+      ...makeInstances(1)[0],
+      id: 'inst-p',
+      referenceNumber: 'TR-PRE',
+      placa: 'PRE001',
+      estado: 'preparado' as const,
+    };
+    mocks.listInstances.mockResolvedValue([borrador, preparado]);
+    render(<TramitesTable />);
+
+    await screen.findByText('BOR001');
+    expect(screen.getByText('PRE001')).toBeInTheDocument();
+
+    const kpiPreparado = screen.getByRole('button', { name: 'Preparado: 1 trámite' });
+    await userEvent.click(kpiPreparado);
+    expect(kpiPreparado).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('PRE001')).toBeInTheDocument();
+    expect(screen.queryByText('BOR001')).toBeNull();
+
+    await userEvent.click(kpiPreparado);
+    expect(kpiPreparado).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('BOR001')).toBeInTheDocument();
+    expect(screen.getByText('PRE001')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Entregado' }));
+    expect(screen.getByRole('button', { name: 'Entregado: 0 trámites' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.queryByText('BOR001')).toBeNull();
+    expect(screen.queryByText('PRE001')).toBeNull();
+  });
+});

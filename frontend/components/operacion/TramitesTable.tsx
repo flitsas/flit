@@ -672,6 +672,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setEstado(v);
     setPage(1);
   };
+  /** HU #11886 — KPI funnel y popover "+ Filtro" comparten `estado` (toggle en segundo clic). */
+  const handleEstadoFunnelClick = useCallback((clicked: EstadoTramite) => {
+    setEstado((prev) => (prev === clicked ? '' : clicked));
+    setPage(1);
+  }, []);
   const handleCompaniaChange = (v: string) => {
     setCompania(v);
     setPage(1);
@@ -1010,11 +1015,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           }
         />
 
-        {/* KPIs por estado (solo lectura) + CTA Nuevo trámite */}
+        {/* KPIs por estado (filtran al clic) + CTA Nuevo trámite */}
         <div className="flex items-stretch gap-4">
           {!loading && !error ? (
             <div className="min-w-0 flex-1">
-              <EstadoFunnel counts={estadoCounts} />
+              <EstadoFunnel
+                counts={estadoCounts}
+                selectedEstado={estado || null}
+                onEstadoClick={handleEstadoFunnelClick}
+              />
             </div>
           ) : null}
           <button

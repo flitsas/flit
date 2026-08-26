@@ -1,6 +1,7 @@
-// Tira de KPIs por estado del listado de trámites: conteo por estado (solo lectura).
-import { describe, expect, it } from 'vitest';
+// Tira de KPIs por estado del listado de trámites: conteo por estado y filtro al clic.
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { EstadoFunnel } from '../EstadoFunnel';
 
 const counts = {
@@ -15,7 +16,7 @@ const counts = {
 
 describe('EstadoFunnel', () => {
   it('renderiza una celda por estado con su conteo y nombre accesible', () => {
-    render(<EstadoFunnel counts={counts} />);
+    render(<EstadoFunnel counts={counts} onEstadoClick={vi.fn()} />);
     expect(screen.getByLabelText('Borrador: 5 trámites')).toBeInTheDocument();
     expect(screen.getByLabelText('Aprobado: 7 trámites')).toBeInTheDocument();
     for (const label of [
@@ -35,12 +36,58 @@ describe('EstadoFunnel', () => {
   });
 
   it('singulariza el nombre accesible cuando hay un solo trámite', () => {
-    render(<EstadoFunnel counts={counts} />);
+    render(<EstadoFunnel counts={counts} onEstadoClick={vi.fn()} />);
     expect(screen.getByLabelText('Rechazado: 1 trámite')).toBeInTheDocument();
   });
 
-  it('no expone botones clicables (filtro de estado vive en + Filtro)', () => {
+  it('expone un botón por estado con aria-pressed cuando hay handler', () => {
+    render(
+      <EstadoFunnel counts={counts} selectedEstado="preparado" onEstadoClick={vi.fn()} />,
+    );
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(7);
+    expect(screen.getByRole('button', { name: 'Preparado: 2 trámites' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Borrador: 5 trámites' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('invoca onEstadoClick al pulsar un KPI', async () => {
+    const onEstadoClick = vi.fn();
+    render(<EstadoFunnel counts={counts} onEstadoClick={onEstadoClick} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Entregado: 3 trámites' }));
+    expect(onEstadoClick).toHaveBeenCalledTimes(1);
+    expect(onEstadoClick).toHaveBeenCalledWith('entregado');
+  });
+
+  it('marca aria-pressed en el KPI seleccionado', () => {
+    const { rerender } = render(
+      <EstadoFunnel counts={counts} selectedEstado="aprobado" onEstadoClick={vi.fn()} />,
+    );
+    expect(screen.getByRole('button', { name: 'Aprobado: 7 trámites' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    rerender(
+      <EstadoFunnel counts={counts} selectedEstado={null} onEstadoClick={vi.fn()} />,
+    );
+    expect(screen.getByRole('button', { name: 'Aprobado: 7 trámites' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('sin onEstadoClick los KPIs no son interactivos (disabled, sin aria-pressed)', () => {
     render(<EstadoFunnel counts={counts} />);
-    expect(screen.queryByRole('button')).toBeNull();
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(7);
+    for (const btn of buttons) {
+      expect(btn).toBeDisabled();
+      expect(btn).not.toHaveAttribute('aria-pressed');
+    }
   });
 });
