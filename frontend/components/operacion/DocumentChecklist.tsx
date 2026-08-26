@@ -857,7 +857,18 @@ export function DocumentChecklist({
 
   return (
     <>
-    {analizandoLote && <CarLoaderModal mode="ocr" />}
+    {analizandoLote && (
+      <CarLoaderModal
+        mode="ocr"
+        label={
+          // El lote va archivo por archivo, así que la espera puede decir por dónde va. Con un solo
+          // archivo el contador sobra y se deja el mensaje de siempre.
+          batch.state.progreso && batch.state.progreso.total > 1
+            ? `Analizando expediente ${Math.min(batch.state.progreso.hechos + 1, batch.state.progreso.total)} de ${batch.state.progreso.total}…`
+            : undefined
+        }
+      />
+    )}
     <DocumentPreviewModal
       open={!!previewAttachment}
       onClose={closePreview}

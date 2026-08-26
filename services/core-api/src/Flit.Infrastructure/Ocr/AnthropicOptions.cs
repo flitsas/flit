@@ -13,7 +13,7 @@ public sealed class AnthropicOptions
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>Modelo de visión (Claude Haiku), configurable por entorno.</summary>
-    public string Model { get; set; } = "claude-haiku-4-5-20251001";
+    public string Model { get; set; } = "claude-haiku-4-5";
 
     public int TimeoutSeconds { get; set; } = 60;
     public int MaxTokens { get; set; } = 2000;

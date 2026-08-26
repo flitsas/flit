@@ -30,6 +30,7 @@ function estado(over: Partial<BatchReviewState> = {}): BatchReviewState {
     noReconocidos: [],
     errores: [],
     archivos: [],
+    progreso: null,
     error: null,
     ...over,
   };

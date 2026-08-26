@@ -91,6 +91,87 @@ describe('useProcedureBatchUpload — análisis', () => {
     expect(result.current.state.error).toBe('Servicio no disponible.');
   });
 
+  it('manda un archivo por petición, no el lote entero', async () => {
+    // El lote completo en una sola petición acumulaba ~90 s de silencio con 4 expedientes y el
+    // proxy lo cortaba con un 504, perdiéndolo todo.
+    client.analyzeBatch.mockResolvedValue({ piezas: [], noReconocidos: [], errores: [] });
+    const { result } = renderHook(() => useProcedureBatchUpload(INSTANCE));
+    const files = [
+      new File(['a'], 'uno.pdf'),
+      new File(['b'], 'dos.pdf'),
+      new File(['c'], 'tres.pdf'),
+    ];
+
+    await act(async () => {
+      await result.current.analyze(files, CHECKLIST, []);
+    });
+
+    expect(client.analyzeBatch).toHaveBeenCalledTimes(3);
+    for (const file of files) {
+      expect(client.analyzeBatch).toHaveBeenCalledWith(['impronta', 'soat'], [file], undefined);
+    }
+  });
+
+  it('un archivo que falla no se lleva por delante a los demás', async () => {
+    client.analyzeBatch
+      .mockResolvedValueOnce({ piezas: [pieza({ sourceFilename: 'uno.pdf' })], noReconocidos: [], errores: [] })
+      .mockRejectedValueOnce(new Error('El archivo está dañado.'))
+      .mockResolvedValueOnce({ piezas: [pieza({ tipo: 'impronta', sourceFilename: 'tres.pdf' })], noReconocidos: [], errores: [] });
+
+    const { result } = renderHook(() => useProcedureBatchUpload(INSTANCE));
+    await act(async () => {
+      await result.current.analyze(
+        [new File(['a'], 'uno.pdf'), new File(['b'], 'dos.pdf'), new File(['c'], 'tres.pdf')],
+        CHECKLIST,
+        [],
+      );
+    });
+
+    expect(result.current.state.phase).toBe('reviewing');
+    expect(result.current.state.items).toHaveLength(2);
+    // El que falló baja a la lista de errores por archivo, con su nombre.
+    expect(result.current.state.errores).toEqual([
+      { filename: 'dos.pdf', motivo: 'El archivo está dañado.' },
+    ]);
+  });
+
+  it('la mejor confianza por tipo se decide sobre el lote entero, no por archivo', async () => {
+    // La factura del primer archivo llega antes, pero la del último es mejor: aplicar la regla por
+    // trozo dejaría marcada la peor.
+    client.analyzeBatch
+      .mockResolvedValueOnce({ piezas: [pieza({ sourceFilename: 'uno.pdf', confianza: 0.6 })], noReconocidos: [], errores: [] })
+      .mockResolvedValueOnce({ piezas: [pieza({ sourceFilename: 'dos.pdf', confianza: 0.95 })], noReconocidos: [], errores: [] });
+
+    const { result } = renderHook(() => useProcedureBatchUpload(INSTANCE));
+    await act(async () => {
+      await result.current.analyze(
+        [new File(['a'], 'uno.pdf'), new File(['b'], 'dos.pdf')],
+        CHECKLIST,
+        [],
+      );
+    });
+
+    const marcadas = result.current.state.items.filter((i) => i.decision === 'accept');
+    expect(marcadas).toHaveLength(1);
+    expect(marcadas[0].piece.sourceFilename).toBe('dos.pdf');
+  });
+
+  it('si TODOS los archivos fallan, no entra en revisión', async () => {
+    client.analyzeBatch.mockRejectedValue(new Error('Servicio no disponible.'));
+    const { result } = renderHook(() => useProcedureBatchUpload(INSTANCE));
+
+    await act(async () => {
+      await result.current.analyze(
+        [new File(['a'], 'uno.pdf'), new File(['b'], 'dos.pdf')],
+        CHECKLIST,
+        [],
+      );
+    });
+
+    expect(result.current.state.phase).toBe('idle');
+    expect(result.current.state.error).toBe('Servicio no disponible.');
+  });
+
   it('rechaza el lote antes de llamar si excede los topes', async () => {
     const { result } = renderHook(() => useProcedureBatchUpload(INSTANCE));
     const files = Array.from({ length: 25 }, (_, i) => new File(['x'], `f${i}.pdf`));
