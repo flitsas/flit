@@ -54,7 +54,7 @@ export const MANDATO_TIPOS: readonly {
     value: "persona_rl",
     label: "Persona o RL",
     summary:
-      "Una persona natural (mandatario registrado o representante legal) firma como mandatario. Default de los OT sin configuración propia.",
+      "Una persona natural (mandatario de la empresa que radica) firma como mandatario. Si elige este tipo, el PDF usa la plantilla genérica.",
   },
   {
     value: "institucional",
@@ -66,7 +66,7 @@ export const MANDATO_TIPOS: readonly {
     value: "abierto",
     label: "Abierto (sin asumir)",
     summary:
-      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas. No se exige firmante persona al aprobar.",
+      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Es el default al nacer un OT.",
   },
 ] as const;
 

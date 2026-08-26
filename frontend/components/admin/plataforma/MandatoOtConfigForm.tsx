@@ -524,6 +524,10 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
         <p className="text-xs text-[#59677D] dark:text-white/65">
           {office.name} · <span className="font-mono">{office.code}</span>
         </p>
+        <p className="text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+          Convive con Plataforma → Mandatos (mismos datos). El modelo de cada empresa que radica
+          aplica a todas las familias. Mandato cliente = Persona o RL + plantilla genérica.
+        </p>
 
         {error ? (
           <p
