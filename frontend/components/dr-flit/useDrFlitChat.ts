@@ -11,6 +11,7 @@ import {
   applyBackToSearch,
   applyClientBranch,
   applySearchFailure,
+  applySelectHelpOption,
   applySelectIntent,
   applyTramitesSuccess,
   applyUserText,
@@ -19,7 +20,11 @@ import {
   queryLabelForIntent,
   type DrFlitChatState,
 } from "./dr-flit-conversation";
-import type { DrFlitClientBranch, DrFlitIntentId } from "./dr-flit-intents";
+import type {
+  DrFlitClientBranch,
+  DrFlitHelpOptionId,
+  DrFlitIntentId,
+} from "./dr-flit-intents";
 import { searchTramites, searchValidaciones } from "./dr-flit-search";
 
 function resolveIsOtAdmin(): boolean {
@@ -171,6 +176,14 @@ export function useDrFlitChat(displayName?: string | null) {
     state.pendingClientBranch,
   ]);
 
+  const selectHelpOption = useCallback((optionId: DrFlitHelpOptionId) => {
+    setState((prev) => {
+      const next = applySelectHelpOption(prev, optionId);
+      return next ?? prev;
+    });
+    queueMicrotask(() => inputRef.current?.focus());
+  }, []);
+
   const selectIntent = useCallback((intentId: DrFlitIntentId) => {
     setState((prev) => {
       const result = applySelectIntent(prev, intentId);
@@ -198,8 +211,7 @@ export function useDrFlitChat(displayName?: string | null) {
   }, [displayName]);
 
   const navigate = useCallback((href: string) => {
-    setOpen(false);
-    window.location.assign(href);
+    window.open(href, "_blank", "noopener,noreferrer");
   }, []);
 
   return {
@@ -209,6 +221,7 @@ export function useDrFlitChat(displayName?: string | null) {
     togglePanel,
     state,
     selectIntent,
+    selectHelpOption,
     selectClientBranch,
     backToSearch,
     sendText,

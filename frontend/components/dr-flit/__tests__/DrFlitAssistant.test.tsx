@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+
 import { render, screen, waitFor } from "@testing-library/react";
+
 import userEvent from "@testing-library/user-event";
+
 import { DrFlitAssistant } from "../DrFlitAssistant";
 
 vi.mock("../dr-flit-search", async () => {
@@ -16,9 +19,11 @@ vi.mock("../dr-flit-search", async () => {
 
 import { searchTramites, searchValidaciones } from "../dr-flit-search";
 
+import { DR_FLIT_SUPPORT_CASE_URL } from "../dr-flit-intents";
+
 describe("DrFlitAssistant", () => {
   beforeEach(() => {
-    vi.stubGlobal("location", { ...window.location, assign: vi.fn() });
+    vi.stubGlobal("open", vi.fn());
     vi.mocked(searchTramites).mockReset();
     vi.mocked(searchValidaciones).mockReset();
   });
@@ -27,14 +32,37 @@ describe("DrFlitAssistant", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra las 4 sugerencias", async () => {
+  it("muestra sesiones Gestión y Ayuda en el chat", async () => {
     const user = userEvent.setup();
     render(<DrFlitAssistant displayName="Juan" />);
     await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Gestión")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ayuda")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Buscar por placa/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Búsqueda por Trámites/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Necesito ayuda/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Soporte/i })).toBeInTheDocument();
+  });
+
+  it("Soporte muestra canales y abre formulario oficial", async () => {
+    const user = userEvent.setup();
+    render(<DrFlitAssistant displayName="Juan" />);
+    await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
+    await user.click(screen.getByRole("button", { name: /Soporte/i }));
+
+    expect(screen.getByText("soporte@flitsas.com")).toBeInTheDocument();
+    expect(screen.getByText("300 000 0000")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /Generar un caso de soporte/i }),
+    );
+    expect(window.open).toHaveBeenCalledWith(
+      DR_FLIT_SUPPORT_CASE_URL,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("placa consulta API y muestra resultados", async () => {
@@ -83,7 +111,7 @@ describe("DrFlitAssistant", () => {
 
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
-    expect(screen.getByText("Sugerencias")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sesiones del chat")).toBeInTheDocument();
     expect(
       screen.queryByText("Indícame el valor de placa a consultar."),
     ).not.toBeInTheDocument();

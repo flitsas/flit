@@ -1,17 +1,29 @@
+import { searchManualArticles } from "@/lib/manual/catalog";
 import {
   buildClientBranchPrompt,
   buildGreeting,
+  buildHelpIntro,
+  buildHelpValuePrompt,
   buildSearchError,
+  buildSupportIntro,
   buildTramitesIntro,
   buildValidacionesIntro,
   buildValuePrompt,
   DR_FLIT_FREE_TEXT_HINT,
+  DR_FLIT_MANUAL_HOME_HREF,
+  getHelpOptionById,
   getIntentById,
   type DrFlitClientBranch,
+  type DrFlitHelpOptionId,
   type DrFlitIntent,
   type DrFlitIntentId,
+  type DrFlitSession,
 } from "./dr-flit-intents";
-import type { DrFlitTramiteResult, DrFlitValidacionResult } from "./dr-flit-types";
+import type {
+  DrFlitHelpResult,
+  DrFlitTramiteResult,
+  DrFlitValidacionResult,
+} from "./dr-flit-types";
 
 export type DrFlitMessageRole = "bot" | "user";
 
@@ -25,24 +37,30 @@ export type DrFlitPhase =
   | "idle"
   | "awaiting_value"
   | "awaiting_client_branch"
+  | "awaiting_help_query"
   | "loading"
   | "showing_tramites"
   | "showing_validaciones"
+  | "showing_help"
+  | "showing_support"
   | "error";
 
 export interface DrFlitChatState {
   messages: DrFlitMessage[];
+  session: DrFlitSession;
   phase: DrFlitPhase;
   pendingIntent: DrFlitIntentId | null;
   queryValue: string | null;
-  showSuggestions: boolean;
+  showSessionMenu: boolean;
+  showSupportInfo: boolean;
   showBackToSearch: boolean;
   showClientBranch: boolean;
   tramiteResults: DrFlitTramiteResult[] | null;
   validacionResults: DrFlitValidacionResult[] | null;
   validacionesHref: string | null;
+  helpResults: DrFlitHelpResult[] | null;
+  manualHomeHref: string | null;
   isTyping: boolean;
-  /** Rama de cliente pendiente durante loading. */
   pendingClientBranch: DrFlitClientBranch | null;
 }
 
@@ -57,6 +75,34 @@ export function resetMessageIdSeq(): void {
   messageSeq = 0;
 }
 
+function idleMenuFlags(): Pick<
+  DrFlitChatState,
+  "showSessionMenu" | "showSupportInfo"
+> {
+  return {
+    showSessionMenu: true,
+    showSupportInfo: false,
+  };
+}
+
+function clearActionState(): Omit<
+  DrFlitChatState,
+  "messages" | "session" | "phase" | "showSessionMenu" | "showSupportInfo" | "showBackToSearch"
+> {
+  return {
+    pendingIntent: null,
+    queryValue: null,
+    showClientBranch: false,
+    tramiteResults: null,
+    validacionResults: null,
+    validacionesHref: null,
+    helpResults: null,
+    manualHomeHref: null,
+    isTyping: false,
+    pendingClientBranch: null,
+  };
+}
+
 export function createInitialState(displayName?: string | null): DrFlitChatState {
   return {
     messages: [
@@ -66,15 +112,19 @@ export function createInitialState(displayName?: string | null): DrFlitChatState
         text: buildGreeting(displayName),
       },
     ],
+    session: "gestion",
     phase: "idle",
     pendingIntent: null,
     queryValue: null,
-    showSuggestions: true,
+    showSessionMenu: true,
+    showSupportInfo: false,
     showBackToSearch: false,
     showClientBranch: false,
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    helpResults: null,
+    manualHomeHref: null,
     isTyping: false,
     pendingClientBranch: null,
   };
@@ -107,23 +157,101 @@ export function applySelectIntent(
     intent,
     next: {
       ...state,
+      ...clearActionState(),
+      session: "gestion",
       messages: [...state.messages, userMsg, botMsg],
       phase: "awaiting_value",
       pendingIntent: intent.id,
-      queryValue: null,
-      showSuggestions: false,
+      showSessionMenu: false,
+      showSupportInfo: false,
       showBackToSearch: false,
-      showClientBranch: false,
-      tramiteResults: null,
-      validacionResults: null,
-      validacionesHref: null,
-      isTyping: false,
-      pendingClientBranch: null,
     },
   };
 }
 
-/** Usuario envió texto: o pide sugerencia, o rama cliente, o arranca loading de búsqueda. */
+export function applySelectHelpOption(
+  state: DrFlitChatState,
+  optionId: DrFlitHelpOptionId,
+): DrFlitChatState | null {
+  const option = getHelpOptionById(optionId);
+  if (!option) return null;
+
+  const userMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "user",
+    text: option.label,
+  };
+
+  if (optionId === "necesito-ayuda") {
+    const botMsg: DrFlitMessage = {
+      id: createMessageId(),
+      role: "bot",
+      text: buildHelpValuePrompt(),
+    };
+    return {
+      ...state,
+      ...clearActionState(),
+      session: "ayuda",
+      messages: [...state.messages, userMsg, botMsg],
+      phase: "awaiting_help_query",
+      showSessionMenu: false,
+      showSupportInfo: false,
+      showBackToSearch: false,
+    };
+  }
+
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: buildSupportIntro(),
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    session: "ayuda",
+    messages: [...state.messages, userMsg, botMsg],
+    phase: "showing_support",
+    showSessionMenu: false,
+    showSupportInfo: true,
+    showBackToSearch: true,
+  };
+}
+
+function applyHelpQuery(state: DrFlitChatState, text: string): DrFlitChatState {
+  const hits = searchManualArticles(text, 5);
+  const results: DrFlitHelpResult[] = hits.map((h) => ({
+    slug: h.slug,
+    title: h.title,
+    audience: h.audience,
+    summary: h.summary,
+    href: h.href,
+  }));
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: buildHelpIntro(text, results.length),
+  };
+  return {
+    ...state,
+    messages: [...state.messages, botMsg],
+    phase: "showing_help",
+    session: "ayuda",
+    queryValue: text,
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: true,
+    tramiteResults: null,
+    validacionResults: null,
+    validacionesHref: null,
+    helpResults: results,
+    manualHomeHref: results.length === 0 ? DR_FLIT_MANUAL_HOME_HREF : null,
+    isTyping: false,
+    pendingIntent: null,
+    pendingClientBranch: null,
+    showClientBranch: false,
+  };
+}
+
 export function applyUserText(
   state: DrFlitChatState,
   rawText: string,
@@ -137,6 +265,13 @@ export function applyUserText(
     text,
   };
 
+  if (state.phase === "awaiting_help_query") {
+    return applyHelpQuery(
+      { ...state, messages: [...state.messages, userMsg] },
+      text,
+    );
+  }
+
   if (state.phase !== "awaiting_value" || !state.pendingIntent) {
     const botMsg: DrFlitMessage = {
       id: createMessageId(),
@@ -147,9 +282,9 @@ export function applyUserText(
       ...state,
       messages: [...state.messages, userMsg, botMsg],
       phase: "idle",
-      showSuggestions: true,
       showBackToSearch: false,
       isTyping: false,
+      ...idleMenuFlags(),
     };
   }
 
@@ -165,12 +300,15 @@ export function applyUserText(
       phase: "awaiting_client_branch",
       pendingIntent: "cliente",
       queryValue: text,
-      showSuggestions: false,
+      showSessionMenu: false,
+      showSupportInfo: false,
       showClientBranch: true,
       showBackToSearch: true,
       tramiteResults: null,
       validacionResults: null,
       validacionesHref: null,
+      helpResults: null,
+      manualHomeHref: null,
       isTyping: false,
       pendingClientBranch: null,
     };
@@ -181,12 +319,15 @@ export function applyUserText(
     messages: [...state.messages, userMsg],
     phase: "loading",
     queryValue: text,
-    showSuggestions: false,
+    showSessionMenu: false,
+    showSupportInfo: false,
     showClientBranch: false,
     showBackToSearch: false,
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    helpResults: null,
+    manualHomeHref: null,
     isTyping: true,
     pendingClientBranch: null,
   };
@@ -213,12 +354,15 @@ export function applyClientBranch(
     ...state,
     messages: [...state.messages, userMsg],
     phase: "loading",
-    showSuggestions: false,
+    showSessionMenu: false,
+    showSupportInfo: false,
     showClientBranch: false,
     showBackToSearch: false,
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    helpResults: null,
+    manualHomeHref: null,
     isTyping: true,
     pendingClientBranch: branch,
   };
@@ -239,14 +383,18 @@ export function applyTramitesSuccess(
     ...state,
     messages: [...state.messages, botMsg],
     phase: "showing_tramites",
+    session: "gestion",
     pendingIntent: null,
     pendingClientBranch: null,
-    showSuggestions: false,
+    showSessionMenu: false,
+    showSupportInfo: false,
     showClientBranch: false,
     showBackToSearch: true,
     tramiteResults: results,
     validacionResults: null,
     validacionesHref: null,
+    helpResults: null,
+    manualHomeHref: null,
     isTyping: false,
   };
 }
@@ -266,14 +414,18 @@ export function applyValidacionesSuccess(
     ...state,
     messages: [...state.messages, botMsg],
     phase: "showing_validaciones",
+    session: "gestion",
     pendingIntent: null,
     pendingClientBranch: null,
-    showSuggestions: false,
+    showSessionMenu: false,
+    showSupportInfo: false,
     showClientBranch: false,
     showBackToSearch: true,
     tramiteResults: null,
     validacionResults: results,
     validacionesHref: href,
+    helpResults: null,
+    manualHomeHref: null,
     isTyping: false,
   };
 }
@@ -291,14 +443,18 @@ export function applySearchFailure(
     ...state,
     messages: [...state.messages, botMsg],
     phase: "error",
+    session: "gestion",
     pendingIntent: null,
     pendingClientBranch: null,
-    showSuggestions: false,
+    showSessionMenu: false,
+    showSupportInfo: false,
     showClientBranch: false,
     showBackToSearch: true,
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    helpResults: null,
+    manualHomeHref: null,
     isTyping: false,
   };
 }
@@ -307,23 +463,16 @@ export function applyBackToSearch(state: DrFlitChatState): DrFlitChatState {
   const botMsg: DrFlitMessage = {
     id: createMessageId(),
     role: "bot",
-    text: "Listo. Elige otra forma de búsqueda.",
+    text: "Listo. Elige otra opción de Gestión o Ayuda.",
   };
 
   return {
     ...state,
     messages: [...state.messages, botMsg],
     phase: "idle",
-    pendingIntent: null,
-    queryValue: null,
-    showSuggestions: true,
+    ...clearActionState(),
     showBackToSearch: false,
-    showClientBranch: false,
-    tramiteResults: null,
-    validacionResults: null,
-    validacionesHref: null,
-    isTyping: false,
-    pendingClientBranch: null,
+    ...idleMenuFlags(),
   };
 }
 
@@ -333,4 +482,12 @@ export function queryLabelForIntent(intent: DrFlitIntentId | null): string {
   if (intent === "tramite") return "trámite";
   if (intent === "cliente") return "cliente";
   return "búsqueda";
+}
+
+export function isComposerEnabled(state: DrFlitChatState): boolean {
+  return (
+    state.phase === "idle" ||
+    state.phase === "awaiting_value" ||
+    state.phase === "awaiting_help_query"
+  );
 }

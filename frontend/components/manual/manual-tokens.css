@@ -1,0 +1,25 @@
+/* Centro de Ayuda FLIT — tokens alineados a flit_design_tokens / globals.css */
+.manual-root {
+  --manual-bg: #eef5ff;
+  --manual-sidebar-bg: #ffffff;
+  --manual-card-bg: #ffffff;
+  --manual-border: #dfe5ed;
+  --manual-border-soft: #e8edf4;
+  --manual-text: #162744;
+  --manual-text-muted: #5b6b7c;
+  --manual-text-soft: #7a8796;
+  --manual-brand: #557eff;
+  --manual-tech: #00dbd5;
+  --manual-heading: #557eff;
+  --manual-active-bg: rgba(0, 219, 213, 0.12);
+  --manual-active-text: #0a6b68;
+  --manual-badge-bg: rgba(85, 126, 255, 0.1);
+  --manual-badge-text: #557eff;
+  --manual-shadow: 0 4px 24px rgba(22, 39, 68, 0.08);
+  --manual-radius-card: 1.25rem;
+  font-family: var(--font-poppins, "Poppins", ui-sans-serif, system-ui, sans-serif);
+}
+
+.manual-root ::selection {
+  background: rgba(0, 219, 213, 0.25);
+}
