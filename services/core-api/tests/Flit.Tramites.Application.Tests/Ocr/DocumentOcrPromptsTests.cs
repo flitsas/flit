@@ -173,6 +173,46 @@ public sealed class DocumentOcrPromptsTests
         prompt.Should().Contain("Agrupalas TODAS en una sola entrada");
     }
 
+    // ── Cargue individual sobre un expediente completo ───────────────────────
+    // El operador puede soltar el expediente entero (31 págs) en la casilla de un tipo. El prompt debe
+    // localizar sus páginas, no rechazar el archivo por contener además un FUR y una declaración.
+
+    [Fact]
+    public void Todos_los_prompts_acotan_las_validaciones_a_las_paginas_identificadas()
+    {
+        foreach (var tipo in DocumentOcrPrompts.SupportedTipos)
+        {
+            var prompt = DocumentOcrPrompts.PromptFor(tipo)!;
+
+            prompt.Should().Contain("ALCANCE DE LAS VALIDACIONES");
+            prompt.Should().Contain("NUNCA al archivo entero");
+            // Sin esta frase el modelo lee «NO es valido si es un FUR» contra el expediente completo.
+            prompt.Should().Contain("NO es motivo de rechazo");
+        }
+    }
+
+    [Fact]
+    public void Prompt_impronta_acepta_la_hoja_de_improntas_del_cliente()
+    {
+        // El prompt de clasificación ya la daba por válida y el de extracción la rechazaba por «no tener
+        // origen en CDA/VUS/organismo»: la misma pieza salía Verificada en el lote y Rechazada suelta.
+        var prompt = DocumentOcrPrompts.PromptFor("impronta")!;
+
+        prompt.Should().Contain("hoja de improntas del\ncliente");
+        prompt.Should().Contain("NO lleva sello de CDA");
+        prompt.Should().NotContain("Para ser valido el documento debe tener origen en:");
+    }
+
+    [Fact]
+    public void Los_dos_extremos_coinciden_sobre_la_impronta_del_cliente()
+    {
+        // Clasificador y extractor tienen que decir lo mismo, o la pieza llega propuesta y rechazada.
+        DocumentOcrPrompts.ClassificationPrompt(["impronta"])
+            .Should().Contain("improntas del cliente");
+        DocumentOcrPrompts.PromptFor("impronta")!
+            .Should().Contain("improntas del");
+    }
+
     [Fact]
     public void El_clasificador_conoce_el_certificado_individual_de_aduanas_de_ensamblado_nacional()
     {
