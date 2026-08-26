@@ -58,16 +58,7 @@ public sealed class ProcedureInstanceLoader(
         ArgumentNullException.ThrowIfNull(mapped);
 
         var existing = await migrationMap.FindAsync(mapped.V1Table, mapped.V1Id, cancellationToken);
-        if (existing is not null && !force)
-        {
-            return new LoadResult
-            {
-                V1Id = mapped.V1Id,
-                Status = LoadStatus.Skipped,
-                V2Id = existing,
-                Reason = "Ya migrado (está en migration_map). Use --force para re-migrar.",
-            };
-        }
+        var warnings = new List<string>(mapped.Warnings);
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
@@ -79,7 +70,43 @@ public sealed class ProcedureInstanceLoader(
                 [mapped.Instance.TenantId.ToString()],
                 cancellationToken);
 
-            if (existing is not null && force)
+            // Idempotencia — la libreta manda, pero SOLO si el trámite sigue existiendo en V2.
+            //
+            // La libreta no tiene FK contra procedure_instances, así que un borrado masivo del
+            // esquema `tramites` (ADR-0050 hizo justo eso) la deja intacta apuntando a filas que ya
+            // no están. Sin esta comprobación el migrador responde "ya migrado" en verde sobre un
+            // trámite inexistente, y el operador no tiene forma de notarlo: el reporte es idéntico
+            // al de una migración legítima.
+            //
+            // La consulta va DENTRO de la transacción, después del set_config, a propósito: si
+            // corriera antes, bajo un rol con RLS activa no vería la fila y TODOS los trámites
+            // parecerían huérfanos.
+            var vigente = existing is not null
+                && await migrationMap.InstanceExistsAsync(existing.Value, cancellationToken);
+
+            if (existing is not null && vigente && !force)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new LoadResult
+                {
+                    V1Id = mapped.V1Id,
+                    Status = LoadStatus.Skipped,
+                    V2Id = existing,
+                    Reason = "Ya migrado (está en migration_map). Use --force para re-migrar.",
+                };
+            }
+
+            if (existing is not null && !vigente)
+            {
+                warnings.Add(
+                    $"La libreta lo daba por migrado como {existing.Value}, pero ese trámite ya no " +
+                    "existe en V2; se vuelve a migrar y se reescribe la entrada.");
+            }
+
+            // Limpia el rastro anterior: por --force, o porque la entrada era huérfana y hay que
+            // borrar también lo que quedara en migration_attachment_map (si no, las instancias 2 y 3
+            // creerían que los adjuntos ya están y el trámite se quedaría vacío en silencio).
+            if (existing is not null)
             {
                 await migrationMap.DeleteMigratedAsync(
                     mapped.V1Table, mapped.V1Id, existing.Value, cancellationToken);
@@ -105,6 +132,18 @@ public sealed class ProcedureInstanceLoader(
             // directamente en 'aprobado' sin simular todo el ciclo de vida.
             if (!string.Equals(mapped.FinalStatus, TramiteEstado.Borrador, StringComparison.Ordinal))
             {
+                // Releer antes de tocar el estado NO es opcional: `row_version` es token de
+                // concurrencia optimista, y los pasos 2 y 3 lo movieron por debajo de EF.
+                //
+                // Al insertar campos y actores se disparan los triggers de denormalización
+                // (47-tramites-campos-busqueda: vin, plate, vendedor_nombre, comprador_nombre), que
+                // hacen UPDATE sobre esta misma fila; cada uno pasa por trg_row_version y suma uno.
+                // EF sigue creyendo el 0 con el que insertó, así que su UPDATE saldría con
+                // `WHERE row_version = 0`, afectaría cero filas y reventaría por concurrencia.
+                //
+                // Solo se nota en trámites que NO quedan en borrador — el 99 % de V1 —, porque un
+                // borrador nunca llega hasta aquí.
+                await db.Entry(mapped.Instance).ReloadAsync(cancellationToken);
                 mapped.Instance.Status = mapped.FinalStatus;
                 await db.SaveChangesAsync(cancellationToken);
             }
@@ -117,7 +156,7 @@ public sealed class ProcedureInstanceLoader(
             // no queda un trámite migrado sin registrar (ni al revés).
             await migrationMap.RecordAsync(
                 mapped.V1Table, mapped.V1Id, mapped.Instance.Id, mapped.Instance.TenantId,
-                batchId, mapped.FinalStatus, mapped.Warnings, cancellationToken);
+                batchId, mapped.FinalStatus, warnings, cancellationToken);
 
             if (dryRun)
             {
@@ -134,7 +173,7 @@ public sealed class ProcedureInstanceLoader(
                 Status = dryRun ? LoadStatus.Simulated : LoadStatus.Migrated,
                 V2Id = mapped.Instance.Id,
                 FinalStatus = mapped.FinalStatus,
-                Warnings = mapped.Warnings,
+                Warnings = warnings,
                 FieldCount = mapped.FieldValues.Count,
                 ActorCount = mapped.Actors.Count,
                 HistoryCount = mapped.StatusHistory.Count,
@@ -147,8 +186,8 @@ public sealed class ProcedureInstanceLoader(
             {
                 V1Id = mapped.V1Id,
                 Status = LoadStatus.Quarantined,
-                Reason = ex.Message,
-                Warnings = mapped.Warnings,
+                Reason = DescribirFallo(ex),
+                Warnings = warnings,
             };
         }
         finally
@@ -157,5 +196,26 @@ public sealed class ProcedureInstanceLoader(
             // entidades que el primero dejó rastreadas.
             db.ChangeTracker.Clear();
         }
+    }
+
+    /// <summary>
+    /// El motivo del fallo, con la causa real y no el envoltorio.
+    /// <para>
+    /// EF envuelve cualquier error de Postgres en un <c>DbUpdateException</c> cuyo mensaje es
+    /// siempre el mismo —«An error occurred while saving the entity changes. See the inner
+    /// exception for details.»—, y ese texto es justo lo que terminaba en el reporte del operador.
+    /// Una clave duplicada, una FK rota y un CHECK violado se leían idénticos y ninguno decía qué
+    /// hacer. La causa útil (<c>23505 duplicate key…</c>) está una o dos capas más abajo.
+    /// </para>
+    /// </summary>
+    private static string DescribirFallo(Exception ex)
+    {
+        var causa = ex;
+        while (causa.InnerException is not null)
+        {
+            causa = causa.InnerException;
+        }
+
+        return ReferenceEquals(causa, ex) ? ex.Message : $"{ex.Message} → {causa.Message}";
     }
 }

@@ -35,8 +35,15 @@ public sealed record MigrationMapEntry(
 public sealed class MigrationMapStore(Flit.Infrastructure.Persistence.FlitDbContext db)
 {
     /// <summary>
-    /// Crea el esquema y la tabla si no existen. Vive en su propio esquema <c>migration</c>
-    /// para dejar claro que es andamiaje de migración y no parte del modelo de negocio de V2.
+    /// Crea el esquema y las tablas si no existen. Viven en su propio esquema <c>migration</c>
+    /// para dejar claro que son andamiaje de migración y no parte del modelo de negocio de V2.
+    /// <para>
+    /// Crea también la libreta de <b>adjuntos</b> aunque esta clase no la lea:
+    /// <see cref="DeleteMigratedAsync"/> borra de las dos, y esa ruta se recorre desde la instancia
+    /// 1 (por <c>--force</c> o por una entrada huérfana). En una base donde solo se hubiera corrido
+    /// la instancia 1, la tabla de adjuntos no existiría y el borrado moriría con
+    /// <c>42P01 relation … does not exist</c> — un fallo por una tabla que ni siquiera se usa.
+    /// </para>
     /// </summary>
     public async Task EnsureCreatedAsync(CancellationToken cancellationToken) =>
         await db.Database.ExecuteSqlRawAsync(
@@ -58,7 +65,7 @@ public sealed class MigrationMapStore(Flit.Infrastructure.Persistence.FlitDbCont
 
             CREATE INDEX IF NOT EXISTS ix_migration_map_v2_id   ON migration.migration_map (v2_id);
             CREATE INDEX IF NOT EXISTS ix_migration_map_batch   ON migration.migration_map (batch_id);
-            """, cancellationToken);
+            """ + AttachmentMapStore.Ddl, cancellationToken);
 
     /// <summary>Id en V2 de un trámite ya migrado, o <c>null</c> si nunca se migró.</summary>
     public async Task<Guid?> FindAsync(string v1Table, long v1Id, CancellationToken cancellationToken)
@@ -70,6 +77,33 @@ public sealed class MigrationMapStore(Flit.Infrastructure.Persistence.FlitDbCont
             .ToListAsync(cancellationToken);
 
         return found.Count > 0 ? found[0] : null;
+    }
+
+    /// <summary>
+    /// ¿El trámite sigue existiendo en V2?
+    /// <para>
+    /// La libreta vive en su propio esquema y <b>no tiene FK</b> contra
+    /// <c>tramites.procedure_instances</c> — a propósito: es andamiaje de migración, no parte del
+    /// modelo de negocio. El precio es que un borrado masivo del esquema <c>tramites</c> la deja
+    /// intacta apuntando a filas que ya no están, y entonces la idempotencia miente: el migrador
+    /// responde «ya migrado» sobre un trámite inexistente y no escribe nada. Pasó de verdad, con el
+    /// reset de ADR-0050.
+    /// </para>
+    /// <para>
+    /// <b>Llamar solo con el tenant ya declarado</b> (<c>app.current_tenant_id</c>): bajo un rol con
+    /// RLS activa, sin él esta consulta no vería ninguna fila y todos los trámites parecerían
+    /// huérfanos — que es un fallo peor que el que arregla.
+    /// </para>
+    /// </summary>
+    public async Task<bool> InstanceExistsAsync(Guid v2Id, CancellationToken cancellationToken)
+    {
+        var found = await db.Database
+            .SqlQueryRaw<Guid>(
+                "SELECT id AS \"Value\" FROM tramites.procedure_instances WHERE id = {0}",
+                v2Id)
+            .ToListAsync(cancellationToken);
+
+        return found.Count > 0;
     }
 
     /// <summary>
