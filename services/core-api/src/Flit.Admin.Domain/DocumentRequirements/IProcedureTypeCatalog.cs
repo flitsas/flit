@@ -22,7 +22,23 @@ public interface IProcedureTypeCatalog
     /// </summary>
     Task<IReadOnlyList<ProcedureTypeCatalogItem>> ListActivePublishedAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lectura puntual por id (incluye inactivos). Usada por el banco de pruebas de notificaciones
+    /// para interpolar <c>name</c> sin tocar instancias de trámite.
+    /// </summary>
+    Task<ProcedureTypeNotificationPreviewItem?> GetByIdForNotificationPreviewAsync(
+        Guid procedureTypeId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<ProcedureTypeNotificationPreviewItem?>(null);
 }
+
+/// <summary>Tipo de trámite para overlay de muestra de correo (banco de pruebas).</summary>
+public sealed record ProcedureTypeNotificationPreviewItem(
+    Guid Id,
+    string Name,
+    string Family,
+    bool IsActive);
 
 /// <summary>Ítem del catálogo de tipos de trámite para selección en el admin (HU #10901/#10904).</summary>
 public sealed record ProcedureTypeCatalogItem(Guid Id, string Code, string Name);

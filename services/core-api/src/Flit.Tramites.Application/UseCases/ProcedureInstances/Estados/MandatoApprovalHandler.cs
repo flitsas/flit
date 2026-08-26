@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
@@ -16,8 +17,9 @@ public enum MandatoApprovalOutcome
     RequiereSeleccion,
 
     /// <summary>
-    /// El mandatario resuelto NO tiene identidad validada vigente (HU #10911/#10916): debe validar su
-    /// identidad antes de firmar (⇒ 409 mandatario_identidad_requerida).
+    /// El mandatario resuelto no tiene NINGUNA de las dos formas de firmar —ni firma del baúl vigente ni
+    /// identidad validada vigente—, así que debe conseguir una antes de firmar
+    /// (⇒ 409 mandatario_identidad_requerida).
     /// </summary>
     IdentidadRequerida,
 }
@@ -36,8 +38,16 @@ public sealed record MandatoApprovalDecision(MandatoApprovalOutcome Outcome, Gui
 /// </summary>
 public sealed class MandatoApprovalHandler(
     IProcedureInstanceRepository repo,
-    IMandateSignerDirectory directory)
+    IMandateSignerDirectory directory,
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IMandateRequirementPolicy? mandatePolicy = null)
 {
+    // El mandatario firma igual que cualquier otra parte: con la firma del baúl si la tiene, y si no con
+    // el sello de su validación de identidad (misma precedencia que aplica el generador del mandato).
+    // Default inerte ⇒ sin baúl configurado el gate se comporta como antes.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+    private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
     public async Task<MandatoApprovalDecision> CheckAsync(
         Guid instanceId,
         Guid clientTenantId,
@@ -49,26 +59,76 @@ public sealed class MandatoApprovalHandler(
         if (instance is null)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
 
-        // El mandato aplica sii ya se generó su adjunto (en preparado, cuando ExigeMandato). Sin él, no se
-        // exige firmante — evita el 409 espurio en trámites que no requieren mandato pero cuyo OT sí tiene
-        // mandatarios registrados.
+        // El mandato aplica sii ya se generó su adjunto DEL SISTEMA (en preparado, cuando ExigeMandato).
+        // Sin él, no se exige firmante — evita el 409 espurio en trámites que no requieren mandato pero
+        // cuyo OT sí tiene mandatarios registrados.
+        //
+        // HU #11317 (Feature #11309, ADR-0042 §supersede parcial) — excluye los adjuntos de mandato con
+        // Source="company": ese PDF es un documento ESTÁTICO de la compañía (sin bloques de firma del
+        // mandatario, sin consultar directorio ni política de firma), así que su sola presencia NO
+        // implica que el trámite exija un mandatario que firme. Si el gate lo mirara sin distinguir el
+        // origen, un mandato personalizado bloquearía SIEMPRE la aprobación con 409
+        // mandatario_requerido/mandatario_identidad_requerida, aunque nadie vaya a firmarlo. Cuando el
+        // adjunto es del sistema (Source="system", el caso de siempre) el gate exige mandatario
+        // exactamente como antes.
         var exigeMandato = instance.Attachments.Any(a =>
-            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase));
+            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase));
         if (!exigeMandato || instance.TransitOfficeId is not { } transitOfficeId)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
 
+        var officeCode = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        var mandateConfig = string.IsNullOrWhiteSpace(officeCode)
+            ? null
+            : await _mandatePolicy.ResolveAsync(officeCode, clientTenantId, ct).ConfigureAwait(false);
+
+        // Abierto / institucional: aprobar sin firmante persona (tipo por compañía×OT).
+        if (MandatoAssignmentModeCodes.SkipsPersonSigner(mandateConfig?.AssignmentMode))
+        {
+            return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
+        }
+
         var candidates = await directory
-            .GetCandidatesAsync(transitOfficeId, instance.TenantId, ct)
+            .GetCandidatesAsync(
+                transitOfficeId, instance.TenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
 
-        var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, explicitSignerId);
+        // HU #11203 — la elección hecha al REGISTRAR el trámite manda sobre la resolución automática:
+        // el gestor ya dijo quién firma y el aprobador no tiene por qué volver a decidirlo. La elección
+        // explícita del aprobador sigue teniendo la última palabra (es quien está aprobando), y la
+        // resolución automática queda como respaldo para los trámites que no traen ninguna.
+        //
+        // Bug DEV (pantalla/documento con mandatarios distintos) — antes esta línea era el TERCER
+        // criterio de resolución (ninguno de los otros dos consumidores conocía el default del OT en este
+        // punto). Ahora pasa primero por el mismo resolvedor que usan el listado de pantalla y la
+        // generación del documento: si no hay elección explícita, aplica el default parametrizado (si
+        // sigue entre los candidatos habilitados) antes de caer al cotejo por usuario que aplica
+        // MandateSignerSelector.Resolve más abajo.
+        var elegido = MandateSignerDefaultResolver.Resolve(
+            candidates.Select(c => c.Id).ToList(),
+            explicitSignerId ?? instance.MandateSignerId,
+            mandateConfig?.DefaultMandateSignerId);
+
+        var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, elegido);
+
+        // El gate miraba SOLO la identidad, así que bloqueaba con "mandatario_identidad_requerida" a un
+        // mandatario que tenía su firma del baúl vigente y podía firmar perfectamente. Son alternativas,
+        // no requisitos acumulativos: basta cualquiera de las tres.
+        //
+        // Y quien firma A MANO ante ese organismo no necesita ninguna: el documento le deja la línea y
+        // él la suscribe en papel. Exigirle firma del baúl o identidad bloquearía un mandato que se
+        // firma justamente porque no las tiene.
+        var puedeFirmar = resolution.Status == MandateSignerResolutionStatus.Resolved
+            && (resolution.Signer!.FirmaFisica
+                || resolution.Signer.IdentityVigente
+                || await TieneFirmaDelBaulAsync(instance.TenantId, resolution.Signer, ct).ConfigureAwait(false));
 
         return resolution.Status switch
         {
-            // Un único candidato / cotejo por usuario / selección explícita válida. El firmante debe tener
-            // identidad validada VIGENTE (HU #10911/#10916): si no, se exige validar antes de aprobar.
-            MandateSignerResolutionStatus.Resolved when resolution.Signer!.IdentityVigente =>
-                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer.Id),
+            MandateSignerResolutionStatus.Resolved when puedeFirmar =>
+                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer!.Id),
             MandateSignerResolutionStatus.Resolved =>
                 new MandatoApprovalDecision(MandatoApprovalOutcome.IdentidadRequerida, null),
             // Varios sin match: el aprobador debe elegir (409).
@@ -77,5 +137,22 @@ public sealed class MandatoApprovalHandler(
             // Sin mandatarios configurados (p. ej. Sabaneta institucional): aprobar sin firmante persona.
             _ => new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null),
         };
+    }
+
+    /// <summary>
+    /// ¿El mandatario tiene firma del baúl activa y vigente? Se resuelve por su DOCUMENTO y contra el
+    /// tenant de la compañía gestora, igual que hace el generador del mandato (HU #11030):
+    /// <c>mandate_signers.signature_vault_id</c> no se escribe nunca, así que esa FK no sirve para saberlo.
+    /// </summary>
+    private async Task<bool> TieneFirmaDelBaulAsync(
+        Guid clientTenantId, MandateSignerCandidate signer, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(signer.Documento))
+            return false;
+
+        var tipoDoc = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento.Trim();
+        return await _vaultPolicy
+            .ResolveAsync(clientTenantId, tipoDoc, signer.Documento.Trim(), ct)
+            .ConfigureAwait(false) is not null;
     }
 }

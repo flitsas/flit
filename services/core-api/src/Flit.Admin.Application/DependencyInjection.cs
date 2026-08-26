@@ -6,8 +6,10 @@ using Flit.Admin.Application.Companies.UpdateCompany;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
+using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
@@ -39,7 +41,9 @@ using Flit.Admin.Application.DocumentRequirementOverrides.SetDocumentRequirement
 using Flit.Admin.Application.DocumentRequirements.CreateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
+using Flit.Admin.Application.DocumentRequirements.PreviewInformativos;
 using Flit.Admin.Application.DocumentRequirements.UpdateProcedureDocumentRequirement;
+using Flit.Admin.Application.RejectionReasons;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
@@ -146,6 +150,10 @@ public static class DependencyInjection
         services.AddScoped<GetOtBlockingPoliciesHandler>();
         services.AddScoped<SetOtBlockingPolicyHandler>();
 
+        // Documento de prenda: opt-out por compañía + OT (default obligatorio).
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.OtPrendaDocumentPolicy.GetOtPrendaDocumentPoliciesHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.OtPrendaDocumentPolicy.SetOtPrendaDocumentPolicyHandler>();
+
         // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
         // auditoría administrativa/seguridad. IAdminAuditLogRepository se registra en
         // AddAdminInfrastructure.
@@ -160,11 +168,19 @@ public static class DependencyInjection
         services.AddScoped<ListMandateSignersHandler>();
         services.AddScoped<ListOtCompaniesHandler>();
 
+        // HU #11202 — vista inversa: la COMPAÑÍA registra sus mandatarios y elige en qué organismos
+        // aplican. Reusa los handlers de arriba para no duplicar operabilidad, huella ni identidad.
+        services.AddScoped<ListCompanyMandateSignersHandler>();
+        services.AddScoped<ListCompanyTransitOfficesHandler>();
+        services.AddScoped<CreateCompanyMandateSignerHandler>();
+        services.AddScoped<UpdateCompanyMandateSignerHandler>();
+
         // HU #10643 (ADR-0025) — baúl de firmas: CRUD SuperAdmin. ISignatureVaultReader/Repository
         // e ISignatureVaultArtifactStorage se registran en AddAdminInfrastructure.
         services.AddScoped<Companies.SignatureVault.CreateSignatureVault.CreateSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.ListSignatureVault.ListSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.GetSignatureVault.GetSignatureVaultByIdHandler>();
+        services.AddScoped<Companies.SignatureVault.UpdateSignatureVault.UpdateSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.RevokeSignatureVault.RevokeSignatureVaultHandler>();
 
         // HU #10900 (ADR-0033) — resolutor de firma/identidad al guardar un representante legal
@@ -201,10 +217,25 @@ public static class DependencyInjection
         services.AddScoped<Companies.Deeds.ListActiveDeeds.ListActiveDeedsForTenantHandler>();
         services.AddScoped<Companies.LegalRepresentatives.FindByNit.FindRepresentativeByNitHandler>();
 
-        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
-        // correo (agnóstico del sujeto). Proveedor/repositorio/linker se registran en
-        // AddAdminInfrastructure; el reloj se toma de TimeProvider.System (vigencia determinista).
-        services.AddScoped<Identity.IAdminIdentityValidationService, Identity.AdminIdentityValidationService>();
+        // HU #11313 (Feature #11309, ADR-0042) — documentos personalizados por compañía: alta de
+        // versión, confirmación (validación de integridad del PDF) y listado del historial.
+        // ICompanyPersonalizedDocumentRepository/Storage e IPdfDocumentInspector se registran en
+        // AddAdminInfrastructure.
+        services.AddScoped<Companies.PersonalizedDocuments.PdfIntegrityValidator>();
+        services.AddScoped<Companies.PersonalizedDocuments.Create.CreatePersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.Confirm.ConfirmPersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.List.ListPersonalizedDocumentsHandler>();
+
+        // HU #11363 (Feature #11348) — bitácora consultable de intentos de envío. El repositorio
+        // (INotificationDeliveryLogRepository) se registra en AddAdminInfrastructure.
+        services.AddScoped<Companies.NotificationDeliveryLogs.List.ListNotificationDeliveryLogsHandler>();
+
+        // HU #11314 (Feature #11309, ADR-0042) — ciclo de vida del documento personalizado:
+        // reactivar una versión histórica, «volver al documento del sistema» (sin borrar nada) y
+        // vista previa sin activar (presigned GET inline, ADR-0029).
+        services.AddScoped<Companies.PersonalizedDocuments.Activate.ActivatePersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.Deactivate.DeactivatePersonalizedDocumentHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.GetView.GetPersonalizedDocumentViewHandler>();
 
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
@@ -216,6 +247,31 @@ public static class DependencyInjection
         services.AddScoped<UpdateDocumentTypeHandler>();
         services.AddScoped<DeleteDocumentTypeHandler>();
         services.AddScoped<ReactivateDocumentTypeHandler>();
+
+        // Causales de rechazo — catálogo global (CRUD SuperAdmin). Sustituye al motivo escrito a
+        // mano como dato agregable del reporte de motivos del organismo y de la empresa.
+        services.AddScoped<ListRejectionReasonsHandler>();
+        services.AddScoped<CreateRejectionReasonHandler>();
+        services.AddScoped<UpdateRejectionReasonHandler>();
+        services.AddScoped<SetRejectionReasonActiveHandler>();
+
+        // Reportes del organismo de tránsito: hasta ahora el módulo de reportes solo existía para
+        // la empresa gestora, y el organismo operaba sin ningún instrumento propio.
+        services.AddScoped<OtMetrics.GetOtOperationalPanelHandler>();
+        services.AddScoped<OtMetrics.GetOtPerformanceHandler>();
+        services.AddScoped<OtMetrics.GetOtRejectionReasonsHandler>();
+        services.AddScoped<OtMetrics.GetOtDrilldownHandler>();
+        services.AddScoped<OtMetrics.GetOtReportHandler>();
+        services.AddScoped<OtMetrics.ListOtClientCompaniesHandler>();
+        services.AddScoped<OtMetrics.GetOtReviewersReportHandler>();
+        services.AddScoped<OtMetrics.ListOtReviewerOptionsHandler>();
+
+        // Consultas propias: el usuario del organismo arma su búsqueda, la guarda y la exporta.
+        services.AddScoped<OtQueries.ExecuteOtQueryHandler>();
+        services.AddScoped<OtQueries.GetOtQueryFieldsHandler>();
+        services.AddScoped<OtQueries.ListOtSavedQueriesHandler>();
+        services.AddScoped<OtQueries.SaveOtQueryHandler>();
+        services.AddScoped<OtQueries.DeleteOtSavedQueryHandler>();
 
         // HU #10195 — asociación de documentos a tipos de trámite (CRUD SuperAdmin).
         services.AddScoped<CreateProcedureDocumentRequirementHandler>();
@@ -233,6 +289,9 @@ public static class DependencyInjection
         // HU #10198 — obligatoriedad documental por OT (3 estados, granular solo para OT).
         services.AddScoped<SetDocumentRequirementOverrideHandler>();
         services.AddScoped<ListDocumentRequirementOverridesHandler>();
+
+        // Preview informativo de documentos (paso 1 wizard, sin instancia).
+        services.AddScoped<PreviewDocumentosInformativosHandler>();
 
         // HU #10521 (RF31) — parámetros documentales por compañía gestora.
         services.AddScoped<CompanyDocumentParams.ListCompanyDocumentParamsHandler>();

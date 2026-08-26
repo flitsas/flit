@@ -136,6 +136,76 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// HU #11270 — listado agrupado por persona (tenant + documento Trim+Upper): una fila por
+    /// documento con la validación más reciente (<c>DISTINCT ON</c> / equivalente) y el contador
+    /// del grupo. No altera el listado plano. Solo lectura.
+    /// </summary>
+    Task<(IReadOnlyList<ReadModels.BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListBiometricValidationsGroupedByPersonAsync(
+            Guid tenantId,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct = default);
+
+    /// <summary>
+    /// Cuenta PERSONAS (tenant + documento Trim+Upper) agrupadas por el estado de su validación más
+    /// reciente, sobre el mismo conjunto filtrado que
+    /// <see cref="ListBiometricValidationsGroupedByPersonAsync"/>. Alimenta los KPIs de la grilla
+    /// agrupada, que cuenta personas — no validaciones — para que los contadores cuadren con las filas
+    /// que el gestor tiene delante. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> CountBiometricPersonsByEstadoAsync(
+        Guid tenantId,
+        BiometricPersonGroupFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11270 — candidatos para calcular la peor alerta de las personas de una página:
+    /// validaciones no terminales o creadas/actualizadas en los últimos <paramref name="alertWindowDays"/> días.
+    /// Clave de documento ya normalizada (Trim+Upper). Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsForPersonAlertScanAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
+        int alertWindowDays,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11272 — todas las validaciones de una persona (documento normalizado) en el tenant,
+    /// más reciente primero, con tope/paginación. <paramref name="AnyNonTerminal"/> indica si existe
+    /// alguna no terminal (para detener polling). Solo lectura.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListBiometricValidationsByPersonAsync(
+            Guid tenantId,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
+            CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11765 (ADR-0050) — la validación MÁS RECIENTE de CADA persona (documento normalizado,
+    /// ver <see cref="Identity.DocumentCanonicalNormalization"/>) del tenant, en UNA sola consulta
+    /// (sin N+1). Reemplaza a <c>admin.admin_identity_validations</c> como fuente de la vigencia de
+    /// identidad de los lectores admin de representantes legales y mandatarios (que proyectan
+    /// listados largos). No filtra por actividad reciente: a diferencia de
+    /// <see cref="ListBiometricValidationsForPersonAlertScanAsync"/>, aquí se necesita SIEMPRE la
+    /// última fila —exista o no actividad— para poder clasificarla igual que la resolución de una
+    /// sola persona (<c>IdentityVigenciaPorDocumentoResolver.ResolveAsync</c>). Solo devuelve UNA
+    /// fila por persona (la más reciente); ausentes en <paramref name="documents"/> sin ninguna
+    /// validación simplemente no aparecen en el resultado.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListLatestBiometricValidationsByPersonsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con sus validaciones biométricas + actores (Slice M4 — simular biométrica:
     /// resuelve el actor de la parte para poblar nombre/documento/email de la validación aprobada).
     /// </summary>
@@ -170,6 +240,15 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> FindVigenteApprovedByDocumentAsync(
         Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11265 — validaciones EN VUELO (<c>pendiente_envio</c> / <c>enviado</c> / <c>en_proceso</c>)
+    /// del documento en el tenant (standalone o ligadas a instancias no eliminadas). Igualdad exacta de
+    /// tipo/número como <see cref="FindVigenteApprovedByDocumentAsync"/> (no cambia el gate, AC5).
+    /// Solo lectura; lista acotada (máx. 20) ordenada por actividad reciente.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
 
     /// <summary>
     /// Claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de todas las identidades APROBADAS y VIGENTES
@@ -252,6 +331,14 @@ public interface IProcedureInstanceRepository
     /// <summary>Encola un evento de bitácora (append-only) para persistir en el próximo SaveChanges.</summary>
     Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct = default);
 
+    /// <summary>
+    /// Documentos que se consultaron REALMENTE en el RUNT dentro de este trámite, en la forma
+    /// <c>TIPO|NUMERO</c> de <see cref="Tramites.Services.RuntPersonaConsultada.Key"/>. Lo usa el gate
+    /// de actores para exigir la consulta en vez de darla por hecha con el documento digitado.
+    /// </summary>
+    Task<IReadOnlySet<string>> ListRuntConsultedDocumentKeysAsync(
+        Guid id, Guid tenantId, CancellationToken ct = default);
+
     /// <summary>Último snapshot de preflight de la instancia (por created_at desc), o null.</summary>
     Task<ProcedureInstancePreflightSnapshot?> GetLatestPreflightAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
@@ -328,6 +415,13 @@ public interface IProcedureInstanceRepository
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #11470 — despachos de correo de cambio de estado del trámite.
+    /// <c>null</c> si la instancia no existe en el tenant; lista vacía si no hay avisos.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el <c>DisplayName</c> de un usuario contra <c>identity.users</c> (operador que radica
     /// una generación de impronta desde el trámite). Null si el usuario no existe.
     /// </summary>
@@ -364,6 +458,25 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceActor?> FindLatestActorContactAsync(
         Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default);
+
+    /// <summary>
+    /// Listado FILTRADO y ORDENADO server-side (a diferencia de <see cref="ListWithSummaryGraphAsync"/>,
+    /// que trae el TOP-N más reciente sin filtros ni paginación real): el <c>WHERE</c>/<c>ORDER BY</c> se
+    /// resuelve en SQL sobre columnas propias o denormalizadas (VIN/placa/vendedor/comprador — migración
+    /// TramitesCamposBusqueda), NUNCA en memoria. Carga el mismo grafo que
+    /// <see cref="ListWithSummaryGraphAsync"/> (necesario para <c>ListProcedureInstancesHandler.ToSummary</c>)
+    /// solo para las filas de la página pedida. <paramref name="tenantId"/> <c>null</c> = TODOS los
+    /// tenants (superadmin, #1). Devuelve también el TOTAL de filas que matchean el filtro (sin
+    /// paginar), para que el caller arme la paginación.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListWithSummaryGraphFilteredAsync(
+        Guid? tenantId,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct = default);
 }
 
 /// <summary>

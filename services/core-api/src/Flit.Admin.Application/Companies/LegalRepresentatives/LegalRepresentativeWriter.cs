@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.DocumentRequirements;
 
 namespace Flit.Admin.Application.Companies.LegalRepresentatives;
@@ -11,6 +12,11 @@ namespace Flit.Admin.Application.Companies.LegalRepresentatives;
 /// persistencia con la marca de tipos de trámite (M:N). Cuando el resolutor no encuentra firma ni
 /// identidad vigente, el guardado igual persiste y la respuesta emite la señal
 /// <see cref="LegalRepresentativeSignals.SinFirmaNiIdentidad"/>. <c>DocumentNumber</c> es PII: no loguear.
+///
+/// HU #11175 (AC3/AC4/AC5): si <see cref="LegalRepresentativeWriteInput.SignatureVaultId"/> viene
+/// informado, se valida (misma tenencia, documento coincidente, activa y vigente) y se persiste
+/// directamente, saltándose el resolver (AC3). Una firma inválida retorna 422 (AC4). Si no viene,
+/// se conserva el comportamiento anterior (AC5).
 /// </summary>
 public sealed class LegalRepresentativeWriter
 {
@@ -20,6 +26,7 @@ public sealed class LegalRepresentativeWriter
 
     private readonly IProcedureTypeCatalog _procedureTypeCatalog;
     private readonly ILegalRepresentativeSignatureResolver _signatureResolver;
+    private readonly ISignatureVaultReader _signatureVaultReader;
     private readonly ILegalRepresentativeRepository _repository;
     private readonly ILegalRepresentativeReader _reader;
     private readonly TimeProvider _timeProvider;
@@ -27,12 +34,14 @@ public sealed class LegalRepresentativeWriter
     public LegalRepresentativeWriter(
         IProcedureTypeCatalog procedureTypeCatalog,
         ILegalRepresentativeSignatureResolver signatureResolver,
+        ISignatureVaultReader signatureVaultReader,
         ILegalRepresentativeRepository repository,
         ILegalRepresentativeReader reader,
         TimeProvider timeProvider)
     {
         _procedureTypeCatalog = procedureTypeCatalog ?? throw new ArgumentNullException(nameof(procedureTypeCatalog));
         _signatureResolver = signatureResolver ?? throw new ArgumentNullException(nameof(signatureResolver));
+        _signatureVaultReader = signatureVaultReader ?? throw new ArgumentNullException(nameof(signatureVaultReader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
@@ -80,6 +89,7 @@ public sealed class LegalRepresentativeWriter
         }
 
         // Upsert de CADA compañía del representante (HU #10932). La primera es la primaria.
+        // Lista vacía = persona sin NITs aún (represented_company_id null).
         var effectiveCompanies = EffectiveCompanies(input);
         var companyIds = new List<Guid>();
         foreach (var company in effectiveCompanies)
@@ -115,13 +125,24 @@ public sealed class LegalRepresentativeWriter
             }
         }
 
-        var primaryNit = effectiveCompanies[0].Nit!.Trim();
-
-        // Resolución de firma/identidad vigente al guardar, a nivel PERSONA (por documento — HU #10932).
+        var primaryCompanyId = companyIds.Count > 0 ? companyIds[0] : (Guid?)null;
+        var primaryNit = effectiveCompanies.Count > 0 ? effectiveCompanies[0].Nit!.Trim() : string.Empty;
         var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
-        var resolution = await _signatureResolver
-            .ResolveAsync(input.TenantId, primaryNit, documentType, documentNumber, today, cancellationToken)
-            .ConfigureAwait(false);
+
+        // AC3/AC5 — Resolución de firma/identidad: explícita (SignatureVaultId) o automática.
+        LegalRepresentativeSignatureResolution resolution;
+        if (input.SignatureVaultId is { } explicitSignatureId)
+        {
+            // AC3: firma elegida explícitamente — ya fue validada en ValidateAsync (AC4).
+            resolution = LegalRepresentativeSignatureResolution.FromSignature(explicitSignatureId);
+        }
+        else
+        {
+            // AC5: resolutor automático por documento (NIT opcional / legado).
+            resolution = await _signatureResolver
+                .ResolveAsync(input.TenantId, primaryNit, documentType, documentNumber, today, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         var distinctProcedureTypeIds = input.ProcedureTypeIds.Distinct().ToArray();
 
@@ -129,7 +150,7 @@ public sealed class LegalRepresentativeWriter
             new SaveLegalRepresentativeData(
                 input.TenantId,
                 editId,
-                companyIds[0],
+                primaryCompanyId,
                 documentType,
                 documentNumber,
                 input.FirstLastName!.Trim(),
@@ -160,7 +181,8 @@ public sealed class LegalRepresentativeWriter
     {
         var errors = new List<LegalRepresentativeValidationError>();
 
-        // Compañías (HU #10932): lista anidada si viene; si no, la compañía única de los campos Company*.
+        // Compañías (HU #10932): opcionales. Si hay lista, cada fila exige NIT+nombre.
+        // Si la lista viene vacía/null y tampoco hay Company* planos → persona sin NITs (válido).
         if (input.Companies is { Count: > 0 } companies)
         {
             foreach (var company in companies)
@@ -169,7 +191,7 @@ public sealed class LegalRepresentativeWriter
                 Require(errors, "companies", company.Name);
             }
         }
-        else
+        else if (!string.IsNullOrWhiteSpace(input.CompanyNit) || !string.IsNullOrWhiteSpace(input.CompanyName))
         {
             Require(errors, "companyNit", input.CompanyNit);
             Require(errors, "companyName", input.CompanyName);
@@ -201,7 +223,69 @@ public sealed class LegalRepresentativeWriter
             }
         }
 
+        // AC4 — Validar la firma elegida explícitamente: misma tenencia, documento coincidente,
+        // activa y vigente. PII (documentNumber) no se incluye en mensajes de error.
+        if (input.SignatureVaultId is { } signatureVaultId && errors.Count == 0)
+        {
+            var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+            await ValidateExplicitSignatureAsync(
+                input.TenantId,
+                signatureVaultId,
+                input.DocumentType!.Trim(),
+                input.DocumentNumber!.Trim(),
+                today,
+                errors,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         return errors;
+    }
+
+    /// <summary>
+    /// AC4: valida que la firma elegida (a) exista en el tenant, (b) su documento coincida con el
+    /// del representante, (c) esté activa y (d) esté vigente en la fecha de Colombia. PII nunca
+    /// se escribe en logs ni en mensajes de error.
+    /// </summary>
+    private async Task ValidateExplicitSignatureAsync(
+        Guid tenantId,
+        Guid signatureVaultId,
+        string documentType,
+        string documentNumber,
+        DateOnly today,
+        List<LegalRepresentativeValidationError> errors,
+        CancellationToken cancellationToken)
+    {
+        var firma = await _signatureVaultReader
+            .GetByIdAsync(tenantId, signatureVaultId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (firma is null)
+        {
+            errors.Add(new LegalRepresentativeValidationError(
+                "signatureVaultId", "firma_no_encontrada",
+                "La firma indicada no existe en el baúl de esta compañía."));
+            return;
+        }
+
+        // Documento del titular de la firma debe coincidir con el del representante.
+        if (!string.Equals(firma.DocumentType, documentType, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(firma.DocumentNumber, documentNumber, StringComparison.Ordinal))
+        {
+            errors.Add(new LegalRepresentativeValidationError(
+                "signatureVaultId", "firma_documento_no_coincide",
+                "La firma indicada no pertenece al representante."));
+            return;
+        }
+
+        // Firma debe estar activa y vigente.
+        if (firma.Estado != SignatureVaultEstado.Activa ||
+            today < firma.VigenciaDesde ||
+            today > firma.VigenciaHasta)
+        {
+            errors.Add(new LegalRepresentativeValidationError(
+                "signatureVaultId", "firma_no_vigente",
+                "La firma indicada no está activa o su vigencia ha expirado."));
+        }
     }
 
     private static void Require(List<LegalRepresentativeValidationError> errors, string field, string? value)
@@ -216,14 +300,28 @@ public sealed class LegalRepresentativeWriter
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
-    /// Compañías efectivas del representante (HU #10932): la lista anidada <c>Companies</c> si viene, o la
-    /// compañía única de los campos <c>Company*</c> (compatibilidad con el contrato previo).
+    /// Compañías efectivas del representante (HU #10932): la lista anidada <c>Companies</c> si viene;
+    /// si no, la compañía única de <c>Company*</c> cuando hay NIT/nombre; si no hay ninguna → lista vacía
+    /// (persona sin empresas asociadas todavía).
     /// </summary>
     private static IReadOnlyList<LegalRepresentativeCompanyInput> EffectiveCompanies(
-        LegalRepresentativeWriteInput input) =>
-        input.Companies is { Count: > 0 } companies
-            ? companies
-            : [new LegalRepresentativeCompanyInput(
-                input.CompanyNit, input.CompanyName, input.CompanyEmail,
-                input.CompanyAddress, input.CompanyCity, input.CompanyPhone)];
+        LegalRepresentativeWriteInput input)
+    {
+        if (input.Companies is { Count: > 0 } companies)
+        {
+            return companies;
+        }
+
+        if (!string.IsNullOrWhiteSpace(input.CompanyNit) || !string.IsNullOrWhiteSpace(input.CompanyName))
+        {
+            return
+            [
+                new LegalRepresentativeCompanyInput(
+                    input.CompanyNit, input.CompanyName, input.CompanyEmail,
+                    input.CompanyAddress, input.CompanyCity, input.CompanyPhone)
+            ];
+        }
+
+        return [];
+    }
 }

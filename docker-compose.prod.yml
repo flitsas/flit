@@ -168,6 +168,10 @@ services:
       # Matriz acordada: DEV warn/warn · QA block/warn · PDN block/block (local va por appsettings.Development.json).
       TramiteValidations__DuplicateActiveProcedure__Mode: ${TRAMITE_VALIDATION_DUPLICATE_MODE:-block}
       TramiteValidations__VehicleRegistrationState__Mode: ${TRAMITE_VALIDATION_VEHICLE_STATE_MODE:-block}
+      # Cambio de carrocería sobre un vehículo que el RUNT reporta SIN CARROCERIA (o sin el dato).
+      TramiteValidations__VehicleBodyTypeRequired__Mode: ${TRAMITE_VALIDATION_BODY_TYPE_MODE:-block}
+      # Levantamiento de prenda sobre un vehículo que el RUNT no reporta con gravamen.
+      TramiteValidations__VehiclePrendaRequired__Mode: ${TRAMITE_VALIDATION_PRENDA_MODE:-block}
       # SMTP — vars ya presentes en el .env del VPS
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}
@@ -176,6 +180,13 @@ services:
       Smtp__DefaultSenderEmail: ${SMTP_FROM:-}
       Smtp__DefaultSenderPassword: ${SMTP_PASSWORD:-}
       Smtp__DefaultSenderName: ${SMTP_FROM_NAME:-FLIT Tramites}
+      # Comprobación de revocación (CRL/OCSP) del certificado del servidor SMTP. Default true:
+      # un despliegue que no defina la variable sigue comprobándola. Ponerla en false NO
+      # desactiva la validación TLS —cadena, emisor, host y vigencia se siguen verificando—,
+      # solo deja de consultarse si el certificado fue revocado antes de expirar. Se expone
+      # porque en redes con proxy o antivirus que inspecciona TLS la consulta de revocación no
+      # llega, y el handshake falla ANTES de autenticar (visto en local el 2026-08-11).
+      Smtp__CheckCertificateRevocation: ${SMTP_CHECK_CERT_REVOCATION:-true}
       # Biometría (HU #10233 — Kyverum Verify). Mismo patrón que Verifik: el código
       # lee env vars CRUDAS (BIOMETRICS_PROVIDER / KYVERUM_*), no `Kyverum__*`.
       # Default mock ⇒ no rompe regresión si el .env no define el proveedor.
@@ -213,6 +224,67 @@ services:
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
       # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
       Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-5020}
+      # ── Canal de notificaciones "API Renting cliente" (Feature #11348) ──────
+      # Mismo patrón CRUDO que Verifik/Kyverum/Fasecolda: el código lee
+      # Environment.GetEnvironmentVariable("RENTING_API_*"); pasar `Notifications__Renting__*`
+      # NO funciona. Plantilla completa y trampas en .env.renting.example.
+      # OPT-IN: con RENTING_API_ENABLED distinto de "true" no se exige ninguna de las demás
+      # ni el certificado, y el servicio arranca igual que hoy.
+      RENTING_API_ENABLED: ${RENTING_API_ENABLED:-false}
+      # Ruta ABSOLUTA del .pfx. Se interpola con EL MISMO VALOR aquí y en la sección volumes a
+      # propósito: el archivo se monta dentro del contenedor en la misma ruta que tiene en el
+      # HOST. Así este nombre significa UNA sola cosa y `ls -l <ruta>` en el VPS comprueba
+      # exactamente el archivo que la app va a abrir (antes eran dos rutas distintas con el
+      # mismo nombre de variable, y el error de "no se encontró el certificado" no daba forma
+      # de comprobar cuál de las dos estaba mal).
+      # TRAMPA de Docker: si el archivo NO existe en el host, el bind mount no falla — Docker
+      # crea un DIRECTORIO vacío en esa ruta y lo monta. La app reporta que no encuentra el
+      # certificado aunque `ls` muestre algo ahí. Hay que borrar ese directorio (rmdir) ANTES
+      # de dejar el .pfx y recrear el contenedor.
+      RENTING_API_PFX_CERTIFICATE_PATH: ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}
+      RENTING_API_PASSPHRASE: ${RENTING_API_PASSPHRASE:-}
+      RENTING_API_BASE_URL: ${RENTING_API_BASE_URL:-}
+      RENTING_API_KEY_NAME: ${RENTING_API_KEY_NAME:-Ocp-Apim-Subscription-Key}
+      RENTING_API_KEY_VALUE: ${RENTING_API_KEY_VALUE:-}
+      RENTING_API_SECONDS_TIMEOUT: ${RENTING_API_SECONDS_TIMEOUT:-30}
+      RENTING_API_LOGIN_PATH: ${RENTING_API_LOGIN_PATH:-}
+      RENTING_API_LOGIN_SECONDS_TIMEOUT: ${RENTING_API_LOGIN_SECONDS_TIMEOUT:-30}
+      # Debe coincidir CARÁCTER A CARÁCTER con el Subject del .pfx montado, o no arranca.
+      RENTING_API_LOGIN_SUBJECT: ${RENTING_API_LOGIN_SUBJECT:-}
+      # No se exige al arrancar (default vacío) pero el login la manda como "secretName":
+      # si falta, el servicio arranca sin quejarse y el login falla en caliente.
+      RENTING_API_LOGIN_SECRET_NAME: ${RENTING_API_LOGIN_SECRET_NAME:-}
+      RENTING_API_LOGIN_CACHE_KEY: ${RENTING_API_LOGIN_CACHE_KEY:-renting-api-login-token}
+      RENTING_API_LOGIN_CACHE_SECONDS_TTL: ${RENTING_API_LOGIN_CACHE_SECONDS_TTL:-3600}
+      RENTING_API_SEND_EMAIL_PATH: ${RENTING_API_SEND_EMAIL_PATH:-RentingNotification/emailNotification/sendEmailFile}
+      RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT: ${RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT:-30}
+      RENTING_API_SEND_EMAIL_SENDER_EMAIL: ${RENTING_API_SEND_EMAIL_SENDER_EMAIL:-}
+      RENTING_API_SEND_EMAIL_SENDER_USERNAME: "${RENTING_API_SEND_EMAIL_SENDER_USERNAME:-Tramites Renting}"
+      RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL: ${RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL:-}
+      RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME: "${RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME:-Tramites Vehiculos}"
+      # ATENCIÓN — ADR-0044 (2026-08-12): el desvío de destinatario YA NO lo decide
+      # ASPNETCORE_ENVIRONMENT (este servicio corre con Development en DEV, QA y PDN por igual,
+      # ver arriba). Lo decide, únicamente, RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:
+      # "true" ⇒ envía a destinatarios REALES; "false"/vacío ⇒ desvía al buzón de control.
+      # Default de este compose: true (envío real). Para desviar en un ambiente, declarar
+      # RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED=false en el .env de ese despliegue.
+      # Cualquier otro valor no vacío tumba el arranque a propósito (no degrada en silencio).
+      # RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED queda DEROGADA: su sola
+      # presencia (con el canal encendido) tumba el arranque con un mensaje de migración — no la
+      # declares en ningún despliegue. Única excepción al desvío (aplica en ambos modos): los
+      # envíos del banco de pruebas de notificaciones, que van a su buzón configurado (decisión
+      # del PO 2026-08-11) — no aplica a los envíos reales de notificaciones. Ver .env.renting.example.
+      RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED: ${RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:-true}
+      RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL:-}
+      RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME: "${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME:-Equipo de desarrollo FLIT}"
+    volumes:
+      # Certificado cliente mTLS del canal API Renting. Solo lectura; NUNCA dentro de la
+      # imagen ni en el repositorio. Vence el 2027-03-22.
+      # MISMA RUTA a ambos lados (host:contenedor) — ver RENTING_API_PFX_CERTIFICATE_PATH
+      # arriba. El certificado se abre en el PRIMER ENVÍO del canal, no al arrancar: un .pfx
+      # ausente o ilegible NO impide que el servicio levante, se manifiesta como un envío
+      # fallido. No confíes en que un arranque limpio signifique canal operativo.
+      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
     ports:
       - "127.0.0.1:${CORE_API_PORT:-5003}:${CORE_API_PORT:-5003}"
     healthcheck:
@@ -245,6 +317,12 @@ services:
       # ICT sube a un sitio y core-api lee de otro → el adjunto transferido por referencia al borrador
       # existe en la tabla pero no abre. Falla en silencio.
       FileManager__BaseUrl: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
+      # Lever B (default false): synchronous_commit=off LOCAL en el camino del registro para no esperar el
+      # fsync del WAL por fila (el registro hace 1 commit por fila). Solo afecta al registro (staging
+      # reprocesable), no a reads/abort/edit. Para activarlo en un ambiente, poner
+      # ICT_RELAX_REGISTER_COMMIT_DURABILITY=true en su .env (p.ej. DEV/QA para pruebas de carga).
+      # Ver services/core-ict/docs/adr/ADR-0001-... y el commit de lever B.
+      Ingest__RelaxRegisterCommitDurability: ${ICT_RELAX_REGISTER_COMMIT_DURABILITY:-false}
     ports:
       - "127.0.0.1:${CORE_ICT_PORT:-5020}:${CORE_ICT_PORT:-5020}"
     depends_on:
@@ -397,6 +475,18 @@ services:
       # Next.js (next dev/start) escucha en este puerto interno.
       PORT: "${FRONTEND_PORT:-5001}"
       HOSTNAME: "0.0.0.0"
+      # ── Consola de migración (/admin/migracion) ─────────────────────────────
+      # Estas dos NO llevan NEXT_PUBLIC_: se leen en el servidor, dentro del BFF de
+      # `app/api/migracion/*`. Con ese prefijo quedarían horneadas en el JS que descarga el
+      # navegador, y X-Migration-Key es la llave maestra del host que reescribe trámites.
+      #
+      # No hay ninguna variable NUEVA en el .env: se reutiliza la MISMA llave que ya consume
+      # migracion-api, que es justo lo que se quiere. Si fueran dos, podrían divergir y el
+      # frontend hablaría con un host que no lo reconoce, con un 401 que no dice por qué.
+      MIGRACION_API_KEY: ${FLITMIG_MIGRACION_API_KEY:-}
+      # Por la red interna de Docker, NO por el dominio público: ese salto pasa por nginx, cuyo
+      # proxy_read_timeout de 60 s corta migraciones de instancia 3 que sí se completan.
+      MIGRACION_API_URL: http://gateway:${GATEWAY_PORT:-5002}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-5001}:${FRONTEND_PORT:-5001}"
     depends_on:

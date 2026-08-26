@@ -21,6 +21,9 @@ import { digitsOnly, sanitizeDecimalInput } from "@/lib/format/currency";
 interface AlertRuleFormProps {
   /** Regla a editar; undefined = crear. */
   initial?: AlertRule;
+  /** Restringe el selector "Métrica" (p. ej. el panel del organismo solo ofrece las 2 métricas
+   * de alcance OT). Por defecto, todas las métricas soportadas. */
+  allowedMetrics?: AlertMetric[];
   onSubmit: (input: AlertRuleInput) => Promise<void>;
   onCancel: () => void;
 }
@@ -36,9 +39,11 @@ const labelClass = "block text-xs font-semibold text-[#162744] dark:text-slate-2
  * etiqueta y descripción en español, operador, umbral, ventana (5-43200 min), cooldown
  * (5-10080 min), destinatarios y activo. Validación espejo del backend.
  */
-export function AlertRuleForm({ initial, onSubmit, onCancel }: AlertRuleFormProps) {
+export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: AlertRuleFormProps) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [metric, setMetric] = useState<AlertMetric>(initial?.metric ?? "rejection_rate_pct");
+  const [metric, setMetric] = useState<AlertMetric>(
+    initial?.metric ?? allowedMetrics?.[0] ?? "rejection_rate_pct",
+  );
   const [operator, setOperator] = useState<AlertOperator>(initial?.operator ?? "gt");
   const [threshold, setThreshold] = useState<string>(initial ? String(initial.threshold) : "");
   const [windowMinutes, setWindowMinutes] = useState<number>(initial?.windowMinutes ?? 1440);
@@ -127,9 +132,11 @@ export function AlertRuleForm({ initial, onSubmit, onCancel }: AlertRuleFormProp
           className={inputClass}
           title={METRIC_DESCRIPTIONS[metric]}
         >
-          {Object.entries(METRIC_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
+          {Object.entries(METRIC_LABELS)
+            .filter(([value]) => !allowedMetrics || allowedMetrics.includes(value as AlertMetric))
+            .map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
         </select>
         <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400" data-testid="metric-description">
           {METRIC_DESCRIPTIONS[metric]}

@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-03-comprador-vendedor-calibrated-newtpl792",
+  "version": "2026-08-21-numeral-20-alertas-prenda-recalibrado",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -109,7 +109,7 @@
       "y": 119.2,
       "size": 9.9
     },
-    {
+        {
       "id": "requested_process_2",
       "page": 1,
       "type": "checkbox",
@@ -118,11 +118,107 @@
       "size": 9.8
     },
     {
+      "id": "requested_process_3",
+      "page": 1,
+      "type": "checkbox",
+      "x": 167.7,
+      "y": 121.1,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_4",
+      "page": 1,
+      "type": "checkbox",
+      "x": 215.9,
+      "y": 121.1,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_5",
+      "page": 1,
+      "type": "checkbox",
+      "x": 286.9,
+      "y": 124.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_7",
+      "page": 1,
+      "type": "checkbox",
+      "x": 71.3,
+      "y": 150.2,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_8",
+      "page": 1,
+      "type": "checkbox",
+      "x": 119.5,
+      "y": 150.2,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_10",
+      "page": 1,
+      "type": "checkbox",
+      "x": 215.9,
+      "y": 150.2,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_17",
+      "page": 1,
+      "type": "checkbox",
+      "x": 286.9,
+      "y": 177.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_18",
+      "page": 1,
+      "type": "checkbox",
+      "x": 343.3,
+      "y": 177.0,
+      "size": 10.1
+    },
+    {
       "id": "requested_process_11",
       "page": 1,
       "type": "checkbox",
       "x": 286.9,
-      "y": 170.9,
+      "y": 150.2,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_12",
+      "page": 1,
+      "type": "checkbox",
+      "x": 343.3,
+      "y": 150.2,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_13",
+      "page": 1,
+      "type": "checkbox",
+      "x": 71.3,
+      "y": 177.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_15",
+      "page": 1,
+      "type": "checkbox",
+      "x": 167.7,
+      "y": 177.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_16",
+      "page": 1,
+      "type": "checkbox",
+      "x": 215.9,
+      "y": 177.0,
       "size": 10.1
     },
     {
@@ -286,6 +382,14 @@
       "size": 8.0
     },
     {
+      "id": "is_armored_vehicle_yes",
+      "page": 1,
+      "type": "checkbox",
+      "x": 504.0,
+      "y": 168.0,
+      "size": 8.0
+    },
+    {
       "id": "is_armored_vehicle_no",
       "page": 1,
       "type": "checkbox",
@@ -426,11 +530,36 @@
       "size": 9.8
     },
     {
+      "id": "linked_company_name",
+      "page": 1,
+      "type": "text",
+      "x": 572.0,
+      "y": 411.0,
+      "w": 130.5,
+      "h": 27.0,
+      "fontSize": 7.6,
+      "minFontSize": 6.0,
+      "bold": true,
+      "align": "left"
+    },
+    {
+      "id": "linked_company_nit",
+      "page": 1,
+      "type": "text",
+      "x": 705.3,
+      "y": 411.0,
+      "w": 48.0,
+      "h": 14.0,
+      "fontSize": 7.6,
+      "bold": true,
+      "align": "left"
+    },
+    {
       "id": "vehicle_serial_number",
       "page": 1,
       "type": "text",
       "x": 570.0,
-      "y": 291.5,
+      "y": 286.5,
       "w": 124.7,
       "h": 14.5,
       "fontSize": 7.8,
@@ -450,14 +579,48 @@
       "align": "left"
     },
     {
+      "id": "alert_data_code_1",
+      "page": 1,
+      "type": "checkbox",
+      "x": 380.8,
+      "y": 411.5,
+      "size": 8.0
+    },
+    {
+      "id": "alert_data_code_2",
+      "page": 1,
+      "type": "checkbox",
+      "x": 419.7,
+      "y": 411.5,
+      "size": 8.0
+    },
+    {
+      "id": "alert_data_code_3",
+      "page": 1,
+      "type": "checkbox",
+      "x": 460.2,
+      "y": 411.5,
+      "size": 8.0
+    },
+    {
+      "id": "alert_data_code_4",
+      "page": 1,
+      "type": "checkbox",
+      "x": 489.5,
+      "y": 411.5,
+      "size": 8.0
+    },
+    {
       "id": "alert_data_code_5",
       "page": 1,
-      "type": "text",
-      "x": 595.6,
-      "y": 338.6,
-      "w": 142.1,
-      "h": 14.4,
-      "fontSize": 7.2,
+      "type": "multiline",
+      "x": 509.5,
+      "y": 411.5,
+      "w": 50.0,
+      "h": 23.0,
+      "fontSize": 4.2,
+      "minFontSize": 3.4,
+      "autoFit": true,
       "bold": true,
       "align": "left"
     },
@@ -785,13 +948,14 @@
       "id": "observations",
       "page": 1,
       "type": "multiline",
-      "x": 381.9,
-      "y": 477.6,
-      "w": 403.1,
+      "x": 379.9,
+      "y": 472.6,
+      "w": 392.0,
       "h": 33.0,
-      "fontSize": 7.2,
+      "fontSize": 6.5,
       "bold": true,
-      "align": "left"
+      "align": "left",
+      "autoFit": true
     }
   ]
 }

@@ -10,7 +10,15 @@ internal static class SettingsMapper
         new SwitchesMatricula(
             settings.AllowInitialRegistration,
             settings.AllowMiscNewVehicles,
-            settings.OnlyOwnVehicles),
+            settings.OnlyOwnVehicles,
+            new OnlyOwnVehiclesByFamily(
+                settings.OnlyOwnVehiclesMatriculas,
+                settings.OnlyOwnVehicles,
+                settings.OnlyOwnVehiclesOtros),
+            new BlockProcedureFamily(
+                Matriculas: !settings.AllowInitialRegistration,
+                Traspaso: settings.BlockProcedureFamilyTraspaso,
+                Otros: settings.BlockProcedureFamilyOtros)),
         settings.SignatureVaultEnabled,
         SettingsWire.ToWire(settings.NotificationChannel),
         SettingsWire.ToWire(settings.NotificationTarget),
@@ -19,10 +27,19 @@ internal static class SettingsMapper
         ToChoices(settings.ConsultationProviderConfig),
         settings.PlatePreassignEnabled,
         settings.PlateFlowSkipToTerminado,
+        settings.ValidateSoatWithRunt,
         new AvaluoProviderConfigDto(
             settings.AvaluoProviderConfig.Primary,
             settings.AvaluoProviderConfig.Enabled),
-        settings.FinesQuerySource);
+        settings.FinesQuerySource,
+        settings.PersonalizedDocumentsEnabled,
+        settings.TramiteApprovedEmailsEnabled,
+        settings.TramiteRejectedEmailsEnabled,
+        new DestinatariosNotificacionDto(
+            settings.StateEmailRecipients.Comprador,
+            settings.StateEmailRecipients.VendedorOPropietario,
+            settings.StateEmailRecipients.Radicador,
+            settings.StateEmailRecipients.ExtraEmail));
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)

@@ -13,6 +13,26 @@ export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   ot: "Organismo de Tránsito",
   uso: "Uso del aplicativo",
   productividad: "Productividad",
+  // Solo se crea desde "Programar este informe" en una consulta guardada — no aparece en el
+  // selector de "Nuevo informe programado" (ver ScheduleForm), pero sí en el listado.
+  consulta: "Consulta personalizada",
+  // Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): los 3 tipos que ofrece el
+  // panel de "Programación y alertas" del propio organismo (ver SchedulesSection), uno por
+  // pestaña con rango de OtReportsConsole.tsx.
+  ot_analisis: "Análisis (causales de rechazo)",
+  ot_informe: "Informe del periodo",
+  ot_revisores: "Revisores",
+  // Alcance ICT (Reportes 2.0, HU-D, cuarta ola): los 4 tipos que ofrece el panel de
+  // "Programación" del módulo de Integración con Terceros. "ict_jobs" solo lo ofrece el
+  // selector a SuperAdmin — ver ICT_REPORT_TYPES en IctLogs.tsx.
+  // Nombres deliberadamente distintos de METRIC_LABELS (más abajo): son dos selectores que
+  // pueden verse en el mismo panel ("Informes"/"Alertas") — un informe entrega el detalle
+  // periódico completo, una alerta solo avisa cuando un número cruza el umbral. Repetir el
+  // mismo texto en los dos haría parecer que activan lo mismo.
+  ict_novedades: "ICT · Detalle de novedades por causa",
+  ict_atascados: "ICT · Detalle de atascados en validación",
+  ict_jobs: "ICT · Detalle de rendimiento de jobs",
+  ict_webhooks: "ICT · Detalle de entrega de webhooks",
 };
 
 export const FREQUENCY_LABELS: Record<ScheduleFrequency, string> = {
@@ -45,6 +65,8 @@ export const METRIC_LABELS: Record<AlertMetric, string> = {
   ict_novelty_rate_pct: "ICT · Tasa de novedades (%)",
   ict_webhook_delivery_failures: "ICT · Fallos de entrega de webhook",
   ict_jobs_out_of_sla: "ICT · Jobs fuera de SLA",
+  ot_rejection_rate_pct: "Tasa de rechazo del organismo (%)",
+  ot_stuck_count: "Trámites atascados en el organismo",
 };
 
 export const METRIC_DESCRIPTIONS: Record<AlertMetric, string> = {
@@ -64,6 +86,10 @@ export const METRIC_DESCRIPTIONS: Record<AlertMetric, string> = {
     "Webhooks ICT entregados con respuesta no satisfactoria dentro de la ventana.",
   ict_jobs_out_of_sla:
     "Corridas de los jobs ICT que incumplieron su SLA (error o duración excedida) en la ventana.",
+  ot_rejection_rate_pct:
+    "Porcentaje de trámites rechazados sobre los decididos por el organismo dentro de la ventana.",
+  ot_stuck_count:
+    "Trámites pendientes de revisión en el organismo hace más de 7 días.",
 };
 
 export const OPERATOR_LABELS: Record<AlertOperator, string> = {

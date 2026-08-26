@@ -57,31 +57,25 @@ public sealed partial class CreateInvitationHandler(
             cancellationToken);
 
         var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
-        var message = new EmailMessage(
-            email,
-            email,
-            InvitationEmailTemplate.Subject,
-            InvitationEmailTemplate.BuildHtmlBody(command.FullName, link));
+        var composed = InvitationEmailTemplate.Compose(command.FullName, link);
+        // HU #11363 AC1 — id estable del catálogo (TemplateIds.Invitation en Flit.Infrastructure);
+        // comparte plantilla con ResendInvitationHandler (dos disparadores, una sola entrada).
+        var message = new EmailMessage(command.TenantId, "security.invitation", email, email, composed.Subject, composed.HtmlBody);
 
         LogActivationLinkDev(logger, link);
 
-        var emailSent = true;
-        try
-        {
-            await emailSender.SendAsync(message, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogEmailFailed(logger, invitationId, ex);
-            emailSent = false;
-        }
+        // HU #11358 AC2/AC3 — el puerto ya no lanza por un fallo de transporte: el resultado
+        // tipado reemplaza el try/catch.
+        var sendResult = await emailSender.SendAsync(message, cancellationToken);
+        if (!sendResult.Success)
+            LogEmailFailed(logger, invitationId, sendResult.Outcome);
 
-        return new InvitationCreatedResult(invitationId, email, emailSent);
+        return new InvitationCreatedResult(invitationId, email, sendResult.Success);
     }
 
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "[retryable] Activation email failed for invitation {InvitationId}. Invitation remains pending.")]
-    private static partial void LogEmailFailed(ILogger logger, Guid invitationId, Exception ex);
+        Message = "[retryable] Activation email failed for invitation {InvitationId}. Invitation remains pending. Cause: {Outcome}.")]
+    private static partial void LogEmailFailed(ILogger logger, Guid invitationId, EmailSendOutcome outcome);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[DEV] Activation link (use this to test locally): {Link}")]

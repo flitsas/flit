@@ -27,5 +27,13 @@ public sealed class ProcedureInstanceAttachment
     /// </summary>
     public Guid? SourceDeedId { get; set; }
 
+    /// <summary>
+    /// HU #11313/#11316 (ADR-0042) — referencia a la versión (admin.company_personalized_documents.id)
+    /// que entró al registro cuando este adjunto es un documento personalizado de compañía
+    /// (<c>Source = "company"</c>). Espejo exacto de <see cref="SourceDeedId"/>. <c>null</c> en
+    /// cualquier otro adjunto.
+    /// </summary>
+    public Guid? SourcePersonalizedDocumentId { get; set; }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 }

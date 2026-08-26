@@ -63,7 +63,7 @@ public sealed class IniciarPrevalidacionHandler(
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events)
 {
-    public async Task<(IniciarPrevalidacionResult? Result, string? Error)> HandleAsync(
+    public async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleAsync(
         Guid tenantId,
         IniciarPrevalidacionRequest input,
         CancellationToken ct = default)
@@ -73,7 +73,7 @@ public sealed class IniciarPrevalidacionHandler(
             || string.IsNullOrWhiteSpace(input.DocumentNumber)
             || string.IsNullOrWhiteSpace(input.Name)
             || string.IsNullOrWhiteSpace(input.Email))
-            return (null, "datos_incompletos");
+            return (null, "datos_incompletos", null);
 
         var personType = string.IsNullOrWhiteSpace(input.PersonType)
             ? PersonTypes.Natural
@@ -85,7 +85,7 @@ public sealed class IniciarPrevalidacionHandler(
         // crear/actualizar un registro que de todas formas se rechaza. No es solo un cambio de UI: cierra
         // la puerta trasera server-side aunque el body llegue directo a la API con personType=juridical.
         if (personType == PersonTypes.Juridical)
-            return (null, "prevalidacion_solo_natural");
+            return (null, "prevalidacion_solo_natural", null);
 
         // ── 2. Upsert de la entidad persona ─────────────────────────────────────
         var person = await personRepo.FindOrCreateAsync(
@@ -101,35 +101,65 @@ public sealed class IniciarPrevalidacionHandler(
             input.LegalRepEmail?.Trim(),
             ct);
 
-        // ── 3. Guard 409: prevalidación activa existente ─────────────────────────
-        // Comprobamos por PersonId (ya sea persona nueva recién añadida al contexto o existente).
-        // Si el person.Id ya tiene una prevalidación activa, el gestor debe reusar la existente.
-        // Solo aplica si el person ya existe en BD (Id conocido sin SaveChanges aún).
-        // Para persona nueva, no puede haber prevalidación activa → el check devuelve null.
+        // ── 3. Precedencia de envío (HU #11264 / ADR-0039) ───────────────────────
+        // Capa PREVIA al guard histórico: consulta baúl N/A en standalone natural, identidad vigente
+        // por documento y validación en vuelo (con/sin enlace vencido). Conserva el código
+        // "prevalidacion_activa" para NoEnviar (compat contrato/tests) y "enlace_vencido_reenvio"
+        // cuando corresponde encauzar al reenvío sin crear fila nueva.
+        var now = DateTimeOffset.UtcNow;
+        var tipoDoc = input.DocumentType.Trim();
+        var numeroDoc = input.DocumentNumber.Trim();
+        var candidates = new List<ProcedureInstanceBiometricValidation>();
         var existingActive = await personRepo.FindActiveStandaloneValidationAsync(person.Id, ct);
         if (existingActive is not null)
-            return (null, "prevalidacion_activa");
+            candidates.Add(existingActive);
+        var vigente = await procedureRepo.FindVigenteApprovedByDocumentAsync(
+            tenantId, tipoDoc, numeroDoc, now, ct);
+        if (vigente is not null
+            && candidates.TrueForAll(c => c.Id != vigente.Id))
+            candidates.Add(vigente);
+
+        var decision = IdentitySendDecisionEvaluator.Evaluate(new IdentitySendDecisionContext(
+            tenantId,
+            tipoDoc,
+            numeroDoc,
+            Actor: null,
+            HasBaulFirmaActivaVigente: false,
+            ValidationsForPerson: candidates,
+            Now: now));
+
+        if (decision.Kind == IdentitySendDecisionKind.EncauzarReenvio)
+            return (null, "enlace_vencido_reenvio", decision);
+
+        if (decision.Kind == IdentitySendDecisionKind.NoEnviar)
+            return (null, "prevalidacion_activa", decision);
 
         // ── 4. Sujeto de identidad (AC2: jurídica → RL) ──────────────────────────
         var subject = ResolveSubject(person);
         if (string.IsNullOrWhiteSpace(subject.Nombre)
             || string.IsNullOrWhiteSpace(subject.TipoDocumento)
             || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-            return (null, "datos_incompletos");
+            return (null, "datos_incompletos", null);
 
         var validationId = Guid.NewGuid();
 
         // ── 5a. Proveedor Kyverum ─────────────────────────────────────────────────
         if (providerOptions.IsKyverum)
-            return await IniciarConKyverumAsync(tenantId, person, subject, validationId, ct);
+        {
+            var (result, error, conflict) = await IniciarConKyverumAsync(tenantId, person, subject, validationId, ct);
+            return (result, error, conflict);
+        }
 
         // ── 5b. Proveedor mock ────────────────────────────────────────────────────
-        return await IniciarConMockAsync(tenantId, person, subject, validationId, ct);
+        {
+            var (result, error, conflict) = await IniciarConMockAsync(tenantId, person, subject, validationId, ct);
+            return (result, error, conflict);
+        }
     }
 
     // ── Kyverum path ─────────────────────────────────────────────────────────────
 
-    private async Task<(IniciarPrevalidacionResult? Result, string? Error)> IniciarConKyverumAsync(
+    private async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> IniciarConKyverumAsync(
         Guid tenantId, Person person, IdentitySubjectStandalone subject,
         Guid validationId, CancellationToken ct)
     {
@@ -150,7 +180,7 @@ public sealed class IniciarPrevalidacionHandler(
         catch (KyverumVerifyException ex)
         {
             if (!ex.Transient)
-                return (null, "proveedor_error");
+                return (null, "proveedor_error", null);
 
             var queuedAt = DateTimeOffset.UtcNow;
             var queued = BuildValidation(tenantId, person.Id, validationId, subject,
@@ -170,10 +200,18 @@ public sealed class IniciarPrevalidacionHandler(
                 Parte = null,
             }, ct);
 
-            await procedureRepo.SaveChangesAsync(ct);
+            try
+            {
+                await procedureRepo.SaveChangesAsync(ct);
+            }
+            catch (Domain.Identity.IdentityInFlightConflictException)
+            {
+                return (null, "prevalidacion_activa",
+                    IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Standalone));
+            }
 
             var queuedDto = IniciarBiometriaHandler.ToDto(queued, queuedAt);
-            return (new IniciarPrevalidacionResult(queuedDto, string.Empty, Queued: true), null);
+            return (new IniciarPrevalidacionResult(queuedDto, string.Empty, Queued: true), null, null);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -204,15 +242,23 @@ public sealed class IniciarPrevalidacionHandler(
             ProviderVerificationId = provider.VerificationId,
         }, ct);
 
-        await procedureRepo.SaveChangesAsync(ct);
+        try
+        {
+            await procedureRepo.SaveChangesAsync(ct);
+        }
+        catch (Domain.Identity.IdentityInFlightConflictException)
+        {
+            return (null, "prevalidacion_activa",
+                IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Standalone));
+        }
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
-        return (new IniciarPrevalidacionResult(dto, provider.CaptureUrl), null);
+        return (new IniciarPrevalidacionResult(dto, provider.CaptureUrl), null, null);
     }
 
     // ── Mock path ────────────────────────────────────────────────────────────────
 
-    private async Task<(IniciarPrevalidacionResult? Result, string? Error)> IniciarConMockAsync(
+    private async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> IniciarConMockAsync(
         Guid tenantId, Person person, IdentitySubjectStandalone subject,
         Guid validationId, CancellationToken ct)
     {
@@ -237,11 +283,19 @@ public sealed class IniciarPrevalidacionHandler(
             Parte = null,
         }, ct);
 
-        await procedureRepo.SaveChangesAsync(ct);
+        try
+        {
+            await procedureRepo.SaveChangesAsync(ct);
+        }
+        catch (Domain.Identity.IdentityInFlightConflictException)
+        {
+            return (null, "prevalidacion_activa",
+                IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Standalone));
+        }
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
         var captureUrl = $"/api/v1/public/biometric/{token}";
-        return (new IniciarPrevalidacionResult(dto, captureUrl), null);
+        return (new IniciarPrevalidacionResult(dto, captureUrl), null, null);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -296,6 +350,8 @@ public sealed class IniciarPrevalidacionHandler(
             && !string.IsNullOrWhiteSpace(person.LegalRepDocumentType)
             && !string.IsNullOrWhiteSpace(person.LegalRepDocumentNumber))
         {
+            // Misma regla que IdentitySubjectResolver: en jurídica el correo es SOLO el del RL.
+            // Sin LegalRepEmail no se cae al correo de la empresa (person.Email).
             return new IdentitySubjectStandalone(
                 Nombre: !string.IsNullOrWhiteSpace(person.LegalRepName)
                     ? person.LegalRepName
@@ -303,8 +359,8 @@ public sealed class IniciarPrevalidacionHandler(
                 TipoDocumento: person.LegalRepDocumentType,
                 NumeroDocumento: person.LegalRepDocumentNumber,
                 Email: !string.IsNullOrWhiteSpace(person.LegalRepEmail)
-                    ? person.LegalRepEmail
-                    : person.Email);
+                    ? person.LegalRepEmail!
+                    : string.Empty);
         }
 
         return new IdentitySubjectStandalone(

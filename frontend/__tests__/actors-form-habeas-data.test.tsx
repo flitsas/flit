@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   runtPersonLookup: vi.fn(),
   ruesPersonLookup: vi.fn(),
   actorContactLookup: vi.fn(),
+  lookupLegalRepresentativeByNit: vi.fn(),
   getInstance: vi.fn(),
 }));
 
@@ -25,6 +26,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     runtPersonLookup: mocks.runtPersonLookup,
     ruesPersonLookup: mocks.ruesPersonLookup,
     actorContactLookup: mocks.actorContactLookup,
+    lookupLegalRepresentativeByNit: mocks.lookupLegalRepresentativeByNit,
     getInstance: mocks.getInstance,
   },
 }));
@@ -50,13 +52,8 @@ beforeEach(() => {
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getInstance.mockResolvedValue({ fieldValues: [] });
   mocks.actorContactLookup.mockResolvedValue(EMPTY_CONTACT);
+  mocks.lookupLegalRepresentativeByNit.mockResolvedValue(null);
 });
-
-async function fillRequiredComprador(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText('Número de documento'), '12345');
-  await user.type(screen.getByLabelText(/Nombre completo/), 'Juan Perez');
-  await user.type(screen.getByLabelText(/Correo electrónico/), 'juan@example.com');
-}
 
 describe('ActorsForm — AC1 (HU #10956) el check de Habeas Data ya no se ofrece', () => {
   it('matrícula (SPLIT, persona natural): no muestra el checkbox de reutilización', async () => {
@@ -71,7 +68,7 @@ describe('ActorsForm — AC1 (HU #10956) el check de Habeas Data ya no se ofrece
   it('matrícula (SPLIT, persona jurídica): tampoco muestra el checkbox', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+    await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
     expect(
       screen.queryByRole('checkbox', { name: /Autorizo la reutilización/i }),
     ).not.toBeInTheDocument();
@@ -96,11 +93,26 @@ describe('ActorsForm — AC1 (HU #10956) el check de Habeas Data ya no se ofrece
         nombreCompleto: 'Juan Perez',
         email: 'juan@example.com',
         autorizaReutilizacionDatos: true,
+        // HU #11595 — ciudad, dirección y teléfono ahora son obligatorios.
+        telefono: '3001234567',
+        ciudad: 'Bogota',
+        direccion: 'Calle 1 # 2-3',
       },
     ]);
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     await screen.findByDisplayValue('Juan Perez');
+
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'Juan Perez',
+      documentType: 'CC',
+      documentNumber: '12345',
+      source: 'RUNT',
+      mode: 'mock',
+    });
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await screen.findByText(/Persona encontrada en RUNT/i);
 
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
@@ -148,14 +160,14 @@ describe('ActorsForm — AC2/AC3/AC4 (HU #10956) precarga de datos de contacto',
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Ciudad')).toHaveValue('Bogotá');
-      expect(screen.getByLabelText('Dirección')).toHaveValue('Cra 1 # 2-3');
+      expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Bogotá');
+      expect(screen.getByLabelText(/^Dirección/)).toHaveValue('Cra 1 # 2-3');
       expect(screen.getByLabelText(/Teléfono/)).toHaveValue('3001112233');
       expect(screen.getByLabelText(/Correo electrónico/)).toHaveValue('juan.contacto@empresa.com');
     });
 
     // El nombre viene del RUNT, nunca del lookup de contacto (que no lo expone).
-    expect(screen.getByLabelText(/Nombre completo/)).toHaveValue('JUAN CARLOS PEREZ GOMEZ');
+    expect(screen.getByLabelText(/Nombres y apellidos/)).toHaveValue('JUAN CARLOS PEREZ GOMEZ');
   });
 
   it('AC3: no pisa un campo que el operador ya había editado antes de que resuelva la precarga', async () => {
@@ -189,11 +201,11 @@ describe('ActorsForm — AC2/AC3/AC4 (HU #10956) precarga de datos de contacto',
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByLabelText('Ciudad')).toHaveValue('Medellín'));
+    await waitFor(() => expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Medellín'));
 
     // La ciudad (no tocada) SÍ se precarga; el correo (editado a mano) se conserva intacto.
     expect(screen.getByLabelText(/Correo electrónico/)).toHaveValue('operador@example.com');
-    expect(screen.getByLabelText('Dirección')).toHaveValue('Calle falsa 123');
+    expect(screen.getByLabelText(/^Dirección/)).toHaveValue('Calle falsa 123');
   });
 
   it('AC4: persona sin antecedentes deja los 4 campos vacíos y editables, sin error', async () => {
@@ -221,14 +233,14 @@ describe('ActorsForm — AC2/AC3/AC4 (HU #10956) precarga de datos de contacto',
 
     await waitFor(() => expect(mocks.actorContactLookup).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByLabelText('Ciudad')).toHaveValue('');
-    expect(screen.getByLabelText('Dirección')).toHaveValue('');
+    expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Dirección/)).toHaveValue('');
     expect(screen.getByLabelText(/Teléfono/)).toHaveValue('');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     // Siguen editables: el operador puede completarlos a mano sin bloqueo.
-    await user.type(screen.getByLabelText('Ciudad'), 'Cali');
-    expect(screen.getByLabelText('Ciudad')).toHaveValue('Cali');
+    await user.type(screen.getByLabelText(/^Ciudad/), 'Cali');
+    expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Cali');
   });
 });
 
@@ -272,7 +284,7 @@ describe('ActorsForm — AC5 (HU #10956) estados de UI del lookup de contacto', 
       telefono: null,
     });
 
-    await waitFor(() => expect(screen.getByLabelText('Ciudad')).toHaveValue('Barranquilla'));
+    await waitFor(() => expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Barranquilla'));
     expect(screen.queryByText(/Buscando datos de contacto conocidos/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(/Contacto precargado desde un trámite anterior/i),
@@ -307,7 +319,7 @@ describe('ActorsForm — AC5 (HU #10956) estados de UI del lookup de contacto', 
     ).toBeInTheDocument();
 
     // Nunca bloquea: el operador completa el contacto a mano sin problema.
-    const ciudadInput = screen.getByLabelText('Ciudad');
+    const ciudadInput = screen.getByLabelText(/^Ciudad/);
     expect(ciudadInput).not.toBeDisabled();
     await user.type(ciudadInput, 'Manizales');
     expect(ciudadInput).toHaveValue('Manizales');

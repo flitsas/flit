@@ -13,6 +13,11 @@ export interface CompanyListItem {
    * tipos heredados fuera del catálogo (p.ej. `standard`, `transit_office`).
    */
   tenantType: string;
+  /**
+   * `true` si el tenant es Organismo de Tránsito (perfil en `admin.transit_office_profiles`).
+   * No inferir solo desde `tenantType`: los OT también usan RENTING.
+   */
+  isTransitOffice: boolean;
   estadoActivo: boolean;
   fechaCreacion: string;
   /**
@@ -35,6 +40,8 @@ export interface CompaniesIndexParams {
   estadoActivo?: boolean;
   fechaDesde?: string;
   fechaHasta?: string;
+  /** Default API true: excluye Organismos de Tránsito del listado B2B. */
+  excludeTransitOffices?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -89,11 +96,40 @@ export interface UpdateCompanyRequest {
 export interface SwitchesMatricula {
   allowInitialRegistration: boolean;
   allowMiscNewVehicles: boolean;
+  /** Legado: espejo de `onlyOwnVehiclesByFamily.traspaso`. */
   onlyOwnVehicles: boolean;
+  /** Solo vehículos propios por familia de trámite. */
+  onlyOwnVehiclesByFamily?: OnlyOwnVehiclesByFamily;
+  /**
+   * Bloqueo de creación por familia. `true` = no permitir crear trámites de esa familia.
+   * Matrículas = invertido de `allowInitialRegistration`.
+   */
+  blockProcedureFamily?: BlockProcedureFamily;
+}
+
+/** Flags por familia (`MATRICULAS` | `TRASPASO` | `OTROS`). */
+export interface OnlyOwnVehiclesByFamily {
+  matriculas: boolean;
+  traspaso: boolean;
+  otros: boolean;
+}
+
+/** Bloqueo de creación por familia (`true` = no crear). */
+export interface BlockProcedureFamily {
+  matriculas: boolean;
+  traspaso: boolean;
+  otros: boolean;
 }
 
 export type EnrutamientoSMTP = "FLIT_SMTP" | "TENANT_API";
 export type NotificationTarget = "COMPRADOR" | "RADICADOR" | "NINGUNO";
+
+export interface DestinatariosNotificacion {
+  comprador: boolean;
+  vendedorOPropietario: boolean;
+  radicador: boolean;
+  extraEmail: string | null;
+}
 
 /**
  * Fuente de la consulta de comparendos de la compañía (FEATURE 02): `internal` (módulo de
@@ -135,8 +171,13 @@ export interface TenantSettings {
    * Default false.
    */
   plateFlowSkipToTerminado?: boolean;
+  /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
+  validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
-  notificationTarget: NotificationTarget;
+  notificationTarget?: NotificationTarget;
+  avisosAprobacionActivos?: boolean;
+  avisosRechazoActivos?: boolean;
+  destinatariosNotificacion?: DestinatariosNotificacion;
   metodosRecaudo: string[];
   // HU #10478 — opcionales en el tipo por compatibilidad; el backend siempre los devuelve.
   runtFailoverTimeoutMs?: number;
@@ -145,6 +186,8 @@ export interface TenantSettings {
   avaluoProviderConfig?: AvaluoProviderConfig;
   // FEATURE 02 — opcional por compatibilidad; el backend siempre lo devuelve.
   finesQuerySource?: FinesQuerySource;
+  /** HU #11469 legado. */
+  avisosCambioEstadoActivos?: boolean;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -158,8 +201,13 @@ export interface TenantSettingsUpdate {
    * Default false.
    */
   plateFlowSkipToTerminado?: boolean;
+  /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
+  validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
-  notificationTarget: NotificationTarget;
+  notificationTarget?: NotificationTarget;
+  avisosAprobacionActivos?: boolean;
+  avisosRechazoActivos?: boolean;
+  destinatariosNotificacion?: DestinatariosNotificacion;
   metodosRecaudo: string[];
   // HU #10478 — opcionales: si se omiten el backend conserva el valor previo.
   runtFailoverTimeoutMs?: number;
@@ -168,6 +216,8 @@ export interface TenantSettingsUpdate {
   avaluoProviderConfig?: AvaluoProviderConfig;
   // FEATURE 02 — si se omite el backend conserva el valor previo.
   finesQuerySource?: FinesQuerySource;
+  /** HU #11469 legado. */
+  avisosCambioEstadoActivos?: boolean;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────
@@ -238,6 +288,18 @@ export interface OtBlockingPolicy {
   blocks: boolean;
 }
 
+/** Check activo ⇒ documento de prenda opcional para el par compañía+OT (default = obligatorio). */
+export interface OtPrendaDocumentPolicy {
+  transitOfficeId: string;
+  documentOptional: boolean;
+}
+
+export interface OtPrendaDocumentPolicyCompany {
+  tenantId: string;
+  tenantName: string;
+  documentOptional: boolean;
+}
+
 /**
  * Posición por defecto del toggle "¿bloquea el trámite?" cuando la compañía no configuró una fila
  * (par tenant, OT). Refleja el comportamiento PREVIO del trámite:
@@ -296,6 +358,16 @@ export interface AdminAuditLogEntry {
   targetEntityId?: string | null;
   clientIp?: string | null;
   changedAt: string;
+  /** Nombre del actor ya resuelto por el backend (antes solo llegaba el uuid `changedBy`). */
+  changedByName?: string | null;
+  changedByEmail?: string | null;
+  /** Nombre de la entidad afectada (usuario o rol) ya resuelto. */
+  targetName?: string | null;
+  /** Campo modificado; en operaciones administrativas repite la operación. */
+  fieldName?: string | null;
+  /** Detalle del cambio serializado como JSON, cuando la operación lo registró. */
+  oldValue?: string | null;
+  newValue?: string | null;
 }
 
 export interface AdminAuditLogPageResponse {
@@ -324,7 +396,14 @@ export interface AdminAuditLogQuery {
 
 // ── Analytics · Dashboard (HU #10243 / #10247) ──────────────────────────────
 /** Categoría de trámite normalizada por el backend (RF01). */
-export type AnalyticsCategory = "matriculas" | "traspasos" | "vehicular" | "otros";
+/**
+ * Categoría analítica de un trámite, derivada de `procedure_types.family`.
+ *
+ * ADR-0050 retiró `vehicular`: esa familia no existe en el catálogo —era el residuo de un seed
+ * histórico— y desde el CHECK del DDL 79 la columna solo admite tres valores, así que el backend no
+ * podía producir esa categoría. El filtro seguía ofreciéndose y devolvía siempre cero.
+ */
+export type AnalyticsCategory = "matriculas" | "traspasos" | "otros";
 
 /** Conteo de trámites en un estado concreto dentro de una categoría. */
 export interface StatusCount {

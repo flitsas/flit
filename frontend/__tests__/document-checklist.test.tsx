@@ -79,8 +79,8 @@ describe('DocumentChecklist — render guiado por checklist', () => {
 
     expect(await screen.findByText('Cédula del comprador')).toBeInTheDocument();
     expect(screen.getByText('SOAT vigente')).toBeInTheDocument();
-    expect(screen.getByText('Obligatorio')).toBeInTheDocument();
-    expect(screen.getByText('(opcional)')).toBeInTheDocument();
+    expect(screen.getByText('* Obligatorio')).toBeInTheDocument();
+    expect(screen.getByText('Opcional')).toBeInTheDocument();
   });
 
   it('muestra el resumen "faltan N obligatorios" cuando no está completo', async () => {
@@ -127,6 +127,54 @@ describe('DocumentChecklist — render guiado por checklist', () => {
     expect(
       screen.getByRole('button', { name: 'Borrar Cédula del comprador' }),
     ).toBeInTheDocument();
+  });
+
+  it('empareja el adjunto con su casilla aunque el código tenga mayúsculas', async () => {
+    // Los dos extremos NO guardan el código igual: `docTipo` conserva el casing con el que se creó el
+    // tipo en el módulo Documental, y el backend persiste `tipo` en minúsculas al subir. Con
+    // comparación exacta, el documento se subía y la casilla seguía vacía y obligatoria: para el
+    // gestor, «no carga».
+    const attachment: ProcedureAttachment = {
+      id: 'att-2',
+      tipo: 'cedula', // minúsculas: lo que devuelve el backend
+      filename: 'documento.png',
+      mimetype: 'image/png',
+      sizeBytes: 2048,
+      sha256: 'abc',
+      source: 'upload',
+      uploadedAt: '2026-06-18T00:00:00Z',
+    };
+    mocks.getAttachments.mockResolvedValue([attachment]);
+
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    // docTipo del checklist: 'CEDULA'.
+    expect(await screen.findByText(/documento\.png/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Borrar Cédula del comprador' }),
+    ).toBeInTheDocument();
+  });
+
+  it('no inventa emparejamientos: un adjunto de otro tipo deja la casilla vacía', async () => {
+    const attachment: ProcedureAttachment = {
+      id: 'att-3',
+      tipo: 'paz_salvo',
+      filename: 'otro.png',
+      mimetype: 'image/png',
+      sizeBytes: 2048,
+      sha256: 'abc',
+      source: 'upload',
+      uploadedAt: '2026-06-18T00:00:00Z',
+    };
+    mocks.getAttachments.mockResolvedValue([attachment]);
+
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    await screen.findByText('Cédula del comprador');
+    expect(screen.queryByText(/otro\.png/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Borrar Cédula del comprador' }),
+    ).not.toBeInTheDocument();
   });
 });
 

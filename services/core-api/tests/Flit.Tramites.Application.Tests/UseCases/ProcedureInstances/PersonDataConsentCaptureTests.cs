@@ -26,6 +26,13 @@ public sealed class PersonDataConsentCaptureTests
 
     public PersonDataConsentCaptureTests()
     {
+        _repo.ListInFlightByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureInstanceBiometricValidation>());
+        _repo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+
         var kyverumHandler = new IniciarKyverumVerifyHandler(
             _repo,
             Substitute.For<IKyverumVerifyClient>(),
@@ -40,12 +47,12 @@ public sealed class PersonDataConsentCaptureTests
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId) => new()
     {
+        ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
         Id = id,
         TenantId = tenantId,
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = "TRM-2026-000001",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = "matricula_inicial",
         CreatedAt = DateTimeOffset.UtcNow,
     };
 

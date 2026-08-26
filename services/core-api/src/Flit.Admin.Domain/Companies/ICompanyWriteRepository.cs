@@ -12,6 +12,13 @@ public interface ICompanyWriteRepository
     Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// ¿Ya existe una compañía con ese NIT? El NIT identifica a la empresa ante el Estado, así que dos
+    /// tenants con el mismo NIT son la misma empresa duplicada: aparecen dos veces —y con la misma razón
+    /// social— en cualquier listado que las ofrezca, sin forma de distinguirlas.
+    /// </summary>
+    Task<bool> TaxIdExistsAsync(string taxId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Devuelve la proyección de listado de la compañía, o <c>null</c> si no existe.
     /// La usa el handler de edición para resolver/validar el <c>tenant_type</c> respecto
     /// del valor actual: preserva tipos heredados fuera del catálogo B2B

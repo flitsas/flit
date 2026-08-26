@@ -73,6 +73,44 @@ describe('PreflightPanel — RNMC condicionado (HU #10603)', () => {
   });
 });
 
+describe('PreflightPanel — trámite sin consultas por migración', () => {
+  it('pide la consulta de forma destacada, en vez de la nota genérica', () => {
+    render(<PreflightPanel snapshot={null} {...baseProps} esMigrado />);
+
+    expect(screen.getByText('Consulta pendiente')).toBeInTheDocument();
+    expect(screen.getByText(/estado actual del vehículo/)).toBeInTheDocument();
+    // El genérico se reemplaza, no se acompaña: dos mensajes para lo mismo confunden.
+    expect(screen.queryByText(/Ejecuta la consulta para ver el semáforo/)).not.toBeInTheDocument();
+  });
+
+  it('no le cuenta al operador que el trámite viene de una migración', () => {
+    // El aviso pide la acción, no la justifica: nombrar la migración o la caducidad de las consultas
+    // no le cambia nada a quien opera y siembra la duda de si el expediente llegó incompleto.
+    const { container } = render(<PreflightPanel snapshot={null} {...baseProps} esMigrado />);
+
+    expect(container.textContent).not.toMatch(/migra|V1|sistema anterior|caduca/i);
+  });
+
+  it('en un trámite nativo conserva la nota de siempre', () => {
+    render(<PreflightPanel snapshot={null} {...baseProps} />);
+
+    expect(screen.getByText(/Ejecuta la consulta para ver el semáforo/)).toBeInTheDocument();
+    expect(screen.queryByText('Consulta pendiente')).not.toBeInTheDocument();
+  });
+
+  it('una vez consultado, el aviso desaparece: ya hay semáforo del día', () => {
+    render(
+      <PreflightPanel
+        snapshot={snap([rnmc('rnmc_comprador_medidas_correctivas')])}
+        {...baseProps}
+        esMigrado
+      />,
+    );
+
+    expect(screen.queryByText('Consulta pendiente')).not.toBeInTheDocument();
+  });
+});
+
 // HU #10763 — advertencias y consultas omitidas visibles; el amarillo no ofrece asumir riesgo.
 describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763)', () => {
   it('kyverum_fines se presenta como SIMIT y nunca filtra el nombre del proveedor', () => {
@@ -90,7 +128,7 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
         {...baseProps}
       />,
     );
-    expect(screen.getByText('SIMIT')).toBeInTheDocument();
+    expect(screen.getByText(/OK \(SIMIT\)|OK - SIMIT/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/KYVERUM/i);
   });
 
@@ -109,7 +147,7 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
         {...baseProps}
       />,
     );
-    expect(screen.getByText('Comparendos FLIT')).toBeInTheDocument();
+    expect(screen.getByText(/OK \(Comparendos FLIT\)|OK - Comparendos FLIT/)).toBeInTheDocument();
   });
 
   it('una consulta omitida por configuración del OT se pinta con su mensaje y fuente FLIT', () => {
@@ -130,8 +168,8 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
     expect(
       screen.getByText('El organismo de tránsito no exige esta consulta.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('FLIT')).toBeInTheDocument();
-    expect(screen.getByText('unknown')).toBeInTheDocument();
+    expect(screen.getByText(/NO ENCONTRADO/)).toBeInTheDocument();
+    // Prototipo: en unknown la pastilla es solo «NO ENCONTRADO»; el detalle queda debajo.
   });
 });
 
@@ -163,7 +201,7 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
     expect(franja).toHaveAttribute('role', 'status');
     expect(franja).toHaveTextContent('Comparendos');
     expect(franja).toHaveTextContent('2 comparendos pendientes de pago.');
-    expect(franja).toHaveTextContent(/Puedes continuar con el trámite/);
+    expect(franja).toHaveTextContent(/Puedes continuar con la gestión del trámite|Puedes continuar con el trámite/);
     // El check en verde no es un hallazgo: no se resume.
     expect(franja).not.toHaveTextContent('SOAT');
   });
@@ -196,6 +234,34 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
     );
     expect(screen.getByText(/Asumo el riesgo/)).toBeInTheDocument();
     expect(screen.getByRole('checkbox')).toBeInTheDocument();
+  });
+
+  // El vehículo no existe en el RUNT: no hay nada que "asumir", hay que corregir el identificador.
+  // Ofrecer el checkbox aquí dejaba crear un trámite sin vehículo verificado.
+  it('NO ofrece asumir el riesgo cuando el vehículo no se encontró en el RUNT', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'red',
+          createdAt: '2026-08-06T00:00:00Z',
+          checks: [
+            {
+              key: 'vehiculo',
+              label: 'Vehículo RUNT',
+              status: 'fail',
+              source: 'verifik',
+              message: 'Vehículo no encontrado en RUNT',
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+    expect(screen.queryByText(/Asumo el riesgo/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/El vehículo no se encontró en el RUNT/),
+    ).toBeInTheDocument();
   });
 
   it('no muestra la franja de advertencias cuando el pre-vuelo está en verde', () => {

@@ -131,6 +131,14 @@ const OT_METRICS: OtMetricsResponse = {
         },
       ],
     },
+    // Causales tipificadas: los porcentajes NO suman 100 % a propósito — un rechazo puede llevar
+    // varias causales, y la vista lo rotula así.
+    rejectionByReasonCatalog: [
+      { reasonId: "rr1", code: "soat_no_vigente", description: "SOAT no vigente", rechazos: 12, pct: 66.7 },
+      { reasonId: "rr2", code: "improntas_borrosas", description: "Improntas están borrosas", rechazos: 7, pct: 38.9 },
+    ],
+    avgReasonsPerRejection: 1.06,
+    internalCycle: { avgHours: 38.5, p50Hours: 26, p90Hours: 96 },
   },
   previous: null,
   comparison: null,
@@ -268,6 +276,67 @@ describe("Reportes — pestañas según permisos RBAC", () => {
     expect(await screen.findByTestId("reportes-sin-permisos")).toHaveTextContent(/no tienes permisos/i);
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
     expect(mocks.fetchAnalyticsOverview).not.toHaveBeenCalled();
+  });
+});
+
+// ── Pestaña Uso del aplicativo ───────────────────────────────────────────────
+describe("Reportes — pestaña Uso del aplicativo", () => {
+  it("no muestra el consumo de APIs externas aunque el backend lo devuelva", async () => {
+    // Es telemetría de nuestras integraciones (URLs, latencias, tasa de error): operación
+    // nuestra, no información de la empresa. El endpoint sigue enviándola; la vista la ignora.
+    setPermissions(["reportes.uso.read"]);
+    mocks.fetchUsageMetrics.mockResolvedValue({
+      ...USAGE_EMPTY,
+      current: {
+        ...USAGE_EMPTY.current,
+        moduleUsage: [{ module: "tramites", events: 42, uniqueUsers: 7 }],
+        externalApis: [
+          {
+            endpoint: "https://quipux.example.gov.co/api/radicar",
+            direction: "outbound",
+            calls: 120,
+            errors: 9,
+            errorRatePct: 7.5,
+            avgDurationMs: 840,
+            p90DurationMs: 1900,
+          },
+        ],
+      },
+    });
+
+    render(<Reportes />);
+
+    // La pestaña sí tiene datos que pintar (módulos), así que no cae al estado vacío.
+    expect(await screen.findByTestId("modulos-mas-usados")).toBeInTheDocument();
+    expect(screen.queryByTestId("apis-externas-table")).not.toBeInTheDocument();
+    expect(screen.queryByText(/APIs externas/i)).not.toBeInTheDocument();
+    // Y no se filtra la URL del proveedor por ningún otro lado de la vista.
+    expect(screen.queryByText(/quipux\.example\.gov\.co/i)).not.toBeInTheDocument();
+  });
+
+  it("con solo APIs externas la pestaña se declara vacía, sin bloques huérfanos", async () => {
+    setPermissions(["reportes.uso.read"]);
+    mocks.fetchUsageMetrics.mockResolvedValue({
+      ...USAGE_EMPTY,
+      current: {
+        ...USAGE_EMPTY.current,
+        externalApis: [
+          {
+            endpoint: "https://quipux.example.gov.co/api/radicar",
+            direction: "outbound",
+            calls: 120,
+            errors: 9,
+            errorRatePct: 7.5,
+            avgDurationMs: 840,
+            p90DurationMs: 1900,
+          },
+        ],
+      },
+    });
+
+    render(<Reportes />);
+
+    expect(await screen.findByText(/aún no hay datos de uso registrados/i)).toBeInTheDocument();
   });
 });
 

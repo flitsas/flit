@@ -59,7 +59,7 @@ public interface IQuipuxSubmissionRepository
     /// Trámites elegibles aún sin submission: en estado <c>preparado</c>, cuyo tipo tiene mapeo
     /// Quipux (<c>procedure_types.external_refs-&gt;'quipux'</c>), y cuya SECRETARÍA DESTINO tiene
     /// <c>code_divipo</c> y la bandera encendida para la familia de ese trámite
-    /// (<c>quipux_matricula</c> / <c>quipux_traspaso</c> / <c>quipux_otros</c>).
+    /// (<c>quipux_registration</c> / <c>quipux_transfer</c> / <c>quipux_other</c>).
     /// </summary>
     /// <remarks>
     /// Es el equivalente 2.0 del <c>listQuipux</c> de FLIT 1.0, que filtraba por

@@ -14,9 +14,31 @@ public sealed class PrendaGateTests
     private static ProcedureInstancePrenda Prenda(string decision) =>
         new() { Decision = decision, Estado = PrendaEstado.Vigente };
 
+    private static ProcedureInstancePrenda PrendaLevantamientoCompleta(string? entidad) =>
+        new()
+        {
+            Decision = PrendaDecision.Levantar,
+            Estado = PrendaEstado.Vigente,
+            AcreedorNombre = "BANCO XYZ",
+            AcreedorDocumento = "890900608",
+            LevantamientoEntidad = entidad,
+        };
+
+    private static ProcedureInstancePrenda PrendaConAcreedor(
+        string decision, string? acreedorNombre, string? acreedorDocumento) =>
+        new()
+        {
+            Decision = decision,
+            Estado = PrendaEstado.Vigente,
+            AcreedorNombre = acreedorNombre,
+            AcreedorDocumento = acreedorDocumento,
+        };
+
     [Fact]
-    public void No_aplica_en_matricula()
+    public void Evaluate_no_aplica_en_matricula()
     {
+        // `Evaluate` es EXCLUSIVAMENTE del gate de traspaso (semáforo de gravámenes): en matrícula
+        // inicial el gate corre por EvaluateMatriculaInicial (HU #11592, ver más abajo), no por acá.
         PrendaGate.Evaluate(esTraspaso: false, hasGravamenWarn: true, prendaVigente: null, docTipos: [])
             .Should().BeNull();
     }
@@ -45,7 +67,12 @@ public sealed class PrendaGateTests
     [Fact]
     public void Decision_que_requiere_documento_con_adjunto_pasa()
     {
-        PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, Prenda("registrar"), docTipos: ["prenda_registro"])
+        // HU #11591: "registrar" también implica gravamen ⇒ exige acreedor diligenciado.
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(PrendaDecision.Registrar, "Banco X", "900123456"),
+                docTipos: ["prenda_registro"])
             .Should().BeNull();
     }
 
@@ -63,20 +90,69 @@ public sealed class PrendaGateTests
             .Should().BeNull();
     }
 
+    // ── HU #11591 — acreedor obligatorio en decisiones que constituyen gravamen ────────────────────
+
+    [Fact]
+    public void Solicitar_con_acreedor_completo_pasa()
+    {
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(PrendaDecision.Solicitar, "Banco X", "900123456"),
+                docTipos: ["prenda_solicitud"])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Registrar_sin_nombre_de_acreedor_bloquea()
+    {
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(PrendaDecision.Registrar, acreedorNombre: null, acreedorDocumento: "900123456"),
+                docTipos: ["prenda_registro"])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Fact]
+    public void Registrar_sin_documento_de_acreedor_bloquea()
+    {
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(PrendaDecision.Registrar, acreedorNombre: "Banco X", acreedorDocumento: null),
+                docTipos: ["prenda_registro"])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Theory]
+    [InlineData(PrendaDecision.Levantar)]
+    [InlineData(PrendaDecision.Omitir)]
+    [InlineData(PrendaDecision.SinPrenda)]
+    public void Decision_que_no_implica_gravamen_no_exige_acreedor(string decision)
+    {
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(decision, acreedorNombre: null, acreedorDocumento: null),
+                docTipos: decision == PrendaDecision.Levantar ? ["prenda_levantamiento"] : [])
+            .Should().NotBe(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
     // ── CF-06 (HU #10881) — override del OT, independiente del semáforo de gravámenes ───────────
 
     [Fact]
     public void OtOverride_Inactivo_NuncaBloquea()
     {
-        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: false, docTipos: [])
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: false, decision: "registrar", docTipos: [])
             .Should().BeNull();
     }
 
     [Fact]
     public void OtOverride_Activo_SinDocumento_Bloquea()
     {
-        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: [])
-            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: "registrar", docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
     }
 
     [Theory]
@@ -85,14 +161,253 @@ public sealed class PrendaGateTests
     [InlineData("prenda_levantamiento")]
     public void OtOverride_Activo_ConCualquierDocumentoDePrenda_Pasa(string docTipo)
     {
-        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: [docTipo])
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: "registrar", docTipos: [docTipo])
             .Should().BeNull();
     }
 
     [Fact]
     public void OtOverride_Activo_ConOtroDocumentoNoRelacionado_Bloquea()
     {
-        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: ["soat", "rtm"])
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: "registrar", docTipos: ["soat", "rtm"])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+    }
+
+    // ── 2026-08-12 — el override deja de exigir lo que la UI no ofrece cargar ────────────────────
+
+    /// <summary>
+    /// EL CASO REAL que motivó el cambio: matrícula inicial con <c>sin_prenda</c>, override del OT
+    /// activo (su valor por DEFECTO mientras nadie configure el opt-out) y ningún adjunto de prenda.
+    /// El trámite quedaba atascado en "Finalizar" exigiendo un documento que el paso de prenda no
+    /// ofrece cargar para esa decisión: sin vía para cumplirlo desde el trámite.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.SinPrenda)]
+    [InlineData(PrendaDecision.Omitir)]
+    public void OtOverride_ConDecisionQueNoPideDocumento_NoBloquea(string decision)
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision, docTipos: [])
+            .Should().BeNull(
+                "el paso de prenda no ofrece cargar documento para esta decisión: exigirlo deja al "
+                + "gestor sin forma de desbloquear el trámite");
+    }
+
+    /// <summary>
+    /// Sin decisión tomada el override NO calla: pide la decisión. Delegarlo en
+    /// <see cref="PrendaGate.Evaluate"/> solo cubría el traspaso con el semáforo en warn; en matrícula
+    /// inicial no hay ningún otro gate de prenda, así que callar aquí dejaba radicar sin el
+    /// certificado que el OT exige con solo no abrir el paso de prenda.
+    /// </summary>
+    [Fact]
+    public void OtOverride_SinDecision_ExigeLaDecision()
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: null, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    /// <summary>
+    /// Y lo pide aunque ya haya un documento de prenda adjunto: el adjunto no dice qué se decidió, y
+    /// el FUR y el trámite se arman a partir de la decisión, no del archivo.
+    /// </summary>
+    [Fact]
+    public void OtOverride_SinDecision_ExigeLaDecisionAunqueHayaDocumento()
+    {
+        PrendaGate.EvaluateOtOverride(
+                otRequiereDocumentoPrenda: true, decision: null, docTipos: ["prenda_registro"])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    /// <summary>Override inactivo: sin decisión tampoco bloquea, como siempre.</summary>
+    [Fact]
+    public void OtOverride_Inactivo_SinDecision_NoBloquea()
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: false, decision: null, docTipos: [])
+            .Should().BeNull();
+    }
+
+    /// <summary>
+    /// Lo que el override NO pierde: sigue siendo independiente del SEMÁFORO. Una matrícula inicial
+    /// que constituye prenda (vehículo nuevo financiado, sin gravamen previo que detectar) sigue
+    /// exigiendo su soporte — ahí `Evaluate` no llega, porque solo actúa en traspaso con warn.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.Solicitar)]
+    [InlineData(PrendaDecision.Registrar)]
+    [InlineData(PrendaDecision.Levantar)]
+    public void OtOverride_ConDecisionQuePideDocumento_SigueExigiendoloSinGravamenDetectado(string decision)
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+    }
+
+    /// <summary>
+    /// El conjunto que dispara el override tiene que ser EXACTAMENTE el mismo que usa la UI para
+    /// decidir si ofrece la carga. Si alguien añade una decisión a uno y no al otro, vuelve el
+    /// bloqueo insatisfacible — este test lo convierte en un fallo, no en un misterio en producción.
+    /// </summary>
+    [Fact]
+    public void OtOverride_SeDisparaExactamenteConElConjuntoQuePideDocumento()
+    {
+        var disparan = PrendaDecision.All
+            .Where(d => PrendaGate.EvaluateOtOverride(true, d, docTipos: [])
+                == TramiteEstadoErrores.PrendaDocumentoRequeridoOt)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        disparan.Should().BeEquivalentTo(PrendaDecision.RequierenDocumento);
+    }
+
+    // ── HU #11592 — bloqueo duro de prenda en matrícula inicial ────────────────────────────────
+    // Invierte deliberadamente la HU #10596 (prenda declarativa/informativa en matrícula, sin gate).
+    // Mismo núcleo que `Evaluate`, pero SIN depender del semáforo de gravámenes (irrelevante en un
+    // vehículo nuevo: el gravamen se constituye, no se detecta).
+
+    [Fact]
+    public void MatriculaInicial_ConDecisionSinPrenda_Avanza()
+    {
+        // AC1: matrícula inicial con decisión "sin_prenda" vigente avanza.
+        PrendaGate.EvaluateMatriculaInicial(Prenda(PrendaDecision.SinPrenda), docTipos: [])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void MatriculaInicial_SinNingunaDecision_Bloquea()
+    {
+        // AC2: sin prenda vigente registrada, el gate bloquea con independencia de cualquier
+        // semáforo de gravámenes (esta función ni siquiera lo recibe como parámetro).
+        PrendaGate.EvaluateMatriculaInicial(prendaVigente: null, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConSolicitarSinDocumento_ExigeDocumento()
+    {
+        // AC3 (rama documento): "solicitar" sin el adjunto de soporte bloquea por documento —el
+        // acreedor ni se evalúa porque el gate corta en el primer requisito insatisfecho.
+        PrendaGate.EvaluateMatriculaInicial(Prenda(PrendaDecision.Solicitar), docTipos: [])
             .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConSolicitarDocumentoSinAcreedor_ExigeAcreedor()
+    {
+        // AC3 (rama acreedor): con el documento adjunto pero sin acreedor diligenciado, el faltante
+        // pasa a ser el acreedor (HU #11591 también aplica en matrícula por el mismo núcleo).
+        PrendaGate.EvaluateMatriculaInicial(
+                PrendaConAcreedor(PrendaDecision.Solicitar, acreedorNombre: null, acreedorDocumento: null),
+                docTipos: ["prenda_solicitud"])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConRegistrarDocumentoYAcreedorCompletos_Avanza()
+    {
+        PrendaGate.EvaluateMatriculaInicial(
+                PrendaConAcreedor(PrendaDecision.Registrar, "Banco X", "900123456"),
+                docTipos: ["prenda_registro"])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConOmitir_AvanzaSinDocumento()
+    {
+        // "omitir" = asumo el riesgo: satisface el gate sin documento ni acreedor.
+        PrendaGate.EvaluateMatriculaInicial(Prenda(PrendaDecision.Omitir), docTipos: [])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Traspaso_ConSemaforoGreenYSinPrendaVigente_NoRegresiona()
+    {
+        // AC4 (no regresión) — R10/HU #10597: fuera de warn, `Evaluate` (traspaso) sigue sin bloquear
+        // aunque no haya prenda vigente registrada. El bloqueo duro de la HU #11592 es EXCLUSIVO de
+        // `EvaluateMatriculaInicial`; `Evaluate` conserva su comportamiento previo.
+        PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: false, prendaVigente: null, docTipos: [])
+            .Should().BeNull();
+    }
+
+    // ── Tipos prendarios de acción única (inscribir / levantar prenda) ──────────────────────────
+
+    [Fact]
+    public void AccionUnica_SinDecision_Bloquea()
+    {
+        // Estos trámites caían fuera de todo gate: el único cuyo objeto ES el gravamen podía
+        // radicarse sin decisión, sin acreedor y sin certificado.
+        PrendaGate.EvaluateAccionUnica(prendaVigente: null, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void AccionUnica_Levantar_ExigeCertificado()
+    {
+        PrendaGate.EvaluateAccionUnica(
+            PrendaConAcreedor(PrendaDecision.Levantar, "BANCO XYZ", "890900608"), docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public void AccionUnica_Levantar_ExigeAcreedor()
+    {
+        // La diferencia con traspaso: aquí el acreedor NO es opcional en un levantamiento, porque el
+        // numeral 20 «A FAVOR DE» y el bloque del párrafo 23 lo nombran. Sin él, el FUR sale marcado
+        // y mudo.
+        PrendaGate.EvaluateAccionUnica(
+            Prenda(PrendaDecision.Levantar), docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Fact]
+    public void AccionUnica_Levantar_ExigeLaEntidadAnteLaQueSeLevanto()
+    {
+        // Es lo que el párrafo 23 declara en este trámite: sin ella el recuadro sale mudo mientras la
+        // casilla 12 afirma que hubo levantamiento.
+        PrendaGate.EvaluateAccionUnica(
+            PrendaLevantamientoCompleta(entidad: null), docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().Be(TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida);
+    }
+
+    [Fact]
+    public void AccionUnica_Levantar_Completo_Avanza()
+    {
+        PrendaGate.EvaluateAccionUnica(
+            PrendaLevantamientoCompleta("NOTARÍA 15 DE MEDELLÍN"),
+            docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void AccionUnica_Registrar_ExigeAcreedorYCertificado()
+    {
+        PrendaGate.EvaluateAccionUnica(Prenda(PrendaDecision.Registrar), docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+
+        PrendaGate.EvaluateAccionUnica(
+            Prenda(PrendaDecision.Registrar), docTipos: [PrendaDocTipos.Registro])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+
+        PrendaGate.EvaluateAccionUnica(
+            PrendaConAcreedor(PrendaDecision.Registrar, "BANCO XYZ", "890900608"),
+            docTipos: [PrendaDocTipos.Registro])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Traspaso_ConLevantarSinAcreedor_SIGUE_Avanzando()
+    {
+        // No regresión deliberada: la exigencia de acreedor en el levantamiento es EXCLUSIVA de los
+        // tipos de acción única. En traspaso `levantar` es una elección entre varias sobre un
+        // vehículo que puede traer el dato incompleto, y ese flujo no se toca.
+        PrendaGate.Evaluate(
+            esTraspaso: true,
+            hasGravamenWarn: true,
+            Prenda(PrendaDecision.Levantar),
+            docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConLevantarSinAcreedor_SIGUE_Avanzando()
+    {
+        PrendaGate.EvaluateMatriculaInicial(
+            Prenda(PrendaDecision.Levantar), docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().BeNull();
     }
 }

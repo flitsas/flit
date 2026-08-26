@@ -117,7 +117,7 @@ beforeEach(() => {
 async function renderJuridicalBuyerWithNit(nit: string) {
   const user = userEvent.setup();
   render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-  await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+  await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
   // El input principal de identificación (no el del representante legal) se distingue por placeholder.
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), nit);
   return user;
@@ -199,6 +199,14 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     // demás campos "Correo electrónico" (el del representante legal ya viene precargado) — y guarda.
     const actorEmail = document.getElementById('comprador-email') as HTMLInputElement;
     await user.type(actorEmail, 'contacto@valle.co');
+    // HU #11595 — ciudad, dirección y teléfono del actor también son obligatorios. El teléfono se
+    // distingue por id: el representante legal (precargado) también trae un input "Teléfono".
+    await user.type(
+      document.getElementById('comprador-telefono') as HTMLInputElement,
+      '3001234567',
+    );
+    await user.type(screen.getByLabelText(/^Ciudad/), 'Bogota');
+    await user.type(screen.getByLabelText(/^Dirección/), 'Calle 1 # 2-3');
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
     await waitFor(() => expect(mocks.saveActors).toHaveBeenCalled());
@@ -238,5 +246,8 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     expect(
       screen.queryByText('Precargado desde el directorio de la compañía'),
     ).toBeNull();
+    const razon = await screen.findByLabelText(/razón social/i);
+    expect(razon).toHaveValue('Empresa Externa SAS');
+    expect(razon).toHaveAttribute('readonly');
   });
 });

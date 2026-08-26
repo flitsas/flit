@@ -1,79 +1,90 @@
 'use client';
 
-import { ChevronRight } from 'lucide-react';
+import {
+  BadgeCheck,
+  Ban,
+  CheckCircle2,
+  FileCheck2,
+  FileText,
+  Sparkles,
+  XCircle,
+} from 'lucide-react';
 import {
   ESTADO_CHIP_STYLES,
   ESTADO_LABELS,
   type EstadoTramite,
 } from '@/lib/tramites/estados';
-import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
-
 /**
- * Funnel de estados del listado de trámites (paridad con el diseño flit-2.0-main):
- * una fila de tarjetas por estado de negocio con su conteo y color, que además
- * actúa como filtro (toggle) por estado. La fuente de labels/colores es
- * `lib/tramites/estados.ts` (los 6 estados de negocio, ADR-0022).
+ * Tira de KPIs por estado de la pantalla principal de trámites: una tarjeta única
+ * dividida en columnas, con icono, etiqueta y conteo por estado (solo lectura).
+ * El filtro por estado vive en el popover "+ Filtro" (`flit-tramites-chrome`).
+ * Labels/colores desde `lib/tramites/estados.ts`.
  */
 
-// Orden de embudo (ciclo de vida): borrador → preparado → entregado → aprobado,
-// con los desenlaces (rechazado/anulado) al final.
+// Orden del ciclo de vida: borrador → preparado → entregado → aprobado, con la
+// reapertura (subsanación) y los desenlaces (rechazado/anulado) al final.
 // La ruta de placa (Feature #10587 / HU #10785) NO añade tarjetas: su progreso es un sub-estado
-// interno que vive bajo 'entregado' (se muestra como badge secundario en la fila, no en el funnel).
+// interno que vive bajo 'entregado' (se muestra como badge secundario en la fila).
 const FUNNEL_ORDER: EstadoTramite[] = [
   'borrador',
   'preparado',
   'entregado',
   'aprobado',
+  'subsanacion',
   'rechazado',
   'anulado',
 ];
 
+const ESTADO_ICON: Record<EstadoTramite, typeof FileText> = {
+  borrador: FileText,
+  preparado: FileCheck2,
+  entregado: BadgeCheck,
+  aprobado: CheckCircle2,
+  subsanacion: Sparkles,
+  rechazado: XCircle,
+  anulado: Ban,
+};
+
 export interface EstadoFunnelProps {
   /** Conteo por estado (calculado sobre el total de trámites). */
   counts: Record<EstadoTramite, number>;
-  /** Estado activo del filtro ('' = todos). */
-  active: '' | InstanceStatus;
-  /** Alterna el filtro por estado. */
-  onSelect: (estado: '' | InstanceStatus) => void;
 }
 
-export function EstadoFunnel({ counts, active, onSelect }: EstadoFunnelProps) {
+/** Tira de KPIs display-only (`flit-tramites-chrome`): el filtro por estado vive en "+ Filtro". */
+export function EstadoFunnel({ counts }: EstadoFunnelProps) {
   return (
     <div
       role="group"
       aria-label="Estados de los trámites"
-      className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8"
+      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
     >
-      {FUNNEL_ORDER.map((estado, i) => {
+      {FUNNEL_ORDER.map((estado) => {
         const style = ESTADO_CHIP_STYLES[estado];
-        const isActive = active === estado;
+        const Icon = ESTADO_ICON[estado];
+        const label = ESTADO_LABELS[estado];
+        const count = counts[estado] ?? 0;
         return (
-          <button
+          <div
             key={estado}
-            type="button"
-            aria-label={ESTADO_LABELS[estado]}
-            aria-pressed={isActive}
-            onClick={() => onSelect(isActive ? '' : estado)}
-            className="relative rounded-xl border border-[#DFE5ED] bg-white p-3 text-center transition hover:border-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14]"
-            style={
-              isActive
-                ? { borderColor: style.color, background: style.bg }
-                : undefined
-            }
+            aria-label={`${label}: ${count} trámite${count === 1 ? '' : 's'}`}
+            className="flex flex-col items-center gap-1 px-2 py-2"
           >
-            <p className="truncate text-[10px] font-medium opacity-70">
-              {ESTADO_LABELS[estado]}
-            </p>
-            <p className="mt-1 text-xl font-bold" style={{ color: style.color }}>
-              {counts[estado] ?? 0}
-            </p>
-            {i < FUNNEL_ORDER.length - 1 && (
-              <ChevronRight
-                className="absolute -right-[9px] top-1/2 hidden h-3 w-3 -translate-y-1/2 opacity-30 lg:block"
-                aria-hidden="true"
-              />
-            )}
-          </button>
+            <span
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
+              style={{ background: `${style.accent}1F` }}
+            >
+              <Icon className="h-3.5 w-3.5" style={{ color: style.accent }} aria-hidden="true" />
+            </span>
+            <span className="max-w-full truncate text-[10px] font-medium opacity-70 text-[#162744] dark:text-white/70">
+              {label}
+            </span>
+            <span
+              className="text-lg font-bold leading-none tabular-nums text-[#1E293B] dark:text-white"
+              aria-hidden="true"
+            >
+              {count}
+            </span>
+          </div>
         );
       })}
     </div>

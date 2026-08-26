@@ -12,9 +12,21 @@ public sealed class TenantOperationalPolicy
 
     public bool AllowInitialRegistration { get; set; }
 
+    /// <summary>Bloquea creación de trámites familia TRASPASO.</summary>
+    public bool BlockProcedureFamilyTraspaso { get; set; }
+
+    /// <summary>Bloquea creación de trámites familia OTROS.</summary>
+    public bool BlockProcedureFamilyOtros { get; set; }
+
     public bool AllowMiscNewVehicles { get; set; } = true;
 
     public bool OnlyOwnVehicles { get; set; }
+
+    /// <summary>Solo vehículos propios — familia MATRICULAS.</summary>
+    public bool OnlyOwnVehiclesMatriculas { get; set; }
+
+    /// <summary>Solo vehículos propios — familia OTROS.</summary>
+    public bool OnlyOwnVehiclesOtros { get; set; }
 
     public bool SignatureVaultEnabled { get; set; }
 
@@ -27,7 +39,35 @@ public sealed class TenantOperationalPolicy
     /// </summary>
     public bool PlateFlowSkipToTerminado { get; set; }
 
+    /// <summary>
+    /// Al procesar en sub-estado asignado se consulta el SOAT en el RUNT y, sin SOAT vigente, el
+    /// avance se detiene. Desactivada, el hallazgo solo se informa y el tramite continua.
+    /// </summary>
+    public bool ValidateSoatWithRunt { get; set; }
+
     public string NotificationChannel { get; set; } = "flit_smtp";
+
+    /// <summary>
+    /// Interruptor propio de documentos personalizados por compañía (HU #11357, Feature #11348).
+    /// Sustituye el uso de <see cref="NotificationChannel"/> = <c>tenant_api</c> como interruptor de
+    /// facto. OJO: el ADR-0042 declara que el interruptor ES la versión activa por (tenant, tipo) y
+    /// que no hay booleano paralelo; la contradicción se resuelve en el ADR-0043 (HU #11362), no
+    /// aquí. Su consumo llega con la HU #11362.
+    /// </summary>
+    public bool PersonalizedDocumentsEnabled { get; set; }
+
+    /// <summary>Avisos de correo al aprobar un trámite. Default true.</summary>
+    public bool TramiteApprovedEmailsEnabled { get; set; } = true;
+
+    /// <summary>Avisos de correo al rechazar un trámite. Default true.</summary>
+    public bool TramiteRejectedEmailsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Destinatarios combinables (jsonb). Forma:
+    /// <c>{"comprador":true,"vendedorOPropietario":true,"radicador":true,"extraEmail":null}</c>.
+    /// </summary>
+    public string TramiteStateEmailRecipients { get; set; } =
+        """{"comprador":true,"vendedorOPropietario":true,"radicador":true,"extraEmail":null}""";
 
     public string NotificationTarget { get; set; } = "submitter";
 

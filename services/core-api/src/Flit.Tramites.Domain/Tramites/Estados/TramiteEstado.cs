@@ -40,6 +40,18 @@ public static class TramiteEstado
     /// </summary>
     public static readonly IReadOnlyList<string> EstadosEnProceso = [Borrador, Preparado, Entregado];
 
+    /// <summary>
+    /// Estados que LIBERAN la placa: un trámite en estos estados ya no la retiene y la placa puede
+    /// asignarse a otro trámite. Cualquier otro estado (borrador, preparado, entregado, aprobado) la
+    /// mantiene ocupada — una placa no puede estar viva en dos trámites a la vez.
+    /// </summary>
+    public static readonly IReadOnlyList<string> EstadosQueLiberanPlaca = [Rechazado, Anulado];
+
+    /// <summary>¿Un trámite en <paramref name="estado"/> retiene la placa e impide reasignarla?</summary>
+    public static bool OcupaPlaca(string? estado) =>
+        estado is not null
+        && !EstadosQueLiberanPlaca.Contains(estado, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>¿<paramref name="estado"/> es un estado de negocio conocido?</summary>
     public static bool EsValido(string? estado) =>
         estado is not null && Todos.Contains(estado, StringComparer.Ordinal);

@@ -88,3 +88,54 @@ describe("DeedsFormPanel (HU #10929)", () => {
     expect(input.companyIds).toEqual(["co-1"]);
   });
 });
+
+// Novedad nov.10 — la obligatoriedad de los campos existía pero era invisible: ningún input
+// llevaba asterisco ni `aria-required`, y no había mensaje de error por campo.
+describe("DeedsFormPanel — indicación de campos obligatorios (novedad nov.10)", () => {
+  it("marca descripción, vigencia desde/hasta y PDF (en alta) como obligatorios vía aria-required", () => {
+    renderPanel();
+
+    expect(screen.getByLabelText(/descripción/i)).toHaveAttribute("aria-required", "true");
+    expect(screen.getByLabelText(/vigencia desde/i)).toHaveAttribute("aria-required", "true");
+    expect(screen.getByLabelText(/vigencia hasta/i)).toHaveAttribute("aria-required", "true");
+    // El input de archivo también queda marcado como obligatorio en alta.
+    const fileInput = document.getElementById("deed-file");
+    expect(fileInput).toHaveAttribute("aria-required", "true");
+  });
+
+  it("en edición el PDF NO se marca como obligatorio (se conserva el custodiado si no se reemplaza)", () => {
+    renderPanel({
+      editing: {
+        id: "deed-1",
+        description: "Poder general",
+        vigenciaDesde: "2025-01-01",
+        vigenciaHasta: "2026-01-01",
+      },
+    });
+
+    const fileInput = document.getElementById("deed-file");
+    expect(fileInput).not.toHaveAttribute("aria-required");
+    expect(screen.getByText(/opcional: reemplaza el actual/i)).toBeInTheDocument();
+  });
+
+  it("al intentar registrar con campos vacíos, muestra un mensaje de error por cada campo obligatorio y NO envía", async () => {
+    const { onSubmit } = renderPanel();
+
+    // El botón no está deshabilitado: al hacer click revela los errores en vez de bloquear
+    // silenciosamente la interacción.
+    const submitBtn = screen.getByRole("button", { name: /registrar escritura/i });
+    expect(submitBtn).not.toBeDisabled();
+    await userEvent.click(submitBtn);
+
+    expect(await screen.findByText("La descripción es obligatoria.")).toBeInTheDocument();
+    expect(screen.getByText("La vigencia desde es obligatoria.")).toBeInTheDocument();
+    expect(screen.getByText("La vigencia hasta es obligatoria.")).toBeInTheDocument();
+    expect(screen.getByText("El documento PDF es obligatorio.")).toBeInTheDocument();
+
+    const description = screen.getByLabelText(/descripción/i);
+    expect(description).toHaveAttribute("aria-invalid", "true");
+    expect(description).toHaveAttribute("aria-describedby", "deed-description-error");
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});

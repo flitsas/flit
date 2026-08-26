@@ -20,7 +20,8 @@ namespace Flit.Ict.Infrastructure.Jobs;
 public sealed class OrchestratorJob(
     IServiceScopeFactory scopeFactory,
     IOptions<IctJobOptions> options,
-    ILogger<OrchestratorJob> logger) : IctPollingJob(scopeFactory, options, logger)
+    IIctJobSettingsProvider settings,
+    ILogger<OrchestratorJob> logger) : IctPollingJob(scopeFactory, options, settings, logger)
 {
     /// <summary>Tope de reintentos por fuente ante fallo TÉCNICO (core-api caído/timeout); al agotar, novedad.</summary>
     private const int MaxAttempts = 3;
@@ -29,7 +30,7 @@ public sealed class OrchestratorJob(
         Guid Id, Guid MasterId, Guid TenantId, string QueryType,
         string Plate, string Vin, string DocumentType, string DocumentNumber, int TransactionType, short Attempts);
 
-    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(Options.OrchestratorPollSeconds);
+    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(JobSettings.OrchestratorPollSeconds);
 
     protected override string JobName => "orchestrator";
 
@@ -37,7 +38,7 @@ public sealed class OrchestratorJob(
         // Advisory lock: guarda multi-réplica (solo una instancia consulta el lote por ciclo).
         RunUnderAdvisoryLockAsync(scope, IctAdvisoryLock.Keys.Orchestrator, async connection =>
         {
-            var pending = await ReadPendingAsync(connection, ct);
+            var pending = await ReadPendingAsync(connection, JobSettings.OrchestratorBatchSize, ct);
             if (pending.Count == 0)
             {
                 return;
@@ -45,8 +46,8 @@ public sealed class OrchestratorJob(
 
             var currentYear = DateTime.UtcNow.Year;
             // Concurrencia: las consultas a fuentes externas (gRPC, lo lento) corren en paralelo, cada una
-            // en su propio scope/conexión (thread-safe). El semáforo acota el paralelismo.
-            using var gate = new SemaphoreSlim(Math.Max(1, Options.OrchestratorConcurrency));
+            // en su propio scope/conexión (thread-safe). El semáforo acota el paralelismo (configurable en BD).
+            using var gate = new SemaphoreSlim(Math.Max(1, JobSettings.OrchestratorConcurrency));
             await Task.WhenAll(pending.Select(q => ProcessQueryAsync(gate, q, currentYear, ct)));
         }, ct);
 
@@ -142,7 +143,7 @@ public sealed class OrchestratorJob(
         }
     }
 
-    private static async Task<List<PendingQuery>> ReadPendingAsync(DbConnection connection, CancellationToken ct)
+    private static async Task<List<PendingQuery>> ReadPendingAsync(DbConnection connection, int limit, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
@@ -152,9 +153,10 @@ public sealed class OrchestratorJob(
             JOIN ict.external_integration_master m ON m.id = sq.eim_id
             WHERE sq.is_data_queried = false AND sq.attempts < @max
             ORDER BY sq.created_at
-            LIMIT 50
+            LIMIT @limit
             """;
         AddParam(cmd, "max", (short)MaxAttempts);
+        AddParam(cmd, "limit", limit);
         var list = new List<PendingQuery>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))

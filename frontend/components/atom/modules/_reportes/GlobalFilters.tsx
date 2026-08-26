@@ -2,10 +2,15 @@
 
 // Filtros globales persistentes de Reportes 2.0 (HU-C): elevados sobre las pestañas,
 // se conservan al cambiar de pestaña. Rango de fechas + compañía (SuperAdmin) +
-// comparación de periodos + filtros adicionales ocultables (OT/tipo/operador por ID,
-// sin catálogo disponible todavía).
-import { useState } from "react";
+// comparación de periodos + filtros adicionales ocultables (OT y operador por ID).
+import { useEffect, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
+import {
+  TipoTramiteSelect,
+  agruparTiposTramite,
+  type GrupoTiposTramite,
+} from "@/components/consultas/tipo-tramite";
+import { tramitesClient } from "@/lib/api/tramites-client";
 import type { CompanyListItem } from "@/lib/api/types";
 import { CompanySelector } from "./CompanySelector";
 import { DateRangeFilter } from "./DateRangeFilter";
@@ -16,13 +21,38 @@ export interface GlobalFiltersProps {
   onChange: (next: ReportFilters) => void;
   isSuper: boolean;
   companies: CompanyListItem[];
+  /**
+   * Deja solo el selector de compañía.
+   *
+   * «Consultas» lleva su propio periodo dentro, sobre la fecha que el usuario elige. Dejar aquí
+   * arriba un rango que no cambia ni un número es exactamente la promesa falsa que obligó a partir
+   * la consola del organismo en pestañas: un selector de fechas presidiendo algo que no gobierna
+   * enseña a desconfiar de todos los filtros de la pantalla.
+   */
+  onlyCompany?: boolean;
 }
 
 const inputClass =
   "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-[#162744] outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white";
 
-export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalFiltersProps) {
+export function GlobalFilters({
+  filters,
+  onChange,
+  isSuper,
+  companies,
+  onlyCompany = false,
+}: GlobalFiltersProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [tiposTramite, setTiposTramite] = useState<GrupoTiposTramite[]>([]);
+
+  // El catálogo es global (ADR-0019) y no depende ni del rango ni de la compañía, así que se pide
+  // una vez. Si falla se queda vacío: se pierde un filtro, no la pantalla.
+  useEffect(() => {
+    tramitesClient
+      .listPublishedProcedureTypes()
+      .then((tipos) => setTiposTramite(agruparTiposTramite(tipos)))
+      .catch(() => setTiposTramite([]));
+  }, []);
 
   function patch(partial: Partial<ReportFilters>) {
     onChange({ ...filters, ...partial });
@@ -31,7 +61,9 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-3">
-        <DateRangeFilter value={filters.range} onChange={(range) => patch({ range })} />
+        {!onlyCompany && (
+          <DateRangeFilter value={filters.range} onChange={(range) => patch({ range })} />
+        )}
 
         {isSuper && (
           <CompanySelector
@@ -42,6 +74,7 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
           />
         )}
 
+        {!onlyCompany && (
         <div className="flex flex-col gap-1">
           <label htmlFor="reportes-comparar" className="text-[10px] font-semibold uppercase opacity-60">
             Comparar con
@@ -58,7 +91,9 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
             <option value="previous_year">Año anterior</option>
           </select>
         </div>
+        )}
 
+        {!onlyCompany && (
         <button
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
@@ -68,9 +103,10 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
           <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
           {showAdvanced ? "Ocultar filtros" : "Más filtros"}
         </button>
+        )}
       </div>
 
-      {showAdvanced && (
+      {showAdvanced && !onlyCompany && (
         <div className="flex flex-wrap items-end gap-3" data-testid="reportes-filtros-avanzados">
           <AdvancedInput
             id="reportes-filtro-ot"
@@ -78,12 +114,28 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
             value={filters.transitOfficeId}
             onChange={(transitOfficeId) => patch({ transitOfficeId })}
           />
-          <AdvancedInput
-            id="reportes-filtro-tipo"
-            label="Tipo de trámite (ID)"
-            value={filters.procedureTypeId}
-            onChange={(procedureTypeId) => patch({ procedureTypeId })}
-          />
+          <div className="flex flex-col gap-1">
+            <label htmlFor="reportes-filtro-tipo" className="text-[10px] font-semibold uppercase opacity-60">
+              Tipo de trámite
+            </label>
+            {/*
+              Era un campo de texto donde había que pegar el UUID del tipo a mano — practicable con
+              dos tipos en el catálogo, inservible con veintiuno. El desplegable los agrupa por
+              familia porque una lista plana de veintiuno obliga a saberse de memoria cuál es cuál.
+
+              `permitirFamilia` va en false a propósito: estas métricas solo saben filtrar por un
+              tipo concreto, y ofrecer «toda la familia» devolvería el informe sin filtrar con
+              pinta de estar filtrado. Los encabezados siguen agrupando.
+            */}
+            <TipoTramiteSelect
+              id="reportes-filtro-tipo"
+              grupos={tiposTramite}
+              permitirFamilia={false}
+              value={{ tipoId: filters.procedureTypeId || undefined }}
+              onChange={(sel) => patch({ procedureTypeId: sel.tipoId ?? "" })}
+              className={`${inputClass} min-w-[200px]`}
+            />
+          </div>
           <AdvancedInput
             id="reportes-filtro-operador"
             label="Operador (ID)"

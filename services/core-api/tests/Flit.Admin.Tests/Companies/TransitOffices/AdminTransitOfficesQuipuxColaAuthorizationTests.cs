@@ -145,7 +145,7 @@ public sealed class AdminTransitOfficesQuipuxColaAuthorizationTests
             Id = tenantId,
             Code = $"OT-QX-{Guid.NewGuid():N}"[..20],
             LegalName = "OT Cola QX auth tests",
-            TaxId = "900999999-9",
+            TaxId = TestNit.Unique(),
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

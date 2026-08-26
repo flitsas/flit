@@ -26,7 +26,8 @@ public static class AdminLegalRepresentativesEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/legal-representatives")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Representantes Legales");
 
         // GET — listado paginado de representantes del tenant ({ data, totalCount, page, pageSize }).
@@ -149,6 +150,7 @@ public static class AdminLegalRepresentativesEndpoints
             Phone = request.Phone,
             ProcedureTypeIds = request.ProcedureTypeIds ?? [],
             Companies = request.Companies,
+            SignatureVaultId = request.SignatureVaultId,
             ActorBy = ResolveUserId(httpContext.User),
         };
 
@@ -195,6 +197,7 @@ public static class AdminLegalRepresentativesEndpoints
             Phone = request.Phone,
             ProcedureTypeIds = request.ProcedureTypeIds ?? [],
             Companies = request.Companies,
+            SignatureVaultId = request.SignatureVaultId,
             ActorBy = ResolveUserId(httpContext.User),
         };
 

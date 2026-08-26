@@ -32,6 +32,13 @@ public sealed class ActorsHandlerTests
 
     public ActorsHandlerTests()
     {
+        _repo.ListInFlightByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureInstanceBiometricValidation>());
+        _repo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+
         _kyverumHandler = new IniciarKyverumVerifyHandler(
             _repo,
             _kyverumClient,
@@ -55,13 +62,12 @@ public sealed class ActorsHandlerTests
         string? tipologia = null) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

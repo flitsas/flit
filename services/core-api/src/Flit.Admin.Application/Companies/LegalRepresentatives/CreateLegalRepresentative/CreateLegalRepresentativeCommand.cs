@@ -43,5 +43,11 @@ public sealed class CreateLegalRepresentativeCommand
     /// <summary>Compañías del representante (HU #10932): lista anidada si viene; si no, la compañía única.</summary>
     public IReadOnlyList<LegalRepresentativeCompanyInput>? Companies { get; init; }
 
+    /// <summary>
+    /// Firma del baúl elegida explícitamente (HU #11175, AC3). Si viene, el writer la valida contra
+    /// tenencia, documento del representante, activa y vigente; si no viene, la resuelve el sistema.
+    /// </summary>
+    public Guid? SignatureVaultId { get; init; }
+
     public Guid? ActorBy { get; init; }
 }

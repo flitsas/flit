@@ -47,6 +47,9 @@ export function CompanyListTable({
               Razón Social
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              Tipo
+            </th>
+            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
               Estado
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
@@ -61,7 +64,7 @@ export function CompanyListTable({
           {items.map((c) => {
             // Solo las compañías del catálogo B2B son editables; los tenants de tipo
             // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
-            const editable = isB2BTenantType(c.tenantType);
+            const editable = isB2BTenantType(c.tenantType) && !c.isTransitOffice;
             return (
             <tr key={c.id} className="bg-white dark:bg-[#0B0F14]">
               <td className="border-y border-l px-4 py-3 font-mono rounded-l-xl">
@@ -69,6 +72,13 @@ export function CompanyListTable({
               </td>
               <td className="border-y px-4 py-3 font-semibold">
                 {c.razonSocial}
+              </td>
+              <td className="border-y px-4 py-3">
+                {c.isTransitOffice ? (
+                  <StatusBadge label="OT" tone="info" ariaLabel="Tipo: Organismo de Tránsito" />
+                ) : (
+                  <StatusBadge label="Empresa" tone="neutral" ariaLabel="Tipo: Empresa" />
+                )}
               </td>
               <td className="border-y px-4 py-3">
                 {c.estadoActivo ? (

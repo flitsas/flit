@@ -1,6 +1,8 @@
 using Flit.Infrastructure.Documents;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Xunit;
 
@@ -8,8 +10,8 @@ namespace Flit.Infrastructure.Tests.Documents;
 
 /// <summary>
 /// HU #10915 (ADR-0036) — smoke tests del generador del Contrato de Mandato: produce un PDF real (tipo
-/// <c>mandato</c>) para las tres variantes (genérica/Sabaneta/Bello) × persona natural/jurídica, oculta
-/// las firmas en borrador y no falla sin firmante resuelto (estado preparado) ni sin parte radicadora.
+/// <c>mandato</c>) para las tres variantes (genérica/Sabaneta/Bello) × persona natural/jurídica y no
+/// falla sin firmante resuelto (estado preparado) ni sin parte radicadora.
 /// (La verificación del contenido textual se hace fuera del test, con render — sin dependencia de un
 /// lector de PDF en el proyecto de pruebas, igual que <see cref="SolicitudVirtualPdfGeneratorTests"/>.)
 /// </summary>
@@ -17,8 +19,12 @@ public sealed class MandatoPdfGeneratorTests
 {
     private static readonly MandatoPdfGenerator Generator = new();
 
+    /// <summary>PNG 1×1 válido: QuestPDF decodifica la imagen de verdad, no basta con bytes sueltos.</summary>
+    private static readonly byte[] FirmaPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
     private static FurDocumentData DataWith(
-        DocumentParte? parte, bool firmasVisibles = true, string codigo = "MATRICULA_NUEVA") =>
+        DocumentParte? parte, string codigo = "MATRICULA_NUEVA") =>
         new(
             ProcedureInstanceId: Guid.NewGuid(),
             ReferenceNumber: "REF-2026-1",
@@ -30,7 +36,7 @@ public sealed class MandatoPdfGeneratorTests
             ValorVenta: null,
             Causal: null,
             SellosFirma: [],
-            FirmasVisibles: firmasVisibles);
+            TemplateFormat: FurTemplateFormat.Automotor);
 
     private static DocumentParte Natural() =>
         new("comprador", "Juan Pérez", "123456", "juan@x.com", "CC", "3001112233");
@@ -44,15 +50,16 @@ public sealed class MandatoPdfGeneratorTests
             RepresentanteLegalDocumento: "52123456");
 
     private static MandatoData Mandato(
-        DocumentParte? parte, string template, bool firmasVisibles = true,
+        DocumentParte? parte, string template,
         MandatarioFirmante? mandatario = null, string? instName = null, string? instNit = null,
         string codigo = "MATRICULA_NUEVA") =>
-        new(DataWith(parte, firmasVisibles, codigo), template, instName, instNit, mandatario);
+        new(DataWith(parte, codigo), template, instName, instNit, mandatario);
 
     [Theory]
     [InlineData("generico")]
     [InlineData("sabaneta")]
     [InlineData("bello")]
+    [InlineData("municipio")]
     public void ProducesMandatoPdf_ForNaturalAndJuridica(string template)
     {
         var firmante = new MandatarioFirmante("Carlos Ruiz", "70111222");
@@ -70,6 +77,32 @@ public sealed class MandatoPdfGeneratorTests
     }
 
     [Fact]
+    public void Municipio_ElObjetoLlevaConDespuesDelTramiteBase()
+    {
+        // Misma redacción que el simulador (Funza/Envigado): "radicación y reclamación del trámite de …"
+        var data = MandatoPreviewSample.Build(
+            MandatoTemplateResolver.Municipio,
+            esJuridica: true,
+            tipologiaCodigo: "TRASPASO_STANDARD",
+            datosDeMuestra: true,
+            procedureTypeName: "Traspaso",
+            procedureFamily: "TRASPASO",
+            prendaMarking: FurPrendaMarking.Levantamiento,
+            transformaciones:
+            [
+                MandatoObjetoComposer.CambioColor,
+                MandatoObjetoComposer.CambioCarroceria,
+                MandatoObjetoComposer.Blindaje,
+            ]);
+
+        MandatoPdfGenerator.ComponerObjeto(data).Should().Be(
+            "TRASPASO CON LEVANTAMIENTO DE PRENDA, CAMBIO DE COLOR, CAMBIO DE CARROCERÍA Y BLINDAJE");
+
+        var pdf = Generator.GenerateMandato(data);
+        pdf.Content.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public void TraspasoTipologia_ProducesMandato()
     {
         var doc = Generator.GenerateMandato(Mandato(
@@ -79,14 +112,51 @@ public sealed class MandatoPdfGeneratorTests
     }
 
     [Fact]
-    public void HidesSignatures_WhenBorrador_AndDoesNotThrow_WithoutSignerOrRadicador()
+    public void ConFirmaDelBaul_EnMandanteYMandatario_GeneraElPdfConSuTrazabilidad()
     {
-        // Preparado/borrador: firmas ocultas y sin mandatario resuelto (placeholders), aún genera el PDF.
-        Generator.GenerateMandato(Mandato(Natural(), "generico", firmasVisibles: false))
-            .Content.Should().NotBeEmpty();
+        // HU #11170 — el mandato pintaba la imagen del baúl y nada más. Aquí se comprueba que el bloque
+        // acepta los metadatos de AMBOS firmantes sin romper el layout; que el texto salga impreso se
+        // verifica con render (el proyecto de pruebas no lee PDFs).
+        var meta = new FirmaBaulMetadata(
+            "52123456", "Ana Gómez", new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), Guid.NewGuid(), "ABC-123");
+        var parte = Juridica();
+        var tramite = DataWith(parte) with
+        {
+            FirmaImagenes = new Dictionary<string, byte[]> { [parte.Rol] = FirmaPng },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                [parte.Rol] = meta,
+            },
+        };
+        var mandatario = new MandatarioFirmante("Carlos Ruiz", "70111222", FirmaPng, null, meta);
 
+        foreach (var template in new[] { "generico", "sabaneta", "bello", "municipio" })
+        {
+            var doc = Generator.GenerateMandato(
+                new MandatoData(tramite, template, "UT-SETSA", "900111222", mandatario));
+            doc.Content.Should().NotBeEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Las firmas del mandato y de la solicitud virtual se ven en TODOS los estados. Se fija como
+    /// invariante estructural —el modelo del documento no transporta ningún interruptor de estado— y no
+    /// como un caso de uso, porque lo que había que eliminar era precisamente la posibilidad de que el
+    /// estado decidiera: mientras el dato no exista, nadie puede volver a condicionar el recuadro.
+    /// </summary>
+    [Fact]
+    public void ElModeloDelDocumentoNoLlevaInterruptorDeFirmasPorEstado()
+    {
+        typeof(FurDocumentData).GetProperties()
+            .Select(p => p.Name)
+            .Should().NotContain("FirmasVisibles");
+    }
+
+    [Fact]
+    public void DoesNotThrow_WithoutSignerOrRadicador()
+    {
         // Sin parte radicadora: usa placeholders, no lanza (las tres variantes).
-        foreach (var template in new[] { "generico", "sabaneta", "bello" })
+        foreach (var template in new[] { "generico", "sabaneta", "bello", "municipio" })
             Generator.GenerateMandato(Mandato(null, template)).Content.Should().NotBeEmpty();
     }
 }

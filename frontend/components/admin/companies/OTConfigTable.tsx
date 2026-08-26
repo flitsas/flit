@@ -30,6 +30,13 @@ export interface OTConfigTableProps {
   operationalById?: Record<string, OtOperationalInfo>;
   /** Persiste el cambio de grant (POST si enabled, DELETE si !enabled). */
   onToggleGrant: (officeId: string, enabled: boolean) => Promise<void>;
+  /**
+   * Ids de OT con los que la compañía tiene CONVENIO comercial. Distinto de `grantedIds`: aquel
+   * habilita la radicación, este decide si el contrato de mandato lleva bloque de firma del mandatario.
+   */
+  agreementIds?: string[];
+  /** Persiste el cambio de convenio. Sin este callback la columna no se pinta. */
+  onToggleAgreement?: (officeId: string, active: boolean) => Promise<void>;
   /** Abre el modal unificado de configuración (bloqueos + restricciones) scoped a ese OT. */
   onOpenConfig: (office: TransitOffice) => void;
   /** Notificación opcional de error de persistencia (toast). */
@@ -55,6 +62,8 @@ function operability(
 export function OTConfigTable({
   offices,
   grantedIds,
+  agreementIds = [],
+  onToggleAgreement,
   operationalById,
   onToggleGrant,
   onOpenConfig,
@@ -65,6 +74,38 @@ export function OTConfigTable({
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   // IDs con confirmación "Guardado" visible unos segundos tras persistir con éxito.
   const [justSaved, setJustSaved] = useState<Set<string>>(() => new Set());
+  const [agreements, setAgreements] = useState<Set<string>>(() => new Set(agreementIds));
+  const [pendingAgreement, setPendingAgreement] = useState<Set<string>>(() => new Set());
+
+  /** Conmuta el convenio con UI optimista y rollback, igual que el grant. */
+  const handleToggleAgreement = async (office: TransitOffice) => {
+    const activar = !agreements.has(office.id);
+    setAgreements((current) => {
+      const next = new Set(current);
+      if (activar) next.add(office.id);
+      else next.delete(office.id);
+      return next;
+    });
+    setPendingAgreement((current) => new Set(current).add(office.id));
+
+    try {
+      await onToggleAgreement!(office.id, activar);
+    } catch {
+      setAgreements((current) => {
+        const next = new Set(current);
+        if (activar) next.delete(office.id);
+        else next.add(office.id);
+        return next;
+      });
+      onError?.(`No se pudo ${activar ? "marcar" : "quitar"} el convenio con ${office.name}.`);
+    } finally {
+      setPendingAgreement((current) => {
+        const next = new Set(current);
+        next.delete(office.id);
+        return next;
+      });
+    }
+  };
 
   const filtered = useMemo(() => {
     const term = fold(search);
@@ -182,6 +223,31 @@ export function OTConfigTable({
         );
       },
     },
+    // El convenio solo se ofrece si el contenedor sabe persistirlo. No depende del grant: son cosas
+    // distintas y una compañía puede tener acuerdo comercial sin estar habilitada para radicar todavía.
+    ...(onToggleAgreement
+      ? [
+          {
+            key: "convenio",
+            header: "Convenio",
+            render: (office: TransitOffice) => {
+              const checked = agreements.has(office.id);
+              const isPending = pendingAgreement.has(office.id);
+              return (
+                <div className="flex flex-wrap items-center gap-2">
+                  <SwitchToggle
+                    checked={checked}
+                    disabled={isPending}
+                    onChange={() => void handleToggleAgreement(office)}
+                    label={`${checked ? "Quitar" : "Marcar"} convenio con ${office.name}`}
+                  />
+                  {isPending && <span className="text-[10px] opacity-60">Guardando…</span>}
+                </div>
+              );
+            },
+          } satisfies DataTableColumn<TransitOffice>,
+        ]
+      : []),
     {
       key: "acciones",
       header: "Acciones",

@@ -3,12 +3,17 @@ using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -51,7 +56,12 @@ public sealed class FurHandlerTests
                 return new GeneratedDocument("certificado_rnmc", $"certificado_rnmc_{d.ReferenceNumber}.pdf",
                     "application/pdf", Encoding.UTF8.GetBytes($"%PDF RNMC {d.Entradas.Count}"));
             });
-        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+        // HU #11305 — el lector documental va en el handler por defecto, con el almacén canónico
+        // VACÍO: así estas pruebas ejercitan el respaldo real sobre field_values, que es el camino de
+        // los trámites anteriores al despliegue. Sin lector no habría certificaciones en absoluto.
+        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance,
+            certificationReader: new CertificationReader(new AlmacenCertificacionesVacio()));
     }
 
     /// <summary>
@@ -108,13 +118,12 @@ public sealed class FurHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string tipologia) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? (tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial")),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial",
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -306,7 +315,8 @@ public sealed class FurHandlerTests
         var fakeSoatRtm = new FakeSoatRtmGenerator();
         var handler = new GenerarFurHandler(
             _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
-            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fakeSoatRtm);
+            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fakeSoatRtm,
+            certificationReader: new CertificationReader(new AlmacenCertificacionesVacio()));
 
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
@@ -336,7 +346,8 @@ public sealed class FurHandlerTests
         var fake = new FakeSoatRtmGenerator();
         var handler = new GenerarFurHandler(
             _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
-            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fake);
+            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fake,
+            certificationReader: new CertificationReader(new AlmacenCertificacionesVacio()));
 
         var (_, error) = await handler.HandleAsync(id, tenant, ct);
         error.Should().BeNull();
@@ -349,7 +360,8 @@ public sealed class FurHandlerTests
         var fake = await GenerarTraspasoConFechaMatricula("15/03/2015");
 
         fake.LastData!.Rtm.Should().NotBeNull();
-        fake.LastData.Rtm!.FechaVencimiento.Should().Be("2027-03-20");
+        fake.LastData.Rtm!.FechaVencimiento.Should().Be("2027/03/20",
+            "HU #11305 — el certificado imprime el día normalizado; antes salía el crudo del proveedor");
     }
 
     [Fact]
@@ -359,7 +371,7 @@ public sealed class FurHandlerTests
         var fake = await GenerarTraspasoConFechaMatricula("15/03/2025");
 
         fake.LastData!.Rtm.Should().BeNull();
-        fake.LastData.Soat.FechaVencimiento.Should().Be("2027-01-15", "el bloque SOAT no cambia");
+        fake.LastData.Soat.FechaVencimiento.Should().Be("2027/01/15", "el bloque SOAT no cambia");
     }
 
     [Fact]
@@ -388,6 +400,243 @@ public sealed class FurHandlerTests
         error.Should().BeNull();
         result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(["fur"]);
         instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
+    }
+
+    /// <summary>
+    /// HU #11641 — la casilla de subtrámite se marca con la BANDERA declarada aunque no haya diff que
+    /// calcular. Es el caso que dejaba el FUR mudo: si el RUNT no devolvió el valor original no hay
+    /// snapshot contra el que comparar, pero el gestor declaró el cambio y el wizard se lo muestra
+    /// como subtrámite activo. El formulario debe decir lo mismo que la pantalla.
+    /// </summary>
+    [Fact]
+    public async Task Generar_TransformacionDeclaradaSinSnapshotRunt_MarcaLaCasilla()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_color", "AZUL");   // sin vehicle_color_runt: no hay diff
+        AddFieldValue(instance, "cambio_color", "true");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Transformaciones.Color.Should().BeTrue(
+            "el gestor declaró el cambio de color: sin snapshot RUNT no hay diff, pero el trámite lo incluye igual");
+        capturing.Captured.Observaciones.Should().Be("Color nuevo(NUEVO COLOR: AZUL)",
+            "si el gestor declaró la transformación, el párrafo 23 lleva el valor nuevo aunque no haya snapshot RUNT");
+    }
+
+    /// <summary>
+    /// Sin bandera pero CON diff (trámites anteriores a que la bandera existiera) la casilla también
+    /// se marca: son dos formas de enterarse de lo mismo.
+    /// </summary>
+    [Fact]
+    public async Task Generar_TransformacionSoloPorDiff_MarcaLaCasilla()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_body_type_runt", "ESTACAS");
+        AddFieldValue(instance, "vehicle_body_type", "FURGON");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Transformaciones.Carroceria.Should().BeTrue();
+        capturing.Captured.Transformaciones.Color.Should().BeFalse("no se declaró ni difiere");
+        capturing.Captured.Transformaciones.Combustible.Should().BeFalse();
+    }
+
+    /// <summary>Un trámite sin transformaciones no marca ninguna casilla de subtrámite.</summary>
+    [Fact]
+    public async Task Generar_SinTransformaciones_NoMarcaSubtramites()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_color_runt", "AZUL");
+        AddFieldValue(instance, "vehicle_color", "AZUL");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Transformaciones.Should().Be(default(FurTransformacionesDeclaradas));
+    }
+
+    // ── Blindaje: nivel y desmonte ───────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("NIVEL_1", "BLINDAJE NIVEL 1.")]
+    [InlineData("NIVEL_2", "BLINDAJE NIVEL 2.")]
+    [InlineData("NIVEL_3", "BLINDAJE NIVEL 3.")]
+    public async Task Generar_Blindaje_DeclaraElNivelYMarcaBlindadoSi(string opcion, string esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarBlindaje(ct, (BlindajeOpciones.FieldKey, opcion));
+
+        capturing.Captured!.Observaciones.Should().Be(esperado);
+        capturing.Captured.Transformaciones.Blindaje.Should().BeTrue(
+            "los tres niveles dejan el vehículo blindado");
+    }
+
+    [Fact]
+    public async Task Generar_Desmonte_DeclaraElRetiroYMarcaBlindadoNo()
+    {
+        // Es el caso que la casilla sola no puede expresar: cae en NO igual que un vehículo que nunca
+        // estuvo blindado, así que sin la observación el FUR no dice que hubo trámite.
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarBlindaje(ct, (BlindajeOpciones.FieldKey, "DESMONTE"));
+
+        capturing.Captured!.Observaciones.Should().Be("DESMONTE DE BLINDAJE.");
+        capturing.Captured.Transformaciones.Blindaje.Should().BeFalse(
+            "el desmonte deja el vehículo SIN blindaje, aunque el trámite sea un blindaje");
+    }
+
+    [Fact]
+    public async Task Generar_BlindajeSinOpcion_MarcaLaCasillaPeroNoInventaElTexto()
+    {
+        // Borrador abierto antes de que la opción existiera: el tipo basta para el SI, pero escribir
+        // un nivel por defecto declararía ante el organismo un blindaje que nadie eligió.
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarBlindaje(ct);
+
+        capturing.Captured!.Observaciones.Should().BeNull();
+        capturing.Captured.Transformaciones.Blindaje.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Generar_NivelResidualEnUnTipoQueNoEsBlindaje_NoSeImprime()
+    {
+        // Mismo criterio que las otras tres capas (ADR-0050): un valor persistido que el tipo no lleva
+        // no debe llegar al documento.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.ProcedureType = ProcedureTypeFixture.CambioColor;
+        WithOrganismo(instance);
+        AddFieldValue(instance, BlindajeOpciones.FieldKey, "NIVEL_3");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Observaciones.Should().NotContain("BLINDAJE NIVEL");
+        capturing.Captured.Transformaciones.Blindaje.Should().BeFalse();
+    }
+
+    // ── Tipos prendarios: el FUR sale tan completo como el de un traspaso ────────────────────────
+
+    /// <summary>Genera el FUR de un tipo prendario con la decisión de prenda vigente indicada.</summary>
+    private async Task<CapturingFurGenerator> GenerarPrendario(
+        ProcedureType tipo, string decision, CancellationToken ct, string? entidadLevantamiento = null)
+    {
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.ProcedureType = tipo;
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _prendaRepo.GetVigenteAsync(id, tenant, ct).Returns(new ProcedureInstancePrenda
+        {
+            Decision = decision,
+            Estado = PrendaEstado.Vigente,
+            AcreedorNombre = "BANCO XYZ S.A.",
+            AcreedorDocumento = "890900608",
+            LevantamientoEntidad = entidadLevantamiento,
+        });
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        return capturing;
+    }
+
+    [Fact]
+    public async Task Levantamiento_FurDeclaraCasilla12_Numeral20_YParrafo23()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarPrendario(
+            ProcedureTypeFixture.LevantamientoPrenda, PrendaDecision.Levantar, ct,
+            entidadLevantamiento: "NOTARÍA 15 DE MEDELLÍN");
+
+        var data = capturing.Captured!;
+        // Casilla del numeral 3: la pone el tipo (tabla 1).
+        FurNumeral3Marks.Resolve(data).Should().Contain(12);
+        // Numeral 20 «A FAVOR DE»: sale del acreedor del gravamen que se levanta.
+        data.AcreedorPrenda.Should().Be("BANCO XYZ S.A.");
+        data.PrendaMarking.Should().Be(FurPrendaMarking.Levantamiento);
+        // Párrafo 23: el bloque que nombra a quién se le levanta.
+        // El acreedor lo nombra el numeral 20; el recuadro dice ante quién se levantó.
+        data.Observaciones.Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+    }
+
+    [Fact]
+    public async Task Inscripcion_FurDeclaraCasilla11_Numeral20_YParrafo23()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarPrendario(
+            ProcedureTypeFixture.PrendaInscripcion, PrendaDecision.Registrar, ct);
+
+        var data = capturing.Captured!;
+        FurNumeral3Marks.Resolve(data).Should().Contain(11);
+        data.AcreedorPrenda.Should().Be("BANCO XYZ S.A.");
+        data.PrendaMarking.Should().Be(FurPrendaMarking.Constitucion);
+        data.Observaciones.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
+    }
+
+    /// <summary>Genera el FUR de un trámite del tipo <c>BLINDAJE</c> con los field_values indicados.</summary>
+    private async Task<CapturingFurGenerator> GenerarBlindaje(
+        CancellationToken ct, params (string Key, string Value)[] fieldValues)
+    {
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.ProcedureType = ProcedureTypeFixture.Blindaje;
+        WithOrganismo(instance);
+        foreach (var (key, value) in fieldValues)
+            AddFieldValue(instance, key, value);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        return capturing;
     }
 
     /// <summary>Generador FUR que captura el <see cref="FurDocumentData"/> ensamblado para aserciones.</summary>
@@ -447,7 +696,7 @@ public sealed class FurHandlerTests
         capturing.Captured.Should().NotBeNull();
         capturing.Captured!.Vehiculo.Color.Should().Be("PLATA");         // campo del FUR = RUNT original
         capturing.Captured.Vehiculo.Combustible.Should().Be("GASOLINA"); // campo del FUR = RUNT original
-        capturing.Captured.Observaciones.Should().Be("Cambio de color: NEGRO. Cambio de combustible: DIESEL.");
+        capturing.Captured.Observaciones.Should().Be("Color nuevo(NUEVO COLOR: NEGRO) COMBUSTIBLE_NUEVO: DIESEL");
     }
 
     [Fact]
@@ -473,6 +722,56 @@ public sealed class FurHandlerTests
         capturing.Captured!.Vehiculo.Color.Should().Be("AZUL");
         capturing.Captured.Vehiculo.Combustible.Should().Be("GASOLINA");
         capturing.Captured.Observaciones.Should().BeNull(); // sin cambio declarado, sin texto automático
+    }
+
+    [Fact]
+    public async Task Generar_ConTransformacionCarroceria_FurUsaRuntEnCamposYNuevoEnObservaciones()
+    {
+        // A4/B4 (HU #10673, ADR-0029): el FUR imprime la carrocería ORIGINAL del RUNT en el campo del
+        // vehículo; la transformación declarada (valor nuevo) va SOLO en observaciones.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_body_type_runt", "SEDAN");
+        AddFieldValue(instance, "vehicle_body_type", "PICKUP");
+        AddFieldValue(instance, "cambio_carroceria", "true");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        capturing.Captured!.Vehiculo.TipoCarroceria.Should().Be("SEDAN");  // campo del FUR = RUNT original
+        capturing.Captured.Observaciones.Should().Be("Carroceria nueva(NUEVA CARROCERIA: PICKUP)");
+    }
+
+    [Fact]
+    public async Task Generar_SinSnapshotCarroceria_FurCaeAlEfectivo()
+    {
+        // Trámite previo a la feature (sin vehicle_body_type_runt): el campo del FUR cae al valor efectivo.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_body_type", "PICKUP");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Vehiculo.TipoCarroceria.Should().Be("PICKUP");
+        capturing.Captured.Observaciones.Should().BeNull();
     }
 
     private static ProcedureInstanceActor ActorJuridico(ProcedureInstance instance) =>
@@ -535,32 +834,174 @@ public sealed class FurHandlerTests
 
     // ── HU #10990 — certificado RUES resuelto POR ACTOR ──────────────────────
 
-    /// <summary>Resolutor de prueba: devuelve datos de registro por NIT y cuenta las llamadas.</summary>
-    private sealed class FakeRuesResolver(params (string Nit, string RazonSocial)[] companias) : IRuesActorDataResolver
+    /// <summary>
+    /// Almacén canónico VACÍO: obliga al lector a caer en el respaldo sobre <c>field_values</c>, que
+    /// es el camino de los trámites anteriores al despliegue de la HU #11302.
+    /// </summary>
+    private sealed class AlmacenCertificacionesVacio : ICertificationRepository
     {
-        public List<string> NitsConsultados { get; } = [];
+        public Task<CertificationSnapshot> LoadAsync(Guid tenantId, Guid instanceId, CancellationToken ct) =>
+            Task.FromResult(CertificationSnapshot.Empty);
 
-        public Task<IReadOnlyDictionary<string, string?>?> ResolveAsync(
-            Guid instanceId, Guid tenantId, string nit, CancellationToken ct = default)
-        {
-            NitsConsultados.Add(nit);
-            var match = companias.FirstOrDefault(c => c.Nit == nit);
-            if (match.Nit is null)
-                return Task.FromResult<IReadOnlyDictionary<string, string?>?>(null);
+        public Task<Guid?> SaveRawPayloadAsync(
+            Guid tenantId, Guid instanceId, RawProviderPayload? payload, CancellationToken ct) =>
+            Task.FromResult<Guid?>(null);
 
-            return Task.FromResult<IReadOnlyDictionary<string, string?>?>(
-                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["rues_nit"] = match.Nit,
-                    ["rues_razon_social"] = match.RazonSocial,
-                    ["rues_matricula_mercantil"] = $"MM-{match.Nit}",
-                });
-        }
+        public Task UpsertSoatPoliciesAsync(
+            Guid tenantId, Guid instanceId, IReadOnlyList<StoredSoatPolicy> policies, CancellationToken ct) =>
+            Task.CompletedTask;
+
+        public Task UpsertRtmInspectionsAsync(
+            Guid tenantId, Guid instanceId, IReadOnlyList<StoredRtmInspection> inspections, CancellationToken ct) =>
+            Task.CompletedTask;
+
+        public Task UpsertMerchantRegistrationsAsync(
+            Guid tenantId, Guid instanceId, IReadOnlyList<StoredMerchantRegistration> registrations, CancellationToken ct) =>
+            Task.CompletedTask;
+
+        public Task<int> FreezeAsync(Guid tenantId, Guid instanceId, DateTimeOffset frozenAt, CancellationToken ct) =>
+            Task.FromResult(0);
     }
 
-    private GenerarFurHandler HandlerConRues(IRuesActorDataResolver resolver) =>
+    /// <summary>
+    /// HU #11305 — handler con el lector documental real. No hay resolutor que inyectar: la consulta
+    /// en vivo al RUES desapareció (D4), así que estas pruebas ya no pueden "simular el proveedor".
+    /// Lo que se ejercita es el respaldo real sobre lo persistido.
+    /// </summary>
+    private GenerarFurHandler HandlerConRues() =>
         new(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
-            NullLogger<GenerarFurHandler>.Instance, ruesResolver: resolver);
+            NullLogger<GenerarFurHandler>.Instance,
+            certificationReader: new CertificationReader(new AlmacenCertificacionesVacio()));
+
+    // ── Bug #11146 — una parte firma de UNA sola manera ──────────────────────
+
+    /// <summary>Baúl que siempre resuelve firma vigente para la persona consultada.</summary>
+    private sealed class VaultConFirma : ISignatureVaultPolicy
+    {
+        public Task<SignatureVaultMatch?> ResolveAsync(
+            Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default) =>
+            Task.FromResult<SignatureVaultMatch?>(new SignatureVaultMatch(
+                Guid.NewGuid(), "REPRESENTANTE DEMO", "hash", "ruta", "sha",
+                new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1), "52082029"));
+    }
+
+    private static ProcedureInstanceActor ActorJuridicoCon(string? mecanismo, string rol = "comprador")
+    {
+        var actor = ActorJuridico(Instance(Guid.NewGuid(), Guid.NewGuid(), TramiteTipologiaCatalog.CodigoTraspasoStandard));
+        actor.ActorType = rol;
+        // El sujeto de identidad de una persona JURÍDICA es su representante legal, y eso lo decide
+        // `PersonType`: sin marcarlo, el sujeto sería el NIT y la validación no casaría.
+        actor.PersonType = "juridical";
+        actor.Metadata = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["representanteLegal"] = new Dictionary<string, object?>
+            {
+                ["tipoDocumento"] = "CC",
+                ["numeroDocumento"] = "52082029",
+                ["nombreCompleto"] = "REPRESENTANTE DEMO",
+                // null = sin eleccion explicita, que es el caso normal.
+                ["mecanismoFirma"] = mecanismo,
+            },
+        });
+        return actor;
+    }
+
+    private Task<FurDocumentData> DatosDelDocumentoCon(string mecanismo) =>
+        DatosDelDocumento(mecanismo, conBaul: true, rol: "comprador");
+
+    /// <summary>
+    /// Traspaso con comprador Y vendedor jurídicos, ambos con identidad aprobada y vigente. Es
+    /// traspaso siempre porque el vendedor solo existe ahí, y ambos validan porque el gate del FUR
+    /// exige las dos partes.
+    /// </summary>
+    private async Task<FurDocumentData> DatosDelDocumento(string? mecanismo, bool conBaul, string rol)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+
+        foreach (var parte in new[] { "comprador", "vendedor" })
+        {
+            var actor = ActorJuridicoCon(mecanismo, parte);
+            actor.TenantId = tenant;
+            actor.ProcedureInstanceId = id;
+            instance.Actors.Add(actor);
+
+            // El sujeto de identidad de un actor jurídico es su REPRESENTANTE LEGAL: la validación va
+            // con el documento del representante, o no casaría y el sello no se emitiría por motivos
+            // ajenos a lo que se prueba. Aprobada Y vigente.
+            var bio = Bio(parte);
+            bio.DocumentType = "CC";
+            bio.DocumentNumber = "52082029";
+            bio.ValidatedAt = DateTimeOffset.UtcNow;
+            bio.ValidUntil = DateTimeOffset.UtcNow.AddDays(20);
+            instance.BiometricValidations.Add(bio);
+        }
+
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance,
+            vaultPolicy: conBaul ? new VaultConFirma() : null);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        _ = rol;
+        return capturing.Captured!;
+    }
+
+    [Fact]
+    public async Task Generar_ConFirmaDelBaul_NoDejaSelloDeIdentidadEnLosDocumentos()
+    {
+        // Lo reportado: con firma de baúl E identidad vigente, la compraventa imprimía las dos estampas.
+        // La exclusividad se decide en el ensamblado, así que la arrastran TODOS los documentos.
+        var data = await DatosDelDocumentoCon(MecanismoFirma.Baul);
+
+        (data.SellosIdentidad ?? new Dictionary<string, string>())
+            .Should().NotContainKey("comprador", "con firma del baúl, esa ES la firma del documento");
+    }
+
+    [Fact]
+    public async Task Generar_ConIdentidadElegida_NoApalancaImagenDelBaul()
+    {
+        var data = await DatosDelDocumentoCon(MecanismoFirma.Identidad);
+
+        (data.FirmaImagenes ?? new Dictionary<string, byte[]>())
+            .Should().NotContainKey("comprador", "se eligió el sello de identidad: no se toca el baúl");
+        (data.SellosIdentidad ?? new Dictionary<string, string>())
+            .Should().ContainKey("comprador");
+    }
+
+    [Theory]
+    [InlineData("comprador")]
+    [InlineData("vendedor")]
+    public async Task Generar_SinBaulYSinEleccion_CONSERVA_ElSelloDeIdentidad(string rol)
+    {
+        // Regresion: al retirar el sello por el mero hecho de ser persona juridica, una parte con
+        // identidad validada y SIN firma de baul se quedaba sin firma en los documentos. Sin eleccion
+        // explicita manda la precedencia del baul, pero solo si la firma existe de verdad.
+        var data = await DatosDelDocumento(mecanismo: null, conBaul: false, rol: rol);
+
+        (data.SellosIdentidad ?? new Dictionary<string, string>())
+            .Should().ContainKey(rol, "sin firma del baul, la identidad validada es la firma");
+    }
+
+    [Theory]
+    [InlineData("comprador")]
+    [InlineData("vendedor")]
+    public async Task Generar_ConBaulExplicitoSinImagen_DejaLaFirmaEnBlanco(string rol)
+    {
+        // Elegido el baul a proposito, no se rellena con un sello que el negocio no eligio: la firma
+        // queda en blanco y se nota.
+        var data = await DatosDelDocumento(MecanismoFirma.Baul, conBaul: true, rol: rol);
+
+        (data.SellosIdentidad ?? new Dictionary<string, string>()).Should().NotContainKey(rol);
+    }
 
     private static ProcedureInstanceActor ActorJuridicoVendedor(ProcedureInstance instance) =>
         new()
@@ -577,10 +1018,8 @@ public sealed class FurHandlerTests
         };
 
     [Fact]
-    public async Task Generar_TraspasoEntreDosPersonasJuridicas_EmiteUnCertificadoPorNit()
+    public async Task Generar_TraspasoEntreDosPersonasJuridicasSinDatosPersistidos_NoEmiteCertificado()
     {
-        // Antes se emitía UNO solo, con las rues_* de instancia: la razón social de una compañía podía
-        // salir junto a la matrícula de la otra.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -590,23 +1029,25 @@ public sealed class FurHandlerTests
         instance.Actors.Add(ActorJuridicoVendedor(instance));  // vendedor,  NIT 800555444
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var resolver = new FakeRuesResolver(
-            ("900123456", "EMPRESA DEMO S.A.S."),
-            ("800555444", "VENDEDORA S.A.S."));
-
-        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+        // HU #11305 (D1/D4) — CONTRAPARTIDA ACEPTADA POR EL PO. Sin dato persistido ya no se emite
+        // certificado: antes esta misma situación disparaba una consulta en vivo al RUES por cada NIT,
+        // cobrada y repetida en cada regeneración del expediente. A cambio, generar el expediente
+        // cuesta cero llamadas externas. Las compañías precargadas del directorio de representantes
+        // legales pierden este anexo, y ese es el riesgo a medir tras el despliegue.
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         var tipos = result!.Documents.Select(d => d.Tipo).ToList();
-        tipos.Should().Contain("certificado_rues");           // comprador (retrocompatible)
-        tipos.Should().Contain("certificado_rues_vendedor");  // vendedor (sufijo de rol)
-        resolver.NitsConsultados.Should().BeEquivalentTo(["900123456", "800555444"]);
+        tipos.Should().NotContain("certificado_rues");
+        tipos.Should().NotContain("certificado_rues_vendedor");
+        tipos.Should().Contain("fur", "el expediente se genera igual");
     }
 
     [Fact]
-    public async Task Generar_ConRuesEnFieldValuesDelMismoNit_NoConsultaAlProveedor()
+    public async Task Generar_ConRuesEnFieldValuesDelMismoNit_EmiteElCertificadoDesdeElRespaldo()
     {
-        // El camino normal no debe pagar una llamada externa por trámite.
+        // HU #11305 — respaldo para trámites anteriores al despliegue: las `rues_*` de instancia siguen
+        // sirviendo cuando corresponden al NIT del actor.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -617,18 +1058,16 @@ public sealed class FurHandlerTests
         AddFieldValue(instance, "rues_razon_social", "EMPRESA DEMO S.A.S.");
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var resolver = new FakeRuesResolver();
-        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_rues");
-        resolver.NitsConsultados.Should().BeEmpty();
     }
 
     // ── HU #11133 — snapshot congelado al registrar ──────────────────────────
 
     [Fact]
-    public async Task Generar_ConSnapshotDeAmbasCompanias_NoConsultaAlProveedorNiUnaVez()
+    public async Task Generar_ConSnapshotDeAmbasCompanias_EmiteAmbosCertificadosSinLlamadasSalientes()
     {
         // El objetivo del negocio: regenerar el expediente no puede costar consultas al RUES. Con dos
         // personas jurídicas el camino anterior siempre pagaba al menos una, porque las llaves
@@ -652,14 +1091,12 @@ public sealed class FurHandlerTests
         AddFieldValue(instance, RuesSnapshots.FieldKey, snapshot!);
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var resolver = new FakeRuesResolver();
-        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         var tipos = result!.Documents.Select(d => d.Tipo).ToList();
         tipos.Should().Contain("certificado_rues");
         tipos.Should().Contain("certificado_rues_vendedor");
-        resolver.NitsConsultados.Should().BeEmpty("el snapshot congelado al registrar es la fuente del certificado");
     }
 
     [Fact]
@@ -681,19 +1118,18 @@ public sealed class FurHandlerTests
             DateTimeOffset.UtcNow)!);
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var resolver = new FakeRuesResolver();
-        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         _ruesGenerator.Received().GenerateRuesCertificate(
             Arg.Is<RuesCertificateData>(d => d.RazonSocial == "NOMBRE DEL SNAPSHOT"));
-        resolver.NitsConsultados.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Generar_ConProveedorRuesCaido_GeneraElFurIgualSinCertificado()
+    public async Task Generar_SinDatosDeRuesPersistidos_GeneraElFurIgualSinCertificado()
     {
-        // Best-effort estricto: el RUES nunca puede tumbar el expediente.
+        // HU #11305 — ya no hay proveedor que se pueda caer al generar: el expediente no hace llamadas
+        // salientes. Sin dato persistido, el certificado sencillamente no se emite y el FUR sale igual.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -702,8 +1138,7 @@ public sealed class FurHandlerTests
         instance.Actors.Add(ActorJuridico(instance));
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        // Resolutor sin compañías: simula "no se pudo obtener el dato".
-        var (result, error) = await HandlerConRues(new FakeRuesResolver()).HandleAsync(id, tenant, ct);
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         result!.Documents.Select(d => d.Tipo).Should().Contain("fur");

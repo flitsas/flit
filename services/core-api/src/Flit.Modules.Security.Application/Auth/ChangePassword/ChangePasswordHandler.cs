@@ -40,6 +40,15 @@ public sealed class ChangePasswordHandler(
             throw new InvalidCurrentPasswordException();
         }
 
+        // HU #11553 — la nueva contraseña no puede ser igual a la vigente. Se compara solo contra
+        // el hash actual (sin histórico), después de complejidad y de la propia contraseña actual.
+        if (passwordHasher.Verify(command.NewPassword, currentHash))
+        {
+            await AuditAsync(command.UserId, AuditVocabulary.Results.Failure, "password_reused", cancellationToken)
+                .ConfigureAwait(false);
+            throw new PasswordReusedException();
+        }
+
         var newHash = passwordHasher.Hash(command.NewPassword);
         await userAccountRepository.UpdatePasswordHashAsync(
             command.UserId, newHash, DateTimeOffset.UtcNow, mustChangePassword: false, cancellationToken);

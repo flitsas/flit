@@ -1,6 +1,4 @@
-using System.Text.Json;
 using Flit.Modules.Quipux.Domain.LogQx;
-using Flit.Modules.Quipux.Domain.Trazabilidad;
 
 namespace Flit.Modules.Quipux.Application.UseCases.ConsultarLog;
 
@@ -89,81 +87,23 @@ public sealed class ConsultarLogQuipuxHandler
             e.UpdatedAt,
             e.Events.Select(MapEvent).ToList());
 
+    /// <summary>
+    /// Proyecta el evento delegando el enmascarado y la extracción de campos técnicos en
+    /// <see cref="LogQxDetailProjector"/>, compartido con el log completo de la HU #11787.
+    /// </summary>
     private static QuipuxLogEventView MapEvent(QuipuxLogEvent ev)
     {
-        JsonElement? detail = null;
-        long? durationMs = null;
-        string? origin = null;
-        int? responseCode = null;
-
-        if (!string.IsNullOrWhiteSpace(ev.Detail))
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(ev.Detail);
-                // Clonar: el JsonDocument se libera al salir del using, pero el JsonElement clonado
-                // sobrevive. El detail ya viene sanitizado desde captura; el enmascarado (HU #10794)
-                // es una segunda barrera que oculta cualquier PII que se hubiera colado a una clave
-                // sensible antes de serializar. Las claves técnicas (codigo/duration_ms/origen) no
-                // casan con la lista sensible → se extraen abajo del original y sobreviven al masker.
-                var root = doc.RootElement.Clone();
-                detail = LogQxSensitiveDataMasker.Mask(root);
-
-                if (root.ValueKind == JsonValueKind.Object)
-                {
-                    if (root.TryGetProperty("duration_ms", out var d)
-                        && d.ValueKind == JsonValueKind.Number
-                        && d.TryGetInt64(out var ms))
-                    {
-                        durationMs = ms;
-                    }
-
-                    if (root.TryGetProperty("origen", out var o) && o.ValueKind == JsonValueKind.String)
-                    {
-                        origin = o.GetString();
-                    }
-
-                    if (root.TryGetProperty("codigo", out var c)
-                        && c.ValueKind == JsonValueKind.Number
-                        && c.TryGetInt32(out var code))
-                    {
-                        responseCode = code;
-                    }
-                }
-            }
-            catch (JsonException)
-            {
-                // Detail histórico no-JSON: se trata como "sin payload disponible", sin romper la página.
-                detail = null;
-            }
-        }
-
-        origin ??= DeriveOrigin(ev.Stage);
+        var p = LogQxDetailProjector.Project(ev.Detail, ev.Stage);
 
         return new QuipuxLogEventView(
             ev.Stage,
             ev.Outcome,
-            detail,
-            durationMs,
-            origin,
-            responseCode,
+            p.Detail,
+            p.DurationMs,
+            p.Origin,
+            p.ResponseCode,
             ev.CorrelationId,
             ev.OccurredAt);
-    }
-
-    /// <summary>
-    /// Origen best-effort para eventos previos a la instrumentación (sin <c>origen</c> en el detail):
-    /// las etapas <c>registro_*</c> las genera el worker registrador; las <c>consulta_*</c>, el sondeo.
-    /// Los eventos nuevos traen el origen explícito y esta derivación no aplica.
-    /// </summary>
-    private static string? DeriveOrigin(string stage)
-    {
-        if (stage.StartsWith("registro", StringComparison.Ordinal))
-        {
-            return QuipuxJobNames.Register;
-        }
-
-        return stage.StartsWith("consulta", StringComparison.Ordinal) ? QuipuxJobNames.StatusPoll : null;
     }
 
     private static string? Trim(string? value) =>

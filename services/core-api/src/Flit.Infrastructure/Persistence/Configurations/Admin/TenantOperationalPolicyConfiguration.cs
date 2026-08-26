@@ -21,16 +21,38 @@ internal sealed class TenantOperationalPolicyConfiguration
             .HasDatabaseName("uq_tenant_operational_policies_tenant_id");
 
         builder.Property(x => x.AllowInitialRegistration).HasDefaultValue(false);
+        builder.Property(x => x.BlockProcedureFamilyTraspaso).HasDefaultValue(false);
+        builder.Property(x => x.BlockProcedureFamilyOtros).HasDefaultValue(false);
         builder.Property(x => x.AllowMiscNewVehicles).HasDefaultValue(true);
         builder.Property(x => x.OnlyOwnVehicles).HasDefaultValue(false);
+        builder.Property(x => x.OnlyOwnVehiclesMatriculas).HasDefaultValue(false);
+        builder.Property(x => x.OnlyOwnVehiclesOtros).HasDefaultValue(false);
         builder.Property(x => x.SignatureVaultEnabled).HasDefaultValue(false);
         builder.Property(x => x.PlatePreassignEnabled).HasDefaultValue(false);
         builder.Property(x => x.PlateFlowSkipToTerminado).HasDefaultValue(false);
+        builder.Property(x => x.ValidateSoatWithRunt).HasDefaultValue(false);
 
         builder.Property(x => x.NotificationChannel)
             .HasMaxLength(20).HasDefaultValue("flit_smtp").IsRequired();
         builder.Property(x => x.NotificationTarget)
             .HasMaxLength(20).HasDefaultValue("submitter").IsRequired();
+
+        // HU #11357 — interruptor propio de documentos personalizados (default false = estado
+        // actual). Lo enciende el backfill 65 para quien venía en canal tenant_api.
+        builder.Property(x => x.PersonalizedDocumentsEnabled).HasDefaultValue(false);
+
+        builder.Property(x => x.TramiteApprovedEmailsEnabled)
+            .HasColumnName("tramite_approved_emails_enabled")
+            .HasDefaultValue(true);
+        builder.Property(x => x.TramiteRejectedEmailsEnabled)
+            .HasColumnName("tramite_rejected_emails_enabled")
+            .HasDefaultValue(true);
+        builder.Property(x => x.TramiteStateEmailRecipients)
+            .HasColumnName("tramite_state_email_recipients")
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql(
+                """'{"comprador":true,"vendedorOPropietario":true,"radicador":true,"extraEmail":null}'""")
+            .IsRequired();
 
         builder.Property(x => x.PaymentMethods)
             .HasColumnType("jsonb").HasDefaultValueSql("'[]'").IsRequired();

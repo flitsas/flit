@@ -9,6 +9,7 @@ import {
   plateFlowLabel,
 } from '@/lib/tramites/estados';
 import type { PlateFlowStatus } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /**
  * Política de UI: `anulado` → "Anular trámite" (destructivo, motivo OBLIGATORIO);
@@ -45,9 +46,12 @@ const ACCION_SUBSANAR: AccionConfig = {
 export function EstadoAcciones({
   instanceId,
   onChanged,
+  embedded = false,
 }: {
   instanceId: string;
   onChanged?: () => void;
+  /** Dentro del wizard: sin márgenes externos ni max-width propio. */
+  embedded?: boolean;
 }) {
   const [status, setStatus] = useState<string | null>(null);
   const [subsanacionActiva, setSubsanacionActiva] = useState(false);
@@ -121,16 +125,29 @@ export function EstadoAcciones({
 
   return (
     <section
-      style={{
-        margin: '16px auto 0',
-        maxWidth: 960,
-        padding: '0 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-      }}
+      aria-label="Estado del trámite"
+      style={
+        embedded
+          ? { display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }
+          : {
+              margin: '16px auto 0',
+              maxWidth: 960,
+              padding: '0 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }
+      }
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          flexWrap: 'wrap',
+          justifyContent: embedded ? 'center' : 'flex-start',
+        }}
+      >
         <span style={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>Estado del trámite:</span>
         <span
           style={{
@@ -220,6 +237,8 @@ export function EstadoAcciones({
             display: 'flex',
             flexDirection: 'column',
             gap: 8,
+            width: embedded ? '100%' : undefined,
+            maxWidth: embedded ? 420 : undefined,
           }}
         >
           <label style={{ color: '#334155', fontSize: 12, fontWeight: 600 }}>
@@ -251,7 +270,7 @@ export function EstadoAcciones({
               disabled={working}
               onClick={() => void ejecutar(pending)}
               style={{
-                background: pending.destructive ? '#dc2626' : '#557eff',
+                background: pending.destructive ? '#dc2626' : WIZARD_CTA_GRADIENT,
                 border: 'none',
                 color: '#fff',
                 borderRadius: 8,

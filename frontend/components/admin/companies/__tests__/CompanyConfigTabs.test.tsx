@@ -16,10 +16,13 @@ const settings: TenantSettings = {
     allowInitialRegistration: true,
     allowMiscNewVehicles: false,
     onlyOwnVehicles: true,
+    onlyOwnVehiclesByFamily: { matriculas: true, traspaso: true, otros: true },
+    blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
   },
   baulFirmasActivo: true,
   preasignacionPlacaActiva: false,
   plateFlowSkipToTerminado: false,
+  validarSoatConRunt: false,
   enrutamientoSMTP: "FLIT_SMTP",
   notificationTarget: "COMPRADOR",
   metodosRecaudo: ["Pasarela FLIT"],
@@ -50,12 +53,22 @@ describe("CompanyConfigTabs (AC2)", () => {
         allowInitialRegistration: true,
         allowMiscNewVehicles: false,
         onlyOwnVehicles: true,
+        onlyOwnVehiclesByFamily: { matriculas: true, traspaso: true, otros: true },
+        blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
       },
       baulFirmasActivo: true,
       preasignacionPlacaActiva: false,
       plateFlowSkipToTerminado: false,
+      validarSoatConRunt: false,
       enrutamientoSMTP: "FLIT_SMTP",
-      notificationTarget: "COMPRADOR",
+      avisosAprobacionActivos: true,
+      avisosRechazoActivos: true,
+      destinatariosNotificacion: {
+        comprador: true,
+        vendedorOPropietario: true,
+        radicador: true,
+        extraEmail: null,
+      },
       metodosRecaudo: ["Pasarela FLIT"],
       // HU #10478 — defaults Kyverum-first cuando la config no viene en settings.
       runtFailoverTimeoutMs: 60000,
@@ -83,17 +96,32 @@ describe("CompanyConfigTabs (AC2)", () => {
 
     render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
 
-    // Pestaña Matrícula Inicial activa por defecto. Estado inicial: inicial=ON, misceláneas=OFF.
-    await user.click(screen.getByLabelText(/permitir matrícula inicial/i)); // ON → OFF (Desactivar)
-    await user.click(screen.getByLabelText(/permitir vehículos de categorías misceláneas/i)); // OFF → ON (Activar)
+    // Pestaña Trámites: familias como desplegables (Matrículas abierta por defecto).
+    expect(screen.getByRole("tab", { name: /^trámites$/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: /matrícula inicial/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /^traspasos$/i })).not.toBeInTheDocument();
+
+    const matriculasHeader = screen.getByRole("button", { name: /matrículas/i });
+    expect(matriculasHeader).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText(/no permitir trámites de matrículas/i)).toBeInTheDocument();
+
+    // Abrir Traspaso y Otros para alcanzar los tres toggles de solo vehículos propios.
+    await user.click(screen.getByRole("button", { name: /^traspaso/i }));
+    await user.click(screen.getByRole("button", { name: /otros trámites/i }));
+
+    await user.click(screen.getByLabelText(/no permitir trámites de matrículas/i)); // OFF → ON (bloquea)
+    await user.click(screen.getByLabelText(/permitir vehículos de categorías misceláneas/i)); // OFF → ON
+    const ownToggles = screen.getAllByLabelText(/^solo vehículos propios$/i);
+    expect(ownToggles).toHaveLength(3);
+    await user.click(ownToggles[1]!); // Traspaso ON → OFF
     await user.click(screen.getByRole("button", { name: /guardar todo/i }));
 
-    // La confirmación agrupa por módulo y describe el cambio REAL de cada campo.
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Matrícula Inicial")).toBeInTheDocument();
-    expect(within(dialog).getByText(/permitir matrícula inicial/i)).toBeInTheDocument();
+    expect(within(dialog).getByText("Matrículas")).toBeInTheDocument();
+    expect(within(dialog).getByText("Traspaso")).toBeInTheDocument();
+    expect(within(dialog).getByText(/no permitir trámites de matrículas/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Activar").length).toBeGreaterThanOrEqual(2);
     expect(within(dialog).getByText("Desactivar")).toBeInTheDocument();
-    expect(within(dialog).getByText("Activar")).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: /guardar cambios/i }));
 
@@ -102,6 +130,17 @@ describe("CompanyConfigTabs (AC2)", () => {
         switchesMatricula: expect.objectContaining({
           allowInitialRegistration: false,
           allowMiscNewVehicles: true,
+          onlyOwnVehicles: false,
+          onlyOwnVehiclesByFamily: expect.objectContaining({
+            matriculas: true,
+            traspaso: false,
+            otros: true,
+          }),
+          blockProcedureFamily: expect.objectContaining({
+            matriculas: true,
+            traspaso: false,
+            otros: false,
+          }),
         }),
       }),
     );
@@ -194,6 +233,40 @@ describe("CompanyConfigTabs (AC2)", () => {
       expect(screen.getByText(/valor inválido para el canal/i)).toBeInTheDocument(),
     );
   });
+
+  it("persiste toggles de aprobación/rechazo y destinatarios en el PUT", async () => {
+    const user = userEvent.setup();
+    const onSaveSettings = vi.fn().mockResolvedValue(undefined);
+
+    render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
+    await user.click(screen.getByRole("tab", { name: /configuración empresa/i }));
+
+    expect(screen.getByLabelText(/avisos al aprobar trámite/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/avisos al rechazar trámite/i)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /^comprador$/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /vendedor \/ propietario/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /radicador/i })).toBeChecked();
+
+    await user.click(screen.getByLabelText(/avisos al rechazar trámite/i));
+    await user.click(screen.getByRole("checkbox", { name: /radicador/i }));
+    await user.type(screen.getByLabelText(/correo adicional/i), "avisos@acme.test");
+
+    await user.click(screen.getByRole("button", { name: /guardar todo/i }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /guardar cambios/i }));
+
+    expect(onSaveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        avisosAprobacionActivos: true,
+        avisosRechazoActivos: false,
+        destinatariosNotificacion: {
+          comprador: true,
+          vendedorOPropietario: true,
+          radicador: false,
+          extraEmail: "avisos@acme.test",
+        },
+      }),
+    );
+  });
 });
 
 // HU #11062 — el tenant solo vivía en la URL: nada en pantalla confirmaba sobre qué compañía se
@@ -229,11 +302,13 @@ describe("CompanyConfigTabs — identificación de la compañía (HU #11062)", (
     expect(within(callout).getByText(/900123456-7/)).toBeInTheDocument();
   });
 
-  it("sin identidad resuelta la pantalla funciona igual, sin hueco", async () => {
+  it("sin identidad resuelta la pantalla funciona igual, sin hueco de empresa", async () => {
     const user = userEvent.setup();
     render(<CompanyConfigTabs settings={settings} company={null} onSaveSettings={vi.fn()} />);
 
-    expect(screen.queryByLabelText("Compañía en configuración")).not.toBeInTheDocument();
+    // El encabezado puede existir (alojar «Guardar todo»), pero sin razón social ni NIT.
+    expect(screen.queryByText(/transportes acme/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nit 900/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /guardar todo/i }));
     expect(

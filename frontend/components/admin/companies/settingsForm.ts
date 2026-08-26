@@ -3,7 +3,6 @@
 import type {
   EnrutamientoSMTP,
   FinesQuerySource,
-  NotificationTarget,
   TenantSettings,
   TenantSettingsUpdate,
 } from "@/lib/api/types";
@@ -110,13 +109,30 @@ function fallbackFor(family: "vehicle" | "conductor", primary: string): string[]
 export interface SettingsForm {
   allowInitialRegistration: boolean;
   allowMiscNewVehicles: boolean;
+  /** Espejo legado de onlyOwnVehiclesTraspaso (PUT `onlyOwnVehicles`). */
   onlyOwnVehicles: boolean;
+  onlyOwnVehiclesMatriculas: boolean;
+  onlyOwnVehiclesTraspaso: boolean;
+  onlyOwnVehiclesOtros: boolean;
+  /**
+   * Bloqueo de creación por familia (`true` = no permitir crear).
+   * Matrículas se deriva de `!allowInitialRegistration` al serializar.
+   */
+  blockProcedureFamilyMatriculas: boolean;
+  blockProcedureFamilyTraspaso: boolean;
+  blockProcedureFamilyOtros: boolean;
   baulFirmasActivo: boolean;
   preasignacionPlacaActiva: boolean;
   /** Con placa completa → Terminado directo (omite Asignado). */
   plateFlowSkipToTerminado: boolean;
+  validarSoatConRunt: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
-  notificationTarget: NotificationTarget;
+  avisosAprobacionActivos: boolean;
+  avisosRechazoActivos: boolean;
+  destinatarioComprador: boolean;
+  destinatarioVendedorOPropietario: boolean;
+  destinatarioRadicador: boolean;
+  destinatarioExtraEmail: string;
   metodosRecaudo: string[];
   // HU #10478 — proveedor PRIMARIO por tipo de consulta RUNT (el fallback se deriva).
   consultaVin: string;
@@ -133,15 +149,33 @@ export interface SettingsForm {
 /** Construye el estado del formulario a partir de la configuración cargada. */
 export function formFromSettings(settings: TenantSettings): SettingsForm {
   const cfg = settings.consultationProviderConfig ?? {};
+  const byFamily = settings.switchesMatricula.onlyOwnVehiclesByFamily;
+  const onlyTraspaso = byFamily?.traspaso ?? settings.switchesMatricula.onlyOwnVehicles;
+  const block = settings.switchesMatricula.blockProcedureFamily;
   return {
     allowInitialRegistration: settings.switchesMatricula.allowInitialRegistration,
     allowMiscNewVehicles: settings.switchesMatricula.allowMiscNewVehicles,
-    onlyOwnVehicles: settings.switchesMatricula.onlyOwnVehicles,
+    onlyOwnVehicles: onlyTraspaso,
+    onlyOwnVehiclesMatriculas: byFamily?.matriculas ?? settings.switchesMatricula.onlyOwnVehicles,
+    onlyOwnVehiclesTraspaso: onlyTraspaso,
+    onlyOwnVehiclesOtros: byFamily?.otros ?? settings.switchesMatricula.onlyOwnVehicles,
+    blockProcedureFamilyMatriculas: block?.matriculas ?? !settings.switchesMatricula.allowInitialRegistration,
+    blockProcedureFamilyTraspaso: block?.traspaso ?? false,
+    blockProcedureFamilyOtros: block?.otros ?? false,
     baulFirmasActivo: settings.baulFirmasActivo,
     preasignacionPlacaActiva: settings.preasignacionPlacaActiva,
     plateFlowSkipToTerminado: settings.plateFlowSkipToTerminado ?? false,
+    validarSoatConRunt: settings.validarSoatConRunt ?? false,
     enrutamientoSMTP: settings.enrutamientoSMTP,
-    notificationTarget: settings.notificationTarget,
+    avisosAprobacionActivos:
+      settings.avisosAprobacionActivos ?? settings.avisosCambioEstadoActivos ?? true,
+    avisosRechazoActivos:
+      settings.avisosRechazoActivos ?? settings.avisosCambioEstadoActivos ?? true,
+    destinatarioComprador: settings.destinatariosNotificacion?.comprador ?? true,
+    destinatarioVendedorOPropietario:
+      settings.destinatariosNotificacion?.vendedorOPropietario ?? true,
+    destinatarioRadicador: settings.destinatariosNotificacion?.radicador ?? true,
+    destinatarioExtraEmail: settings.destinatariosNotificacion?.extraEmail ?? "",
     metodosRecaudo: [...settings.metodosRecaudo],
     consultaVin: cfg.vehicle_vin?.primary ?? DEFAULT_VEHICLE_PROVIDER,
     consultaPlaca: cfg.vehicle_plate?.primary ?? DEFAULT_VEHICLE_PROVIDER,
@@ -169,15 +203,33 @@ function avaluoFromSettings(config: TenantSettings["avaluoProviderConfig"]): {
 export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
   return {
     switchesMatricula: {
-      allowInitialRegistration: form.allowInitialRegistration,
+      allowInitialRegistration: !form.blockProcedureFamilyMatriculas,
       allowMiscNewVehicles: form.allowMiscNewVehicles,
-      onlyOwnVehicles: form.onlyOwnVehicles,
+      onlyOwnVehicles: form.onlyOwnVehiclesTraspaso,
+      onlyOwnVehiclesByFamily: {
+        matriculas: form.onlyOwnVehiclesMatriculas,
+        traspaso: form.onlyOwnVehiclesTraspaso,
+        otros: form.onlyOwnVehiclesOtros,
+      },
+      blockProcedureFamily: {
+        matriculas: form.blockProcedureFamilyMatriculas,
+        traspaso: form.blockProcedureFamilyTraspaso,
+        otros: form.blockProcedureFamilyOtros,
+      },
     },
     baulFirmasActivo: form.baulFirmasActivo,
     preasignacionPlacaActiva: form.preasignacionPlacaActiva,
     plateFlowSkipToTerminado: form.plateFlowSkipToTerminado,
+    validarSoatConRunt: form.validarSoatConRunt,
     enrutamientoSMTP: form.enrutamientoSMTP,
-    notificationTarget: form.notificationTarget,
+    avisosAprobacionActivos: form.avisosAprobacionActivos,
+    avisosRechazoActivos: form.avisosRechazoActivos,
+    destinatariosNotificacion: {
+      comprador: form.destinatarioComprador,
+      vendedorOPropietario: form.destinatarioVendedorOPropietario,
+      radicador: form.destinatarioRadicador,
+      extraEmail: form.destinatarioExtraEmail.trim() || null,
+    },
     metodosRecaudo: [...form.metodosRecaudo],
     runtFailoverTimeoutMs: form.runtFailoverTimeoutMs,
     consultationProviderConfig: {
@@ -223,22 +275,46 @@ const onOff = (value: boolean): Omit<ConfigChangeItem, "label"> =>
 
 const FIELD_DESCRIPTORS: FieldDescriptor[] = [
   {
-    key: "allowInitialRegistration",
-    module: "Matrícula Inicial",
-    label: "Permitir matrícula inicial",
-    describe: (_i, c) => onOff(c.allowInitialRegistration),
+    key: "blockProcedureFamilyMatriculas",
+    module: "Matrículas",
+    label: "No permitir trámites de matrículas",
+    describe: (_i, c) => onOff(c.blockProcedureFamilyMatriculas),
   },
   {
     key: "allowMiscNewVehicles",
-    module: "Matrícula Inicial",
+    module: "Matrículas",
     label: "Permitir vehículos de categorías misceláneas",
     describe: (_i, c) => onOff(c.allowMiscNewVehicles),
   },
   {
-    key: "onlyOwnVehicles",
-    module: "Traspasos",
+    key: "onlyOwnVehiclesMatriculas",
+    module: "Matrículas",
     label: "Solo vehículos propios",
-    describe: (_i, c) => onOff(c.onlyOwnVehicles),
+    describe: (_i, c) => onOff(c.onlyOwnVehiclesMatriculas),
+  },
+  {
+    key: "blockProcedureFamilyTraspaso",
+    module: "Traspaso",
+    label: "No permitir trámites de traspaso",
+    describe: (_i, c) => onOff(c.blockProcedureFamilyTraspaso),
+  },
+  {
+    key: "onlyOwnVehiclesTraspaso",
+    module: "Traspaso",
+    label: "Solo vehículos propios",
+    describe: (_i, c) => onOff(c.onlyOwnVehiclesTraspaso),
+  },
+  {
+    key: "blockProcedureFamilyOtros",
+    module: "Otros trámites",
+    label: "No permitir otros trámites",
+    describe: (_i, c) => onOff(c.blockProcedureFamilyOtros),
+  },
+  {
+    key: "onlyOwnVehiclesOtros",
+    module: "Otros trámites",
+    label: "Solo vehículos propios",
+    describe: (_i, c) => onOff(c.onlyOwnVehiclesOtros),
   },
   {
     key: "baulFirmasActivo",
@@ -259,6 +335,12 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     describe: (_i, c) => onOff(c.plateFlowSkipToTerminado),
   },
   {
+    key: "validarSoatConRunt",
+    module: "Configuración Empresa",
+    label: "Validar SOAT ante el RUNT al procesar",
+    describe: (_i, c) => onOff(c.validarSoatConRunt),
+  },
+  {
     key: "enrutamientoSMTP",
     module: "Configuración Empresa",
     label: "Enrutamiento de notificaciones",
@@ -268,11 +350,41 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     }),
   },
   {
-    key: "notificationTarget",
+    key: "avisosAprobacionActivos",
     module: "Configuración Empresa",
-    label: "Destinatario de notificaciones",
+    label: "Avisos al aprobar trámite",
+    describe: (_i, c) => onOff(c.avisosAprobacionActivos),
+  },
+  {
+    key: "avisosRechazoActivos",
+    module: "Configuración Empresa",
+    label: "Avisos al rechazar trámite",
+    describe: (_i, c) => onOff(c.avisosRechazoActivos),
+  },
+  {
+    key: "destinatarioComprador",
+    module: "Configuración Empresa",
+    label: "Notificar al comprador",
+    describe: (_i, c) => onOff(c.destinatarioComprador),
+  },
+  {
+    key: "destinatarioVendedorOPropietario",
+    module: "Configuración Empresa",
+    label: "Notificar al vendedor o propietario",
+    describe: (_i, c) => onOff(c.destinatarioVendedorOPropietario),
+  },
+  {
+    key: "destinatarioRadicador",
+    module: "Configuración Empresa",
+    label: "Notificar al radicador",
+    describe: (_i, c) => onOff(c.destinatarioRadicador),
+  },
+  {
+    key: "destinatarioExtraEmail",
+    module: "Configuración Empresa",
+    label: "Correo adicional de avisos",
     describe: (i, c) => ({
-      detail: `${NOTIFICATION_TARGET_LABELS[i.notificationTarget]} → ${NOTIFICATION_TARGET_LABELS[c.notificationTarget]}`,
+      detail: `${i.destinatarioExtraEmail || "(vacío)"} → ${c.destinatarioExtraEmail || "(vacío)"}`,
       tone: "neutral",
     }),
   },
@@ -361,8 +473,9 @@ const providerChange = (
 });
 
 const MODULE_ORDER = [
-  "Matrícula Inicial",
-  "Traspasos",
+  "Matrículas",
+  "Traspaso",
+  "Otros trámites",
   "Configuración Empresa",
   CONSULTA_MODULE,
   AVALUO_MODULE,
@@ -401,16 +514,6 @@ export const SMTP_LABELS: Record<EnrutamientoSMTP, string> = {
   TENANT_API: "API Renting cliente",
 };
 
-export const NOTIFICATION_TARGETS: NotificationTarget[] = ["COMPRADOR", "RADICADOR", "NINGUNO"];
-
-/** Etiquetas legibles para el destinatario de notificaciones (el valor enviado sigue siendo el enum). */
-export const NOTIFICATION_TARGET_LABELS: Record<NotificationTarget, string> = {
-  COMPRADOR: "Comprador del vehículo",
-  RADICADOR: "Radicador del trámite",
-  NINGUNO: "Sin notificaciones",
-};
-
-/** Opciones de fuente de comparendos (FEATURE 02). El valor enviado es el enum (internal|external). */
 export const FINES_QUERY_SOURCES: FinesQuerySource[] = ["internal", "external"];
 
 /** Etiquetas legibles para la fuente de comparendos. */

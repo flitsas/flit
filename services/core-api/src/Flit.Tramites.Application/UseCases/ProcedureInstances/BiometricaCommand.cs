@@ -41,7 +41,9 @@ public sealed record BiometricValidationDto(
     Guid? ProcedureInstanceId = null,
     string? ReferenceNumber = null,
     string? Modalidad = null,
-    IReadOnlyList<LinkedProcedureDto>? LinkedProcedures = null);
+    IReadOnlyList<LinkedProcedureDto>? LinkedProcedures = null,
+    /// <summary>Fecha de registro de la validación (para ordenar historial más reciente → más antigua).</summary>
+    DateTimeOffset? CreatedAt = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -60,7 +62,24 @@ public sealed record BiometricValidationsResponse(
     // HU #11014 (ADR-0025 §4) — partes cuya identidad queda cubierta por la FIRMA DEL BAÚL en vez de por
     // una validación biométrica (misma regla que el outcome `firma_baul` de EnsureIdentity, HU #10646).
     // La UI las rotula como "firmado desde el baúl" y no ofrece el certificado de identidad, que no existe.
-    IReadOnlyList<string>? FirmaBaulPartes = null);
+    IReadOnlyList<string>? FirmaBaulPartes = null,
+    // Bug #11615 — intentos de una parte que YA tiene identidad aprobada y vigente (propia o
+    // referenciada de otro trámite): rechazados, expirados o en vuelo. Salen de `validations` para no
+    // suplantar al estado vigente según la posición en que quedaran, pero siguen viajando aquí para
+    // que el histórico esté disponible sin volver a consultar. Null cuando no hay ninguno.
+    IReadOnlyList<BiometricValidationDto>? SupersededValidations = null,
+    // HU #11665 — por qué NO se envió la validación de identidad a una parte jurídica. Derivado al
+    // vuelo con la MISMA regla que usa el disparador (EnvioValidacionBloqueoRules), nunca persistido:
+    // en cuanto el gestor corrige el dato, el motivo desaparece. Null cuando no hay ninguno.
+    IReadOnlyList<EnvioValidacionMotivoDto>? MotivosNoEnvio = null);
+
+/// <summary>
+/// HU #11665 — motivo tipificado de no envío de la validación de identidad, por parte.
+/// <c>informativo = true</c> no es un fallo: explica una ausencia legítima (la parte ya está cubierta)
+/// y la UI no debe pintarlo como bloqueo. Es un derivado calculado del estado, igual que
+/// <c>firmaBaulPartes</c>; no existe ninguna columna que lo guarde.
+/// </summary>
+public sealed record EnvioValidacionMotivoDto(string Parte, string Codigo, bool Informativo);
 
 // NOTA: estos DOS contratos quedan en ESPAÑOL a propósito (request de iniciar + vista pública de
 // captura). El renombrado a inglés (HU10350) cubre SOLO la tabla y sus respuestas (grilla/wizard/stuck);
@@ -116,10 +135,15 @@ public static class BiometricToken
 /// — el gestor debe reusar la existente en vez de duplicar. Requiere instancia en <c>draft</c>.
 /// La parte se normaliza vía <c>NormalizeParte</c>: matrícula usa 'comprador' (la FE/iniciar lo
 /// pasa explícito; vacío → null por compatibilidad legado); traspaso usa 'comprador'|'vendedor'.
+/// HU #11265: capa PREVIA de precedencia de envío (persona/tenant) antes del guard por parte.
 /// </summary>
-public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
+public sealed class IniciarBiometriaHandler(
+    IProcedureInstanceRepository repo,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
-    public async Task<(IniciarBiometriaResult? Result, string? Error)> HandleAsync(
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    public async Task<(IniciarBiometriaResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleAsync(
         Guid id,
         Guid tenantId,
         IniciarBiometriaInput input,
@@ -129,26 +153,40 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
             || string.IsNullOrWhiteSpace(input.TipoDoc)
             || string.IsNullOrWhiteSpace(input.Documento)
             || string.IsNullOrWhiteSpace(input.Email))
-            return (null, "datos_incompletos");
+            return (null, "datos_incompletos", null);
 
         var parte = NormalizeParte(input.Parte);
         if (parte is "invalid")
-            return (null, "parte_invalida");
+            return (null, "parte_invalida", null);
 
-        var instance = await repo.GetByIdWithBiometricsAsync(id, tenantId, ct);
+        var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
-            return (null, "not_found");
+            return (null, "not_found", null);
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
-            return (null, "not_draft");
+            return (null, "not_draft", null);
+
+        var tipoDoc = input.TipoDoc.Trim();
+        var documento = input.Documento.Trim();
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        var now = DateTimeOffset.UtcNow;
+
+        // HU #11265 — precedencia de envío (capa PREVIA a idempotencia por parte).
+        var decision = await IdentitySendDecisionForTramite.EvaluateAsync(
+            repo, _vaultPolicy, tenantId, actor, tipoDoc, documento,
+            instance.BiometricValidations.ToList(), now, ct);
+        var (sendError, sendConflict, continueStart) = IdentitySendDecisionForTramite.ToStartOutcome(
+            decision, id, parte, instance.BiometricValidations.ToList());
+        if (!continueStart)
+            return (null, sendError, sendConflict);
 
         // Idempotencia por parte: una validación activa o aprobada bloquea recrear.
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
             && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado);
         if (existing is not null)
-            return (null, "biometria_activa");
+            return (null, "biometria_activa", null);
 
-        var now = DateTimeOffset.UtcNow;
         var token = BiometricToken.Generate();
         var validation = new ProcedureInstanceBiometricValidation
         {
@@ -157,8 +195,8 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
             ProcedureInstanceId = id,
             PartyRole = parte,
             Name = input.Nombre.Trim(),
-            DocumentType = input.TipoDoc.Trim(),
-            DocumentNumber = input.Documento.Trim(),
+            DocumentType = tipoDoc,
+            DocumentNumber = documento,
             Email = input.Email.Trim(),
             Status = BiometricEstados.Enviado,
             TokenHash = BiometricToken.Hash(token),
@@ -172,11 +210,20 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
         // PK store-generated con Id ya seteado: marcar Added explícito para forzar INSERT
         // (mismo bug/convención que UploadAttachmentHandler).
         repo.Add(validation);
-        await repo.SaveChangesAsync(ct);
+        try
+        {
+            await repo.SaveChangesAsync(ct);
+        }
+        catch (Domain.Identity.IdentityInFlightConflictException)
+        {
+            // HU #11266 — carrera: otra petición ya creó la fila en vuelo.
+            return (null, "biometria_activa",
+                IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Tramite));
+        }
 
         var dto = ToDto(validation, now);
         var result = new IniciarBiometriaResult(dto, token, $"/biometric/{token}");
-        return (result, null);
+        return (result, null, null);
     }
 
     private static string? NormalizeParte(string? parte)
@@ -198,7 +245,8 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
                     ? v.CaptureUrl
                     : null,
             ExtractMotivoRechazo(v),
-            ExtractUltimoIntentoMotivo(v));
+            ExtractUltimoIntentoMotivo(v),
+            CreatedAt: v.CreatedAt);
 
     /// <summary>
     /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado
@@ -315,10 +363,22 @@ public sealed class ListBiometriaHandler(
         // parte pero la PERSONA (documento del actor) sí tiene una en otro trámite, se expone ESA (sin clonar)
         // para que la UI muestre "identidad verificada". La validación referenciada se rotula con la parte
         // actual (su PartyRole de origen puede diferir, p.ej. matrícula→traspaso).
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                         == TramiteModalidadEntrada.Traspaso;
+        var esTraspaso = instance.Family
+                         == ProcedureFamily.Traspaso;
         var partes = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
         var firmaBaulPartes = new List<string>(partes.Length);
+        // Bug #11615 — identidad que PREVALECE por parte (aprobada + vigente, propia o referenciada) y
+        // resto de entradas aprobadas+vigentes de esa parte. Con esto el listado deja de depender de en
+        // qué posición cayó cada intento. Ver BiometricListPrevalence.
+        var prevalecientePorParte = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var vigentesPorParte = new Dictionary<string, IReadOnlySet<Guid>>(StringComparer.OrdinalIgnoreCase);
+        // Documento del sujeto de identidad de cada parte: sin él, el emparejamiento de las filas SIN
+        // ROL (matrícula) le atribuiría a la parte intentos de otra persona y los sacaría de la vista.
+        var documentoPorParte = new Dictionary<string, ParteDocumento>(StringComparer.OrdinalIgnoreCase);
+        // HU #11665 — motivo tipificado de no envío por parte. `partesJuridicas` acota la segunda
+        // pasada (los motivos informativos): una persona natural no reporta motivos.
+        var motivosNoEnvio = new List<EnvioValidacionMotivoDto>(partes.Length);
+        var partesJuridicas = new List<string>(partes.Length);
         foreach (var parte in partes)
         {
             var actor = instance.Actors.FirstOrDefault(a =>
@@ -328,31 +388,147 @@ public sealed class ListBiometriaHandler(
 
             // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
             var subject = IdentitySubjectResolver.For(actor);
+
+            // HU #11665 — el motivo lo calcula la MISMA regla que usa el disparador al escribir
+            // (EnvioValidacionBloqueoRules): una sola fuente, así el listado no puede explicar el no
+            // envío de una forma distinta a como se decidió. Se registra ANTES de los `continue` de
+            // abajo, porque el caso «RL sin documento» es justamente uno de los que cortan aquí.
+            var estadoEnvio = EnvioValidacionBloqueoRules.EstadoDe(actor, subject, providerOptions.IsKyverum);
+            if (estadoEnvio.ActorEsJuridico)
+            {
+                partesJuridicas.Add(parte);
+                var motivoDatos = EnvioValidacionBloqueoRules.Evaluar(estadoEnvio);
+                if (motivoDatos is not null)
+                    motivosNoEnvio.Add(new EnvioValidacionMotivoDto(parte, motivoDatos.Codigo, motivoDatos.Informativo));
+            }
+
             if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
                 continue;
 
+            documentoPorParte[parte] = new ParteDocumento(subject.TipoDocumento, subject.NumeroDocumento);
+
             // HU #11014 — cobertura por FIRMA DEL BAÚL: la identidad del sujeto queda satisfecha por su
             // firma vigente y NO hay validación biométrica ni certificado que mostrar.
-            var firmaBaul = await _vaultPolicy
-                .ResolveAsync(instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
-                .ConfigureAwait(false);
-            if (firmaBaul is not null)
-                firmaBaulPartes.Add(parte);
+            //
+            // Bug #11141 — antes bastaba con que EXISTIERA una firma vigente, sin mirar el mecanismo
+            // elegido por el gestor ni si el actor era jurídico. Con "validación de identidad"
+            // seleccionada, el documento se firmaba con el sello de identidad (correcto) pero esta
+            // lista rotulaba a la parte como firmada desde el baúl, y de ahí salían el resumen del paso
+            // FUR y las pestañas de comprador/vendedor del expediente. Ahora la condición es el mismo
+            // predicado que usa el generador, así que la vista no puede contradecir al documento.
+            if (FirmaBaulCobertura.Aplica(actor))
+            {
+                var firmaBaul = await _vaultPolicy
+                    .ResolveAsync(instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
+                    .ConfigureAwait(false);
+                if (firmaBaul is not null)
+                    firmaBaulPartes.Add(parte);
+            }
 
-            var yaLocal = instance.BiometricValidations.Any(v =>
-                string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-                && BiometricRules.EsAprobadaVigente(v, now)
-                && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento));
-            if (yaLocal)
+            // Filas PROPIAS de la parte que ya están aprobadas y vigentes para el documento del sujeto:
+            // son las únicas que pueden representar el estado de la parte sin referenciar otro trámite.
+            var vigentesLocales = instance.BiometricValidations
+                .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                            && BiometricRules.EsAprobadaVigente(v, now)
+                            && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento))
+                .ToList();
+            if (vigentesLocales.Count > 0)
+            {
+                vigentesPorParte[parte] = vigentesLocales.Select(v => v.Id).ToHashSet();
+                // La más reciente manda: si hubo varias aprobaciones vigentes, la última aprobación es la
+                // que el gestor considera actual.
+                prevalecientePorParte[parte] = vigentesLocales
+                    .OrderByDescending(v => v.ValidatedAt ?? v.CreatedAt)
+                    .First().Id;
                 continue;
+            }
 
             var source = await repo.FindVigenteApprovedByDocumentAsync(
                 instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
-            if (source is not null)
+            if (source is null)
+                continue;
+
+            // La identidad referenciada solo se agrega si no está ya en el listado: la consulta busca por
+            // documento en TODO el tenant y puede devolver una fila de este mismo trámite (p.ej. rotulada
+            // con otro rol o sin rol).
+            //
+            // Cuando ya está, NO basta con marcarla como prevaleciente: los consumidores emparejan POR
+            // ROL, así que una fila de este trámite rotulada con el otro rol subía a la primera posición
+            // pero seguía sin representar a esta parte, y la parte se veía sin identidad vigente. Se
+            // re-rotula con la parte actual (mismo criterio que la fila que se agrega desde otro
+            // trámite), salvo que la etiqueta que trae sea LEGÍTIMA: si la otra parte del traspaso tiene
+            // ese mismo documento, la fila es suya y robársela dejaría a esa otra parte sin identidad.
+            var indiceExistente = dtos.FindIndex(d => d.Id == source.Id);
+            if (indiceExistente < 0)
+            {
                 dtos.Add(IniciarBiometriaHandler.ToDto(source, now) with { PartyRole = parte });
+            }
+            else if (!string.Equals(dtos[indiceExistente].PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                     && !EsDeOtraParte(dtos[indiceExistente], parte, instance, partes))
+            {
+                dtos[indiceExistente] = dtos[indiceExistente] with { PartyRole = parte };
+            }
+
+            prevalecientePorParte[parte] = source.Id;
+            vigentesPorParte[parte] = new HashSet<Guid> { source.Id };
         }
 
-        return (new BiometricValidationsResponse(dtos, providerOptions.Provider, firmaBaulPartes), null);
+        // HU #11665 — motivos INFORMATIVOS: la parte jurídica está completa, pero no se le envía nada
+        // porque ya está cubierta. Se derivan de lo que este handler YA resolvió —la cobertura del baúl
+        // y la identidad aprobada vigente (propia o referenciada)—, que son los pasos 1 y 2 de la
+        // precedencia que evalúa el disparador río abajo. Cero consultas nuevas.
+        foreach (var parte in partesJuridicas)
+        {
+            if (motivosNoEnvio.Exists(m => string.Equals(m.Parte, parte, StringComparison.OrdinalIgnoreCase)))
+                continue; // Ya hay un motivo de datos: ese manda, es el que el gestor debe corregir.
+
+            var informativo = EnvioValidacionBloqueoRules.DesdeCobertura(
+                firmaBaulPartes.Contains(parte, StringComparer.OrdinalIgnoreCase),
+                prevalecientePorParte.ContainsKey(parte));
+            if (informativo is not null)
+                motivosNoEnvio.Add(new EnvioValidacionMotivoDto(parte, informativo.Codigo, informativo.Informativo));
+        }
+
+        // Bug #11615 — la entrada aprobada y vigente de cada parte prevalece sobre sus intentos
+        // rechazados / expirados / en vuelo, que pasan a `supersededValidations`.
+        var (validations, superseded) = BiometricListPrevalence.Apply(
+            dtos, prevalecientePorParte, vigentesPorParte, documentoPorParte, esTraspaso);
+
+        return (new BiometricValidationsResponse(
+            validations,
+            providerOptions.Provider,
+            firmaBaulPartes,
+            superseded.Count > 0 ? superseded : null,
+            motivosNoEnvio.Count > 0 ? motivosNoEnvio : null), null);
+    }
+
+    /// <summary>
+    /// ¿La etiqueta de rol que ya trae la entrada pertenece legítimamente a OTRA parte del trámite? Lo
+    /// es cuando el sujeto de identidad de esa otra parte tiene el mismo documento que la entrada (dos
+    /// partes con el mismo documento). En ese caso la fila no se re-rotula: hacerlo dejaría sin
+    /// identidad vigente a la parte que sí la tenía.
+    /// </summary>
+    private static bool EsDeOtraParte(
+        BiometricValidationDto dto, string parte, ProcedureInstance instance, IReadOnlyList<string> partes)
+    {
+        if (dto.PartyRole is null)
+            return false;
+
+        var otra = partes.FirstOrDefault(p =>
+            !string.Equals(p, parte, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(p, dto.PartyRole, StringComparison.OrdinalIgnoreCase));
+        if (otra is null)
+            return false;
+
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, otra, StringComparison.OrdinalIgnoreCase));
+        if (actor is null)
+            return false;
+
+        var subject = IdentitySubjectResolver.For(actor);
+        return !string.IsNullOrWhiteSpace(subject.NumeroDocumento)
+            && !string.IsNullOrWhiteSpace(dto.DocumentNumber)
+            && string.Equals(subject.NumeroDocumento.Trim(), dto.DocumentNumber.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 }
 

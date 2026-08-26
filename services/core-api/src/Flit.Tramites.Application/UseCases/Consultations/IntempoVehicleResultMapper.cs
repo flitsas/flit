@@ -1,3 +1,5 @@
+using Flit.Tramites.Application.UseCases.Certifications;
+using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -22,7 +24,16 @@ public static class IntempoVehicleResultMapper
     private const string Yellow = "yellow";
     private const string Red = "red";
 
-    public static ConsultationResult Map(IntempoVehicleResponse response)
+    /// <summary>Versión del mapeo; se persiste con cada fila certificada (HU #11303, ADR-0041).</summary>
+    public const string MapperVersion = "intempo-v2";
+
+    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
+
+    public static ConsultationResult Map(IntempoVehicleResponse response) =>
+        Map(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).Date));
+
+    /// <summary>Sobrecarga con la fecha inyectada, para que las pruebas no dependan del reloj.</summary>
+    public static ConsultationResult Map(IntempoVehicleResponse response, DateOnly today)
     {
         // codigoResultado="Error" → error de negocio (VIN/placa no encontrado).
         if (string.Equals(response.CodigoResultado, "Error", StringComparison.OrdinalIgnoreCase))
@@ -38,13 +49,36 @@ public static class IntempoVehicleResultMapper
         {
             MapEstadoVehiculo(response.EstadoDelVehiculo),
             MapSoat(response.SoatNacionales),
-            MapGravamenes(response.TieneGravamenes, response.Prendas, response.LimitacionesPropiedad),
+            MapGravamenes(response.TieneGravamenes, response.Prendas, response.LimitacionesPropiedad, response.Gravamenes),
         };
 
         var hydrated = MapHydratedFields(response);
         var overall = ComputeOverall(checks);
+        var certifications = MapCertifications(response, today);
 
-        return new ConsultationResult(Provider, overall, checks, hydrated);
+        return new ConsultationResult(Provider, overall, checks, hydrated, Certifications: certifications);
+    }
+
+    /// <summary>
+    /// Traduce la respuesta al vocabulario canónico (HU #11303, ADR-0041). Intempo <b>no tiene bloque
+    /// de revisión técnico-mecánica</b> en su contrato: el bundle sale sin RTM y no se declara una
+    /// inventada. Sí aporta las seis celdas del SOAT y la fecha de matrícula.
+    /// </summary>
+    private static CertificationBundle? MapCertifications(IntempoVehicleResponse response, DateOnly today)
+    {
+        var soat = (response.SoatNacionales ?? [])
+            .Where(s => s is not null)
+            .Select(s => CertificationFactory.Soat(
+                s.NoPoliza,
+                s.EntidadExpideSoat,
+                s.FechaExpedicion,
+                s.FechaVigencia,
+                s.FechaVencimiento,
+                s.Estado));
+
+        var vehicle = CertificationFactory.Vehicle(response.FechaMatricula);
+
+        return CertificationFactory.VehicleBundle(soat, [], vehicle, today);
     }
 
     private static ConsultationCheck MapEstadoVehiculo(string? estado)
@@ -78,13 +112,15 @@ public static class IntempoVehicleResultMapper
     private static ConsultationCheck MapGravamenes(
         string? tieneGravamenes,
         string? prendas,
-        List<object>? limitaciones)
+        List<object>? limitaciones,
+        List<IntempoGravamen>? gravamenesDetalle)
     {
         var sinGravamenes = IsNo(tieneGravamenes);
         var sinPrendas = IsNo(prendas);
         var sinLimitaciones = limitaciones is null || limitaciones.Count == 0;
+        var sinDetalle = gravamenesDetalle is null || gravamenesDetalle.Count == 0;
 
-        if (sinGravamenes && sinPrendas && sinLimitaciones)
+        if (sinGravamenes && sinPrendas && sinLimitaciones && sinDetalle)
             return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
 
         return new ConsultationCheck(
@@ -92,8 +128,11 @@ public static class IntempoVehicleResultMapper
             "Gravámenes y limitaciones",
             Warn,
             Provider,
-            "El vehículo tiene gravámenes, prendas o limitaciones");
+            $"El vehículo tiene gravámenes, prendas o limitaciones (gravámenes: {NormSiNo(tieneGravamenes)} · prendas: {NormSiNo(prendas)})");
     }
+
+    private static string NormSiNo(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
 
     private static bool IsNo(string? value) =>
         string.Equals(value, "NO", StringComparison.OrdinalIgnoreCase);
@@ -149,6 +188,19 @@ public static class IntempoVehicleResultMapper
         // Insumo de la regla de antigüedad de la RTM (HU #11136).
         if (!string.IsNullOrWhiteSpace(r.FechaMatricula))
             fields.Add(new HydratedField("vehicle_registration_date", r.FechaMatricula, null));
+
+        // Señal RUNT de prenda/gravamen (+ detalle de acreedores cuando Intempo lo trae).
+        Add(fields, "runt_tiene_gravamenes", r.TieneGravamenes);
+        Add(fields, "runt_tiene_prendas", r.Prendas);
+        Add(fields, "runt_prendario", r.Prendario);
+        Add(fields, "runt_nombre_acreedor", r.NombreAcreedor);
+        if (r.Gravamenes is { Count: > 0 } detalle)
+        {
+            fields.Add(new HydratedField(
+                "runt_gravamenes",
+                null,
+                System.Text.Json.JsonSerializer.Serialize(detalle)));
+        }
 
         // HU #11137 — SOAT. Este mapper producía una verificación de estado y NINGÚN campo, así que un
         // trámite consultado por Intempo emitía la tabla certificadora del SOAT entera en blanco. El

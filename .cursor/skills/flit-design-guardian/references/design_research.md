@@ -17,7 +17,7 @@ Las fuentes revisadas coinciden en que una guía frontend madura debe contener c
 | Design tokens | Mantener una fuente única para colores, gradientes, radios, sombras, tipografía, spacing y estados. |
 | UX operativa | Preservar flujos de dashboard, colaboradores, traspasos, OCR, firma, validaciones y modales. |
 | Accesibilidad sistémica | Exigir WCAG 2.2 AA como base, foco visible, navegación por teclado, labels y semántica ARIA cuando aplique. |
-| Arquitectura de información | Mantener sidebar, topbar, título en tarjeta, cards, tablas, filtros, wizards y timelines. |
+| Arquitectura de información | Mantener dock de navegación, topbar, título en tarjeta, cards, tablas, filtros, wizards y timelines. |
 | IA como auditor | Usar IA para detectar drift visual, documentar decisiones y revisar checklist, no para crear un estilo nuevo. |
 | Rendimiento frontend | Evitar efectos pesados, visual noise y dependencias visuales sin tematizar. |
 | Privacidad | Tratar datos personales, firmas, avatares y documentos como placeholders visuales. |
@@ -29,7 +29,7 @@ Las fuentes revisadas coinciden en que una guía frontend madura debe contener c
 | UI como apariencia e interacción | Figma | Controlar layout, colores, tipografía, botones, inputs y fidelidad visual. |
 | UX como experiencia total | Figma | Mantener arquitectura de información, flujos, pruebas y consistencia. |
 | Guía frontend viva | Nielsen Norman Group | Centralizar componentes para evitar inconsistencias en desarrollo. |
-| Componentes modulares | Nielsen Norman Group | Usar `AppShell`, `Sidebar`, `Topbar`, `DataTable`, `WizardSidebar`, `Modal`, etc. |
+| Componentes modulares | Nielsen Norman Group | Usar `AppShell`, `Dock`, `Topbar`, `DataTable`, `WizardStepTracker`, `Modal`, etc. |
 | WCAG 2.2 | W3C/WAI | Implementar criterios verificables de accesibilidad bajo principios perceptible, operable, comprensible y robusto. |
 | ARIA APG | W3C/WAI | Aplicar roles, estados, nombres accesibles y soporte de teclado a widgets. |
 | Accesibilidad desde el sistema | UXPin | Validar colores, tipografía, spacing, tamaños y componentes antes de pantallas completas. |

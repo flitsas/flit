@@ -1,12 +1,11 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp, Users } from "lucide-react";
+import { Building2, FileClock, FileText, Hash, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
-import { MatriculaInicialTab } from "./tabs/MatriculaInicialTab";
-import { TraspasosTab } from "./tabs/TraspasosTab";
+import { TramitesTab } from "./tabs/TramitesTab";
 import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 
 // Contenedor multi-pestaña de configuración (HU #10194, AC2). Mantiene un único
@@ -15,21 +14,22 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // ventana de confirmación (SaveConfigDialog) que los lista y pide confirmar; el resultado
 // se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
 // Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
+// Matrícula Inicial y Traspaso viven juntos en la pestaña «Trámites» (por tipo de trámite).
 
 type TabId =
-  | "matricula"
-  | "traspasos"
+  | "tramites"
   | "config"
   | "documentos"
   | "placas"
   | "representantes"
+  | "mandatarios"
+  | "usuarios"
   | "historial";
 
 /**
- * Navegación al Baúl de Firmas expuesta a la pestaña de representantes (HU #10904, ajustes HU #10929).
- * El Baúl ya no es una pestaña propia: vive como una sección dentro de la pestaña "Representantes
- * legales". `goToBaul` lleva a esa sección (scroll) y `baulVisible` indica si está disponible (depende
- * de `baulFirmasActivo`). El proveedor real lo aporta el contenedor de la pestaña de representantes.
+ * Navegación auxiliar hacia el Baúl de Firmas (legado HU #10929).
+ * La pestaña de representantes ya no muestra un baúl suelto; la firma se asocia
+ * desde la ficha del representante. Se conserva el contexto por compatibilidad.
  */
 export interface CompanyTabsNav {
   goToBaul: () => void;
@@ -51,17 +51,22 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { id: "matricula", label: "Matrícula Inicial", icon: Stamp, isConfig: true },
-  { id: "traspasos", label: "Traspasos", icon: Shuffle, isConfig: true },
+  { id: "tramites", label: "Trámites", icon: Stamp, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
   // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
   { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
   // HU #10653 (Feature #10587) — visualización de placas preasignadas por OT (solo si está activa).
   { id: "placas", label: "Placas preasignadas", icon: Hash, isConfig: false },
   // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
-  // Ajustes HU #10929: aloja también el Baúl de Firmas como sección interna y es el único punto de
-  // alta/edición de escrituras (por compañía, desde el detalle del representante).
+  // Escrituras y firma/identidad se gestionan desde la ficha de cada representante (no hay baúl
+  // suelto ni sección hermana de escrituras en esta pestaña).
   { id: "representantes", label: "Representantes legales", icon: Users, isConfig: false },
+  // HU #11202 (Feature #11190) — los mandatarios los registra la COMPAÑÍA y elige en cuáles de sus
+  // organismos aplican. Antes vivían en el perfil de cada organismo de tránsito, que era quien elegía
+  // compañías: el mandatario es de la empresa, no del organismo.
+  { id: "mandatarios", label: "Mandatarios", icon: UserCheck, isConfig: false },
+  // Gestión de usuarios del tenant compañía (SuperAdmin); invite force AdminCompany.
+  { id: "usuarios", label: "Usuarios", icon: UserCog, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -79,10 +84,14 @@ export interface CompanyConfigTabsProps {
   /** HU #10653 — visor de placas preasignadas. Solo si la preasignación está activa. */
   platesSlot?: ReactNode;
   /**
-   * HU #10904 (ajustes HU #10929) — pestaña de representantes legales, que además aloja el Baúl de
-   * Firmas como sección interna (según `baulFirmasActivo`).
+   * HU #10904 — pestaña de representantes legales (directorio). Firma e identidad
+   * viven en la ficha de cada persona; las escrituras bajo cada NIT del acordeón.
    */
   legalRepresentativesSlot?: ReactNode;
+  /** HU #11202 — mandatarios de la compañía y los organismos donde aplican. */
+  mandatariosSlot?: ReactNode;
+  /** Tab Usuarios scoped al tenant de la ficha (SuperAdmin). */
+  usuariosSlot?: ReactNode;
   /**
    * HU #11062 — compañía que se está configurando. Se rotula por ENCIMA de la barra de pestañas para
    * que sobreviva al cambio de pestaña, y se repite en la confirmación de guardado. `null` mientras
@@ -100,13 +109,21 @@ export function CompanyConfigTabs({
   documentosSlot,
   platesSlot,
   legalRepresentativesSlot,
+  mandatariosSlot,
+  usuariosSlot,
   company,
 }: CompanyConfigTabsProps) {
-  const [tab, setTab] = useState<TabId>("matricula");
+  const [tab, setTab] = useState<TabId>("tramites");
   // La pestaña de placas solo aparece si la preasignación está activa.
+  // Usuarios solo si el consumidor inyecta el slot (SuperAdmin en ficha compañía).
   const visibleTabs = useMemo(
-    () => TABS.filter((t) => t.id !== "placas" || settings.preasignacionPlacaActiva),
-    [settings.preasignacionPlacaActiva],
+    () =>
+      TABS.filter(
+        (t) =>
+          (t.id !== "placas" || settings.preasignacionPlacaActiva) &&
+          (t.id !== "usuarios" || Boolean(usuariosSlot)),
+      ),
+    [settings.preasignacionPlacaActiva, usuariosSlot],
   );
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
   // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.
@@ -120,6 +137,10 @@ export function CompanyConfigTabs({
   const patch = (p: Partial<SettingsForm>) => setForm((f) => ({ ...f, ...p }));
 
   const changes = useMemo(() => diffSettings(initialForm, form), [initialForm, form]);
+  const pendingChangeCount = useMemo(
+    () => changes.reduce((n, g) => n + g.items.length, 0),
+    [changes],
+  );
 
   // "Guardar todo" no persiste directo: abre la confirmación con el resumen de cambios.
   const openConfirm = () => {
@@ -146,6 +167,9 @@ export function CompanyConfigTabs({
         const mapped: Record<string, string> = {};
         for (const e of errors) {
           mapped[e.field] = e.message;
+          if (e.field === "destinatariosNotificacion.extraEmail") {
+            mapped.extraEmail = e.message;
+          }
         }
         setFieldErrors(mapped);
         setErrorBanner("Revisa los campos marcados: hay valores inválidos.");
@@ -165,22 +189,48 @@ export function CompanyConfigTabs({
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      {/* HU #11062 — identifica la compañía en TODA la pantalla: va sobre la barra de pestañas, así
-          que no desaparece al cambiar de pestaña. Antes el tenant solo estaba en la URL y nada en
-          pantalla confirmaba sobre qué compañía persistía el "Guardar todo" (un PUT atómico). */}
-      {company && (
+      {/* Identidad de compañía + «Guardar todo» a la derecha (PUT atómico de settings). */}
+      {(company || currentTab?.isConfig) && (
         <header
-          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-[#DFE5ED] px-4 py-3 dark:border-white/10"
+          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-[#DFE5ED] px-4 py-3 dark:border-white/10"
           style={{ background: "rgba(85,126,255,0.04)" }}
           aria-label="Compañía en configuración"
         >
-          <span className="text-[10px] font-semibold uppercase tracking-wider opacity-60">
-            Configurando
-          </span>
-          <span className="text-sm font-bold text-[#162744] dark:text-white">
-            {company.razonSocial}
-          </span>
-          <span className="text-xs opacity-70">NIT {company.nit}</span>
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+            {company ? (
+              <>
+                <span className="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                  Configurando
+                </span>
+                <span className="text-sm font-bold text-[#162744] dark:text-white">
+                  {company.razonSocial}
+                </span>
+                <span className="text-xs opacity-70">NIT {company.nit}</span>
+              </>
+            ) : (
+              <span className="text-xs opacity-60">Configuración de compañía</span>
+            )}
+          </div>
+
+          {currentTab?.isConfig && (
+            <div className="flex shrink-0 items-center gap-3">
+              {pendingChangeCount > 0 && (
+                <span className="hidden text-[11px] font-medium opacity-60 sm:inline" aria-live="polite">
+                  {pendingChangeCount} cambio{pendingChangeCount === 1 ? "" : "s"} pendiente
+                  {pendingChangeCount === 1 ? "" : "s"}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={openConfirm}
+                disabled={confirmOpen}
+                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              >
+                <Save className="h-4 w-4" aria-hidden /> Guardar todo
+              </button>
+            </div>
+          )}
         </header>
       )}
 
@@ -200,32 +250,14 @@ export function CompanyConfigTabs({
               <Icon className="h-3.5 w-3.5" />
               {t.label}
               {active && (
-                <span className="absolute right-2 left-2 -bottom-px h-0.5 rounded-full" style={{ background: "#557EFF" }} />
+                <span
+                  className="absolute right-2 left-2 -bottom-px h-0.5 rounded-full"
+                  style={{ background: "#557EFF" }}
+                />
               )}
             </button>
           );
         })}
-      </div>
-
-      <div role="tabpanel" className="flex-1">
-        {activeTabId === "matricula" && (
-          <MatriculaInicialTab form={form} onChange={patch} fieldErrors={fieldErrors} />
-        )}
-        {activeTabId === "traspasos" && (
-          <TraspasosTab form={form} onChange={patch} whitelistSlot={whitelistSlot} />
-        )}
-        {activeTabId === "config" && (
-          <ConfiguracionEmpresaTab
-            form={form}
-            onChange={patch}
-            otSlot={otSlot}
-            fieldErrors={fieldErrors}
-          />
-        )}
-        {activeTabId === "documentos" && documentosSlot}
-        {activeTabId === "placas" && platesSlot}
-        {activeTabId === "representantes" && legalRepresentativesSlot}
-        {activeTabId === "historial" && auditSlot}
       </div>
 
       {errorBanner && (
@@ -239,21 +271,30 @@ export function CompanyConfigTabs({
         </div>
       )}
 
-      {currentTab?.isConfig && (
-        <div
-          className="sticky bottom-0 flex items-center justify-end gap-3 border-t bg-white/90 py-3 backdrop-blur dark:bg-[#0B0F14]/90"
-        >
-          <button
-            type="button"
-            onClick={openConfirm}
-            disabled={confirmOpen}
-            className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-          >
-            <Save className="h-4 w-4" /> Guardar todo
-          </button>
-        </div>
-      )}
+      <div role="tabpanel" className="flex-1">
+        {activeTabId === "tramites" && (
+          <TramitesTab
+            form={form}
+            onChange={patch}
+            fieldErrors={fieldErrors}
+            whitelistSlot={whitelistSlot}
+          />
+        )}
+        {activeTabId === "config" && (
+          <ConfiguracionEmpresaTab
+            form={form}
+            onChange={patch}
+            otSlot={otSlot}
+            fieldErrors={fieldErrors}
+          />
+        )}
+        {activeTabId === "documentos" && documentosSlot}
+        {activeTabId === "placas" && platesSlot}
+        {activeTabId === "representantes" && legalRepresentativesSlot}
+        {activeTabId === "mandatarios" && mandatariosSlot}
+        {activeTabId === "usuarios" && usuariosSlot}
+        {activeTabId === "historial" && auditSlot}
+      </div>
 
       {confirmOpen && (
         <SaveConfigDialog

@@ -16,7 +16,10 @@ internal sealed class IntegrationClientConfiguration : IEntityTypeConfiguration<
     {
         builder.ToTable("integration_clients", SchemaNames.Ict, t => t.ExcludeFromMigrations());
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Username).HasColumnType("citext");
+        // username es varchar (NO citext): la case-insensitivity se resuelve normalizando a minúsculas en la
+        // app + índice único funcional lower(username) (ver 01-ICT-schema-core.sql). Evita la dependencia de
+        // la extensión citext, que no se puede crear con el rol de la app en PDN.
+        builder.Property(x => x.Username).HasMaxLength(50);
         builder.Property(x => x.Scopes).HasColumnType("jsonb");
         builder.Property(x => x.RowVersion).IsConcurrencyToken().HasDefaultValue(0L);
         builder.HasIndex(x => x.Username).IsUnique();
@@ -40,6 +43,11 @@ internal sealed class ExternalIntegrationMasterConfiguration : IEntityTypeConfig
     {
         builder.ToTable("external_integration_master", SchemaNames.Ict, t => t.ExcludeFromMigrations());
         builder.HasKey(x => x.Id);
+        // Identificador numérico secuencial (paridad v1): lo genera la secuencia en la BD (DDL embebido);
+        // EF no lo envía en el INSERT y lo lee de vuelta (RETURNING) para exponerlo en /register.
+        builder.Property(x => x.TransactionNumber)
+            .ValueGeneratedOnAdd()
+            .HasDefaultValueSql("nextval('ict.transaction_number_seq')");
         builder.Property(x => x.SellingPrice).HasColumnType("numeric(19,2)");
         builder.Property(x => x.BusinessCommentsValidation).HasColumnType("text");
         builder.Property(x => x.ExternalCommentsValidation).HasColumnType("text");

@@ -1,13 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import type { LinkedProcedureRef } from '@/lib/api/types/procedure-runtime';
-
-const MODALIDAD_LABEL: Record<string, string> = {
-  traspaso: 'Traspaso',
-  matricula_inicial: 'Matrícula inicial',
-};
+import { FLIT } from '@/lib/flit-design-tokens';
+import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 export type AssociatedProcedureItem = {
   instanceId: string;
@@ -46,7 +43,7 @@ export function AssociatedProceduresList({
       {procedures.map((p) => {
         const tipo =
           p.modalidad != null && p.modalidad !== ''
-            ? (MODALIDAD_LABEL[p.modalidad] ?? p.modalidad)
+            ? (familiaLabel(p.modalidad))
             : null;
         return (
           <li key={p.instanceId}>
@@ -55,9 +52,9 @@ export function AssociatedProceduresList({
               className={
                 compact
                   ? 'block truncate underline'
-                  : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[#557EFF0D]'
+                  : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[rgba(79,116,201,0.05)]'
               }
-              style={compact ? { color: '#557EFF' } : { borderColor: '#DFE5ED' }}
+              style={compact ? { color: FLIT.brand.blue } : { borderColor: FLIT.border.soft }}
               title={`${p.referenceNumber}${tipo ? ` · ${tipo}` : ''}${p.status ? ` (${p.status})` : ''}`}
             >
               {compact ? (
@@ -67,7 +64,7 @@ export function AssociatedProceduresList({
                 </>
               ) : (
                 <>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: '#557EFF' }}>
+                  <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
                     <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
                     {p.referenceNumber}
                     {p.primary ? (
@@ -108,26 +105,29 @@ export function AssociatedProceduresList({
     );
   }
 
-  // Mismo patrón que IdentityValidationTrackingPanel: caja + disclosure «Ver …».
+  // Barra del mockup de detalle: texto a la izquierda, CTA outlined a la derecha.
   return (
-    <div className="rounded-xl border p-3">
-      <p className="mb-1 text-[11px] font-semibold text-[#162744] dark:text-white">Trámites asociados</p>
-      <p className="mb-2 text-[10px] opacity-60">
-        Trámites del tenant vinculados a esta identidad ({procedures.length}).
-      </p>
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-1.5 text-[11px] font-semibold opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        aria-expanded={open}
-        aria-label={`Ver trámites asociados (${procedures.length})`}
-      >
-        <ChevronRight
-          className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
-          aria-hidden
-        />
-        Ver trámites ({procedures.length})
-      </button>
+    <div className="rounded-xl border px-3 py-2.5" style={{ borderColor: FLIT.border.soft }}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] opacity-70">
+          {procedures.length} trámite{procedures.length === 1 ? '' : 's'} asociado
+          {procedures.length === 1 ? '' : 's'} a esta identidad
+        </p>
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{
+            borderColor: FLIT.brand.blue,
+            color: FLIT.brand.blue,
+            outlineColor: FLIT.brand.blue,
+          }}
+          aria-expanded={open}
+          aria-label={`Ver trámites asociados (${procedures.length})`}
+        >
+          Ver trámites ({procedures.length})
+        </button>
+      </div>
       {open && <div className="mt-2 space-y-2">{list}</div>}
     </div>
   );

@@ -19,6 +19,20 @@ public sealed record TenantSettingsResponse(
     bool PreasignacionPlacaActiva,
     // Sub-flujo post-radicación: con placa completa, omitir Asignado → Terminado.
     bool PlateFlowSkipToTerminado,
+    // Validación del SOAT ante el RUNT al procesar (sub-estado asignado).
+    bool ValidarSoatConRunt,
     AvaluoProviderConfigDto AvaluoProviderConfig,
     // FEATURE 02 — fuente de comparendos (internal | external).
-    string FinesQuerySource);
+    string FinesQuerySource,
+    // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, desacoplada del canal.
+    bool DocumentosPersonalizadosActivo,
+    bool AvisosAprobacionActivos,
+    bool AvisosRechazoActivos,
+    DestinatariosNotificacionDto DestinatariosNotificacion);
+
+/// <summary>Checkboxes + correo extra de avisos de estado.</summary>
+public sealed record DestinatariosNotificacionDto(
+    bool Comprador,
+    bool VendedorOPropietario,
+    bool Radicador,
+    string? ExtraEmail);

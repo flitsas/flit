@@ -1,3 +1,5 @@
+using System.Reflection;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Xunit;
@@ -29,6 +31,19 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// comprueba que el fichero declarado la mencione; no puede demostrar que la escritura ocurra en
 /// tiempo de ejecución. Su valor es que añadir un consumidor sin productor deja de ser silencioso y
 /// pasa a ser una decisión explícita y revisable.</para>
+///
+/// <para><b>HU #11308 — ese límite resultó ser el agujero, y ya no se cubre desde aquí.</b> Este
+/// guardián es un <c>grep</c>: le basta con que <i>algún</i> productor declarado mencione la llave
+/// como literal en su código. Declaró durante meses que Verifik producía <c>rtm_numero</c> y
+/// <c>rtm_expedicion</c> —y las mencionaba, en una búsqueda por nombres candidatos que nunca acertó—
+/// mientras esas dos llaves tenían CERO filas en toda la base. Pasó en verde el Feature entero
+/// dedicado a llenarlas.</para>
+///
+/// <para>La cobertura de las certificaciones pasa a
+/// <c>CertificationCoverageGuardTests</c>, que recorre la cadena completa —respuesta real del
+/// proveedor → mapper → ingesta → lector documental— y exige que las celdas lleguen no vacías al
+/// final. Con el DTO anterior de Kyverum, esa prueba falla. Esta se conserva para lo que sí sabe
+/// hacer y la otra no cubre: detectar que un documento empiece a leer una llave que nadie escribe.</para>
 /// </summary>
 public sealed class FieldValueContractGuardTests
 {
@@ -66,10 +81,29 @@ public sealed class FieldValueContractGuardTests
     private const string Preflight = App + "UseCases/ProcedureInstances/PreflightCommand.cs";
     private const string RuesProvider = Infra + "Consultations/VerifikRuesConsultationProvider.cs";
     private const string RuesLookup = App + "UseCases/Consultations/RuesPersonLookupHandler.cs";
+    /// <summary>
+    /// HU sin ADO 2026-08-11 (segunda tanda) — casilla 18/19 del FUR elegidas por el operador en
+    /// matrícula inicial (tipoServicioCode == PUBLICO para la 19), escritas al crear el trámite.
+    /// </summary>
+    private const string CreateFromConsulta = App + "UseCases/ProcedureInstances/CreateFromConsultaCommand.cs";
     private const string WizardFur = "frontend/components/operacion/FirmaFurStep.tsx";
+    /// <summary>P6 del wizard — observaciones del trámite (antes vivían en FirmaFurStep).</summary>
+    private const string WizardTramite = "frontend/components/operacion/TramiteWizard.tsx";
 
-    /// <summary>Fichero que se lee para extraer las llaves CONSUMIDAS por los documentos.</summary>
-    private const string Consumidor = App + "UseCases/ProcedureInstances/FurCommand.cs";
+    /// <summary>
+    /// Ficheros que se leen para extraer las llaves CONSUMIDAS por los documentos.
+    /// </summary>
+    /// <remarks>
+    /// HU #11305 — dejó de ser uno solo. El expediente ya no lee <c>field_values</c> directamente para
+    /// las certificaciones: lo hace el lector documental, que resuelve tabla canónica → respaldo sobre
+    /// <c>field_values</c> → nada. <c>FurCommand</c> conserva el resto (placa, organismo,
+    /// transformaciones, prenda) y los campos <c>rues_*</c> que el certificado imprime.
+    /// </remarks>
+    private static readonly string[] Consumidores =
+    [
+        App + "UseCases/ProcedureInstances/FurCommand.cs",
+        App + "UseCases/Certifications/CertificationReader.cs",
+    ];
 
     /// <summary>
     /// Registro declarativo: llave de <c>field_values</c> → quién la escribe.
@@ -91,7 +125,11 @@ public sealed class FieldValueContractGuardTests
         ["vehicle_chassis"] = new(Verifik, Modo.Literal),
         ["vehicle_engine_number"] = new(Verifik, Modo.Literal),
         ["vehicle_series"] = new(Verifik, Modo.Literal),
-        ["vehicle_service"] = new(Verifik, Modo.Literal),
+        // HU sin ADO 2026-08-11 (segunda tanda) — segundo productor, sin quitar el de Verifik: el
+        // traspaso lo hidrata el RUNT como texto libre; la matrícula inicial persiste el CÓDIGO
+        // cerrado que el operador elige (casilla 18). VehicleServiceTypeCode.Resolve (Domain)
+        // normaliza cualquiera de las dos formas a una sola casilla del FUR.
+        ["vehicle_service"] = new([Verifik, CreateFromConsulta], Modo.Literal),
         ["vehicle_passengers"] = new(Verifik, Modo.Literal),
         ["vehicle_weight"] = new(Verifik, Modo.Literal),
         ["vehicle_axles"] = new(Verifik, Modo.Literal),
@@ -101,11 +139,13 @@ public sealed class FieldValueContractGuardTests
         // `field.FieldKey + RuntSnapshotSuffix`. Es el caso que un grep reportaría como huérfano.
         ["vehicle_color_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
         ["vehicle_fuel_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
+        // HU #10673 (A4/B4) — carrocería se suma al mismo patrón de transformación.
+        ["vehicle_body_type_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
 
-        // HU #11136 — fecha de matrícula del vehículo: insumo de la regla de antigüedad de la RTM.
-        // OJO: solo la reporta Verifik. Las respuestas capturadas de Kyverum no traen fecha alguna de
-        // matrícula, así que con ese proveedor la regla cae al lado seguro (mostrar la tabla).
-        ["vehicle_registration_date"] = new(Verifik, Modo.Literal),
+        // HU #11136 / #11303 — fecha de matrícula del vehículo: insumo de la regla de antigüedad de la
+        // RTM. Se creía exclusiva de Verifik porque Kyverum manda `fechaMatricula` en null; la fecha
+        // real viaja en `vehiculo.fechaRegistro`, que ahora sí se lee.
+        ["vehicle_registration_date"] = new([Verifik, Kyverum], Modo.Literal),
 
         // SOAT y RTM — parte del RUNT, parte del OCR del documento (HU #10975/#10976/#10977).
         ["soat_vencimiento"] = new(Verifik, Modo.Literal),
@@ -114,14 +154,24 @@ public sealed class FieldValueContractGuardTests
         ["rtm_vencimiento"] = new(Verifik, Modo.Literal),
         ["rtm_estado"] = new(Verifik, Modo.Literal),
         ["rtm_entidad"] = new(Verifik, Modo.Literal),
-        // HU #11134 / #11135 — doble productor: el RUNT es el primario y el OCR del PDF el respaldo
-        // (PersistOcrFieldsHandler nunca pisa un valor de consulta). Ambos deben seguir existiendo.
-        ["soat_poliza"] = new([Verifik, Ocr], Modo.Literal),
-        ["soat_vigencia"] = new([Verifik, Ocr], Modo.Literal),
-        ["soat_expedicion"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_numero"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_vigencia"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_expedicion"] = new([Verifik, Ocr], Modo.Literal),
+        // HU #11134 / #11135 / #11303 — doble productor: el RUNT es el primario y el OCR del PDF el
+        // respaldo (PersistOcrFieldsHandler nunca pisa un valor de consulta). Ambos deben existir.
+        // La HU #11303 suma Kyverum a las tres del SOAT: el proveedor primario SÍ manda numSoat,
+        // fechaExpediSoat y fechaInicioPoliza, y el DTO afirmaba lo contrario.
+        ["soat_poliza"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+        ["soat_vigencia"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+        ["soat_expedicion"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+
+        // rtm_numero y rtm_expedicion pasan a Kyverum + OCR. Verifik SALE de la lista: la HU #11303
+        // retiró su resolución por nombres candidatos sobre JsonExtensionData, que en la medición de
+        // base de datos nunca produjo una sola fila. Cuando haya una captura real de Verifik con
+        // sección RTM se declararán los campos con su nombre verdadero y volverá a la lista.
+        ["rtm_numero"] = new([Kyverum, Ocr], Modo.Literal),
+        ["rtm_expedicion"] = new([Kyverum, Ocr], Modo.Literal),
+
+        // rtm_vigencia queda SOLO en el OCR: ningún proveedor manda el inicio de vigencia de la
+        // revisión, y no se deduce de la fecha de expedición.
+        ["rtm_vigencia"] = new(Ocr, Modo.Literal),
 
         // Fecha de la consulta al RUNT (HU #10974): dato de la EJECUCIÓN, no de la respuesta.
         ["runt_consulta_fecha"] = new(RunConsulta, Modo.Literal),
@@ -129,8 +179,32 @@ public sealed class FieldValueContractGuardTests
         // Organismo de tránsito y campos del FUR — los escribe el wizard vía PatchFieldValues.
         ["transit_office_code"] = new(WizardFur, Modo.Literal),
         ["transit_office_city"] = new(WizardFur, Modo.Literal),
-        ["fur_observations"] = new(WizardFur, Modo.Literal),   // HU #10987
+
+        // Organismo donde el vehículo está matriculado HOY, cuando NO coincide con el del trámite.
+        // Solo lo escribe el radicado de cuenta, cuyo organismo canónico es el DESTINO (quien
+        // aprueba); el encabezado del FUR necesita el actual y lo lee de aquí. Llaves CONSTRUIDAS en
+        // ejecución por `RedirigirOrganismoDelRunt`, reetiquetando las canónicas.
+        //
+        // `transit_office_actual_id` NO se declara: se escribe (el id resuelto es útil en pantalla y
+        // para diagnóstico) pero ningún documento lo lee, y este registro describe lo que los
+        // documentos consumen. Declararlo sería ruido que esconde el siguiente hueco real.
+        // Organismo al que va la cuenta en el TRASLADO, que lo declara sin radicarse allí: el trámite
+        // lo expide el de origen. Lo escribe el paso 1 del asistente vía PatchFieldValues, igual que
+        // las observaciones del trámite. (En el radicado el destino ES el organismo del trámite, así
+        // que va en las canónicas y no por aquí.)
+        ["transit_office_destino_name"] = new(WizardTramite, Modo.Literal),
+
+        ["transit_office_actual_code"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
+        ["transit_office_actual_name"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
+        ["transit_office_actual_city"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
+        ["fur_observations"] = new(WizardTramite, Modo.Literal), // HU #10987 — productor en P6 del wizard
         ["fur_processing_date"] = new(WizardFur, Modo.Literal), // HU #10988
+
+        // HU sin ADO 2026-08-11 (segunda tanda) — casilla 19 "EMPRESA VINCULADORA" del FUR: el
+        // operador la captura en matrícula inicial (solo con tipoServicioCode == PUBLICO) y se
+        // persiste al crear el trámite, mismo canal que transit_office_*/vehicle_service de arriba.
+        ["empresa_vinculadora_nit"] = new(CreateFromConsulta, Modo.Literal),
+        ["empresa_vinculadora_razon_social"] = new(CreateFromConsulta, Modo.Literal),
 
         // RUES — provider de consulta; el resolutor por actor (HU #10990) devuelve estas mismas llaves.
         ["rues_nit"] = new(RuesProvider, Modo.Literal),
@@ -204,15 +278,59 @@ public sealed class FieldValueContractGuardTests
     };
 
     /// <summary>
-    /// Llaves que los documentos CONSUMEN: los literales de <c>Get(fv, "…")</c> (datos del trámite) y
-    /// de <c>Val(datos, "…")</c> (datos del RUES resueltos por actor) en <c>FurCommand</c>, más las
-    /// declaradas en <see cref="ConsumidasPorConstante"/>.
+    /// Llaves que los documentos CONSUMEN: los literales de <c>Get(fv, "…")</c> (datos del trámite),
+    /// de <c>Val(datos, "…")</c> (RUES por actor), de <c>RuntOrEffective</c>/<c>Declarada</c> (snapshot
+    /// RUNT vs valor efectivo en el FUR) en <c>FurCommand</c>, más las de
+    /// <see cref="ConsumidasPorConstante"/>.
     /// </summary>
     private static HashSet<string> LlavesConsumidas()
     {
-        var fuente = Leer(Consumidor);
+        var fuente = string.Join('\n', Consumidores.Select(Leer));
         var regex = new Regex("(?:Get\\(fv|Val\\(datos),\\s*\"([a-z0-9_]+)\"", RegexOptions.CultureInvariant);
         var llaves = regex.Matches(fuente).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+
+        // El FUR ya no lee los snapshots RUNT con Get(fv, "vehicle_color_runt"): los pasa a
+        // RuntOrEffective / Declarada. Sin estas formas la guardia los daba por no consumidos.
+        foreach (Match m in Regex.Matches(
+                     fuente,
+                     @"RuntOrEffective\(fv,\s*""([a-z0-9_]+)""\s*,\s*""([a-z0-9_]+)""",
+                     RegexOptions.CultureInvariant))
+        {
+            llaves.Add(m.Groups[1].Value);
+            llaves.Add(m.Groups[2].Value);
+        }
+
+        foreach (Match m in Regex.Matches(
+                     fuente,
+                     @"Declarada\(fv,\s*[^,]+,\s*""([a-z0-9_]+)""\s*,\s*""([a-z0-9_]+)""",
+                     RegexOptions.CultureInvariant))
+        {
+            llaves.Add(m.Groups[1].Value);
+            llaves.Add(m.Groups[2].Value);
+        }
+
+        // Llaves referidas por CONSTANTE en vez de por literal. El organismo de tránsito las tiene
+        // así porque las comparten tres capas y el radicado de cuenta introdujo una segunda familia
+        // (`transit_office_actual_*`) que no puede quedar a merced de un typo. Se resuelven por
+        // reflexión sobre la clase de constantes, de modo que añadir una allí la registra aquí sola.
+        var porConstante = typeof(TransitOfficeFieldKeys)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .ToDictionary(f => f.Name, f => (string)f.GetRawConstantValue()!, StringComparer.Ordinal);
+
+        foreach (Match m in Regex.Matches(
+                     fuente,
+                     $@"{nameof(TransitOfficeFieldKeys)}\.(\w+)",
+                     RegexOptions.CultureInvariant))
+        {
+            if (porConstante.TryGetValue(m.Groups[1].Value, out var llave))
+                llaves.Add(llave);
+        }
+
+        // HU #11305 — las llaves `rues_*` que el lector enumera para el respaldo también son consumo,
+        // aunque no aparezcan bajo la forma Get(fv, "…").
+        foreach (Match m in Regex.Matches(fuente, "\"(rues_[a-z0-9_]+)\"", RegexOptions.CultureInvariant))
+            llaves.Add(m.Groups[1].Value);
 
         foreach (var (llave, expresion) in ConsumidasPorConstante)
         {

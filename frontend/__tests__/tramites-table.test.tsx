@@ -12,16 +12,30 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
+  // Frente C, etapa 1 — modal de detalle de un trámite ya radicado.
+  getInstance: vi.fn(),
+  listBiometricExpediente: vi.fn(),
   // ICT (PR #204) — pausa individual y masiva + cierre del subflujo de placa.
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
   completePlateFlow: vi.fn(),
+  // La tabla consulta la config del tenant al montar (bloqueo de creación por familia y
+  // "solo vehículos propios"); sin este mock el efecto revienta y tumba todo el archivo.
+  getConsultationConfig: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   DEV_TENANT_ID: 'tenant-dev',
   DEV_USER_ID: 'user-dev',
+}));
+
+// Preferencias de columnas: sin mock, el put fallaba y el selector revertía la selección.
+vi.mock('@/lib/api/ui-preferences', () => ({
+  uiPreferencesClient: {
+    get: vi.fn().mockResolvedValue({ scope: 'tramites.columns', value: {} }),
+    put: vi.fn().mockResolvedValue({ scope: 'tramites.columns', value: { visible: [] } }),
+  },
 }));
 
 // La tabla usa useRouter para abrir cada fila; en jsdom no hay router montado.
@@ -39,7 +53,7 @@ function makeInstances(n: number): InstanceSummary[] {
     return {
       id: `inst-${num}`,
       referenceNumber: `TR-${num}`,
-      modalidad: 'traspaso',
+      modalidad: 'TRASPASO',
       estado: 'borrador',
       placa: `P${num}`,
       vin: `VIN-${num}`,
@@ -88,17 +102,27 @@ async function abrirAcciones(referenceNumber = 'TR-0001') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks borra la implementación: sin re-armarla el efecto de config recibe undefined
+  // y encadena .then sobre él. Por defecto, ninguna familia bloqueada.
+  mocks.getConsultationConfig.mockResolvedValue({
+    vehiclePlate: 'kyverum_runt',
+    onlyOwnVehicles: false,
+    blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
+  });
 });
 
 describe('TramitesTable — paginación', () => {
-  it('no muestra controles de paginación cuando todo cabe en una página', async () => {
+  it('no muestra botones de página cuando todo cabe en una página, pero sí el conteo', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(10));
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    expect(
-      screen.queryByRole('navigation', { name: 'Paginación de trámites' }),
-    ).not.toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Paginación de trámites' });
+    // La píldora de conteo suelta desapareció: la cuenta ahora vive SOLO aquí, incluso con una
+    // única página.
+    expect(within(nav).getByText('Mostrando 10 de 10')).toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Página anterior' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Página 1' })).not.toBeInTheDocument();
   });
 
   it('pagina a 10 filas por página y navega entre páginas', async () => {
@@ -111,8 +135,9 @@ describe('TramitesTable — paginación', () => {
     expect(screen.queryByText('P0011')).not.toBeInTheDocument();
 
     const nav = screen.getByRole('navigation', { name: 'Paginación de trámites' });
-    expect(within(nav).getByText('1 / 3')).toBeInTheDocument();
-    expect(within(nav).getByText('1–10 de 23')).toBeInTheDocument();
+    // Paginación numerada del diseño: la página activa se marca con aria-current="page".
+    expect(within(nav).getByRole('button', { name: 'Página 1', current: 'page' })).toBeInTheDocument();
+    expect(within(nav).getByText('Mostrando 10 de 23')).toBeInTheDocument();
     // En la primera página "Anterior" está deshabilitado.
     expect(within(nav).getByRole('button', { name: 'Página anterior' })).toBeDisabled();
 
@@ -130,8 +155,8 @@ describe('TramitesTable — paginación', () => {
     );
     expect(screen.getByText('P0021')).toBeInTheDocument();
     expect(screen.getByText('P0023')).toBeInTheDocument();
-    expect(within(nav).getByText('3 / 3')).toBeInTheDocument();
-    expect(within(nav).getByText('21–23 de 23')).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Página 3', current: 'page' })).toBeInTheDocument();
+    expect(within(nav).getByText('Mostrando 3 de 23')).toBeInTheDocument();
     expect(
       within(nav).getByRole('button', { name: 'Página siguiente' }),
     ).toBeDisabled();
@@ -147,16 +172,15 @@ describe('TramitesTable — paginación', () => {
     await userEvent.click(
       within(nav).getByRole('button', { name: 'Página siguiente' }),
     );
-    expect(within(nav).getByText('2 / 3')).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Página 2', current: 'page' })).toBeInTheDocument();
 
     // Buscar "Comprador" matchea las 23 (siguen 3 páginas) pero resetea a la 1.
-    // La búsqueda está oculta tras el botón "Buscar" (paridad con el diseño).
-    await userEvent.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
+    // La búsqueda vive en la tarjeta de filtros, siempre visible.
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Comprador',
     );
-    expect(within(nav).getByText('1 / 3')).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Página 1', current: 'page' })).toBeInTheDocument();
     expect(screen.getByText('P0001')).toBeInTheDocument();
     expect(screen.queryByText('P0011')).not.toBeInTheDocument();
   });
@@ -178,7 +202,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     ]);
     render(<TramitesTable />);
 
-    const row = (await screen.findByText('PEND01')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('PEND01')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
     // Accesible: el chip expone su estado por aria-label.
     expect(within(row).getByLabelText('Estado: Pendiente validación')).toBeInTheDocument();
@@ -202,7 +226,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     ]);
     render(<TramitesTable />);
 
-    const row = (await screen.findByText('FIRM01')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('FIRM01')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Pendiente firma')).toBeInTheDocument();
   });
 
@@ -221,7 +245,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     ]);
     render(<TramitesTable />);
 
-    const row = (await screen.findByText('RDY001')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('RDY001')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
     // La acción vive dentro del menú de la fila desde HU #11037.
     await abrirAcciones();
@@ -243,8 +267,7 @@ describe('TramitesTable — organismo de tránsito', () => {
     expect(screen.getByText('Secretaría de Movilidad Bogotá')).toBeInTheDocument();
     expect(screen.getByText('Cali — STTMP')).toBeInTheDocument();
 
-    // El buscador también filtra por organismo.
-    await userEvent.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
+    // El buscador también filtra por organismo (siempre visible en la tarjeta de filtros).
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Cali',
@@ -279,6 +302,58 @@ describe('TramitesTable — HU #10536 prioridad', () => {
     ).toBeInTheDocument();
   });
 
+  it('al marcar prioritario la fila sube a la primera posición sin recargar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'x1', referenceNumber: 'TR-X1', placa: 'AAA111', prioritario: false },
+      { ...base, id: 'x2', referenceNumber: 'TR-X2', placa: 'BBB222', prioritario: false },
+    ]);
+    mocks.setPriority.mockResolvedValue({ id: 'x2', prioritario: true });
+    render(<TramitesTable />);
+
+    await screen.findByText('AAA111');
+    const filas = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' }))
+        .getAllByRole('row')
+        .slice(1);
+    expect(filas()[0].textContent).toContain('AAA111');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Marcar como prioritario el trámite TR-X2' }),
+    );
+
+    // Sin refetch ni recarga: el listado se reordena con el MISMO criterio del backend
+    // (prioritarios primero), así que la fila marcada pasa a encabezar la tabla.
+    expect(mocks.listInstances).toHaveBeenCalledTimes(1);
+    expect(filas()[0].textContent).toContain('BBB222');
+    expect(filas()[1].textContent).toContain('AAA111');
+  });
+
+  it('al marcar prioritario la fila sube a la primera posición sin recargar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'x1', referenceNumber: 'TR-X1', placa: 'AAA111', prioritario: false },
+      { ...base, id: 'x2', referenceNumber: 'TR-X2', placa: 'BBB222', prioritario: false },
+    ]);
+    mocks.setPriority.mockResolvedValue({ id: 'x2', prioritario: true });
+    render(<TramitesTable />);
+
+    await screen.findByText('AAA111');
+    const filas = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' }))
+        .getAllByRole('row')
+        .slice(1);
+    expect(filas()[0].textContent).toContain('AAA111');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Marcar como prioritario el trámite TR-X2' }),
+    );
+
+    // Sin refetch ni recarga: el listado se reordena con el MISMO criterio del backend
+    // (prioritarios primero), así que la fila marcada pasa a encabezar la tabla.
+    expect(mocks.listInstances).toHaveBeenCalledTimes(1);
+    expect(filas()[0].textContent).toContain('BBB222');
+    expect(filas()[1].textContent).toContain('AAA111');
+  });
+
   it('el filtro "Prioritarios" muestra solo los trámites prioritarios', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'a', placa: 'PRIO01', prioritario: true },
@@ -289,7 +364,9 @@ describe('TramitesTable — HU #10536 prioridad', () => {
     await screen.findByText('PRIO01');
     expect(screen.getByText('NORM01')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Prioritarios' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Mostrar solo trámites prioritarios' }),
+    );
 
     expect(screen.getByText('PRIO01')).toBeInTheDocument();
     expect(screen.queryByText('NORM01')).not.toBeInTheDocument();
@@ -305,7 +382,7 @@ function superAdminToken(): string {
 
 function instance(over: Partial<InstanceSummary>): InstanceSummary {
   return {
-    id: 'i', referenceNumber: 'TR', modalidad: 'traspaso', estado: 'borrador',
+    id: 'i', referenceNumber: 'TR', modalidad: 'TRASPASO', estado: 'borrador',
     placa: 'P', vin: 'V', vehiculoMarca: 'M', vehiculoLinea: 'L',
     compradorNombre: 'C', compradorDocumento: '1', organismoTransito: null,
     pasoActual: 1, totalPasos: 6, createdAt: '2026-06-18T00:00:00Z',
@@ -334,7 +411,7 @@ describe('TramitesTable — subsanación / motivo de rechazo', () => {
     ]);
     render(<TramitesTable />);
 
-    const row = (await screen.findByText('SUB001')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('SUB001')).closest('tr') as HTMLElement;
     expect(within(row).queryByText('En subsanación')).not.toBeInTheDocument();
     expect(within(row).queryByText('Subsanado ×2')).not.toBeInTheDocument();
 
@@ -400,11 +477,17 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     render(<TramitesTable />);
 
     await screen.findByText('AAA111');
-    expect(within(screen.getByRole('row')).getByText('Gestor')).toBeInTheDocument();
-    expect(within(screen.getByRole('row')).queryByText('Compañía')).not.toBeInTheDocument();
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    expect(within(rows).getByText('Empresa A')).toBeInTheDocument();
-    // Filtro Compañía presente (select con label) con la opción de la empresa.
+    // Gestor entra en el default de la pantalla principal: ya no hay que activarla a mano.
+    // `getByRole('row')` ya no es único: la cabecera y cada fila de datos son `<tr>` (role="row"
+    // implícito), así que se acota a la cabecera con `getAllByRole('row')[0]`.
+    const table = screen.getByRole('table', { name: 'Trámites en curso' });
+    const header = within(table).getAllByRole('row')[0];
+    expect(within(header).getByText('Gestor')).toBeInTheDocument();
+    expect(within(header).queryByText('Compañía')).not.toBeInTheDocument();
+    expect(within(table).getByText('Empresa A')).toBeInTheDocument();
+    // Filtro Compañía: select SIEMPRE presente (no checkbox) dentro del grupo ALCANCE del
+    // popover "+ Filtro", primero para el SuperAdmin.
+    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
     expect(screen.getByLabelText('Compañía')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Empresa A' })).toBeInTheDocument();
 
@@ -422,8 +505,9 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
 
     await screen.findByText('P0001');
     // HU #11057 renombró la cabecera a "Propietario / vendedor" (rótulo del negocio).
-    expect(screen.getByText('Propietario / vendedor')).toBeInTheDocument();
-    expect(screen.getByText('Comprador')).toBeInTheDocument();
+    // El mismo texto aparece en el formulario de filtros; basta con que exista ≥1.
+    expect(screen.getAllByText('Propietario / vendedor').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Comprador').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Vendedor 0001')).toBeInTheDocument();
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
   });
@@ -431,7 +515,7 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
   it('en matrícula inicial (sin vendedor) la celda queda vacía sin romper la fila', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
-      { ...item, modalidad: 'matricula_inicial', vendedorNombre: null, vendedorDocumento: null },
+      { ...item, modalidad: 'MATRICULAS', vendedorNombre: null, vendedorDocumento: null },
     ]);
     render(<TramitesTable />);
 
@@ -441,23 +525,25 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
   });
 });
 
-// HU #11057 — columnas acordadas con el negocio.
+// HU #11057 — columnas del listado; el default es compacto (el resto se activa con "Columnas").
 describe('TramitesTable — columnas del listado (HU #11057)', () => {
-  it('muestra las columnas acordadas con el negocio', async () => {
+  it('muestra por defecto las columnas esenciales (sin scroll de catálogo completo)', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    const header = screen.getByRole('row');
+    // `getByRole('row')` ya no es único (cabecera + una fila por `<tr>`): se acota a la cabecera.
+    const header = within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole(
+      'row',
+    )[0];
     for (const col of [
       'Radicado',
       'VIN',
       'Placa',
-      'Trámite / Modalidad',
       'Propietario / vendedor',
       'Comprador',
-      'Fecha de creación',
-      'Fecha de actualización',
+      'Firmas',
+      'Trámite / Estado',
       'Secretaría',
       'Gestor',
       'Fuente',
@@ -465,13 +551,51 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     ]) {
       expect(within(header).getByText(col)).toBeInTheDocument();
     }
-    // Dos columnas "Firmado" (vendedor y comprador), distinguidas por su sufijo accesible.
-    expect(within(header).getAllByText(/^Firmado/)).toHaveLength(2);
-    expect(within(header).getByText('(vendedor)')).toBeInTheDocument();
-    expect(within(header).getByText('(comprador)')).toBeInTheDocument();
+    // Columnas cuyo dato viaja apilado en una celda compuesta: fuera de la cabecera por defecto,
+    // disponibles en el selector para moverlo a su propia columna.
+    expect(within(header).queryByText('Vehículo')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Paso')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Estado')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Fecha de creación')).not.toBeInTheDocument();
   });
 
-  it('proyecta gestor, fuente y fecha de actualización de la fila', async () => {
+  it('permite activar columnas opcionales desde el selector', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    // Preferencias: sin backend en test, setVisible actualiza estado local.
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Vehículo$/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Paso$/i }));
+
+    const header = within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole(
+      'row',
+    )[0];
+    expect(within(header).getByText('Vehículo')).toBeInTheDocument();
+    expect(within(header).getByText('Paso')).toBeInTheDocument();
+  });
+
+  it('al activar una columna compuesta, el dato se MUEVE a su columna en vez de duplicarse', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, vehiculoMarca: 'RENAULT', vehiculoLinea: 'STEPWAY' },
+    ]);
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    const rows = () => screen.getByRole('table', { name: 'Trámites en curso' });
+    // Por defecto el vehículo va apilado bajo la placa: aparece UNA vez.
+    expect(within(rows()).getAllByText('RENAULT STEPWAY')).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Vehículo$/i }));
+
+    // Con la columna dedicada activa sigue apareciendo UNA sola vez, ahora en su propia celda.
+    expect(within(rows()).getAllByText('RENAULT STEPWAY')).toHaveLength(1);
+  });
+
+  it('proyecta gestor, fuente y fecha de actualización cuando el usuario las activa', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
@@ -487,32 +611,82 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    // Gestor y Fuente ya vienen en el default; solo hay que activar la fecha de actualización,
+    // que por defecto va apilada dentro del radicado.
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /Fecha de actualización/i }));
+
+    const rows = screen.getByRole('table', { name: 'Trámites en curso' });
     expect(within(rows).getByText('Empresa Gestora SAS')).toBeInTheDocument();
     expect(within(rows).getByText('Ana Gestora')).toBeInTheDocument();
     expect(within(rows).getByText('Integración')).toBeInTheDocument();
     expect(within(rows).getByText('2026/07/20')).toBeInTheDocument();
   });
 
-  it('muestra el estado de acreditación de cada parte por separado', async () => {
-    const [item] = makeInstances(1);
-    mocks.listInstances.mockResolvedValue([
-      { ...item, firmaVendedorEstado: 'firmado', firmaCompradorEstado: 'rechazado' },
-    ]);
-    render(<TramitesTable />);
-
-    await screen.findByText('P0001');
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    expect(within(rows).getByText('Firmado')).toBeInTheDocument();
-    expect(within(rows).getByText('Rechazado')).toBeInTheDocument();
-  });
-
-  it('en matrícula inicial la columna del vendedor se presenta como no aplicable', async () => {
+  // Las firmas de las dos partes viven en UNA sola columna ("Firmas"), cada una con su rótulo:
+  // apiladas sin rótulo no se sabría de quién es cada chip.
+  it('en traspaso muestra la acreditación de vendedor y comprador, cada una rotulada', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
         ...item,
-        modalidad: 'matricula_inicial',
+        modalidad: 'TRASPASO',
+        firmaVendedorEstado: 'firmado',
+        firmaCompradorEstado: 'rechazado',
+      },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    // El rótulo ya no lleva dos puntos —rótulo y valor se alinean en dos columnas dentro de la
+    // celda, y el separador lo da la rejilla—, así que se busca dentro de la FILA de datos y no
+    // de la tabla entera: "Comprador" es también el texto de una cabecera ordenable. Lo que se
+    // comprueba sigue siendo lo mismo: que cada acreditación diga de qué parte es.
+    const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
+    const fila = within(tabla).getAllByRole('row')[1];
+    expect(within(fila).getByText('Vendedor')).toBeInTheDocument();
+    expect(within(fila).getByText('Comprador')).toBeInTheDocument();
+    expect(within(fila).getByText('Firmado')).toBeInTheDocument();
+    expect(within(fila).getByText('Rechazado')).toBeInTheDocument();
+    // El chip ya no se repite junto al nombre del actor: existe una sola vez por parte.
+    expect(within(fila).getAllByText('Firmado')).toHaveLength(1);
+  });
+
+  // La columna del vendedor se ata a la pestaña, no a la preferencia: en matrícula inicial no
+  // existe vendedor, pero en "Todos" la lista mezcla ambas modalidades y el dato sí aplica.
+  it('la columna Propietario / vendedor sigue a la pestaña sin alterar la preferencia guardada', async () => {
+    // Una instancia de cada modalidad: si no, al cambiar de pestaña el listado queda vacío y no
+    // hay cabecera que comprobar (el caso se estaría midiendo contra el estado "Sin resultados").
+    const [uno, dos] = makeInstances(2);
+    mocks.listInstances.mockResolvedValue([
+      { ...uno, modalidad: 'MATRICULAS' },
+      { ...dos, modalidad: 'TRASPASO' },
+    ]);
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    const header = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole('row')[0];
+    // Pestaña "Todos": presente.
+    expect(within(header()).getByText('Propietario / vendedor')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Matrículas' }));
+    expect(within(header()).queryByText('Propietario / vendedor')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Traspaso' }));
+    expect(within(header()).getByText('Propietario / vendedor')).toBeInTheDocument();
+
+    // Y al volver a "Todos" reaparece: nunca se tocó la preferencia, solo se derivó la vista.
+    await userEvent.click(screen.getByRole('tab', { name: 'Todos' }));
+    expect(within(header()).getByText('Propietario / vendedor')).toBeInTheDocument();
+  });
+
+  it('en matrícula inicial solo aparece la línea del comprador (no hay vendedor)', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...item,
+        modalidad: 'MATRICULAS',
         vendedorNombre: null,
         firmaVendedorEstado: null,
         firmaCompradorEstado: null,
@@ -521,10 +695,13 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    // Sin chip de acreditación: el vendedor no existe y el comprador viene sin estado.
-    expect(within(rows).queryByText('Pendiente')).toBeNull();
-    expect(within(rows).getAllByTitle(/No aplica: este trámite no tiene/)).toHaveLength(2);
+    // Acotado a la fila de datos: "Comprador" es también el texto de una cabecera ordenable.
+    const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
+    const fila = within(tabla).getAllByRole('row')[1];
+    expect(within(fila).queryByText('Vendedor')).toBeNull();
+    expect(within(fila).getByText('Comprador')).toBeInTheDocument();
+    // Parte existente pero sin acreditación registrada: se dice, no se deja un guion mudo.
+    expect(within(fila).getByText('Sin registrar')).toBeInTheDocument();
   });
 });
 
@@ -609,6 +786,286 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
   });
 });
 
+// Frente C, etapa 1 — armazón del modal de detalle (Tramites.tsx:222 de la propuesta): borrador
+// sigue navegando al asistente; radicado (estado ≠ 'borrador') abre el modal de detalle, sin
+// navegar. Cubre el cableado (fila / botón del radicado / acción "Ver") y el contenido del modal
+// (trazabilidad + archivos finales) con los 4 estados de carga.
+describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radicado', () => {
+  const [base] = makeInstances(1);
+
+  it('un trámite radicado abre el modal de detalle al hacer clic en la fila, sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-1', referenceNumber: 'TR-RAD1', placa: 'RAD001', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-1', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD001'));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  // La secuencia de pasos y sus nombres los fija la norma FLIT (prototype_rules, «Reglas de
+  // wizards y trámites»): trámite general con CINCO pasos y matrícula inicial con CUATRO, porque
+  // no tiene datos comerciales. «Prohibido reordenar o renombrar pasos sin HU que lo respalde»,
+  // así que esto se blinda en un test en vez de confiarlo a la revisión.
+  it('los pasos del detalle son los de la norma: cinco en traspaso, cuatro en matrícula inicial', async () => {
+    mocks.getInstance.mockResolvedValue({ id: 'rad-p', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-p', referenceNumber: 'TR-P', placa: 'PASO01', estado: 'entregado' },
+    ]);
+    const { unmount } = render(<TramitesTable />);
+    await userEvent.click(await screen.findByText('PASO01'));
+    // Se comparan los NOMBRES ACCESIBLES: llevan el ordinal, el rótulo y el estado del paso, que
+    // es justo el contrato que hay que blindar. El número visible lo pinta el círculo del stepper,
+    // no el rótulo. Un trámite «entregado» tiene la captura cumplida y el expediente pendiente.
+    const tabsTraspaso = within(
+      await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
+    ).getAllByRole('tab');
+    expect(tabsTraspaso.map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Paso 1: Trámite y vehículo — completado',
+      'Paso 2: Actores y validación — completado',
+      'Paso 3: Documentos — completado',
+      'Paso 4: Datos comerciales — completado',
+      'Paso 5: FUR y expediente — pendiente',
+    ]);
+    unmount();
+
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'rad-m',
+        referenceNumber: 'MI-P',
+        placa: 'PASO02',
+        estado: 'entregado',
+        modalidad: 'MATRICULAS',
+      },
+    ]);
+    render(<TramitesTable />);
+    await userEvent.click(await screen.findByText('PASO02'));
+    const tabsMatricula = within(
+      await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
+    ).getAllByRole('tab');
+    expect(tabsMatricula.map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Paso 1: Consulta VIN y placa — completado',
+      'Paso 2: Comprador y rep. legal — completado',
+      'Paso 3: Documentos — completado',
+      'Paso 4: FUR y expediente — pendiente',
+    ]);
+  });
+
+  it('el botón del radicado de un trámite radicado abre el modal sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-2', referenceNumber: 'TR-RAD2', placa: 'RAD002', estado: 'aprobado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-2', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD2' }));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('la acción "Ver" del menú de un trámite radicado abre el modal sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-3', referenceNumber: 'TR-RAD3', placa: 'RAD003', estado: 'preparado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-3', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await screen.findByText('RAD003');
+    await abrirAcciones('TR-RAD3');
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Ver$/ }));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('un trámite en borrador sigue navegando al asistente en vez de abrir el modal', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'brw-1', referenceNumber: 'TR-BRW1', placa: 'BRW001', estado: 'borrador' },
+    ]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('BRW001'));
+
+    expect(routerPush).toHaveBeenCalledWith('/tramites/brw-1');
+    expect(screen.queryByRole('dialog', { name: /Detalle de/ })).toBeNull();
+    expect(mocks.getInstance).not.toHaveBeenCalled();
+  });
+
+  it('la trazabilidad pinta los hitos del statusHistory devuelto por getInstance', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-4', referenceNumber: 'TR-RAD4', placa: 'RAD004', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-4',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'preparado', changedAt: '2026-07-02T09:00:00Z', reason: null },
+      ],
+    });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD004'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).getByText('Borrador')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
+  });
+
+  it('el badge de Estado abre el modal de línea de tiempo sin abrir el detalle ni navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-tl', referenceNumber: 'TR-TL', placa: 'RADTL1', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-tl',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
+      ],
+    });
+    render(<TramitesTable />);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ver trazabilidad del trámite TR-TL/i }),
+    );
+
+    expect(
+      await screen.findByRole('dialog', { name: /Línea de tiempo del trámite/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).toBeNull();
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Entregado desde Borrador/)).toBeInTheDocument();
+  });
+
+  it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'rad-id',
+        referenceNumber: 'TR-ID',
+        placa: 'RADID1',
+        estado: 'entregado',
+        firmaCompradorEstado: 'firmado',
+      },
+    ]);
+    mocks.listBiometricExpediente.mockResolvedValue({
+      validations: [],
+      firmaBaulPartes: ['comprador'],
+    });
+    render(<TramitesTable />);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ver tracking de identidad de Comprador/i }),
+    );
+
+    expect(
+      await screen.findByRole('dialog', { name: /Tracking de identidad · Comprador/i }),
+    ).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('los archivos finales del sistema muestran su SHA-256 completo (y excluyen los de otro origen)', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-5', referenceNumber: 'TR-RAD5', placa: 'RAD005', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-5', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([
+      {
+        id: 'att-sys',
+        tipo: 'fur',
+        filename: 'fur-generado.pdf',
+        mimetype: 'application/pdf',
+        sizeBytes: 2048,
+        sha256: 'a91f2c7d4e88b013aabbccddeeff00112233445566778899aabbccddeeff00',
+        source: 'system',
+        uploadedAt: '2026-07-05T00:00:00Z',
+      },
+      {
+        id: 'att-user',
+        tipo: 'cedula',
+        filename: 'cedula.pdf',
+        mimetype: 'application/pdf',
+        sizeBytes: 1024,
+        sha256: 'zzzz',
+        source: 'user',
+        uploadedAt: '2026-07-04T00:00:00Z',
+      },
+    ]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD005'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(await within(dialog).findByText('fur-generado.pdf')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        /SHA-256 · a91f2c7d4e88b013aabbccddeeff00112233445566778899aabbccddeeff00/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('cedula.pdf')).toBeNull();
+    expect(
+      within(dialog).getByRole('button', { name: 'Descargar fur-generado.pdf' }),
+    ).toBeInTheDocument();
+  });
+
+  it('estado de carga: muestra el skeleton de trazabilidad mientras getInstance está pendiente', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-6', referenceNumber: 'TR-RAD6', placa: 'RAD006', estado: 'entregado' },
+    ]);
+    let resolveGetInstance: (value: unknown) => void = () => {};
+    mocks.getInstance.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGetInstance = resolve;
+      }),
+    );
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD006'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).getByRole('status', { name: 'Cargando trazabilidad' })).toBeInTheDocument();
+
+    resolveGetInstance({ id: 'rad-6', statusHistory: [] });
+    await vi.waitFor(() => {
+      expect(within(dialog).queryByRole('status', { name: 'Cargando trazabilidad' })).toBeNull();
+    });
+  });
+
+  it('estado de error: muestra el mensaje con botón Reintentar y vuelve a llamar a getInstance', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-7', referenceNumber: 'TR-RAD7', placa: 'RAD007', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockRejectedValueOnce(new Error('Fallo de red'));
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD007'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(await within(dialog).findByText('Fallo de red')).toBeInTheDocument();
+
+    mocks.getInstance.mockResolvedValueOnce({ id: 'rad-7', statusHistory: [] });
+    // El panel de trazabilidad tiene tres bloques que fallan por separado (cronología, archivos e
+    // identidad), así que el reintento se pide por su nombre accesible concreto y no por el
+    // genérico «Reintentar», que ahora sería ambiguo.
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Reintentar la trazabilidad' }),
+    );
+
+    await vi.waitFor(() => {
+      expect(within(dialog).queryByText('Fallo de red')).toBeNull();
+    });
+    expect(mocks.getInstance).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_paused)', () => {
   it('muestra el badge "Pausado" con la observación en el label cuando isPaused', async () => {
     const [item] = makeInstances(1);
@@ -686,6 +1143,69 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
   });
 });
 
+// El trámite puede avanzar a Terminado CON salvedades (compañía que permite continuar sin SOAT
+// vigente). Enviarlo al OT en silencio en ese caso es el bug que esta suite cubre.
+describe('TramitesTable — advertencias al procesar (SOAT no vigente)', () => {
+  const procesable = () => {
+    const [item] = makeInstances(1);
+    return { ...item, id: 'proc1', referenceNumber: 'TR-PROC', placa: 'PRC001', estado: 'entregado', plateFlowStatus: 'asignado' } satisfies InstanceSummary;
+  };
+
+  it('cuando hay alerta de procesar, el menú destaca la opción Procesar', async () => {
+    mocks.listInstances.mockResolvedValue([procesable()]);
+    render(<TramitesTable />);
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /Acciones del trámite TR-PROC.*Pendiente por procesar/,
+      }),
+    );
+    const procesar = await screen.findByRole('menuitem', { name: 'Procesar' });
+    expect(procesar).toHaveClass('bg-amber-50');
+  });
+
+  async function procesar() {
+    mocks.listInstances.mockResolvedValue([procesable()]);
+    render(<TramitesTable />);
+    // Con la fila pendiente por procesar, ActionsMenu añade el hint al nombre accesible.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Acciones del trámite TR-PROC/ }),
+    );
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Procesar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Marcar como Terminado' }));
+  }
+
+  it('muestra la advertencia del backend y deja el modal abierto', async () => {
+    mocks.completePlateFlow.mockResolvedValue({
+      instance: null,
+      warningCode: 'soat_no_vigente_advertencia',
+      warningMessage: 'El trámite se envió al OT SIN SOAT vigente: el RUNT no lo reporta vigente.',
+    });
+
+    await procesar();
+
+    const dialog = screen.getByRole('dialog', { name: 'Procesar trámite' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/SIN SOAT vigente/);
+    // La operación fue exitosa: ya no se puede reintentar, solo cerrar.
+    expect(within(dialog).queryByRole('button', { name: 'Marcar como Terminado' })).toBeNull();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Entendido' }));
+    expect(screen.queryByRole('dialog', { name: 'Procesar trámite' })).toBeNull();
+  });
+
+  it('sin advertencia cierra el modal directamente', async () => {
+    mocks.completePlateFlow.mockResolvedValue({
+      instance: null,
+      warningCode: null,
+      warningMessage: null,
+    });
+
+    await procesar();
+
+    expect(screen.queryByRole('dialog', { name: 'Procesar trámite' })).toBeNull();
+  });
+});
+
 describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
   it('selecciona varios borradores ICT y los pausa en lote', async () => {
     const [b] = makeInstances(1);
@@ -706,5 +1226,263 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
+  });
+});
+
+describe('TramitesTable — filtros y ordenamiento server-side', () => {
+  // Los filtros específicos (placa/actores/gestor/firmado) ya no están siempre en pantalla: hay
+  // que añadirlos primero desde el popover "+ Filtro" (disparador con checkboxes agrupados). El
+  // rótulo del disparador cambia a "+ Filtro (n)" al marcar filtros, así que se abre por regex.
+  async function abrirPopoverFiltro() {
+    if (screen.queryByRole('dialog', { name: 'Agregar filtro' })) return;
+    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
+  }
+  async function abrirPopoverPeriodo() {
+    if (screen.queryByRole('dialog', { name: 'Elegir periodo' })) return;
+    // Rótulo "Periodo" en reposo ("Sin periodo"); una vez elegido un periodo, el botón muestra su
+    // nombre (p. ej. "Mes actual"). En estos tests siempre se abre en reposo, antes de elegir.
+    await userEvent.click(screen.getByRole('button', { name: 'Periodo' }));
+  }
+  /** Abre "+ Filtro" y marca cada casilla pedida; el popover se deja abierto (sus campos reales
+   *  se despliegan justo debajo de cada checkbox marcado, dentro del propio popover). */
+  async function agregarFiltrosEspecificos(...nombres: string[]) {
+    await abrirPopoverFiltro();
+    for (const nombre of nombres) {
+      await userEvent.click(screen.getByRole('checkbox', { name: nombre }));
+    }
+  }
+
+  it('aplica filtros de placa, actores, gestor, firmado y rango de creación al listado', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+    expect(mocks.listInstances).toHaveBeenCalledWith(undefined);
+
+    await agregarFiltrosEspecificos('Placa', 'Propietario / vendedor', 'Comprador', 'Gestor', 'Firmado');
+
+    await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'ABC123');
+    await userEvent.type(screen.getByLabelText('Filtrar por propietario o vendedor'), 'Pérez');
+    await userEvent.type(screen.getByLabelText('Filtrar por comprador'), 'García');
+    await userEvent.type(screen.getByLabelText('Filtrar por gestor'), 'Ana');
+    await userEvent.selectOptions(screen.getByLabelText('Filtrar por firma de compraventa'), 'true');
+
+    // Rango propio sobre "Fecha de creación" (opción por defecto de "Rango sobre") — vive en el
+    // popover "Periodo", un disparador distinto: abrirlo cierra "+ Filtro" (clic fuera), pero el
+    // borrador de los campos ya escritos sigue vivo (todo el estado vive en TramitesTable, no en
+    // el popover).
+    await abrirPopoverPeriodo();
+    await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
+    await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-01-01');
+    await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-01-31');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          placa: 'ABC123',
+          vendedor: 'Pérez',
+          comprador: 'García',
+          gestor: 'Ana',
+          firmado: true,
+          createdFrom: '2026-01-01',
+          createdTo: '2026-01-31',
+          take: 200,
+          skip: 0,
+        }),
+      );
+    });
+  });
+
+  it('aplica un rango de fechas propio sobre la última actualización', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await abrirPopoverPeriodo();
+    await userEvent.selectOptions(screen.getByLabelText('Rango sobre'), 'Última actualización');
+    await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
+    await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-02-01');
+    await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-02-28');
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updatedFrom: '2026-02-01',
+          updatedTo: '2026-02-28',
+        }),
+      );
+    });
+  });
+
+  it('mantiene los filtros específicos ocultos por defecto y permite limpiarlos', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await abrirPopoverFiltro();
+    expect(screen.queryByLabelText('Filtrar por placa')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Empezar de cero' })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Placa' }));
+    expect(screen.getByLabelText('Filtrar por placa')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'XYZ');
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ placa: 'XYZ' }),
+      );
+    });
+
+    // "Aplicar" cerró el popover: se reabre (ahora con rótulo "+ Filtro (1)") para llegar a
+    // "Empezar de cero".
+    await abrirPopoverFiltro();
+    await userEvent.click(screen.getByRole('button', { name: 'Empezar de cero' }));
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(undefined);
+    });
+  });
+
+  it('ordena por placa al hacer clic en la cabecera', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Placa/i }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sortBy: 'placa',
+          sortDir: 'asc',
+          take: 200,
+        }),
+      );
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Placa \(ascendente\)/i }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sortBy: 'placa',
+          sortDir: 'desc',
+        }),
+      );
+    });
+  });
+
+  it('ordena por comprador y fecha de creación desde cabeceras visibles', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Comprador/i }));
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'comprador', sortDir: 'asc' }),
+      );
+    });
+
+    // La fecha de creación va apilada bajo el radicado en el default: para ordenar por ella hay
+    // que sacarla a su propia columna, que es donde vive la cabecera ordenable.
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Fecha de creación$/i }));
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Fecha de creación/i }));
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'createdAt', sortDir: 'asc' }),
+      );
+    });
+  });
+});
+
+/**
+ * ADR-0050 — la fila dice QUÉ trámite es.
+ *
+ * La familia identifica bien una matrícula o un traspaso, pero «Otros» agrupa quince tipos: tres
+ * filas seguidas decían «Otros» y no había forma de distinguir un blindaje de un levantamiento de
+ * prenda sin abrirlas.
+ */
+describe('TramitesTable — rótulo del trámite', () => {
+  function conTipo(
+    modalidad: InstanceSummary['modalidad'],
+    tipoNombre: string | null,
+  ): InstanceSummary[] {
+    const [base] = makeInstances(1);
+    return [{ ...base, modalidad, tipoNombre }];
+  }
+
+  it('en OTROS muestra el nombre del tipo, no la familia', async () => {
+    mocks.listInstances.mockResolvedValue(conTipo('OTROS', 'Levantamiento de prenda'));
+    render(<TramitesTable />);
+
+    expect(await screen.findByText('Levantamiento de prenda')).toBeInTheDocument();
+    expect(screen.queryByText('Otros')).not.toBeInTheDocument();
+  });
+
+  it('sin nombre de tipo cae a la familia y nunca deja la celda vacía', async () => {
+    // Expediente servido por un backend anterior al campo.
+    mocks.listInstances.mockResolvedValue(conTipo('OTROS', null));
+    render(<TramitesTable />);
+
+    expect(await screen.findByText('Otros')).toBeInTheDocument();
+  });
+
+  it('matrícula y traspaso conservan el rótulo de familia (regresión)', async () => {
+    mocks.listInstances.mockResolvedValue(conTipo('MATRICULAS', 'Matrícula Leasing'));
+    const { unmount } = render(<TramitesTable />);
+    expect(await screen.findByText('Matrícula')).toBeInTheDocument();
+    expect(screen.queryByText('Matrícula Leasing')).not.toBeInTheDocument();
+    unmount();
+
+    mocks.listInstances.mockResolvedValue(conTipo('TRASPASO', 'Traspaso Unilateral'));
+    render(<TramitesTable />);
+    expect(await screen.findByText('Traspaso')).toBeInTheDocument();
+  });
+});
+
+/**
+ * ADR-0050 — el rótulo del paso sale del recorrido del TIPO, no de una lista por familia.
+ * La lista de OTROS estaba vacía, así que esas filas mostraban «—» pasara lo que pasara.
+ */
+describe('TramitesTable — paso en curso', () => {
+  function conPaso(
+    modalidad: InstanceSummary['modalidad'],
+    pasoNombre: string | null,
+    pasoActual = 2,
+  ): InstanceSummary[] {
+    const [base] = makeInstances(1);
+    return [{ ...base, modalidad, pasoNombre, pasoActual, totalPasos: 5 }];
+  }
+
+  it('muestra el nombre del paso que manda el servidor', async () => {
+    mocks.listInstances.mockResolvedValue(conPaso('OTROS', 'Decisión de prenda'));
+    render(<TramitesTable />);
+
+    // Acotado al bloque del progreso: hay otros «—» en la fila (vehículo, organismo).
+    const progreso = await screen.findByText('2/5');
+    expect(progreso.parentElement).toHaveTextContent('Decisión de prenda');
+  });
+
+  it('sin nombre del servidor cae al respaldo por familia', async () => {
+    // Expediente de un backend anterior al campo: matrícula sí tiene lista de respaldo.
+    mocks.listInstances.mockResolvedValue(conPaso('MATRICULAS', null, 1));
+    render(<TramitesTable />);
+
+    const progreso = await screen.findByText('1/5');
+    expect(progreso.parentElement).toHaveTextContent('Consulta VIN');
+  });
+
+  it('sin nombre y sin respaldo no rompe: muestra un guion', async () => {
+    mocks.listInstances.mockResolvedValue(conPaso('OTROS', null));
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const progreso = screen.getByText('2/5');
+    expect(progreso.parentElement?.textContent).toContain('—');
   });
 });

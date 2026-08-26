@@ -22,6 +22,14 @@ public sealed class ProcedureInstancePrenda
     public string? AcreedorNombre { get; set; }
     public string? AcreedorDocumento { get; set; }
 
+    /// <summary>
+    /// Entidad u oficina ante la que se levantó el gravamen (notaría, oficina de registro…).
+    /// <para>La declara el párrafo 23 del FUR en el trámite de LEVANTAMIENTO de prenda, donde el
+    /// levantamiento ES el trámite. El RUNT no la trae: su detalle de gravamen se limita a acreedor,
+    /// documento, fecha y estado. Queda vacía en traspaso y matrícula, que conservan su literal.</para>
+    /// </summary>
+    public string? LevantamientoEntidad { get; set; }
+
     public string Metadata { get; set; } = "{}";
     public long RowVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

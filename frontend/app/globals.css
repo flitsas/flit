@@ -12,6 +12,12 @@
   --color-flit-alert: #ff4e00;
   --color-flit-bg: #eef5ff;
   --color-flit-gray: #dfe5ed;
+  /* Dock inferior — utilities desde tokens §2D (GUIA-DOCK) alineados a flit_design_tokens */
+  --color-nav-app: var(--nav-app-bg);
+  --color-nav-ink: var(--nav-texto-fuerte);
+  --color-nav-soft: var(--nav-borde);
+  --color-nav-texto: var(--nav-texto);
+  --radius-nav-pill: var(--nav-radio-pill);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -94,13 +100,17 @@
 
   /* Badges de estado — paleta semántica unificada (HU #10844). Cinco tones; forma
      tintada (fondo translúcido + texto + borde). Reemplaza los colores crudos que cada
-     dominio pasaba a mano y los badges de relleno sólido (OtStatusBadge). */
-  --badge-success-bg: rgba(0, 219, 213, 0.15);
-  --badge-success-fg: #0f766e;
-  --badge-success-border: rgba(0, 219, 213, 0.35);
-  --badge-warning-bg: rgba(245, 158, 11, 0.15);
+     dominio pasaba a mano y los badges de relleno sólido (OtStatusBadge).
+     ACTUALIZACIÓN: success pasa de cian (#00DBD5) a verde tintado alineado al PDF 20 ago +
+     prototipo Lovable (OK = { color:#4F7A12, bg:#F3FBE8, border:#CDEB9C }). La semántica
+     verde = válido/completo ya era correcta en prototype_rules.md; el cian era un error
+     de implementación. Warning alineado a #F9AC00 (ámbar FLIT del PDF 20 ago). */
+  --badge-success-bg: #F3FBE8;
+  --badge-success-fg: #4F7A12;
+  --badge-success-border: #CDEB9C;
+  --badge-warning-bg: rgba(249, 172, 0, 0.15);
   --badge-warning-fg: #b45309;
-  --badge-warning-border: rgba(245, 158, 11, 0.35);
+  --badge-warning-border: rgba(249, 172, 0, 0.40);
   --badge-danger-bg: rgba(255, 78, 0, 0.12);
   --badge-danger-fg: #c2410c;
   --badge-danger-border: rgba(255, 78, 0, 0.32);
@@ -111,6 +121,15 @@
   --badge-neutral-fg: #445569;
   --badge-neutral-border: rgba(223, 229, 237, 0.9);
 
+  /* Tinta legible del verde cuando el verde de marca (#8CC63F) se usa como color de TEXTO: en
+     plano da 2.05:1 sobre blanco y no se lee. El verde de marca sigue valiendo como relleno de
+     punto, borde o fondo tintado; esta variable es solo para texto.
+
+     El valor es el tono `OK` del propio repo de propuesta, no uno inventado: #4F7A12, que además
+     da 5.09:1 sobre blanco y cumple AA. Se llegó a él después de usar un #4A7019 propio —más
+     apagado y sin razón para existiendo este—. */
+  --flit-success-ink: #4f7a12;
+
   /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
      tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
      gris de marca #DFE5ED (== CompanyListTable, la tabla de referencia), NO el --muted casi
@@ -120,6 +139,27 @@
   --table-header-fg: #162744;
   --table-row-border: #dfe5ed;
   --table-row-hover: #f4f8ff;
+
+  /* Dock inferior flotante — Contrato D (GUIA-DOCK-INFERIOR-FLOTANTE) × flit_design_tokens.
+     Solo presentación: no cambia catálogo, permisos ni layout de navegación. */
+  --nav-vidrio: rgba(255, 255, 255, 0.94);
+  --nav-vidrio-dark: rgba(22, 39, 68, 0.9);
+  --nav-panel-bg: #ffffff;
+  --nav-borde: #dde5f0;
+  --nav-app-bg: #eaf2ff;
+  --nav-texto: #59677d;
+  --nav-texto-fuerte: #162744;
+  --nav-texto-tenue: #667085;
+  --nav-focus: #4f74c9;
+  --nav-activo: linear-gradient(90deg, #4fd4cc 0%, #4f74c9 100%);
+  --nav-radio-pill: 999px;
+  --nav-radio-panel: 18px;
+  --nav-sombra-dock: 0 8px 24px rgba(22, 39, 68, 0.08);
+  --nav-sombra-panel: 0 24px 60px rgba(22, 39, 68, 0.18);
+  --nav-sombra-activo: 0 10px 22px rgba(79, 116, 201, 0.22);
+  --nav-duracion: 180ms;
+  --nav-ease: cubic-bezier(0.2, 0, 0, 1);
+  --alto-navegacion: 0px;
 }
 
 .dark {
@@ -156,13 +196,14 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
 
-  /* Badges de estado — variantes para modo oscuro (HU #10844). */
-  --badge-success-bg: rgba(0, 219, 213, 0.18);
-  --badge-success-fg: #5eead4;
-  --badge-success-border: rgba(0, 219, 213, 0.35);
-  --badge-warning-bg: rgba(245, 158, 11, 0.2);
+  /* Badges de estado — variantes para modo oscuro (HU #10844).
+     Success: verde oscuro tintado (PDF 20 ago). Warning: #F9AC00 familia. */
+  --badge-success-bg: rgba(140, 198, 63, 0.22);
+  --badge-success-fg: #B8E986;
+  --badge-success-border: rgba(140, 198, 63, 0.45);
+  --badge-warning-bg: rgba(249, 172, 0, 0.20);
   --badge-warning-fg: #fbbf24;
-  --badge-warning-border: rgba(245, 158, 11, 0.4);
+  --badge-warning-border: rgba(249, 172, 0, 0.40);
   --badge-danger-bg: rgba(255, 78, 0, 0.2);
   --badge-danger-fg: #fca574;
   --badge-danger-border: rgba(255, 78, 0, 0.4);
@@ -173,11 +214,24 @@
   --badge-neutral-fg: #cbd5e1;
   --badge-neutral-border: rgba(255, 255, 255, 0.15);
 
+  /* Verde de marca como texto: sobre el fondo oscuro el mismo tono ya es legible (no necesita el
+     oscurecimiento que sí requiere sobre blanco). */
+  --flit-success-ink: #8cc63f;
+
   /* Tabla card-list — variantes para modo oscuro (HU #10844). */
   --table-header-bg: rgba(255, 255, 255, 0.06);
   --table-header-fg: rgba(255, 255, 255, 0.72);
   --table-row-border: rgba(255, 255, 255, 0.1);
   --table-row-hover: rgba(255, 255, 255, 0.04);
+
+  /* Dock — superficies y texto en tema oscuro (píldoras inactivas legibles). */
+  --nav-vidrio: var(--nav-vidrio-dark);
+  --nav-borde: rgba(255, 255, 255, 0.1);
+  --nav-app-bg: rgba(255, 255, 255, 0.08);
+  --nav-texto: rgba(255, 255, 255, 0.78);
+  --nav-texto-fuerte: #ffffff;
+  --nav-texto-tenue: rgba(255, 255, 255, 0.55);
+  --nav-panel-bg: #162744;
 }
 
 @layer base {
@@ -299,5 +353,88 @@
     place-items: center;
     animation: flit-counter 1.2s linear infinite;
     color: #00dbd5;
+  }
+
+  /* Escena del CarLoader de la propuesta: la pista queda fija, la línea orbita en contra y el
+     vehículo gira a favor. Las dos velocidades son distintas a propósito — con la misma cadencia
+     los dos elementos parecen una sola pieza rígida y la escena deja de leerse como movimiento. */
+  .flit-escena-orbita {
+    animation: flit-counter 2.5s linear infinite;
+  }
+
+  .flit-escena-vehiculo {
+    animation: flit-orbit 3.5s linear infinite;
+  }
+
+  /* Respeta a quien pidió menos movimiento: la escena se queda quieta y el mensaje sigue
+     anunciando el progreso, que es lo que de verdad informa. */
+  @media (prefers-reduced-motion: reduce) {
+    .flit-escena-orbita,
+    .flit-escena-vehiculo {
+      animation: none;
+    }
+  }
+
+  /* Cápsula del dock inferior — vidrio + sombra tokenizados (ajuste visual, sin cambio estructural). */
+  .dock-capsula {
+    background: var(--nav-vidrio);
+    border: 1px solid var(--nav-borde);
+    box-shadow: var(--nav-sombra-dock);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-radius: var(--nav-radio-pill);
+  }
+
+  .dock-pill {
+    color: var(--nav-texto);
+  }
+
+  .dock-pill:hover {
+    background: var(--nav-app-bg);
+    color: var(--nav-texto-fuerte);
+  }
+
+  .dock-pill[aria-current="page"] {
+    background: var(--nav-activo);
+    box-shadow: var(--nav-sombra-activo);
+    color: #ffffff;
+  }
+
+  .dock-pill[aria-current="page"]:hover {
+    background: var(--nav-activo);
+    color: #ffffff;
+  }
+
+  .dock-fab {
+    background: var(--nav-activo);
+    box-shadow: var(--nav-sombra-activo);
+  }
+
+  @keyframes panel-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .panel-up {
+    animation: panel-up var(--nav-duracion) var(--nav-ease) both;
+    transform-origin: bottom center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dock-capsula,
+    .dock-pill,
+    .dock-fab {
+      transition: none !important;
+    }
+
+    .panel-up {
+      animation: none;
+    }
   }
 }

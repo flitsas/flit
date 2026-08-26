@@ -1,17 +1,23 @@
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Documents;
 
 /// <summary>
-/// HU #10601 (Feature #10585) — marcación de la prenda en el FUR: el checkbox requested_process_11
-/// refleja el gravamen declarado (TienePrenda) en el mapper de campos.
+/// HU #10601 (Feature #10585), ampliado por HU #11257 (Feature #11254) — marcación de la prenda en el
+/// FUR: <c>requested_process_11</c> (constitución) y <c>requested_process_12</c> (levantamiento) según
+/// <see cref="FurDocumentData.PrendaMarking"/>, resuelto ya en el dominio
+/// (<see cref="PrendaDecision.ToFurMarking"/>). Matriz decisión × formato: el mapper es agnóstico del
+/// formato (produce los mismos tokens en los tres), pero se ejercita explícitamente contra
+/// <see cref="FurTemplateFormat"/> para no depender de eso por accidente, y cada caso afirma que la
+/// casilla CONTRARIA queda vacía (no solo que la esperada se marque).
 /// </summary>
 public sealed class FurPrendaMarkingTests
 {
-    private static FurDocumentData Data(bool tienePrenda) => new(
+    private static FurDocumentData Data(FurPrendaMarking marking, FurTemplateFormat format) => new(
         ProcedureInstanceId: Guid.NewGuid(),
         ReferenceNumber: "TRM-2026-000001",
         Modalidad: "matricula_inicial",
@@ -23,19 +29,112 @@ public sealed class FurPrendaMarkingTests
         Organismo: new OrganismoTransito("25286000", "OT", "CIUDAD"),
         Partes: [new DocumentParte("comprador", "DANIEL AMADO", "1193552679", null, DocumentType: "CC")],
         ValorVenta: null, Causal: null, SellosFirma: [],
-        TienePrenda: tienePrenda);
+        PrendaMarking: marking,
+        AcreedorPrenda: marking is FurPrendaMarking.Ninguna ? null : "FONDEICON",
+        TemplateFormat: format);
+
+    public static IEnumerable<object[]> DecisionPorFormato()
+    {
+        foreach (var format in new[] { FurTemplateFormat.Automotor, FurTemplateFormat.Maquinaria, FurTemplateFormat.Remolques })
+        foreach (var marking in new[] { FurPrendaMarking.Constitucion, FurPrendaMarking.Levantamiento, FurPrendaMarking.Ninguna, FurPrendaMarking.Ambos })
+            yield return [marking, format];
+    }
+
+    [Theory]
+    [MemberData(nameof(DecisionPorFormato))]
+    public void Map_MarcaLaCasillaCorrectaYDejaLaContrariaVacia(FurPrendaMarking marking, FurTemplateFormat format)
+    {
+        var campos = FurFieldMapper.Map(Data(marking, format));
+
+        var esperado11 = marking is FurPrendaMarking.Constitucion or FurPrendaMarking.Ambos ? "X" : "";
+        var esperado12 = marking is FurPrendaMarking.Levantamiento or FurPrendaMarking.Ambos ? "X" : "";
+
+        campos["requested_process_11"].Text.Should().Be(esperado11,
+            "marking={0} en {1}", marking, format);
+        campos["requested_process_12"].Text.Should().Be(esperado12,
+            "marking={0} en {1}", marking, format);
+    }
 
     [Fact]
-    public void FUR_marca_el_gravamen_cuando_hay_prenda_vigente()
+    public void Constitucion_MarcaSolo11_LaCasilla12QuedaVacia()
     {
-        var campos = FurFieldMapper.Map(Data(tienePrenda: true));
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Constitucion, FurTemplateFormat.Automotor));
+
+        campos["requested_process_11"].Text.Should().Be("X");
+        campos["requested_process_12"].Text.Should().Be("", "la constitución no debe marcar el levantamiento");
+    }
+
+    [Fact]
+    public void Levantamiento_Marca12_LaCasilla11QuedaVacia()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Levantamiento, FurTemplateFormat.Automotor));
+
+        campos["requested_process_12"].Text.Should().Be("X");
+        campos["requested_process_11"].Text.Should().Be("", "el levantamiento no debe marcar la constitución");
+    }
+
+    [Fact]
+    public void Ninguna_NoMarcaNiConstitucionNiLevantamiento()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Ninguna, FurTemplateFormat.Automotor));
+
+        campos["requested_process_11"].Text.Should().Be("");
+        campos["requested_process_12"].Text.Should().Be("");
+    }
+
+    [Fact]
+    public void MatriculaConPrenda_Marca1Mas11_NoUnaMezclaDe2Mas11()
+    {
+        // Verificación explícita de D1: requested_process_1/_2 (tipo de trámite) es independiente de
+        // requested_process_11/_12 (modalidad de prenda). Una MATRÍCULA (no traspaso) con prenda debe
+        // salir 1 + 11, nunca 2 + 11.
+        var data = Data(FurPrendaMarking.Constitucion, FurTemplateFormat.Automotor);
+        var campos = FurFieldMapper.Map(data);
+
+        campos["requested_process_1"].Text.Should().Be("X", "es matrícula, no traspaso");
+        campos["requested_process_2"].Text.Should().Be("");
         campos["requested_process_11"].Text.Should().Be("X");
     }
 
     [Fact]
-    public void FUR_no_marca_el_gravamen_sin_prenda()
+    public void Constitucion_MarcaLimPropiedadYAcreedorEnAlerta()
     {
-        var campos = FurFieldMapper.Map(Data(tienePrenda: false));
-        campos["requested_process_11"].Text.Should().Be("");
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Constitucion, FurTemplateFormat.Automotor));
+
+        campos["alert_data_code_1"].Text.Should().BeEmpty();
+        campos["alert_data_code_2"].Text.Should().Be("X", "inscripción/registro marca LIM. PROPIEDAD");
+        campos["alert_data_code_3"].Text.Should().BeEmpty();
+        campos["alert_data_code_4"].Text.Should().BeEmpty();
+        campos["alert_data_code_5"].Text.Should().Be("FONDEICON");
+    }
+
+    [Fact]
+    public void Levantamiento_MarcaOtroYAcreedorEnAlerta()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Levantamiento, FurTemplateFormat.Automotor));
+
+        campos["alert_data_code_2"].Text.Should().BeEmpty();
+        campos["alert_data_code_4"].Text.Should().Be("X", "levantamiento marca OTRO");
+        campos["alert_data_code_5"].Text.Should().Be("FONDEICON");
+    }
+
+    [Fact]
+    public void Ninguna_DejaAlertaEnBlanco()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Ninguna, FurTemplateFormat.Automotor));
+
+        campos["alert_data_code_2"].Text.Should().BeEmpty();
+        campos["alert_data_code_4"].Text.Should().BeEmpty();
+        campos["alert_data_code_5"].Text.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Ambos_MarcaLimPropiedadYOtro()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Ambos, FurTemplateFormat.Automotor));
+
+        campos["alert_data_code_2"].Text.Should().Be("X");
+        campos["alert_data_code_4"].Text.Should().Be("X");
+        campos["alert_data_code_5"].Text.Should().Be("FONDEICON");
     }
 }

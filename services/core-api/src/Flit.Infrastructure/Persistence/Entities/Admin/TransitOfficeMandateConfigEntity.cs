@@ -24,6 +24,38 @@ public sealed class TransitOfficeMandateConfigEntity
     /// <summary>NIT del mandatario institucional, o null.</summary>
     public string? InstitutionalMandataryNit { get; set; }
 
+    /// <summary>
+    /// HU #11204 — familia del mandatario: <c>individuo</c> (una persona firma) u
+    /// <c>organismo_transito</c> (firma el propio organismo / una unión temporal). NO determina la
+    /// redacción, que la sigue eligiendo <see cref="TemplateCode"/>.
+    /// </summary>
+    public string MandataryFamily { get; set; } = "individuo";
+
+    /// <summary>HU #11204 — ciudad de la Cámara de Comercio que acredita al MANDANTE.</summary>
+    public string? ChamberCity { get; set; }
+
+    /// <summary>HU #11204 — sigla de la unión temporal (p. ej. UT-SETSA), usada en las obligaciones.</summary>
+    public string? MandatarySigla { get; set; }
+
+    /// <summary>
+    /// Modo de asignación: <c>signer</c> | <c>institutional</c> | <c>open</c>.
+    /// Independiente de <see cref="TemplateCode"/> (redacción).
+    /// </summary>
+    public string AssignmentMode { get; set; } = "signer";
+
+    /// <summary><c>none</c> | <c>pdf</c> | <c>editor</c>. Sin propia ⇒ se usa <see cref="TemplateCode"/>.</summary>
+    public string CustomTemplateKind { get; set; } = "none";
+
+    public string? CustomTemplateStoragePath { get; set; }
+    public string? CustomTemplateSha256 { get; set; }
+    public string? CustomTemplateFileName { get; set; }
+
+    /// <summary>Cuerpo del editor (texto/HTML simple con placeholders). Sin firmas.</summary>
+    public string? CustomTemplateBody { get; set; }
+
+    /// <summary>Manifest de coordenadas overlay (JSON); opcional.</summary>
+    public string? CustomFieldManifest { get; set; }
+
     public long RowVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Flit.Tramites.Application.UseCases.Certifications;
+using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -23,7 +25,16 @@ public static class VerifikResultMapper
     private const string Yellow = "yellow";
     private const string Red = "red";
 
-    public static ConsultationResult MapVehicle(VerifikVehicleResponse response)
+    /// <summary>Versión del mapeo; se persiste con cada fila certificada (HU #11303, ADR-0041).</summary>
+    public const string MapperVersion = "verifik-v2";
+
+    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
+
+    public static ConsultationResult MapVehicle(VerifikVehicleResponse response) =>
+        MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).Date));
+
+    /// <summary>Sobrecarga con la fecha inyectada, para que las pruebas no dependan del reloj.</summary>
+    public static ConsultationResult MapVehicle(VerifikVehicleResponse response, DateOnly today)
     {
         var info = response.Data?.InformacionGeneral;
 
@@ -37,8 +48,42 @@ public static class VerifikResultMapper
 
         var hydrated = MapHydratedFields(response.Data);
         var overall = ComputeOverall(checks);
+        var certifications = MapCertifications(response.Data, today);
 
-        return new ConsultationResult(Provider, overall, checks, hydrated);
+        return new ConsultationResult(Provider, overall, checks, hydrated, Certifications: certifications);
+    }
+
+    /// <summary>
+    /// Traduce la respuesta al vocabulario canónico (HU #11303, ADR-0041), con el histórico completo
+    /// de pólizas y revisiones.
+    /// </summary>
+    private static CertificationBundle? MapCertifications(VerifikVehicleData? data, DateOnly today)
+    {
+        var soat = (data?.Soat ?? [])
+            .Where(s => s is not null)
+            .Select(s => CertificationFactory.Soat(
+                s.NoPoliza,
+                s.EntidadExpideSoat,
+                s.FechaExpedicion,
+                s.FechaVigencia,
+                s.FechaVencimiento,
+                s.Estado));
+
+        // La vigencia sale de `vigente`, no de `estado`: en la RTM ese campo describe el resultado del
+        // trámite de la revisión ("APROBADA") y no su cobertura.
+        var rtm = (data?.TecnoMecanica ?? [])
+            .Where(t => t is not null)
+            .Select(t => CertificationFactory.Rtm(
+                certificateNumber: null,
+                cda: t.CdaExpide,
+                issuedOn: null,
+                validFrom: null,
+                validUntil: t.FechaVencimiento,
+                status: t.Vigente ?? t.Estado));
+
+        var vehicle = CertificationFactory.Vehicle(data?.InformacionGeneral?.FechaMatricula);
+
+        return CertificationFactory.VehicleBundle(soat, rtm, vehicle, today);
     }
 
     private static ConsultationCheck MapEstadoVehiculo(VerifikInformacionGeneral? info)
@@ -105,8 +150,16 @@ public static class VerifikResultMapper
         if (sinGravamenes && sinPrendas)
             return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
 
-        return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Warn, Provider, "El vehículo tiene gravámenes o prendas");
+        return new ConsultationCheck(
+            "gravamenes",
+            "Gravámenes y limitaciones",
+            Warn,
+            Provider,
+            $"El vehículo tiene gravámenes o prendas (gravámenes: {NormSiNo(info.TieneGravamenes)} · prendas: {NormSiNo(info.Prendas)})");
     }
+
+    private static string NormSiNo(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
 
     private static bool IsSi(string? value) =>
         string.Equals(value, "SI", StringComparison.OrdinalIgnoreCase);
@@ -179,6 +232,17 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(info.FechaMatricula))
             fields.Add(new HydratedField("vehicle_registration_date", info.FechaMatricula, null));
 
+        // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta).
+        AddSiHay(fields, "runt_tiene_gravamenes", info.TieneGravamenes);
+        AddSiHay(fields, "runt_tiene_prendas", info.Prendas);
+        if (data?.GarantiasMobiliarias is { Count: > 0 } garantias)
+        {
+            fields.Add(new HydratedField(
+                "runt_gravamenes",
+                null,
+                JsonSerializer.Serialize(garantias)));
+        }
+
         // SOAT: tomar el vigente; si no, el primero disponible.
         var soat = data?.Soat?.FirstOrDefault(s =>
             string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase))
@@ -222,57 +286,18 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(rtm?.CdaExpide))
             fields.Add(new HydratedField("rtm_entidad", rtm.CdaExpide, null));
 
-        // HU #11135 — número de certificado y fechas de la RTM. Ninguna muestra real disponible los
-        // documenta (ver VerifikTecnomecanica), así que se resuelven por lectura tolerante sobre los
-        // campos que el proveedor manda y el modelo no declara. Sin coincidencia no se escribe la
-        // llave, con lo que la celda queda en blanco y el OCR del PDF puede aportarla como respaldo.
-        AddSiHay(fields, "rtm_numero", Tolerante(rtm, NombresNumeroRtm));
-        AddSiHay(fields, "rtm_vigencia", Tolerante(rtm, NombresVigenciaRtm));
-        AddSiHay(fields, "rtm_expedicion", Tolerante(rtm, NombresExpedicionRtm));
+        // HU #11303 — se RETIRA la búsqueda "tolerante" por nombres candidatos que introdujo la
+        // HU #11135 para el número y las fechas de la RTM. No es una decisión de estilo: la medición
+        // en base de datos muestra CERO filas de `rtm_numero` y `rtm_expedicion` en todo el ambiente,
+        // así que en la práctica nunca acertó un nombre. Lo que sí hacía era dar cobertura aparente a
+        // un hueco real, que es exactamente el mecanismo que originó este Feature.
+        //
+        // Cuando haya una captura real de Verifik con sección RTM (hoy imposible: el token está
+        // vencido), se declaran los campos en VerifikTecnomecanica con su nombre verdadero. Mientras
+        // tanto la celda queda en blanco —regla HU #10856— y el payload crudo guardado permite
+        // verificar qué manda el proveedor sin una sonda manual.
 
         return fields;
-    }
-
-    // Nombres candidatos, en orden de preferencia. Salen de la convención que el propio RUNT usa en
-    // el registro de SOAT (noPoliza / fechaVigencia / fechaExpedicion) y de las variantes habituales
-    // del servicio. La sonda al RUNT con un vehículo que SÍ tenga RTM cerrará la lista.
-    private static readonly string[] NombresNumeroRtm =
-        ["noCertificado", "numeroCertificado", "nroCertificado", "noRevision", "numeroRevision"];
-
-    private static readonly string[] NombresVigenciaRtm =
-        ["fechaVigencia", "fechaInicioVigencia", "fechaVigenciaRtm"];
-
-    private static readonly string[] NombresExpedicionRtm =
-        ["fechaExpedicion", "fechaExpedicionRtm", "fechaRevision"];
-
-    /// <summary>
-    /// Primer valor no vacío entre los nombres candidatos, buscado en los campos que el proveedor
-    /// envió y el modelo no declara. Solo se aceptan cadenas y números: un objeto o un array significa
-    /// que ese nombre no es el que se busca.
-    /// </summary>
-    private static string? Tolerante(VerifikTecnomecanica? rtm, string[] candidatos)
-    {
-        var extra = rtm?.CamposNoModelados;
-        if (extra is null || extra.Count == 0)
-            return null;
-
-        foreach (var nombre in candidatos)
-        {
-            if (!extra.TryGetValue(nombre, out var el))
-                continue;
-
-            var valor = el.ValueKind switch
-            {
-                JsonValueKind.String => el.GetString(),
-                JsonValueKind.Number => el.ToString(),
-                _ => null,
-            };
-
-            if (!string.IsNullOrWhiteSpace(valor))
-                return valor;
-        }
-
-        return null;
     }
 
     private static void AddSiHay(List<HydratedField> fields, string key, string? value)

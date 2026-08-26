@@ -1,3 +1,5 @@
+using Flit.Tramites.Domain.Certifications;
+
 namespace Flit.Tramites.Application.UseCases.Consultations;
 
 /// <summary>
@@ -11,6 +13,18 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// posicionales opcionales, con default) — no rompen ninguna construcción existente de 4 argumentos
 /// posicionales. <see cref="FromCache"/> = true cuando el resultado vino de
 /// <c>tramites.external_query_cache</c> sin llamar al proveedor externo (AC1).
+///
+/// <para>HU #11303 (Feature #11301, ADR-0041): <see cref="Certifications"/> y
+/// <see cref="RawPayload"/> siguen el mismo patrón aditivo. Son el canal por el que el mapper entrega
+/// lo que certificó en <b>vocabulario canónico</b>, sin que ningún consumidor tenga que volver a
+/// interpretar el texto libre de <see cref="HydratedFields"/>.</para>
+///
+/// <para>La costura es esta y no otra por dos razones. Un normalizador central sobre
+/// <see cref="HydratedFields"/> sería un segundo mapeo sobre el primero y perdería lo que el mapper ya
+/// sabe. Y fusionar entre proveedores en el resolutor de cadena exigiría llamar a más de uno, y
+/// <b>cada llamada se cobra</b>: la fusión que hace falta es a lo largo del tiempo (consulta → OCR →
+/// corrección → reconsulta), y esa vive en el almacén. Un proveedor que no lo implemente devuelve
+/// <c>null</c> y degrada al camino actual.</para>
 /// </remarks>
 public sealed record ConsultationResult(
     string Provider,
@@ -18,7 +32,9 @@ public sealed record ConsultationResult(
     IReadOnlyList<ConsultationCheck> Checks,
     IReadOnlyList<HydratedField> HydratedFields,
     bool FromCache = false,
-    DateTimeOffset? QueriedAt = null);
+    DateTimeOffset? QueriedAt = null,
+    CertificationBundle? Certifications = null,
+    RawProviderPayload? RawPayload = null);
 
 /// <summary>
 /// Un check individual de la consulta. Status ∈ {"ok","warn","fail","unknown","error"}.

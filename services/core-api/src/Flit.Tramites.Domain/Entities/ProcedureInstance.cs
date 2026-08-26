@@ -8,10 +8,40 @@ public sealed class ProcedureInstance
     public string ReferenceNumber { get; set; } = string.Empty;
     public string Status { get; set; } = Tramites.Estados.TramiteEstado.Borrador;
 
-    // Rework trámites (Slice 1) — modalidad/tipología/checklist explícitos
-    public string ModalidadEntrada { get; set; } = "matricula_inicial";
-    public string? TipologiaCodigo { get; set; }
+    // Rework trámites (Slice 1) — checklist explícito.
+    // ADR-0050: modalidad_entrada y tipologia_codigo se eliminaron. La clasificación del expediente
+    // se deriva del tipo (Family / TypeCode / TypeName, más abajo).
     public string ChecklistEstado { get; set; } = "{}";
+
+    /// <summary>
+    /// Familia del expediente (ADR-0050), derivada del tipo. Sustituye a <see cref="ModalidadEntrada"/>,
+    /// que solo tenía dos valores y colapsaba OTROS en matrícula.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Si la navegación <see cref="ProcedureType"/> no está cargada. Se prefiere fallar ruidosamente a
+    /// devolver un default: un expediente clasificado por accidente como OTROS elegiría mal el flujo,
+    /// los documentos y las causales de rechazo.
+    /// </exception>
+    public Enums.ProcedureFamily Family =>
+        Enums.ProcedureFamilyCodes.FromCodeOrOtros(RequireProcedureType().Family);
+
+    /// <summary>
+    /// Código canónico del tipo (<c>MATRICULA_NUEVA</c>, <c>BLINDAJE</c>, …). Es también la tipología:
+    /// ADR-0050 elimina el catálogo de tipologías paralelo.
+    /// </summary>
+    public string TypeCode => RequireProcedureType().Code;
+
+    /// <summary>Código persistido de la familia, para DTOs, filtros y exportes.</summary>
+    public string FamilyCode => Enums.ProcedureFamilyCodes.ToCode(Family);
+
+    /// <summary>Etiqueta de negocio del tipo: la que deben rotular FUR, portada y mandato.</summary>
+    public string TypeName => RequireProcedureType().Name;
+
+    private ProcedureType RequireProcedureType() =>
+        ProcedureType ?? throw new InvalidOperationException(
+            $"La navegación ProcedureType no está cargada en la instancia {Id}. "
+            + "Usa un método del repositorio que la incluya (todos los GetBy* lo hacen desde ADR-0050) "
+            + "o carga el tipo antes de leer su clasificación.");
 
     public Guid? TransitOfficeId { get; set; }
 
@@ -65,6 +95,17 @@ public sealed class ProcedureInstance
     /// Columna por migración SQL cruda (tabla ExcludeFromMigrations).
     /// </summary>
     public int SubsanacionCount { get; set; }
+
+    /// <summary>
+    /// Snapshot de <c>field_values</c> capturado al activar la subsanación: el baseline contra el que
+    /// se compara al re-radicar para decidir qué gates se re-evalúan.
+    ///
+    /// <para>Vive aquí y no en el historial de estados a propósito. Antes se guardaba en el
+    /// <c>metadata</c> de una fila <c>rechazado → rechazado</c>, que no era una transición real y el
+    /// timeline mostraba como un segundo rechazo. Columna por migración SQL cruda (tabla
+    /// ExcludeFromMigrations).</para>
+    /// </summary>
+    public string? SubsanacionBaseline { get; set; }
 
     /// <summary>
     /// Feature #10701 / HU #10706 — marca de vigencia del expediente consolidado maestro. En
@@ -148,6 +189,30 @@ public sealed class ProcedureInstance
     /// se mapea al modelo EF.
     /// </summary>
     public Guid? MandateSignerId { get; set; }
+
+    /// <summary>
+    /// VIN denormalizado desde <c>procedure_instance_field_values</c> (field_key <c>vin</c>), mantenido
+    /// por trigger de BD (migración TramitesCamposBusqueda). Habilita filtrar/ordenar el listado en SQL
+    /// sin cargar el grafo completo. SOLO LECTURA para el aplicativo: la fuente de verdad sigue siendo
+    /// <see cref="FieldValues"/>; escribir aquí directamente no se propaga a field_values. Columna
+    /// agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea.
+    /// </summary>
+    public string? Vin { get; set; }
+
+    /// <summary>Placa denormalizada (field_key <c>plate</c>). Mismo propósito y misma advertencia de
+    /// solo-lectura que <see cref="Vin"/>.</summary>
+    public string? Plate { get; set; }
+
+    /// <summary>
+    /// Nombre del vendedor (actor_type <c>vendedor</c>) denormalizado desde
+    /// <see cref="Actors"/> por trigger. Null en matrícula inicial (no hay vendedor) o si el actor aún
+    /// no se ha registrado. SOLO LECTURA para el aplicativo.
+    /// </summary>
+    public string? VendedorNombre { get; set; }
+
+    /// <summary>Nombre del comprador (actor_type <c>comprador</c>) denormalizado desde
+    /// <see cref="Actors"/> por el mismo trigger que <see cref="VendedorNombre"/>. SOLO LECTURA.</summary>
+    public string? CompradorNombre { get; set; }
 
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }

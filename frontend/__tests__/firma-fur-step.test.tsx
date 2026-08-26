@@ -23,11 +23,18 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   getInstance: vi.fn(),
   listBiometric: vi.fn(),
+  listBiometricExpediente: vi.fn(),
+  getBiometricState: vi.fn(),
   patchFieldValues: vi.fn(),
   submitInstance: vi.fn(),
   downloadAttachment: vi.fn(),
   listTransitOffices: vi.fn(),
   runRnmc: vi.fn(),
+  getPrenda: vi.fn(),
+  getFirmaPosterior: vi.fn(),
+  marcarFirmaPosterior: vi.fn(),
+  getActors: vi.fn(),
+  getChecklist: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -45,17 +52,32 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getAttachments: mocks.getAttachments,
     getInstance: mocks.getInstance,
     listBiometric: mocks.listBiometric,
+    listBiometricExpediente: mocks.listBiometricExpediente,
+    getBiometricState: mocks.getBiometricState,
     patchFieldValues: mocks.patchFieldValues,
     submitInstance: mocks.submitInstance,
     downloadAttachment: mocks.downloadAttachment,
     listTransitOffices: mocks.listTransitOffices,
     runRnmc: mocks.runRnmc,
+    getPrenda: mocks.getPrenda,
+    getFirmaPosterior: mocks.getFirmaPosterior,
+    marcarFirmaPosterior: mocks.marcarFirmaPosterior,
+    getActors: mocks.getActors,
+    getChecklist: mocks.getChecklist,
   },
 }));
 
 import { FirmaFurStep } from '@/components/operacion/FirmaFurStep';
 
 const INSTANCE = 'inst-1';
+
+/** Las tres casillas base de «Expediente consolidado» (punto 6, rediseño Step5). Los tests de este
+ * archivo no declaran transformaciones, así que no hay cuarta casilla. */
+const CONFIRMACIONES_BASE = (organismo = 'Secretaría Distrital de Movilidad de Bogotá') => [
+  'Confirmo que los datos del vehículo coinciden con la factura de venta.',
+  'Confirmo que el comprador autorizó el tratamiento de sus datos personales.',
+  `Confirmo la radicación ante ${organismo}.`,
+];
 
 const FIRMA_ENVIADA: Signature = {
   id: 'sig-1',
@@ -126,7 +148,22 @@ const INSTANCE_DETAIL = {
     { formFieldId: null, fieldKey: 'transit_office_city', valueText: 'Bogotá D.C.', valueJson: null, source: 'runt' },
   ],
   statusHistory: [],
-  actors: [],
+  actors: [
+    {
+      actorType: 'vendedor',
+      documentType: 'CC',
+      documentNumber: '1001',
+      fullName: 'Vendedor Demo',
+      email: 'vendedor@example.com',
+    },
+    {
+      actorType: 'comprador',
+      documentType: 'CC',
+      documentNumber: '2002',
+      fullName: 'Comprador Demo',
+      email: 'comprador@example.com',
+    },
+  ],
 };
 
 beforeEach(() => {
@@ -134,11 +171,43 @@ beforeEach(() => {
   mocks.listFirmas.mockResolvedValue([]);
   mocks.listParticipantes.mockResolvedValue([]);
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listBiometric.mockResolvedValue([]);
+  mocks.listBiometricExpediente.mockResolvedValue({ validations: [], provider: 'mock', firmaBaulPartes: [] });
+  mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock', firmaBaulPartes: [] });
   mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listTransitOffices.mockResolvedValue([]);
   mocks.runRnmc.mockResolvedValue([]);
+  mocks.getPrenda.mockResolvedValue(null);
+  mocks.getActors.mockResolvedValue([
+    {
+      rol: 'vendedor',
+      tipoDocumento: 'CC',
+      numeroDocumento: '1001',
+      nombreCompleto: 'Vendedor Demo',
+      email: 'vendedor@example.com',
+      telefono: '3001112233',
+      direccion: 'Calle 1 # 2-3',
+      ciudad: 'Medellín',
+    },
+    {
+      rol: 'comprador',
+      tipoDocumento: 'CC',
+      numeroDocumento: '2002',
+      nombreCompleto: 'Comprador Demo',
+      email: 'comprador@example.com',
+      telefono: '3004445566',
+      direccion: 'Carrera 10 # 20-30',
+      ciudad: 'Bogotá',
+    },
+  ]);
+  mocks.getFirmaPosterior.mockResolvedValue({
+    aplica: false,
+    marcado: false,
+    representanteNombre: null,
+    marcadoAt: null,
+  });
   // HU #11052 — el consolidado es el único disparador de generación del paso FUR.
   mocks.generarConsolidado.mockResolvedValue({
     attachmentId: 'att-consolidado',
@@ -183,88 +252,76 @@ beforeEach(() => {
 describe('FirmaFurStep — firma solo en traspaso', () => {
   it('matrícula NO muestra la sección de firma', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Participantes del portal' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('region', { name: 'Firma de la compraventa' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /Firma compraventa/i })).not.toBeInTheDocument();
   });
 
-  it('traspaso muestra firma de comprador y vendedor', async () => {
+  it('traspaso tampoco muestra firma de compraventa en el resumen', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    expect(await screen.findByRole('group', { name: 'Firma Comprador' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Firma Vendedor' })).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.queryByRole('group', { name: 'Firma compraventa Comprador' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Firma compraventa Vendedor' })).not.toBeInTheDocument();
   });
 });
 
 describe('FirmaFurStep — solicitar y simular firma', () => {
-  // HU #11019 — el botón de solicitar la firma se retiró: el gate ya no la exige (ADR-0028) y pedirla
-  // solo añadía un paso que no desbloquea nada. La tarjeta sigue mostrando el estado de la firma.
-  it('no ofrece solicitar la firma de la compraventa', async () => {
+  // La UI de firma de compraventa se retiró del resumen (ambos actores).
+  it('no muestra tarjeta de firma de compraventa en el resumen', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const card = await screen.findByRole('group', { name: 'Firma Comprador' });
-
-    expect(within(card).queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
-    expect(within(card).getByText('Firma no solicitada.')).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.queryByRole('group', { name: /Firma compraventa/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
     expect(mocks.solicitarFirma).not.toHaveBeenCalled();
   });
 
-  it('muestra signUrl y permite simular cuando la firma está enviada', async () => {
+  it('no ofrece simular firma de compraventa desde el resumen', async () => {
     mocks.listFirmas.mockResolvedValue([FIRMA_ENVIADA]);
-    const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const card = await screen.findByRole('group', { name: 'Firma Comprador' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.queryByRole('button', { name: 'Simular firma (DEV)' })).toBeNull();
+    expect(mocks.simularFirma).not.toHaveBeenCalled();
+  });
+});
+
+describe('FirmaFurStep — participantes portal ocultos (Feature #11211)', () => {
+  it('no renderiza Participantes del portal en el camino feliz', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(
-      (within(card).getByLabelText('Enlace de firma Comprador') as HTMLInputElement).value,
-    ).toContain('https://mock/sign/sig-1');
-    await user.click(within(card).getByRole('button', { name: 'Simular firma (DEV)' }));
-    await waitFor(() => expect(mocks.simularFirma).toHaveBeenCalledWith(INSTANCE, 'sig-1'));
+      screen.queryByRole('region', { name: 'Participantes del portal' }),
+    ).not.toBeInTheDocument();
+    expect(mocks.listParticipantes).not.toHaveBeenCalled();
   });
 });
 
-describe('FirmaFurStep — invitar participante', () => {
-  it('invita y muestra el magic-link absoluto copiable', async () => {
-    const user = userEvent.setup();
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Participantes del portal' });
-    await user.type(screen.getByLabelText('Nombre completo'), 'Ana Comprador');
-    await user.type(screen.getByLabelText('Correo electrónico'), 'ana@example.com');
-    await user.click(screen.getByRole('button', { name: 'Invitar participante' }));
-
-    await waitFor(() => expect(mocks.invitarParticipante).toHaveBeenCalledTimes(1));
-    const link = (await screen.findByLabelText(
-      'Enlace de portal del participante',
-    )) as HTMLInputElement;
-    expect(link.value).toContain('/portal/raw-token-xyz');
-  });
-
-  it('reinvitar muestra el error de cooldown 429', async () => {
-    mocks.listParticipantes.mockResolvedValue([PARTICIPANT]);
-    mocks.reinvitarParticipante.mockRejectedValue(new Error('429 Too Many Requests'));
-    const user = userEvent.setup();
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByText(/Ana Comprador/);
-    await user.click(screen.getByRole('button', { name: 'Reinvitar' }));
-    expect(await screen.findByText(/Espera 24h antes de reenviar/)).toBeInTheDocument();
-  });
-});
-
-// Feature #11066 — la impronta se pre-genera al entrar al paso (best-effort). Sin botón Generar.
-// HU #11052 — tampoco hay generación manual; el consolidado sigue disponible en el paso FUR.
+// Feature #11066 — la impronta se pre-genera al entrar al paso (best-effort). Sin sección dedicada:
+// aparece en Documentos del expediente cuando existe.
 describe('FirmaFurStep — impronta (Feature #11066)', () => {
-  it('sin impronta: informa pre-gen al entrar y NO ofrece botón Generar', async () => {
+  it('sin impronta: no muestra sección dedicada ni botón Generar Improntas', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-
-    const seccion = await screen.findByRole('region', { name: 'Impronta de motor y chasis' });
-    expect(seccion).toHaveTextContent(/Se genera automáticamente al entrar a este paso/i);
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.queryByRole('region', { name: 'Impronta de motor y chasis' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Generar Improntas/i })).not.toBeInTheDocument();
   });
 
-  it('con impronta existente muestra descarga y no el botón Generar', async () => {
+  it('con impronta existente la lista en Documentos del expediente', async () => {
     mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
+    // La rejilla sale del checklist (rediseño): el ítem se empareja con el adjunto por `docTipo`.
+    mocks.getChecklist.mockResolvedValue({
+      items: [
+        { key: 'impronta', label: 'Improntas de motor y chasis', obligatorio: true, docTipo: 'impronta', satisfied: true },
+      ],
+      faltanObligatorios: 0,
+      completo: true,
+    });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const section = await screen.findByRole('region', { name: 'Impronta de motor y chasis' });
-    expect(screen.queryByRole('button', { name: /Generar Improntas/i })).not.toBeInTheDocument();
-    expect(within(section).getByText(/impronta\.pdf/i)).toBeInTheDocument();
-    expect(within(section).getByRole('button', { name: /Descargar/i })).toBeInTheDocument();
+    const docs = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
+    expect(within(docs).getByText('Improntas de motor y chasis')).toBeInTheDocument();
+    expect(within(docs).getByText('Validado')).toBeInTheDocument();
+    expect(within(docs).getByText(/SHA-256/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Impronta de motor y chasis' })).not.toBeInTheDocument();
   });
 });
 
@@ -272,12 +329,12 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
   it('sin consolidado: no genera FUR a mano; pre-genera paquete+impronta al entrar', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
+    await screen.findByRole('region', { name: 'Expediente digital' });
 
     expect(screen.queryByRole('button', { name: /Generar FUR/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Re-generar FUR/i })).not.toBeInTheDocument();
     expect(
-      await screen.findByRole('button', { name: 'Generar expediente consolidado' }),
+      await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -286,26 +343,86 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     });
   });
 
-  it('lista el FUR ya generado para descarga y no vuelve a generarFur', async () => {
-    mocks.getAttachments.mockResolvedValue([FUR_DOC]);
+  // Punto 6 del rediseño (captura Step5) — las casillas nacen desmarcadas, pero NO gatean el botón:
+  // ver el PDF no es un acto que haya que confirmar. Lo que sí deben condicionar es radicar, y ese
+  // gateo vive en el wizard (`Requisitos pendientes antes del envío`), fuera de este paso.
+  it('las casillas de confirmación nacen desmarcadas y NO bloquean «Ver expediente consolidado»', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    // El nombre amigable ('FUR') y el filename van en nodos separados; se valida el <p> contenedor.
-    const furFilename = await screen.findByText(/· fur\.txt/);
-    expect(furFilename.closest('p')).toHaveTextContent('FUR · fur.txt');
+    const boton = await screen.findByRole('button', {
+      name: 'Ver expediente consolidado (PDF)',
+    });
+    expect(boton).toBeEnabled();
+
+    for (const texto of CONFIRMACIONES_BASE()) {
+      expect(screen.getByLabelText(texto)).not.toBeChecked();
+    }
+
+    await user.click(boton);
+    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true));
+  });
+
+  // Contrato de `onConfirmacionesExpedienteChange`: reporta las confirmaciones SIN marcar, para que
+  // el wizard (dueño de `TramiteWizard.tsx`) las sume a sus requisitos pendientes.
+  it('reporta las confirmaciones pendientes y las retira al marcarlas', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    const user = userEvent.setup();
+    const reportes: string[][] = [];
+    render(
+      <FirmaFurStep
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        onConfirmacionesExpedienteChange={(pendientes) => reportes.push(pendientes)}
+      />,
+    );
+
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
+    await waitFor(() => expect(reportes.at(-1)).toEqual(CONFIRMACIONES_BASE()));
+
+    for (const texto of CONFIRMACIONES_BASE()) {
+      await user.click(screen.getByLabelText(texto));
+    }
+    await waitFor(() => expect(reportes.at(-1)).toEqual([]));
+  });
+
+  it('lista el FUR en Documentos del expediente y no vuelve a generarFur', async () => {
+    mocks.getAttachments.mockResolvedValue([FUR_DOC]);
+    mocks.getChecklist.mockResolvedValue({
+      items: [{ key: 'fur', label: 'FUR', obligatorio: true, docTipo: 'fur', satisfied: true }],
+      faltanObligatorios: 0,
+      completo: true,
+    });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const docs = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
+    expect(within(docs).getByText('FUR')).toBeInTheDocument();
+    expect(within(docs).getByText(/SHA-256 abc123/)).toBeInTheDocument();
     await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalled());
     expect(mocks.generarFur).not.toHaveBeenCalled();
   });
 
-  it('precarga Fecha del trámite con la fecha local de hoy si no hay valor guardado', async () => {
+  it('muestra Fecha del trámite al inicio del resumen como hoy y no editable', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const fecha = (await screen.findByLabelText(/Fecha del trámite/i)) as HTMLInputElement;
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    const fecha = within(resumen).getByLabelText('Fecha del trámite', {
+      selector: 'input',
+    }) as HTMLInputElement;
     const today = new Date();
     const yyyy = today.getFullYear();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     expect(fecha.value).toBe(`${yyyy}-${mm}-${dd}`);
+    expect(fecha).toBeDisabled();
+    expect(fecha).toHaveAttribute('readonly');
+    // Debe ir antes del bloque Vehículo (visible al inicio). Vehículo ya no es un acordeón
+    // (rediseño: tarjeta siempre abierta), así que se ubica por su región, no por su botón.
+    const vehiculoRegion = within(resumen).getByRole('region', { name: /Vehículo/i });
+    expect(
+      fecha.compareDocumentPosition(vehiculoRegion) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     await waitFor(() =>
       expect(mocks.patchFieldValues).toHaveBeenCalledWith(
         INSTANCE,
@@ -316,25 +433,23 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     );
   });
 
-  // Hereda el guardado previo que hacía el botón del FUR (HU #10987/#10988): al ser el único
-  // disparador manual, si no persistiera antes, la fecha y las observaciones escritas sin perder
-  // el foco no llegarían al PDF.
-  it('persiste fecha y observaciones ANTES de generar el consolidado', async () => {
+  it('persiste la fecha ANTES de generar el consolidado', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Generar expediente consolidado' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalled());
-    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE));
+    await waitFor(() =>
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true),
+    );
     const ordenGuardado = mocks.patchFieldValues.mock.invocationCallOrder[0]!;
     const ordenGenerado = mocks.generarConsolidado.mock.invocationCallOrder[0]!;
     expect(ordenGuardado).toBeLessThan(ordenGenerado);
   });
 
-  // HU #11051 — el backend rechaza la regeneración del gestor en estado final; el mensaje lo explica.
   it('traduce el rechazo por estado final del backend', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     mocks.generarConsolidado.mockRejectedValue(
@@ -342,17 +457,15 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     );
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Generar expediente consolidado' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     expect(
       await screen.findByText(/su documentación es definitiva y no se regenera/i),
     ).toBeInTheDocument();
   });
 
-  // Avisos informativos del consolidado (p.ej. impronta no disponible). Feature #11066 no usa
-  // cascada caliente en backend; el FE igual muestra avisosCascada si el API los envía.
   it('avisa si el consolidado reporta un aviso (p.ej. impronta no disponible)', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     mocks.generarConsolidado.mockResolvedValue({
@@ -367,9 +480,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     });
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Generar expediente consolidado' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     const aviso = await screen.findByRole('alert');
     expect(aviso).toHaveTextContent(/Expediente consolidado generado/i);
@@ -377,12 +490,38 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     expect(aviso).toHaveTextContent(/proveedor no está disponible/i);
   });
 
-  // AC3 — trámite aprobado: ninguna acción de generación, solo consulta y descarga.
+  it('si el FUR no se pudo regenerar, avisa que el expediente conserva la versión anterior', async () => {
+    // HU #11642 — el aviso de FUR NO puede leerse como "falta el FUR": el documento existe, lo que
+    // falló fue rehacerlo, así que lo que el gestor tiene delante puede no recoger su último cambio.
+    // Es el desenlace del defecto que motivó la HU (cambio de color que no llegaba al consolidado).
+    mocks.getAttachments.mockResolvedValue([]);
+    mocks.generarConsolidado.mockResolvedValue({
+      attachmentId: 'att-consolidado',
+      tipo: 'consolidado',
+      filename: 'consolidado.pdf',
+      sha256: 'cns123',
+      regenerado: true,
+      incompleto: false,
+      documentosFaltantes: [],
+      avisosCascada: ['fur: organismo_requerido'],
+    });
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
+
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
+
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent(/No se pudo regenerar el FUR/i);
+    expect(aviso).toHaveTextContent(/falta el organismo de tránsito/i);
+    expect(aviso).toHaveTextContent(/conserva la versión anterior/i);
+    expect(aviso).not.toHaveTextContent(/No se pudo generar el FUR/i);
+  });
+
   it('en trámite aprobado no ofrece generar y lo explica', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
     mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, status: 'aprobado' });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
 
     expect(
       await screen.findByText(/El trámite ya está aprobado: su documentación es definitiva/i),
@@ -408,7 +547,7 @@ describe('FirmaFurStep — consulta RNMC en el paso final (FEATURE 05)', () => {
 
   it('con RNMC inactivo no consulta ni muestra la sección', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
+    await screen.findByRole('region', { name: 'Expediente digital' });
     expect(mocks.runRnmc).not.toHaveBeenCalled();
     expect(screen.queryByText('Consulta RNMC — Medidas correctivas')).not.toBeInTheDocument();
   });
@@ -476,53 +615,74 @@ describe('FirmaFurStep — organismo de tránsito', () => {
 });
 
 describe('FirmaFurStep — descarga de documentos', () => {
-  it('descarga un documento generado disparando el download del navegador', async () => {
+  it('abre un documento del expediente en nueva pestaña con «Ver PDF»', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
-    const clickSpy = vi.fn();
-    const origCreate = document.createElement.bind(document);
-    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = origCreate(tag) as HTMLElement;
-      if (tag === 'a') (el as HTMLAnchorElement).click = clickSpy;
-      return el;
+    mocks.getChecklist.mockResolvedValue({
+      items: [{ key: 'fur', label: 'FUR', obligatorio: true, docTipo: 'fur', satisfied: true }],
+      faltanObligatorios: 0,
+      completo: true,
+    });
+    mocks.downloadAttachment.mockResolvedValue({
+      blob: new Blob(['x'], { type: 'text/plain' }),
+      filename: 'fur.txt',
+      mimetype: 'text/plain',
     });
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock');
     globalThis.URL.revokeObjectURL = vi.fn();
+    // Ventana simulada completa (no solo `focus`): `openAttachmentInNewTab` abre la pestaña con el
+    // carrito (`openLoadingDocumentTab`, escribe en `win.document`) y luego navega con
+    // `win.location.replace(...)` — un stub incompleto deja una rejection sin capturar tras el test.
+    const fakeWin = {
+      opener: null as unknown,
+      closed: false,
+      document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+      focus: vi.fn(),
+    };
+    const openSpy = vi.fn(() => fakeWin);
+    vi.stubGlobal('open', openSpy);
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const docList = await screen.findByRole('list', { name: 'Documentos generados' });
-    await user.click(within(docList).getByRole('button', { name: /Descargar/ }));
-    await waitFor(() => expect(mocks.downloadAttachment).toHaveBeenCalledWith(INSTANCE, 'att-fur'));
-    expect(clickSpy).toHaveBeenCalled();
-    vi.mocked(document.createElement).mockRestore();
+    const docList = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
+    // Rediseño (captura Step5): un solo botón «Ver PDF», no «Ver»/«Descargar».
+    await user.click(within(docList).getByRole('button', { name: /Ver PDF de FUR/i }));
+    await waitFor(() =>
+      expect(mocks.downloadAttachment).toHaveBeenCalledWith(
+        INSTANCE,
+        'att-fur',
+        undefined,
+        'fur.txt',
+      ),
+    );
+    expect(openSpy).toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });
 
 describe('FirmaFurStep — sin envío duplicado en el paso', () => {
   it('NO renderiza la sección de envío a tránsito (el submit vive en Finalizar)', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Participantes del portal' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('region', { name: 'Envío a tránsito' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enviar a tránsito' })).not.toBeInTheDocument();
     expect(mocks.submitInstance).not.toHaveBeenCalled();
   });
 });
 
-describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
-  it('muestra el resumen de la matrícula con el estado de la instancia', async () => {
+describe('FirmaFurStep — resumen / expediente', () => {
+  it('muestra el resumen del trámite con el estado de la instancia', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen de la matrícula' });
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     // N 03 — label desde la fuente única lib/tramites/estados.ts.
     expect(within(resumen).getByText('Borrador')).toBeInTheDocument();
   });
 
-  it('en traspaso el resumen se rotula "Resumen del traspaso" (no matrícula)', async () => {
+  it('en traspaso y matrícula el resumen se rotula "Consolidado del trámite"', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     expect(
-      await screen.findByRole('region', { name: 'Resumen del traspaso' }),
+      await screen.findByRole('region', { name: 'Consolidado del trámite' }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('region', { name: 'Resumen de la matrícula' }),
-    ).toBeNull();
   });
 
   it('en traspaso el resumen muestra al vendedor; en matrícula no', async () => {
@@ -534,34 +694,83 @@ describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
       ],
     });
     const { unmount } = render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen del traspaso' });
-    expect(within(resumen).getByText('Vendedor')).toBeInTheDocument();
-    expect(within(resumen).getByText('Ana Vendedora')).toBeInTheDocument();
-    expect(within(resumen).getByText('Beto Comprador')).toBeInTheDocument();
-
-    // En matrícula (sin vendedor) no aparece la fila Vendedor.
+    const resumenTraspaso = await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(within(resumenTraspaso).getByText(/Ana Vendedora/)).toBeInTheDocument();
     unmount();
-    mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
+
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCE_DETAIL,
+      actors: [
+        { actorType: 'comprador', fullName: 'Beto Comprador', documentType: 'CC', documentNumber: '222' },
+      ],
+    });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumenMat = await screen.findByRole('region', { name: 'Resumen de la matrícula' });
-    expect(within(resumenMat).queryByText('Vendedor')).toBeNull();
+    const resumenMat = await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(within(resumenMat).queryByText(/Ana Vendedora/)).toBeNull();
+    expect(within(resumenMat).getByText(/Beto Comprador/)).toBeInTheDocument();
   });
 
-  it('el expediente digital alterna entre las pestañas Vehículo / Comprador / Documentos', async () => {
-    const user = userEvent.setup();
+  it('el resumen muestra transformaciones declaradas y la decisión de prenda', async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCE_DETAIL,
+      fieldValues: [
+        ...INSTANCE_DETAIL.fieldValues,
+        { formFieldId: null, fieldKey: 'vehicle_color_runt', valueText: 'BLANCO', valueJson: null, source: 'runt' },
+        { formFieldId: null, fieldKey: 'vehicle_color', valueText: 'NEGRO', valueJson: null, source: 'user' },
+        { formFieldId: null, fieldKey: 'cambio_color', valueText: 'true', valueJson: null, source: 'user' },
+        { formFieldId: null, fieldKey: 'vehicle_fuel_runt', valueText: 'GASOLINA', valueJson: null, source: 'runt' },
+        { formFieldId: null, fieldKey: 'vehicle_fuel', valueText: 'DIESEL', valueJson: null, source: 'user' },
+        { formFieldId: null, fieldKey: 'cambio_combustible', valueText: 'true', valueJson: null, source: 'user' },
+      ],
+    });
+    mocks.getPrenda.mockResolvedValue({
+      id: 'prenda-1',
+      decision: 'registrar',
+      estado: 'vigente',
+      acreedorNombre: 'Banco Demo',
+      acreedorDocumento: '900111222',
+      createdAt: '2026-06-19T00:00:00Z',
+    });
+
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    // Transformaciones y Prenda son tarjetas abiertas de la fila de tres columnas, no desplegables.
+    const transformaciones = within(resumen).getByLabelText('Transformaciones declaradas');
+    expect(within(transformaciones).getByText('Color')).toBeInTheDocument();
+    expect(within(transformaciones).getByText('NEGRO')).toBeInTheDocument();
+    expect(within(transformaciones).getByText('Combustible')).toBeInTheDocument();
+    expect(within(transformaciones).getByText('DIESEL')).toBeInTheDocument();
+    expect(within(resumen).getByLabelText('Prenda o gravamen')).toBeInTheDocument();
+    expect(within(resumen).getByText('Registrar prenda')).toBeInTheDocument();
+    expect(within(resumen).getByText('Banco Demo')).toBeInTheDocument();
+    expect(within(resumen).getByText('900111222')).toBeInTheDocument();
+    expect(within(resumen).getByText('Certificado / registro de prenda')).toBeInTheDocument();
+    expect(within(resumen).getByText('Sin documento cargado')).toBeInTheDocument();
+  });
+
+  it('sin transformaciones ni prenda el resumen no muestra esos bloques', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(within(resumen).queryByLabelText('Transformaciones declaradas')).toBeNull();
+    expect(within(resumen).queryByLabelText('Prenda o gravamen')).toBeNull();
+  });
+
+  it('el expediente digital muestra documentos; el resumen tiene vehículo', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     const visor = await screen.findByRole('region', { name: 'Expediente digital' });
-    // Pestaña por defecto: Vehículo.
-    expect(within(visor).getByText('Especificaciones técnicas')).toBeInTheDocument();
-    await user.click(within(visor).getByRole('tab', { name: 'Comprador' }));
-    expect(within(visor).getByText('Datos del comprador')).toBeInTheDocument();
-    await user.click(within(visor).getByRole('tab', { name: 'Documentos' }));
+    // Vehículo ya no es un acordeón (rediseño: tarjeta siempre abierta).
+    expect(within(resumen).getByRole('region', { name: 'Vehículo' })).toBeInTheDocument();
+    // «Documentos cargados» tampoco es un acordeón (rediseño): tarjeta siempre abierta, sin botón.
+    expect(within(visor).getByRole('region', { name: 'Documentos cargados' })).toBeInTheDocument();
+    expect(within(visor).queryByRole('button', { name: 'Documentos' })).toBeNull();
     expect(within(visor).getByText('No se han cargado documentos.')).toBeInTheDocument();
-    // Matrícula tiene una sola parte: no hay pestaña Vendedor.
-    expect(within(visor).queryByRole('tab', { name: 'Vendedor' })).toBeNull();
+    expect(within(visor).queryByRole('button', { name: 'Vehículo' })).toBeNull();
+    expect(within(visor).queryByRole('button', { name: 'Validación de identidad' })).toBeNull();
+    expect(within(visor).queryByRole('tab')).toBeNull();
   });
 
-  it('el expediente en traspaso agrega la pestaña Vendedor con sus datos', async () => {
+  it('en traspaso el resumen tiene vendedor y comprador con biométrica embebida; el expediente no los duplica', async () => {
     mocks.getInstance.mockResolvedValue({
       ...INSTANCE_DETAIL,
       actors: [
@@ -569,26 +778,21 @@ describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
         { actorType: 'comprador', fullName: 'Beto Comprador', documentType: 'CC', documentNumber: '222' },
       ],
     });
-    const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     const visor = await screen.findByRole('region', { name: 'Expediente digital' });
 
-    await user.click(within(visor).getByRole('tab', { name: 'Vendedor' }));
-    expect(within(visor).getByText('Datos del vendedor')).toBeInTheDocument();
-    expect(within(visor).getByText('Ana Vendedora')).toBeInTheDocument();
-
-    // La pestaña Comprador sigue disponible y separada.
-    await user.click(within(visor).getByRole('tab', { name: 'Comprador' }));
-    expect(within(visor).getByText('Datos del comprador')).toBeInTheDocument();
-    expect(within(visor).getByText('Beto Comprador')).toBeInTheDocument();
-  });
-
-  it('la línea de tiempo muestra el vacío cuando no hay historial de estado', async () => {
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const timeline = await screen.findByRole('region', {
-      name: 'Línea de tiempo del expediente',
-    });
-    expect(within(timeline).getByText('Sin eventos registrados todavía.')).toBeInTheDocument();
+    // Vendedor/Comprador ya no son acordeones (rediseño: tarjetas siempre abiertas en dos columnas).
+    expect(within(resumen).getByRole('region', { name: 'Vendedor' })).toBeInTheDocument();
+    expect(within(resumen).getByRole('region', { name: 'Comprador' })).toBeInTheDocument();
+    expect(within(resumen).getByText('Ana Vendedora')).toBeInTheDocument();
+    expect(within(resumen).getByText('Beto Comprador')).toBeInTheDocument();
+    expect(await within(resumen).findByRole('group', { name: 'Biométrica Vendedor' })).toBeInTheDocument();
+    expect(within(resumen).getByRole('group', { name: 'Biométrica Comprador' })).toBeInTheDocument();
+    expect(within(visor).queryByRole('button', { name: 'Vendedor' })).toBeNull();
+    expect(within(visor).queryByRole('button', { name: 'Comprador' })).toBeNull();
+    expect(within(visor).queryByRole('button', { name: 'Validación de identidad' })).toBeNull();
+    expect(within(visor).queryByRole('tab')).toBeNull();
   });
 });
 
@@ -604,22 +808,22 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
     ],
   };
 
-  it('traspaso con OT resuelto: solo lectura, sin botón Cambiar/Seleccionar y sin abrir el modal', async () => {
+  it('traspaso con OT resuelto: no muestra organismo en el resumen ni abre el modal', async () => {
     mocks.getInstance.mockResolvedValue(TRASPASO_OT_BOUND);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
-    expect(
-      within(seccion).getByText(/El organismo proviene del RUNT y no puede modificarse en un traspaso\./),
-    ).toBeInTheDocument();
-    // No hay botón para seleccionar/cambiar el organismo.
+    expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
+    // El organismo SÍ se muestra ahora, como ficha informativa y en las dos modalidades (el gestor
+    // radicaba sin ver ante quién). Lo que estos tests guardan sigue en pie: nada editable, ni
+    // catálogo, ni modal — el OT se eligió en el paso 1 o lo fijó el RUNT (HU #10659/#11199).
+    expect(screen.getByRole('region', { name: 'Organismo de tránsito' })).toBeInTheDocument();
+    expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
-    // En traspaso nunca se abre el modal → no se consulta el catálogo de OT.
     expect(mocks.listTransitOffices).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: 'Seleccionar organismo de tránsito' })).not.toBeInTheDocument();
   });
 
-  it('traspaso con OT del RUNT no habilitado (nombre sin id): avisa, sin selector', async () => {
+  it('traspaso con OT del RUNT no habilitado: tampoco muestra organismo ni selector', async () => {
     mocks.getInstance.mockResolvedValue({
       ...INSTANCE_DETAIL,
       fieldValues: [
@@ -628,49 +832,171 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
-    expect(within(seccion).getByText(/no está habilitado para tu empresa/)).toBeInTheDocument();
+    expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
+    // El organismo SÍ se muestra ahora, como ficha informativa y en las dos modalidades (el gestor
+    // radicaba sin ver ante quién). Lo que estos tests guardan sigue en pie: nada editable, ni
+    // catálogo, ni modal — el OT se eligió en el paso 1 o lo fijó el RUNT (HU #10659/#11199).
+    expect(screen.getByRole('region', { name: 'Organismo de tránsito' })).toBeInTheDocument();
+    expect(screen.queryByText(/no está habilitado para tu empresa/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
   });
 
-  it('matrícula: sigue ofreciendo seleccionar/cambiar el organismo (sin cambios)', async () => {
-    // Con OT elegido (nombre/código) en matrícula el botón dice "Cambiar".
+  it('matrícula: el resumen tampoco muestra la sección de organismo', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
-    expect(within(seccion).getByRole('button', { name: /Cambiar/ })).toBeInTheDocument();
-    // El texto de solo lectura de traspaso NO aparece en matrícula.
+    expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
+    // El organismo SÍ se muestra ahora, como ficha informativa y en las dos modalidades (el gestor
+    // radicaba sin ver ante quién). Lo que estos tests guardan sigue en pie: nada editable, ni
+    // catálogo, ni modal — el OT se eligió en el paso 1 o lo fijó el RUNT (HU #10659/#11199).
+    expect(screen.getByRole('region', { name: 'Organismo de tránsito' })).toBeInTheDocument();
     expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
   });
 });
 
-describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', () => {
-  it('traspaso: la sección de firma es informativa y aclara que no bloquea el trámite', async () => {
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+describe('FirmaFurStep — la secretaría elegida en el paso 1 (HU #11199, AC4)', () => {
+  /** Trámite creado con el organismo ya elegido en el primer paso: trae la marca del origen. */
+  const MATRICULA_OT_PASO_1 = {
+    ...INSTANCE_DETAIL,
+    fieldValues: [
+      { formFieldId: null, fieldKey: 'transit_office_id', valueText: 'aaaaaaaa-0001-4000-8000-000000000010', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_code', valueText: '05001000', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'Secretaría de Movilidad de Medellín', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_city', valueText: '05001', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_origen', valueText: 'paso_1', valueJson: null, source: 'user' },
+    ],
+  };
 
-    const seccion = await screen.findByRole('region', { name: 'Firma de la compraventa' });
-    // Copy alineado a ADR-0028: la firma no bloquea preparar/radicar.
-    expect(within(seccion).getByText('no bloquea')).toBeInTheDocument();
-    // Ajuste del PO: además se explica DE DÓNDE sale la firma, para que el gestor no busque un paso
-    // de firma que no existe. Antes el copy decía "pendiente de definición de negocio".
-    expect(within(seccion).getByText(/validación de identidad/)).toBeInTheDocument();
-    expect(within(seccion).getByText(/firma del baúl/)).toBeInTheDocument();
+  it('AC4: el paso del FUR no vuelve a mostrar el organismo si ya se eligió en el paso 1', async () => {
+    mocks.getInstance.mockResolvedValue(MATRICULA_OT_PASO_1);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    // Esperar a que el paso cargue (resumen / expediente).
+    expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
+    expect(screen.queryByText(/Lo elegiste al comenzar el trámite/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Seleccionar organismo de tránsito' })).not.toBeInTheDocument();
+    expect(mocks.listTransitOffices).not.toHaveBeenCalled();
+  });
+
+  it('D8: un borrador anterior al cambio (sin la marca) conserva el selector del FUR', async () => {
+    // Convivencia: no hay migración de borradores. Sin `transit_office_origen` el paso se comporta
+    // exactamente como antes, incluido el modal que se auto-abre cuando aún no hay organismo.
+    mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, fieldValues: [] });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
     expect(
-      within(seccion).getByText(/seleccionado al registrar el trámite/),
+      await screen.findByRole('dialog', { name: 'Seleccionar organismo de tránsito' }),
     ).toBeInTheDocument();
   });
+});
 
-  it('traspaso: la firma es informativa y ya no se solicita desde el paso (HU #11019)', async () => {
-    // AC5 de ADR-0028 sigue vigente en el MODELO (endpoints y estado intactos), pero la UI ya no
-    // ofrece la acción: la firma de compraventa no bloquea y pedirla no aportaba nada al gestor.
+describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', () => {
+  it('traspaso: el resumen no muestra firma de compraventa en Comprador/Vendedor', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const vendedor = await screen.findByRole('region', { name: 'Vendedor' });
+    const comprador = await screen.findByRole('region', { name: 'Comprador' });
+    expect(within(vendedor).queryByRole('group', { name: 'Firma compraventa Vendedor' })).toBeNull();
+    expect(within(comprador).queryByRole('group', { name: 'Firma compraventa Comprador' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Firma de la compraventa' })).not.toBeInTheDocument();
+  });
+
+  it('traspaso: muestra teléfono, dirección y ciudad del actor', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    const vendedor = await screen.findByRole('region', { name: 'Vendedor' });
+    expect(within(vendedor).getByText('3001112233')).toBeInTheDocument();
+    expect(within(vendedor).getByText('Calle 1 # 2-3')).toBeInTheDocument();
+    expect(within(vendedor).getByText('Medellín')).toBeInTheDocument();
+  });
+
+  it('traspaso: no solicita firma de compraventa desde el resumen', async () => {
     mocks.listFirmas.mockResolvedValue([FIRMA_ENVIADA]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const card = await screen.findByRole('group', { name: 'Firma Comprador' });
-
-    // El estado de una firma ya existente se sigue mostrando…
-    expect(
-      (within(card).getByLabelText('Enlace de firma Comprador') as HTMLInputElement).value,
-    ).toContain('https://mock/sign/sig-1');
-    // …pero no hay forma de solicitar una nueva.
-    expect(within(card).queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
+    expect(screen.queryByLabelText('Enlace de firma Comprador')).toBeNull();
   });
+});
+
+// ── Bug #11145 — el aviso de generación del expediente ──────────────────────
+//
+// El aviso ("Generando documentos del expediente… No bloquea Preparar") se quedaba girando
+// indefinidamente aunque los documentos ya estuvieran generados. FirmaFurStep no lo pinta: reporta
+// su estado al shell vía `onPaqueteStatusChange`, y es ese estado el que se quedaba en 'loading'.
+describe('FirmaFurStep — estado del paquete de documentos (Bug #11145)', () => {
+  const FUR_ATT: ProcedureAttachment = {
+    id: 'att-fur',
+    tipo: 'fur',
+    filename: 'fur.pdf',
+    mimetype: 'application/pdf',
+    sizeBytes: 10,
+    sha256: 'abc',
+    uploadedAt: '2026-07-31T00:00:00Z',
+    source: 'system',
+  };
+
+  it('termina en «listo» y no se queda en «generando»', async () => {
+    const estados: string[] = [];
+    render(
+      <FirmaFurStep
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        onPaqueteStatusChange={(s) => estados.push(s)}
+      />,
+    );
+
+    await waitFor(() => expect(estados).toContain('ready'));
+    expect(estados.at(-1)).toBe('ready');
+  });
+
+  it('con el FUR ya adjunto NUNCA reporta «generando»', async () => {
+    // La red de seguridad que pidió el negocio: si el gestor ya ve los documentos, el aviso sobra.
+    mocks.getAttachments.mockResolvedValue([FUR_ATT]);
+    const estados: string[] = [];
+
+    render(
+      <FirmaFurStep
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        onPaqueteStatusChange={(s) => estados.push(s)}
+      />,
+    );
+
+    await waitFor(() => expect(estados).toContain('ready'));
+    expect(estados).not.toContain('loading');
+    // Y no se regenera lo que ya existe.
+    expect(mocks.generarFur).not.toHaveBeenCalled();
+  });
+
+  it('con la generación aún en vuelo, el aviso se retira en cuanto el FUR aparece', async () => {
+    // Causa raíz: el estado solo pasaba a «listo» cuando RESPONDÍA la generación del FUR, y esa
+    // petición puede tardar. El documento se materializa antes, así que el gestor veía el FUR en el
+    // expediente mientras el aviso seguía girando. Aquí la generación no resuelve nunca y el FUR
+    // aparece en el expediente al segundo listado: el aviso debe retirarse igual.
+    // La generación NUNCA responde: es el escenario que dejaba el aviso girando para siempre.
+    mocks.generarFur.mockImplementation(() => new Promise(() => {}));
+    // El expediente empieza vacío —para que la generación llegue a dispararse— y el FUR aparece al
+    // cabo de un segundo, como haría el backend mientras la petición sigue abierta. Se controla por
+    // TIEMPO y no por número de llamadas: varios componentes del paso listan adjuntos.
+    let furEnElExpediente = false;
+    mocks.getAttachments.mockImplementation(() =>
+      Promise.resolve(furEnElExpediente ? [FUR_ATT] : []),
+    );
+    setTimeout(() => {
+      furEnElExpediente = true;
+    }, 1_000);
+    const estados: string[] = [];
+
+    render(
+      <FirmaFurStep
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        onPaqueteStatusChange={(s) => estados.push(s)}
+      />,
+    );
+
+    await waitFor(() => expect(estados).toContain('loading'));
+    await waitFor(() => expect(estados.at(-1)).toBe('ready'), { timeout: 10_000 });
+    // Se llegó a disparar la generación y aun así el aviso se retiró sin esperar su respuesta.
+    expect(mocks.generarFur).toHaveBeenCalled();
+  }, 15_000);
 });

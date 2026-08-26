@@ -38,9 +38,14 @@ public sealed class TramiteLifecycleServiceTests
             .IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
+        // 2026-08-12 — el override del OT ya no exige documento con CUALQUIER decisión, solo con las
+        // que lo piden (solicitar/registrar/levantar), así que estos tests necesitan una decisión
+        // vigente para ejercitarlo. Por defecto `registrar`; los casos que prueban lo contrario
+        // construyen su propio servicio con otra decisión.
         _sut = new TramiteLifecycleService(
             _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
-            prendaDocumentRequirementPolicy: _prendaPolicy);
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Registrar));
     }
 
     private ProcedureInstance Wire(string status, bool conGates = false)
@@ -49,13 +54,12 @@ public sealed class TramiteLifecycleServiceTests
         var tenantId = Guid.NewGuid();
         var i = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         if (conGates)
@@ -96,9 +100,21 @@ public sealed class TramiteLifecycleServiceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         return i;
+    }
+
+    /// <summary>Repo de prenda que siempre devuelve la misma decisión vigente (o ninguna si es null).</summary>
+    private static IProcedureInstancePrendaRepository StubPrendaRepo(string? decision)
+    {
+        var repo = Substitute.For<IProcedureInstancePrendaRepository>();
+        repo.GetVigenteAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(decision is null
+                ? null
+                : new ProcedureInstancePrenda { Decision = decision, Estado = PrendaEstado.Vigente });
+        return repo;
     }
 
     private Task<TramiteTransitionOutcome> Transition(
@@ -476,6 +492,29 @@ public sealed class TramiteLifecycleServiceTests
         i.SubsanacionActiva.Should().BeFalse();
     }
 
+    /// <summary>
+    /// HU #11200 (AC4) — adelantar la comprobación del organismo al paso 1 NO la retira de la
+    /// radicación. Entre una cosa y la otra pueden pasar días: el trámite queda en borrador y el
+    /// administrador puede revocar el grant. Sin esta segunda comprobación, un trámite que pasó el paso
+    /// 1 se entregaría a un organismo que ya no lo recibe y no aparecería en ninguna bandeja.
+    /// </summary>
+    [Fact]
+    public async Task HU11200_AC4_Entrega_GrantRevocadoDespuesDelPaso1_SigueBloqueando()
+    {
+        var i = Wire(TramiteEstado.Preparado);
+        SeleccionarOt(i, Guid.NewGuid());
+        _grantGate
+            .IsEnabledForTenantAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.OrganismoNoHabilitado);
+        i.Status.Should().Be(TramiteEstado.Preparado);
+        _publisher.Published.Should().BeEmpty();
+    }
+
     // HU #10518 — enforcement runtime: con grant, el OT debe estar OPERATIVO para entregar.
     [Fact]
     public async Task Entrega_OtConGrantPeroNoOperable_BloqueaConOrganismoNoOperable()
@@ -559,13 +598,12 @@ public sealed class TramiteLifecycleServiceTests
         var tenantId = Guid.NewGuid();
         var i = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000900",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             TransitOfficeId = transitOfficeId,
             CreatedAt = createdAt,
         };
@@ -633,6 +671,7 @@ public sealed class TramiteLifecycleServiceTests
             Name = "Traspaso estándar",
             Family = "traspaso",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         return i;
@@ -644,15 +683,72 @@ public sealed class TramiteLifecycleServiceTests
         var otId = Guid.NewGuid();
         var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
         _prendaPolicy
-            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
             .Returns(true);
 
         var outcome = await Transition(i, TramiteEstado.Preparado);
 
         outcome.Success.Should().BeFalse();
-        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
         i.Status.Should().Be(TramiteEstado.Borrador);
         _recorder.Records.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// EL CASO REPORTADO (2026-08-12) en el gate de preparación, hermano del que cubre
+    /// <c>WizardStateHandlerTests</c>: con <c>sin_prenda</c> u <c>omitir</c> no hay documento que
+    /// adjuntar —el paso de prenda ni siquiera lo ofrece—, así que el override del OT no puede
+    /// exigirlo. Antes bloqueaba, y el trámite se quedaba sin salida.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.SinPrenda)]
+    [InlineData(PrendaDecision.Omitir)]
+    public async Task OverrideOtActivo_ConDecisionSinSoporte_NoBloquea(string decision)
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    /// <summary>
+    /// Hermano del anterior por el otro lado: con el override activo y SIN decisión registrada, el
+    /// trámite NO pasa a preparado. Callar aquí convertía "no abrir el paso de prenda" en la vía para
+    /// radicar sin el certificado que el OT exige. El código es el accionable (registra la decisión),
+    /// no el documento imposible que motivó la corrección de la tanda.
+    /// </summary>
+    [Fact]
+    public async Task OverrideOtActivo_SinDecisionRegistrada_ExigeLaDecision()
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision: null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        i.Status.Should().Be(TramiteEstado.Borrador);
     }
 
     [Fact]
@@ -661,7 +757,7 @@ public sealed class TramiteLifecycleServiceTests
         var otId = Guid.NewGuid();
         var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: true);
         _prendaPolicy
-            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
             .Returns(true);
 
         var outcome = await Transition(i, TramiteEstado.Preparado);
@@ -678,10 +774,133 @@ public sealed class TramiteLifecycleServiceTests
         var otId = Guid.NewGuid();
         var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
         _prendaPolicy
-            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
             .Returns(false);
 
         var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    // ── HU #11592 — bloqueo duro de prenda en matrícula inicial ────────────────────────────────
+    // Invierte deliberadamente la HU #10596 (prenda declarativa/informativa en matrícula, sin gate).
+
+    [Fact]
+    public async Task MatriculaInicial_ConDecisionSinPrenda_Avanza()
+    {
+        // AC1 — matrícula inicial con decisión "sin_prenda" vigente avanza.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.SinPrenda));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    [Fact]
+    public async Task MatriculaInicial_SinNingunaDecisionDePrenda_Bloquea()
+    {
+        // AC2 — sin prenda vigente registrada y el override del OT desactivado (política sin
+        // configurar ⇒ default false), el gate bloquea con independencia del semáforo de
+        // gravámenes: no hay preflight snapshot cableado en `Wire`, así que HasGravamenWarn ni
+        // siquiera se evalúa para este disparador.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision: null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+        _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MatriculaInicial_ConSolicitarSinDocumento_ExigeDocumento()
+    {
+        // AC3 (rama documento) — "solicitar" sin el adjunto de soporte bloquea por documento. Con la
+        // política compañía+OT exigiendo el certificado (default), el override CF-06 (HU #10881) —que
+        // ya corre para CUALQUIER modalidad y es INDEPENDIENTE del semáforo, ver EvaluateOtOverride—
+        // captura el caso primero y devuelve su código propio "_ot"; es el MISMO bloqueo por documento
+        // faltante que exige la HU #11592, solo que vía el mecanismo que ya lo cubría.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, i.TransitOfficeId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Solicitar));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+    }
+
+    [Fact]
+    public async Task MatriculaInicial_ConSolicitarDocumentoSinAcreedor_ExigeAcreedor()
+    {
+        // AC3 (rama acreedor) — con el documento adjunto pero sin acreedor diligenciado, el
+        // faltante pasa a ser el acreedor (HU #11591 aplicado también en matrícula).
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        i.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            Tipo = "prenda_solicitud",
+            StoragePath = "p/prenda_solicitud",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, i.TransitOfficeId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Solicitar));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+    }
+
+    [Fact]
+    public async Task Traspaso_ConSemaforoGreenYSinPrendaVigente_NoRegresiona()
+    {
+        // AC4 (no regresión, R10/HU #10597) — el traspaso conserva su comportamiento previo: fuera
+        // de warn el gate no bloquea aunque no haya prenda vigente registrada. El bloqueo duro de la
+        // HU #11592 es exclusivo de matrícula inicial.
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision: null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
 
         outcome.Success.Should().BeTrue();
         i.Status.Should().Be(TramiteEstado.Preparado);

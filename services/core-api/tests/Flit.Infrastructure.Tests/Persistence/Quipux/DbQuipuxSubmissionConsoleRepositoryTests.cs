@@ -32,7 +32,8 @@ public sealed class DbQuipuxSubmissionConsoleRepositoryTests
     private static async Task SeedCatalogAsync(FlitDbContext db)
     {
         db.Tenants.Add(new Tenant { Id = TenantId, LegalName = "Renting del Café S.A.S." });
-        db.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Name = "Traspaso" });
+        db.ProcedureTypes.Add(new ProcedureType {
+        Family = "MATRICULAS", Id = ProcedureTypeId, Name = "Traspaso" });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 

@@ -60,11 +60,24 @@ export interface CreateInstanceRequest {
  * avanzar al paso 2 (`createInstanceFromConsulta`).
  */
 export interface ConsultaVehiculoInput {
-  modalidad: WizardModalidad;
+  /** Familia del trámite; gobierna el bloqueo por compañía. El nombre del campo es heredado. */
+  modalidad: ProcedureFamily | WizardModalidad;
+  /**
+   * ADR-0050 — `code` del tipo elegido en el catálogo. Manda sobre `modalidad`: decide qué
+   * identificador exige la consulta y qué trámite se crea. Sin él, todo lo que no fuera traspaso se
+   * consultaba y creaba como matrícula inicial.
+   */
+  procedureTypeCode?: string | null;
   vin?: string | null;
   plate?: string | null;
   ownerDocumentType?: string | null;
   ownerDocumentNumber?: string | null;
+  /**
+   * HU #11199 — secretaría de tránsito elegida en el primer paso. Obligatoria en matrícula inicial
+   * (sin ella el backend no consulta el VIN); en traspaso va nula, porque el organismo lo impone el
+   * RUNT según dónde esté matriculado el vehículo.
+   */
+  transitOfficeId?: string | null;
 }
 
 /**
@@ -98,6 +111,18 @@ export interface ProcedureInstanceSummary {
   draftFinalizedAt?: string | null;
 }
 
+/**
+ * Respuesta de POST /instances/{id}/plate-flow/complete. El trámite avanzó a Terminado, pero puede
+ * hacerlo con salvedades: p. ej. la compañía permite continuar sin SOAT vigente
+ * (`warningCode = 'soat_no_vigente_advertencia'`). La UI debe mostrar `warningMessage` aunque la
+ * llamada haya sido exitosa.
+ */
+export interface CompletePlateFlowResult {
+  instance: ProcedureInstanceSummary | null;
+  warningCode: string | null;
+  warningMessage: string | null;
+}
+
 // ── Listado de instancias (Slice M6) ───────────────────────────────
 // Contrato FIJO acordado con backend:
 //   GET /api/v1/tramites/instances  (X-Tenant-Id)  -> { items: InstanceSummary[] }
@@ -106,7 +131,21 @@ export interface ProcedureInstanceSummary {
 export interface InstanceSummary {
   id: string;
   referenceNumber: string;
-  modalidad: WizardModalidad;
+  /**
+   * ADR-0050 — FAMILIA del tipo de trámite (`MATRICULAS` | `TRASPASO` | `OTROS`). Conserva el
+   * nombre `modalidad` porque así viaja en el contrato del listado; lo que cambió es su contenido,
+   * que antes era una de las dos modalidades de entrada.
+   */
+  modalidad: ProcedureFamily;
+  /**
+   * ADR-0050 — nombre del TIPO en el catálogo («Blindaje», «Cambio de color», «Levantamiento de
+   * prenda»…). La familia sola identifica bien una matrícula o un traspaso, pero agrupa quince tipos
+   * bajo «Otros»: sin esto, tres trámites distintos se ven idénticos en el listado.
+   * Ausente en expedientes servidos por un backend anterior a este campo.
+   */
+  tipoNombre?: string | null;
+  /** `code` canónico del tipo, para decidir por tipo sin depender del nombre mostrado. */
+  tipoCodigo?: string | null;
   estado: InstanceStatus;
   /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
   plateFlowStatus?: PlateFlowStatus | null;
@@ -125,6 +164,13 @@ export interface InstanceSummary {
   organismoTransito: string | null;
   pasoActual: number;
   totalPasos: number;
+  /**
+   * Rótulo del paso en curso, tomado del recorrido del TIPO. Antes el cliente lo derivaba de una
+   * lista de nombres por familia: para OTROS estaba vacía —salía «—»— y de todos modos no puede
+   * acertar, porque desde ADR-0050 cada tipo tiene su propio recorrido.
+   * Ausente si el tipo no está parametrizado o el backend es anterior al campo.
+   */
+  pasoNombre?: string | null;
   createdAt: string;
   // HU #10350 — desacople de la validación de identidad async. Derivan los chips del listado
   // ("Pendiente validación" / "Pendiente firma") y la acción de la fila ("Radicar"/"Continuar").
@@ -194,9 +240,40 @@ export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
  */
 export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
 
-/** Respuesta de GET /instances. */
+/**
+ * Query params de GET /api/v1/tramites/instances (filtros + orden server-side).
+ * Si no se envía ninguno, el backend responde el TOP-N legacy sin `total`.
+ */
+export interface ListInstancesParams {
+  /** SuperAdmin: acota el listado a una compañía (header X-Tenant-Id). */
+  filterTenantId?: string;
+  vin?: string;
+  placa?: string;
+  /** Subcadena sobre el nombre del propietario/vendedor. */
+  vendedor?: string;
+  comprador?: string;
+  gestor?: string;
+  /**
+   * Firma electrónica de la compraventa completa (`true`) o pendiente (`false`).
+   * No es el chip de identidad/baúl de la columna de actores.
+   */
+  firmado?: boolean;
+  /** ISO-8601 / fecha `YYYY-MM-DD` (el cliente normaliza a inicio/fin de día). */
+  createdFrom?: string;
+  createdTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
+  /** Whitelist backend: vin | placa | comprador | gestor | createdAt | updatedAt */
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  skip?: number;
+  take?: number;
+}
+
+/** Respuesta de GET /instances. `total` solo viene en el camino filtrado/ordenado. */
 export interface InstancesResponse {
   items: InstanceSummary[];
+  total?: number;
 }
 
 /** Organismo de tránsito habilitado para la empresa (catálogo + grant). */
@@ -209,6 +286,22 @@ export interface TransitOfficeOption {
 
 export interface TransitOfficesResponse {
   items: TransitOfficeOption[];
+}
+
+/**
+ * Tipo de servicio del vehículo — catálogo cerrado `catalogs.vehicle_service_types` (sección 18 del
+ * FUR). Seis valores fijos (PARTICULAR/PUBLICO/DIPLOMATICO/OFICIAL/ESPECIAL/OTROS); `sortOrder`
+ * respeta el orden normativo del FUR con el que el backend ya lo devuelve.
+ */
+export interface VehicleServiceTypeOption {
+  id: string;
+  code: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface VehicleServiceTypesResponse {
+  items: VehicleServiceTypeOption[];
 }
 
 export interface FieldValue {
@@ -269,6 +362,11 @@ export interface ProcedureInstanceDetail {
   subsanacionActiva?: boolean;
   /** Veces que se activó la subsanación en este expediente. */
   subsanacionCount?: number;
+  /**
+   * HU #10536 — marca de prioridad. Vive en una columna del expediente, no en `fieldValues`, así que
+   * es el único dato del paso 1 que no se puede releer desde ahí al volver sobre un trámite creado.
+   */
+  prioritario?: boolean;
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];
@@ -290,7 +388,14 @@ export interface FieldValueInput {
 // La entidad `Actor` (arriba) es el espejo del detalle de instancia ya
 // existente; estos tipos modelan la captura/edición dedicada de actores.
 
-export type ActorRol = 'comprador' | 'vendedor';
+/**
+ * Rol de la parte en el trámite.
+ *
+ * `locatario` es el arrendatario del leasing (`LESSEE`). Se identifica y recibe los correos del
+ * trámite, pero NO valida identidad ni firma — eso es del propietario, y por eso no está en
+ * {@link BiometricParte}.
+ */
+export type ActorRol = 'comprador' | 'vendedor' | 'locatario';
 
 export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
 
@@ -308,9 +413,20 @@ export interface ConsultationProvidersConfig {
   vehicleVin: string;
   vehiclePlate: string;
   conductor: string;
-  // FEATURE 02 — política "solo vehículos propios" del tenant. Cuando es true, el wizard autorrellena
-  // el documento del tenant (NIT) en la consulta de traspaso y bloquea la consulta si se edita a otro.
+  // FEATURE 02 — legado: espejo de onlyOwnVehiclesByFamily.traspaso.
   onlyOwnVehicles: boolean;
+  /** Solo vehículos propios por familia de trámite. */
+  onlyOwnVehiclesByFamily?: {
+    matriculas: boolean;
+    traspaso: boolean;
+    otros: boolean;
+  };
+  /** Bloqueo de creación por familia (`true` = no permitir crear). */
+  blockProcedureFamily?: {
+    matriculas: boolean;
+    traspaso: boolean;
+    otros: boolean;
+  };
 }
 
 /**
@@ -400,8 +516,14 @@ export interface RuntPersonLookupInput {
 export interface RuntPersonLookupResult {
   found: boolean;
   fullName: string | null;
+  // El nombre llega desglosado: `firstName` es el PRIMER nombre (no todos los de pila) y
+  // `lastName` conserva los dos apellidos juntos. El RUNT enmascara sus campos de display, así
+  // que el backend resuelve la separación y el front no debe volver a partir `fullName`.
   firstName: string | null;
   lastName: string | null;
+  secondName?: string | null;
+  firstLastName?: string | null;
+  secondLastName?: string | null;
   documentType: string;
   documentNumber: string;
   licenseStatus: string | null;    // driverStatus del conductor
@@ -454,6 +576,21 @@ export interface RuesPersonLookupResult {
   mode: 'real' | 'mock' | 'cache';
 }
 
+// ── Consulta RUES SIN trámite (paso 1, empresa vinculadora del tipo de servicio PÚBLICO) ──
+// POST /api/v1/tramites/rues-preview  body { documentNumber }
+// No está anclada a una instancia (el paso 1 puede correr sin trámite creado, CF-02): a diferencia
+// de `ruesPersonLookup`, siempre viaja el NIT en el body y nunca un instanceId en la ruta.
+export interface RuesPreviewInput {
+  documentNumber: string;
+}
+
+export interface RuesPreviewResult {
+  /** El proveedor respondió y no existe ese NIT en el RUES (distinto de un fallo transitorio 503). */
+  found: boolean;
+  nit: string;
+  razonSocial: string | null;
+}
+
 // ── Directorio de representantes/escrituras — consumo del wizard (HU #10903/#10906) ──
 // GET /api/v1/tramites/deeds/active (tenant-scoped por header). Cada fila es el par (escritura ×
 // compañía representada) de una escritura activa y VIGENTE del tenant, proyectada para el collapse
@@ -470,6 +607,14 @@ export interface ActiveDeed {
   vigenciaHasta: string;
   /** Descripción de la escritura (p. ej. número/notaría), si viene. */
   description?: string | null;
+  /** Id del RL que asoció la escritura; null en escrituras legadas. */
+  representativeId?: string | null;
+  /** Nombre completo del RL. */
+  representativeName?: string | null;
+  /** Tipo de documento del RL (CC, CE, …). */
+  representativeDocumentType?: string | null;
+  /** Número de documento del RL (PII). */
+  representativeDocumentNumber?: string | null;
 }
 
 /** Compañía representada precargada por NIT (razón social + contacto). */
@@ -623,8 +768,37 @@ export interface ProcedureAttachment {
   mimetype: string;
   sizeBytes: number;
   sha256: string;
+  /**
+   * Origen del adjunto. NO es un catálogo cerrado (el backend puede sumar valores sin romper el
+   * contrato): usar {@link ATTACHMENT_SOURCE_LABELS} para la etiqueta, con fallback al valor crudo.
+   * `'company'` (Feature #11309/#11313, ADR-0042) — versión activa de un documento personalizado de
+   * la compañía (mandato | tramite_virtual), sustituida en el único punto del pipeline de
+   * generación. Se distingue así de `'system'` (generado por FLIT) y de `'user'`/`'ot'` (cargado por
+   * una persona).
+   */
   source: string;
   uploadedAt: string;
+}
+
+/**
+ * Etiqueta legible del origen de un adjunto (HU #11315). Un valor no listado aquí no es un error: se
+ * muestra su texto crudo (`source`) en vez de asumir el conjunto cerrado — el backend no promete una
+ * lista fija.
+ */
+export const ATTACHMENT_SOURCE_LABELS: Partial<Record<string, string>> = {
+  system: 'Generado por FLIT',
+  company: 'Documento de la compañía',
+  user: 'Cargado por el usuario',
+  ot: 'Cargado por el organismo',
+  ocr: 'Cargado (OCR)',
+  portal: 'Cargado desde el portal',
+  consultation: 'Consulta automática',
+  ict: 'Integración (ICT)',
+};
+
+/** Etiqueta de un `source` de adjunto, con fallback al valor crudo si no está en el mapa. */
+export function attachmentSourceLabel(source: string): string {
+  return ATTACHMENT_SOURCE_LABELS[source] ?? source;
 }
 
 /** Respuesta de GET /instances/{id}/attachments. */
@@ -657,6 +831,67 @@ export interface DocumentOcrResult {
    * multi-documento; null/ausente si no hubo recorte. El wizard sube este recorte en vez del original.
    */
   extractedPdfBase64?: string | null;
+}
+
+/**
+ * Una pieza propuesta por el cargue masivo: un documento que el clasificador reconoció dentro de un
+ * archivo, ya recortado y verificado con el prompt de su tipo. NO está subida — vive en la pantalla de
+ * revisión hasta que el operador la confirma.
+ */
+export interface BatchOcrPiece {
+  /** Tipo de documento al que se propone asignarla. */
+  tipo: string;
+  /** Archivo del lote del que salió, para que el operador se ubique. */
+  sourceFilename: string;
+  /** Nombre propuesto del adjunto (`soat_expediente.pdf` cuando hubo recorte). */
+  filename: string;
+  mimetype: string;
+  sizeBytes: number;
+  /** Páginas del archivo original que ocupa, base 1. */
+  paginas: number[];
+  /** Páginas del archivo original, para el chip «recorte 3/16 págs». */
+  totalPaginasOrigen: number;
+  /** Certeza del clasificador, 0.0–1.0. */
+  confianza: number;
+  /** Por qué el clasificador la reconoció así. */
+  motivo?: string | null;
+  /**
+   * JSON del prompt por tipo — el MISMO que devuelve el cargue campo a campo, así que se evalúa con
+   * `evaluateOcr` y se pinta con `OcrStatusPanel` sin duplicar reglas. null si el análisis falló.
+   */
+  data: Record<string, unknown> | null;
+  /** Por qué no hay `data`; null si el análisis fue bien. */
+  analisisError?: string | null;
+  /** Bytes de la pieza recortada, listos para subir al confirmar. */
+  contentBase64: string;
+}
+
+/**
+ * Páginas que el clasificador no supo ubicar en ningún tipo. Sin binario a propósito: el cliente
+ * todavía tiene el archivo original, y la salida que se le ofrece al operador es cargarlo a mano en un
+ * campo (donde el OCR dirigido reintenta la extracción) o descartarlo.
+ */
+export interface BatchOcrUnrecognized {
+  sourceFilename: string;
+  paginas: number[];
+  totalPaginas: number;
+}
+
+/** Archivo del lote que no se pudo procesar, con el motivo en lenguaje del operador. */
+export interface BatchOcrFileError {
+  filename: string;
+  motivo: string;
+}
+
+/**
+ * Respuesta de POST /tramites/ocr/lote. Las tres listas son la pantalla de revisión: lo que se propone
+ * subir, lo que sobró, y lo que ni siquiera se pudo abrir. Un lote donde todo falla sigue siendo un 200
+ * con `piezas` vacío — el error por archivo es información para el operador, no un fallo de la petición.
+ */
+export interface BatchOcrResult {
+  piezas: BatchOcrPiece[];
+  noReconocidos: BatchOcrUnrecognized[];
+  errores: BatchOcrFileError[];
 }
 
 /**
@@ -702,6 +937,16 @@ export interface ChecklistView {
 
 export type WizardModalidad = 'matricula_inicial' | 'traspaso';
 
+/** Ítem de la guía informativa de documentos (paso 1, sin checklist de carga). */
+export interface DocumentoInformativoPreviewItem {
+  documentTypeId: string;
+  codigo: string;
+  nombre: string;
+  obligatorio: boolean;
+  orden: number;
+  descripcion?: string | null;
+}
+
 export type WizardStepStatus = 'complete' | 'incomplete' | 'locked';
 
 /** Keys canónicas por modalidad (matrícula: 5, traspaso: 6). */
@@ -718,6 +963,22 @@ export type WizardStepKey =
   | 'vendedor'
   | 'comercial';
 
+/**
+ * Renderer de una sección del paso (CFD-09). Catálogo CERRADO: espeja el CHECK de
+ * `tramites.procedure_sections.section_type` y las ramas de `DynamicGateEvaluator`. Añadir un valor
+ * exige PR coordinado backend + frontend + migración.
+ */
+export type WizardSectionType =
+  | 'vehicle_query'
+  | 'document_checklist'
+  | 'actor_form'
+  | 'commercial'
+  | 'biometric'
+  | 'signature_fur'
+  | 'plate_request'
+  | 'prenda_decision'
+  | 'generic_form';
+
 export interface WizardStep {
   index: number;
   key: WizardStepKey | string;
@@ -725,12 +986,102 @@ export interface WizardStep {
   status: WizardStepStatus;
   /** Códigos de razón de incompletitud (mapeados a copy en la UI). */
   reasons: string[];
+  /**
+   * ADR-0050 / CFD-09 — renderer principal del paso, decidido por la parametrización del tipo y no
+   * por su clave. Es lo que permite que un trámite de OTROS tenga recorrido propio sin que el
+   * cliente conozca su `key`.
+   */
+  sectionType?: WizardSectionType;
+  /** Todas las secciones del paso, en orden. Un paso puede tener más de una. */
+  sectionTypes?: WizardSectionType[];
+  /** Capacidades del tipo que la sección necesita para pintarse (entryMode, actores, firma…). */
+  sectionConfig?: Record<string, unknown> | null;
 }
 
 /** Respuesta de GET /instances/{id}/wizard. */
+/**
+ * Capacidades del tipo con el que se conformó el expediente (ADR-0050).
+ *
+ * Es lo que le faltaba al asistente para dejar de decidir por modalidad: qué partes pide el trámite,
+ * si lleva datos comerciales, si la prenda es una puerta y por qué identificador entra el vehículo.
+ * Salen del mismo `gate_profile` que gobierna los gates del backend, congelado en el snapshot del
+ * expediente, así que el asistente y el servidor no pueden discrepar.
+ *
+ * Es una proyección PARCIAL a propósito: lo que solo afecta a validaciones del servidor no viaja,
+ * para que el frontend no pueda reimplementar un gate.
+ */
+export interface WizardCapabilities {
+  /** `VIN` (el vehículo aún no tiene placa) o `PLATE`. */
+  entryMode: string | null;
+  /** Hay parte vendedora. En la familia OTROS el titular no vende. */
+  requiresSeller: boolean;
+  /** Hay parte compradora o titular. */
+  requiresBuyer: boolean;
+  /**
+   * Interviene un arrendatario además del propietario (leasing). Parte declarativa: se identifica y
+   * se le notifica, pero no valida identidad ni firma. Ausente ⇒ `false`.
+   */
+  requiresLessee?: boolean;
+  allowsMultipleBuyer: boolean;
+  requiresCommercialValue: boolean;
+  requiresBiometrics: boolean;
+  /** Actores a validar: `OWNER`, `BUYER`. */
+  biometricActors: string[];
+  /** La decisión de prenda es una puerta y no una declaración. */
+  hasPrendaGate: boolean;
+  /**
+   * ADR-0050 — el expediente admite declarar transformaciones POR ENCIMA del tipo base (los
+   * «trámites simultáneos» del art. 5.1.8). El backend lo entrega ya resuelto: la familia OTROS no
+   * acumula —ahí el cambio ES el trámite— y matrícula y traspaso sí.
+   *
+   * Ausente ⇒ se trata como `true` (un borrador abierto antes de esta llave no debe perder los
+   * simultáneos que ya tenía).
+   */
+  allowsComplementaryTransformations?: boolean;
+  /**
+   * Admite un gravamen por encima del tipo base. No se refiere a la prenda de un TIPO de prenda:
+   * ahí la prenda es el trámite y su paso se pinta igual. Ausente ⇒ `true`.
+   */
+  allowsComplementaryPrenda?: boolean;
+  /**
+   * El organismo de tránsito lo ELIGE el operador entre los habilitados de su compañía, en vez de
+   * imponerlo el RUNT. Dejó de deducirse de `entryMode`: un radicado de cuenta entra por placa y aun
+   * así lo elige, porque el trámite consiste en llevar la cuenta a OTRO organismo.
+   *
+   * Ausente ⇒ se cae a `entryMode === 'VIN'`, que es el criterio anterior a esta llave.
+   */
+  operatorChoosesTransitOffice?: boolean;
+  /**
+   * El trámite DECLARA un organismo de destino además del suyo: el traslado de cuenta, que expide el
+   * organismo de ORIGEN pero tiene que decir a dónde va la cuenta.
+   *
+   * No confundir con `operatorChoosesTransitOffice`: ahí el organismo elegido ES el del trámite (el
+   * radicado de cuenta). Aquí el del trámite lo sigue imponiendo el RUNT y el destino es un dato más.
+   */
+  requiresDestinationTransitOffice?: boolean;
+  /**
+   * El trámite PIDE una placa nueva al organismo (matrícula, rematrícula, duplicado de placa). Es lo
+   * que decide si la preferencia de dígito de preasignación tiene sentido: en un radicado de cuenta
+   * el vehículo ya tiene placa y no hay ninguna que asignar.
+   *
+   * Ausente ⇒ se cae a `entryMode === 'VIN'`, que es como se decidía antes de esta llave.
+   */
+  requiresPlateRequest?: boolean;
+}
+
 export interface WizardState {
-  modalidad: WizardModalidad;
+  /**
+   * ADR-0050 — familia del tipo (`MATRICULAS` | `TRASPASO` | `OTROS`). El nombre del campo es
+   * heredado; el backend escribe aquí `procedure_types.family` desde que se retiró
+   * `modalidad_entrada`, así que declararlo como `WizardModalidad` era una promesa falsa: ninguna
+   * comparación contra `'traspaso'` podía acertar.
+   */
+  modalidad: ProcedureFamily | WizardModalidad;
   tipologiaCodigo: string;
+  /** Nombre del tipo del catálogo, para titular el trámite que se está haciendo. */
+  typeName?: string | null;
+  /** Ausente solo si el tipo no tiene pasos parametrizados (el asistente pinta el bloqueo). */
+  capabilities?: WizardCapabilities | null;
   totalSteps: number;
   steps: WizardStep[];
   canSubmit: boolean;
@@ -762,6 +1113,18 @@ export interface WizardState {
   subsanacionActiva?: boolean;
   /** Veces que se activó la subsanación en este expediente. */
   subsanacionCount?: number;
+  /**
+   * Migración V1→V2 — el trámite viene de V1 y no se capturó paso a paso aquí, así que llega sin las
+   * consultas de RUNT/SIMIT hechas (no se migran: caducan en minutos y no quedan atadas al trámite).
+   * El wizard lo usa para DESTACAR la petición de correrlas, sin exponer ese porqué en la UI.
+   * Ausente/false ⇒ trámite nativo de V2.
+   */
+  esMigrado?: boolean;
+  /**
+   * Compañía+OT: certificado de prenda obligatorio (default) u opcional (opt-out vigente al crear
+   * el trámite). Ausente ⇒ se trata como obligatorio.
+   */
+  prendaDocumentRequired?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -823,6 +1186,12 @@ export interface PrendaData {
   estado: 'vigente' | 'reemplazada';
   acreedorNombre: string | null;
   acreedorDocumento: string | null;
+  /**
+   * Entidad ante la que se levantó el gravamen. Solo la captura el trámite de levantamiento de
+   * prenda: es lo que su FUR declara en el párrafo 23. En traspaso y matrícula llega `null` y el
+   * literal de esas modalidades no cambia.
+   */
+  levantamientoEntidad: string | null;
   createdAt: string;
 }
 
@@ -831,6 +1200,7 @@ export interface PrendaInput {
   decision: PrendaDecision;
   acreedorNombre?: string | null;
   acreedorDocumento?: string | null;
+  levantamientoEntidad?: string | null;
 }
 
 // ── Biométrica (Slice 6) ────────────────────────────────────────────
@@ -857,8 +1227,12 @@ export type BiometricEstado =
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
 
-/** Proveedor de validación de identidad (espejo de BiometricProviders). */
-export type BiometricProvider = 'mock' | 'kyverum';
+/**
+ * Proveedor de validación de identidad (espejo de BiometricProviders).
+ * `migracion_v1` = identidad que ya venía validada de V1 y la migración trajo como hecho
+ * consumado; no hubo captura ni proveedor externo, y solo acredita a su propio trámite.
+ */
+export type BiometricProvider = 'mock' | 'kyverum' | 'migracion_v1';
 
 /** Estado de vigencia derivado de una identidad aprobada (espejo de BiometricVigenciaEstados). */
 export type BiometricVigenciaEstado = 'vigente' | 'por_vencer' | 'vencida';
@@ -894,6 +1268,8 @@ export interface BiometricValidation {
   referenceNumber?: string | null;
   modalidad?: string | null;
   linkedProcedures?: LinkedProcedureRef[] | null;
+  /** Fecha de registro (historial por persona: más reciente → más antigua). */
+  createdAt?: string | null;
 }
 
 /**
@@ -969,6 +1345,28 @@ export interface BiometricValidationsResponse {
    * una validación biométrica. Se rotulan como «firmado desde el baúl»: no hay certificado que mostrar.
    */
   firmaBaulPartes?: string[] | null;
+  /**
+   * HU #11665 — por qué NO se envió la validación de identidad a una parte jurídica. Derivado al
+   * vuelo por el backend (`EnvioValidacionBloqueoRules`), nunca persistido: desaparece en cuanto el
+   * gestor corrige el dato. `null`/ausente cuando no hay ningún motivo que reportar.
+   */
+  motivosNoEnvio?: EnvioValidacionMotivo[] | null;
+}
+
+/**
+ * HU #11665 — motivo tipificado de no envío, por parte (espejo de `EnvioValidacionMotivoDto`).
+ *
+ * `codigo` se deja como `string` a propósito: el backend puede tipificar un motivo nuevo antes de
+ * que esta pantalla lo conozca y eso no debe romper el tipado ni la vista (ver
+ * `presentarMotivoNoEnvio`). `informativo: true` NO es un fallo — explica una ausencia legítima
+ * (la parte ya está cubierta) y la UI no debe pintarlo como bloqueo.
+ */
+export interface EnvioValidacionMotivo {
+  /** Rol de la parte: `comprador` | `vendedor`. */
+  parte: string;
+  /** Código estable del motivo (`proveedor_no_envia`, `rl_sin_documento`, …). */
+  codigo: string;
+  informativo: boolean;
 }
 
 export interface LinkedProcedureRef {
@@ -996,7 +1394,9 @@ export interface TenantBiometricValidation {
   referenceNumber: string | null;
   /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
   modalidad: string | null;
-  partyRole: BiometricParte | null;
+  // string (no BiometricParte): el contrato declara partyRole como string libre y el backend lo expone
+  // como string? — la vista transversal solo lo pinta como texto, nunca discrimina por rol.
+  partyRole: string | null;
   name: string;
   documentType: string;
   documentNumber: string;
@@ -1031,6 +1431,15 @@ export interface TenantBiometricValidation {
    * (excluye el trámite primario `instanceId` si existe).
    */
   linkedProcedures?: LinkedProcedureRef[];
+  /**
+   * HU #11505 — intentos consumidos por la validación (mismo criterio de lectura que
+   * `BiometricValidation.intentos`, ver PersonIdentityDetailDrawer). Opcional: el backend de esta vista
+   * transversal aún no lo envía (HU #11504 en curso en paralelo); si falta, la grilla omite el contador
+   * sin romper la fila.
+   */
+  intentos?: number;
+  /** HU #11505 — tope de intentos de la validación. Opcional por el mismo motivo que `intentos`. */
+  maxIntentos?: number;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
@@ -1091,6 +1500,85 @@ export interface TenantBiometricValidationFilters {
    * false = solo ligadas a trámite; omitido = todas (comportamiento de Validaciones — CF-03).
    */
   standalone?: boolean;
+}
+
+/**
+ * Fila agrupada por persona (HU #11270 / #11271, ADR-0040): estado de la más reciente + contador +
+ * peor alerta. Espejo de TenantBiometricPersonDto.
+ */
+export interface TenantBiometricPerson {
+  documentType: string;
+  documentNumber: string;
+  name: string;
+  status: BiometricEstado;
+  validationCount: number;
+  worstAlertKind: IdentityValidationAlertKind | null;
+  latestValidationId: string;
+  instanceId: string | null;
+  referenceNumber: string | null;
+  modalidad: string | null;
+  partyRole: string | null;
+  email: string;
+  provider: BiometricProvider;
+  score: number | null;
+  /** URL de captura de la validación más reciente (null si aún no hay enlace). */
+  captureUrl: string | null;
+  expired: boolean;
+  createdAt: string;
+  validatedAt: string | null;
+  validUntil: string | null;
+  daysRemaining: number | null;
+  linkExpiresAt: string | null;
+  /**
+   * HU #11505 — intentos consumidos por la validación MÁS RECIENTE de la persona (mismo criterio de
+   * lectura que `BiometricValidation.intentos`, ya usado en PersonIdentityDetailDrawer). Opcional a
+   * propósito: el backend aún no los envía en esta vista agrupada (queda para la capa backend de esta
+   * misma HU); si faltan, la grilla omite el contador sin romper la fila (AC4).
+   */
+  intentos?: number;
+  /** HU #11505 — tope de intentos de la validación más reciente. Opcional por el mismo motivo. */
+  maxIntentos?: number;
+}
+
+/** Respuesta de GET /biometric-validations/by-person. `total` = personas; `stats` = validaciones. */
+export interface TenantBiometricPersonsResponse {
+  persons: TenantBiometricPerson[];
+  stats: BiometricValidationStats;
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/** Filtros del listado agrupado (solo semántica de persona). */
+export interface TenantBiometricPersonFilters {
+  name?: string;
+  documentType?: string;
+  documentNumber?: string;
+  status?: BiometricEstado;
+  createdFrom?: string;
+  createdTo?: string;
+  vigenciaEstado?: BiometricVigenciaEstado;
+  expiraDesde?: string;
+  expiraHasta?: string;
+  venceEnDias?: number;
+  page?: number;
+  pageSize?: number;
+  standalone?: boolean;
+}
+
+/**
+ * Historial multi-validación por persona (HU #11272 / #11273). Espejo de
+ * PersonBiometricValidationsResponse. `allTerminal` detiene el polling del drawer.
+ */
+export interface PersonBiometricValidationsResponse {
+  documentType: string;
+  documentNumber: string;
+  name: string | null;
+  validations: BiometricValidation[];
+  page: number;
+  pageSize: number;
+  total: number;
+  allTerminal: boolean;
 }
 
 /** Cola en dead-letter de una validación atascada. `envio` = el envío al proveedor (Kyverum) agotó
@@ -1543,4 +2031,64 @@ export interface StatusHistoryPage {
   total: number;
   page: number;
   pageSize: number;
+}
+
+/** HU #11470 — fila de despacho de correo (dirección enmascarada). */
+export interface NotificationDispatchItem {
+  id: string;
+  recipientRole: string;
+  recipientKind: string;
+  recipientMasked: string | null;
+  recipientName: string | null;
+  templateKey: string;
+  status: string;
+  failureReason: string | null;
+  attempts: number;
+  queuedAt: string;
+  processedAt: string | null;
+}
+
+export interface NotificationDispatchesResponse {
+  items: NotificationDispatchItem[];
+}
+
+/**
+ * HU #11203 — un mandatario que puede firmar el mandato del trámite.
+ *
+ * Puede firmar por cualquiera de dos vías ALTERNATIVAS: `firmaBaulVigente` o `identidadVigente`. Antes
+ * solo se informaba la identidad, así que un mandatario con su firma del baúl vigente —perfectamente
+ * capaz de firmar— se anunciaba como si le faltara algo.
+ */
+export interface MandateSignerOption {
+  id: string;
+  nombre: string;
+  tipoDocumento: string;
+  documento: string;
+  identidadVigente: boolean;
+  identidadHasta: string | null;
+  firmaBaulVigente?: boolean;
+  /**
+   * Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos vías
+   * anteriores: el documento le deja la línea y él la suscribe.
+   */
+  firmaFisica?: boolean;
+}
+
+/** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */
+export interface MandateSignerSelection {
+  opciones: MandateSignerOption[];
+  elegidoId: string | null;
+  editable: boolean;
+}
+
+/**
+ * HU #11197 - estado de la firma a posteriori de una parte. `aplica` es true solo cuando el
+ * representante legal tiene la identidad Y la firma del baul vencidas: con cualquiera de las dos
+ * vigente el tramite puede firmarse ya y la opcion no se ofrece.
+ */
+export interface FirmaPosteriorEstado {
+  aplica: boolean;
+  marcado: boolean;
+  representanteNombre?: string | null;
+  marcadoAt?: string | null;
 }

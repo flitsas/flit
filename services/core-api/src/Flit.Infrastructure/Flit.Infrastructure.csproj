@@ -53,6 +53,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Flit.Admin.Tests" />
     <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
+    <!-- HU #11371 — IExplicitChannelEmailSender es internal a propósito (puerta de acceso angosta,
+         ver TenantChannelEmailRouter.cs). NSubstitute usa Castle DynamicProxy para crear el doble en
+         los tests de arriba, y Castle exige que el ensamblado que declara el tipo internal marque
+         visibilidad hacia su ensamblado generado dinámicamente cuando el ensamblado no tiene nombre
+         fuerte (no es el caso de tipos públicos, que no lo necesitan). -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
   <ItemGroup>

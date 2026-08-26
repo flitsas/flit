@@ -26,6 +26,7 @@ using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
+using Flit.Infrastructure.Tramites;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Services;
@@ -67,6 +68,9 @@ public static class AdminInfrastructureExtensions
         // HU #10192 — grants de organismos de tránsito + catálogo OT desde BD.
         services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
+        // Convenio comercial compañía↔OT. Distinto del grant de arriba: aquel habilita la radicación,
+        // este decide si el contrato de mandato lleva bloque de firma del mandatario.
+        services.AddScoped<ICompanyAgreementRepository, CompanyAgreementRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
         // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
@@ -99,10 +103,54 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
         services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
 
+        // HU #11195 — el directorio de representantes visto desde trámites: dice si el NIT de una parte
+        // tiene un representante utilizable (escritura vigente + firma o identidad vigente). Sin él, la
+        // ruta de registro no sabe cuándo el gestor se está quedando sin salida.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IRepresentanteLegalDirectory,
+            RepresentanteLegalDirectory>();
+
+        // HU #11196 (AC4) — tras firmar el lote diferido, el directorio queda apuntando a la identidad
+        // recién validada; si no, el siguiente trámite volvería a pedirle la validación a esa persona.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IRepresentanteLegalIdentityUpdater,
+            RepresentanteLegalIdentityUpdater>();
+
         // HU #10912 (ADR-0036) — configuración de mandato por OT (plantilla + exige-PN + mandatario
         // institucional), leída por código de OT para el flujo de trámite.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,
             Flit.Infrastructure.OtRules.MandateRequirementPolicy>();
+
+        // Plataforma → Mandatos: CRUD SuperAdmin de config por OT + extract OCR de referencia.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateConfigAdminService,
+            Flit.Infrastructure.OtRules.MandateConfigAdminService>();
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateTemplateStorage,
+            Flit.Infrastructure.Storage.MandateTemplateStorage>();
+        // Simulador de mandatos (HU #11706): reusa la política del trámite, no una propia.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateSimulatorService,
+            Flit.Infrastructure.OtRules.MandateSimulatorService>();
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateCustomTemplateBlobReader,
+            Flit.Infrastructure.Storage.MandateCustomTemplateBlobReader>();
+
+        // HU #11366 (Feature #11349) — buzón de pruebas de notificaciones: lectura/actualización de
+        // la fila única admin.notification_test_settings sembrada por la HU #11365.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestMailboxAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationTestMailboxAdminService>();
+
+        // HU #11367 (Feature #11349) — canales de notificación con su remitente resuelto por
+        // configuración (EmailSettings / RentingChannelOptions). Sin adaptador de envío: lee, no
+        // construye — mantiene el Feature #11349 independiente del #11348.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationChannelsAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationChannelsAdminService>();
+
+        // HU #11368 (Feature #11349) — envío de prueba con límite de frecuencia persistido. Usa el
+        // IEmailSender del proceso (registrado en AddPostgresInfrastructure, ya decorado con
+        // bitácora) y EmailTransportDescriptor para declarar si el transporte fue de consola (AC8).
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestSendAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationTestSendAdminService>();
+
+        // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
+        // mandato lleva bloque de firma del mandatario y de qué forma.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
+            Flit.Infrastructure.OtRules.MandatoFirmaPolicy>();
 
         // HU #10916 (ADR-0036 §D9) — directorio de mandatarios por OT/compañía: resuelve el firmante del
         // mandato al aprobar y rellena su nombre/documento en el PDF regenerado.
@@ -124,21 +172,48 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.LegalRepresentatives.IRepresentativeIdentityLookup,
             RepresentativeIdentityLookup>();
 
-        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
-        // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient
-        // + cifra el secreto del webhook) y linker que ancla la identidad aprobada al sujeto
-        // (representante legal → identity_validation_ref). El servicio se registra en AddAdminApplication.
-        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationRepository,
-            AdminIdentityValidationRepository>();
-        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentitySubjectLinker,
-            AdminIdentitySubjectLinker>();
-        // HU #11028 — identidad que la persona ya validó dentro de un trámite de las compañías del OT.
-        services.AddScoped<Flit.Admin.Application.Identity.IPersonIdentityLookup, PersonIdentityLookup>();
-        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationProvider,
-            Flit.Infrastructure.Kyverum.KyverumAdminIdentityValidationProvider>();
+        // HU #11313 (Feature #11309, ADR-0042) — documentos personalizados por compañía: repositorio
+        // tenant-scoped (WHERE tenant_id explícito, RLS decorativo), custodia del PDF en storage
+        // (delega en IAttachmentStorage) e inspector de PDF (PdfSharpCore) para el validador de
+        // integridad del confirm.
+        services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.ICompanyPersonalizedDocumentRepository,
+            Flit.Infrastructure.Persistence.Repositories.CompanyPersonalizedDocumentRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.ICompanyPersonalizedDocumentStorage,
+            Flit.Infrastructure.Storage.CompanyPersonalizedDocumentStorage>();
+        services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.IPdfDocumentInspector,
+            Flit.Infrastructure.Documents.PdfSharpDocumentInspector>();
+
+        // HU #11363 (Feature #11348) — bitácora consultable de intentos de envío: repositorio
+        // tenant-scoped (WHERE tenant_id explícito, RLS decorativo). El escritor
+        // (INotificationDeliveryLogWriter) se registra en InfrastructureExtensions.AddPostgresInfrastructure,
+        // junto al decorador de IEmailSender.
+        services.AddScoped<Flit.Admin.Application.Companies.NotificationDeliveryLogs.INotificationDeliveryLogRepository,
+            Flit.Infrastructure.Persistence.Repositories.NotificationDeliveryLogRepository>();
+
+        // HU #11764 (ADR-0050) — el bloque de validación de identidad administrativa desacoplada por
+        // correo (HU #10907/#11028) se RETIRA por completo: sin consumidor real (el módulo Identidad es
+        // la única fuente que puede originar una validación). Se fueron IAdminIdentityValidationService/
+        // Provider/Repository/SubjectLinker/PersonIdentityLookup y sus implementaciones
+        // (AdminIdentityValidationRepository, AdminIdentitySubjectLinker, PersonIdentityLookup,
+        // KyverumAdminIdentityValidationProvider). La tabla admin.admin_identity_validations y su
+        // lectura de vigencia (AdminIdentityVigencia, vía EF directo) NO se tocan: siguen alimentando el
+        // estado de identidad que muestra la consola.
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
+
+        // Causales de rechazo — catálogo global (CRUD SuperAdmin) y validación de las causales
+        // que llegan en el rechazo del organismo.
+        services.AddScoped<Flit.Admin.Domain.RejectionReasons.IRejectionReasonRepository,
+            RejectionReasonRepository>();
+
+        // Reportes del organismo: acceso cross-tenant por grant, mismo mecanismo que la bandeja.
+        services.AddScoped<Flit.Admin.Domain.OtMetrics.IOtMetricsReadRepository,
+            OtMetricsReadRepository>();
+
+        // Consultas que el usuario del organismo arma, guarda y exporta. Mismo alcance OT.
+        services.AddScoped<Flit.Admin.Domain.OtQueries.IOtQueryRepository,
+            OtQueryRepository>();
 
         // HU #10195 — asociación documentos ↔ tipos de trámite + catálogo de trámites
         // (read-only). El guard de uso es ahora la implementación real (HU #10197).
@@ -178,12 +253,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtApiCallLogRepository, OtApiCallLogRepository>();
         services.AddScoped<IOtWebhookSecretHasher, OtWebhookSecretHasherService>();
         services.AddScoped<IOtWebhookDispatchService, OtWebhookDispatchService>();
-        // Concreto + mapeo a la interfaz (misma instancia). El concreto lo consume el notifier COMPUESTO
-        // (OT + reflejo ICT, ver AddIctStateReflection); si el canal inverso ICT no está configurado, este
-        // mapeo a la interfaz sigue vigente y el comportamiento OT no cambia.
+        // Concreto del sink OT. El mapeo a IProcedureStateChangeNotifier vive SOLO en
+        // ProcedureStateChangeNotifierRegistration (HU #11464), invocado desde AddIctStateReflection
+        // (con o sin canal inverso), para que un sink nuevo no silencie OT al registrarse aparte.
         services.AddScoped<OtWebhookProcedureStateChangeNotifier>();
-        services.AddScoped<IProcedureStateChangeNotifier>(sp =>
-            sp.GetRequiredService<OtWebhookProcedureStateChangeNotifier>());
 
         services.AddHttpClient(nameof(OtWebhookDispatchService), client =>
         {
@@ -204,6 +277,9 @@ public static class AdminInfrastructureExtensions
         // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.
         services.AddScoped<IOtOperabilityGate, OtOperabilityGate>();
 
+        // Bloqueo de creación de trámites por familia (config compañía → Trámites).
+        services.AddScoped<IProcedureFamilyCreationGate, ProcedureFamilyCreationGate>();
+
         // HU #10548 — exigibilidad de la validación de identidad según la config del OT destino.
         services.AddScoped<IIdentityValidationPolicy, IdentityValidationPolicy>();
 
@@ -220,6 +296,7 @@ public static class AdminInfrastructureExtensions
         // FEATURE 05 — política de bloqueo de preflight por criterio y OT: decide si un hallazgo
         // negativo (soat/rtm/estado/fines/rnmc) bloquea (rojo) o solo advierte (amarillo).
         services.AddScoped<IOtBlockingPolicyRepository, OtBlockingPolicyRepository>();
+        services.AddScoped<IOtPrendaDocumentPolicyRepository, OtPrendaDocumentPolicyRepository>();
         services.AddScoped<IConsultationBlockingPolicy, ConsultationBlockingPolicy>();
 
         // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la

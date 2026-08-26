@@ -93,12 +93,12 @@ public sealed class GetPortalByTokenHandler(IProcedureInstanceRepository repo)
 
     internal static PortalViewDto BuildView(ProcedureInstanceParticipant p, ProcedureInstance instance)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var tipologia = TramiteTipologiaCatalog.Get(codigo);
 
         var summary = new PortalInstanceSummary(
             instance.ReferenceNumber,
-            instance.ModalidadEntrada,
+            instance.FamilyCode,
             codigo,
             tipologia?.Nombre);
 
@@ -219,7 +219,8 @@ public sealed class AceptarConsentimientoHandler(IProcedureInstanceRepository re
 /// </summary>
 public sealed class SubirDocumentoPortalHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    AttachmentValidator? validator = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         string token,
@@ -241,15 +242,18 @@ public sealed class SubirDocumentoPortalHandler(
         if (participant.Consent1581At is null)
             return (null, "consent_requerido");
 
-        // Validación de archivo idéntica al flujo autenticado (UploadAttachmentHandler).
+        // Validación de archivo idéntica al flujo autenticado (UploadAttachmentHandler). El comentario
+        // decía «idéntica» pero no lo era: aquí se comprobaba SOLO contra la lista fija de tipos, así
+        // que cualquier documento dado de alta en el módulo Documental —que vive en el catálogo, no en
+        // esa lista— se rechazaba con `invalid_tipo`. El participante veía un requisito obligatorio en
+        // su checklist que el portal no le dejaba cargar nunca.
         if (input.Content is null || input.SizeBytes <= 0)
             return (null, "missing_file");
-        if (string.IsNullOrWhiteSpace(input.Tipo) || !AttachmentRules.ValidTipos.Contains(input.Tipo))
-            return (null, "invalid_tipo");
-        if (string.IsNullOrWhiteSpace(input.Mimetype) || !AttachmentRules.ValidMimetypes.Contains(input.Mimetype))
-            return (null, "invalid_mime");
-        if (input.SizeBytes > AttachmentRules.MaxSizeBytes)
-            return (null, "file_too_large");
+        var validationError = validator is not null
+            ? await validator.ValidateAsync(input.Tipo, input.Mimetype, input.SizeBytes, ct).ConfigureAwait(false)
+            : AttachmentRules.Validate(input.Tipo, input.Mimetype, input.SizeBytes);
+        if (validationError is not null)
+            return (null, validationError);
 
         var instance = participant.ProcedureInstance!;
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
@@ -348,7 +352,7 @@ public sealed class GetFirmaUrlPortalHandler(IProcedureInstanceRepository repo)
             return (null, "not_found");
 
         var instance = participant.ProcedureInstance!;
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var aplica = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase)
             && participant.Rol is ParticipantRoles.Comprador or ParticipantRoles.Vendedor;
         if (!aplica)

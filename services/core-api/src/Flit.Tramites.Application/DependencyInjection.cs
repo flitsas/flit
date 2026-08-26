@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<DeleteProcedureTypeHandler>();
         services.AddScoped<PublishProcedureTypeHandler>();
         services.AddScoped<ArchiveProcedureTypeHandler>();
+        services.AddScoped<SetWizardEnabledHandler>();
         services.AddScoped<ValidateProcedureTypeHandler>();
         services.AddScoped<GetConformationRulesHandler>();
         services.AddScoped<UpsertConformationRulesHandler>();
@@ -37,11 +38,17 @@ public static class DependencyInjection
         services.AddScoped<CreateProcedureInstanceHandler>();
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
+        // Filtrado/ordenamiento server-side del listado (WHERE/ORDER BY en SQL, no en memoria).
+        services.AddScoped<ListProcedureInstancesFilteredHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
         services.AddScoped<PersistOcrFieldsHandler>();
         // HU #10990 (Feature #10972) — resuelve el RUES por actor al generar el expediente.
-        services.AddScoped<IRuesActorDataResolver, RuesActorDataResolver>();
+        // HU #11305 (Feature #11301, ADR-0041) — lector documental de certificaciones. Sustituye a
+        // IRuesActorDataResolver, que consultaba el RUES EN VIVO al generar el expediente. Generar un
+        // documento pasa a costar cero llamadas externas (D4).
+        services.AddScoped<UseCases.Certifications.ICertificationReader,
+            UseCases.Certifications.CertificationReader>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // ICT (paridad v1) — pausar/reanudar trámites ICT desde la UI de FLIT (individual + masivo).
         services.AddScoped<PauseProcedureInstanceHandler>();
@@ -104,6 +111,10 @@ public static class DependencyInjection
         services.AddScoped<RunPreflightPreviewHandler>();
         services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
+        // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
+        services.AddScoped<ListMandateSignerOptionsHandler>();
+        services.AddScoped<SetMandateSignerHandler>();
+
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();
         services.AddScoped<GetRnmcHandler>();
@@ -114,6 +125,7 @@ public static class DependencyInjection
         // HU-2 (N03): puerto de historial del lifecycle — 1 fila de status_history + 1 evento por transición.
         services.AddScoped<Domain.Tramites.Estados.ITramiteTransitionRecorder, UseCases.ProcedureInstances.Estados.TramiteTransitionRecorder>();
         services.AddScoped<UseCases.ProcedureInstances.Estados.GetStatusHistoryHandler>();
+        services.AddScoped<UseCases.ProcedureInstances.Notifications.GetNotificationDispatchesHandler>();
 
         // Biométrica (Slice 6, mock). El scorer es un MOCK determinista; se reemplazará por uno real
         // (proveedor biométrico) sin tocar handlers. Contract-first, igual que los consultation providers.
@@ -122,6 +134,8 @@ public static class DependencyInjection
         services.AddScoped<ListBiometriaHandler>();
         // HU #10234 — vista transversal del submódulo "Validaciones de Identidad" (todas las instancias).
         services.AddScoped<ListTenantBiometricValidationsHandler>();
+        // HU #11270 — vista agrupada por persona (ADR-0040); endpoint propio.
+        services.AddScoped<ListTenantBiometricPersonsHandler>();
         services.AddScoped<GetBiometriaByTokenHandler>();
         services.AddScoped<CompletarBiometriaHandler>();
         services.AddScoped<SimularBiometriaHandler>();
@@ -138,6 +152,12 @@ public static class DependencyInjection
         // CF-06 (Feature #11004, ADR-0036) — detalle de UNA validación por id (poll), tenant-scoped,
         // sirve tanto a standalone como a trámite.
         services.AddScoped<UseCases.Persons.GetPrevalidacionDetailHandler>();
+        // HU #11272 — historial multi-validación por persona (ADR-0040).
+        services.AddScoped<UseCases.Persons.ListPersonBiometricValidationsHandler>();
+        // HU #11751 (ADR-0050) — resolución/clasificación de vigencia de identidad por documento,
+        // fuente única reutilizada también por MandateSignerDirectory (HU #11752).
+        services.AddScoped<UseCases.Persons.IdentityVigenciaPorDocumentoResolver>();
+        services.AddScoped<UseCases.Persons.GetIdentityVigenciaPorDocumentoHandler>();
 
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
@@ -151,6 +171,12 @@ public static class DependencyInjection
         // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los
         // borradores finalizados del sujeto validado. Lo invoca el procesador de outbox (Infraestructura).
         services.AddScoped<Identity.IdentityValidationCompletedConsumer>();
+        // HU #11196 — consumidor del MISMO evento para el lote de firma a posteriori: firma de una todos
+        // los trámites marcados que esperaban a esa persona. Separado del anterior a propósito: son dos
+        // políticas distintas y mezclarlas haría imposible saber cuál disparó qué.
+        services.AddScoped<Identity.DeferredSignatureBatchConsumer>();
+        services.AddScoped<ITramiteFirmaAplicador, TramiteFirmaAplicador>();
+        services.AddScoped<MarcarFirmaPosteriorHandler>();
         // HU #10349 (fase 2) — observabilidad: consulta + reencolar eventos de identidad ATASCADOS (dead-letter).
         services.AddScoped<ListStuckIdentityValidationsHandler>();
         services.AddScoped<RequeueStuckIdentityValidationHandler>();
@@ -169,11 +195,15 @@ public static class DependencyInjection
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
+        services.AddScoped<PreviewFurHandler>();
         // ADR-0036 §D9 (HU #10916) — resolución del mandatario al aprobar (consumida por AdminOtEndpoints).
         services.AddScoped<MandatoApprovalHandler>();
         // HU #10860 (ADR-0032) — el consolidado del wizard regenera en cascada el FUR/documentos en
         // caliente vía este puerto, resuelto al mismo GenerarFurHandler (mismo scope/unidad de trabajo).
         services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());
+        // Bug #11613 — envoltura trazada de la regeneración en caliente para los flujos internos del OT
+        // (aprobar, asignar placa): inspecciona el resultado, loguea a Error y persiste evento.
+        services.AddScoped<RegenerarDocumentosTrazadoHandler>();
         services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
         // HU #11051 — gate de generación documental del GESTOR (estado final ⇒ documentación definitiva).
@@ -207,6 +237,12 @@ public static class DependencyInjection
         services.AddScoped<GetFirmaUrlPortalHandler>();
         services.AddScoped<SimularFirmaPortalHandler>();
 
+        // HU #11304 (Feature #11301, ADR-0041) — único punto de escritura del almacén canónico de
+        // certificaciones. Lo consumen los escritores de SOAT/RTM/RUES (consulta, OCR y validación
+        // del OT) para que la precedencia entre fuentes sea una sola regla y no una por escritor.
+        services.AddScoped<UseCases.Certifications.ICertificationIngestionService,
+            UseCases.Certifications.CertificationIngestionService>();
+
         // HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031) — cache-aside cross-trámite de
         // consultas externas, consumido por los 3 handlers de consulta de abajo.
         services.AddScoped<UseCases.Consultations.ExternalQueryCacheService>();
@@ -215,16 +251,26 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
         // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).
         services.AddScoped<UseCases.Consultations.RuesPersonLookupHandler>();
+        // HU sin ADO 2026-08-11 — mismo lookup RUES pero SIN instancia (paso 1, casilla 19 del FUR).
+        services.AddScoped<UseCases.Consultations.RuesPreviewHandler>();
 
         // OCR semántico de documentos de trámites (prompt + LLM de visión). El handler es Application;
         // el IDocumentOcrAnalyzer (mock | Anthropic según Ocr:Provider) se registra en Infraestructura
         // (AddOcr) — mismo split app-layer/infra que los consultation providers.
         services.AddScoped<Ocr.AnalyzeDocumentHandler>();
 
+        // Cargue masivo: clasifica el archivo, recorta y verifica cada documento. Mismo split — el
+        // IDocumentBatchClassifier (mock | Anthropic) también se registra en AddOcr.
+        services.AddScoped<Ocr.AnalyzeBatchHandler>();
+
         services.AddScoped<ListProcedureEntitiesHandler>();
         services.AddScoped<ListExternalDataSourcesHandler>();
         services.AddScoped<ListConsultationTemplatesHandler>();
         services.AddScoped<ApplyConsultationTemplateFieldsHandler>();
+
+        // HU #11462 — resolución de destinatarios del aviso de cambio de estado (ADR-0045).
+        services.AddScoped<Notifications.ITramiteNotificationRecipientResolver,
+            Notifications.TramiteNotificationRecipientResolver>();
 
         return services;
     }

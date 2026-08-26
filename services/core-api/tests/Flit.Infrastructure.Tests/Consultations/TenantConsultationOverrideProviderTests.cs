@@ -109,4 +109,40 @@ public sealed class TenantConsultationOverrideProviderTests
         result!.Chains.Should().ContainKey(ConsultationKindKeys.Conductor);
         result.Chains!.Should().HaveCount(1);
     }
+
+    [Fact]
+    public async Task GetAsync_PropagaBlockYOnlyOwnPorFamilia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var settings = new TenantSettings
+        {
+            TenantId = TenantId,
+            AllowInitialRegistration = false, // ⇒ bloquea MATRICULAS
+            AllowMiscNewVehicles = true,
+            OnlyOwnVehicles = true,
+            OnlyOwnVehiclesMatriculas = true,
+            OnlyOwnVehiclesOtros = false,
+            BlockProcedureFamilyTraspaso = true,
+            BlockProcedureFamilyOtros = false,
+            SignatureVaultEnabled = false,
+            NotificationChannel = NotificationChannel.FlitSmtp,
+            NotificationTarget = NotificationTarget.Radicador,
+            PaymentMethods = [],
+            RuntFailoverTimeoutMs = 4000,
+            ConsultationProviderConfig = ConsultationProviderConfig.Empty,
+        };
+        var repo = Substitute.For<ITenantSettingsRepository>();
+        repo.GetAsync(TenantId, ct).Returns(settings);
+        var sut = new TenantConsultationOverrideProvider(repo);
+
+        var result = await sut.GetAsync(TenantId, ct);
+
+        result.Should().NotBeNull();
+        result!.OnlyOwnVehicles.Should().BeTrue();
+        result.OnlyOwnVehiclesMatriculas.Should().BeTrue();
+        result.OnlyOwnVehiclesOtros.Should().BeFalse();
+        result.BlockProcedureFamilyMatriculas.Should().BeTrue();
+        result.BlockProcedureFamilyTraspaso.Should().BeTrue();
+        result.BlockProcedureFamilyOtros.Should().BeFalse();
+    }
 }

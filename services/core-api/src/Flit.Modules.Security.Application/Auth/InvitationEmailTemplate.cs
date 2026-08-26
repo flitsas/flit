@@ -16,12 +16,30 @@ public static class InvitationEmailTemplate
         return $"{activateUrlBase}{separator}token={Uri.EscapeDataString(rawToken)}";
     }
 
-    public static string BuildHtmlBody(string fullName, string link) => $"""
-        <p>Hola {System.Net.WebUtility.HtmlEncode(fullName)},</p>
-        <p>Has sido invitado a unirte a FLIT.</p>
-        <p>Haz clic en el siguiente enlace para crear tu contraseña y activar tu cuenta:</p>
-        <p><a href="{link}">Activar mi cuenta</a></p>
-        <p>Si no esperabas esta invitación, puedes ignorar este mensaje.</p>
-        <p>— Equipo FLIT</p>
-        """;
+    public static string BuildHtmlBody(string fullName, string link, string? assetsBaseUrl = null)
+    {
+        var name = System.Net.WebUtility.HtmlEncode(fullName);
+        var body =
+            FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
+            + FlitBrandedEmailLayout.Paragraph("Has sido invitado a unirte a FLIT.")
+            + FlitBrandedEmailLayout.Paragraph(
+                "Haz clic en el siguiente enlace para crear tu contraseña y activar tu cuenta:")
+            + FlitBrandedEmailLayout.ActionLink(link, "Activar mi cuenta")
+            + FlitBrandedEmailLayout.Paragraph(
+                "Si no esperabas esta invitación, puedes ignorar este mensaje.");
+
+        return FlitBrandedEmailLayout.Wrap(
+            headline: "¡INVITACIÓN A FLIT!",
+            bodyInnerHtml: body,
+            closingHeadline: "¡Activa tu cuenta y disfruta de todos tus beneficios!",
+            assetsBaseUrl: assetsBaseUrl);
+    }
+
+    /// <summary>
+    /// HU #11351 — composición pura: asunto y cuerpo a partir únicamente de <paramref name="fullName"/>
+    /// y <paramref name="link"/> (ya calculado con <see cref="BuildActivateLink"/>). Sin E/S, sin reloj,
+    /// sin aleatoriedad, sin estado.
+    /// </summary>
+    public static ComposedEmail Compose(string fullName, string link, string? assetsBaseUrl = null) =>
+        new(Subject, BuildHtmlBody(fullName, link, assetsBaseUrl));
 }

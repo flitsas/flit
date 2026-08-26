@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using FluentAssertions;
 using Xunit;
@@ -34,7 +35,7 @@ public sealed class FurTransformationObservationsTests
         var result = FurTransformationObservations.Compose(
             null, colorRunt: "PLATA", colorEfectivo: "NEGRO", fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA");
 
-        result.Should().Be("Cambio de color: NEGRO.");
+        result.Should().Be("Color nuevo(NUEVO COLOR: NEGRO)");
     }
 
     [Fact]
@@ -43,7 +44,7 @@ public sealed class FurTransformationObservationsTests
         var result = FurTransformationObservations.Compose(
             null, colorRunt: "PLATA", colorEfectivo: "PLATA", fuelRunt: "GASOLINA", fuelEfectivo: "DIESEL");
 
-        result.Should().Be("Cambio de combustible: DIESEL.");
+        result.Should().Be("COMBUSTIBLE_NUEVO: DIESEL");
     }
 
     [Fact]
@@ -52,7 +53,7 @@ public sealed class FurTransformationObservationsTests
         var result = FurTransformationObservations.Compose(
             null, colorRunt: "plata metalico", colorEfectivo: "rojo", fuelRunt: "gasolina", fuelEfectivo: "diesel");
 
-        result.Should().Be("Cambio de color: ROJO. Cambio de combustible: DIESEL.");
+        result.Should().Be("Color nuevo(NUEVO COLOR: ROJO) COMBUSTIBLE_NUEVO: DIESEL");
     }
 
     [Fact]
@@ -62,7 +63,7 @@ public sealed class FurTransformationObservationsTests
             "  Observación previa.  ",
             colorRunt: "PLATA", colorEfectivo: "NEGRO", fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA");
 
-        result.Should().Be("Observación previa. Cambio de color: NEGRO.");
+        result.Should().Be("Observación previa. Color nuevo(NUEVO COLOR: NEGRO)");
     }
 
     [Fact]
@@ -82,5 +83,90 @@ public sealed class FurTransformationObservationsTests
             "Manual", colorRunt: "PLATA", colorEfectivo: " plata ", fuelRunt: "GASOLINA", fuelEfectivo: "gasolina");
 
         result.Should().Be("Manual");
+    }
+
+    // ── A4/B4 (HU #10673) — carrocería ────────────────────────────────────────
+
+    [Fact]
+    public void SoloCarroceria_ComponeSoloElValorNuevo()
+    {
+        var result = FurTransformationObservations.Compose(
+            null,
+            colorRunt: "PLATA", colorEfectivo: "PLATA",
+            fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA",
+            bodyTypeRunt: "SEDAN", bodyTypeEfectivo: "PICKUP");
+
+        result.Should().Be("Carroceria nueva(NUEVA CARROCERIA: PICKUP)");
+    }
+
+    [Fact]
+    public void ColorCombustibleYCarroceria_ComponeLosTres()
+    {
+        var result = FurTransformationObservations.Compose(
+            null,
+            colorRunt: "plata", colorEfectivo: "negro",
+            fuelRunt: "gasolina", fuelEfectivo: "diesel",
+            bodyTypeRunt: "sedan", bodyTypeEfectivo: "pickup");
+
+        result.Should().Be("Color nuevo(NUEVO COLOR: NEGRO) Carroceria nueva(NUEVA CARROCERIA: PICKUP) COMBUSTIBLE_NUEVO: DIESEL");
+    }
+
+    [Fact]
+    public void CarroceriaSnapshotAusente_NoDeclaraCambio()
+    {
+        var result = FurTransformationObservations.Compose(
+            null,
+            colorRunt: "PLATA", colorEfectivo: "PLATA",
+            fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA",
+            bodyTypeRunt: null, bodyTypeEfectivo: "PICKUP");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void CarroceriaIgualSnapshot_NoDeclaraCambio()
+    {
+        var result = FurTransformationObservations.Compose(
+            null,
+            colorRunt: "PLATA", colorEfectivo: "PLATA",
+            fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA",
+            bodyTypeRunt: "SEDAN", bodyTypeEfectivo: " sedan ");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void CarroceriaConObservacionesManuales_AnexaSinBorrar()
+    {
+        var result = FurTransformationObservations.Compose(
+            "Obs previa.",
+            colorRunt: "PLATA", colorEfectivo: "PLATA",
+            fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA",
+            bodyTypeRunt: "SEDAN", bodyTypeEfectivo: "PICKUP");
+
+        result.Should().Be("Obs previa. Carroceria nueva(NUEVA CARROCERIA: PICKUP)");
+    }
+
+    [Fact]
+    public void SinArgumentosCarroceria_ComportamientoExistenteSinCambio()
+    {
+        // Sin pasar los parámetros opcionales, la firma de color/combustible funciona igual que antes.
+        var result = FurTransformationObservations.Compose(
+            null, colorRunt: "PLATA", colorEfectivo: "PLATA", fuelRunt: "GASOLINA", fuelEfectivo: "GASOLINA");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ComposeDeclaradas_ConcatenaSinReemplazar()
+    {
+        var texto = FurTransformationObservations.ComposeDeclaradas(
+            new FurTransformacionesDeclaradas(Color: true, Carroceria: true, Combustible: true),
+            "MULTICOLOR CON AEROGRAFIAS",
+            "DIESEL",
+            "PICKUP");
+
+        texto.Should().Be(
+            "Color nuevo(NUEVO COLOR: MULTICOLOR CON AEROGRAFIAS) Carroceria nueva(NUEVA CARROCERIA: PICKUP) COMBUSTIBLE_NUEVO: DIESEL");
     }
 }

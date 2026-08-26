@@ -3,6 +3,69 @@
 // backend manda los códigos; la UI los traduce a lenguaje del operador. Si
 // llega un código desconocido se devuelve un fallback legible (no se rompe).
 
+/** En qué punto de la cadena de identidad automática se estaba cuando algo salió mal. */
+export type IdentidadAutomaticaEtapa = 'asegurar' | 'proveedor' | 'iniciar' | 'simular';
+
+/**
+ * Qué decirle al gestor cuando la identidad automática del Continuar no prospera.
+ *
+ * <p>La cadena son cuatro llamadas (asegurar → resolver proveedor → iniciar/simular) y hasta ahora
+ * TODAS caían en el mismo mensaje: "no se pudo iniciar automáticamente la validación de identidad".
+ * Con eso delante, un gestor que no ve llegar el correo de Kyverum no puede saber si el actor no
+ * tiene correo, si esa persona ya tenía un envío en vuelo o si el proveedor rechazó — y nosotros
+ * tampoco, porque el código de estado no quedaba en ninguna parte.</p>
+ *
+ * <p><b>El 409 no es un fallo.</b> Desde la decisión única de envío por persona (HU #11265), que ya
+ * haya una validación en curso para ese documento significa que el sistema decidió NO mandar otra:
+ * la identidad está encaminada. Pintarlo en rojo hacía leer como avería lo que era la regla
+ * funcionando, así que sale como aviso positivo.</p>
+ */
+export function identidadAutomaticaCopy(
+  etapa: IdentidadAutomaticaEtapa,
+  status?: number,
+): { message: string; tone: 'success' | 'error' } {
+  if (status === 409) {
+    return {
+      message:
+        'Esta persona ya tiene una validación de identidad en curso, así que no se envió otra.',
+      tone: 'success',
+    };
+  }
+
+  if (etapa === 'iniciar' && status === 400) {
+    return {
+      message:
+        'Faltan datos del actor para pedir la validación de identidad (nombre, tipo y número de documento y correo).',
+      tone: 'error',
+    };
+  }
+
+  if (etapa === 'iniciar' && (status === 502 || status === 503)) {
+    return {
+      message: 'El proveedor de validación de identidad no respondió, así que el enlace no salió.',
+      tone: 'error',
+    };
+  }
+
+  if (etapa === 'iniciar') {
+    return { message: 'No se pudo enviar la validación de identidad al proveedor.', tone: 'error' };
+  }
+
+  if (etapa === 'proveedor') {
+    return {
+      message: 'No se pudo resolver qué proveedor de identidad aplica a este trámite.',
+      tone: 'error',
+    };
+  }
+
+  // `asegurar` y `simular` comparten el mensaje de siempre: en el primero aún no se sabe nada del
+  // envío, y el segundo no manda correos (proveedor mock), así que el detalle no aporta.
+  return {
+    message: 'No se pudo iniciar automáticamente la validación de identidad.',
+    tone: 'error',
+  };
+}
+
 /** Razones por las que un paso queda incompleto. */
 const REASON_COPY: Record<string, string> = {
   // consultas RUNT por actor
@@ -47,6 +110,16 @@ const REASON_COPY: Record<string, string> = {
     'El vehículo tiene gravámenes: registra una decisión de prenda para continuar',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
+  // CF-06 (HU #10881) — código distinto del anterior a propósito: este bloqueo NO nace de la
+  // decisión del gestor sino de una regla del organismo, y decir "la decisión seleccionada
+  // requiere…" a quien eligió "sin prenda" describe una causa que no es la suya.
+  prenda_documento_requerido_ot:
+    'El organismo de tránsito exige adjuntar el documento de prenda para este trámite',
+  // HU #11591/#11594 — solicitar/registrar CONSTITUYEN gravamen: exigen acreedor (nombre + NIT).
+  // El formulario ya valida esto en cliente antes de guardar; este código es la defensa del
+  // backend si algo se saltó esa validación (condición de carrera, datos legacy).
+  prenda_acreedor_requerido:
+    'La decisión de prenda seleccionada requiere los datos del acreedor (nombre y documento)',
   // R19 (HU #10604/#10605/#10697) — RNMC ya NO bloquea: la medida correctiva es informativa.
   rnmc_medida_pendiente:
     'Medida correctiva RNMC registrada (informativa, no bloquea el envío)',
@@ -67,11 +140,22 @@ const BLOCKER_COPY: Record<string, string> = {
   pendiente_firma: 'Firma de la compraventa (informativa, no bloquea)',
   fur_pendiente: 'FUR pendiente (opcional)',
   pasos_incompletos: 'Hay pasos sin completar',
-  // R10 (HU #10597/#10598) — gate de preparación/radicación del traspaso por prenda.
+  // R10 (HU #10597/#10598) — gate de preparación/radicación por prenda. Como BLOQUEO este código
+  // tiene dos orígenes: el semáforo de gravámenes del traspaso y el override del organismo (que
+  // aplica también a matrícula inicial, sin gravamen que detectar). Por eso no los nombra: decirle
+  // "el vehículo tiene gravámenes" a quien matricula un vehículo nuevo describe una causa que no es
+  // la suya — el mismo error que motivó separar prenda_documento_requerido_ot. Como RAZÓN de paso
+  // sigue naciendo solo del semáforo, y allí el texto sí los nombra.
   prenda_decision_requerida:
-    'El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar o radicar el trámite',
+    'Registra la decisión de prenda del vehículo antes de preparar o radicar el trámite',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
+  // CF-06 (HU #10881) — ver la nota del mapa de razones: el origen es el organismo, no la decisión.
+  prenda_documento_requerido_ot:
+    'El organismo de tránsito exige adjuntar el documento de prenda para este trámite',
+  // HU #11591/#11594 — ver la nota del mapa de razones.
+  prenda_acreedor_requerido:
+    'La decisión de prenda seleccionada requiere los datos del acreedor (nombre y documento)',
   // R19 (HU #10697) — RNMC ya NO bloquea el envío al OT; no hay blocker de medida correctiva.
 };
 
@@ -82,10 +166,93 @@ function humanize(code: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * `DOCUMENT_{CODE}_REQUIRED` — un código por documento obligatorio que falta
+ * (`DocumentRequirementGate`). No están en los diccionarios porque la lista sale del catálogo
+ * documental y crece con él, así que `humanize` los escupía crudos y en mayúsculas:
+ * «DOCUMENT COMPRAVENTA REQUIRED». Se traducen por patrón, no una entrada por documento.
+ */
+const DOCUMENTO_REQUERIDO = /^DOCUMENT_(.+)_REQUIRED$/i;
+
+function documentoRequeridoCopy(code: string): string | null {
+  const match = DOCUMENTO_REQUERIDO.exec(code);
+  if (!match) return null;
+  const nombre = match[1].replace(/[_-]+/g, ' ').trim().toLocaleLowerCase('es');
+  return `Falta el documento: ${nombre}`;
+}
+
 export function reasonCopy(code: string): string {
-  return REASON_COPY[code] ?? humanize(code);
+  return REASON_COPY[code] ?? documentoRequeridoCopy(code) ?? humanize(code);
 }
 
 export function blockerCopy(code: string): string {
-  return BLOCKER_COPY[code] ?? humanize(code);
+  return BLOCKER_COPY[code] ?? documentoRequeridoCopy(code) ?? humanize(code);
+}
+
+/**
+ * UNA línea para el seguimiento: la línea de tiempo dice QUÉ paso falta y a grandes rasgos por qué;
+ * el detalle vive en el propio paso y en el pie de «Antes de enviar».
+ *
+ * Listar todos los motivos convertía un paso en un volcado de siete viñetas —la mayoría, un código
+ * por documento faltante— que además cambiaba de alto al navegar. El primero es el agregado (el
+ * backend emite `documentos_incompletos` antes que los códigos por documento), así que encabeza bien.
+ */
+export function reasonsSummary(reasons: readonly string[]): string | null {
+  if (reasons.length === 0) return null;
+  const primero = reasonCopy(reasons[0]);
+  return reasons.length === 1 ? primero : `${primero} y ${reasons.length - 1} más`;
+}
+
+/**
+ * Nombre del paso en la nomenclatura de la propuesta de diseño.
+ *
+ * El backend manda el label junto a cada paso; esto NO lo sustituye como fuente de verdad de la
+ * estructura —los pasos, su orden y su estado siguen viniendo del servidor—, solo unifica cómo se
+ * escriben en pantalla. La misma etapa se llamaba distinto según la modalidad ("Consulta VIN" vs
+ * "Consulta del vehículo") y el paso final aparecía como "Resumen del trámite" pese a ser donde se
+ * genera el FUR y el expediente.
+ *
+ * `actores` es la clave del paso visual que fusiona vendedor+comprador en traspaso.
+ */
+/**
+ * UN diccionario, no uno por modalidad.
+ *
+ * Había dos, y tres claves se llamaban distinto en cada uno: `documentos` era "Requisitos" en
+ * matrícula y "Documentos" en traspaso; `fur` era "Resumen" y "FUR y Expediente". La diferencia no
+ * venía de que los pasos hicieran cosas distintas —hacen exactamente lo mismo, con el mismo
+ * componente— sino de que cada modalidad se portó de un asistente distinto del repo de propuesta.
+ * Un gestor que trabaja las dos modalidades tenía que aprender dos vocabularios para el mismo
+ * trabajo.
+ *
+ * Nomenclatura fijada por el equipo: Consulta Vehículo · Actores · Requisitos · Validación de
+ * Identidad · Resumen. Los mismos nombres para cualquier tipo de trámite.
+ *
+ * `Datos Comerciales` no está en esa lista porque el paso solo existe en traspaso: no hay nada que
+ * unificar, ninguna otra modalidad lo tiene. Los pasos y su orden los sigue definiendo el backend;
+ * esto solo decide cómo se escriben.
+ */
+const STEP_LABELS: Record<string, string> = {
+  consulta: 'Consulta Vehículo',
+  consulta_vin: 'Consulta Vehículo',
+  actores: 'Actores',
+  vendedor: 'Actores',
+  comprador: 'Actores',
+  documentos: 'Requisitos',
+  // `comercial` ya no es un paso: sus datos viven en Requisitos y el asistente normaliza la clave
+  // a `documentos`. Solo puede llegar desde un borrador antiguo, y entonces el panel pinta
+  // Requisitos entero. Rotularlo "Datos Comerciales" hacía que el nombre del paso mintiera sobre
+  // lo que hay dentro, así que se rotula por lo que se ve.
+  comercial: 'Requisitos',
+  identidad: 'Validación de Identidad',
+  fur: 'Resumen',
+};
+
+/**
+ * Etiqueta a mostrar para un paso. Cae al label del servidor cuando la clave no está mapeada:
+ * un paso nuevo en backend aparece con su nombre, nunca en blanco.
+ *
+ * Ya no recibe la modalidad: una misma clave se llama igual en todos los trámites.
+ */
+export function stepLabelCopy(key: string, serverLabel: string): string {
+  return STEP_LABELS[key] ?? serverLabel;
 }

@@ -20,6 +20,7 @@ export interface AdminAccessDecision {
  * - Sin token, token malformado o token expirado → no renderizar, redirigir a /403.
  * - SuperAdmin → permitido en todo /admin/*.
  * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
+ * - AdminCompany → permitido solo en /admin/companies/* (HU #11228; la página redirige a su tenant).
  * - Otros roles → redirigir a /403.
  */
 export function evaluateAdminAccess(
@@ -40,6 +41,14 @@ export function evaluateAdminAccess(
     pathname?.startsWith("/admin/transit-offices") &&
     payload &&
     isOtAdmin(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  if (
+    pathname?.startsWith("/admin/companies") &&
+    payload &&
+    isAdminCompany(payload)
   ) {
     return { allowed: true };
   }

@@ -49,4 +49,23 @@ internal static class TestTokenFactory
             SigningCredentials = new SigningCredentials(DummyKey, SecurityAlgorithms.HmacSha256),
         });
     }
+
+    /// <summary>HU #11228 — token AdminCompany con tenant concreto.</summary>
+    public static string CreateAdminCompanyToken(Guid tenantId, Guid? userId = null)
+    {
+        var handler = new JsonWebTokenHandler();
+        return handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = "https://api.flit.co",
+            Audience = "flit-api",
+            Subject = new ClaimsIdentity(
+            [
+                new Claim("sub", (userId ?? Guid.Parse("11111111-1111-1111-1111-111111111111")).ToString()),
+                new Claim("role", "AdminCompany"),
+                new Claim("tenant_id", tenantId.ToString()),
+            ]),
+            Expires = DateTime.UtcNow.AddHours(1),
+            SigningCredentials = new SigningCredentials(DummyKey, SecurityAlgorithms.HmacSha256),
+        });
+    }
 }

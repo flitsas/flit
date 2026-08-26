@@ -4,6 +4,7 @@ using Flit.Admin.Application.Companies.SignatureVault.CreateSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.GetSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.ListSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.RevokeSignatureVault;
+using Flit.Admin.Application.Companies.SignatureVault.UpdateSignatureVault;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,10 +24,12 @@ public static class AdminSignatureVaultEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/signature-vault")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Baúl de Firmas");
 
         // GET — firmas del baúl del tenant (activas y revocadas), sin material de firma.
+        // Filtros opcionales: documentType + documentNumber (AC1, HU #11175) y soloVigentes (AC2).
         group.MapGet("", ListAsync)
             .WithName("AdminSignatureVaultList")
             .WithSummary("Lista las firmas del baúl de una compañía")
@@ -52,6 +55,17 @@ public static class AdminSignatureVaultEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
+        // PUT /{id} — corrección de los datos capturados de una firma ACTIVA.
+        group.MapPut("/{id:guid}", UpdateAsync)
+            .WithName("AdminSignatureVaultUpdate")
+            .WithSummary("Corrige los datos de una firma del baúl")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
         // POST /{id}/revoke — baja lógica idempotente.
         group.MapPost("/{id:guid}/revoke", RevokeAsync)
             .WithName("AdminSignatureVaultRevoke")
@@ -67,10 +81,19 @@ public static class AdminSignatureVaultEndpoints
     private static async Task<IResult> ListAsync(
         Guid tenantId,
         [FromServices] ListSignatureVaultHandler handler,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? documentType = null,
+        [FromQuery] string? documentNumber = null,
+        [FromQuery] bool? soloVigentes = null)
     {
         var result = await handler
-            .HandleAsync(new ListSignatureVaultQuery { TenantId = tenantId }, cancellationToken)
+            .HandleAsync(new ListSignatureVaultQuery
+            {
+                TenantId = tenantId,
+                DocumentType = documentType,
+                DocumentNumber = documentNumber,
+                SoloVigentes = soloVigentes,
+            }, cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(new { data = result });
@@ -148,10 +171,56 @@ public static class AdminSignatureVaultEndpoints
     }
 
     /// <summary>422 con el sobre estándar de errores; nunca incluye PII.</summary>
+    /// <summary>
+    /// Corrige los datos capturados de una firma. No admite cambiar el documento (identifica a la
+    /// persona) ni el artefacto (lo ya emitido se estampó con esa imagen): para eso se captura una
+    /// firma nueva, que revoca la anterior conservándola.
+    /// </summary>
+    private static async Task<IResult> UpdateAsync(
+        Guid tenantId,
+        Guid id,
+        UpdateSignatureVaultRequest request,
+        HttpContext httpContext,
+        [FromServices] UpdateSignatureVaultHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await handler.HandleAsync(
+            new UpdateSignatureVaultCommand
+            {
+                TenantId = tenantId,
+                Id = id,
+                FullName = request.FullName,
+                CodigoHash = request.CodigoHash,
+                VigenciaDesde = request.VigenciaDesde,
+                VigenciaHasta = request.VigenciaHasta,
+                ChangedBy = ResolveUserId(httpContext.User),
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            UpdateSignatureVaultOutcome.Updated => Results.NoContent(),
+            UpdateSignatureVaultOutcome.NotFound =>
+                Results.NotFound(new { error = $"No existe la firma {id} en el baúl de esta compañía." }),
+            UpdateSignatureVaultOutcome.Revoked => Results.Conflict(
+                new { error = "La firma está revocada: su contenido es histórico y no se corrige." }),
+            _ => ValidationProblem(result.Errors),
+        };
+    }
+
     private static IResult ValidationProblem(IReadOnlyList<SignatureVaultValidationError> errors) =>
         Results.Json(
             new { errors = errors.Select(e => new { field = e.Field, code = e.Code, message = e.Message }) },
             statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    /// <summary>Cuerpo de la edición: solo los campos corregibles.</summary>
+    public sealed record UpdateSignatureVaultRequest(
+        string? FullName,
+        string? CodigoHash,
+        DateOnly VigenciaDesde,
+        DateOnly VigenciaHasta);
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {

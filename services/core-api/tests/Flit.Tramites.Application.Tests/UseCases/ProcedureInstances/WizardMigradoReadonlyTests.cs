@@ -30,13 +30,12 @@ public sealed class WizardMigradoReadonlyTests
     private static ProcedureInstance Traspaso(string status, bool isMigrated) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "MIG-TR-24860",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             IsMigrated = isMigrated,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -91,6 +90,22 @@ public sealed class WizardMigradoReadonlyTests
 
         result!.Steps.Should().NotBeEmpty();
         result.Steps.Should().Contain(s => s.Status != "complete");
+    }
+
+    [Fact]
+    public async Task ElOrigenMigradoViajaAlWizard_EnCualquierEstado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // El frontend lo necesita en BORRADOR —no solo en la foto terminal— para explicar en el
+        // pre-vuelo por qué las consultas de RUNT/SIMIT llegan sin hacer: no se migran porque caducan.
+        Setup(Traspaso(TramiteEstado.Borrador, isMigrated: true));
+        var (migrado, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        Setup(Traspaso(TramiteEstado.Borrador, isMigrated: false));
+        var (nativo, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        migrado!.EsMigrado.Should().BeTrue();
+        nativo!.EsMigrado.Should().BeFalse();
     }
 
     [Fact]

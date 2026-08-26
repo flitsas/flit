@@ -47,6 +47,8 @@ export interface OtClientProcedure {
   clientTenantName?: string;
   referenceNumber: string;
   status: string;
+  /** `matricula_inicial` | `traspaso`. Determina qué causales de rechazo ofrece el modal. */
+  familia?: string;
   /**
    * Sub-estado interno de la ruta de placa (null | preasignado | asignado | terminado),
    * ortogonal al status (que permanece en 'entregado').
@@ -70,6 +72,11 @@ export interface OtClientProcedure {
   submittedAt?: string | null;
   /** HU #10536 — trámite marcado como prioritario: el OT lo revisa con primacía (solo indicador). */
   prioritario?: boolean;
+  /** Propietario/vendedor (null en matrícula inicial). */
+  vendedorNombre?: string | null;
+  compradorNombre?: string | null;
+  /** Gestor que radicó el trámite. */
+  gestorNombre?: string | null;
   /** Detalle (GET by id): actores del trámite. */
   actors?: OtClientProcedureActor[];
   placa?: string | null;
@@ -103,6 +110,15 @@ export interface OtClientProcedurePagedResult {
 export interface OtClientProceduresParams {
   status?: string;
   procedureTypeId?: string;
+  vin?: string;
+  placa?: string;
+  vendedor?: string;
+  comprador?: string;
+  gestor?: string;
+  /** vin | placa | vendedor | comprador | gestor | createdAt | radicado | estado */
+  sortBy?: string;
+  /** asc | desc */
+  sortDir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }
@@ -168,7 +184,35 @@ export interface OtApiLogsParams {
 }
 
 export interface RejectOtClientProcedureRequest {
+  /**
+   * Observación general del rechazo, obligatoria. No la sustituyen las causales: la causal dice
+   * QUÉ falló (dato agregable del reporte) y la observación dice CÓMO corregirlo — qué documento
+   * exactamente, qué dato no cuadra. Es el contexto de quien va a subsanar.
+   */
   reason: string;
+  /**
+   * Causales del catálogo marcadas por el revisor. Varias son válidas y esperadas: un expediente
+   * puede llegar con improntas borrosas, sin impronta y sin pago de impuestos a la vez.
+   */
+  rejectionReasonIds?: string[];
+}
+
+/** Causal del catálogo global de rechazo (administrado por SuperAdmin). */
+export interface RejectionReason {
+  id: string;
+  code: string;
+  description: string;
+  /** `matricula_inicial` | `traspaso`. */
+  modalidad: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface SaveRejectionReasonRequest {
+  code: string;
+  description: string;
+  modalidad: string;
+  sortOrder?: number;
 }
 
 export type OtRuleLogic = "AND" | "OR";
@@ -212,8 +256,14 @@ export interface OtRulesListResult {
 
 export interface OtDocumentPrecedenceItem {
   document_type_id: string;
+  /** Código del catálogo (HU #11182); empareja con el tipo del adjunto del trámite. */
+  document_code?: string;
   document_name: string;
   sort_order: number;
+  /** HU #11181 — lo produce FLIT (FUR, certificados, mandato); el gestor no lo adjunta. */
+  is_system_generated?: boolean;
+  /** HU #11182 — el OT ya guardó una posición para este documento. */
+  is_configured?: boolean;
 }
 
 export interface OtDocumentPrecedenceListResult {

@@ -18,6 +18,16 @@ public sealed class OtClientProcedure
     public string Status { get; init; } = string.Empty;
 
     /// <summary>
+    /// Familia del tipo de trámite (<c>MATRICULAS</c> | <c>TRASPASO</c> | <c>OTROS</c>). La necesita
+    /// el modal de rechazo para ofrecer solo las causales del proceso correcto: «manifiesto de
+    /// aduana» no aplica a un traspaso ni «escritura del vendedor» a una matrícula inicial.
+    /// <para>Se llamaba <c>ModalidadEntrada</c> y su documentación prometía los dos literales del
+    /// vocabulario que ADR-0050 eliminó; el dato que transporta es <c>procedure_types.family</c>
+    /// desde que se retiró la columna.</para>
+    /// </summary>
+    public string Familia { get; init; } = string.Empty;
+
+    /// <summary>
     /// Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al <see cref="Status"/>
     /// (que permanece en 'entregado'): <c>null</c> (sin ruta de placa), <c>preasignado</c> (esperando placa)
     /// o <c>asignado</c> (placa registrada). Gobierna las acciones del OT (Asignar/Revocar placa).
@@ -58,11 +68,20 @@ public sealed class OtClientProcedure
     /// <summary>Detalle (GET by id): actores del trámite. Vacío en listados.</summary>
     public IReadOnlyList<OtClientProcedureActor> Actors { get; init; } = [];
 
-    /// <summary>Detalle (GET by id): placa del vehículo.</summary>
+    /// <summary>Placa denormalizada (también en listado de bandeja).</summary>
     public string? Placa { get; init; }
 
-    /// <summary>Detalle (GET by id): VIN.</summary>
+    /// <summary>VIN denormalizado (también en listado de bandeja).</summary>
     public string? Vin { get; init; }
+
+    /// <summary>Nombre del propietario/vendedor (actor vendedor); null en matrícula inicial.</summary>
+    public string? VendedorNombre { get; init; }
+
+    /// <summary>Nombre del comprador.</summary>
+    public string? CompradorNombre { get; init; }
+
+    /// <summary>Nombre visible del gestor que radicó (created_by_user → DisplayName).</summary>
+    public string? GestorNombre { get; init; }
 
     /// <summary>Detalle (GET by id): marca.</summary>
     public string? Marca { get; init; }

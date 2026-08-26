@@ -1,5 +1,6 @@
 using Flit.Ict.Application.Register;
 using Flit.Ict.Domain.Abstractions;
+using Flit.Ict.Domain.Trazabilidad;
 using Flit.Ict.Grpc.Contracts;
 using Flit.Ict.Infrastructure.ExternalClients;
 using Flit.Ict.Infrastructure.Jobs;
@@ -68,6 +69,16 @@ public static class IctInfrastructureExtensions
         services.AddScoped<IIntegrationLogQuery>(sp => sp.GetRequiredService<IntegrationLogRepository>());
         services.AddScoped<IIctAlertMetricsQuery, IctAlertMetricsQuery>();
 
+        // Trazabilidad ICT por trámite (Feature #11814). Solo lectura.
+        services.AddScoped<ITrazabilidadBandejaQuery, DbTrazabilidadBandejaRepository>();
+        services.AddScoped<ITiposTramiteQuery, DbTiposTramiteRepository>();
+        services.AddScoped<IRecorridoTramiteQuery, DbRecorridoTramiteRepository>();
+        services.AddScoped<IConsultasFuenteQuery, DbConsultasFuenteRepository>();
+        services.AddScoped<DbDetalleTramiteRepository>();
+        services.AddScoped<IDatosTramiteQuery>(sp => sp.GetRequiredService<DbDetalleTramiteRepository>());
+        services.AddScoped<ILogTramiteQuery>(sp => sp.GetRequiredService<DbDetalleTramiteRepository>());
+        services.AddScoped<IRevelarDatosPersonalesQuery, DbRevelarDatosPersonalesRepository>();
+
         // Seguridad (login ICT independiente).
         services.AddSingleton(sp => new IctJwtKeyMaterial(sp.GetRequiredService<IOptions<IctJwtSettings>>().Value));
         services.AddSingleton<IIctJwtTokenIssuer, IctRsaJwtTokenIssuer>();
@@ -86,6 +97,9 @@ public static class IctInfrastructureExtensions
 
         // Pipeline de validación: clientes externos + 5 jobs programados.
         services.Configure<IctJobOptions>(configuration.GetSection(IctJobOptions.SectionName));
+        // Parámetros de cadencia/concurrencia/lote configurables en BD (ict.job_settings), leídos en
+        // caliente por los jobs; fallback a IctJobOptions. Singleton compartido por los 5 jobs.
+        services.AddSingleton<Jobs.IIctJobSettingsProvider, Jobs.IctJobSettingsProvider>();
         services.AddHttpClient("ict-webhook", client => client.Timeout = TimeSpan.FromSeconds(30))
             .AddHttpMessageHandler(sp => new Logging.IctOutboundLoggingHandler(
                 sp.GetRequiredService<IServiceScopeFactory>(), "webhook"));

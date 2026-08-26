@@ -35,6 +35,14 @@ public sealed class IntegrationLogRepository(IctDbContext db) : IIntegrationLogW
             query = query.Where(l => l.CorrelationId == correlationId);
         }
 
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            // Búsqueda por la RUTA (texto): permite rastrear un trámite por su número (TransactionFlit),
+            // que viaja en la ruta de estado/reproceso/cierre (p.ej. .../byId/82). ILIKE = case-insensitive.
+            var pattern = $"%{filter.Search.Trim()}%";
+            query = query.Where(l => EF.Functions.ILike(l.Path, pattern));
+        }
+
         if (filter.From is { } from)
         {
             query = query.Where(l => l.CreatedAt >= from);

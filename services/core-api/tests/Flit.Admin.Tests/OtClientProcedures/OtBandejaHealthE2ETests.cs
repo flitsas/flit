@@ -195,7 +195,7 @@ public sealed class OtBandejaHealthE2ETests
             });
         }
 
-        if (!ctx.ProcedureTypes.Any(pt => pt.Id == procedureTypeId))
+        if (!ctx.ProcedureTypes.Local.Any(pt => pt.Id == procedureTypeId) && !ctx.ProcedureTypes.Any(pt => pt.Id == procedureTypeId))
         {
             ctx.ProcedureTypes.Add(new ProcedureType
             {

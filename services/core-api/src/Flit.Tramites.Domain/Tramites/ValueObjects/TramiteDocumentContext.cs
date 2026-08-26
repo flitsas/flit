@@ -15,8 +15,15 @@ namespace Flit.Tramites.Domain.Tramites.ValueObjects;
 /// <param name="CambioCarroceria">Cambio de carrocería (⇒ factura de carrocería).</param>
 /// <param name="ServicioEspecial">Servicio especial (⇒ anexos de servicio especial).</param>
 /// <param name="ExigeMandato">
-/// El trámite exige mandato (ADR-0036, HU #10913): persona jurídica siempre, o persona natural en un
-/// OT que lo exija (Sabaneta). ⇒ el mandato aparece en el checklist como documento autogenerado.
+/// El trámite exige mandato (ADR-0036): siempre (persona natural y jurídica).
+/// ⇒ el mandato aparece en el checklist como documento autogenerado.
+/// </param>
+/// <param name="CancelacionCausal">
+/// Causal declarada en una cancelación de matrícula (⇒ los documentos que la acreditan).
+/// <para>A diferencia del resto, no es un booleano: cada causal exige documentos distintos y son
+/// excluyentes entre sí, así que colapsarlas en banderas sueltas permitiría estados imposibles —una
+/// cancelación que fuera judicial y voluntaria a la vez—. <see cref="ValueObjects.CancelacionCausal.Ninguna"/>
+/// (el defecto) no exige nada ⇒ checklist base.</para>
 /// </param>
 public sealed record TramiteDocumentContext(
     bool EsImportado = false,
@@ -27,4 +34,5 @@ public sealed record TramiteDocumentContext(
     bool TieneTramitador = false,
     bool CambioCarroceria = false,
     bool ServicioEspecial = false,
-    bool ExigeMandato = false);
+    bool ExigeMandato = false,
+    CancelacionCausal CancelacionCausal = CancelacionCausal.Ninguna);

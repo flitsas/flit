@@ -2,6 +2,7 @@ using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -13,6 +14,8 @@ public sealed record PrendaDto(
     string Estado,
     string? AcreedorNombre,
     string? AcreedorDocumento,
+    /// <summary>Entidad ante la que se levantó el gravamen; solo la usa el trámite de levantamiento.</summary>
+    string? LevantamientoEntidad,
     DateTimeOffset CreatedAt);
 
 /// <summary>Datos de una decisión de prenda a registrar.</summary>
@@ -20,6 +23,7 @@ public sealed record RegistrarPrendaInput(
     string Decision,
     string? AcreedorNombre = null,
     string? AcreedorDocumento = null,
+    string? LevantamientoEntidad = null,
     string? MetadataJson = null);
 
 /// <summary>
@@ -33,8 +37,18 @@ public sealed record RegistrarPrendaInput(
 /// </summary>
 public sealed class RegistrarPrendaHandler(
     IProcedureInstanceRepository instances,
-    IProcedureInstancePrendaRepository prendas)
+    IProcedureInstancePrendaRepository prendas,
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
 {
+    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible.</summary>
+    public const string OmitirNoAdmitidoError = "prenda_omitir_no_admitido";
+
+    /// <summary>Error: este tipo no tiene dimensión de gravamen (familia OTROS, tipo no prendario).</summary>
+    public const string PrendaNoAdmitidaError = "prenda_no_admitida_en_tipo";
+
+    private readonly IPrendaDocumentRequirementPolicy _documentPolicy =
+        prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
+
     public async Task<(PrendaDto? Result, string? Error)> HandleAsync(
         Guid instanceId,
         Guid tenantId,
@@ -54,7 +68,35 @@ public sealed class RegistrarPrendaHandler(
         if (TramiteEstado.EsFinal(instance.Status))
             return (null, TramiteEstadoErrores.EstadoFinal);
 
+        // ADR-0050 — en la familia OTROS la prenda no es una capa que se añada: o el tipo ES el
+        // trámite de gravamen (inscribir, levantar, cambiar de acreedor) o el expediente no tiene
+        // dimensión de prenda en absoluto. Un duplicado de tarjeta con un gravamen encima son dos
+        // trámites, y el organismo devuelve el FUR que los mezcla. Matrícula y traspaso conservan la
+        // prenda complementaria del art. 5.1.8 y no pasan por aquí.
+        var perfil = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (!perfil.ComplementaryPrendaAllowed(instance.ProcedureType?.Family)
+            && !ProcedureTypeLayers.EsTipoPrendaBase(instance.ProcedureType?.Code))
+        {
+            return (null, PrendaNoAdmitidaError);
+        }
+
         var decision = input.Decision.Trim().ToLowerInvariant();
+
+        // CF-06 (HU #10881) — "omitir" es la vía "asumo el riesgo", y con un OT que exige el
+        // certificado de prenda no hay riesgo que el gestor pueda asumir por su cuenta: la regla es
+        // del organismo. Se rechaza AL ELEGIR, que es donde el gate de radicación decía que había que
+        // decidirlo (ver PrendaGate.EvaluateOtOverride). Bloquear después dejaría guardada una
+        // decisión que ningún adjunto puede satisfacer —el paso de prenda no ofrece cargar documento
+        // para "omitir"—, que es exactamente el atasco que corrigió esta tanda. Las decisiones ya
+        // guardadas no se revisan: la regla mira la elección nueva, no reabre trámites en curso.
+        if (string.Equals(decision, PrendaDecision.Omitir, StringComparison.OrdinalIgnoreCase)
+            && await _documentPolicy
+                .IsRequiredAsync(tenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
+                .ConfigureAwait(false))
+        {
+            return (null, OmitirNoAdmitidoError);
+        }
+
         var now = DateTimeOffset.UtcNow;
 
         // Versionado: la decisión vigente anterior queda reemplazada. Se persiste PRIMERO (libera el índice
@@ -88,6 +130,7 @@ public sealed class RegistrarPrendaHandler(
             Estado = PrendaEstado.Vigente,
             AcreedorNombre = Trimmed(input.AcreedorNombre),
             AcreedorDocumento = Trimmed(input.AcreedorDocumento),
+            LevantamientoEntidad = Trimmed(input.LevantamientoEntidad),
             Metadata = string.IsNullOrWhiteSpace(input.MetadataJson) ? "{}" : input.MetadataJson,
             CreatedAt = now,
             CreatedBy = userId,
@@ -99,7 +142,7 @@ public sealed class RegistrarPrendaHandler(
     }
 
     internal static PrendaDto ToDto(ProcedureInstancePrenda p) =>
-        new(p.Id, p.Decision, p.Estado, p.AcreedorNombre, p.AcreedorDocumento, p.CreatedAt);
+        new(p.Id, p.Decision, p.Estado, p.AcreedorNombre, p.AcreedorDocumento, p.LevantamientoEntidad, p.CreatedAt);
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

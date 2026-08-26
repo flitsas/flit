@@ -1,6 +1,8 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -27,6 +29,13 @@ public sealed record WizardStepDto(
 
     /// <summary>Configuración del renderer para el frontend (SectionRendererRegistry). Null si no aplica.</summary>
     public JsonNode? SectionConfig { get; init; }
+
+    /// <summary>
+    /// Todas las secciones del paso, en orden (CFD-09). <see cref="SectionType"/> es la primera y se
+    /// mantiene por compatibilidad del contrato; un paso con varias secciones las expone aquí para
+    /// que el frontend las renderice completas.
+    /// </summary>
+    public IReadOnlyList<string>? SectionTypes { get; init; }
 }
 
 /// <summary>
@@ -72,6 +81,132 @@ public sealed record WizardStateDto(
 
     /// <summary>Veces que se activó la subsanación en este expediente.</summary>
     public int SubsanacionCount { get; init; }
+
+    /// <summary>
+    /// Migración V1→V2 — el trámite viene de V1; no se capturó paso a paso en V2.
+    /// <para>
+    /// Lo consume el frontend para PEDIRLE al gestor las consultas que el trámite no trae: los
+    /// resultados de RUNT y SIMIT de V1 no se migran —son perecederos, la propia configuración de V1
+    /// caduca el SIMIT a los cinco minutos, y no quedan atados al trámite—, así que un borrador
+    /// migrado llega al pre-vuelo en blanco y hay que correrlas antes de radicar.
+    /// </para>
+    /// <para>
+    /// Ese porqué se queda AQUÍ: la UI solo destaca la acción. Contarle al operador de dónde viene el
+    /// trámite no le cambia lo que tiene que hacer y siembra la duda de si llegó incompleto.
+    /// </para>
+    /// </summary>
+    public bool EsMigrado { get; init; }
+
+    /// <summary>
+    /// Compañía+OT: <c>true</c> (default) exige certificado de prenda; <c>false</c> si el opt-out
+    /// <c>document_optional</c> estaba vigente al crear el trámite (snapshot). El wizard usa este
+    /// flag para pintar Obligatorio/Opcional en la carga del certificado.
+    /// </summary>
+    public bool PrendaDocumentRequired { get; init; } = true;
+
+    /// <summary>
+    /// ADR-0050 — identidad del tipo con el que se conformó el expediente, para que el asistente
+    /// titule el trámite que se está haciendo. Sin esto, el frontend solo tenía la familia y
+    /// rotulaba «Matrícula Inicial» cualquier cosa que no fuera un traspaso.
+    /// </summary>
+    public string? TypeName { get; init; }
+
+    /// <summary>
+    /// ADR-0050 — capacidades del tipo, tomadas del mismo <c>gate_profile</c> que gobierna los gates
+    /// del backend (snapshot congelado, con respaldo en el catálogo vivo).
+    /// <para>Es lo que le faltaba al asistente para dejar de decidir por modalidad: qué partes pide,
+    /// si lleva datos comerciales, si tiene puerta de prenda y por qué identificador entra el
+    /// vehículo. Sin ellas, un tipo de la familia OTROS se podía elegir y dibujar, pero por dentro
+    /// se comportaba como una matrícula.</para>
+    /// </summary>
+    public WizardCapabilitiesDto? Capabilities { get; init; }
+}
+
+/// <summary>
+/// Capacidades del tipo que el asistente necesita para armarse (ADR-0050). Es una proyección
+/// deliberadamente PARCIAL de <c>ProcedureTypeGateProfile</c>: solo lo que cambia lo que el gestor
+/// ve o captura. Lo que solo afecta a validaciones del servidor —<c>validateOtOperability</c>,
+/// <c>simitMode</c>— no se publica: el frontend no debe poder reimplementar un gate del backend.
+/// </summary>
+/// <param name="EntryMode">
+/// Identificador con el que entra el vehículo: <c>VIN</c> (aún no tiene placa) o <c>PLATE</c>.
+/// </param>
+/// <param name="RequiresSeller">Hay parte vendedora. En la familia OTROS el titular no vende.</param>
+/// <param name="RequiresBuyer">Hay parte compradora o titular.</param>
+/// <param name="RequiresLessee">
+/// Interviene un arrendatario además del propietario. Parte declarativa: se identifica y se notifica,
+/// pero no valida identidad ni firma (eso lo dice <paramref name="BiometricActors"/>, que no lo trae).
+/// </param>
+/// <param name="AllowsMultipleBuyer">La parte compradora admite varias personas.</param>
+/// <param name="RequiresCommercialValue">El trámite lleva valor y fecha de venta.</param>
+/// <param name="RequiresBiometrics">Se valida identidad.</param>
+/// <param name="BiometricActors">Actores a validar (<c>OWNER</c>, <c>BUYER</c>).</param>
+/// <param name="HasPrendaGate">La decisión de prenda es una puerta y no una declaración.</param>
+/// <param name="AllowsComplementaryTransformations">
+/// El expediente admite transformaciones POR ENCIMA del tipo base («trámites simultáneos»). Viaja ya
+/// resuelto: el asistente recibe la respuesta, no el perfil crudo ni la familia con la que deducirla.
+/// </param>
+/// <param name="AllowsComplementaryPrenda">Admite un gravamen por encima del tipo base.</param>
+public sealed record WizardCapabilitiesDto(
+    string? EntryMode,
+    bool RequiresSeller,
+    bool RequiresBuyer,
+    bool RequiresLessee,
+    bool AllowsMultipleBuyer,
+    bool RequiresCommercialValue,
+    bool RequiresBiometrics,
+    IReadOnlyList<string> BiometricActors,
+    bool HasPrendaGate,
+    bool AllowsComplementaryTransformations,
+    bool AllowsComplementaryPrenda,
+    /// <summary>
+    /// El organismo de tránsito lo ELIGE el operador entre los habilitados de su compañía, en vez de
+    /// imponerlo el RUNT. Deja de deducirse del modo de entrada: un radicado de cuenta entra por
+    /// placa y aun así lo elige, porque el trámite consiste en llevar la cuenta a otro organismo.
+    /// </summary>
+    bool OperatorChoosesTransitOffice,
+    /// <summary>
+    /// El trámite DECLARA un organismo de destino además del suyo (traslado de cuenta): se captura y
+    /// se imprime en el FUR, pero el trámite se radica y se aprueba en el organismo de origen.
+    /// </summary>
+    bool RequiresDestinationTransitOffice,
+    /// <summary>
+    /// El trámite PIDE una placa nueva al organismo (matrícula, rematrícula, duplicado de placa).
+    /// Solo en ellos tiene sentido la preferencia de dígito de preasignación: en un radicado de
+    /// cuenta o un levantamiento de prenda el vehículo ya tiene placa y no hay nada que asignar.
+    /// </summary>
+    bool RequiresPlateRequest)
+{
+    /// <param name="familyCode">
+    /// Familia del expediente. Resuelve los dos flags de acumulación cuando el perfil no los declara
+    /// —el caso de todo tipo parametrizado antes de esta llave y de todo snapshot ya congelado—.
+    /// </param>
+    /// <param name="typeCode">Código del tipo, para reconocer los trámites que SON el gravamen.</param>
+    /// <param name="runtReportaGravamen">
+    /// El RUNT reportó prenda/gravamen sobre el vehículo. Con <c>typeCode</c> deriva
+    /// <c>HasPrendaGate</c>: el asistente recibe la RESPUESTA («hay prenda que gestionar»), no la
+    /// marca del catálogo que antes había que acordarse de poner y que además se congelaba.
+    /// </param>
+    internal static WizardCapabilitiesDto From(
+        ProcedureTypeGateProfile profile,
+        string? familyCode,
+        string? typeCode = null,
+        bool runtReportaGravamen = false) =>
+        new(
+            profile.EntryMode,
+            profile.RequiresSeller,
+            profile.RequiresBuyer,
+            profile.RequiresLessee,
+            profile.AllowsMultipleBuyer,
+            profile.RequiresCommercialValue,
+            profile.RequiresBiometrics,
+            profile.BiometricActors,
+            ProcedureTypeLayers.ExigeDecisionDePrenda(typeCode, runtReportaGravamen),
+            profile.ComplementaryTransformationsAllowed(familyCode),
+            profile.ComplementaryPrendaAllowed(familyCode),
+            profile.OperatorChoosesTransitOffice(),
+            profile.RequiresDestinationTransitOffice,
+            profile.RequiresPlateRequest);
 }
 
 /// <summary>
@@ -83,11 +218,14 @@ public sealed record WizardStateDto(
 /// actores → <see cref="ParteDatos"/> + <see cref="RuntSnapshot"/> (RUNT se asume consultado
 /// cuando el actor tiene documento; el RUNT vive en field_values, sin entidad propia en este slice);
 /// último preflight → <see cref="PreflightSnapshot"/> (Overall);
-/// comercial → ValorVenta;
+/// comercial → ValorVenta, exigido AHORA por el gate del paso de documentos (traspaso 4: los datos
+/// comerciales se absorbieron ahí, paridad con matrícula);
 /// checklist (<see cref="ChecklistEngine"/> sobre adjuntos) → completitud del paso de documentos
 /// (HU #10935: paso 4 en traspaso, paso 3 en matrícula — después de los actores);
-/// biométrica → <c>null</c> (diferida, slice 6) → los pasos finales se marcan incomplete con
-/// reason explícita ("pendiente_biometria"/"pendiente_firma"), NO se bloquean con error.</para>
+/// biométrica → <see cref="BiometriaSnapshot"/>, exigida por el gate del paso de Identidad (traspaso 5:
+/// ambas partes; matrícula 4: comprador, evaluado aparte por el flag <c>IdentidadAprobada</c>). El
+/// paso de FUR (diferido, IO) se marca incomplete con reason explícita ("fur_pendiente"/
+/// "pendiente_firma"), NO se bloquea con error.</para>
 /// </summary>
 public sealed class GetWizardStateHandler(
     IProcedureInstanceRepository repo,
@@ -99,10 +237,16 @@ public sealed class GetWizardStateHandler(
     IConsultationRestrictionPolicy? restrictionPolicy = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
-    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
+    IProcedureTypeRepository? typeRepo = null,
+    IProcedureInstancePrendaRepository? prendaRepo = null,
+    IResolvedChecklistMatrixProvider? checklistMatrixProvider = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
+
+    /// <summary>El tipo de trámite no tiene pasos configurados: no hay wizard que construir.</summary>
+    public const string TipoSinParametrizar = "tipo_sin_parametrizar";
     public const string FurPendiente = "fur_pendiente";
 
     // FEATURE-08 / HU-BE-06 — flag F08_DynamicProcedures (default deshabilitado → camino estático).
@@ -134,6 +278,17 @@ public sealed class GetWizardStateHandler(
     private readonly IPrendaDocumentRequirementPolicy _prendaDocumentRequirementPolicy =
         prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
 
+    // 2026-08-12 — la decisión de prenda vive en un agregado aparte (no cuelga de ProcedureInstance),
+    // y el override del OT la necesita para no exigir un documento que la UI no ofrece cargar. Sin
+    // repo (tests, listado de trámites) la decisión queda null ⇒ el override calla, igual que antes.
+    private readonly IProcedureInstancePrendaRepository? _prendaRepo = prendaRepo;
+
+    // CFD-06 — matriz documental resuelta por tipo (+ overrides del OT). El camino dinámico la
+    // necesita para que DocumentRequirementGate evalúe requisitos reales; sin ella caía siempre al
+    // booleano agregado DocumentosCompletos y CFD-06 no llegaba nunca al motor. Sin proveedor
+    // (tests) se conserva ese fallback.
+    private readonly IResolvedChecklistMatrixProvider? _checklistMatrixProvider = checklistMatrixProvider;
+
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -152,17 +307,6 @@ public sealed class GetWizardStateHandler(
         // FEATURE-08 / HU-BE-06 (CFD-09): wizard dinámico flag-guarded. Solo cuando F08_DynamicProcedures
         // está habilitado para el tenant Y la instancia tiene snapshot (tipo dinámico). En cualquier otro
         // caso se preserva el camino estático (BuildMatricula/BuildTraspaso) sin regresión (AC-02).
-        if (!esMigradoTerminal && snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct))
-        {
-            var snapshot = await snapshotRepo.GetByInstanceIdAsync(id, tenantId, ct);
-            if (snapshot is not null)
-            {
-                // HU #10879 — el paso persistido prima como punto de retoma también en el wizard dinámico.
-                var dynamicState = await BuildDynamicStateAsync(instance, snapshot, ct);
-                return (AnnotateInstanceFlags(dynamicState, instance), null);
-            }
-        }
-
         // Identidad PER-PERSONA (documento del actor), no por instancia: se referencia la validación
         // vigente de la persona en N trámites sin clonar (HU #10350).
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
@@ -199,27 +343,112 @@ public sealed class GetWizardStateHandler(
         // CF-06 (HU #10881) — override del OT (independiente del semáforo de gravámenes): si aplica
         // y falta el documento de prenda, canSubmit debe reflejarlo con el mismo código de bloqueo
         // que el gate de preparación (TramiteLifecycleService), para que el wizard y el submit
-        // coincidan. Solo aplica a traspaso (única modalidad con concepto de prenda/gravamen).
-        var prendaDocumentoOtRequerido = await PrendaDocumentoOtBlockeaAsync(instance, ct);
+        // coincidan. Aplica a CUALQUIER modalidad con OT: la matrícula inicial que constituye prenda
+        // (vehículo nuevo financiado) es justo el caso que el semáforo de gravámenes no ve.
+        var prendaOtBlocker = await PrendaOtBlockerAsync(instance, ct);
+
+        // Actores a los que el tipo de trámite exige pasar por el RUNT, y los documentos que se
+        // consultaron de verdad en este trámite. Sin repositorio de tipos (tests) no hay exigencia.
+        var runtExigido = await ResolveRuntExigidoAsync(instance, tenantId, ct);
+
+        var prendaDocumentRequired = await ResolvePrendaDocumentRequiredAsync(instance, ct);
+
+        // ADR-0050 / CFD-09 — el wizard se conforma SIEMPRE desde el tipo: un solo motor, sin flag.
+        // La conformación sale del snapshot congelado al crear y, si no lo hay, del catálogo vivo
+        // (ResolveConformationAsync).
+        //
+        // La paridad con el antiguo camino estático está cubierta por DynamicVsStaticParityGapsTests:
+        // bloqueo de pasos diferidos, razón según entryMode, semáforo del pre-vuelo, bloqueos duros en
+        // el paso de documentos, actor por sección y el FUR fuera de los blockers. El camino estático
+        // que queda debajo solo actúa si el tipo NO tiene pasos parametrizados, y desaparece cuando
+        // los 21 tipos estén sembrados.
+        //
+        // La bifurcación va DESPUÉS de resolver las señales, no antes: cuando estaba arriba, el camino
+        // dinámico se saltaba identidad, RNMC, prenda del OT y la matriz documental, y devolvía los
+        // defaults del DTO.
+        if (!esMigradoTerminal)
+        {
+            var conformation = await ResolveConformationAsync(instance, id, tenantId, ct);
+            if (conformation is not null && conformation.Steps.Count > 0)
+            {
+                var dynamicState = await BuildDynamicStateAsync(
+                    instance, conformation, partesEfectivas, prendaOtBlocker,
+                    comparendosBloquean, runtExigido, ct);
+
+                // HU #10879 — el paso persistido prima como punto de retoma también en el dinámico.
+                return (AnnotateInstanceFlags(
+                    dynamicState with
+                    {
+                        IdentityValidationEnabled = identityRequired,
+                        RnmcEnabled = rnmcEnabled,
+                        PrendaDocumentRequired = prendaDocumentRequired,
+                    },
+                    instance), null);
+            }
+        }
 
         var state = AnnotateInstanceFlags(
             ComputeState(
-                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaDocumentoOtRequerido) with
+                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
+                runtExigido) with
             {
                 IdentityValidationEnabled = identityRequired,
                 RnmcEnabled = rnmcEnabled,
+                PrendaDocumentRequired = prendaDocumentRequired,
             },
             instance);
         return (state, null);
     }
 
     /// <summary>
+    /// Política compañía+OT del certificado de prenda (snapshot al <see cref="ProcedureInstance.CreatedAt"/>).
+    /// </summary>
+    private Task<bool> ResolvePrendaDocumentRequiredAsync(ProcedureInstance instance, CancellationToken ct) =>
+        _prendaDocumentRequirementPolicy.IsRequiredAsync(
+            instance.TenantId,
+            instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+            instance.CreatedAt,
+            ct);
+
+    /// <summary>
     /// FEATURE-08 / HU-BE-06 — computa el estado del wizard desde el snapshot del tipo (gate_profile +
     /// stepSectionTypes) y las MISMAS señales de la instancia que el camino estático, delegando en
     /// <see cref="DynamicGateEvaluator"/>. Mapea el resultado al contrato con <c>sectionType</c> por paso.
     /// </summary>
-    private async Task<WizardStateDto> BuildDynamicStateAsync(
-        ProcedureInstance instance, ProcedureTypeSnapshotRecord snapshot, CancellationToken ct)
+    /// <summary>
+    /// Conformación del wizard: perfil de gates + pasos con sus <c>section_type</c>.
+    /// </summary>
+    private sealed record WizardConformation(
+        ProcedureTypeGateProfile GateProfile,
+        IReadOnlyList<DynamicWizardStep> Steps);
+
+    /// <summary>
+    /// Resuelve la conformación del expediente (ADR-0050). Precedencia:
+    /// <list type="number">
+    /// <item>el <b>snapshot</b> congelado al crear — así un cambio del catálogo no reconfigura un
+    /// expediente en curso;</item>
+    /// <item>el <b>catálogo vivo</b>, para expedientes anteriores al snapshot o creados sin él.</item>
+    /// </list>
+    /// Devuelve <c>null</c> si el tipo no tiene pasos parametrizados: ahí no hay wizard que construir.
+    /// </summary>
+    private async Task<WizardConformation?> ResolveConformationAsync(
+        ProcedureInstance instance, Guid id, Guid tenantId, CancellationToken ct)
+    {
+        if (snapshotRepo is not null)
+        {
+            var snapshot = await snapshotRepo.GetByInstanceIdAsync(id, tenantId, ct);
+            if (snapshot is not null)
+            {
+                var fromSnapshot = FromSnapshot(snapshot);
+                if (fromSnapshot is not null)
+                    return fromSnapshot;
+            }
+        }
+
+        return FromCatalog(instance);
+    }
+
+    private static WizardConformation? FromSnapshot(ProcedureTypeSnapshotRecord snapshot)
     {
         var root = JsonNode.Parse(snapshot.Snapshot) as JsonObject ?? [];
         var gateProfile = ProcedureTypeGateProfile.FromJson(root["gateProfile"]?.ToJsonString());
@@ -231,59 +460,198 @@ public sealed class GetWizardStateHandler(
             {
                 if (node is not JsonObject stepObj)
                     continue;
+
                 var stepCode = (stepObj["stepCode"] as JsonValue)?.ToString() ?? string.Empty;
-                var firstType = "generic_form";
-                if (stepObj["sectionTypes"] is JsonArray sts && sts.Count > 0)
-                    firstType = (sts[0] as JsonValue)?.ToString() ?? "generic_form";
-                steps.Add(new DynamicWizardStep(stepCode, firstType));
+
+                // Antes se tomaba solo sectionTypes[0] y las demás secciones del paso desaparecían
+                // en silencio, con sus gates sin evaluar.
+                var sectionTypes = new List<string>();
+                if (stepObj["sectionTypes"] is JsonArray sts)
+                {
+                    foreach (var st in sts)
+                    {
+                        var value = (st as JsonValue)?.ToString();
+                        if (!string.IsNullOrWhiteSpace(value))
+                            sectionTypes.Add(value);
+                    }
+                }
+
+                if (sectionTypes.Count == 0)
+                    sectionTypes.Add(ProcedureSectionTypes.GenericForm);
+
+                var sectionCodes = new List<string>();
+                if (stepObj["sectionCodes"] is JsonArray scs)
+                {
+                    foreach (var sc in scs)
+                    {
+                        var value = (sc as JsonValue)?.ToString();
+                        if (!string.IsNullOrWhiteSpace(value))
+                            sectionCodes.Add(value);
+                    }
+                }
+
+                steps.Add(new DynamicWizardStep(stepCode, sectionTypes)
+                {
+                    SectionCodes = sectionCodes,
+                    StepTitle = (stepObj["stepTitle"] as JsonValue)?.ToString(),
+                });
             }
         }
+
+        return steps.Count > 0 ? new WizardConformation(gateProfile, steps) : null;
+    }
+
+    private static WizardConformation? FromCatalog(ProcedureInstance instance) =>
+        FromCatalogSteps(instance.ProcedureType);
+
+    /// <summary>Conformación desde los pasos del tipo; <c>null</c> si no tiene ninguno.</summary>
+    private static WizardConformation? FromCatalogSteps(ProcedureType? type)
+    {
+        if (type is null || type.Steps.Count == 0)
+            return null;
+
+        var steps = type.Steps
+            .Where(st => st.IsActive)
+            .OrderBy(st => st.SortOrder)
+            .Select(st => new DynamicWizardStep(
+                st.Code,
+                [.. st.Sections.OrderBy(sec => sec.SortOrder).Select(sec => sec.SectionType)])
+            {
+                SectionCodes = [.. st.Sections.OrderBy(sec => sec.SortOrder).Select(sec => sec.Code)],
+                StepTitle = st.Title,
+            })
+            .Where(st => st.SectionTypes.Count > 0)
+            .ToList();
+
+        return steps.Count > 0
+            ? new WizardConformation(ProcedureTypeGateProfile.FromJson(type.GateProfile), steps)
+            : null;
+    }
+
+    private async Task<WizardStateDto> BuildDynamicStateAsync(
+        ProcedureInstance instance,
+        WizardConformation conformation,
+        IReadOnlySet<string> partesEfectivas,
+        string? prendaOtBlocker,
+        bool comparendosBloquean,
+        RuntConsultaExigida? runtExigido,
+        CancellationToken ct)
+    {
+        // CFD-06 — requisitos reales del tipo (+ overrides del OT). Con la matriz cargada el gate
+        // evalúa documento a documento; sin ella cae al booleano agregado, como hacía siempre.
+        var documentRequirements = await ResolveDynamicDocumentRequirementsAsync(instance, ct);
+
+        // La decisión de prenda vive en un agregado aparte y la necesita la sección prenda_decision.
+        var prendaVigente = _prendaRepo is null
+            ? null
+            : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+
+        return BuildDynamicStateCore(
+            instance, conformation, partesEfectivas, prendaOtBlocker, comparendosBloquean,
+            runtExigido, documentRequirements, prendaVigente);
+    }
+
+    /// <summary>
+    /// Núcleo del wizard dinámico, SIN IO: compone el contexto desde el grafo ya cargado y lo evalúa.
+    /// <para>Lo comparten el detalle del wizard —que además resuelve por IO la matriz documental y la
+    /// prenda— y el listado de trámites, que necesita el mismo progreso por expediente y no puede
+    /// pagar una consulta por fila.</para>
+    /// </summary>
+    private static WizardStateDto BuildDynamicStateCore(
+        ProcedureInstance instance,
+        WizardConformation conformation,
+        IReadOnlySet<string> partesEfectivas,
+        string? prendaOtBlocker,
+        bool comparendosBloquean,
+        RuntConsultaExigida? runtExigido,
+        IReadOnlyList<DocumentRequirementItem> documentRequirements,
+        ProcedureInstancePrenda? prendaVigente)
+    {
+        var gateProfile = conformation.GateProfile;
+        var steps = conformation.Steps;
 
         var fv = FieldValues(instance);
         var comprador = ParteOf(instance, "comprador");
         var vendedor = ParteOf(instance, "vendedor");
-        var runtComprador = RuntOf(instance, "comprador");
-        var runtVendedor = RuntOf(instance, "vendedor");
+        var runtComprador = RuntOf(instance, "comprador", runtExigido);
+        var runtVendedor = RuntOf(instance, "vendedor", runtExigido);
         var preflight = PreflightOf(instance);
-
-        var approvedParties = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
-            repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
+        var simitComprador = SimitOf(instance, comprador, preflight);
 
         var ctx = new DynamicWizardContext
         {
             VehiculoConsultado = HasVehiculoConsulta(fv),
             PreflightProviderError = preflight?.ProviderError == true,
+            PreflightVehiculoNoEncontrado = preflight?.VehiculoNoEncontrado == true,
             DocumentosCompletos = DocumentosObligatoriosCompletos(instance),
             HasBuyer = comprador is not null,
             BuyerRuntConsultado = runtComprador?.Consultado == true,
             HasSeller = vendedor is not null,
             SellerRuntConsultado = runtVendedor?.Consultado == true,
+            BuyerCompleto = ParteCompletaRule.EstaCompleta(comprador),
+            SellerCompleto = ParteCompletaRule.EstaCompleta(vendedor),
             ValorVenta = instance.Commercial?.ValorVenta ?? 0m,
-            BiometricsApproved = MapPartiesToEntityCodes(approvedParties),
+            // partesEfectivas y no las aprobadas en crudo: si el OT deshabilita la identidad, las
+            // partes cuentan como satisfechas y el paso biométrico no bloquea (HU #10548).
+            BiometricsApproved = MapPartiesToEntityCodes(partesEfectivas),
             FurGenerado = FurGenerado(instance),
             PlateRequestCompleted = PlateRequestCompleted(fv),
             UploadedDocumentCodes = new HashSet<string>(
                 instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
+            DocumentRequirements = documentRequirements,
+            PrendaVigente = prendaVigente,
+            RuntReportaGravamen = RuntReportaGravamen(fv),
+            TypeCode = instance.ProcedureType?.Code,
+            AttachmentTipos = instance.Attachments.Select(a => a.Tipo).ToList(),
+            CompradorConComparendos = (simitComprador?.TotalComparendos ?? 0) > 0,
+            ComparendosBloquean = comparendosBloquean,
+            PreflightRed = preflight?.Overall == "red",
+            RiesgoAceptado = RiesgoAceptado(instance),
         };
 
         var result = DynamicGateEvaluator.Evaluate(gateProfile, steps, ctx);
 
         var wizardSteps = result.Steps
-            .Select(s => new WizardStepDto(s.Index, s.Key, SectionLabel(s.SectionType), s.Status, s.Reasons)
+            .Select(s => new WizardStepDto(
+                s.Index, s.Key,
+                // El título configurado manda: es el que distingue "Vendedor" de "Comprador", y
+                // "Propietario" en la familia OTROS. SectionLabel es solo el respaldo genérico.
+                string.IsNullOrWhiteSpace(s.Title) ? SectionLabel(s.SectionType) : s.Title,
+                s.Status, s.Reasons)
             {
                 SectionType = s.SectionType,
+                SectionTypes = s.SectionTypes,
+                SectionConfig = BuildSectionConfig(s, gateProfile),
             })
             .ToList();
 
+        // CF-06 (HU #10881) — el override del OT es IO y vive fuera del evaluador puro; se compone
+        // aquí para que el wizard y el gate de preparación devuelvan el mismo código de bloqueo.
+        var blockers = result.Blockers;
+        var canSubmit = result.CanSubmit;
+        if (prendaOtBlocker is not null && !blockers.Contains(prendaOtBlocker, StringComparer.Ordinal))
+        {
+            blockers = [.. blockers, prendaOtBlocker];
+            canSubmit = false;
+        }
+
         return new WizardStateDto(
-            instance.ModalidadEntrada ?? string.Empty,
-            instance.TipologiaCodigo,
+            instance.FamilyCode ?? string.Empty,
+            instance.TypeCode,
             result.Steps.Count,
             wizardSteps,
-            result.CanSubmit,
-            result.Blockers,
+            canSubmit,
+            blockers,
             instance.Status,
-            TramiteStateMachine.TransitionsFrom(instance.Status));
+            TramiteStateMachine.TransitionsFrom(instance.Status))
+        {
+            // ADR-0050 — el mismo perfil que acaba de gobernar los gates viaja al asistente, para
+            // que no vuelva a deducir por familia lo que el tipo ya declara.
+            TypeName = instance.TypeName,
+            Capabilities = WizardCapabilitiesDto.From(
+                conformation.GateProfile, instance.FamilyCode,
+                instance.ProcedureType?.Code, RuntReportaGravamen(instance)),
+        };
     }
 
     /// <summary>
@@ -305,6 +673,7 @@ public sealed class GetWizardStateHandler(
             SubsanacionCount = instance.SubsanacionCount,
             AllowedTransitions = allowed,
             Status = instance.Status,
+            EsMigrado = instance.IsMigrated,
         };
     }
 
@@ -312,6 +681,79 @@ public sealed class GetWizardStateHandler(
     /// Mapea las partes aprobadas (comprador/vendedor/locatario) a los códigos de entidad del
     /// gate_profile (BUYER/OWNER/LESSEE) para compararlas con <c>biometricActors</c>.
     /// </summary>
+    /// <summary>
+    /// CFD-06 — requisitos documentales del tipo, resueltos con los overrides del OT, en la forma que
+    /// consume <see cref="DocumentRequirementGate"/>. Lista vacía si no hay proveedor cableado o el
+    /// tipo no tiene matriz: el gate cae entonces al booleano agregado, sin regresión.
+    /// </summary>
+    private async Task<IReadOnlyList<DocumentRequirementItem>> ResolveDynamicDocumentRequirementsAsync(
+        ProcedureInstance instance, CancellationToken ct)
+    {
+        if (_checklistMatrixProvider is null)
+            return [];
+
+        var matriz = await _checklistMatrixProvider
+            .GetForAsync(
+                instance.ProcedureTypeId,
+                instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+                ct)
+            .ConfigureAwait(false);
+
+        return [.. matriz.Select(d => new DocumentRequirementItem(d.Codigo, d.Obligatorio, d.EsDummy))];
+    }
+
+    /// <summary>
+    /// Configuración que el <c>SectionRendererRegistry</c> del frontend necesita para pintar la
+    /// sección. La propiedad existía en el contrato desde F08 y nunca se asignaba, así que el cliente
+    /// recibía siempre <c>null</c> y no podía saber, por ejemplo, si el paso de actores pide vendedor.
+    /// </summary>
+    private static JsonObject? BuildSectionConfig(
+        DynamicWizardStepResult step, ProcedureTypeGateProfile profile)
+    {
+        switch (step.SectionType)
+        {
+            case ProcedureSectionTypes.VehicleQuery:
+                return new JsonObject { ["entryMode"] = profile.EntryMode };
+
+            case ProcedureSectionTypes.ActorForm:
+                return new JsonObject
+                {
+                    ["requiresSeller"] = profile.RequiresSeller,
+                    ["requiresBuyer"] = profile.RequiresBuyer,
+                    ["allowsMultipleSeller"] = profile.AllowsMultipleSeller,
+                    ["allowsMultipleBuyer"] = profile.AllowsMultipleBuyer,
+                };
+
+            case ProcedureSectionTypes.Commercial:
+                return new JsonObject
+                {
+                    ["requiresCommercialValue"] = profile.RequiresCommercialValue,
+                    ["commercialValueSource"] = profile.CommercialValueSource,
+                };
+
+            case ProcedureSectionTypes.Biometric:
+                return new JsonObject
+                {
+                    ["requiresBiometrics"] = profile.RequiresBiometrics,
+                    ["actors"] = new JsonArray([.. profile.BiometricActors.Select(a => (JsonNode)a!)]),
+                };
+
+            case ProcedureSectionTypes.SignatureFur:
+                return new JsonObject { ["requiresSignature"] = profile.RequiresSignature };
+
+            case ProcedureSectionTypes.PlateRequest:
+                return new JsonObject { ["requiresPlateRequest"] = profile.RequiresPlateRequest };
+
+            case ProcedureSectionTypes.PrendaDecision:
+                return new JsonObject { ["hasPrendaGate"] = profile.HasPrendaGate };
+
+            default:
+                // document_checklist y generic_form no necesitan config: el checklist llega por su
+                // propio endpoint y el genérico se pinta desde form_fields.
+                return null;
+        }
+    }
+
     private static HashSet<string> MapPartiesToEntityCodes(IReadOnlySet<string> approvedParties)
     {
         var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -321,13 +763,35 @@ public sealed class GetWizardStateHandler(
         return codes;
     }
 
+    /// <summary>
+    /// El RUNT reportó gravamen o prenda sobre el vehículo. Lo hidratan los tres mappers de consulta
+    /// (Kyverum, Verifik, Intempo) en <c>field_values</c>, que es también de donde el asistente saca
+    /// la alerta amarilla y el detalle del acreedor: pantalla y gate leen el MISMO dato.
+    ///
+    /// <para>El RUNT contesta «SI»/«NO» en texto. Se acepta cualquier variante afirmativa razonable y
+    /// se ignora el resto: un dato ausente o ilegible NO inventa un gravamen —eso convertiría cada
+    /// consulta fallida en un bloqueo— pero tampoco lo oculta cuando sí vino.</para>
+    /// </summary>
+    private static bool RuntReportaGravamen(Dictionary<string, string?> fv) =>
+        EsAfirmativo(Get(fv, "runt_tiene_prendas")) || EsAfirmativo(Get(fv, "runt_tiene_gravamenes"));
+
+    /// <inheritdoc cref="RuntReportaGravamen(Dictionary{string, string})"/>
+    private static bool RuntReportaGravamen(ProcedureInstance instance) =>
+        instance.FieldValues.Any(f =>
+            (string.Equals(f.FieldKey, "runt_tiene_prendas", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(f.FieldKey, "runt_tiene_gravamenes", StringComparison.OrdinalIgnoreCase))
+            && EsAfirmativo(f.ValueText));
+
+    private static bool EsAfirmativo(string? valor) =>
+        valor?.Trim().ToUpperInvariant() is "SI" or "SÍ" or "S" or "TRUE" or "1";
+
     private static bool PlateRequestCompleted(Dictionary<string, string?> fv) =>
         string.Equals(Get(fv, "plate_request_completed"), "true", StringComparison.OrdinalIgnoreCase);
 
     private static string SectionLabel(string sectionType) => sectionType switch
     {
         "vehicle_query" => "Consulta del vehículo",
-        "document_checklist" => "Documentos",
+        "document_checklist" => "Datos y Documentos del Trámite",
         "actor_form" => "Actores",
         "commercial" => "Valor comercial",
         "biometric" => "Identidad",
@@ -350,26 +814,40 @@ public sealed class GetWizardStateHandler(
     }
 
     /// <summary>
-    /// CF-06 (HU #10881) — ¿el override del OT exige el documento de prenda y el trámite (traspaso)
-    /// no lo tiene adjunto? Usa <c>instance.TransitOfficeId</c> (mismo OT que consume
-    /// <see cref="ChecklistMatrixCompleteness"/> para la matriz documental por OT, HU #10522) y la
-    /// fecha de creación de la instancia para el comportamiento SNAPSHOT (AC2). Solo aplica a
-    /// traspaso; matrícula inicial no tiene concepto de prenda/gravamen.
+    /// Compañía+OT: ¿el documento de prenda es obligatorio y el trámite no lo tiene adjunto?
+    /// Aplica a cualquier modalidad (matrícula, traspaso, etc.). Usa <c>TransitOfficeId</c> de la
+    /// instancia (mismo OT que la matriz documental) y el <c>CreatedAt</c> para el snapshot.
+    ///
+    /// <para>2026-08-12 — se consulta también la DECISIÓN vigente. Antes no, y el resultado era un
+    /// bloqueo insatisfacible: una matrícula inicial con <c>sin_prenda</c> quedaba atascada en
+    /// "Finalizar" pidiendo un adjunto que el paso de prenda no ofrece cargar para esa decisión. La
+    /// regla la impone <see cref="PrendaGate.EvaluateOtOverride"/>; aquí solo se le aporta el dato.</para>
+    ///
+    /// <para>Devuelve el CÓDIGO de bloqueo, no un booleano: el override puede pedir el documento
+    /// (<c>prenda_documento_requerido_ot</c>) o la decisión que aún nadie tomó
+    /// (<c>prenda_decision_requerida</c>), y el wizard tiene que decir cuál de las dos para que el
+    /// banner coincida con lo que devuelve el gate de preparación.</para>
     /// </summary>
-    private async Task<bool> PrendaDocumentoOtBlockeaAsync(ProcedureInstance instance, CancellationToken ct)
+    private async Task<string?> PrendaOtBlockerAsync(ProcedureInstance instance, CancellationToken ct)
     {
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
-        if (!esTraspaso)
-            return false;
-
         var otRequiere = await _prendaDocumentRequirementPolicy
-            .IsRequiredAsync(instance.ProcedureTypeId, instance.TransitOfficeId, instance.CreatedAt, ct)
+            .IsRequiredAsync(
+                instance.TenantId,
+                instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+                instance.CreatedAt,
+                ct)
             .ConfigureAwait(false);
         if (!otRequiere)
-            return false;
+            return null;
+
+        // Solo se paga la lectura del agregado de prenda cuando el override está activo: sin él la
+        // decisión da igual y el gate no bloquea de todos modos.
+        var prenda = _prendaRepo is null
+            ? null
+            : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
 
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        return PrendaGate.EvaluateOtOverride(otRequiere, docTipos) is not null;
+        return PrendaGate.EvaluateOtOverride(otRequiere, prenda?.Decision, docTipos);
     }
 
     /// <summary>
@@ -388,23 +866,40 @@ public sealed class GetWizardStateHandler(
     /// compañía + OT). Default <c>true</c> ⇒ comportamiento previo; los llamadores que no resuelven la
     /// política (p. ej. el listado de trámites) lo dejan en el default sin regresión.
     /// </param>
-    /// <param name="prendaDocumentoOtRequerido">
-    /// CF-06 (HU #10881): <c>true</c> cuando el override del OT exige el documento de prenda y el
-    /// trámite no lo tiene adjunto. Default <c>false</c> ⇒ comportamiento previo (sin override, o
-    /// llamadores que no lo resuelven, p. ej. el listado de trámites), sin regresión.
+    /// <param name="prendaOtBlocker">
+    /// CF-06 (HU #10881): código de bloqueo que emite el override del OT
+    /// (<c>prenda_documento_requerido_ot</c> o <c>prenda_decision_requerida</c>), o <c>null</c> si no
+    /// bloquea. Default <c>null</c> ⇒ comportamiento previo (sin override, o llamadores que no lo
+    /// resuelven, p. ej. el listado de trámites), sin regresión.
     /// </param>
     public static WizardStateDto ComputeState(
         ProcedureInstance instance,
         IReadOnlySet<string> identidadAprobadaPartes,
         bool? documentosCompletosOverride = null,
         bool comparendosBloquean = true,
-        bool prendaDocumentoOtRequerido = false)
+        string? prendaOtBlocker = null,
+        RuntConsultaExigida? runtExigido = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
+        var conformation = FromCatalog(instance);
+
+        // Tipo sin pasos parametrizados. No debería ocurrir —los 21 del catálogo los tienen y hay un
+        // test que lo verifica— pero un tipo creado a mano desde el configurador puede quedarse sin
+        // ellos. Se devuelve un estado vacío y bloqueado en vez de inventar un recorrido: el
+        // expediente se ve, no avanza, y el motivo es explícito.
+        if (conformation is null)
+        {
+            // Sin pasos parametrizados no hay capacidades que publicar: el asistente pinta el
+            // bloqueo, no un recorrido a medias.
+            return new WizardStateDto(
+                string.Empty, instance.TypeCode, 0, [], false, [TipoSinParametrizar],
+                instance.Status, TramiteStateMachine.TransitionsFrom(instance.Status))
+            {
+                TypeName = instance.TypeName,
+            };
+        }
 
         // Migración V1→V2 — un trámite MIGRADO en estado terminal es una FOTO de solo lectura: no se
         // capturó paso a paso en V2, así que no se somete al gating vivo del wizard (que exige datos
@@ -412,11 +907,15 @@ public sealed class GetWizardStateHandler(
         // expediente como completo/solo-lectura para que el visor lo muestre íntegro. Reutiliza
         // TramiteEstado.EsFinal (aprobado/anulado = inmutable, RF04) como predicado de "terminal".
         if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
-            return BuildReadonlySnapshot(instance, modalidad);
+            return BuildReadonlySnapshot(instance, conformation);
 
-        return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaDocumentoOtRequerido)
-            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride);
+        // ADR-0050 — mismo motor que el detalle del wizard, conformado desde el catálogo del tipo.
+        // El listado no resuelve por IO la matriz documental ni la prenda (una consulta por fila):
+        // el gate de documentos cae entonces a la completitud agregada, que es lo que este camino
+        // usaba antes de todos modos.
+        return BuildDynamicStateCore(
+            instance, conformation, identidadAprobadaPartes, prendaOtBlocker,
+            comparendosBloquean, runtExigido, documentRequirements: [], prendaVigente: null);
     }
 
     /// <summary>
@@ -427,267 +926,41 @@ public sealed class GetWizardStateHandler(
     /// devuelve [] para aprobado/anulado. No evalúa gates: el expediente ya vino tal cual de V1 y no debe
     /// someterse al gating del flujo vivo (que exige comercial/biométrica/FUR inexistentes en la foto).
     /// </summary>
+    /// <summary>
+    /// Foto de solo lectura de un trámite migrado en estado terminal: todos los pasos del tipo en
+    /// <c>complete</c> y sin acciones. Los pasos salen del catálogo, igual que en el camino vivo.
+    /// </summary>
     private static WizardStateDto BuildReadonlySnapshot(
-        ProcedureInstance instance, TramiteModalidadEntrada modalidad)
+        ProcedureInstance instance, WizardConformation conformation)
     {
-        var esTraspaso = modalidad == TramiteModalidadEntrada.Traspaso;
-        var totalPasos = esTraspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
-        var codigoTipologia = esTraspaso
-            ? TramiteTipologiaCatalog.CodigoTraspasoStandard
-            : TramiteTipologiaCatalog.CodigoMatriculaInicial;
-        var pasos = TipologiaMatrizCatalog.Get(codigoTipologia)?.Pasos ?? [];
-
-        var steps = new List<WizardStepDto>(totalPasos);
-        for (var p = 1; p <= totalPasos; p++)
-            steps.Add(new WizardStepDto(p, StepKey(esTraspaso, p), StepLabel(pasos, p), "complete", []));
+        var steps = conformation.Steps
+            .Select((st, i) => new WizardStepDto(
+                i + 1,
+                st.StepCode,
+                string.IsNullOrWhiteSpace(st.StepTitle) ? SectionLabel(st.PrimarySectionType) : st.StepTitle!,
+                "complete",
+                [])
+            {
+                SectionType = st.PrimarySectionType,
+                SectionTypes = st.SectionTypes,
+            })
+            .ToList();
 
         return new WizardStateDto(
-            esTraspaso ? TramiteModalidadEntradaCodes.Traspaso : TramiteModalidadEntradaCodes.MatriculaInicial,
-            instance.TipologiaCodigo,
-            totalPasos,
+            string.Empty,
+            instance.TypeCode,
+            steps.Count,
             steps,
             false,   // canSubmit: terminal, sin acciones
             [],      // blockers
             instance.Status,
-            TramiteStateMachine.TransitionsFrom(instance.Status));
-    }
-
-    // ---- Matrícula inicial (5 pasos) ----------------------------------------
-
-    private static WizardStateDto BuildMatricula(
-        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null)
-    {
-        var fv = FieldValues(instance);
-        var comprador = ParteOf(instance, "comprador");
-        var runtComprador = RuntOf(instance, "comprador");
-        var preflight = PreflightOf(instance);
-
-        var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
-        var riesgoAceptado = RiesgoAceptado(instance);
-
-        // Matrícula: la única parte (comprador) lleva la biométrica. Aprobación PER-PERSONA (documento),
-        // no por instancia: se referencia la identidad vigente de la persona en N trámites (HU #10350).
-        var identidadAprobada = identidadAprobadaPartes.Contains("comprador");
-
-        var ctx = new MatriculaGateContext
+            TramiteStateMachine.TransitionsFrom(instance.Status))
         {
-            VehiculoConsultado = HasVehiculoConsulta(fv),
-            Preflight = preflight,
-            Comprador = comprador,
-            RuntComprador = runtComprador,
-            IdentidadAprobada = identidadAprobada,
-            DocumentosObligatoriosCompletos = docsCompletos,
-            ForzarContinuar = false,
-            RiesgoPreflightAceptado = riesgoAceptado,
+            TypeName = instance.TypeName,
+            Capabilities = WizardCapabilitiesDto.From(
+                conformation.GateProfile, instance.FamilyCode,
+                instance.ProcedureType?.Code, RuntReportaGravamen(instance)),
         };
-
-        var maxAlcanzable = MatriculaGates.MaxPasoAlcanzable(ctx);
-        // Datos (pasos 1-3) completos: maxAlcanzable >= 4 ⇒ Consulta+Documentos+Comprador OK. A partir
-        // de aquí los pasos diferidos (4 Identidad, 5 FUR) son ALCANZABLES aunque la identidad esté
-        // pendiente — desacople HU #10350: el gestor recorre hasta el último paso y finaliza el borrador.
-        var datosCompletos = maxAlcanzable >= 4;
-        var pasos = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoMatriculaInicial)?.Pasos
-                    ?? [];
-
-        var steps = new List<WizardStepDto>(MatriculaGates.TotalPasos);
-        for (var p = 1; p <= MatriculaGates.TotalPasos; p++)
-        {
-            var reasons = new List<string>();
-            string status;
-
-            // 4 = Identidad (biométrica, slice 6): refleja el estado real de la biométrica del comprador.
-            if (p == 4)
-            {
-                if (!datosCompletos)
-                {
-                    status = "locked";
-                }
-                else if (identidadAprobada)
-                {
-                    status = "complete";
-                }
-                else
-                {
-                    status = "incomplete";
-                    reasons.Add("identidad_pendiente");
-                    reasons.Add(PendienteBiometria);
-                }
-            }
-            // 5 = Generar FUR (slice 7): diferido. Alcanzable en cuanto los datos están completos AUNQUE
-            // la identidad siga pendiente (HU #10350), para que sea el ÚLTIMO paso del wizard donde el
-            // gestor finaliza/radica. El FUR se genera automáticamente al validar la identidad (#10349).
-            else if (p == 5)
-            {
-                if (!datosCompletos)
-                {
-                    status = "locked";
-                }
-                else if (FurGenerado(instance))
-                {
-                    status = "complete";
-                }
-                else
-                {
-                    status = "incomplete";
-                    reasons.Add(FurPendiente);
-                }
-            }
-            else
-            {
-                // Pasos de datos 1-3: cascada estándar por gate (no alcanzable ⇒ locked).
-                var gate = MatriculaGates.PasoCompleto(p, ctx);
-                if (p > maxAlcanzable)
-                {
-                    status = "locked";
-                }
-                else if (gate.Ok)
-                {
-                    status = "complete";
-                }
-                else
-                {
-                    status = "incomplete";
-                    if (gate.Code is not null)
-                        reasons.Add(gate.Code);
-                }
-            }
-
-            steps.Add(new WizardStepDto(p, StepKey(false, p), StepLabel(pasos, p), status, reasons));
-        }
-
-        // N 03 (RF03): canSubmit/blockers reflejan el gate borrador→preparado — identidad del
-        // comprador aprobada/vigente + documentos obligatorios. El FUR/firma (paso 5, slice 7)
-        // sigue diferido. El frontend nunca recalcula gates: solo pinta estos códigos.
-        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado, identidadAprobada);
-        var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [4, 5]);
-
-        return new WizardStateDto(
-            TramiteModalidadEntradaCodes.MatriculaInicial,
-            instance.TipologiaCodigo,
-            MatriculaGates.TotalPasos,
-            steps,
-            canSubmit,
-            blockers,
-            instance.Status,
-            TramiteStateMachine.TransitionsFrom(instance.Status));
-    }
-
-    // ---- Traspaso estándar (6 pasos) ----------------------------------------
-
-    private static WizardStateDto BuildTraspaso(
-        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes,
-        bool? docsCompletosOverride = null, bool comparendosBloquean = true,
-        bool prendaDocumentoOtRequerido = false)
-    {
-        var fv = FieldValues(instance);
-        var vendedor = ParteOf(instance, "vendedor");
-        var comprador = ParteOf(instance, "comprador");
-        var runtVendedor = RuntOf(instance, "vendedor");
-        var runtComprador = RuntOf(instance, "comprador");
-        var preflight = PreflightOf(instance);
-        var simitComprador = SimitOf(instance, comprador, preflight);
-        var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
-        var riesgoAceptado = RiesgoAceptado(instance);
-
-        var ctx = new TraspasoGateContext
-        {
-            // El trámite ya existe (instancia creada) → radicado a efectos del wizard server-side.
-            TramiteRadicado = true,
-            // Consulta del vehículo por placa: sin ella el paso 1 queda incompleto (frontera),
-            // así un traspaso recién creado abre en el paso 1 y no en el 2.
-            VehiculoConsultado = HasVehiculoConsulta(fv),
-            Preflight = preflight,
-            PazSalvoImpuestoVerificado = PazSalvoVerificado(instance),
-            Vendedor = vendedor,
-            RuntVendedor = runtVendedor,
-            Comprador = comprador,
-            RuntComprador = runtComprador,
-            SimitComprador = simitComprador,
-            ValorVenta = instance.Commercial?.ValorVenta ?? 0m,
-            // Biométrica real (slice 6): traspaso requiere ambas partes. Aprobación PER-PERSONA (documento),
-            // referenciada de la identidad vigente de cada persona (HU #10350), no por instancia.
-            Biometria = new BiometriaSnapshot(
-                Vendedor: identidadAprobadaPartes.Contains("vendedor"),
-                Comprador: identidadAprobadaPartes.Contains("comprador")),
-            DocumentosObligatoriosCompletos = docsCompletos,
-            ForzarContinuar = false,
-            RiesgoPreflightAceptado = riesgoAceptado,
-            ComparendosBloquean = comparendosBloquean,
-        };
-
-        var maxAlcanzable = TraspasoGates.MaxPasoAlcanzable(ctx);
-        var pasos = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoTraspasoStandard)?.Pasos
-                    ?? [];
-
-        var steps = new List<WizardStepDto>(TraspasoGates.TotalPasos);
-        for (var p = 1; p <= TraspasoGates.TotalPasos; p++)
-        {
-            var gate = TraspasoGates.PasoCompleto(p, ctx);
-            var reasons = new List<string>();
-            string status;
-
-            // Flujo en cascada: un paso aún NO alcanzable (p > maxAlcanzable) se bloquea
-            // (locked, sin reasons), incluido el diferido (6 FUR). El sidebar no deja saltar
-            // a FUR sin haber completado los pasos previos. Solo si es alcanzable se evalúa.
-            if (p > maxAlcanzable)
-            {
-                status = "locked";
-            }
-            // 6 = Generar FUR: docs obligatorios + biométrica de AMBAS partes (slice 6) +
-            // firma de AMBAS partes (slice 7) + FUR generado. Completa solo cuando todo está listo;
-            // emite las razones precisas de lo que falta.
-            else if (p == 6)
-            {
-                // Paso 6 = Generar FUR: biométrica de AMBAS partes (slice 6) + FUR generado. Los
-                // documentos ya se exigen en el paso 4 (HU #10935, después de los actores); aquí NO
-                // se listan como reason. El faltante de docs sigue vetando el submit vía el blocker
-                // global documentos_incompletos.
-                //
-                // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
-                // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
-                // firmas. El estado de firma queda informativo en el preflight `firma_compraventa`
-                // (DerivaFirmaCompraventaCheck, warn/green), sin bloquear canSubmit.
-                var biometriaOk = TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok;
-                var furOk = FurGenerado(instance);
-
-                if (!biometriaOk)
-                    reasons.Add(PendienteBiometria);
-                if (!furOk)
-                    reasons.Add(FurPendiente);
-
-                status = (biometriaOk && furOk) ? "complete" : "incomplete";
-            }
-            else if (gate.Ok)
-            {
-                status = "complete";
-            }
-            else
-            {
-                // Alcanzable (p <= maxAlcanzable) pero con gate sin cumplir → incomplete.
-                status = "incomplete";
-                if (gate.Code is not null)
-                    reasons.Add(gate.Code);
-            }
-
-            steps.Add(new WizardStepDto(p, StepKey(true, p), StepLabel(pasos, p), status, reasons));
-        }
-
-        // N 03 (RF03): mismo gate de preparación que matrícula — la identidad exigida es la del
-        // comprador (endurecer vendedor+firma en traspaso sigue como deuda M5, ver SubmitGate).
-        // CF-06 (HU #10881): + override OT del documento de prenda (independiente del gravamen).
-        var blockers = BlockersFrom(
-            preflight, docsCompletos, riesgoAceptado, ctx.Biometria.Comprador, prendaDocumentoOtRequerido);
-        var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [6]);
-
-        return new WizardStateDto(
-            TramiteModalidadEntradaCodes.Traspaso,
-            instance.TipologiaCodigo,
-            TraspasoGates.TotalPasos,
-            steps,
-            canSubmit,
-            blockers,
-            instance.Status,
-            TramiteStateMachine.TransitionsFrom(instance.Status));
     }
 
     // ---- Composición de canSubmit / blockers --------------------------------
@@ -730,7 +1003,7 @@ public sealed class GetWizardStateHandler(
         bool documentosCompletos,
         bool riesgoAceptado,
         bool identidadAprobada,
-        bool prendaDocumentoOtRequerido = false)
+        string? prendaOtBlocker = null)
     {
         var blockers = new List<string>(5);
         if (preflight?.ProviderError == true)
@@ -742,9 +1015,12 @@ public sealed class GetWizardStateHandler(
         if (!identidadAprobada)
             blockers.Add(TramiteEstadoErrores.IdentidadNoAprobada);
         // CF-06 (HU #10881) — override del OT: exige el documento de prenda con independencia del
-        // semáforo de gravámenes/decisión.
-        if (prendaDocumentoOtRequerido)
-            blockers.Add(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        // semáforo de gravámenes (sí de la decisión: ver PrendaGate.EvaluateOtOverride). Código
+        // PROPIO para que el banner pueda decir que el origen es una regla del organismo y no la
+        // decisión del gestor — el gate de preparación emite exactamente el mismo por este camino,
+        // incluido el prenda_decision_requerida de cuando aún no hay decisión que evaluar.
+        if (prendaOtBlocker is not null)
+            blockers.Add(prendaOtBlocker);
         return blockers;
     }
 
@@ -758,7 +1034,7 @@ public sealed class GetWizardStateHandler(
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
 
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.Completo ?? true;
@@ -777,7 +1053,7 @@ public sealed class GetWizardStateHandler(
     /// </summary>
     public static PreflightCheckDto? DerivaFirmaCompraventaCheck(ProcedureInstance instance)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         if (!string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase))
             return null;
 
@@ -820,7 +1096,12 @@ public sealed class GetWizardStateHandler(
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, actorType, StringComparison.OrdinalIgnoreCase));
-        return a is null ? null : new ParteDatos(a.FullName, a.DocumentNumber, a.Email);
+        if (a is null)
+            return null;
+
+        // HU #11593 — ciudad/dirección viven en actor.metadata (JSON); el teléfono en la columna.
+        var (ciudad, direccion, _, _) = ActorMetadataReader.Parse(a.Metadata);
+        return new ParteDatos(a.FullName, a.DocumentNumber, a.Email, ciudad, direccion, a.Phone);
     }
 
     /// <summary>
@@ -828,13 +1109,71 @@ public sealed class GetWizardStateHandler(
     /// se hidrata en field_values (Slice 5) sin entidad propia; el documento del snapshot coincide
     /// con el del actor por construcción (el gate normaliza y compara documentos).
     /// </summary>
-    private static RuntSnapshot? RuntOf(ProcedureInstance instance, string actorType)
+    /// <summary>
+    /// Arma la exigencia de RUNT del trámite: los actores cuyo perfil de validación tiene
+    /// <c>requiresRunt</c> y los documentos con consulta evidenciada. Devuelve
+    /// <see cref="RuntConsultaExigida.Ninguna"/> si el tipo no exige RUNT a nadie, para no pagar la
+    /// lectura de eventos cuando no aplica.
+    /// </summary>
+    private async Task<RuntConsultaExigida?> ResolveRuntExigidoAsync(
+        ProcedureInstance instance, Guid tenantId, CancellationToken ct)
+    {
+        if (typeRepo is null)
+            return null;
+
+        var tipo = await typeRepo.GetByIdWithDetailsAsync(instance.ProcedureTypeId, ct).ConfigureAwait(false);
+        if (tipo is null)
+            return null;
+
+        var actores = tipo.ConformationRules
+            .Where(r => r.IsActive && RequiereRunt(r.ValidationProfile))
+            .Select(r => RuntConsultaExigida.ActorTypeDeEntidad(r.ProcedureEntity?.Code))
+            .Where(a => a is not null)
+            .Select(a => a!)
+            .ToList();
+
+        if (actores.Count == 0)
+            return RuntConsultaExigida.Ninguna;
+
+        var consultados = await repo
+            .ListRuntConsultedDocumentKeysAsync(instance.Id, tenantId, ct)
+            .ConfigureAwait(false);
+
+        return new RuntConsultaExigida(actores, consultados);
+    }
+
+    /// <summary>¿El perfil de validación del actor marca <c>requiresRunt</c>?</summary>
+    private static bool RequiereRunt(string? validationProfile)
+    {
+        if (string.IsNullOrWhiteSpace(validationProfile))
+            return false;
+        try
+        {
+            var node = JsonNode.Parse(validationProfile);
+            return node?["requiresRunt"]?.GetValue<bool>() == true;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            // Perfil ilegible: no se inventa una exigencia que el configurador no expresó.
+            return false;
+        }
+    }
+
+    private static RuntSnapshot? RuntOf(
+        ProcedureInstance instance, string actorType, RuntConsultaExigida? exigencia = null)
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, actorType, StringComparison.OrdinalIgnoreCase));
         if (a is null || string.IsNullOrWhiteSpace(a.DocumentNumber))
             return null;
-        return new RuntSnapshot(Consultado: true, Documento: a.DocumentNumber);
+
+        // Cuando el tipo de trámite marca este actor con requiresRunt, la consulta debe estar
+        // EVIDENCIADA para el mismo documento; sin evidencia el gate del paso no pasa. Sin exigencia
+        // configurada se conserva el comportamiento anterior (documento digitado ⇒ consultado).
+        var consultado = exigencia?.Exige(actorType) != true
+            || exigencia.FueConsultado(a.DocumentType, a.DocumentNumber);
+
+        return new RuntSnapshot(Consultado: consultado, Documento: a.DocumentNumber);
     }
 
     /// <summary>
@@ -888,7 +1227,12 @@ public sealed class GetWizardStateHandler(
             c.Key.Contains("impuesto", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(c.Status, "unknown", StringComparison.OrdinalIgnoreCase));
         var providerError = checks.Any(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase));
-        return new PreflightSnapshot(latest.Overall, impuestoUnknown, providerError);
+        // El vehículo no existe en el RUNT: la fuente respondió, pero no hay vehículo que tramitar.
+        // Bloqueo DURO igual que providerError (ver PreflightSnapshot).
+        var vehiculoNoEncontrado = checks.Any(c =>
+            string.Equals(c.Key, "vehiculo", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase));
+        return new PreflightSnapshot(latest.Overall, impuestoUnknown, providerError, vehiculoNoEncontrado);
     }
 
     /// <summary>Checks del último preflight (por fecha); lista vacía si aún no se ha corrido.</summary>
@@ -927,9 +1271,6 @@ public sealed class GetWizardStateHandler(
 
     // ---- Etiquetas y keys de pasos ------------------------------------------
 
-    private static string StepLabel(IReadOnlyList<PasoTipologia> pasos, int index) =>
-        pasos.FirstOrDefault(p => p.Paso == index)?.Titulo ?? $"Paso {index}";
-
     /// <summary>
     /// HU #10879 — ¿la consulta del vehículo está completa? (VIN o placa hidratados en field_values).
     /// Es la MISMA señal que abre el paso 1 del wizard; se expone para el gate de "avanzar de paso"
@@ -949,84 +1290,68 @@ public sealed class GetWizardStateHandler(
     /// </summary>
     /// <summary>
     /// CF-02 (HU #10883, AC3) — esqueleto del wizard para el paso 1 cuando el trámite AÚN NO EXISTE.
-    /// Mismos pasos, keys y etiquetas que el wizard real (misma fuente: el catálogo de la tipología),
-    /// con el paso 1 abierto y el resto bloqueado: la cascada de gates no es evaluable sin instancia,
-    /// y el trámite se crea justo al avanzar al paso 2. Devuelve <c>null</c> si la modalidad no existe.
+    /// Mismos pasos, claves y etiquetas que el wizard real —salen del mismo catálogo— con el paso 1
+    /// abierto y el resto bloqueado: la cascada de gates no es evaluable sin instancia, y el trámite
+    /// se crea justo al avanzar al paso 2.
+    /// <para>ADR-0050: se construye desde el TIPO, no desde la modalidad, así que el preview existe
+    /// para cualquier tipo parametrizado y no solo para matrícula y traspaso.</para>
     /// </summary>
-    public static WizardStateDto? BuildPreview(string? modalidadCodigo)
+    /// <param name="type">Tipo con sus pasos y secciones cargados.</param>
+    public static WizardStateDto? BuildPreview(ProcedureType? type)
     {
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(modalidadCodigo);
-        if (modalidad is null)
+        if (type is null)
             return null;
 
-        var traspaso = modalidad == TramiteModalidadEntrada.Traspaso;
-        var total = traspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
-        var pasos = TipologiaMatrizCatalog.Get(
-                        traspaso
-                            ? TramiteTipologiaCatalog.CodigoTraspasoStandard
-                            : TramiteTipologiaCatalog.CodigoMatriculaInicial)?.Pasos
-                    ?? [];
+        var conformation = FromCatalogSteps(type);
+        if (conformation is null)
+            return null;
 
-        var steps = new List<WizardStepDto>(total);
-        for (var p = 1; p <= total; p++)
-        {
-            steps.Add(new WizardStepDto(
-                p,
-                StepKey(traspaso, p),
-                StepLabel(pasos, p),
-                p == 1 ? "incomplete" : "locked",
-                []));
-        }
+        var steps = conformation.Steps
+            .Select((st, i) => new WizardStepDto(
+                i + 1,
+                st.StepCode,
+                string.IsNullOrWhiteSpace(st.StepTitle) ? SectionLabel(st.PrimarySectionType) : st.StepTitle!,
+                i == 0 ? "incomplete" : "locked",
+                [])
+            {
+                SectionType = st.PrimarySectionType,
+                SectionTypes = st.SectionTypes,
+                SectionConfig = BuildSectionConfig(
+                    new DynamicWizardStepResult(i + 1, st.StepCode, st.PrimarySectionType, "locked", []),
+                    conformation.GateProfile),
+            })
+            .ToList();
 
         return new WizardStateDto(
-            traspaso ? TramiteModalidadEntradaCodes.Traspaso : TramiteModalidadEntradaCodes.MatriculaInicial,
-            traspaso ? TramiteTipologiaCatalog.CodigoTraspasoStandard : TramiteTipologiaCatalog.CodigoMatriculaInicial,
-            total,
+            string.Empty,
+            type.Code,
+            steps.Count,
             steps,
             CanSubmit: false,
             Blockers: [],
             TramiteEstado.Borrador,
-            AllowedTransitions: []);
+            AllowedTransitions: [])
+        {
+            // El paso 1 ya necesita saber por qué identificador entra el vehículo: es la diferencia
+            // entre pedir VIN o placa, y era lo primero que el asistente deducía de la modalidad.
+            TypeName = type.Name,
+            // Paso 1 sin expediente: todavía no hay consulta RUNT, así que la prenda solo la exige el
+            // tipo que ES el gravamen. En cuanto el vehículo se consulte, el estado se recalcula.
+            Capabilities = WizardCapabilitiesDto.From(
+                conformation.GateProfile, type.Family, type.Code, runtReportaGravamen: false),
+        };
     }
 
+    /// <summary>
+    /// HU #10879 — claves ORDENADAS de los pasos del wizard de la instancia, para validar que el paso
+    /// que se intenta persistir es uno legítimo. Salen del catálogo del tipo (ADR-0050), que es la
+    /// misma fuente que usa el motor: antes se derivaban de la modalidad y eran siempre 5 o 6.
+    /// </summary>
     public static IReadOnlyList<string> StepKeysFor(ProcedureInstance instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
-        var traspaso = modalidad == TramiteModalidadEntrada.Traspaso;
-        var total = traspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
-
-        var keys = new List<string>(total);
-        for (var p = 1; p <= total; p++)
-            keys.Add(StepKey(traspaso, p));
-        return keys;
+        var conformation = FromCatalog(instance);
+        return conformation is null ? [] : [.. conformation.Steps.Select(st => st.StepCode)];
     }
-
-    // HU #10935 — orden del wizard: los documentos van DESPUÉS de la información del comprador y/o
-    // vendedor (traspaso: consulta → vendedor → comprador → documentos → comercial → fur;
-    // matrícula: consulta_vin → comprador → documentos → identidad → fur). Este mapeo índice→key
-    // debe seguir el MISMO orden que la cascada de gates (TraspasoGates/MatriculaGates.PasoCompleto).
-    private static string StepKey(bool traspaso, int index) =>
-        traspaso
-            ? index switch
-            {
-                1 => "consulta",
-                2 => "vendedor",
-                3 => "comprador",
-                4 => "documentos",
-                5 => "comercial",
-                6 => "fur",
-                _ => $"paso_{index}",
-            }
-            : index switch
-            {
-                1 => "consulta_vin",
-                2 => "comprador",
-                3 => "documentos",
-                4 => "identidad",
-                5 => "fur",
-                _ => $"paso_{index}",
-            };
 }

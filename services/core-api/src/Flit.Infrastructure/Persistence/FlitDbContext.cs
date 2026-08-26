@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Quipux;
@@ -53,6 +54,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    /// <summary>
+    /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
+    /// radicar: este solo decide si el mandato lleva bloque de firma del mandatario.
+    /// </summary>
+    public DbSet<CompanyTransitOfficeAgreement> CompanyTransitOfficeAgreements =>
+        Set<CompanyTransitOfficeAgreement>();
+
     // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
     public DbSet<TenantTransitOfficeConsultationRestriction> TenantTransitOfficeConsultationRestrictions =>
         Set<TenantTransitOfficeConsultationRestriction>();
@@ -61,14 +69,39 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantTransitOfficeBlockingPolicy> TenantTransitOfficeBlockingPolicies =>
         Set<TenantTransitOfficeBlockingPolicy>();
 
+    /// <summary>
+    /// Opt-out de documento de prenda obligatorio por compañía + OT.
+    /// Ausencia de fila = obligatorio; <c>document_optional=true</c> = opcional.
+    /// </summary>
+    public DbSet<TenantTransitOfficePrendaDocumentPolicy> TenantTransitOfficePrendaDocumentPolicies =>
+        Set<TenantTransitOfficePrendaDocumentPolicy>();
+
     // ── Admin OT — mandatarios (firmantes de mandato) y sus compañías (ADR-0023) ──
     public DbSet<MandateSigner> MandateSigners => Set<MandateSigner>();
 
     public DbSet<MandateSignerCompany> MandateSignerCompanies => Set<MandateSignerCompany>();
 
+    /// <summary>
+    /// HU #11201 — organismos donde aplica cada mandatario. Fuente de verdad desde este cambio;
+    /// <c>MandateSigner.TransitOfficeId</c> queda como organismo primario para compatibilidad.
+    /// </summary>
+    public DbSet<MandateSignerTransitOffice> MandateSignerTransitOffices =>
+        Set<MandateSignerTransitOffice>();
+
+    /// <summary>
+    /// Empresas representadas para las que firma cada mandatario, por organismo. Distinto de
+    /// <see cref="MandateSignerCompanies"/>, que lleva la compañía GESTORA.
+    /// </summary>
+    public DbSet<MandateSignerRepresentedCompany> MandateSignerRepresentedCompanies =>
+        Set<MandateSignerRepresentedCompany>();
+
     // ── Admin OT — configuración de mandato por OT (ADR-0036, HU #10912) ───────────
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();
+
+    /// <summary>Tipo de mandato (3) por compañía gestora × OT.</summary>
+    public DbSet<CompanyOtMandateRuleEntity> CompanyOtMandateRules =>
+        Set<CompanyOtMandateRuleEntity>();
 
     // ── Admin Compañías — baúl de firmas precargadas (HU #10642, ADR-0025) ─────────
     public DbSet<SignatureVaultEntity> SignatureVault => Set<SignatureVaultEntity>();
@@ -90,16 +123,50 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<CompanyDeedCompanyEntity> CompanyDeedCompanies => Set<CompanyDeedCompanyEntity>();
 
+    // HU #11313 (Feature #11309, ADR-0042) — versiones de documento personalizado por compañía.
+    public DbSet<CompanyPersonalizedDocumentEntity> CompanyPersonalizedDocuments => Set<CompanyPersonalizedDocumentEntity>();
+
     // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
     public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
         Set<AdminIdentityValidationEntity>();
 
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
+    public DbSet<VehicleColor> VehicleColors => Set<VehicleColor>();
+
+    /// <summary>Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019).</summary>
+    public DbSet<VehicleServiceType> VehicleServiceTypes => Set<VehicleServiceType>();
+
+    /// <summary>
+    /// Catálogo global de causales de rechazo (SuperAdmin). Sustituye al motivo escrito a mano
+    /// como dato agregable del reporte de motivos.
+    /// </summary>
+    public DbSet<RejectionReason> RejectionReasons => Set<RejectionReason>();
+
+    /// <summary>Causales marcadas por el organismo en cada evento de rechazo.</summary>
+    public DbSet<ProcedureInstanceRejectionReason> ProcedureInstanceRejectionReasons =>
+        Set<ProcedureInstanceRejectionReason>();
+
     // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────
     public DbSet<TransitOfficeProfile> TransitOfficeProfiles => Set<TransitOfficeProfile>();
 
     public DbSet<OtFeatureFlagEntity> OtFeatureFlags => Set<OtFeatureFlagEntity>();
+
+    // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
+    public DbSet<UserUiPreferenceEntity> UserUiPreferences => Set<UserUiPreferenceEntity>();
+
+    // Consultas que cada usuario del organismo arma y guarda sobre los trámites.
+    public DbSet<OtSavedQueryEntity> OtSavedQueries => Set<OtSavedQueryEntity>();
+
+    // Lo mismo, del otro lado del trámite: las que guarda un usuario de la empresa gestora.
+    public DbSet<CompanySavedQueryEntity> CompanySavedQueries => Set<CompanySavedQueryEntity>();
+
+    // Las que guarda SuperAdmin en modo «todas las compañías»: sin tenant, compartidas entre todo
+    // el equipo de SuperAdmin.
+    public DbSet<SuperAdminSavedQueryEntity> SuperAdminSavedQueries => Set<SuperAdminSavedQueryEntity>();
+
+    // Consultas que un usuario de la empresa arma y guarda sobre sus propios pre-trámites de ICT.
+    public DbSet<IctSavedQueryEntity> IctSavedQueries => Set<IctSavedQueryEntity>();
 
     // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
     public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
@@ -161,11 +228,22 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — biométrica (Slice 6, mock)
     public DbSet<ProcedureInstanceBiometricValidation> ProcedureInstanceBiometricValidations => Set<ProcedureInstanceBiometricValidation>();
 
+    // Trámites — marcas de firma a posteriori (HU #11196): el lote que se firma cuando el representante valida
+    public DbSet<DeferredSignatureMark> DeferredSignatureMarks => Set<DeferredSignatureMark>();
+
     // Trámites — outbox de eventos de validación de identidad (HU #10233, fase 2 event-driven)
     public DbSet<IdentityValidationOutbox> IdentityValidationOutbox => Set<IdentityValidationOutbox>();
 
     // Trámites — outbox de cambios de estado del trámite (N 03 RNF01, ADR-0022)
     public DbSet<ProcedureStateChangeOutbox> ProcedureStateChangeOutbox => Set<ProcedureStateChangeOutbox>();
+
+    // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
+    public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
+        Set<ProcedureStateChangeEmailDispatch>();
+
+    // Trámites — cola de despachos de correo al asignar placa (HU #11484, ADR-0046)
+    public DbSet<PlateAssignmentEmailDispatch> PlateAssignmentEmailDispatches =>
+        Set<PlateAssignmentEmailDispatch>();
 
     // Trámites — bitácora ÚNICA del ciclo de validación de identidad (envío/webhook/descifrado/errores)
     public DbSet<IdentityValidationAuditEvent> IdentityValidationAudits => Set<IdentityValidationAuditEvent>();
@@ -186,6 +264,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // (HU #10878, Feature #10862, CF-04, ADR-0030/ADR-0031).
     public DbSet<ExternalQueryCacheEntry> ExternalQueryCache => Set<ExternalQueryCacheEntry>();
     public DbSet<PersonDataConsent> PersonDataConsents => Set<PersonDataConsent>();
+
+    // Trámites — certificaciones externas en modelo canónico persistido (HU #11302, Feature #11301,
+    // ADR-0041). Almacén propio para SOAT, RTM y registro mercantil: reemplaza las llaves sueltas de
+    // field_values, que son inmutables fuera de borrador y por tanto irreparables, y admite el
+    // histórico que el RUNT ya entrega. El payload crudo habilita reprocesar un mapeo corregido sin
+    // volver a pagar la consulta.
+    public DbSet<ExternalQueryPayload> ExternalQueryPayloads => Set<ExternalQueryPayload>();
+    public DbSet<VehicleSoatPolicy> VehicleSoatPolicies => Set<VehicleSoatPolicy>();
+    public DbSet<VehicleRtmInspection> VehicleRtmInspections => Set<VehicleRtmInspection>();
+    public DbSet<CompanyRegistration> CompanyRegistrations => Set<CompanyRegistration>();
 
     // Trámites — entidad persona/sujeto a nivel tenant para prevalidaciones de identidad
     // (HU #10865, Feature #10864, CF-00, ADR-0030).
@@ -210,6 +298,17 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Quipux — configuración operativa (fila única, secretos cifrados). Entidad de persistencia:
     // el dominio los ve en claro, la BD solo cifrados.
     internal DbSet<QuipuxSettingsRow> QuipuxSettings => Set<QuipuxSettingsRow>();
+
+    // Banco de pruebas de notificaciones (HU #11365) — fila única y global de plataforma: buzón de
+    // pruebas y marca del último envío. Sin tenant_id (y por tanto sin RLS) a propósito: lo gestiona
+    // el SuperAdmin, no un cliente.
+    internal DbSet<Entities.Admin.NotificationTestSettingsRow> NotificationTestSettings =>
+        Set<Entities.Admin.NotificationTestSettingsRow>();
+
+    // Bitácora append-only de intentos de envío de notificación (HU #11363, esquema de la
+    // HU #11357). tenant_id NOT NULL en BD — ver NotificationDeliveryLoggingEmailSender.
+    internal DbSet<Entities.Admin.NotificationDeliveryLogEntity> NotificationDeliveryLogs =>
+        Set<Entities.Admin.NotificationDeliveryLogEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

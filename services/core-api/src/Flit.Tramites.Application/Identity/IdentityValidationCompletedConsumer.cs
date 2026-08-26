@@ -4,6 +4,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.Identity;
 
@@ -59,8 +60,8 @@ public sealed class IdentityValidationCompletedConsumer(
 
         foreach (var instance in instances)
         {
-            var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
-                             == TramiteModalidadEntrada.Traspaso;
+            var esTraspaso = instance.Family
+                             == ProcedureFamily.Traspaso;
 
             string? error;
             string accion;
@@ -94,7 +95,7 @@ public sealed class IdentityValidationCompletedConsumer(
                 {
                     validation_id = evt.ValidationId,
                     parte,
-                    modalidad = instance.ModalidadEntrada,
+                    modalidad = instance.FamilyCode,
                     accion,
                 }),
                 CreatedAt = DateTimeOffset.UtcNow,

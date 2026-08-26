@@ -58,7 +58,7 @@ public sealed class SolicitarFirmaHandler(IProcedureInstanceRepository repo, ISi
             return (null, "not_found");
 
         // La firma de la compraventa solo aplica a traspaso_standard.
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         if (!string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase))
             return (null, "no_aplica");
 

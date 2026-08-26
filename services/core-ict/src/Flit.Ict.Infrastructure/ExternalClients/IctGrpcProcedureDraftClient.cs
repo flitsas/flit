@@ -21,89 +21,12 @@ public sealed partial class IctGrpcProcedureDraftClient(
 {
     public async Task<CreateDraftResult> CreateDraftAsync(
         ExternalIntegrationMaster master,
-        string procedureTypeCode,
+        DraftProcedureType procedureType,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(master);
 
-        var request = new CreateDraftFromIctRequest
-        {
-            TenantId = master.TenantId.ToString(),
-            ProcedureTypeCode = procedureTypeCode,
-            CreatedByUserId = (master.CreatedBy ?? Guid.Empty).ToString(),
-            TransitOfficeId = string.Empty,
-            Origin = "ict",
-            ExternalRef = master.Id.ToString(),
-        };
-
-        // Traspaso: el organismo de tránsito lo fija el RUNT (paridad v1), no el código del cliente. Se
-        // envía el nombre que capturó el orquestador de la consulta VEHICLE; core-api lo resuelve al
-        // transit_office_id del catálogo (grants del tenant). Matrícula (1/2) mantiene el comportamiento
-        // actual (transit_office_id vacío → el gestor asigna el OT).
-        // TODO(ICT-OT-MATRICULA): en matrícula, resolver el OT por el traffic_secretary_code del cliente.
-        var esTraspaso = procedureTypeCode?.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase) == true;
-        if (esTraspaso && !string.IsNullOrWhiteSpace(master.RuntTransitOfficeName))
-        {
-            request.TransitOfficeName = master.RuntTransitOfficeName;
-        }
-
-        if (!string.IsNullOrWhiteSpace(master.Vin))
-        {
-            request.FieldValues.Add(new FieldValue { FieldKey = "vin", ValueText = master.Vin });
-        }
-
-        if (!string.IsNullOrWhiteSpace(master.Plate))
-        {
-            request.FieldValues.Add(new FieldValue { FieldKey = "plate", ValueText = master.Plate });
-        }
-
-        foreach (var actor in master.Actors)
-        {
-            request.Actors.Add(new Actor
-            {
-                ActorType = actor.ActorType,
-                DocumentType = actor.DocumentType,
-                DocumentNumber = actor.DocumentNumber,
-                FullName = $"{actor.Name} {actor.FirstLastName} {actor.SecondLastName}".Trim(),
-                Email = actor.Email,
-                Phone = actor.Phone,
-                Metadata = BuildActorMetadata(actor),
-            });
-        }
-
-        if (master.TransactionType == 3)
-        {
-            request.Commercial = new CommercialData
-            {
-                ValorVenta = master.SellingPrice.ToString(CultureInfo.InvariantCulture),
-                SellingDate = master.SellingDate,
-            };
-        }
-
-        // Adjuntos por REFERENCIA: el binario ya está en el File Manager corporativo (mismo backend que
-        // core-api); se envía solo la metadata + storage_path para que core-api registre el mismo objeto.
-        // core-ict resuelve el DocTipo (dueño de la tabla de asociación); core-api lo registra tal cual.
-        foreach (var attachment in master.Attachments)
-        {
-            if (string.IsNullOrWhiteSpace(attachment.StoragePath) || string.IsNullOrWhiteSpace(attachment.Sha256))
-            {
-                // Sin objeto durable ni hash no hay nada que referenciar (core-api los exige). Se registra
-                // el descarte para no perderlo en silencio; la fila ICT persiste como fuente de verdad.
-                Log.AttachmentSkipped(logger, attachment.IdAttachment, master.Id);
-                continue;
-            }
-
-            var docType = await docTypeResolver.ResolveDocTypeAsync(master.TransactionType, attachment.IdAttachment, ct);
-            request.Attachments.Add(new AttachmentRef
-            {
-                DocumentType = docType,
-                Filename = attachment.Filename ?? string.Empty,
-                MimeType = string.IsNullOrWhiteSpace(attachment.MimeType) ? "application/pdf" : attachment.MimeType,
-                SizeBytes = attachment.SizeBytes,
-                Sha256 = attachment.Sha256,
-                StoragePath = attachment.StoragePath,
-            });
-        }
+        var request = await BuildRequestAsync(master, procedureType, docTypeResolver, logger, ct);
 
         try
         {
@@ -133,6 +56,105 @@ public sealed partial class IctGrpcProcedureDraftClient(
             Log.GrpcFailed(logger, ex.StatusCode.ToString(), ex.Status.Detail, master.Id, ex);
             return new CreateDraftResult(null, null, null, "grpc_unavailable");
         }
+    }
+
+    /// <summary>
+    /// Arma el request del borrador. Está separado del envío porque es donde viven las decisiones de
+    /// ADR-0050: qué tipo se materializa, de dónde sale el organismo de tránsito y si el borrador
+    /// lleva datos comerciales. Todas las declara <c>ict.procedure_type_mapping</c>; ninguna se
+    /// deduce ya del texto del código ni del número de transacción.
+    /// </summary>
+    internal static async Task<CreateDraftFromIctRequest> BuildRequestAsync(
+        ExternalIntegrationMaster master,
+        DraftProcedureType procedureType,
+        IAttachmentDocTypeResolver docTypeResolver,
+        ILogger? log = null,
+        CancellationToken ct = default)
+    {
+        var request = new CreateDraftFromIctRequest
+        {
+            TenantId = master.TenantId.ToString(),
+            ProcedureTypeCode = procedureType.Code,
+            CreatedByUserId = (master.CreatedBy ?? Guid.Empty).ToString(),
+            TransitOfficeId = string.Empty,
+            Origin = "ict",
+            ExternalRef = master.Id.ToString(),
+        };
+
+        // Hay tipos cuyo organismo de tránsito lo fija el RUNT (paridad v1 de traspaso) y no el código
+        // del cliente: se envía el nombre que capturó el orquestador de la consulta VEHICLE y core-api
+        // lo resuelve al transit_office_id del catálogo (grants del tenant). En los demás va vacío y lo
+        // asigna el gestor. Quién es cuál lo declara el mapeo, no el texto del código (ADR-0050).
+        // TODO(ICT-OT-MATRICULA): en matrícula, resolver el OT por el traffic_secretary_code del cliente.
+        if (procedureType.ResolvesTransitOfficeFromRunt && !string.IsNullOrWhiteSpace(master.RuntTransitOfficeName))
+        {
+            request.TransitOfficeName = master.RuntTransitOfficeName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(master.Vin))
+        {
+            request.FieldValues.Add(new FieldValue { FieldKey = "vin", ValueText = master.Vin });
+        }
+
+        if (!string.IsNullOrWhiteSpace(master.Plate))
+        {
+            request.FieldValues.Add(new FieldValue { FieldKey = "plate", ValueText = master.Plate });
+        }
+
+        foreach (var actor in master.Actors)
+        {
+            request.Actors.Add(new Actor
+            {
+                ActorType = actor.ActorType,
+                DocumentType = actor.DocumentType,
+                DocumentNumber = actor.DocumentNumber,
+                FullName = $"{actor.Name} {actor.FirstLastName} {actor.SecondLastName}".Trim(),
+                Email = actor.Email,
+                Phone = actor.Phone,
+                Metadata = BuildActorMetadata(actor),
+            });
+        }
+
+        // El valor comercial es una capacidad del tipo (el FUR lo exige en traspaso), no del número 3.
+        if (procedureType.RequiresCommercialValue)
+        {
+            request.Commercial = new CommercialData
+            {
+                ValorVenta = master.SellingPrice.ToString(CultureInfo.InvariantCulture),
+                SellingDate = master.SellingDate,
+            };
+        }
+
+        // Adjuntos por REFERENCIA: el binario ya está en el File Manager corporativo (mismo backend que
+        // core-api); se envía solo la metadata + storage_path para que core-api registre el mismo objeto.
+        // core-ict resuelve el DocTipo (dueño de la tabla de asociación); core-api lo registra tal cual.
+        foreach (var attachment in master.Attachments)
+        {
+            if (string.IsNullOrWhiteSpace(attachment.StoragePath) || string.IsNullOrWhiteSpace(attachment.Sha256))
+            {
+                // Sin objeto durable ni hash no hay nada que referenciar (core-api los exige). Se registra
+                // el descarte para no perderlo en silencio; la fila ICT persiste como fuente de verdad.
+                if (log is not null)
+                {
+                    Log.AttachmentSkipped(log, attachment.IdAttachment, master.Id);
+                }
+                continue;
+            }
+
+            var docType = await docTypeResolver.ResolveDocTypeAsync(master.TransactionType, attachment.IdAttachment, ct);
+            request.Attachments.Add(new AttachmentRef
+            {
+                DocumentType = docType,
+                Filename = attachment.Filename ?? string.Empty,
+                MimeType = string.IsNullOrWhiteSpace(attachment.MimeType) ? "application/pdf" : attachment.MimeType,
+                SizeBytes = attachment.SizeBytes,
+                Sha256 = attachment.Sha256,
+                StoragePath = attachment.StoragePath,
+            });
+        }
+
+
+        return request;
     }
 
     public async Task<DraftActionResult> PauseDraftAsync(

@@ -8,8 +8,35 @@ public sealed class UserRoleAssignmentRepository(FlitDbContext db) : IUserRoleAs
 {
     public async Task<bool> UserBelongsToTenantAsync(Guid userId, Guid tenantId, CancellationToken ct)
     {
-        return await db.Users
-            .AnyAsync(u => u.Id == userId && u.HomeTenantId == tenantId && u.DeletedAt == null, ct);
+        // home_tenant_id es opcional en BD y hay usuarios legítimos sin él; para esos, la
+        // pertenencia la dan sus asignaciones de rol activas. Antes solo se miraba HomeTenantId
+        // y cambiarles el rol devolvía OUT_OF_SCOPE aunque el usuario apareciera en el listado
+        // del tenant (que se arma justamente desde las asignaciones).
+        return await db.Users.AnyAsync(
+            u => u.Id == userId && u.DeletedAt == null
+                && (u.HomeTenantId == tenantId
+                    || db.UserRoleAssignments.Any(
+                        a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null)),
+            ct);
+    }
+
+    public async Task<Guid?> GetUserTenantAsync(Guid userId, CancellationToken ct)
+    {
+        var homeTenantId = await db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId && u.DeletedAt == null)
+            .Select(u => u.HomeTenantId)
+            .FirstOrDefaultAsync(ct);
+
+        if (homeTenantId is not null)
+            return homeTenantId;
+
+        return await db.UserRoleAssignments
+            .AsNoTracking()
+            .Where(a => a.UserId == userId && a.DeletedAt == null)
+            .OrderBy(a => a.AssignedAt)
+            .Select(a => (Guid?)a.TenantId)
+            .FirstOrDefaultAsync(ct);
     }
 
     public async Task<RoleForAssignmentSnapshot?> GetActiveRoleAsync(Guid roleId, CancellationToken ct)

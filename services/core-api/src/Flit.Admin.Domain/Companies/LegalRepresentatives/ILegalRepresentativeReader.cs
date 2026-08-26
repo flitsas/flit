@@ -75,4 +75,14 @@ public interface ILegalRepresentativeReader
         Guid tenantId,
         string documentNumber,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Proyección ligera (nombre + documento) de representantes por id — consumo del wizard al listar
+    /// escrituras vigentes. Solo ids del tenant; omite ids inexistentes. Diccionario vacío si
+    /// <paramref name="ids"/> está vacío.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, LegalRepresentativeBrief>> FindBriefByIdsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken = default);
 }

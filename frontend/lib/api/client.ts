@@ -43,7 +43,8 @@ export function setDevSuperAdminToken(sub = "11111111-1111-1111-1111-11111111111
 export interface RequestOptions {
   method?: string;
   body?: unknown;
-  query?: Record<string, string | number | boolean | undefined | null>;
+  /** Los arrays se serializan repitiendo el parámetro (`userIds=a&userIds=b`), que es lo que espera el binding de Minimal API. */
+  query?: Record<string, string | number | boolean | string[] | undefined | null>;
   signal?: AbortSignal;
 }
 
@@ -59,9 +60,18 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined && value !== null && value !== "") {
-        url.searchParams.set(key, String(value));
+      if (value === undefined || value === null || value === "") {
+        continue;
       }
+
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          url.searchParams.append(key, item);
+        }
+        continue;
+      }
+
+      url.searchParams.set(key, String(value));
     }
   }
 
@@ -83,24 +93,53 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   if (response.status === 422) {
-    const data = (await safeJson(response)) as ValidationErrorResponse | null;
+    const data = (await safeJson(response)) as
+      | (ValidationErrorResponse & { detail?: string; title?: string })
+      | null;
+    // ProblemDetails (RFC 7807) con `detail`: no es el diccionario de validación de modelo.
+    // Antes se convertía en ApiValidationError vacío y la UI perdía el motivo (p.ej. placa).
+    if (typeof data?.detail === "string" && data.detail.trim()) {
+      throw new ApiError(422, data.detail, data);
+    }
     throw new ApiValidationError(data?.errors ?? [], 422);
   }
 
   if (!response.ok) {
     // Se lee el cuerpo una sola vez y se adjunta al ApiError para que el caller pueda
     // reaccionar a errores con detalle (p. ej. el 409 del soft-delete con `procedureTypes`).
-    const data = (await safeJson(response)) as { code?: string } | null;
+    const data = (await safeJson(response)) as
+      | { code?: string; error?: string; detail?: string; title?: string }
+      | null;
     if (response.status === 401 && data?.code === "SESSION_EXPIRED") {
       // HU #10172 AC2 — sesión expirada: limpia el token y avisa al modal global.
       clearToken();
       emitSessionExpired();
       throw new ApiError(401, "SESSION_EXPIRED");
     }
-    throw new ApiError(response.status, `Error ${response.status} al llamar ${path}`, data);
+    throw new ApiError(response.status, friendlyErrorMessage(data), data);
   }
 
   return (await safeJson(response)) as T;
+}
+
+/**
+ * Precedencia única del mensaje amigable de un error HTTP no-ok, compartida por `apiFetch` y por
+ * los clientes ad-hoc que no pueden usarlo (multipart, descargas binarias): el motivo en español
+ * que ya manda el backend ({ error } de los Results.Conflict/BadRequest/NotFound "a mano",
+ * { detail } de un ProblemDetails con Results.Problem, o — a falta de ambos — { title } del
+ * propio ProblemDetails). Sin ninguno, cae a un mensaje genérico que NUNCA filtra la ruta/status
+ * técnico a quien lo ve en pantalla: un componente que hace `catch { setError(e.message) }` sin
+ * más se volvería un "Error 500 al llamar /api/v1/..." ilegible para el usuario (Bug #11626).
+ */
+export function friendlyErrorMessage(
+  data: { error?: unknown; detail?: unknown; title?: unknown } | null | undefined,
+): string {
+  for (const candidate of [data?.error, data?.detail, data?.title]) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return "No se pudo completar la solicitud. Inténtalo de nuevo.";
 }
 
 async function safeJson(response: Response): Promise<unknown> {

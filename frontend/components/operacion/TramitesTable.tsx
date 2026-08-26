@@ -5,8 +5,9 @@ import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
-  ArrowLeftRight,
-  Car,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   CheckCircle2,
   Eye,
   FileCheck,
@@ -14,7 +15,6 @@ import {
   FileText,
   Pause,
   Play,
-  Search,
   Star,
   X,
 } from 'lucide-react';
@@ -22,26 +22,63 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
+import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
+import {
+  TramitesFiltrosBar,
+  TramitesFiltrosChips,
+  rangoDePeriodo,
+  type FiltroEspecificoKey,
+  type RangoSobre,
+} from './TramitesFiltrosBar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
+import {
+  TRAMITES_COLUMNS,
+  TRAMITES_COLUMN_KEYS,
+  TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
+  DEFAULT_TRAMITES_VISIBLE_COLUMNS,
+  buildTramitesGridLayout,
+  buildTramitesColWidths,
+  tramitesColumnToSortBy,
+  type TramitesColumnDef,
+  type TramitesGridLayout,
+} from '@/lib/tramites/tramites-table-columns';
+import { useUiPreferences } from '@/hooks/useUiPreferences';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { PageNav } from '@/components/atom/PageNav';
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
+import { ColumnSelector } from '@/components/atom/ColumnSelector';
+import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
+import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
 import {
   AttachmentPreview,
   TramiteDocumentosModal,
   useAttachmentPreview,
 } from './TramiteDocumentosModal';
+import { TramiteDetalleModal } from './TramiteDetalleModal';
+import { TramiteTrackingModal } from './TramiteTrackingModal';
 import type {
+  BiometricParte,
   FirmaParteEstado,
   InstanceStatus,
   InstanceSummary,
+  ListInstancesParams,
   TramiteFuente,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
+import { IdentidadParteTrackingModal } from './IdentidadParteTrackingModal';
 
-/** Texto corto y discreto del sub-estado de placa (debajo del chip de estado). */
-function plateFlowHint(status: string | null | undefined): string | null {
+/** Tope del camino filtrado del backend (mismo MaxItems del API). */
+const SERVER_LIST_TAKE = 200;
+
+/**
+ * Texto corto y discreto del sub-estado de placa (debajo del chip de estado). Exportada porque
+ * `TramiteDetalleModal` reutiliza el mismo texto en su banner contextual — no se duplica.
+ */
+export function plateFlowHint(status: string | null | undefined): string | null {
   if (status === 'asignado') return 'Placa asignada por el OT';
   if (status === 'preasignado') return 'Esperando placa del OT';
   if (status === 'terminado') return 'Listo para el OT';
@@ -69,13 +106,40 @@ const estadoChip = (
 type Chip = { label: string; bg: string; color: string; border: string };
 
 /**
+ * HU #11668 — ayuda del chip de identidad del listado.
+ *
+ * <p><b>Qué acredita.</b> Desde la HU #11667 la ruta de LOTE que alimenta estos chips acredita
+ * también por firma del baúl, no solo por validación biométrica. El gestor que veía «Identidad
+ * validada» iba a buscar un certificado de validación que, cuando la acreditación viene del baúl,
+ * no existe.</p>
+ *
+ * <p><b>Qué NO dice el resumen del listado.</b> El origen concreto de cada parte no viaja en
+ * <c>InstanceSummary</c>: la fila trae el estado agregado (<c>identityValidationStatus</c>) y la
+ * acreditación por parte (<c>firmaVendedorEstado</c> / <c>firmaCompradorEstado</c>), y ninguno de
+ * los dos distingue biométrica de baúl — los dos caminos producen exactamente el mismo valor. Por
+ * eso la ayuda nombra las DOS vías posibles y remite al trámite, en vez de afirmar una que la fila
+ * no puede saber. Inventar aquí el origen sería peor que no decirlo.</p>
+ */
+const AYUDA_ORIGEN =
+  'La identidad puede quedar acreditada por validación biométrica o por la firma del baúl de la parte; cuando la acredita el baúl no hay certificado de validación que descargar. Abre el trámite para ver el origen de cada parte.';
+
+/**
+ * HU #11668 — alcance de los estados no terminales. La acreditación aprobada se resuelve por
+ * persona (identidad vigente de cualquier trámite del tenant, o firma del baúl), pero «en proceso»
+ * y «rechazado» salen únicamente de las validaciones de ESTE trámite: las claves en lote solo
+ * traen identidades aprobadas y vigentes.
+ */
+const AYUDA_NO_TERMINALES =
+  'Los estados en curso y rechazado se calculan solo con las validaciones propias de este trámite.';
+
+/**
  * HU #10350 (AC3) — chip de estado async para borradores FINALIZADOS (draft + draftFinalizedAt). El
  * trámite cerró la captura y espera la validación de identidad del cliente; la firma se procesa sola
  * al aprobarse. Precedencia: rechazo → aprobado (firma pendiente / listo para radicar) → pendiente de
  * validación. Devuelve además `ready` cuando ya se puede radicar (identidad aprobada + gates), para que
  * la acción de la fila pase de "Continuar" a "Radicar". Null si no es un borrador finalizado (chip base).
  */
-function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | null {
+function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean; ayuda: string } | null {
   if (item.estado !== 'borrador' || !item.draftFinalizedAt) return null;
   const idv = item.identityValidationStatus;
 
@@ -83,25 +147,32 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | nu
     return {
       chip: { label: 'Validación rechazada', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
       ready: false,
+      ayuda: AYUDA_NO_TERMINALES,
     };
   }
 
   if (idv === 'aprobado') {
+    // HU #11668 — los tres chips de esta rama nacen de una identidad ACREDITADA, que desde la
+    // HU #11667 puede venir de la biométrica o del baúl: los tres llevan la ayuda del origen.
+    const ayuda = `${AYUDA_ORIGEN} ${AYUDA_NO_TERMINALES}`;
     if (item.signaturePending) {
       return {
         chip: { label: 'Pendiente firma', bg: 'rgba(99,102,241,0.12)', color: '#4f46e5', border: 'rgba(99,102,241,0.3)' },
         ready: false,
+        ayuda,
       };
     }
     if (item.canSubmit) {
       return {
-        chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
+        chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.4)' },
         ready: true,
+        ayuda,
       };
     }
     return {
-      chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: '#5B8A1F', border: 'rgba(140,198,63,0.35)' },
+      chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.35)' },
       ready: false,
+      ayuda,
     };
   }
 
@@ -109,7 +180,46 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | nu
   return {
     chip: { label: 'Pendiente validación', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
     ready: false,
+    ayuda: AYUDA_NO_TERMINALES,
   };
+}
+
+/**
+ * HU #11668 — chip de identidad con su ayuda. El chip en sí es el mismo `StatusBadge` de siempre
+ * (mismo texto, mismo nombre accesible): lo que se agrega es un envoltorio ALCANZABLE POR TECLADO
+ * que expone la ayuda como descripción (`aria-describedby`) y la muestra al enfocar o al pasar el
+ * puntero — el mismo patrón del indicador de OCR del checklist de documentos.
+ *
+ * El envoltorio no es un botón: no hay acción que ejecutar, solo información. Por eso tampoco
+ * intercepta el clic de la fila, que sigue abriendo el trámite.
+ */
+function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipId: string }) {
+  const [tipOpen, setTipOpen] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <span
+        tabIndex={0}
+        aria-describedby={tipOpen ? tipId : undefined}
+        className="inline-flex rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+        onMouseEnter={() => setTipOpen(true)}
+        onMouseLeave={() => setTipOpen(false)}
+        onFocus={() => setTipOpen(true)}
+        onBlur={() => setTipOpen(false)}
+      >
+        <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+      </span>
+      {tipOpen ? (
+        <span
+          id={tipId}
+          role="tooltip"
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-[#162744] shadow-lg dark:bg-[#162744] dark:text-white/90"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          {ayuda}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 // HU #11018 — formato de negocio unico: AÑO/MES/DIA, sin hora.
@@ -122,49 +232,79 @@ function vehiculo(item: InstanceSummary): string {
   return text || '—';
 }
 
-const MODALIDAD_SHORT: Record<WizardModalidad, string> = {
-  matricula_inicial: 'Matrícula',
-  traspaso: 'Traspaso',
+const MODALIDAD_SHORT: Record<ProcedureFamily, string> = {
+  OTROS: 'Otros',
+  MATRICULAS: 'Matrícula',
+  TRASPASO: 'Traspaso',
 };
 
 /**
- * Nombres de paso por modalidad, alineados con TipologiaMatrizCatalog. Solo
- * presentación: `pasoActual`/`totalPasos` se usan tal cual los entrega el API
- * (no se corrige backend en este track). El label es STEP_LABELS[modalidad]
- * [pasoActual - 1], o '—' si el índice no existe.
+ * Qué rotula la fila del listado.
+ *
+ * En MATRICULAS y TRASPASO la familia identifica bien el trámite. En OTROS no: agrupa quince tipos
+ * —blindaje, cambio de color, levantamiento de prenda, duplicado de tarjeta…— que se veían los tres
+ * igual, «Otros», sin forma de distinguirlos sin abrirlos. Ahí manda el nombre del tipo.
+ *
+ * Respaldo a la familia si el expediente viene de un backend anterior al campo, para que la celda
+ * nunca quede vacía.
  */
-const STEP_LABELS: Record<WizardModalidad, string[]> = {
-  matricula_inicial: [
-    'Consulta VIN',
-    'Documentos',
-    'Comprador',
-    'Identidad',
-    'Generar FUR',
-  ],
-  traspaso: [
-    'Consulta del vehículo',
-    'Documentos',
-    'Vendedor',
-    'Comprador',
-    'Datos comerciales',
-    'Generar FUR',
-  ],
-};
-
-function stepLabel(item: InstanceSummary): string {
-  return STEP_LABELS[item.modalidad]?.[item.pasoActual - 1] ?? '—';
+function tramiteLabel(item: InstanceSummary): string {
+  const familia = MODALIDAD_SHORT[item.modalidad];
+  if (item.modalidad !== 'OTROS') return familia;
+  return item.tipoNombre?.trim() || familia;
 }
 
 /**
- * HU #11057 — chip de "Firmado" POR PARTE (vendedor y comprador tienen columna propia).
- *
- * Ajuste del PO: la columna acredita a la parte por VALIDACIÓN DE IDENTIDAD o FIRMA DEL BAÚL, no por
- * la firma electrónica de la compraventa. Solo hay tres estados válidos y son excluyentes.
+ * Nombres de paso por familia — RESPALDO para expedientes servidos por un backend anterior a
+ * `pasoNombre`. No se amplía: desde ADR-0050 el recorrido lo define el TIPO, no la familia, así que
+ * una lista por familia no puede acertar en OTROS —quince tipos con recorridos distintos— y de hecho
+ * estaba VACÍA, que es por lo que esas filas mostraban «—».
  */
-const FIRMA_CHIP: Record<FirmaParteEstado, Chip> = {
-  firmado: { label: 'Firmado', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
-  pendiente: { label: 'Pendiente', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
-  rechazado: { label: 'Rechazado', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
+const STEP_LABELS_FALLBACK: Record<ProcedureFamily, string[]> = {
+  OTROS: [],
+  MATRICULAS: [
+    'Consulta VIN',
+    'Datos y Documentos del Trámite',
+    'Comprador',
+    'Identidad',
+    'Resumen del trámite',
+  ],
+  TRASPASO: [
+    'Consulta del vehículo',
+    'Datos y Documentos del Trámite',
+    'Vendedor',
+    'Comprador',
+    'Datos comerciales',
+    'Resumen del trámite',
+  ],
+};
+
+/** Rótulo del paso en curso: manda el que arma el recorrido del tipo en el servidor. */
+function stepLabel(item: InstanceSummary): string {
+  return (
+    item.pasoNombre?.trim() ||
+    STEP_LABELS_FALLBACK[item.modalidad]?.[item.pasoActual - 1] ||
+    '—'
+  );
+}
+
+/**
+ * Acreditación de una parte (identidad validada o firma del baúl) en la columna "Firmas".
+ *
+ * El diseño la dibuja como TEXTO PLANO de color, no como píldora, así que aquí solo se necesita
+ * etiqueta + color, y se usan los tonos EXACTOS de la propuesta por decisión expresa del usuario.
+ *
+ * DEUDA DE CONTRASTE CONOCIDA: sobre blanco, `#F9AC00` da 1.9:1 y `#16A34A` 3.3:1, por debajo del
+ * 4.5:1 que pide AA para texto. Se asume a sabiendas: el estado nunca depende solo del color —la
+ * etiqueta lo dice— pero la legibilidad sigue siendo peor de lo que exige la norma. Se documentó
+ * junto a las otras dos deudas de contraste abiertas (blanco sobre `#8CC63F` y sobre `#FF4E00`).
+ */
+const FIRMA_TEXTO: Record<FirmaParteEstado, { label: string; color: string }> = {
+  firmado: { label: 'Firmado', color: '#16A34A' },
+  pendiente: { label: 'Sin firma', color: '#F9AC00' },
+  // La propuesta no dibuja una firma rechazada, así que no hay "tono exacto" que copiar: se queda
+  // el naranja de marca en su variante para texto, que sí cumple contraste.
+  rechazado: { label: 'Rechazado', color: '#C2410C' },
 };
 
 /** HU #11057 — etiqueta de la columna Fuente. No hay "QX": Quipux es canal de salida, no de entrada. */
@@ -174,77 +314,118 @@ const FUENTE_LABEL: Record<TramiteFuente, string> = {
   migrado: 'Migrado',
 };
 
-// HU #11020 — se añade la columna Vendedor antes de Comprador (saliente → entrante), coherente con
-// el expediente y el resumen del último paso.
-// ICT (PR #204) — ancho de la columna de selección (checkbox), PRIMERA columna de la tabla.
-const SELECT_COL = '2.25rem';
-
-// HU #11057 — columnas acordadas con el negocio: radicado · VIN · placa · trámite/modalidad ·
-// propietario/vendedor + su firma · comprador + su firma · fecha de creación · fecha de actualización ·
-// secretaría · gestor · fuente · acciones. El negocio pidió "visualizar MÍNIMO" esa información, así
-// que se conservan además Vehículo, Paso y Estado (Estado y Paso son los chips que orientan la acción
-// de la fila; quitarlos sería una regresión funcional). Con 17 columnas la tabla se navega con
-// desplazamiento horizontal: el ancho mínimo crece en consecuencia y la cabecera comparte el mismo
-// `gridTemplateColumns` que las filas para no desalinearse (ver docs/reporte-desalineamiento-tablas.md).
-const GRID_COLS = [
-  SELECT_COL, // Selección (checkbox ICT); cabecera vacía
-  '1.2fr', // Radicado (+ estrella de prioridad)
-  '1.1fr', // VIN
-  '0.9fr', // Placa
-  '0.9fr', // Trámite / Modalidad
-  '1.1fr', // Vehículo
-  '1.2fr', // Propietario / vendedor
-  '0.9fr', // Firmado (vendedor)
-  '1.2fr', // Comprador
-  '0.9fr', // Firmado (comprador)
-  '1fr',   // Paso
-  '1.2fr', // Estado
-  '0.9fr', // Fecha de creación
-  '0.9fr', // Fecha de actualización
-  '1.1fr', // Secretaría
-  '1.3fr', // Gestor
-  '0.9fr', // Fuente
-  '1.2fr', // Acciones
-].join(' ');
-
-/**
- * Ancho mínimo del grid con las 17 columnas: por debajo de esto la tabla se desplaza en horizontal
- * dentro de su contenedor (`overflow-x-auto`) en vez de comprimir las celdas.
- */
-const MIN_WIDTH = 'min-w-[1940px]';
+// Selector de columnas — el ancho/orden de cada columna vive en TRAMITES_COLUMNS
+// (lib/tramites/tramites-table-columns.ts); `buildTramitesGridLayout` calcula el
+// `gridTemplateColumns` (Selección + visibles + Acciones) UNA sola vez a partir de las columnas
+// visibles, y tanto la cabecera como cada fila lo reciben ya calculado: quedan alineadas por
+// construcción sin importar cuántas columnas se oculten.
 
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
 
-// Registro de nuevo trámite por modalidad (botones estilo "Nuevo Trámite" del diseño).
-const NEW_TRAMITE_ACTIONS: { id: WizardModalidad; label: string; icon: typeof Car }[] = [
-  { id: 'matricula_inicial', label: 'Matrícula inicial', icon: Car },
-  { id: 'traspaso', label: 'Traspaso estándar', icon: ArrowLeftRight },
-];
-
 interface TramitesTableProps {
   /** Cambia (incrementa) para forzar un refetch — p. ej. al volver del wizard. */
   refreshKey?: number;
-  /** Inicia un nuevo trámite de la modalidad elegida (navega al wizard). */
-  onStartTramite?: (modalidad: WizardModalidad) => void;
+  /**
+   * Entra al asistente de un trámite nuevo, SIN modalidad: el tipo se elige dentro del paso 1,
+   * como en el diseño. Antes esta vista decidía la modalidad en un diálogo previo.
+   */
+  onNewTramite?: () => void;
 }
 
-export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableProps) {
+export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTableProps) {
   const router = useRouter();
   const [items, setItems] = useState<InstanceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Bloqueo de creación por modalidad (config compañía → Trámites). */
+  const [blockNew, setBlockNew] = useState<{ matricula: boolean; traspaso: boolean }>({
+    matricula: false,
+    traspaso: false,
+  });
 
   // Filtros client-side.
   const [search, setSearch] = useState('');
-  // La búsqueda por placa/VIN está oculta hasta pulsar "Buscar" (paridad con el diseño).
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [modalidad, setModalidad] = useState<'' | WizardModalidad>('');
+  // Selector de modalidad del botón general "Nuevo trámite". La modalidad elegida se guarda
+  // aparte del filtro `modalidad` del listado: son cosas distintas (crear vs filtrar).
+  // ADR-0050 — el campo `modalidad` de la fila transporta ya la FAMILIA del tipo.
+  const [modalidad, setModalidad] = useState<'' | ProcedureFamily>('');
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   const [compania, setCompania] = useState('');
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
+
+  // Filtros server-side (mismo contrato que GET /instances). Borrador del form → se aplican
+  // solo con "Aplicar filtros"; el sort sí recarga de inmediato al clic en cabecera.
+  // Qué filtros específicos están AÑADIDOS (visibles) en la tarjeta — controla tanto el campo
+  // real que se pinta como el chip de la fila inferior. Es independiente de si ya se aplicaron.
+  const [filtrosEspecificos, setFiltrosEspecificos] = useState<Set<FiltroEspecificoKey>>(
+    () => new Set(),
+  );
+  const [placaFilter, setPlacaFilter] = useState('');
+  const [vendedorFilter, setVendedorFilter] = useState('');
+  const [compradorFilter, setCompradorFilter] = useState('');
+  const [gestorFilter, setGestorFilter] = useState('');
+  const [firmadoFilter, setFirmadoFilter] = useState<'' | 'true' | 'false'>('');
+  // "Rango sobre" + "Periodo" reemplazan a los 4 inputs de fecha sueltos: el usuario elige a qué
+  // campo apunta el rango (creación o actualización) y un periodo predefinido — o "Rango propio"
+  // con fechas propias. `rangoDePeriodo` (TramitesFiltrosBar) hace la conversión a
+  // createdFrom/createdTo o updatedFrom/updatedTo al pulsar "Aplicar filtros".
+  const [rangoSobre, setRangoSobre] = useState<RangoSobre>('created');
+  const [periodo, setPeriodo] = useState('Sin periodo');
+  const [rangoPropioDesde, setRangoPropioDesde] = useState('');
+  const [rangoPropioHasta, setRangoPropioHasta] = useState('');
+  const [appliedPlaca, setAppliedPlaca] = useState('');
+  const [appliedVendedor, setAppliedVendedor] = useState('');
+  const [appliedComprador, setAppliedComprador] = useState('');
+  const [appliedGestor, setAppliedGestor] = useState('');
+  const [appliedFirmado, setAppliedFirmado] = useState<'' | 'true' | 'false'>('');
+  const [appliedCreatedFrom, setAppliedCreatedFrom] = useState('');
+  const [appliedCreatedTo, setAppliedCreatedTo] = useState('');
+  const [appliedUpdatedFrom, setAppliedUpdatedFrom] = useState('');
+  const [appliedUpdatedTo, setAppliedUpdatedTo] = useState('');
+  const [sortBy, setSortBy] = useState('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Selector de columnas: persiste qué columnas ve el usuario (scope "tramites.columns"). Degrada
+  // con elegancia — si la preferencia no carga o falla al guardar, la tabla sigue con el default
+  // compacto (el hook nunca deja la tabla en blanco ni bloquea su render).
+  const {
+    visible: visibleColumns,
+    saving: savingColumns,
+    setVisible: setVisibleColumns,
+  } = useUiPreferences('tramites.columns', DEFAULT_TRAMITES_VISIBLE_COLUMNS, {
+    catalog: TRAMITES_COLUMN_KEYS,
+    addedSinceLegacy: TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
+  });
+  // Solo reservar la pista del checkbox cuando haya borradores ICT seleccionables; si no, ese
+  // hueco vacío se veía como “espacio muerto” al inicio de Radicado.
+  const includeSelectColumn = useMemo(
+    () => items.some((it) => it.origin === 'ict' && it.estado === 'borrador'),
+    [items],
+  );
+  /**
+   * Columnas realmente pintadas = preferencia del usuario menos las que no aplican al tipo de
+   * trámite filtrado. Hoy solo aplica a "Propietario / vendedor": la matrícula inicial no tiene
+   * vendedor, así que en esa pestaña la columna sobra. En "Todos" SÍ se muestra, porque la lista
+   * mezcla ambas modalidades y el dato existe para una parte de las filas.
+   *
+   * Es un cálculo derivado: NO se toca la preferencia guardada, así que al volver a "Todos" o a
+   * "Traspaso" la columna reaparece sin que el usuario tenga que reactivarla.
+   */
+  const effectiveColumns = useMemo(
+    () =>
+      // En matrículas el titular es el comprador y la columna 'propietario' sale vacía.
+      modalidad === 'MATRICULAS'
+        ? visibleColumns.filter((k) => k !== 'propietario')
+        : visibleColumns,
+    [visibleColumns, modalidad],
+  );
+  const gridLayout = useMemo(
+    () => buildTramitesGridLayout(effectiveColumns, { includeSelectColumn }),
+    [effectiveColumns, includeSelectColumn],
+  );
 
   // #1 — ¿el caller es SuperAdmin? Determina la columna/filtro Compañía y si al abrir un trámite
   // se pasa el tenant de la fila (?t=) para poder verlo aunque sea de otra empresa. Se resuelve del
@@ -260,6 +441,17 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   // necesita el tenant de la fila.
   const [docsTramite, setDocsTramite] = useState<InstanceSummary | null>(null);
   const [consolidadoTramite, setConsolidadoTramite] = useState<InstanceSummary | null>(null);
+  // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
+  // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
+  const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
+  /** Click en badge Estado → modal de línea de tiempo del trámite (todas las modalidades). */
+  const [trackingTramite, setTrackingTramite] = useState<InstanceSummary | null>(null);
+  /** Click en línea Firmas → modal de tracking de identidad de esa parte. */
+  const [identidadTracking, setIdentidadTracking] = useState<{
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  } | null>(null);
 
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
@@ -268,26 +460,52 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
+  // Config compañía: qué modalidades no se pueden iniciar (No permitir trámites…).
+  useEffect(() => {
+    let active = true;
+    void tramitesClient
+      .getConsultationConfig()
+      .then((cfg) => {
+        if (!active) return;
+        const block = cfg.blockProcedureFamily;
+        setBlockNew({
+          matricula: block?.matriculas ?? false,
+          traspaso: block?.traspaso ?? false,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   /** Modal Procesar (Asignado → Terminado) desde la tabla. */
   const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
   const [soatPagado, setSoatPagado] = useState(false);
   const [impuestoPagado, setImpuestoPagado] = useState(false);
   const [processActing, setProcessActing] = useState(false);
   const [processError, setProcessError] = useState<string | null>(null);
+  /**
+   * Salvedad con la que el trámite avanzó (p. ej. sin SOAT vigente). No es un error: el modal se
+   * queda abierto mostrándola para que el gestor sepa en qué condiciones lo envió al OT.
+   */
+  const [processWarning, setProcessWarning] = useState<string | null>(null);
 
   const openProcesar = (item: InstanceSummary) => {
     setProcessTarget(item);
     setSoatPagado(false);
     setImpuestoPagado(false);
     setProcessError(null);
+    setProcessWarning(null);
   };
 
   const confirmProcesar = async () => {
     if (!processTarget) return;
     setProcessActing(true);
     setProcessError(null);
+    setProcessWarning(null);
     try {
-      await tramitesClient.completePlateFlow(
+      const res = await tramitesClient.completePlateFlow(
         processTarget.id,
         { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
         isAdmin ? processTarget.tenantId : undefined,
@@ -297,7 +515,11 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           it.id === processTarget.id ? { ...it, plateFlowStatus: 'terminado' } : it,
         ),
       );
-      setProcessTarget(null);
+      if (res?.warningMessage) {
+        setProcessWarning(res.warningMessage);
+      } else {
+        setProcessTarget(null);
+      }
     } catch (err) {
       setProcessError(err instanceof Error ? err.message : 'No se pudo marcar como Terminado.');
     } finally {
@@ -309,14 +531,48 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     setLoading(true);
     setError(null);
     try {
-      const data = await tramitesClient.listInstances();
+      const query: ListInstancesParams = {};
+      if (appliedPlaca.trim()) query.placa = appliedPlaca.trim();
+      if (appliedVendedor.trim()) query.vendedor = appliedVendedor.trim();
+      if (appliedComprador.trim()) query.comprador = appliedComprador.trim();
+      if (appliedGestor.trim()) query.gestor = appliedGestor.trim();
+      if (appliedFirmado === 'true') query.firmado = true;
+      if (appliedFirmado === 'false') query.firmado = false;
+      if (appliedCreatedFrom.trim()) query.createdFrom = appliedCreatedFrom.trim();
+      if (appliedCreatedTo.trim()) query.createdTo = appliedCreatedTo.trim();
+      if (appliedUpdatedFrom.trim()) query.updatedFrom = appliedUpdatedFrom.trim();
+      if (appliedUpdatedTo.trim()) query.updatedTo = appliedUpdatedTo.trim();
+      if (sortBy) {
+        query.sortBy = sortBy;
+        query.sortDir = sortDir;
+      }
+      // Cualquier filtro/orden activa el camino server-side: pedir el tope del API.
+      if (Object.keys(query).length > 0) {
+        query.take = SERVER_LIST_TAKE;
+        query.skip = 0;
+      }
+      const data = await tramitesClient.listInstances(
+        Object.keys(query).length > 0 ? query : undefined,
+      );
       setItems(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    appliedPlaca,
+    appliedVendedor,
+    appliedComprador,
+    appliedGestor,
+    appliedFirmado,
+    appliedCreatedFrom,
+    appliedCreatedTo,
+    appliedUpdatedFrom,
+    appliedUpdatedTo,
+    sortBy,
+    sortDir,
+  ]);
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -325,9 +581,8 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     void load();
   }, [load, refreshKey]);
 
-  // Conteo por estado de negocio (para el funnel de estados). Se calcula sobre el
-  // total de trámites cargados, no sobre `filtered`, para que el embudo muestre
-  // siempre el panorama completo aunque haya un estado seleccionado.
+  // Conteo por estado para la tira KPI (`flit-tramites-chrome`): cambia con el tab de modalidad,
+  // no con búsqueda ni filtro de estado — mismo criterio que el mockup.
   const estadoCounts = useMemo(() => {
     const c: Record<EstadoTramite, number> = {
       borrador: 0,
@@ -336,15 +591,14 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
       entregado: 0,
       aprobado: 0,
       rechazado: 0,
-      // HU #10874 — no tiene tarjeta propia en el funnel (FUNNEL_ORDER no la incluye), pero el
-      // tipo Record<EstadoTramite, number> exige la clave; se cuenta igual por completitud.
       subsanacion: 0,
     };
     for (const it of items) {
+      if (modalidad && it.modalidad !== modalidad) continue;
       if (it.estado in c) c[it.estado as EstadoTramite] += 1;
     }
     return c;
-  }, [items]);
+  }, [items, modalidad]);
 
   // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
   const companias = useMemo(() => {
@@ -380,14 +634,27 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     });
   }, [items, search, modalidad, estado, compania, soloPrioritarios]);
 
+  // HU #10536 — sin orden explicito por columna, el backend devuelve los prioritarios primero. Al
+  // marcar uno desde la tabla se replica ESE mismo criterio en cliente, para que suba a la primera
+  // fila en el acto en vez de quedarse en su sitio hasta el siguiente refetch o hasta recargar la
+  // pagina. `sort` es estable, asi que dentro de cada grupo se conserva el orden que vino del
+  // backend. Con un orden explicito por cabecera (`sortBy`) NO se reordena: ahi manda lo que pidio
+  // el usuario, y colar los prioritarios arriba contradiria la columna que acaba de elegir.
+  const ordenados = useMemo(() => {
+    if (sortBy) return filtered;
+    return [...filtered].sort(
+      (a, b) => Number(b.prioritario ?? false) - Number(a.prioritario ?? false),
+    );
+  }, [filtered, sortBy]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // Página segura: si los filtros/refetch reducen los resultados por debajo de
   // la página actual, se clampa al último rango válido.
   const safePage = Math.min(page, totalPages);
   const paginated = useMemo(() => {
     const start = (safePage - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, safePage]);
+    return ordenados.slice(start, start + PAGE_SIZE);
+  }, [ordenados, safePage]);
 
   // Al cambiar cualquier filtro se vuelve a la primera página: la combinación
   // de criterios redefine el conjunto, así que arrancar desde el inicio es lo
@@ -397,12 +664,7 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     setSearch(v);
     setPage(1);
   };
-  const openSearch = () => setSearchOpen(true);
-  const closeSearch = () => {
-    setSearchOpen(false);
-    handleSearchChange('');
-  };
-  const handleModalidadChange = (v: '' | WizardModalidad) => {
+  const handleModalidadChange = (v: '' | ProcedureFamily) => {
     setModalidad(v);
     setPage(1);
   };
@@ -420,8 +682,9 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   };
 
   // HU #10536 — marca/desmarca la prioridad con actualización optimista; revierte si el backend falla.
-  // No cambia el estado del ciclo de vida, solo el flag de ordenamiento (el listado ya viene ordenado
-  // con los prioritarios primero; el reordenamiento visual se aplica al siguiente refetch).
+  // No cambia el estado del ciclo de vida, solo el flag de ordenamiento. La fila SUBE en el acto:
+  // `ordenados` reordena en cliente con el mismo criterio del backend, asi que no hay que esperar
+  // al siguiente refetch ni recargar la pagina para ver el efecto de haber marcado la prioridad.
   const handleTogglePriority = useCallback(
     async (id: string, next: boolean, tenantId: string) => {
       setItems((prev) =>
@@ -526,12 +789,108 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     [selectedIds, items, isAdmin, load],
   );
 
+  const hasServerFilters =
+    appliedPlaca.trim() !== '' ||
+    appliedVendedor.trim() !== '' ||
+    appliedComprador.trim() !== '' ||
+    appliedGestor.trim() !== '' ||
+    appliedFirmado !== '' ||
+    appliedCreatedFrom.trim() !== '' ||
+    appliedCreatedTo.trim() !== '' ||
+    appliedUpdatedFrom.trim() !== '' ||
+    appliedUpdatedTo.trim() !== '';
+
   const hasActiveFilters =
     search.trim() !== '' ||
     modalidad !== '' ||
     estado !== '' ||
     compania !== '' ||
-    soloPrioritarios;
+    soloPrioritarios ||
+    hasServerFilters ||
+    sortBy !== '';
+
+  /**
+   * Lo que el usuario ya tocó en la tarjeta de filtros pero TODAVÍA no aplicó: filtros específicos
+   * añadidos, un periodo elegido o fechas propias escritas. "Empezar de cero" tiene que poder
+   * borrarlo también — si solo mirara lo aplicado, quedaban chips a la vista con el botón apagado.
+   */
+  const hasDraftFilters =
+    filtrosEspecificos.size > 0 ||
+    periodo !== 'Sin periodo' ||
+    rangoPropioDesde !== '' ||
+    rangoPropioHasta !== '';
+
+  const applyServerFilters = () => {
+    setAppliedPlaca(placaFilter);
+    setAppliedVendedor(vendedorFilter);
+    setAppliedComprador(compradorFilter);
+    setAppliedGestor(gestorFilter);
+    setAppliedFirmado(firmadoFilter);
+
+    // "Periodo" → fechas: "Rango propio" usa lo que el usuario escribió en el popover; cualquier
+    // otro periodo predefinido se calcula con rangoDePeriodo. "Sin periodo" no filtra (null).
+    const rango =
+      periodo === 'Rango propio'
+        ? rangoPropioDesde || rangoPropioHasta
+          ? { desde: rangoPropioDesde, hasta: rangoPropioHasta }
+          : null
+        : rangoDePeriodo(periodo, new Date());
+    if (rangoSobre === 'created') {
+      setAppliedCreatedFrom(rango?.desde ?? '');
+      setAppliedCreatedTo(rango?.hasta ?? '');
+      setAppliedUpdatedFrom('');
+      setAppliedUpdatedTo('');
+    } else {
+      setAppliedUpdatedFrom(rango?.desde ?? '');
+      setAppliedUpdatedTo(rango?.hasta ?? '');
+      setAppliedCreatedFrom('');
+      setAppliedCreatedTo('');
+    }
+    setPage(1);
+  };
+
+  const handleSortChange = (nextSortBy: string, nextSortDir: 'asc' | 'desc') => {
+    setSortBy(nextSortBy);
+    setSortDir(nextSortDir);
+    setPage(1);
+  };
+
+  // Al desmarcar un filtro específico se limpia su valor (draft Y aplicado): no puede quedar un
+  // filtro activo en el backend con el campo escondido (invisible para el usuario).
+  const handleToggleFiltroEspecifico = (key: FiltroEspecificoKey) => {
+    setFiltrosEspecificos((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        switch (key) {
+          case 'placa':
+            setPlacaFilter('');
+            setAppliedPlaca('');
+            break;
+          case 'vendedor':
+            setVendedorFilter('');
+            setAppliedVendedor('');
+            break;
+          case 'comprador':
+            setCompradorFilter('');
+            setAppliedComprador('');
+            break;
+          case 'gestor':
+            setGestorFilter('');
+            setAppliedGestor('');
+            break;
+          case 'firmado':
+            setFirmadoFilter('');
+            setAppliedFirmado('');
+            break;
+        }
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+    setPage(1);
+  };
 
   const clearFilters = () => {
     setSearch('');
@@ -539,127 +898,157 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     setEstado('');
     setCompania('');
     setSoloPrioritarios(false);
+    setFiltrosEspecificos(new Set());
+    setPlacaFilter('');
+    setVendedorFilter('');
+    setCompradorFilter('');
+    setGestorFilter('');
+    setFirmadoFilter('');
+    setRangoSobre('created');
+    setPeriodo('Sin periodo');
+    setRangoPropioDesde('');
+    setRangoPropioHasta('');
+    setAppliedPlaca('');
+    setAppliedVendedor('');
+    setAppliedComprador('');
+    setAppliedGestor('');
+    setAppliedFirmado('');
+    setAppliedCreatedFrom('');
+    setAppliedCreatedTo('');
+    setAppliedUpdatedFrom('');
+    setAppliedUpdatedTo('');
+    setSortBy('');
+    setSortDir('desc');
     setPage(1);
   };
 
-  const heading = (
-    <h2 className="mb-3 text-sm font-bold">
-      Trámites en curso
-      {!loading && !error && (
-        <span className="opacity-60"> ({items.length})</span>
-      )}
-    </h2>
-  );
+  // Quita el chip de periodo: limpia borrador (periodo + rango propio) Y lo ya aplicado al
+  // backend (createdFrom/To o updatedFrom/To, según a qué apuntaba) — mismo criterio que
+  // `handleToggleFiltroEspecifico` para los filtros específicos.
+  const handleQuitarPeriodo = () => {
+    setPeriodo('Sin periodo');
+    setRangoPropioDesde('');
+    setRangoPropioHasta('');
+    setAppliedCreatedFrom('');
+    setAppliedCreatedTo('');
+    setAppliedUpdatedFrom('');
+    setAppliedUpdatedTo('');
+    setPage(1);
+  };
+
+  /** Mockup chrome: Actualizar limpia búsqueda y filtro de estado, luego recarga. */
+  const handleRefresh = () => {
+    setSearch('');
+    setEstado('');
+    setPage(1);
+    void load();
+  };
 
   return (
-    <section
-      className="rounded-2xl border bg-white p-4 shrink-0 min-w-0 dark:bg-[#0B0F14]"
-    >
-      {heading}
+    // Sin tarjeta blanca envolvente: en el diseño la pantalla es una pila de bloques sobre el
+    // fondo azul claro (título en tarjeta, KPIs en tarjeta, tabs desnudos, filas como tarjetas).
+    // Meter todo dentro de un contenedor blanco aplanaba esa jerarquía.
+    <section className="flex min-w-0 flex-col gap-4">
+      <ModuleTitle
+        title="Gestión Integral de trámites"
+        subtitle="Administra, monitorea y radica tus trámites ante organismos de tránsito en tiempo real."
+      />
 
-      <div className="flex min-w-0 flex-col gap-3">
-        {/* Funnel de estados (paridad con el diseño): conteo por estado + filtro. */}
-        {!loading && !error && items.length > 0 && (
-          <EstadoFunnel
-            counts={estadoCounts}
-            active={estado}
-            onSelect={handleEstadoChange}
-          />
-        )}
-
-        {/* Fila de acciones (paridad con el diseño): registrar nuevo trámite por
-            modalidad + búsqueda desplegable, en la misma línea y con el mismo estilo
-            (píldora con gradiente). La búsqueda queda oculta hasta pulsar "Buscar". */}
-        <div className="flex flex-wrap items-center gap-2" aria-label="Acciones de trámites">
-          {NEW_TRAMITE_ACTIONS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onStartTramite?.(id)}
-              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
-              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-              aria-label={`Iniciar ${label}`}
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {label}
-            </button>
-          ))}
-          {searchOpen ? (
-            <div className="relative min-w-[220px] flex-1">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                autoFocus
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') closeSearch();
-                }}
-                placeholder="Buscar por placa, VIN, referencia, comprador u organismo…"
-                aria-label="Buscar trámites"
-                className="w-full rounded-xl border bg-white py-2.5 pl-9 pr-9 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]"
-              />
-              <button
-                type="button"
-                onClick={closeSearch}
-                aria-label="Cerrar búsqueda"
-                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-lg opacity-60 hover:opacity-100"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={openSearch}
-              aria-label="Buscar por placa o VIN"
-              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
-              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-            >
-              <Search className="h-4 w-4" aria-hidden="true" />
-              Buscar
-            </button>
-          )}
-        </div>
-
+      <div className="flex min-w-0 flex-col gap-4">
+        {/* flit-tramites-chrome: tabs + filtros ANTES de KPIs */}
         <TramitesListToolbar
           modalidad={modalidad}
           onModalidadChange={handleModalidadChange}
-          onRefresh={() => void load()}
-          onClearFilters={clearFilters}
+          onRefresh={handleRefresh}
           loading={loading}
           hasActiveFilters={hasActiveFilters}
-          totalCount={items.length}
-          filteredCount={filtered.length}
           soloPrioritarios={soloPrioritarios}
           onPrioritariosChange={handlePrioritariosChange}
+          actions={
+            <TramitesFiltrosBar
+              rangoSobre={rangoSobre}
+              onRangoSobreChange={setRangoSobre}
+              periodo={periodo}
+              onPeriodoChange={setPeriodo}
+              rangoPropioDesde={rangoPropioDesde}
+              rangoPropioHasta={rangoPropioHasta}
+              onRangoPropioDesdeChange={setRangoPropioDesde}
+              onRangoPropioHastaChange={setRangoPropioHasta}
+              estado={estado}
+              onEstadoChange={handleEstadoChange}
+              filtrosEspecificos={filtrosEspecificos}
+              onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
+              placa={placaFilter}
+              onPlacaChange={setPlacaFilter}
+              vendedor={vendedorFilter}
+              onVendedorChange={setVendedorFilter}
+              comprador={compradorFilter}
+              onCompradorChange={setCompradorFilter}
+              gestor={gestorFilter}
+              onGestorChange={setGestorFilter}
+              firmado={firmadoFilter}
+              onFirmadoChange={setFirmadoFilter}
+              search={search}
+              onSearchChange={handleSearchChange}
+              onAplicar={applyServerFilters}
+              onEmpezarDeCero={clearFilters}
+              empezarDeCeroDisabled={!hasActiveFilters && !hasDraftFilters}
+              columnSelector={
+                <ColumnSelector
+                  columns={TRAMITES_COLUMNS}
+                  visible={visibleColumns}
+                  onChange={setVisibleColumns}
+                  label="Columnas"
+                  disabled={savingColumns}
+                />
+              }
+              isAdmin={isAdmin}
+              companias={companias}
+              compania={compania}
+              onCompaniaChange={handleCompaniaChange}
+            />
+          }
         />
 
-        {/* #1 — Filtro por compañía (solo SuperAdmin, que ve trámites de todas las empresas). */}
-        {isAdmin && companias.length > 0 && (
-          <div className="flex items-center gap-2">
-            <label htmlFor="filtro-compania" className="text-[11px] font-semibold opacity-60">
-              Compañía
-            </label>
-            <select
-              id="filtro-compania"
-              value={compania}
-              onChange={(e) => handleCompaniaChange(e.target.value)}
-              className="rounded-xl border px-3 py-1.5 text-xs"
-              style={{ color: '#162744' }}
-            >
-              <option value="">Todas</option>
-              {companias.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* KPIs por estado (solo lectura) + CTA Nuevo trámite */}
+        <div className="flex items-stretch gap-4">
+          {!loading && !error ? (
+            <div className="min-w-0 flex-1">
+              <EstadoFunnel counts={estadoCounts} />
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => onNewTramite?.()}
+            disabled={blockNew.matricula && blockNew.traspaso}
+            title={
+              blockNew.matricula && blockNew.traspaso
+                ? 'La compañía tiene bloqueada la creación de trámites.'
+                : undefined
+            }
+            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
+            style={{ background: WIZARD_CTA_GRADIENT }}
+          >
+            <span>
+              Nuevo
+              <br />
+              trámite
+            </span>
+          </button>
+        </div>
+
+        {/* Tira de chips: SOLO existe si hay periodo o algún filtro específico activo */}
+        <TramitesFiltrosChips
+          periodo={periodo}
+          filtrosEspecificos={filtrosEspecificos}
+          onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
+          onQuitarPeriodo={handleQuitarPeriodo}
+          appliedPlaca={appliedPlaca}
+          appliedVendedor={appliedVendedor}
+          appliedComprador={appliedComprador}
+          appliedGestor={appliedGestor}
+          appliedFirmado={appliedFirmado}
+        />
 
         {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
         {selectedIds.size > 0 ? (
@@ -701,10 +1090,15 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           items={items}
           filtered={filtered}
           paginated={paginated}
+          visibleColumns={effectiveColumns}
+          gridLayout={gridLayout}
           page={safePage}
           totalPages={totalPages}
           onPageChange={setPage}
           hasActiveFilters={hasActiveFilters}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSortChange={handleSortChange}
           openPopoverId={openPopoverId}
           onTogglePopover={(id) => setOpenPopoverId((prev) => (prev === id ? null : id))}
           onClosePopover={() => setOpenPopoverId(null)}
@@ -724,6 +1118,9 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           }
           onVerDocumentos={setDocsTramite}
           onVerConsolidado={setConsolidadoTramite}
+          onOpenDetalle={setDetalleTramite}
+          onOpenTrackingTramite={setTrackingTramite}
+          onOpenIdentidadTracking={setIdentidadTracking}
         />
       </div>
 
@@ -747,15 +1144,48 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
         }}
       />
 
+      {/* Frente C, etapa 1 — modal de detalle para trámites ya radicados (estado ≠ 'borrador'). */}
+      <TramiteDetalleModal
+        open={detalleTramite !== null}
+        onClose={() => setDetalleTramite(null)}
+        instanceId={detalleTramite?.id ?? null}
+        tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
+        item={detalleTramite}
+      />
+
+      <TramiteTrackingModal
+        open={trackingTramite !== null}
+        onClose={() => setTrackingTramite(null)}
+        instanceId={trackingTramite?.id ?? null}
+        tenantId={isAdmin ? trackingTramite?.tenantId : undefined}
+        titleHint={
+          trackingTramite
+            ? [trackingTramite.referenceNumber, trackingTramite.placa].filter(Boolean).join(' · ')
+            : null
+        }
+      />
+
+      <IdentidadParteTrackingModal
+        open={identidadTracking !== null}
+        onClose={() => setIdentidadTracking(null)}
+        instanceId={identidadTracking?.item.id ?? null}
+        tenantId={isAdmin ? identidadTracking?.item.tenantId : undefined}
+        parte={identidadTracking?.parte ?? 'comprador'}
+        rotulo={identidadTracking?.rotulo ?? 'Comprador'}
+      />
+
       {processTarget && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          // Overlay FLIT (component.modal): rgba(22,39,68,0.45) + blur 6px. Antes era
+          // `bg-slate-900/40`, y la escala slate de Tailwind no es paleta de este producto.
+          className="fixed inset-0 z-[90] flex items-center justify-center px-4 backdrop-blur-[6px]"
+          style={{ background: 'rgba(22,39,68,0.45)' }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="procesar-plate-title"
         >
           <div
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#162744]"
             style={{ border: '1px solid #DFE5ED' }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -777,7 +1207,7 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
                   className="h-4 w-4 accent-[#557EFF]"
                   checked={soatPagado}
                   onChange={(e) => setSoatPagado(e.target.checked)}
-                  disabled={processActing}
+                  disabled={processActing || !!processWarning}
                 />
                 SOAT pagado
               </label>
@@ -787,39 +1217,95 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
                   className="h-4 w-4 accent-[#557EFF]"
                   checked={impuestoPagado}
                   onChange={(e) => setImpuestoPagado(e.target.checked)}
-                  disabled={processActing}
+                  disabled={processActing || !!processWarning}
                 />
                 Impuesto departamental pagado
               </label>
             </div>
             {processError ? (
-              <p role="alert" className="mt-3 text-xs text-orange-700">
+              <InlineAlert tone="warning" title="No se pudo procesar el trámite" className="mt-4">
                 {processError}
-              </p>
+              </InlineAlert>
+            ) : null}
+            {processWarning ? (
+              <InlineAlert tone="warning" title="Trámite enviado al OT con advertencia" className="mt-4">
+                {processWarning}
+              </InlineAlert>
             ) : null}
             <div className="mt-5 flex gap-3">
-              <button
-                type="button"
-                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                onClick={() => setProcessTarget(null)}
-                disabled={processActing}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: '#557EFF' }}
-                disabled={processActing}
-                onClick={() => void confirmProcesar()}
-              >
-                {processActing ? 'Procesando…' : 'Marcar como Terminado'}
-              </button>
+              {processWarning ? (
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
+                  style={{ background: WIZARD_CTA_GRADIENT }}
+                  onClick={() => setProcessTarget(null)}
+                >
+                  Entendido
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                    onClick={() => setProcessTarget(null)}
+                    disabled={processActing}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                    style={{ background: WIZARD_CTA_GRADIENT }}
+                    disabled={processActing}
+                    onClick={() => void confirmProcesar()}
+                  >
+                    {processActing ? 'Procesando…' : 'Marcar como Terminado'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
+
+
     </section>
+  );
+}
+
+/**
+ * Cabecera ordenable — mismo patrón que OT ClientProceduresTable. Se renderiza DENTRO del `<th>`
+ * (que ya aporta el contexto de bloque): sin envolver en un `<div>` de más, para no duplicar
+ * semántica sobre la propia celda de cabecera.
+ */
+function SortableHeaderCell({
+  column,
+  sortBy,
+  sortDir,
+  onSortChange,
+}: {
+  column: TramitesColumnDef;
+  sortBy: string;
+  sortDir: 'asc' | 'desc';
+  onSortChange: (sortBy: string, sortDir: 'asc' | 'desc') => void;
+}) {
+  if (!column.sortable) {
+    return <>{column.label}</>;
+  }
+  const apiKey = tramitesColumnToSortBy(column.key);
+  const active = sortBy === apiKey;
+  const nextDir: 'asc' | 'desc' = active && sortDir === 'asc' ? 'desc' : 'asc';
+  const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+      aria-label={`Ordenar por ${column.label}${active ? ` (${sortDir === 'asc' ? 'ascendente' : 'descendente'})` : ''}`}
+      onClick={() => onSortChange(apiKey, nextDir)}
+    >
+      {column.label}
+      <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
+    </button>
   );
 }
 
@@ -830,10 +1316,15 @@ function TableBody({
   items,
   filtered,
   paginated,
+  visibleColumns,
+  gridLayout,
   page,
   totalPages,
   onPageChange,
   hasActiveFilters,
+  sortBy,
+  sortDir,
+  onSortChange,
   openPopoverId,
   onTogglePopover,
   onClosePopover,
@@ -847,16 +1338,27 @@ function TableBody({
   onOpen,
   onVerDocumentos,
   onVerConsolidado,
+  onOpenDetalle,
+  onOpenTrackingTramite,
+  onOpenIdentidadTracking,
 }: {
   loading: boolean;
   error: string | null;
   items: InstanceSummary[];
   filtered: InstanceSummary[];
   paginated: InstanceSummary[];
+  /** Selector de columnas: claves visibles, en el mismo orden que TRAMITES_COLUMNS. */
+  visibleColumns: readonly string[];
+  /** `gridTemplateColumns` + ancho mínimo, calculados UNA vez a partir de `visibleColumns` — la
+   *  cabecera y cada fila lo reciben ya resuelto, así quedan alineados por construcción. */
+  gridLayout: TramitesGridLayout;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
   hasActiveFilters: boolean;
+  sortBy: string;
+  sortDir: 'asc' | 'desc';
+  onSortChange: (sortBy: string, sortDir: 'asc' | 'desc') => void;
   openPopoverId: string | null;
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
@@ -870,23 +1372,22 @@ function TableBody({
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
+  /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
+  onOpenDetalle: (item: InstanceSummary) => void;
+  /** Click en badge Estado → modal de línea de tiempo del trámite. */
+  onOpenTrackingTramite: (item: InstanceSummary) => void;
+  onOpenIdentidadTracking: (target: {
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  }) => void;
 }) {
   if (loading) {
-    return (
-      <div
-        className="flex flex-col gap-2"
-        aria-busy="true"
-        aria-label="Cargando trámites"
-      >
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-12 rounded-xl animate-pulse"
-            style={{ background: 'rgba(223,229,237,0.5)' }}
-          />
-        ))}
-      </div>
-    );
+    // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
+    // esqueleto. Las barras siguen siendo el patrón correcto DENTRO del detalle —allí cada bloque
+    // carga por separado y el esqueleto conserva la silueta de la sección—, pero aquí se está
+    // esperando la pantalla entera, y esa espera es la que el loader del módulo tiene que nombrar.
+    return <CarLoaderModal label="Cargando trámites…" />;
   }
 
   if (error) {
@@ -944,170 +1445,206 @@ function TableBody({
     );
   }
 
-    return (
-    <div className="overflow-x-auto">
-      <div className={MIN_WIDTH}>
-        {/* Header */}
-        <div
-          className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
+  // Columnas visibles, RE-ORDENADAS al orden canónico de TRAMITES_COLUMNS (nunca al orden en que
+  // llegó `visibleColumns`, que podría venir desordenado de una preferencia guardada). Header y
+  // filas reciben esta MISMA lista `visibleKeysOrdered`, calculada una sola vez aquí: es lo que
+  // garantiza la alineación por construcción, sin importar cuántas columnas se oculten.
+  const visibleDefs = TRAMITES_COLUMNS.filter((c) => visibleColumns.includes(c.key));
+  const visibleKeysOrdered = visibleDefs.map((c) => c.key);
+  // `<colgroup>` no admite `fr` (lo que usa `gridLayout`): los anchos en % se calculan aparte,
+  // con el MISMO `visibleColumns` — así quedan alineados con `visibleDefs` por construcción.
+  const colWidths = buildTramitesColWidths(visibleColumns, {
+    includeSelectColumn: gridLayout.includeSelectColumn,
+  });
+
+  return (
+    // Scroll normal de página: la tabla crece con su contenido y solo scrollea en horizontal
+    // cuando las columnas visibles no caben a lo ancho. La píldora de conteo que iba aquí se
+    // fundió con "Mostrando X de Y" de `PageNav` — un solo lugar para el recuento.
+    <div className="flex flex-col">
+      <div className="overflow-x-auto">
+        <table
+          aria-label="Trámites en curso"
           style={{
-            background: '#dfe5ed',
-            color: '#162744',
-            gridTemplateColumns: GRID_COLS,
+            minWidth: `${gridLayout.minWidthPx}px`,
+            borderCollapse: 'separate',
+            borderSpacing: '0 8px',
+            tableLayout: 'fixed',
           }}
-          role="row"
         >
-          {/* Columna de selección (checkbox por fila); cabecera vacía. */}
-          <div aria-hidden="true" />
-          <div>Radicado</div>
-          <div>VIN</div>
-          <div>Placa</div>
-          <div>Trámite / Modalidad</div>
-          <div>Vehículo</div>
-          <div>Propietario / vendedor</div>
-          {/* Dos columnas "Firmado": el negocio las rotula igual, así que el sufijo va oculto
-              visualmente para que cada cabecera tenga un nombre accesible propio. */}
-          <div>
-            Firmado<span className="sr-only"> (vendedor)</span>
-          </div>
-          <div>Comprador</div>
-          <div>
-            Firmado<span className="sr-only"> (comprador)</span>
-          </div>
-          <div>Paso</div>
-          <div>Estado</div>
-          <div>Fecha de creación</div>
-          <div>Fecha de actualización</div>
-          <div>Secretaría</div>
-          <div>Gestor</div>
-          <div>Fuente</div>
-          <div className="text-right">Acciones</div>
-        </div>
-
-        {/* Rows */}
-        <ul className="space-y-2 mt-2" aria-label="Trámites en curso">
-          {paginated.map((item) => (
-            <TramiteRow
-              key={item.id}
-              item={item}
-              popoverOpen={openPopoverId === item.id}
-              onTogglePopover={onTogglePopover}
-              onClosePopover={onClosePopover}
-              onTogglePriority={onTogglePriority}
-              onTogglePause={onTogglePause}
-              selected={selectedIds.has(item.id)}
-              onToggleSelect={onToggleSelect}
-              onProcesar={onProcesar}
-              onOpen={onOpen}
-              onVerDocumentos={onVerDocumentos}
-              onVerConsolidado={onVerConsolidado}
-            />
-          ))}
-        </ul>
-
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          total={filtered.length}
-          shown={paginated.length}
-          onPageChange={onPageChange}
-        />
+          <colgroup>
+            {/* Columna de selección solo cuando hay borradores ICT (si no, hueco vacío al inicio). */}
+            {gridLayout.includeSelectColumn ? <col style={{ width: colWidths[0] }} /> : null}
+            {visibleDefs.map((col, index) => (
+              <col
+                key={col.key}
+                style={{
+                  width: colWidths[gridLayout.includeSelectColumn ? index + 1 : index],
+                }}
+              />
+            ))}
+            <col style={{ width: colWidths[colWidths.length - 1] }} />
+          </colgroup>
+          <thead>
+            <tr>
+              {gridLayout.includeSelectColumn ? (
+                <th
+                  scope="col"
+                  className="rounded-l-xl px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wider"
+                  style={{ background: '#DFE5ED', color: '#162744' }}
+                >
+                  {/* Nombre real, no `aria-hidden`: ocultar una cabecera desalinea el recuento de
+                      columnas del lector de pantalla respecto a las celdas de cada fila. */}
+                  <span className="sr-only">Selección</span>
+                </th>
+              ) : null}
+              {visibleDefs.map((col, index) => (
+                <th
+                  key={col.key}
+                  scope="col"
+                  className={`px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wider ${
+                    !gridLayout.includeSelectColumn && index === 0 ? 'rounded-l-xl' : ''
+                  }`}
+                  style={{ background: '#DFE5ED', color: '#162744' }}
+                >
+                  <SortableHeaderCell
+                    column={col}
+                    sortBy={sortBy}
+                    sortDir={sortDir}
+                    onSortChange={onSortChange}
+                  />
+                </th>
+              ))}
+              <th
+                scope="col"
+                className="rounded-r-xl px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wider"
+                style={{ background: '#DFE5ED', color: '#162744' }}
+              >
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginated.map((item) => (
+              <TramiteRow
+                key={item.id}
+                item={item}
+                visibleColumns={visibleKeysOrdered}
+                includeSelectColumn={gridLayout.includeSelectColumn}
+                popoverOpen={openPopoverId === item.id}
+                onTogglePopover={onTogglePopover}
+                onClosePopover={onClosePopover}
+                onTogglePriority={onTogglePriority}
+                onTogglePause={onTogglePause}
+                selected={selectedIds.has(item.id)}
+                onToggleSelect={onToggleSelect}
+                onProcesar={onProcesar}
+                onOpen={onOpen}
+                onVerDocumentos={onVerDocumentos}
+                onVerConsolidado={onVerConsolidado}
+                onOpenDetalle={onOpenDetalle}
+                onOpenTrackingTramite={onOpenTrackingTramite}
+                onOpenIdentidadTracking={onOpenIdentidadTracking}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      {/* Fuera del contenedor con scroll horizontal: la paginación no se desplaza con la tabla. */}
+      <PageNav
+        page={page}
+        totalPages={totalPages}
+        resumen={`Mostrando ${paginated.length} de ${filtered.length}`}
+        ariaLabel="Paginación de trámites"
+        onPageChange={onPageChange}
+      />
     </div>
   );
 }
 
 /**
- * Control de paginación client-side. Se oculta cuando todo cabe en una sola
- * página (totalPages <= 1). Estilo FLIT: borde #DFE5ED, acento #557EFF.
+ * Celda de actor: solo el nombre. La acreditación de esa parte ya NO vive aquí — se consolidó en
+ * la columna única "Firmas" (ver `FirmaParteLinea`), que es lo que dibuja el diseño. Tenerla en
+ * los dos sitios repetía el mismo chip dos veces por fila.
  */
-function Pagination({
-  page,
-  totalPages,
-  total,
-  shown,
-  onPageChange,
-}: {
-  page: number;
-  totalPages: number;
-  total: number;
-  shown: number;
-  onPageChange: (page: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-
-  const from = (page - 1) * PAGE_SIZE + 1;
-  const to = from + shown - 1;
-
+function ActorCell({ nombre }: { nombre: string | null | undefined }) {
+  const texto = nombre?.trim();
   return (
-    <nav
-      className="mt-3 flex items-center justify-between gap-3 border-t pt-3"
-      aria-label="Paginación de trámites"
+    <span
+      className="block w-full truncate text-[#162744] dark:text-white/90"
+      title={texto || undefined}
     >
-      <p className="text-[11px] opacity-60" role="status" aria-live="polite">
-        {from}–{to} de {total}
-      </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page <= 1}
-          className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-40"
-          style={{ color: '#162744' }}
-          aria-label="Página anterior"
-        >
-          Anterior
-        </button>
-        <span className="text-[11px] font-semibold tabular-nums opacity-70">
-          {page} / {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages}
-          className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-40"
-          style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          aria-label="Página siguiente"
-        >
-          Siguiente
-        </button>
-      </div>
-    </nav>
+      {texto || '—'}
+    </span>
   );
 }
 
 /**
- * HU #11057 — celda de "Firmado" de una parte. `null` = NO APLICA (el vendedor no existe en matrícula
- * inicial): se muestra un guion, no un chip, para no dar una falsa alarma.
+ * Una parte dentro de la columna "Firmas": rótulo + chip de acreditación (identidad validada o
+ * firma del baúl). El rótulo NO es decorativo — con dos chips apilados es lo único que dice de
+ * quién es cada firma.
+ *
+ * `estado` null significa que la parte existe pero aún no tiene acreditación registrada; se
+ * muestra como "Sin registrar" en vez de un guion mudo, que se confundía con "no aplica".
  */
-function FirmaCell({
+function FirmaParteLinea({
+  rotulo,
   estado,
-  parte,
+  onOpenTracking,
 }: {
+  rotulo: string;
   estado?: FirmaParteEstado | null;
-  parte: 'vendedor' | 'comprador';
+  /** Click en el indicador → modal de tracking de identidad de esta parte. */
+  onOpenTracking?: () => void;
 }) {
-  if (!estado) {
-    return (
-      <span
-        className="block text-xs text-[#162744]/40 dark:text-white/30"
-        title={`No aplica: este trámite no tiene ${parte}`}
-      >
-        —
-      </span>
-    );
-  }
-  const chip = FIRMA_CHIP[estado];
-  return (
-    <span className="block">
-      <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+  // Fragmento de DOS celdas, no una línea cerrada: la rejilla vive en el contenedor (ver la celda
+  // `firmado`), y así el valor de vendedor y el de comprador quedan alineados en la misma columna.
+  // Con la línea corrida anterior ("Vendedor: …" / "Comprador: …") los valores bailaban, porque
+  // los dos rótulos no miden lo mismo, y la columna no se podía barrer en vertical.
+  const valor = estado ? (
+    <span
+      className="whitespace-nowrap text-xs font-semibold"
+      style={{ color: FIRMA_TEXTO[estado].color }}
+    >
+      {FIRMA_TEXTO[estado].label}
     </span>
+  ) : (
+    <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
+      Sin registrar
+    </span>
+  );
+
+  return (
+    <>
+      <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
+        {rotulo}
+      </span>
+      {onOpenTracking ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenTracking();
+          }}
+          aria-label={`Ver tracking de identidad de ${rotulo}`}
+          title={`Ver tracking de identidad · ${rotulo}`}
+          className="rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+        >
+          {valor}
+        </button>
+      ) : (
+        valor
+      )}
+    </>
   );
 }
 
 /** Fila de trámite: clickable (abre el wizard) + acciones explícitas (documentos, consolidado, Continuar/Ver). */
 function TramiteRow({
   item,
+  visibleColumns,
+  includeSelectColumn,
   popoverOpen,
   onTogglePopover,
   onClosePopover,
@@ -1119,8 +1656,15 @@ function TramiteRow({
   onOpen,
   onVerDocumentos,
   onVerConsolidado,
+  onOpenDetalle,
+  onOpenTrackingTramite,
+  onOpenIdentidadTracking,
 }: {
   item: InstanceSummary;
+  /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
+  visibleColumns: readonly string[];
+  /** Debe coincidir con `gridLayout.includeSelectColumn` (pista del checkbox ICT). */
+  includeSelectColumn: boolean;
   popoverOpen: boolean;
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
@@ -1132,6 +1676,14 @@ function TramiteRow({
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
+  /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
+  onOpenDetalle: (item: InstanceSummary) => void;
+  onOpenTrackingTramite: (item: InstanceSummary) => void;
+  onOpenIdentidadTracking: (target: {
+    item: InstanceSummary;
+    parte: BiometricParte;
+    rotulo: string;
+  }) => void;
 }) {
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
@@ -1143,6 +1695,9 @@ function TramiteRow({
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
   const async = asyncStatus(item);
   const chip = async?.chip ?? estadoChip(item.estado);
+  // HU #11668 — solo los chips derivados de la identidad llevan ayuda; el chip base de estado
+  // (radicado, entregado…) no habla de acreditación y no debe crecerle un tooltip.
+  const ayudaIdentidad = async?.ayuda ?? null;
   const isDraft = item.estado === 'borrador';
   const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
   const actionIcon = async?.ready ? FileCheck : isDraft ? Play : Eye;
@@ -1174,6 +1729,7 @@ function TramiteRow({
             key: 'procesar',
             label: 'Procesar',
             icon: CheckCircle2,
+            attention: true,
             onSelect: () => onProcesar(item),
           },
         ]
@@ -1209,7 +1765,14 @@ function TramiteRow({
   // ICT — abrir/continuar un trámite PAUSADO pide confirmación primero (modal FLIT, no confirm nativo):
   // recordar reanudarlo para poder radicarlo.
   const [confirmPauseOpen, setConfirmPauseOpen] = useState(false);
+  // Frente C, etapa 1 (Tramites.tsx:222 de la propuesta) — borrador → asistente; radicado → modal
+  // de detalle, sin navegar. `isPaused` solo aplica a borradores ICT, así que el chequeo de pausa
+  // queda intacto dentro de esa rama.
   const handleOpen = () => {
+    if (item.estado !== 'borrador') {
+      onOpenDetalle(item);
+      return;
+    }
     if (item.isPaused) {
       setConfirmPauseOpen(true);
       return;
@@ -1235,36 +1798,20 @@ function TramiteRow({
     };
   }, [popoverOpen, onClosePopover]);
 
-  return (
-    <li>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={handleOpen}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleOpen();
-          }
-        }}
-        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-sm transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ gridTemplateColumns: GRID_COLS }}
-        aria-label={`Abrir trámite ${item.referenceNumber}`}
-      >
-        {/* ICT (paridad v1 pause-unpause-massive) — checkbox de selección: PRIMERA columna. Solo
-            borradores ICT; en el resto la celda va vacía para mantener la grilla alineada. */}
-        <span className="flex items-center justify-start" onClick={(e) => e.stopPropagation()}>
-          {isIctDraft ? (
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => onToggleSelect(item.id)}
-              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
-              title="Seleccionar para pausar/reanudar en lote"
-              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
-            />
-          ) : null}
-        </span>
+  // Contenido de cada columna de DATOS (todo menos Selección/Acciones, que son estructurales),
+  // indexado por la misma clave que usa el selector de columnas. Se define aparte del JSX para
+  // poder renderizar SOLO las visibles, en el orden canónico de TRAMITES_COLUMNS, con un único
+  // `.map` — así la fila queda alineada con la cabecera por construcción (ambas parten de
+  // `gridTemplateColumns` calculado por TableBody a partir del mismo `visibleColumns`).
+  // Celdas COMPUESTAS — `radicado`, `placa` y `tramite` apilan el dato de otra columna SOLO si esa
+  // columna está oculta. Al activarla desde el selector, el dato se muda a su propia columna en vez
+  // de aparecer dos veces. Es lo que permite adoptar el layout del diseño sin romper las
+  // preferencias de columnas ya guardadas por cada usuario.
+  const shows = (key: string) => visibleColumns.includes(key);
+
+  const cellsByKey: Record<string, React.ReactNode> = {
+    radicado: (
+      <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-2">
           {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
           <button
@@ -1292,195 +1839,364 @@ function TramiteRow({
               aria-hidden="true"
             />
           </button>
-          <span className="min-w-0 font-mono font-semibold text-[#162744] dark:text-white truncate block">
+          {/* Acceso por teclado/lector de pantalla a la fila: el `<tr>` ya no es focuseable (una
+              tabla semántica no puede tener `role="button"` en la fila), así que el radicado
+              lleva el mismo `handleOpen`/aria-label de antes en un botón real. El aspecto en
+              reposo no cambia: mismo font-mono font-semibold, subrayado solo al interactuar. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpen();
+            }}
+            aria-label={`Abrir trámite ${item.referenceNumber}`}
+            className="min-w-0 truncate font-mono font-semibold text-[#162744] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:text-white"
+          >
             {item.referenceNumber}
+          </button>
+        </span>
+        {!shows('fechaCreacion') ? (
+          <span className="block truncate text-xs text-[#162744]/60 dark:text-white/50">
+            Creación: {shortDate(item.createdAt)}
           </span>
-        </span>
-        <span className="block font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
-          {item.vin ?? '—'}
-        </span>
-        <span className="block font-mono font-semibold text-[#162744] dark:text-white truncate">
+        ) : null}
+        {!shows('fechaActualizacion') && item.updatedAt ? (
+          <span className="block truncate text-xs text-[#162744]/60 dark:text-white/50">
+            Actualización: {shortDate(item.updatedAt)}
+          </span>
+        ) : null}
+      </span>
+    ),
+    vin: (
+      <span className="block truncate font-mono text-xs text-[#162744]/80 dark:text-white/70">
+        {item.vin ?? '—'}
+      </span>
+    ),
+    placa: (
+      <span className="block min-w-0">
+        <span className="block truncate font-mono font-semibold tracking-wider text-[#162744] dark:text-white">
           {item.placa ?? '—'}
         </span>
-        <span className="block">
+        {!shows('vehiculo') ? (
           <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-            style={{
-              background: 'rgba(85,126,255,0.08)',
-              color: '#557eff',
-              borderColor: 'rgba(85,126,255,0.25)',
-            }}
+            className="block truncate text-xs text-[#162744]/60 dark:text-white/50"
+            title={vehiculo(item)}
           >
-            {MODALIDAD_SHORT[item.modalidad]}
+            {vehiculo(item)}
           </span>
-        </span>
-        <span className="block text-[#162744]/90 dark:text-white/80 truncate">
-          {vehiculo(item)}
-        </span>
-        <span className="block text-[#162744] dark:text-white/90 truncate">
-          {item.vendedorNombre ?? '—'}
-        </span>
-        <FirmaCell estado={item.firmaVendedorEstado} parte="vendedor" />
-        <span className="block text-[#162744] dark:text-white/90 truncate">
-          {item.compradorNombre ?? '—'}
-        </span>
-        <FirmaCell estado={item.firmaCompradorEstado} parte="comprador" />
-        <span className="block min-w-0">
-          <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
-            {item.pasoActual}/{item.totalPasos}
-          </span>
-          <span className="block text-[10px] text-[#162744]/60 dark:text-white/50 truncate">
-            {stepLabel(item)}
-          </span>
-        </span>
-        <span className="relative flex min-w-0 flex-col items-start gap-1">
-          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-            {showRejectPopover ? (
-            <div ref={popoverRef} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTogglePopover(item.id);
-                }}
-                aria-expanded={popoverOpen}
-                aria-haspopup="dialog"
-                aria-label={`Ver detalle de rechazo / subsanación de ${item.referenceNumber}`}
-                title="Ver motivo del OT y subsanación"
-                className="rounded-md p-0.5 transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00]"
-              >
-                <AlertCircle
-                  className="h-3.5 w-3.5"
-                  style={{ color: iconColor }}
-                  aria-hidden="true"
-                />
-              </button>
-              {popoverOpen ? (
-                <div
-                  role="dialog"
-                  aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
-                  className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
-                  style={{ borderColor: 'rgba(255,78,0,0.28)' }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {motivoRechazo ? (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#c2410c]">
-                        Motivo del OT
-                      </p>
-                      <p className="mt-1 text-sm text-[#162744] dark:text-white/90 whitespace-pre-wrap">
-                        {motivoRechazo}
-                      </p>
-                    </div>
-                  ) : null}
-                  {enSubsanacion || subsanacionCount > 0 ? (
-                    <div
-                      className={`flex flex-wrap gap-1.5 ${motivoRechazo ? 'mt-2.5 border-t pt-2.5' : ''}`}
-                      style={
-                        motivoRechazo
-                          ? { borderColor: 'rgba(223,229,237,0.8)' }
-                          : undefined
-                      }
-                    >
-                      {enSubsanacion ? (
-                        <span
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-                          style={{
-                            background: 'rgba(245,158,11,0.12)',
-                            color: '#b45309',
-                            borderColor: 'rgba(245,158,11,0.3)',
-                          }}
-                        >
-                          En subsanación
-                        </span>
-                      ) : null}
-                      {subsanacionCount > 0 ? (
-                        <span
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-                          style={{
-                            background: 'rgba(99,102,241,0.10)',
-                            color: '#4f46e5',
-                            borderColor: 'rgba(99,102,241,0.28)',
-                          }}
-                        >
-                          Subsanado ×{subsanacionCount}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          </span>
-          {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
-          {item.isPaused ? (
-            <span
-              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-[10px] font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
-              title={item.pausedObservation ?? 'Trámite pausado'}
-              aria-label={
-                item.pausedObservation
-                  ? `Trámite pausado: ${item.pausedObservation}`
-                  : 'Trámite pausado'
-              }
-            >
-              Pausado
-            </span>
-          ) : null}
-          {plateHint ? (
-            <span
-              className="text-[10px] leading-tight text-[#162744]/45 dark:text-white/40 truncate"
-              title={plateHint}
-            >
-              {plateHint}
-            </span>
-          ) : null}
-        </span>
-        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
-          {shortDate(item.createdAt)}
-        </span>
-        {/* Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar. */}
-        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
-          {item.updatedAt ? shortDate(item.updatedAt) : '—'}
-        </span>
-        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
-          {item.organismoTransito ?? '—'}
-        </span>
-        {/* Gestor = empresa que radica + persona que la operó. Sustituye a la antigua columna
-            "Compañía" del SuperAdmin: era exactamente la misma razón social, sin la persona. El
-            filtro por compañía sigue existiendo (arriba), y ahora todos los perfiles ven el dato. */}
-        <span className="block min-w-0">
-          <span className="block truncate text-xs font-semibold text-[#162744] dark:text-white">
-            {item.companiaNombre ?? '—'}
-          </span>
-          <span className="block truncate text-[10px] text-[#162744]/60 dark:text-white/50">
-            {item.gestorNombre ?? '—'}
-          </span>
-        </span>
-        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
-          {FUENTE_LABEL[item.fuente ?? 'dashboard']}
-        </span>
-        {/* La fila entera navega al wizard, así que las acciones detienen la propagación en un
-            envoltorio: el menú no recibe el evento y no hay que filtrarlo acción por acción.
-            Se conserva el `ActionsMenu` que introdujo el subflujo de placa (HU #11037): las acciones
-            de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
-            botones en la misma celda. */}
-        <span
-          className="flex justify-end"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <ActionsMenu
-            ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
-            items={actionItems}
-            className="bg-white dark:bg-[#162744]"
-            attention={puedeProcesar}
-            attentionHint="Pendiente por procesar: el OT ya asignó la placa"
+        ) : null}
+      </span>
+    ),
+    // UNA columna para las firmas de AMBAS partes, como en el diseño. La acreditación (identidad
+    // validada o firma del baúl) es POR PARTE, así que la celda lleva una línea por cada una con
+    // su rótulo: dos chips sueltos no dirían de quién es cada firma.
+    //
+    // Qué partes aparecen depende del tipo de trámite: el traspaso tiene vendedor y comprador; la
+    // matrícula inicial no tiene vendedor, así que se muestra solo el comprador en lugar de gastar
+    // una línea en un "No aplica" repetido en todas las filas.
+    firmado: (
+      <span className="grid min-w-0 grid-cols-[auto_auto] justify-start items-center gap-x-2 gap-y-1">
+        {item.modalidad === 'TRASPASO' ? (
+          <FirmaParteLinea
+            rotulo="Vendedor"
+            estado={item.firmaVendedorEstado}
+            onOpenTracking={() =>
+              onOpenIdentidadTracking({ item, parte: 'vendedor', rotulo: 'Vendedor' })
+            }
           />
+        ) : null}
+        <FirmaParteLinea
+          rotulo="Comprador"
+          estado={item.firmaCompradorEstado}
+          onOpenTracking={() =>
+            onOpenIdentidadTracking({ item, parte: 'comprador', rotulo: 'Comprador' })
+          }
+        />
+      </span>
+    ),
+    // El chip de estado se inyecta más abajo (solo si la columna `estado` está oculta), para
+    // reutilizar EXACTAMENTE la misma celda —popover de rechazo incluido— en vez de duplicarla.
+    tramite: (
+      <span className="flex min-w-0 flex-col items-start gap-1">
+        <span
+          className="block truncate text-xs font-semibold text-[#162744] dark:text-white"
+          // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta: el
+          // truncado necesita que el nombre completo siga estando disponible al pasar por encima.
+          title={tramiteLabel(item)}
+        >
+          {tramiteLabel(item)}
         </span>
-      </div>
-      {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite pausado. */}
+        {!shows('paso') ? (
+          <span className="flex min-w-0 items-center gap-1 text-xs text-[#162744]/60 dark:text-white/50">
+            <span className="shrink-0 font-mono tabular-nums">
+              {item.pasoActual}/{item.totalPasos}
+            </span>
+            <span className="truncate">{stepLabel(item)}</span>
+          </span>
+        ) : null}
+      </span>
+    ),
+    vehiculo: (
+      <span className="block truncate text-[#162744]/90 dark:text-white/80" title={vehiculo(item)}>
+        {vehiculo(item)}
+      </span>
+    ),
+    propietario: (
+      <ActorCell nombre={item.vendedorNombre} />
+    ),
+    comprador: (
+      <ActorCell nombre={item.compradorNombre} />
+    ),
+    paso: (
+      <span className="block min-w-0">
+        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+          {item.pasoActual}/{item.totalPasos}
+        </span>
+        <span className="block truncate text-xs text-[#162744]/60 dark:text-white/50">
+          {stepLabel(item)}
+        </span>
+      </span>
+    ),
+    estado: (
+      <span className="relative flex min-w-0 flex-col items-start gap-1">
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenTrackingTramite(item);
+            }}
+            aria-label={`Ver trazabilidad del trámite ${item.referenceNumber}`}
+            title="Ver línea de tiempo del trámite"
+            className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+          >
+            {ayudaIdentidad ? (
+              <IdentidadChip
+                chip={chip}
+                ayuda={ayudaIdentidad}
+                tipId={`identidad-ayuda-${item.id}`}
+              />
+            ) : (
+              <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+            )}
+          </button>
+          {showRejectPopover ? (
+          <div ref={popoverRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePopover(item.id);
+              }}
+              aria-expanded={popoverOpen}
+              aria-haspopup="dialog"
+              aria-label={`Ver detalle de rechazo / subsanación de ${item.referenceNumber}`}
+              title="Ver motivo del OT y subsanación"
+              className="rounded-md p-0.5 transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00]"
+            >
+              <AlertCircle
+                className="h-3.5 w-3.5"
+                style={{ color: iconColor }}
+                aria-hidden="true"
+              />
+            </button>
+            {popoverOpen ? (
+              <div
+                role="dialog"
+                aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
+                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
+                style={{ borderColor: 'rgba(255,78,0,0.28)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {motivoRechazo ? (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#c2410c]">
+                      Motivo del OT
+                    </p>
+                    <p className="mt-1 text-sm text-[#162744] dark:text-white/90 whitespace-pre-wrap">
+                      {motivoRechazo}
+                    </p>
+                  </div>
+                ) : null}
+                {enSubsanacion || subsanacionCount > 0 ? (
+                  <div
+                    className={`flex flex-wrap gap-1.5 ${motivoRechazo ? 'mt-2.5 border-t pt-2.5' : ''}`}
+                    style={
+                      motivoRechazo
+                        ? { borderColor: 'rgba(223,229,237,0.8)' }
+                        : undefined
+                    }
+                  >
+                    {enSubsanacion ? (
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+                        style={{
+                          background: 'rgba(245,158,11,0.12)',
+                          color: '#b45309',
+                          borderColor: 'rgba(245,158,11,0.3)',
+                        }}
+                      >
+                        En subsanación
+                      </span>
+                    ) : null}
+                    {subsanacionCount > 0 ? (
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+                        style={{
+                          background: 'rgba(99,102,241,0.10)',
+                          color: '#4f46e5',
+                          borderColor: 'rgba(99,102,241,0.28)',
+                        }}
+                      >
+                        Subsanado ×{subsanacionCount}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        </span>
+        {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
+        {item.isPaused ? (
+          <span
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-xs font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+            title={item.pausedObservation ?? 'Trámite pausado'}
+            aria-label={
+              item.pausedObservation
+                ? `Trámite pausado: ${item.pausedObservation}`
+                : 'Trámite pausado'
+            }
+          >
+            Pausado
+          </span>
+        ) : null}
+        {plateHint ? (
+          <span
+            className="text-xs leading-tight text-[#162744]/45 dark:text-white/40 truncate"
+            title={plateHint}
+          >
+            {plateHint}
+          </span>
+        ) : null}
+      </span>
+    ),
+    fechaCreacion: (
+      <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+        {shortDate(item.createdAt)}
+      </span>
+    ),
+    // Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar.
+    fechaActualizacion: (
+      <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+        {item.updatedAt ? shortDate(item.updatedAt) : '—'}
+      </span>
+    ),
+    // Sin `truncate`: el nombre del organismo se lee entero o no sirve de nada — cortado a
+    // "SECRETARIA DISTRITAL DE…" no distingue una secretaría de otra, que es justo para lo que
+    // está la columna. Envuelve en varias líneas; la fila crece lo que haga falta.
+    secretaria: (
+      <span className="block text-xs leading-snug text-balance break-words text-[#162744]/90 dark:text-white/80">
+        {item.organismoTransito ?? '—'}
+      </span>
+    ),
+    // Gestor = empresa que radica + persona que la operó. Sustituye a la antigua columna
+    // "Compañía" del SuperAdmin: era exactamente la misma razón social, sin la persona. El
+    // filtro por compañía sigue existiendo (arriba), y ahora todos los perfiles ven el dato.
+    gestor: (
+      <span className="block min-w-0">
+        <span
+          className="block truncate text-xs font-semibold text-[#162744] dark:text-white"
+          title={item.companiaNombre ?? undefined}
+        >
+          {item.companiaNombre ?? '—'}
+        </span>
+        <span
+          className="block truncate text-xs text-[#162744]/60 dark:text-white/50"
+          title={item.gestorNombre ?? undefined}
+        >
+          {item.gestorNombre ?? '—'}
+        </span>
+      </span>
+    ),
+    fuente: (
+      <span className="block truncate text-xs text-[#162744]/90 dark:text-white/80">
+        {FUENTE_LABEL[item.fuente ?? 'dashboard']}
+      </span>
+    ),
+  };
+
+  // Composición del layout del diseño: con la columna `estado` oculta, su celda —chip, popover de
+  // rechazo/subsanación, "Pausado" y sub-estado de placa— se apila dentro de "Trámite / Estado".
+  // Se REUTILIZA la celda ya construida en vez de escribir una segunda versión, para que ambas
+  // rutas no puedan divergir.
+  if (!shows('estado')) {
+    cellsByKey.tramite = (
+      <span className="flex min-w-0 flex-col items-start gap-1">
+        {cellsByKey.tramite}
+        {cellsByKey.estado}
+      </span>
+    );
+  }
+
+  // `<tr>` conserva el onClick (comodidad de ratón) pero PIERDE role/tabIndex/onKeyDown/aria-label:
+  // un <tr role="button"> rompería la semántica de tabla. El acceso por teclado/lector de pantalla
+  // vive en el botón del radicado (ver cellsByKey.radicado), con el mismo aria-label de antes.
+  return (
+    <tr onClick={handleOpen} className="group cursor-pointer bg-white text-xs transition dark:bg-[#162744]">
+      {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
+          <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
+      {includeSelectColumn ? (
+        <td
+          className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle group-hover:border-[#557EFF]/40 dark:border-white/10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {isIctDraft ? (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(item.id)}
+              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
+              title="Seleccionar para pausar/reanudar en lote"
+              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
+            />
+          ) : null}
+        </td>
+      ) : null}
+      {/* Selector de columnas: solo se renderizan las visibles, en el orden canónico de
+          TRAMITES_COLUMNS — la misma lista/orden que usa la cabecera (TableBody). */}
+      {visibleColumns.map((key, index) => (
+        <td
+          key={key}
+          className={`border-y border-[#DFE5ED] px-4 py-3 align-middle text-xs group-hover:border-[#557EFF]/40 dark:border-white/10 ${
+            !includeSelectColumn && index === 0 ? 'border-l rounded-l-xl' : ''
+          }`}
+        >
+          {cellsByKey[key]}
+        </td>
+      ))}
+      {/* La fila entera navega al wizard, así que las acciones detienen la propagación en un
+          envoltorio: el menú no recibe el evento y no hay que filtrarlo acción por acción.
+          Se conserva el `ActionsMenu` que introdujo el subflujo de placa (HU #11037): las acciones
+          de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
+          botones en la misma celda. */}
+      <td
+        className="rounded-r-xl border-y border-r border-[#DFE5ED] px-4 py-3 text-right align-middle group-hover:border-[#557EFF]/40 dark:border-white/10"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <ActionsMenu
+          ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
+          items={actionItems}
+          className="bg-white dark:bg-[#162744]"
+          attention={puedeProcesar}
+          attentionHint="Pendiente por procesar: el OT ya asignó la placa"
+        />
+      </td>
+      {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite
+          pausado. `Modal` se porta vía `createPortal` a `document.body`: no llega a insertarse
+          como hijo real del `<tr>` en el DOM, así que no rompe la validez de la tabla. */}
       <Modal
         open={confirmPauseOpen}
         onClose={() => setConfirmPauseOpen(false)}
@@ -1515,6 +2231,6 @@ function TramiteRow({
           </button>
         </div>
       </Modal>
-    </li>
+    </tr>
   );
 }

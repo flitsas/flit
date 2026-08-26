@@ -84,6 +84,12 @@ public sealed class RunPreflightHandler(
     // HU #10970 — check de duplicidad en modo advertencia. NO está en CriterioDeCheck: no es un criterio
     // configurable de FEATURE 05, así que AplicarPoliticaDeBloqueo nunca reescribe su severidad.
     private const string CheckDuplicidadTramite = "duplicidad_tramite";
+    // Tampoco es un CriterioDeCheck: la ausencia de carrocería no es un hallazgo de proveedor que la
+    // compañía pueda relajar por OT, es una precondición del tipo de trámite.
+    private const string CheckCarroceriaAusente = "carroceria_ausente";
+    // Tampoco es un CriterioDeCheck: no es un hallazgo del proveedor que la compañía pueda relajar
+    // por OT, es una precondición del tipo de trámite.
+    private const string CheckPrendaAusente = "prenda_ausente";
 
     // A4/B4 (HU #10673, ADR-0029) — atributos del vehículo que el operador puede TRANSFORMAR durante el
     // trámite (color/combustible). Cada valor efectivo (el que va al FUR) mapea con su flag de cambio
@@ -94,6 +100,7 @@ public sealed class RunPreflightHandler(
         {
             ["vehicle_color"] = "cambio_color",
             ["vehicle_fuel"] = "cambio_combustible",
+            ["vehicle_body_type"] = "cambio_carroceria",
         };
 
     public Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
@@ -123,7 +130,7 @@ public sealed class RunPreflightHandler(
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft", null, null);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
+        var modalidad = instance.Family;
 
         var fieldValues = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
@@ -159,7 +166,7 @@ public sealed class RunPreflightHandler(
         // checks antes de componer el overall (ver AplicarPoliticaDeBloqueo).
         var blockingRules = await _blockingPolicy.GetAsync(tenantId, otId, ct);
 
-        if (modalidad == TramiteModalidadEntrada.Traspaso)
+        if (modalidad == ProcedureFamily.Traspaso)
         {
             // Vehículo por placa (requiere documento del propietario actual). El doc del
             // propietario se persiste en field_values en el paso "consulta" (puede llegar
@@ -175,6 +182,27 @@ public sealed class RunPreflightHandler(
             {
                 await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, tenantOverride, ct);
                 await RunSimitAsync(registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, tenantOverride, ct);
+            }
+        }
+        else if (modalidad == ProcedureFamily.Otros)
+        {
+            // ADR-0050 — la familia OTROS opera sobre un vehículo YA matriculado: entra por placa
+            // (gate_profile.entryMode = PLATE) igual que el traspaso. Antes caía en el `else` de
+            // abajo y se consultaba por VIN, de modo que un blindaje o un duplicado de tarjeta —que
+            // nunca traen VIN, porque el paso 1 pide placa— corrían el pre-vuelo contra un
+            // identificador vacío y el semáforo salía en gris sin que nada fallara.
+            //
+            // Interviene UN SOLO actor, el propietario inscrito, persistido como `comprador` (el
+            // modelo no tiene rol 'propietario'). No hay parte saliente que consultar: pedir un
+            // SIMIT de vendedor aquí devolvería siempre vacío y además insinuaría una compraventa.
+            vehicleFields = await RunVehiculoAsync(chainResolver, checks, providersUsed, ConsultationKind.VehiclePlate, instance.Id, tenantId, vin, plate, fieldValues, tenantOverride, precomputedVehicle, ct);
+            if (finesDisabled)
+            {
+                AddOmittedCheck(checks, CheckSimitOmitida, "Consulta de comparendos omitida", "No se consultaron los comparendos");
+            }
+            else
+            {
+                await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT propietario", comprador, tenantOverride, ct);
             }
         }
         else
@@ -195,12 +223,12 @@ public sealed class RunPreflightHandler(
         // devolvió los atributos del RUNT (marca/línea/color/…). Los persistimos en field_values
         // (source="consultation") para la tarjeta "Datos del vehículo", evitando una segunda
         // consulta dedicada. Idempotente: upsert por field_key.
-        UpsertHydratedFields(instance, tenantId, vehicleFields);
+        UpsertHydratedFields(instance, tenantId, RedirigirOrganismoDelRunt(instance, vehicleFields));
 
-        // B11 (HU #10659) — en TRASPASO el vehículo ya tiene OT en RUNT: tras hidratar
-        // transit_office_name, resolver el OT habilitado de la empresa y fijar también id/code/city.
-        // El OT queda fijado desde el RUNT (no editable manualmente; ver PatchFieldValuesHandler).
-        await AutoBindTransitOfficeForTraspasoAsync(instance, tenantId, ct);
+        // B11 (HU #10659) — en TRASPASO y en la familia OTROS el vehículo ya tiene OT en RUNT: tras
+        // hidratar transit_office_name, resolver el OT habilitado de la empresa y fijar también
+        // id/code/city. El OT queda fijado desde el RUNT.
+        await AutoBindTransitOfficeFromRuntAsync(instance, tenantId, ct);
 
         // FEATURE 05 — ajusta la severidad de cada criterio configurable (soat/rtm/estado/fines/rnmc)
         // según la política de la compañía para el OT destino. Va ANTES de la relajación de matrícula
@@ -216,6 +244,49 @@ public sealed class RunPreflightHandler(
             checks, modalidad, _validationPolicy.VehicleRegistrationState);
         if (vehicleStateBlock is not null)
             return (null, VehicleStatePolicy.ErrorCode, null, vehicleStateBlock);
+
+        // Cambio de carrocería sobre un vehículo que el RUNT no reporta con ninguna: no hay atributo
+        // que sustituir, así que el trámite no puede radicarse. Se evalúa sobre lo que devolvió ESTA
+        // consulta (no sobre lo persistido) para no confundir «el RUNT dice que no tiene» con «el RUNT
+        // no contestó»: sin respuesta no se bloquea nunca. En modo warn el hallazgo viaja como check
+        // amarillo dentro del snapshot; en modo off ni se evalúa.
+        if (_validationPolicy.VehicleBodyTypeRequired != TramiteValidationMode.Off)
+        {
+            var bodyTypeBlock = VehicleBodyTypePolicy.Evaluar(
+                instance.ProcedureType?.Code,
+                consultaRespondio: vehicleFields.Count > 0,
+                carroceriaReportada: vehicleFields
+                    .FirstOrDefault(f => string.Equals(
+                        f.FieldKey, VehicleBodyTypePolicy.BodyTypeFieldKey, StringComparison.OrdinalIgnoreCase))
+                    ?.ValueText);
+
+            if (bodyTypeBlock is not null)
+            {
+                if (_validationPolicy.VehicleBodyTypeRequired == TramiteValidationMode.Block)
+                    return (null, VehicleBodyTypePolicy.ErrorCode, null, null);
+
+                checks.Add(BuildCarroceriaAusenteCheck());
+            }
+        }
+
+        // Levantamiento de prenda sobre un vehículo que el RUNT no reporta con gravamen: no hay nada
+        // que levantar, y el acreedor del numeral 20 lo precarga justamente ese gravamen. Se lee del
+        // check ya compuesto, no de los field_values: el semáforo es quien sabe si el proveedor
+        // afirmó la ausencia o simplemente no trajo el dato.
+        if (_validationPolicy.VehiclePrendaRequired != TramiteValidationMode.Off)
+        {
+            var prendaBlock = VehiclePrendaPolicy.Evaluar(
+                instance.ProcedureType?.Code,
+                EstadoDelCheck(checks, VehiclePrendaPolicy.GravamenCheckKey));
+
+            if (prendaBlock is not null)
+            {
+                if (_validationPolicy.VehiclePrendaRequired == TramiteValidationMode.Block)
+                    return (null, VehiclePrendaPolicy.ErrorCode, null, null);
+
+                checks.Add(BuildPrendaAusenteCheck());
+            }
+        }
 
         // CF-01 (HU #10876) — bloqueo DURO de duplicidad EN PROCESO por familia (VIN en Matrícula
         // Inicial, placa en Traspaso), evaluado ANTES de componer el overall y persistir el snapshot.
@@ -266,13 +337,13 @@ public sealed class RunPreflightHandler(
     /// </summary>
     private async Task<Guid?> FindDuplicateActiveProcedureAsync(
         ProcedureInstance instance,
-        TramiteModalidadEntrada? modalidad,
+        ProcedureFamily? modalidad,
         Guid tenantId,
         string? vin,
         string? plate,
         CancellationToken ct)
     {
-        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad == ProcedureFamily.Matriculas)
         {
             var vinNorm = VinNormalizer.Normalize(vin);
             if (vinNorm is null)
@@ -283,7 +354,7 @@ public sealed class RunPreflightHandler(
                 existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
-        if (modalidad == TramiteModalidadEntrada.Traspaso)
+        if (modalidad == ProcedureFamily.Traspaso)
         {
             var placaNorm = plate?.Trim().ToUpperInvariant();
             if (string.IsNullOrEmpty(placaNorm))
@@ -418,10 +489,10 @@ public sealed class RunPreflightHandler(
     /// </summary>
     internal static VehicleStateBlock? EndurecerEstadoVehiculoMatricula(
         List<PreflightCheckDto> checks,
-        TramiteModalidadEntrada? modalidad,
+        ProcedureFamily? modalidad,
         TramiteValidationMode mode = TramiteValidationMode.Block)
     {
-        if (modalidad != TramiteModalidadEntrada.MatriculaInicial)
+        if (modalidad != ProcedureFamily.Matriculas)
             return null;
 
         for (var i = 0; i < checks.Count; i++)
@@ -488,6 +559,36 @@ public sealed class RunPreflightHandler(
             SystemSource,
             "Ya existe un trámite en curso para la misma placa/VIN (id " +
             $"{existingProcedureInstanceId}). El bloqueo por duplicidad está en modo advertencia en este ambiente.");
+
+    /// <summary>
+    /// Bloqueo «sin carrocería que cambiar» en modo <c>warn</c>: el hallazgo no corta el flujo pero sí
+    /// pinta el semáforo en amarillo, para que el gestor sepa por qué el organismo puede devolverle el
+    /// expediente. En modo <c>block</c> este check no existe: allí viaja como 422 y el snapshot ni se
+    /// persiste.
+    /// </summary>
+    /// <summary>Estado del check indicado, o <c>null</c> si el semáforo no llegó a emitirlo.</summary>
+    internal static string? EstadoDelCheck(IReadOnlyList<PreflightCheckDto> checks, string key) =>
+        checks.FirstOrDefault(c => string.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase))?.Status;
+
+    /// <summary>
+    /// Bloqueo «sin prenda que levantar» en modo <c>warn</c>: no corta el flujo pero pinta el
+    /// semáforo en amarillo. En modo <c>block</c> este check no existe: allí viaja como 422.
+    /// </summary>
+    internal static PreflightCheckDto BuildPrendaAusenteCheck() =>
+        new(CheckPrendaAusente,
+            "Vehículo sin prenda registrada",
+            "warn",
+            SystemSource,
+            "El RUNT no reporta gravamen sobre este vehículo, así que no hay prenda que levantar. "
+            + "El bloqueo está en modo advertencia en este ambiente.");
+
+    internal static PreflightCheckDto BuildCarroceriaAusenteCheck() =>
+        new(CheckCarroceriaAusente,
+            "Vehículo sin carrocería registrada",
+            "warn",
+            SystemSource,
+            "El RUNT no reporta carrocería para este vehículo, así que no hay carrocería que cambiar. "
+            + "El bloqueo está en modo advertencia en este ambiente.");
 
     /// <summary>
     /// Corre la consulta de vehículo a través de la CADENA de proveedores (HU #10478): Kyverum RUNT
@@ -779,6 +880,41 @@ public sealed class RunPreflightHandler(
     /// en la misma consulta del preflight, con Source="consultation". Reusa la convención de
     /// valores "loose" (FormFieldId null) de <c>RunConsultationHandler</c>. Idempotente.
     /// </summary>
+    /// <summary>
+    /// Cuando el organismo lo elige el operador, el que reporta el RUNT es el organismo ACTUAL del
+    /// vehículo, no el destino del trámite: se reetiqueta a <c>transit_office_actual_*</c> antes de
+    /// persistirlo.
+    ///
+    /// <para>Sin esto, cada consulta al RUNT sobrescribía con el organismo de origen la secretaría de
+    /// destino que el gestor acababa de elegir — y con ella el grant, la bandeja y quién aprueba el
+    /// trámite. En los tipos cuyo organismo impone el RUNT no se toca nada: la lista pasa tal cual.</para>
+    /// </summary>
+    private static IReadOnlyList<HydratedField> RedirigirOrganismoDelRunt(
+        ProcedureInstance instance,
+        IReadOnlyList<HydratedField> vehicleFields)
+    {
+        var eligeElOperador = ProcedureTypeGateProfile
+            .FromJson(instance.ProcedureType?.GateProfile)
+            .OperatorChoosesTransitOffice();
+        if (!eligeElOperador || vehicleFields.Count == 0)
+            return vehicleFields;
+
+        return [.. vehicleFields.Select(f => RenombrarOrganismo(f.FieldKey) is { } destino
+            ? f with { FieldKey = destino }
+            : f)];
+    }
+
+    /// <summary>Clave descriptiva equivalente, o <c>null</c> si el campo no es del organismo.</summary>
+    private static string? RenombrarOrganismo(string fieldKey) =>
+        fieldKey.ToLowerInvariant() switch
+        {
+            TransitOfficeFieldKeys.Id => TransitOfficeFieldKeys.ActualId,
+            TransitOfficeFieldKeys.Code => TransitOfficeFieldKeys.ActualCode,
+            TransitOfficeFieldKeys.Name => TransitOfficeFieldKeys.ActualName,
+            TransitOfficeFieldKeys.City => TransitOfficeFieldKeys.ActualCity,
+            _ => null,
+        };
+
     private void UpsertHydratedFields(
         ProcedureInstance instance,
         Guid tenantId,
@@ -899,24 +1035,42 @@ public sealed class RunPreflightHandler(
     }
 
     /// <summary>
-    /// B11 (HU #10659) — SOLO en traspaso_standard: tras hidratar <c>transit_office_name</c> desde el
-    /// RUNT, resuelve el OT habilitado de la empresa (por nombre, case-insensitive) y fija también
-    /// <c>transit_office_id</c>, <c>transit_office_code</c> y <c>transit_office_city</c>
-    /// (Source="consultation"). Si el nombre RUNT NO coincide con ningún OT habilitado se conserva solo
-    /// <c>transit_office_name</c> y NO se inventa un id (el traspaso queda a la espera de que el
-    /// SuperAdmin habilite el grant correcto). En matrícula no hace nada (el operador elige libremente).
+    /// B11 (HU #10659) — cuando el vehículo YA está inscrito, el organismo lo fija el RUNT y no el
+    /// operador: tras hidratar <c>transit_office_name</c>, resuelve el OT habilitado de la empresa
+    /// (por nombre, case-insensitive) y fija también <c>transit_office_id</c>,
+    /// <c>transit_office_code</c> y <c>transit_office_city</c> (Source="consultation"). Si el nombre
+    /// RUNT NO coincide con ningún OT habilitado se conserva solo <c>transit_office_name</c> y NO se
+    /// inventa un id (el trámite queda a la espera de que el SuperAdmin habilite el grant correcto).
+    ///
+    /// <para>Aplica a traspaso_standard —donde nació— y a TODA la familia OTROS: un cambio de color o
+    /// un levantamiento de prenda se radican, por norma, ante el organismo donde el vehículo está
+    /// matriculado. Estaba atado al código de una sola tipología, así que la familia OTROS dejaba el
+    /// organismo sin resolver y el gestor lo elegía a mano, pudiendo escoger uno distinto al del RUNT.
+    /// En matrícula inicial no hace nada: allí no hay inscripción previa y el operador sí elige.</para>
     /// </summary>
-    private async Task AutoBindTransitOfficeForTraspasoAsync(
+    private async Task AutoBindTransitOfficeFromRuntAsync(
         ProcedureInstance instance,
         Guid tenantId,
         CancellationToken ct)
     {
-        var tipologia = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
-        if (!string.Equals(tipologia, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal))
+        var esTraspasoStandard = string.Equals(
+            instance.TypeCode, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal);
+        if (!esTraspasoStandard && instance.Family != ProcedureFamily.Otros)
             return;
 
+        // Cuando el organismo lo ELIGE el operador, el del RUNT no es el destino del trámite: es
+        // dónde está el vehículo hoy. Escribirlo en las claves canónicas pisaría en cada consulta la
+        // secretaría de destino que el gestor acaba de escoger —y con ella el grant, la bandeja y
+        // quién aprueba—, así que va a las claves descriptivas.
+        var eligeElOperador = ProcedureTypeGateProfile
+            .FromJson(instance.ProcedureType?.GateProfile)
+            .OperatorChoosesTransitOffice();
+
         var runtName = instance.FieldValues
-            .FirstOrDefault(f => string.Equals(f.FieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(f => string.Equals(
+                f.FieldKey,
+                eligeElOperador ? TransitOfficeFieldKeys.ActualName : TransitOfficeFieldKeys.Name,
+                StringComparison.OrdinalIgnoreCase))
             ?.ValueText;
         if (string.IsNullOrWhiteSpace(runtName))
             return;
@@ -926,13 +1080,21 @@ public sealed class RunPreflightHandler(
             return; // Sin OT habilitado que coincida: se deja solo el nombre RUNT (no se inventa id).
 
         // Reusa el upsert idempotente de campos hidratados (Source="consultation").
-        UpsertHydratedFields(instance, tenantId,
-        [
-            new HydratedField("transit_office_id", match.Id.ToString(), null),
-            new HydratedField("transit_office_code", match.Code, null),
-            new HydratedField("transit_office_name", match.Name, null),
-            new HydratedField("transit_office_city", match.CityCode, null),
-        ]);
+        UpsertHydratedFields(instance, tenantId, eligeElOperador
+            ?
+            [
+                new HydratedField(TransitOfficeFieldKeys.ActualId, match.Id.ToString(), null),
+                new HydratedField(TransitOfficeFieldKeys.ActualCode, match.Code, null),
+                new HydratedField(TransitOfficeFieldKeys.ActualName, match.Name, null),
+                new HydratedField(TransitOfficeFieldKeys.ActualCity, match.CityCode, null),
+            ]
+            :
+            [
+                new HydratedField(TransitOfficeFieldKeys.Id, match.Id.ToString(), null),
+                new HydratedField(TransitOfficeFieldKeys.Code, match.Code, null),
+                new HydratedField(TransitOfficeFieldKeys.Name, match.Name, null),
+                new HydratedField(TransitOfficeFieldKeys.City, match.CityCode, null),
+            ]);
     }
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>

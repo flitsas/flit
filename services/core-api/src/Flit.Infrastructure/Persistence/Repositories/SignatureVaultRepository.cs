@@ -33,6 +33,17 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
             cancellationToken);
     }
 
+    public Task<bool> UpdateAsync(
+        UpdateSignatureVaultData data,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        return ExecuteInTenantScopeAsync(
+            data.TenantId,
+            () => PersistUpdateAsync(data, cancellationToken),
+            cancellationToken);
+    }
+
     public Task<bool> RevokeAsync(
         RevokeSignatureVaultData data,
         CancellationToken cancellationToken = default)
@@ -92,12 +103,27 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
         catch (DbUpdateException ex) when (IsActiveUniqueViolation(ex))
         {
             // Índice único parcial uq_signature_vault_activa: a lo sumo UNA firma 'activa' por
-            // (tenant, NIT, documento). Se traduce el 23505 a una excepción de dominio (checklist
+            // (tenant, documento). Se traduce el 23505 a una excepción de dominio (checklist
             // §B12); el handler la mapea a 422 (firma_activa_existente). Sin PII en el mensaje.
+            //
+            // Tras el 23505 la entidad queda en Added en el ChangeTracker: el revoke+reintento del
+            // handler (HU #11193) volvería a intentar el INSERT y fallaría otra vez. Hay que
+            // desprenderla antes de propagar.
+            DetachAddedSignatureVaultEntries();
             throw new SignatureVaultActiveConflictException();
         }
 
         return entity.Id;
+    }
+
+    private void DetachAddedSignatureVaultEntries()
+    {
+        foreach (var entry in _context.ChangeTracker.Entries<SignatureVaultEntity>()
+                     .Where(e => e.State == EntityState.Added)
+                     .ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
     }
 
     private const string ActiveUniqueIndex = "uq_signature_vault_activa";
@@ -106,6 +132,31 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
         && pg.ConstraintName == ActiveUniqueIndex;
+
+    private async Task<bool> PersistUpdateAsync(
+        UpdateSignatureVaultData data,
+        CancellationToken cancellationToken)
+    {
+        var entity = await _context.SignatureVault
+            .FirstOrDefaultAsync(s => s.Id == data.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Solo se edita lo vigente: corregir una firma ya revocada cambiaría un dato histórico.
+        if (entity is null || entity.Estado != SignatureVaultEstadoMapping.Activa)
+        {
+            return false;
+        }
+
+        entity.FullName = data.FullName;
+        entity.CodigoHash = data.CodigoHash;
+        entity.VigenciaDesde = data.VigenciaDesde;
+        entity.VigenciaHasta = data.VigenciaHasta;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedBy = data.ChangedBy;
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
 
     private async Task<bool> PersistRevokeAsync(
         RevokeSignatureVaultData data,

@@ -7,7 +7,30 @@ const base = "/api/v1/analytics";
 
 // ── Tipos §4.7 ───────────────────────────────────────────────────────────────
 
-export type ReportType = "resumen" | "operacion" | "ot" | "uso" | "productividad";
+export type ReportType =
+  | "resumen"
+  | "operacion"
+  | "ot"
+  | "uso"
+  | "productividad"
+  | "consulta"
+  // Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): uno por pestaña con rango de
+  // OtReportsConsole.tsx. "Ahora mismo" queda fuera (snapshot en vivo, sin rango).
+  | "ot_analisis"
+  | "ot_informe"
+  | "ot_revisores"
+  // Alcance ICT (Reportes 2.0, HU-D, cuarta ola): detalle fila a fila del pipeline de
+  // Integración con Terceros, sin versión PDF con sentido (mismo criterio que "consulta"). Solo
+  // se entregan en Excel — validado también en el backend (SchedulingValidation). "ict_jobs" es
+  // el único de los cuatro restringido a SuperAdmin: ict.job_runs es platform-wide, sin tenant_id.
+  | "ict_novedades"
+  | "ict_atascados"
+  | "ict_jobs"
+  | "ict_webhooks";
+/** Solo aplica cuando reportType="consulta". "ot" = consulta guardada del organismo de tránsito
+ * (Reportes 2.0, HU-D, tercera ola). "ict" = consulta guardada de Integración con Terceros
+ * (Reportes 2.0, HU-D, cuarta ola). */
+export type SavedQueryScope = "empresa" | "superadmin" | "ot" | "ict";
 export type ScheduleFrequency = "daily" | "weekly" | "monthly";
 export type ScheduleFormat = "excel" | "pdf";
 export type AlertMetric =
@@ -19,7 +42,10 @@ export type AlertMetric =
   | "ict_stuck_in_validation"
   | "ict_novelty_rate_pct"
   | "ict_webhook_delivery_failures"
-  | "ict_jobs_out_of_sla";
+  | "ict_jobs_out_of_sla"
+  // Métricas de alcance OT (Reportes 2.0, HU-D, tercera ola)
+  | "ot_rejection_rate_pct"
+  | "ot_stuck_count";
 export type AlertOperator = "gt" | "gte" | "lt" | "lte";
 
 export interface ReportSchedule {
@@ -37,6 +63,10 @@ export interface ReportSchedule {
   recipients: string[];
   isActive: boolean;
   lastSentAt: string | null;
+  /** Solo reportType="consulta". */
+  savedQueryId?: string | null;
+  /** Solo reportType="consulta". */
+  savedQueryScope?: SavedQueryScope | null;
 }
 
 export interface AlertRule {
@@ -83,6 +113,10 @@ export interface ReportScheduleInput {
   format: ScheduleFormat;
   recipients: string[];
   isActive: boolean;
+  /** Solo reportType="consulta". */
+  savedQueryId?: string | null;
+  /** Solo reportType="consulta". */
+  savedQueryScope?: SavedQueryScope | null;
 }
 
 /** Payload de creación/edición de una regla de alerta (POST/PUT). */
@@ -145,6 +179,35 @@ export function deleteReportSchedule(id: string, tenantId?: string): Promise<voi
     method: "DELETE",
     query: { tenantId },
   });
+}
+
+// ── Informes de SuperAdmin (alcance "superadmin", todas las compañías) ──────
+// Mismo modelo, endpoint separado y SIN tenant — ver SuperAdminReportSchedulesEndpoints
+// en el backend. Solo crea/edita reportType="consulta" con savedQueryScope="superadmin".
+
+export function fetchSuperAdminReportSchedules(signal?: AbortSignal): Promise<{ items: ReportSchedule[] }> {
+  return apiFetch<{ items: ReportSchedule[] }>(`${base}/report-schedules/superadmin`, { signal });
+}
+
+export function createSuperAdminReportSchedule(input: ReportScheduleInput): Promise<ReportSchedule> {
+  return apiFetch<ReportSchedule>(`${base}/report-schedules/superadmin`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function updateSuperAdminReportSchedule(
+  id: string,
+  input: ReportScheduleInput,
+): Promise<ReportSchedule> {
+  return apiFetch<ReportSchedule>(`${base}/report-schedules/superadmin/${id}`, {
+    method: "PUT",
+    body: input,
+  });
+}
+
+export function deleteSuperAdminReportSchedule(id: string): Promise<void> {
+  return apiFetch<void>(`${base}/report-schedules/superadmin/${id}`, { method: "DELETE" });
 }
 
 // ── Reglas de alerta ─────────────────────────────────────────────────────────

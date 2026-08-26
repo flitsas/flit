@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Documents;
 using FluentAssertions;
 using PdfSharpCore.Fonts;
 using Xunit;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Infrastructure.Tests.Documents;
 
@@ -43,8 +44,9 @@ public sealed class FurOverlayDocumentGeneratorTests
 
     private static FurDocumentData TraspasoData() => FullData() with
     {
-        Modalidad = "traspaso",
-        TipologiaCodigo = "traspaso_standard",
+        // ADR-0050 — la tipología es el code del tipo; antes bastaba con la modalidad.
+        TipologiaCodigo = "TRASPASO_STANDARD",
+        Modalidad = ProcedureFamilyCodes.Traspaso,
         Vehiculo = FullData().Vehiculo with
         {
             Marca = "BAJAJ",
@@ -110,6 +112,30 @@ public sealed class FurOverlayDocumentGeneratorTests
             {
                 ["comprador"] = "hash-comprador (2026)",
                 ["vendedor"] = "hash-vendedor (2026)",
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void GenerateCompraventa_ConFirmaDelBaul_ProducePdfConSuTrazabilidad()
+    {
+        // HU #11170 — la compraventa estampaba la imagen del baúl y nada más: al hacerse exclusivas la
+        // imagen y el sello de identidad (Bug #11146), esa firma se quedó sin vigencia ni hash. El texto
+        // impreso se verifica con render; aquí, que el bloque acepte los metadatos sin romperse.
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        var data = TraspasoData() with
+        {
+            IdentidadValidada = true,
+            FirmaImagenes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase) { ["vendedor"] = png },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["vendedor"] = new FirmaBaulMetadata(
+                    "52123456", "Ana Gómez", new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), Guid.NewGuid(), "ABC-123"),
             },
         };
 
@@ -502,5 +528,40 @@ public sealed class FurOverlayDocumentGeneratorTests
         using var ms = new MemoryStream(pdf);
         using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(ms, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
         return doc.PageCount;
+    }
+
+    // ── ADR-0050: la parte vendedora la declara el tipo ──────────────────────────────────────────
+    // Antes se decidía buscando "TRASPASO" dentro de la tipología o de la modalidad.
+
+    [Fact]
+    public void UnTipoQueDeclaraParteVendedora_EstampaLaSeccionDelComprador()
+    {
+        var data = FullData() with
+        {
+            TipologiaCodigo = "TRANSFERENCIA_DOMINIO",  // no contiene la palabra "TRASPASO"
+            Modalidad = "TRASPASO",
+            RequiereVendedor = true,
+        };
+
+        var values = FurFieldMapper.Map(data);
+
+        values["vehicle_buyer_name"].Text.Should().NotBeEmpty(
+            "el tipo declara parte vendedora, así que el FUR lleva sección de comprador");
+    }
+
+    [Fact]
+    public void UnTramiteDeOtrosNoEstampaSeccionDeComprador()
+    {
+        // Un blindaje tiene un único titular: estampar un comprador inventaría una parte.
+        var data = FullData() with
+        {
+            TipologiaCodigo = "BLINDAJE",
+            Modalidad = "OTROS",
+            RequiereVendedor = false,
+        };
+
+        var values = FurFieldMapper.Map(data);
+
+        values["vehicle_buyer_name"].Text.Should().BeEmpty();
     }
 }

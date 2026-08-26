@@ -39,48 +39,69 @@ export const ESTADO_LABELS: Record<EstadoTramite, string> = {
 
 export interface EstadoChipStyle {
   bg: string;
+  /** Color del TEXTO del chip. Cumple ≥4.5:1 sobre `bg`: es texto pequeño. */
   color: string;
   border: string;
+  /**
+   * Tono puro del estado, tal cual lo define el diseño. Para elementos GRÁFICOS (icono de la
+   * tarjeta KPI, puntos, barras), donde el umbral es 3:1 y sí se puede usar el color saturado.
+   * No usarlo como color de texto: varios de estos tonos no llegan a 4.5:1 sobre blanco.
+   */
+  accent: string;
 }
 
-/** Paleta coherente con los chips existentes de TramitesTable (ámbar/azul/etc.). */
+/**
+ * Paleta de estados del diseño de la pantalla de trámites. Cada estado tiene su propio tono —
+ * gris, azul, violeta, verde, cian, naranja y vino — en vez de reutilizar una escala de cinco.
+ *
+ * `accent` es el tono exacto del diseño; `color` es ese mismo tono oscurecido lo justo para que
+ * el texto del chip llegue a 4.5:1. Varios de los tonos puros se quedan cortos como texto
+ * (#557EFF ≈ 3.7:1, #16A34A ≈ 3.1:1, #FF4E00 ≈ 3.5:1, #00DBD5 muy por debajo), así que se
+ * conserva la identidad cromática y se ajusta solo la luminosidad, que es lo que corresponde
+ * cuando un color del prototipo no cumple contraste en un uso concreto.
+ */
 export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
   borrador: {
-    bg: 'rgba(245,158,11,0.12)',
-    color: '#b45309',
-    border: 'rgba(245,158,11,0.3)',
+    bg: 'rgba(148,163,184,0.16)',
+    color: '#64748B',
+    border: 'rgba(148,163,184,0.35)',
+    accent: '#94A3B8',
   },
   preparado: {
-    bg: 'rgba(139,92,246,0.12)',
-    color: '#7c3aed',
-    border: 'rgba(139,92,246,0.3)',
+    bg: 'rgba(85,126,255,0.14)',
+    color: '#3B4FD6',
+    border: 'rgba(85,126,255,0.35)',
+    accent: '#557EFF',
   },
   entregado: {
-    bg: 'rgba(85,126,255,0.12)',
-    color: '#557eff',
-    border: 'rgba(85,126,255,0.3)',
+    bg: 'rgba(139,92,246,0.14)',
+    color: '#6D28D9',
+    border: 'rgba(139,92,246,0.35)',
+    accent: '#7C3AED',
   },
   aprobado: {
-    bg: 'rgba(34,197,94,0.12)',
-    color: '#15803d',
-    border: 'rgba(34,197,94,0.3)',
+    bg: 'rgba(34,197,94,0.14)',
+    color: '#15803D',
+    border: 'rgba(34,197,94,0.35)',
+    accent: '#16A34A',
   },
   rechazado: {
-    bg: 'rgba(255,78,0,0.10)',
-    color: '#c2410c',
-    border: 'rgba(255,78,0,0.3)',
+    bg: 'rgba(255,78,0,0.14)',
+    color: '#C2410C',
+    border: 'rgba(255,78,0,0.32)',
+    accent: '#FF4E00',
   },
   anulado: {
-    bg: 'rgba(100,116,139,0.12)',
-    color: '#475569',
-    border: 'rgba(100,116,139,0.3)',
+    bg: 'rgba(153,27,27,0.14)',
+    color: '#991B1B',
+    border: 'rgba(153,27,27,0.32)',
+    accent: '#991B1B',
   },
-  // Mismo ámbar de aviso (#F9AC00) que usan los banners de "requiere atención" del wizard
-  // (draftFinalized, blockers): consistente con el resto de la UI de trámites.
   subsanacion: {
-    bg: 'rgba(249,172,0,0.12)',
-    color: '#B45309',
-    border: 'rgba(249,172,0,0.3)',
+    bg: 'rgba(0,219,213,0.16)',
+    color: '#0F766E',
+    border: 'rgba(0,219,213,0.35)',
+    accent: '#00DBD5',
   },
 };
 
@@ -106,6 +127,7 @@ export function estadoChipStyle(value: string | null | undefined): EstadoChipSty
     bg: 'rgba(100,116,139,0.12)',
     color: '#475569',
     border: 'rgba(100,116,139,0.3)',
+    accent: '#64748B',
   };
 }
 
@@ -133,16 +155,19 @@ export const PLATE_FLOW_CHIP_STYLES: Record<PlateFlowStatus, EstadoChipStyle> = 
     bg: 'rgba(6,182,212,0.12)',
     color: '#0e7490',
     border: 'rgba(6,182,212,0.3)',
+    accent: '#06B6D4',
   },
   asignado: {
     bg: 'rgba(99,102,241,0.12)',
     color: '#4f46e5',
     border: 'rgba(99,102,241,0.3)',
+    accent: '#6366F1',
   },
   terminado: {
     bg: 'rgba(16,185,129,0.12)',
     color: '#047857',
     border: 'rgba(16,185,129,0.3)',
+    accent: '#10B981',
   },
 };
 

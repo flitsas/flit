@@ -29,6 +29,7 @@ public sealed class PersistOcrFieldsHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = _id,
             TenantId = _tenantId,
             ProcedureTypeId = Guid.NewGuid(),

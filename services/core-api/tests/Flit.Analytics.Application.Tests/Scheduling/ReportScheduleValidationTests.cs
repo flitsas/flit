@@ -170,4 +170,186 @@ public sealed class ReportScheduleValidationTests
         error.Should().BeNull();
         result!.Recipients.Should().HaveCount(1);
     }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, segunda ola) — informe tipo "consulta"
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Tipo_consulta_valido_normaliza_savedQueryId_y_scope()
+    {
+        var id = Guid.NewGuid();
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = id,
+            SavedQueryScope = "empresa",
+        };
+
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().BeNull();
+        result!.SavedQueryId.Should().Be(id);
+        result.SavedQueryScope.Should().Be("empresa");
+    }
+
+    [Fact]
+    public void Tipo_consulta_valido_con_scope_ict_normaliza_savedQueryId_y_scope()
+    {
+        var id = Guid.NewGuid();
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = id,
+            SavedQueryScope = "ict",
+        };
+
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().BeNull();
+        result!.SavedQueryId.Should().Be(id);
+        result.SavedQueryScope.Should().Be("ict");
+    }
+
+    [Fact]
+    public void Tipo_consulta_sin_savedQueryId_devuelve_error()
+    {
+        var input = Valid(reportType: "consulta", format: "excel") with { SavedQueryScope = "empresa" };
+
+        var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().Be("Un informe de tipo 'consulta' requiere indicar savedQueryId.");
+    }
+
+    [Fact]
+    public void Tipo_consulta_sin_scope_devuelve_error()
+    {
+        var input = Valid(reportType: "consulta", format: "excel") with { SavedQueryId = Guid.NewGuid() };
+
+        var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot', 'ict' o 'superadmin'.");
+    }
+
+    [Fact]
+    public void Tipo_consulta_con_scope_desconocido_devuelve_error()
+    {
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = Guid.NewGuid(),
+            SavedQueryScope = "otro",
+        };
+
+        var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot', 'ict' o 'superadmin'.");
+    }
+
+    [Fact]
+    public void Tipo_consulta_con_scope_superadmin_valido_normaliza_sin_error()
+    {
+        var id = Guid.NewGuid();
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = id,
+            SavedQueryScope = "superadmin",
+        };
+
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().BeNull();
+        result!.SavedQueryScope.Should().Be("superadmin");
+    }
+
+    [Fact]
+    public void Tipo_consulta_en_pdf_devuelve_error()
+    {
+        var input = Valid(reportType: "consulta", format: "pdf") with
+        {
+            SavedQueryId = Guid.NewGuid(),
+            SavedQueryScope = "empresa",
+        };
+
+        var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().Be("Un informe de tipo 'consulta' solo se entrega en formato Excel.");
+    }
+
+    [Fact]
+    public void SavedQueryId_en_un_tipo_que_no_es_consulta_devuelve_error()
+    {
+        var input = Valid(reportType: "resumen") with { SavedQueryId = Guid.NewGuid() };
+
+        var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().Be("savedQueryId y el alcance de la consulta solo aplican a informes de tipo 'consulta'.");
+    }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, tercera ola) — 3 tipos propios del organismo (alcance OT)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("ot_analisis")]
+    [InlineData("ot_informe")]
+    [InlineData("ot_revisores")]
+    public void Tipos_de_alcance_ot_estan_en_el_vocabulario_y_no_exigen_saved_query(string reportType)
+    {
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: reportType));
+
+        error.Should().BeNull();
+        result!.ReportType.Should().Be(reportType);
+        result.SavedQueryId.Should().BeNull();
+        result.SavedQueryScope.Should().BeNull();
+    }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, tercera ola) — consulta guardada del organismo (savedQueryScope="ot")
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Tipo_consulta_con_scope_ot_valido_normaliza_sin_error()
+    {
+        var id = Guid.NewGuid();
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = id,
+            SavedQueryScope = "ot",
+        };
+
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().BeNull();
+        result!.SavedQueryId.Should().Be(id);
+        result.SavedQueryScope.Should().Be("ot");
+    }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, cuarta ola) — 4 tipos propios de ICT (alcance ICT, solo Excel)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("ict_novedades")]
+    [InlineData("ict_atascados")]
+    [InlineData("ict_jobs")]
+    [InlineData("ict_webhooks")]
+    public void Tipos_de_alcance_ict_estan_en_el_vocabulario_y_no_exigen_saved_query(string reportType)
+    {
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: reportType, format: "excel"));
+
+        error.Should().BeNull();
+        result!.ReportType.Should().Be(reportType);
+        result.SavedQueryId.Should().BeNull();
+        result.SavedQueryScope.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("ict_novedades")]
+    [InlineData("ict_atascados")]
+    [InlineData("ict_jobs")]
+    [InlineData("ict_webhooks")]
+    public void Tipos_de_alcance_ict_en_pdf_devuelven_error(string reportType)
+    {
+        var (_, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: reportType, format: "pdf"));
+
+        error.Should().Be($"Un informe de tipo '{reportType}' solo se entrega en formato Excel.");
+    }
 }

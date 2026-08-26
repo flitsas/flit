@@ -52,6 +52,8 @@ internal static class ActorEndpoints
                 "missing_required_rol" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Faltan partes obligatorias para la modalidad del trámite."),
                 "duplicate_rol" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Cada rol admite a lo sumo un actor."),
                 "partes_duplicadas" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El vendedor y el comprador no pueden compartir documento ni correo."),
+                // Si el arrendatario fuera el propietario no habría leasing que registrar.
+                PutActorsHandler.LocatarioIgualAlPropietarioError => Results.Problem(statusCode: 409, title: PutActorsHandler.LocatarioIgualAlPropietarioError, detail: "El locatario no puede ser el mismo propietario del vehículo."),
                 "entity_catalog_missing" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El catálogo de entidades (procedure_entities) no está seedeado."),
                 _ => Results.Ok(result)
             };

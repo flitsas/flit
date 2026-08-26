@@ -52,20 +52,29 @@ public static class RtmCertificado
     /// que incluir una de más solo añade información. Y la fecha falta con más frecuencia de lo que
     /// parece — hay proveedores de RUNT que sencillamente no la reportan.
     /// </remarks>
-    public static bool Aplica(bool esTraspaso, string? fechaMatricula, DateTimeOffset hoy)
+    public static bool Aplica(bool esTraspaso, string? fechaMatricula, DateTimeOffset hoy) =>
+        Aplica(
+            esTraspaso,
+            Interpretar(fechaMatricula) is { } m ? DateOnly.FromDateTime(m.UtcDateTime) : null,
+            DateOnly.FromDateTime(hoy.UtcDateTime));
+
+    /// <summary>
+    /// Misma regla, con la fecha ya interpretada (HU #11305). Es la que usa el modelo canónico de
+    /// certificaciones: allí la fecha se normaliza <b>una sola vez</b>, al persistir, y volver a
+    /// parsear texto en el punto de decisión sería el segundo mapeo que este diseño evita.
+    /// </summary>
+    public static bool Aplica(bool esTraspaso, DateOnly? fechaMatricula, DateOnly hoy)
     {
         if (!esTraspaso)
             return false;
 
-        var matricula = Interpretar(fechaMatricula);
-        if (matricula is null)
+        if (fechaMatricula is not { } matricula)
             return true;
 
         // Se compara por DÍA CALENDARIO, no por instante: si no, el mismo trámite daría un resultado
         // distinto según la hora a la que se genere el documento el día del quinto aniversario. En el
         // aniversario el vehículo cumple exactamente 5 años, así que todavía no los ha superado.
-        var cumpleCinco = matricula.Value.UtcDateTime.Date.AddYears(AntiguedadMinimaAnios);
-        return cumpleCinco < hoy.UtcDateTime.Date;
+        return matricula.AddYears(AntiguedadMinimaAnios) < hoy;
     }
 
     /// <summary>

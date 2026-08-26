@@ -51,7 +51,8 @@ describe('IdentityValidationTrackingPanel (HU #11007)', () => {
     await user.click(screen.getByRole('button', { name: /ver tracking/i }));
 
     expect(mocks.getBiometricAuditByValidation).toHaveBeenCalledWith('val-1');
-    expect(await screen.findByText('send')).toBeInTheDocument();
+    expect(await screen.findByText('Envío al proveedor')).toBeInTheDocument();
+    expect(screen.getByText('OK (HTTP 200)')).toBeInTheDocument();
   });
 
   it('AC2 — pinta la línea de tiempo de una prevalidación standalone (sin instanceId) usando solo validationId', async () => {
@@ -78,8 +79,12 @@ describe('IdentityValidationTrackingPanel (HU #11007)', () => {
     render(<IdentityValidationTrackingPanel validationId="val-standalone" />);
     await user.click(screen.getByRole('button', { name: /ver tracking/i }));
 
-    expect(await screen.findByText('webhook_received')).toBeInTheDocument();
-    expect(screen.getByText('OK')).toBeInTheDocument();
+    expect(await screen.findByText('Notificación recibida')).toBeInTheDocument();
+    expect(screen.getByText('Aprobado')).toBeInTheDocument();
+    // La columna «Cifrado» dice si el cuerpo cifrado del proveedor se pudo descifrar. Antes lo
+    // resumía en «OK», que bajo ese encabezado se leía como el algoritmo; ahora lo dice en
+    // palabras.
+    expect(screen.getByText('Verificado')).toBeInTheDocument();
   });
 
   it('AC3 — un 404 cross-tenant se muestra como error, sin filtrar la existencia del registro', async () => {

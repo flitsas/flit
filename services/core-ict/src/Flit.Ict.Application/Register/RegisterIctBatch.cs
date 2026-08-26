@@ -112,4 +112,14 @@ public sealed class IctIngestOptions
     public const string SectionName = "Ingest";
 
     public int MaxItemsPerBatch { get; init; } = 20;
+
+    /// <summary>
+    /// Lever B (default false = durabilidad plena, comportamiento actual). Cuando es true, el camino de
+    /// INGESTA del registro corre con <c>synchronous_commit</c> LOCAL en off: no espera el fsync del WAL en
+    /// cada fila (el registro hace 1 commit por fila) → más throughput, a cambio de tolerar perder los
+    /// últimos ms de commits ante un crash del servidor (el pre-trámite es staging reprocesable). Solo
+    /// afecta al registro (no a reads ni a abort/edit/timeline). Activar por ambiente vía env var
+    /// <c>Ingest__RelaxRegisterCommitDurability=true</c> (p.ej. DEV/QA para las pruebas de carga).
+    /// </summary>
+    public bool RelaxRegisterCommitDurability { get; init; }
 }

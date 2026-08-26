@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -19,22 +20,31 @@ public sealed class WizardStateHandlerTests
 
     public WizardStateHandlerTests()
     {
-        _handler = new GetWizardStateHandler(_repo);
+        // R10 (HU #10598) — con `hasPrendaGate` sembrado en la familia TRASPASO, un traspaso NO es
+        // radicable mientras nadie declare qué pasa con el gravamen. El handler por defecto trae una
+        // decisión que satisface el gate (`omitir` no exige documento ni acreedor) para que los
+        // fixtures «listo para radicar» digan la verdad; los tests que ejercitan la prenda arman su
+        // propio stub. Sin esto, todo traspaso quedaba bloqueado por un motivo que no es el que el
+        // test mide, y el gate desactivado era justamente el defecto que esta tanda corrige.
+        _handler = new GetWizardStateHandler(
+            _repo, prendaRepo: new StubPrendaRepo(PrendaDecision.Omitir));
     }
 
     private static ProcedureInstance Base(string modalidad, string? tipologia = null) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
+    // HU #11593 — contacto obligatorio (ciudad, dirección, teléfono) en los gates de actor: los
+    // fixtures de este archivo representan actores completos por defecto para no acoplar cada test
+    // de otras reglas (documentos, preflight, identidad) a esta exigencia nueva.
     private static ProcedureInstanceActor Actor(string actorType, string doc = "123") =>
         new()
         {
@@ -43,6 +53,8 @@ public sealed class WizardStateHandlerTests
             DocumentNumber = doc,
             FullName = "Persona",
             Email = "p@x.com",
+            Phone = "3001234567",
+            Metadata = ActorMetadataReader.Serialize("Bogotá", "Calle 1 # 2-3", null),
         };
 
     private static ProcedureInstancePreflightSnapshot Preflight(string overall, string checks = "[]") =>
@@ -135,9 +147,41 @@ public sealed class WizardStateHandlerTests
     private sealed class StubPrendaDocumentRequirementPolicy(bool required) : IPrendaDocumentRequirementPolicy
     {
         public Task<bool> IsRequiredAsync(
-            Guid procedureTypeId, Guid? transitOfficeId, DateTimeOffset procedureCreatedAt,
+            Guid tenantId, Guid? transitOfficeId, DateTimeOffset procedureCreatedAt,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(required);
+    }
+
+    /// <summary>
+    /// 2026-08-12 — la decisión de prenda vive en un agregado aparte, y desde el arreglo del override
+    /// el wizard la necesita: sin ella no puede distinguir "constituyo prenda y me falta el soporte"
+    /// de "no hay prenda que soportar". <c>null</c> ⇒ sin decisión registrada.
+    /// </summary>
+    private sealed class StubPrendaRepo(string? decision) : IProcedureInstancePrendaRepository
+    {
+        public Task<ProcedureInstancePrenda?> GetVigenteAsync(
+            Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default) =>
+            Task.FromResult<ProcedureInstancePrenda?>(
+                decision is null
+                    ? null
+                    : new ProcedureInstancePrenda
+                    {
+                        Decision = decision,
+                        Estado = PrendaEstado.Vigente,
+                        // R10 (HU #11591/#11594): las decisiones que CONSTITUYEN gravamen exigen
+                        // acreedor. El stub las creaba sin él, así que una decisión «registrar»
+                        // nunca podía satisfacer el gate — daba igual el resto del expediente.
+                        AcreedorNombre = PrendaDecision.ImplicaGravamen(decision) ? "Banco XYZ" : null,
+                        AcreedorDocumento = PrendaDecision.ImplicaGravamen(decision) ? "900123456" : null,
+                    });
+
+        public Task<IReadOnlyList<ProcedureInstancePrenda>> ListByInstanceAsync(
+            Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ProcedureInstancePrenda>>([]);
+
+        public Task AddAsync(ProcedureInstancePrenda prenda, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
     // ── FEATURE 05 — RnmcEnabled controla la visibilidad de la fecha de expedición ──
@@ -211,7 +255,7 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Modalidad.Should().Be("matricula_inicial");
+        result!.Modalidad.Should().Be("MATRICULAS");
         result.TotalSteps.Should().Be(5);
         result.Steps.Should().HaveCount(5);
     }
@@ -254,7 +298,7 @@ public sealed class WizardStateHandlerTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Modalidad.Should().Be("traspaso");
+        result!.Modalidad.Should().Be("TRASPASO");
         result.TotalSteps.Should().Be(6);
         result.Steps.Should().HaveCount(6);
     }
@@ -322,28 +366,30 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
-    public async Task Get_Traspaso_FurReachable_DefersBiometric()
+    public async Task Get_Traspaso_IdentidadReachable_FurReachableSinBiometria()
     {
-        // Pasos 1-5 completos → FUR (6) alcanzable. Sin biométrica/FUR generado → incomplete con la
-        // razón diferida de biométrica. B12 (HU #10661, ADR-0028): la firma de compraventa YA NO
-        // aporta `pendiente_firma` ni condiciona el completado del paso 6.
+        // Regla de negocio restituida (2026-08) — paridad con matrícula (HU #10350): pasos 1-4
+        // completos (incluido el valor de venta, absorbido en Documentos) → Identidad (5) alcanzable
+        // e incomplete con la razón de biométrica; SIN biométrica de ambas partes, FUR (6) sigue
+        // ALCANZABLE (incomplete, no locked) — la identidad pendiente no atrapa al gestor.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         instance.Actors.Add(Actor("vendedor", "555"));
         instance.Actors.Add(Actor("comprador", "666"));
         instance.PreflightSnapshots.Add(Preflight("green"));
-        CompletarDocsTraspaso(instance); // docs gobiernan el paso 2; sin ellos FUR queda locked.
+        CompletarDocsTraspaso(instance);
         instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        var fur = result!.Steps.Single(s => s.Index == 6);
+        var identidad = result!.Steps.Single(s => s.Index == 5);
+        identidad.Status.Should().Be("incomplete");
+        identidad.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
+
+        var fur = result.Steps.Single(s => s.Index == 6);
         fur.Status.Should().Be("incomplete");
-        fur.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
-        // B12: la firma ya no es una razón de incompletitud del paso 6.
-        fur.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
     }
 
     [Fact]
@@ -394,18 +440,21 @@ public sealed class WizardStateHandlerTests
     [Fact]
     public async Task Ac1_Get_Traspaso_OverrideOtPrendaActivo_SinDocumento_CanSubmitFalseConBlocker()
     {
-        // AC1 — con el override activo y SIN el documento de prenda, canSubmit refleja el bloqueo
-        // con el MISMO código que usa el gate de preparación (prenda_documento_requerido).
+        // AC1 — con el override activo, una decisión que SÍ pide soporte y sin el documento adjunto,
+        // canSubmit refleja el bloqueo con el MISMO código que emite el gate de preparación por este
+        // camino (prenda_documento_requerido_ot, propio del override desde 2026-08-12).
         var ct = TestContext.Current.CancellationToken;
         var instance = TraspasoListoParaRadicar();
         Setup(instance);
         var handler = new GetWizardStateHandler(
-            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+            _repo,
+            prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true),
+            prendaRepo: new StubPrendaRepo(PrendaDecision.Registrar));
 
         var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         result!.CanSubmit.Should().BeFalse();
-        result.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        result.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
     }
 
     [Fact]
@@ -416,12 +465,14 @@ public sealed class WizardStateHandlerTests
         instance.Attachments.Add(Attachment("prenda_registro"));
         Setup(instance);
         var handler = new GetWizardStateHandler(
-            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+            _repo,
+            prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true),
+            prendaRepo: new StubPrendaRepo(PrendaDecision.Registrar));
 
         var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         result!.CanSubmit.Should().BeTrue();
-        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
     }
 
     [Fact]
@@ -435,7 +486,139 @@ public sealed class WizardStateHandlerTests
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         result!.CanSubmit.Should().BeTrue();
-        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+    }
+
+    [Fact]
+    public async Task Get_PrendaDocumentRequired_TrueCuandoPoliticaExige()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Get_PrendaDocumentRequired_FalseCuandoOptOutCompañiaOt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        instance.Attachments.Add(Attachment("prenda_registro"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: false));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeFalse();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+    }
+
+    /// <summary>
+    /// Matrícula inicial que CONSTITUYE prenda (vehículo nuevo financiado): el override sigue
+    /// exigiendo el soporte aunque no haya gravamen previo que detectar. Es lo que el override aporta
+    /// sobre <c>PrendaGate.Evaluate</c>, que solo actúa en traspaso con el semáforo en warn.
+    /// </summary>
+    [Fact]
+    public async Task Get_Matricula_PoliticaPrendaObligatoria_DecisionQuePideSoporte_SinDocumento_Bloquea()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo,
+            prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true),
+            prendaRepo: new StubPrendaRepo(PrendaDecision.Registrar));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeTrue();
+        result.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// EL CASO REPORTADO (2026-08-12). Matrícula inicial con <c>sin_prenda</c> u <c>omitir</c> y el
+    /// override del OT activo — que es su valor por DEFECTO mientras nadie configure el opt-out.
+    ///
+    /// <para>Antes bloqueaba: el trámite quedaba atascado en "Finalizar" pidiendo un adjunto que el
+    /// paso de prenda no ofrece cargar para esas decisiones, sin ninguna vía para cumplirlo desde el
+    /// trámite. Y el banner lo atribuía a "la decisión de prenda seleccionada", que era justo la que
+    /// decía que no había prenda.</para>
+    ///
+    /// <para>La versión anterior de este test fijaba ese comportamiento (misma política, SIN decisión
+    /// registrada, esperando el blocker), que es por lo que el defecto sobrevivió a la suite.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.SinPrenda)]
+    [InlineData(PrendaDecision.Omitir)]
+    public async Task Get_Matricula_PoliticaPrendaObligatoria_DecisionSinSoporte_NoBloquea(string decision)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo,
+            prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true),
+            prendaRepo: new StubPrendaRepo(decision));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Blockers.Should().NotContain(
+            TramiteEstadoErrores.PrendaDocumentoRequeridoOt,
+            "con esta decisión no hay documento de prenda que cargar: exigirlo deja el trámite sin salida");
+    }
+
+    /// <summary>
+    /// El hueco que abrió la corrección de arriba, cerrado por el otro lado. Matrícula inicial con el
+    /// override activo y SIN decisión de prenda registrada: si el override callara, bastaría con no
+    /// abrir el paso de prenda para radicar sin el certificado que el OT exige — y en matrícula no hay
+    /// ningún otro gate que lo recoja (<c>PrendaGate.Evaluate</c> solo actúa en traspaso con warn).
+    /// El código es el accionable: registra la decisión, que siempre está a mano.
+    /// </summary>
+    [Fact]
+    public async Task Get_Matricula_PoliticaPrendaObligatoria_SinDecision_ExigeLaDecision()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo,
+            prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true),
+            prendaRepo: new StubPrendaRepo(decision: null));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDecisionRequerida);
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Get_Matricula_PoliticaPrendaOpcional_SinDocumento_NoAgregaBlocker()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: false));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeFalse();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
     }
 
     // ── Mapeo persistencia → GateContext (pasos completan al llenarlos) ───────
@@ -493,14 +676,16 @@ public sealed class WizardStateHandlerTests
         instance.Actors.Add(Actor("vendedor", "555"));
         instance.Actors.Add(Actor("comprador", "666"));
         instance.PreflightSnapshots.Add(Preflight("green"));
-        CompletarDocsTraspaso(instance); // HU #10935: documentos (paso 4) tras los actores; habilita el 5.
+        CompletarDocsTraspaso(instance); // HU #10935: documentos (paso 4) tras los actores.
         instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Paso 5 (comercial) completo gracias a ValorVenta > 0.
-        result!.Steps.Single(s => s.Index == 5).Status.Should().Be("complete");
+        // Paridad con matrícula (2026-08) — los datos comerciales se absorbieron en el paso 4
+        // (Documentos): completo gracias al checklist + ValorVenta > 0, y habilita el 5 (Identidad).
+        result!.Steps.Single(s => s.Index == 4).Status.Should().Be("complete");
+        result.Steps.Single(s => s.Index == 5).Status.Should().Be("incomplete");
     }
 
     // ── Blockers / canSubmit ──────────────────────────────────────────────────
@@ -774,7 +959,7 @@ public sealed class WizardStateHandlerTests
         var documentos = result!.Steps.Single(s => s.Key == "documentos");
         var comprador = result.Steps.Single(s => s.Key == "comprador");
         var vendedor = result.Steps.Single(s => s.Key == "vendedor");
-        // Orden: consulta → vendedor → comprador → documentos → comercial → fur.
+        // Orden: consulta → vendedor → comprador → documentos → identidad → fur.
         documentos.Index.Should().Be(4);
         documentos.Index.Should().BeGreaterThan(comprador.Index);
         documentos.Index.Should().BeGreaterThan(vendedor.Index);
@@ -859,6 +1044,8 @@ public sealed class WizardStateHandlerTests
             DocumentNumber = nit,
             FullName = "Renting SAS",
             Email = "renting@x.com",
+            Phone = "3001234567",
+            Metadata = ActorMetadataReader.Serialize("Bogotá", "Calle 1 # 2-3", null),
         };
 
     private static SignatureVaultMatch VaultMatch() => new(

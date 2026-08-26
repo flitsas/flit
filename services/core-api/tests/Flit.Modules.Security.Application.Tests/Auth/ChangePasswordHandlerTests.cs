@@ -70,4 +70,31 @@ public sealed class ChangePasswordHandlerTests
         await _handler.Invoking(h => h.HandleAsync(new ChangePasswordCommand(_userId, "Current1!", "NewPass123"), CancellationToken.None))
             .Should().ThrowAsync<InvalidCredentialsException>();
     }
+
+    // HU #11553 AC1 — la nueva contraseña es idéntica a la vigente → PasswordReusedException,
+    // sin persistir el hash.
+    [Fact]
+    public async Task HandleAsync_NewPasswordSameAsCurrent_ThrowsPasswordReused()
+    {
+        _repo.GetPasswordHashAsync(_userId, Arg.Any<CancellationToken>()).Returns("current-hash");
+        _hasher.Verify("Current1!", "current-hash").Returns(true);
+
+        await _handler.Invoking(h => h.HandleAsync(new ChangePasswordCommand(_userId, "Current1!", "Current1!"), CancellationToken.None))
+            .Should().ThrowAsync<PasswordReusedException>();
+
+        await _repo.DidNotReceiveWithAnyArgs().UpdatePasswordHashAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #11553 AC1 — la política de complejidad se evalúa ANTES que la reutilización: una
+    // contraseña débil (aunque coincida con la actual) debe fallar por WeakPassword, no reuso.
+    [Fact]
+    public async Task HandleAsync_WeakPasswordThatAlsoMatchesCurrent_ThrowsWeakPasswordNotReused()
+    {
+        _repo.GetPasswordHashAsync(_userId, Arg.Any<CancellationToken>()).Returns("current-hash");
+        _hasher.Verify(Arg.Any<string>(), "current-hash").Returns(true);
+
+        await _handler.Invoking(h => h.HandleAsync(new ChangePasswordCommand(_userId, "weak", "weak"), CancellationToken.None))
+            .Should().ThrowAsync<WeakPasswordException>();
+    }
 }

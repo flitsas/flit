@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".
   listInstances: vi.fn(),
+  getConsultationConfig: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -44,6 +45,22 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { OperacionView } from '@/components/operacion/OperacionView';
+
+/**
+ * Filas de datos de "Trámites en curso": la tabla ahora es un `<table>` semántico, así que
+ * `getByRole('row')` deja de ser único (cabecera + una fila por `<tr>`). Se acota al `<tbody>`
+ * (segundo `rowgroup` del `<table>`, después del `<thead>`) y se cuentan sus `<tr>`.
+ */
+function tramitesBodyRows(): HTMLElement[] {
+  const table = screen.getByRole('table', { name: /Trámites en curso/ });
+  const tbody = within(table).getAllByRole('rowgroup')[1];
+  return within(tbody).getAllByRole('row');
+}
+
+async function findTramitesBodyRows(): Promise<HTMLElement[]> {
+  await screen.findByRole('table', { name: /Trámites en curso/ });
+  return tramitesBodyRows();
+}
 
 const TRASPASO_WIZARD: WizardState = {
   modalidad: 'traspaso',
@@ -92,12 +109,20 @@ beforeEach(() => {
   mocks.getAttachments.mockResolvedValue([]);
   // Por defecto la tabla de "Trámites en curso" está vacía.
   mocks.listInstances.mockResolvedValue([]);
+  mocks.getConsultationConfig.mockResolvedValue({
+    vehicleVin: 'kyverum_runt',
+    vehiclePlate: 'kyverum_runt',
+    conductor: 'kyverum_runt_conductor',
+    onlyOwnVehicles: false,
+    onlyOwnVehiclesByFamily: { matriculas: false, traspaso: false, otros: false },
+    blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
+  });
 });
 
 const INSTANCE_DRAFT: InstanceSummary = {
   id: 'inst-1',
   referenceNumber: 'TR-001',
-  modalidad: 'traspaso',
+  modalidad: 'TRASPASO',
   estado: 'borrador',
   placa: 'ABC123',
   vin: 'VIN-XYZ-001',
@@ -121,7 +146,7 @@ const INSTANCE_DRAFT: InstanceSummary = {
 const INSTANCE_SUBMITTED: InstanceSummary = {
   id: 'inst-2',
   referenceNumber: 'MA-002',
-  modalidad: 'matricula_inicial',
+  modalidad: 'MATRICULAS',
   estado: 'entregado',
   placa: null,
   vin: 'VIN-NEW-002',
@@ -144,25 +169,23 @@ const INSTANCE_SUBMITTED: InstanceSummary = {
 
 describe('M6 — tabla de trámites en curso', () => {
   it('muestra el estado vacío cuando no hay instancias', async () => {
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
     expect(await screen.findByText('Aún no hay trámites')).toBeInTheDocument();
     expect(mocks.listInstances).toHaveBeenCalledTimes(1);
   });
 
   it('renderiza una fila por instancia con placa, comprador, VIN, paso y chip de estado', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
 
-    const list = await screen.findByRole('list', { name: /Trámites en curso/ });
-    const rows = within(list).getAllByRole('listitem');
+    const rows = await findTramitesBodyRows();
     expect(rows).toHaveLength(2);
 
-    // Fila borrador: placa real, comprador, VIN, vehículo concatenado, paso, chip ámbar (N 03).
+    // Fila borrador: placa, comprador, vehículo (si columna visible), paso, chip ámbar (N 03).
+    // VIN no está en DEFAULT_TRAMITES_VISIBLE_COLUMNS — se activa con "Columnas".
     expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
     expect(within(rows[0]).getByText('TR-001')).toBeInTheDocument();
     expect(within(rows[0]).getByText('Carlos Mendoza')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('VIN-XYZ-001')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('Toyota Corolla')).toBeInTheDocument();
     expect(within(rows[0]).getByText('2/6')).toBeInTheDocument();
     expect(within(rows[0]).getByText('Borrador')).toBeInTheDocument();
 
@@ -177,7 +200,7 @@ describe('M6 — tabla de trámites en curso', () => {
   it('al hacer clic en una fila navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
 
     const row = await screen.findByRole('button', { name: /Abrir trámite TR-001/ });
     await user.click(row);
@@ -185,68 +208,66 @@ describe('M6 — tabla de trámites en curso', () => {
   });
 });
 
-describe('M0 — chooser por modalidad (Track B: delega en la ruta)', () => {
-  it('muestra las dos modalidades y NO consulta tipos publicados', async () => {
-    render(<OperacionView onStartTramite={vi.fn()} />);
-    expect(await screen.findByRole('button', { name: /Iniciar Matrícula inicial/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Iniciar Traspaso estándar/ })).toBeInTheDocument();
-    // M0 desliga de Parametrización: ya no se listan tipos publicados.
+describe('M0 — entrada al asistente (flujo del diseño)', () => {
+  // El listado ya no elige la modalidad: "Nuevo trámite" entra directo al asistente y el tipo
+  // de trámite se elige dentro del paso 1, como en la propuesta. Antes había un diálogo previo.
+  it('el botón general entra al asistente sin decidir la modalidad', async () => {
+    const onNew = vi.fn();
+    const user = userEvent.setup();
+    render(<OperacionView onNewTramite={onNew} />);
+
+    await user.click(await screen.findByRole('button', { name: /Nuevos*trámite/ }));
+
+    expect(onNew).toHaveBeenCalledTimes(1);
+    // No se pide modalidad aquí, ni se crea nada: eso vive en la ruta del asistente.
+    expect(onNew).toHaveBeenCalledWith();
+    expect(mocks.createInstance).not.toHaveBeenCalled();
     expect(mocks.listPublishedProcedureTypes).not.toHaveBeenCalled();
   });
 
-  it('Matrícula inicial dispara onStartTramite y NO crea instancia inline', async () => {
-    const onStart = vi.fn();
-    const user = userEvent.setup();
-    render(<OperacionView onStartTramite={onStart} />);
-    await user.click(await screen.findByRole('button', { name: /Iniciar Matrícula inicial/ }));
+  it('ya no ofrece un selector de modalidad en el listado', async () => {
+    render(<OperacionView onNewTramite={vi.fn()} />);
+    await screen.findByRole('button', { name: /Nuevos*trámite/ });
 
-    expect(onStart).toHaveBeenCalledWith('matricula_inicial');
-    // Track B: el listado ya no crea la instancia; eso lo hace la ruta /nuevo.
-    expect(mocks.createInstance).not.toHaveBeenCalled();
-  });
-
-  it('Traspaso estándar dispara onStartTramite con la modalidad traspaso', async () => {
-    const onStart = vi.fn();
-    const user = userEvent.setup();
-    render(<OperacionView onStartTramite={onStart} />);
-    await user.click(await screen.findByRole('button', { name: /Iniciar Traspaso estándar/ }));
-
-    expect(onStart).toHaveBeenCalledWith('traspaso');
-    expect(mocks.createInstance).not.toHaveBeenCalled();
+    expect(screen.queryByRole('radio', { name: /Matrícula inicial/ })).toBeNull();
+    expect(screen.queryByRole('radio', { name: /Traspaso estándar/ })).toBeNull();
   });
 });
 
 describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('renderiza los chips de filtro de modalidad y estado', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
 
     // Espera a que cargue el listado (sale del estado "Cargando…").
-    await screen.findByRole('list', { name: /Trámites en curso/ });
+    await screen.findByRole('table', { name: /Trámites en curso/ });
 
-    expect(screen.getByRole('button', { name: 'Matrícula inicial' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Traspaso' })).toBeInTheDocument();
-    // N 03 — chips de filtro por los 6 estados de negocio.
-    expect(screen.getByRole('button', { name: 'Borrador' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Entregado' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Anulado' })).toBeInTheDocument();
+    // La modalidad se filtra con tabs (rol `tab`), no con chips toggle.
+    // ADR-0050 — las pestañas son las tres familias del catálogo, no las dos modalidades.
+    expect(screen.getByRole('tab', { name: 'Matrículas' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Traspaso' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Otros trámites' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Todos' })).toBeInTheDocument();
+    // El estado se filtra con la tira de KPIs; su nombre accesible lleva el conteo.
+    for (const estado of ['Borrador', 'Entregado', 'Anulado']) {
+      expect(
+        screen.getByRole('button', { name: new RegExp(`^${estado}:`) }),
+      ).toBeInTheDocument();
+    }
   });
 
   it('la búsqueda por placa reduce las filas visibles', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
 
-    const list = await screen.findByRole('list', { name: /Trámites en curso/ });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    const initialRows = await findTramitesBodyRows();
+    expect(initialRows).toHaveLength(2);
 
-    // La búsqueda está oculta tras el botón "Buscar" (paridad con el diseño).
-    await user.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
+    // La búsqueda vive en la tarjeta de filtros, siempre visible.
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ABC123');
 
-    const rows = within(
-      screen.getByRole('list', { name: /Trámites en curso/ }),
-    ).getAllByRole('listitem');
+    const rows = tramitesBodyRows();
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
   });
@@ -254,15 +275,12 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la búsqueda por VIN reduce las filas visibles', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
 
-    await screen.findByRole('list', { name: /Trámites en curso/ });
-    await user.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
+    await findTramitesBodyRows();
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'VIN-NEW-002');
 
-    const rows = within(
-      screen.getByRole('list', { name: /Trámites en curso/ }),
-    ).getAllByRole('listitem');
+    const rows = tramitesBodyRows();
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText('Entregado')).toBeInTheDocument();
   });
@@ -272,7 +290,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la acción Continuar de una fila borrador navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
 
     await user.click(
       await screen.findByRole('button', { name: /Acciones del trámite TR-001/ }),
@@ -281,30 +299,37 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     expect(routerPush).toHaveBeenCalledWith('/tramites/inst-1');
   });
 
-  it('la acción Ver de una fila submitted navega al wizard de esa instancia', async () => {
+  // Frente C, etapa 1 — un trámite YA RADICADO (estado ≠ 'borrador') ya no navega al asistente:
+  // abre el modal de detalle en su lugar (Tramites.tsx:222 de la propuesta). Antes esta prueba
+  // comprobaba que "Ver" navegaba; ahora comprueba lo contrario (abre el modal, sin navegar), que
+  // es el comportamiento nuevo — no se debilita, se actualiza al contrato vigente.
+  it('la acción Ver de una fila submitted abre el modal de detalle sin navegar', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
 
     await user.click(
       await screen.findByRole('button', { name: /Acciones del trámite MA-002/ }),
     );
-    // "Ver" abre el wizard; "Ver documentos" es otra acción, de ahí el ancla al final.
+    // "Ver" abre el modal de detalle; "Ver documentos" es otra acción, de ahí el ancla al final.
     await user.click(screen.getByRole('menuitem', { name: /^Ver$/ }));
-    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-2');
+
+    expect(
+      await screen.findByRole('dialog', { name: /Detalle de matrícula inicial/ }),
+    ).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it('el estado vacío con filtros activos muestra "Limpiar filtros" y al limpiar reaparecen las filas', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onStartTramite={vi.fn()} />);
+    render(<OperacionView onNewTramite={vi.fn()} />);
 
-    await screen.findByRole('list', { name: /Trámites en curso/ });
-    await user.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
+    await findTramitesBodyRows();
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ZZZ-SIN-MATCH');
 
-    // Ya no hay lista de resultados; aparece el vacío "Sin resultados".
-    expect(screen.queryByRole('list', { name: /Trámites en curso/ })).not.toBeInTheDocument();
+    // Ya no hay tabla de resultados; aparece el vacío "Sin resultados".
+    expect(screen.queryByRole('table', { name: /Trámites en curso/ })).not.toBeInTheDocument();
     expect(screen.getAllByText('Sin resultados').length).toBeGreaterThan(0);
 
     const clearButtons = screen.getAllByRole('button', { name: 'Limpiar filtros' });
@@ -312,9 +337,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     await user.click(clearButtons[0]);
 
     // Tras limpiar, vuelven las dos filas.
-    const rows = within(
-      await screen.findByRole('list', { name: /Trámites en curso/ }),
-    ).getAllByRole('listitem');
+    const rows = await findTramitesBodyRows();
     expect(rows).toHaveLength(2);
   });
 });

@@ -1,8 +1,11 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -108,8 +111,19 @@ public sealed class PutActorsHandler(
     ICatalogRepository catalogRepo,
     BiometricsProviderOptions providerOptions,
     IniciarKyverumVerifyHandler kyverumHandler,
-    IPersonDataConsentRepository consentRepo)
+    IPersonDataConsentRepository consentRepo,
+    ISignatureVaultPolicy? vaultPolicy = null,
+    ILogger<PutActorsHandler>? logger = null)
 {
+    // HU #11665 — traza del disparador de identidad. Default inerte para no obligar a los tests que no
+    // la ejercitan a inyectarlo. NUNCA se loguea PII: ni correo, ni documento, ni nombre.
+    private readonly ILogger _logger = logger ?? NullLogger<PutActorsHandler>.Instance;
+
+    // Baúl de firmas: lo consume el reenvío por cambio de correo (HU #10880), que no puede expirar la
+    // validación en curso de una parte que va a firmar con el baúl. Default inerte (nunca resuelve
+    // firma) ⇒ los tests que no lo inyectan conservan su comportamiento.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
     // Documentos válidos del contrato congelado (front consume el mismo set).
     private static readonly HashSet<string> ValidDocumentTypes =
         new(StringComparer.OrdinalIgnoreCase) { "CC", "CE", "NIT", "PAS", "TI" };
@@ -125,6 +139,8 @@ public sealed class PutActorsHandler(
         {
             [ParteRol.Comprador] = "BUYER",
             [ParteRol.Vendedor] = "OWNER",
+            // El código ya existía en el catálogo («Arrendatario»); lo que faltaba era poder llegar a él.
+            [ParteRol.Locatario] = "LESSEE",
         };
 
     public async Task<(ActorsResponse? Result, string? Error)> HandleAsync(
@@ -180,10 +196,7 @@ public sealed class PutActorsHandler(
         }
 
         // 2. Roles permitidos según modalidad_entrada (matriz de dominio, no hardcode).
-        var journey = ResolveJourney(instance);
-        var allowedRoles = journey is null
-            ? new HashSet<ParteRol>()
-            : journey.Partes.Select(p => p.Rol).ToHashSet();
+        var allowedRoles = AllowedRoles(instance);
 
         var providedRoles = new List<ParteRol>();
         foreach (var a in inputs)
@@ -205,6 +218,11 @@ public sealed class PutActorsHandler(
         // EFECTIVO: roles del request + actores existentes que se conservan. Así se
         // detecta el duplicado aunque cada parte se guarde en un PUT distinto.
         var error = ValidateTraspasoPartes(instance, inputs);
+        if (error is not null)
+            return (null, error);
+
+        // Mismo criterio de conjunto efectivo para el arrendatario: no puede ser el propietario.
+        error = ValidateLocatario(instance, inputs);
         if (error is not null)
             return (null, error);
 
@@ -285,7 +303,103 @@ public sealed class PutActorsHandler(
         // IniciarKyverumVerifyHandler recargue la instancia.
         await ResendIdentityOnEmailChangeAsync(instance, tenantId, previousSubjectsByRol, newActorsByRol, ct);
 
+        // HU #11662: validación de identidad del representante legal de una parte jurídica. Corre DESPUÉS
+        // del reenvío por cambio de correo para que, si ese ya creó una validación nueva, la precedencia
+        // río abajo la vea en vuelo y no duplique el envío.
+        await EnviarValidacionAlRepresentanteDeLaParteJuridicaAsync(instance, tenantId, newActorsByRol, ct);
+
         return (ToResponse(instance), null);
+    }
+
+    /// <summary>
+    /// HU #11195/#11662 — al registrar el actor, si la parte es una persona jurídica se encamina la
+    /// validación de identidad del <b>representante legal declarado en el trámite</b>. Sin este
+    /// disparador el gestor se quedaba sin salida: el trámite exige la firma de alguien a quien nadie le
+    /// había pedido validar su identidad.
+    ///
+    /// <para><b>Aquí solo se filtran DATOS, no se decide el envío.</b> Lo que queda es: proveedor
+    /// Kyverum, actor jurídico, y un sujeto que sea el representante legal con tipo y número de documento
+    /// y correo. Si falta cualquiera de esos, no hay a quién escribirle ni a quién validar (el NIT no es
+    /// validable biométricamente) y se omite, igual que hace <c>EnsureIdentityHandler</c> con
+    /// <c>sin_actor</c>.</para>
+    ///
+    /// <para><b>Por qué ya no hay compuertas de negocio (HU #11662).</b> Este método llegó a descartar
+    /// envíos por su cuenta —cobertura del baúl, y si la COMPAÑÍA tenía algún representante utilizable en
+    /// el directorio—. Lo segundo respondía por la empresa y no por la persona elegida para este trámite:
+    /// bastaba que otro representante acreditado tuviera firma para que al representante elegido no le
+    /// llegara nada, dejando el trámite sin identidad y sin vía para conseguirla. Y ambas comprobaciones
+    /// eran redundantes: <see cref="IniciarKyverumVerifyHandler"/> evalúa río abajo la precedencia única
+    /// de envío (ADR-0039: baúl → identidad vigente → validación en vuelo → enviar), de la cual la
+    /// cobertura del baúl es literalmente el primer paso. Un prechequeo solo puede suprimir envíos
+    /// legítimos; nunca añade uno que la precedencia no fuera a hacer.</para>
+    ///
+    /// <para><b>Por qué la validación del trámite y no <c>POST identity/send</c> de Admin:</b> ese
+    /// endpoint exige un representante YA REGISTRADO en el directorio, que es justo lo que no existe en
+    /// el caso principal. El RL vive declarado en <c>actor.metadata</c>, así que se usa la misma
+    /// maquinaria que el reenvío por cambio de correo (HU #10880) sobre el sujeto de identidad de la
+    /// parte. La validación queda en el trámite y los gates de identidad la ven.</para>
+    ///
+    /// <para>Las personas naturales ni siquiera entran. Solo actúa con Kyverum: el proveedor mock no
+    /// emite CaptureUrl ni envía correos, mismo criterio que
+    /// <see cref="ResendIdentityOnEmailChangeAsync"/>.</para>
+    ///
+    /// <para><b>HU #11665 — ninguna omisión es muda.</b> Cada salida sin envío deja un motivo tipificado
+    /// (<see cref="EnvioValidacionBloqueoRules"/>) en un log de negocio, y el listado de biometría
+    /// publica el mismo código calculado con la misma regla. El motivo no se persiste: se deriva del
+    /// estado, así que desaparece solo en cuanto el gestor corrige el dato.</para>
+    /// </summary>
+    private async Task EnviarValidacionAlRepresentanteDeLaParteJuridicaAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        Dictionary<ParteRol, ProcedureInstanceActor> newActorsByRol,
+        CancellationToken ct)
+    {
+        var rolesQueValidan = RolesQueValidanIdentidad(instance);
+
+        foreach (var (rol, actor) in newActorsByRol)
+        {
+            // Una parte que el tipo NO manda a validar no convoca validación de nadie, ni siquiera de
+            // su representante legal. Sin este corte, un locatario persona jurídica arrastraba a su
+            // representante a una biometría que el trámite no le pide.
+            if (rolesQueValidan is not null && !rolesQueValidan.Contains(rol))
+                continue;
+
+            var subject = IdentitySubjectResolver.For(actor);
+
+            // HU #11665 — el filtrado de datos vive en la regla compartida, no en una condición
+            // compuesta local. Las tres omisiones por datos incompletos eran UN SOLO `continue`, así
+            // que ni el código sabía cuál de las tres había ocurrido; y el corte por proveedor mock
+            // hacía `return` del método entero, con lo que las partes siguientes ni se miraban.
+            var estado = EnvioValidacionBloqueoRules.EstadoDe(actor, subject, providerOptions.IsKyverum);
+            if (!estado.ActorEsJuridico)
+                continue; // Persona natural: no entra al disparador y no reporta motivo.
+
+            var motivo = EnvioValidacionBloqueoRules.Evaluar(estado);
+            if (motivo is not null)
+            {
+                PutActorsLog.ValidacionNoEnviada(_logger, instance.Id, RolToCode(rol), motivo.Codigo);
+                continue;
+            }
+
+            // Quién decide si de verdad se envía: el handler, que evalúa la precedencia única
+            // (ADR-0039). Si la persona ya está cubierta por el baúl, ya tiene identidad vigente o ya
+            // tiene una validación en vuelo, devuelve la decisión y no crea nada. De ESA decisión —no
+            // de un pre-chequeo local, que la HU #11662 retiró— salen los motivos informativos.
+            var (_, _, conflicto) = await kyverumHandler.HandleAsync(
+                instance.Id,
+                tenantId,
+                new IniciarBiometriaInput(
+                    RolToCode(rol),
+                    subject.Nombre ?? actor.FullName,
+                    subject.TipoDocumento!,
+                    subject.NumeroDocumento!,
+                    subject.Email!),
+                ct);
+
+            var informativo = EnvioValidacionBloqueoRules.DesdeDecision(conflicto);
+            if (informativo is not null)
+                PutActorsLog.ValidacionNoEnviada(_logger, instance.Id, RolToCode(rol), informativo.Codigo);
+        }
     }
 
     /// <summary>
@@ -371,6 +485,12 @@ public sealed class PutActorsHandler(
             if (prevEmail is null || newEmail is null || prevEmail == newEmail)
                 continue; // AC2: sin cambio real de correo -> no-op.
 
+            // Con la firma del baúl cubriendo a la parte, corregir el correo no debe convocar una
+            // validación de identidad: se firma con el baúl. La previa en curso se deja como está —
+            // expirarla aquí sería decidir por el gestor sobre una validación que él inició.
+            if (await LaFirmaDelBaulYaCubreAsync(tenantId, newActor, newSubject, ct))
+                continue;
+
             var parte = RolToCode(rol);
 
             // Solo hay algo que reenviar si la parte tenía una validación EN CURSO para el documento del
@@ -403,6 +523,37 @@ public sealed class PutActorsHandler(
         }
     }
 
+    /// <summary>
+    /// ¿La firma del baúl ya cubre a esta parte, de modo que pedirle una validación de identidad sería
+    /// pedirle algo que no necesita?
+    ///
+    /// <para>Lo consume el <b>reenvío por cambio de correo</b> (HU #10880), y ahí no es redundante con
+    /// la precedencia única: antes de llamar al handler, ese camino EXPIRA la validación en curso. Sin
+    /// esta comprobación, corregirle el correo a una parte que va a firmar con el baúl le tumbaría una
+    /// validación que el gestor inició a propósito.</para>
+    ///
+    /// <para>Se comprueban las dos cosas: que la firma del baúl proceda para esta parte
+    /// (<see cref="FirmaBaulCobertura.Aplica"/>, que es el predicado único del Bug #11141 e incluye el
+    /// mecanismo elegido) y que exista de verdad. Sin firma real no basta con haberla elegido: ahí la
+    /// validación de identidad sigue siendo la única salida.</para>
+    ///
+    /// <para><b>HU #11662:</b> el disparador de la parte jurídica ya NO lo usa. Ahí sí era redundante —
+    /// la cobertura del baúl es el primer paso de la precedencia que evalúa
+    /// <see cref="IniciarKyverumVerifyHandler"/>— y solo servía para suprimir envíos legítimos.</para>
+    /// </summary>
+    private async Task<bool> LaFirmaDelBaulYaCubreAsync(
+        Guid tenantId, ProcedureInstanceActor actor, IdentitySubject subject, CancellationToken ct)
+    {
+        if (!FirmaBaulCobertura.Aplica(actor)
+            || string.IsNullOrWhiteSpace(subject.TipoDocumento)
+            || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+            return false;
+
+        return await _vaultPolicy
+            .ResolveAsync(tenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
+            .ConfigureAwait(false) is not null;
+    }
+
     /// <summary>Correo normalizado para comparar (trim + minúsculas); null si viene vacío.</summary>
     private static string? NormalizeEmail(string? email) =>
         string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
@@ -424,6 +575,34 @@ public sealed class PutActorsHandler(
         return TraspasoPartes.MensajeDuplicadas(dup) is null ? null : "partes_duplicadas";
     }
 
+    /// <summary>Error: el arrendatario y el propietario resultaron ser la misma persona.</summary>
+    public const string LocatarioIgualAlPropietarioError = "locatario_igual_al_propietario";
+
+    /// <summary>
+    /// El locatario no puede ser el propietario. Si lo fueran, en un CAMBIO_LOCATARIO no habría nada
+    /// que cambiar y en una matrícula por leasing no habría leasing — y el FUR imprimiría «de X a X».
+    ///
+    /// <para>La comprobación vive aquí y no en el formulario porque las dos partes se capturan en
+    /// PASOS DISTINTOS: la pantalla del locatario nunca tiene al propietario a la vista. Se evalúa
+    /// sobre el conjunto EFECTIVO (lo que trae el request + los actores que se conservan), igual que
+    /// la regla de vendedor≠comprador, así que da lo mismo en qué orden se guarden.</para>
+    /// </summary>
+    private static string? ValidateLocatario(ProcedureInstance instance, IReadOnlyList<ActorInput> inputs)
+    {
+        var locatario = EffectiveParte(instance, inputs, ParteRol.Locatario);
+        var propietario = EffectiveParte(instance, inputs, ParteRol.Comprador);
+        if (locatario is null || propietario is null)
+            return null;
+
+        // Se compara el NÚMERO, que es lo que `ParteDatos` transporta y el mismo criterio con el que
+        // `TraspasoPartes` decide que vendedor y comprador son la misma persona.
+        var mismoDocumento =
+            !string.IsNullOrWhiteSpace(locatario.Documento)
+            && string.Equals(locatario.Documento.Trim(), propietario.Documento?.Trim(), StringComparison.Ordinal);
+
+        return mismoDocumento ? LocatarioIgualAlPropietarioError : null;
+    }
+
     /// <summary>
     /// Datos efectivos de un rol tras el upsert: el del request si viene en él; si no, el del
     /// actor ya persistido que se conservará. Permite validar vendedor≠comprador aunque cada
@@ -436,31 +615,75 @@ public sealed class PutActorsHandler(
     {
         var input = inputs.FirstOrDefault(a => ParseRol(a.Rol) == rol);
         if (input is not null)
-            return new ParteDatos(input.NombreCompleto, input.NumeroDocumento, input.Email);
+            return new ParteDatos(
+                input.NombreCompleto, input.NumeroDocumento, input.Email,
+                input.Ciudad, input.Direccion, input.Telefono);
 
         var existing = instance.Actors.FirstOrDefault(a => ParseRol(a.ActorType) == rol);
-        return existing is null
-            ? null
-            : new ParteDatos(existing.FullName, existing.DocumentNumber, existing.Email ?? string.Empty);
+        if (existing is null)
+            return null;
+
+        // HU #11593 — ciudad/dirección viven en actor.metadata (JSON); el teléfono en la columna.
+        var (ciudad, direccion, _, _) = ActorMetadataReader.Parse(existing.Metadata);
+        return new ParteDatos(
+            existing.FullName, existing.DocumentNumber, existing.Email ?? string.Empty,
+            ciudad, direccion, existing.Phone);
     }
 
-    private static TipologiaJourney? ResolveJourney(ProcedureInstance instance)
+    /// <summary>
+    /// Roles de actor admitidos por el trámite (ADR-0050): los declara el <c>gate_profile</c> del
+    /// tipo, no un catálogo de journeys por modalidad.
+    /// <para>En la familia OTROS interviene un solo actor —el titular, que no vende ni compra— y se
+    /// persiste con el rol <see cref="ParteRol.Comprador"/>, igual que en matrícula inicial, porque
+    /// el modelo no tiene un rol de propietario.</para>
+    /// </summary>
+    private static HashSet<ParteRol> AllowedRoles(ProcedureInstance instance)
     {
-        // Preferir tipología si está set; si no, resolver el journey por modalidad_entrada.
-        var byTipologia = TipologiaMatrizCatalog.Get(instance.TipologiaCodigo);
-        if (byTipologia is not null)
-            return byTipologia;
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
-        return modalidad is null
-            ? null
-            : TipologiaMatrizCatalog.All.FirstOrDefault(j => j.Modalidad == modalidad.Value);
+        var roles = new HashSet<ParteRol>();
+        if (profile.RequiresBuyer)
+            roles.Add(ParteRol.Comprador);
+        if (profile.RequiresSeller)
+            roles.Add(ParteRol.Vendedor);
+        if (profile.RequiresLessee)
+            roles.Add(ParteRol.Locatario);
+        return roles;
+    }
+
+    /// <summary>
+    /// Roles que este tipo manda a VALIDAR IDENTIDAD, según <c>biometricActors</c> del perfil.
+    ///
+    /// <para>Existe porque el disparador de la validación del representante legal recorría TODOS los
+    /// actores guardados: con un locatario persona jurídica habría convocado una validación para su
+    /// representante, cuando en el leasing quien valida y firma es el propietario. La lista es la
+    /// misma que el motor usa para los gates, así que pantalla, gate y disparador no pueden discrepar.</para>
+    ///
+    /// <para>Un perfil SIN <c>biometricActors</c> devuelve <c>null</c> y el llamador no filtra nada:
+    /// es el comportamiento previo, y degradar a «ninguno» apagaría el disparador en todo tipo cuyo
+    /// perfil llegue vacío o corrupto.</para>
+    /// </summary>
+    private static HashSet<ParteRol>? RolesQueValidanIdentidad(ProcedureInstance instance)
+    {
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (profile.BiometricActors.Count == 0)
+            return null;
+
+        var codigos = profile.BiometricActors
+            .Select(a => a.Trim().ToUpperInvariant())
+            .ToHashSet(StringComparer.Ordinal);
+
+        return RolToEntityCode
+            .Where(kv => codigos.Contains(kv.Value))
+            .Select(kv => kv.Key)
+            .ToHashSet();
     }
 
     private static ParteRol? ParseRol(string? rol) => rol?.Trim().ToLowerInvariant() switch
     {
         "comprador" => ParteRol.Comprador,
         "vendedor" => ParteRol.Vendedor,
+        "locatario" => ParteRol.Locatario,
         _ => null,
     };
 
@@ -468,6 +691,8 @@ public sealed class PutActorsHandler(
     {
         ParteRol.Comprador => "comprador",
         ParteRol.Vendedor => "vendedor",
+        // El literal que ya leen FurCommand, el resolver de destinatarios y el ciclo de vida.
+        ParteRol.Locatario => "locatario",
         _ => rol.ToString().ToLowerInvariant(),
     };
 
@@ -475,7 +700,7 @@ public sealed class PutActorsHandler(
         new(instance.Actors
             .Select(a =>
             {
-                var (ciudad, direccion, rl, mandante) = ParseMetadata(a.Metadata);
+                var (ciudad, direccion, rl, mandante) = ActorMetadataReader.Parse(a.Metadata);
                 return new ActorDto(
                     a.ActorType,
                     a.DocumentType,
@@ -492,86 +717,18 @@ public sealed class PutActorsHandler(
             })
             .ToList());
 
-    private static readonly JsonSerializerOptions MetadataJson = new(JsonSerializerDefaults.Web);
-
-    /// <summary>
-    /// Serializa ciudad/dirección + representante legal al JSON de <c>actor.metadata</c>.
-    /// Sin ningún dato → "{}".
-    /// </summary>
     private static string SerializeMetadata(
         string? ciudad,
         string? direccion,
         ActorRepresentanteLegal? rl,
-        ActorMandante? mandante = null)
-    {
-        var c = string.IsNullOrWhiteSpace(ciudad) ? null : ciudad.Trim();
-        var d = string.IsNullOrWhiteSpace(direccion) ? null : direccion.Trim();
-        var repLegal = NormalizeRepresentanteLegal(rl);
-        var mand = NormalizeMandante(mandante);
-        return c is null && d is null && repLegal is null && mand is null
-            ? "{}"
-            : JsonSerializer.Serialize(new ActorMetadata(c, d, repLegal, mand), MetadataJson);
-    }
+        ActorMandante? mandante = null) =>
+        ActorMetadataReader.Serialize(ciudad, direccion, rl, mandante);
 
     /// <summary>
-    /// Lee ciudad/dirección + representante legal de <c>actor.metadata</c>. Robusto ante
-    /// null/"{}"/JSON inválido. <c>internal</c> (HU #10955): reutilizado por
-    /// <see cref="ActorContactLookupHandler"/> para el lookup de datos de contacto (AC2) sin
-    /// duplicar la deserialización del jsonb.
+    /// Alias interno (HU #10955) — delega en <see cref="ActorMetadataReader.Parse"/>.
     /// </summary>
-    internal static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal, ActorMandante? Mandante) ParseMetadata(string? metadata)
-    {
-        if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
-            return (null, null, null, null);
-        try
-        {
-            var m = JsonSerializer.Deserialize<ActorMetadata>(metadata, MetadataJson);
-            return (m?.Ciudad, m?.Direccion, NormalizeRepresentanteLegal(m?.RepresentanteLegal), NormalizeMandante(m?.Mandante));
-        }
-        catch (JsonException)
-        {
-            return (null, null, null, null);
-        }
-    }
-
-    /// <summary>Trim + colapso a null si el mandante viene vacío en todos sus campos.</summary>
-    private static ActorMandante? NormalizeMandante(ActorMandante? mandante)
-    {
-        if (mandante is null)
-            return null;
-        string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
-        var tipo = Clean(mandante.TipoDocumento);
-        var numero = Clean(mandante.NumeroDocumento);
-        var nombre = Clean(mandante.NombreCompleto);
-        var email = Clean(mandante.Email);
-        return tipo is null && numero is null && nombre is null && email is null
-            ? null
-            : new ActorMandante(tipo, numero, nombre, email);
-    }
-
-    /// <summary>Trim + colapso a null si el representante legal viene vacío en todos sus campos.</summary>
-    private static ActorRepresentanteLegal? NormalizeRepresentanteLegal(ActorRepresentanteLegal? rl)
-    {
-        if (rl is null)
-            return null;
-        string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
-        var tipo = Clean(rl.TipoDocumento);
-        var numero = Clean(rl.NumeroDocumento);
-        var nombre = Clean(rl.NombreCompleto);
-        var email = Clean(rl.Email);
-        var telefono = Clean(rl.Telefono);
-        var mecanismo = MecanismoFirma.Normalizar(rl.MecanismoFirma);
-        return tipo is null && numero is null && nombre is null && email is null && telefono is null
-            && mecanismo is null
-            ? null
-            : new ActorRepresentanteLegal(tipo, numero, nombre, email, telefono, mecanismo);
-    }
-
-    private sealed record ActorMetadata(
-        string? Ciudad,
-        string? Direccion,
-        ActorRepresentanteLegal? RepresentanteLegal = null,
-        ActorMandante? Mandante = null);
+    internal static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal, ActorMandante? Mandante) ParseMetadata(string? metadata) =>
+        ActorMetadataReader.Parse(metadata);
 }
 
 /// <summary>GET de actores del set guardado.</summary>
@@ -588,4 +745,17 @@ public sealed class GetActorsHandler(IProcedureInstanceRepository repo)
 
         return (PutActorsHandler.ToResponse(instance), null);
     }
+}
+
+/// <summary>
+/// Logging source-generated (CA1848) del disparador de validación de identidad (HU #11665).
+/// <b>Sin PII (Ley 1581):</b> solo el id de la instancia, el rol de la parte y el código del motivo.
+/// Ni correo, ni número de documento, ni nombre del representante.
+/// </summary>
+internal static partial class PutActorsLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se envió la validación de identidad a la parte {Parte} del trámite {InstanceId}: {Motivo}.")]
+    public static partial void ValidacionNoEnviada(
+        ILogger logger, Guid instanceId, string? parte, string motivo);
 }

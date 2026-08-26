@@ -17,7 +17,12 @@ public static class DocumentOcrPrompts
     /// impronta + soat). HU #10977 añade <c>rtm</c> en ambas modalidades.
     /// </summary>
     public static readonly IReadOnlySet<string> SupportedTipos =
-        new HashSet<string>(StringComparer.Ordinal) { "factura", "aduana", "impronta", "soat", "rtm" };
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "factura", "aduana", "impronta", "soat", "rtm",
+            // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
+            "mandato_config",
+        };
 
     /// <summary>true si <paramref name="tipo"/> tiene prompt OCR asociado.</summary>
     public static bool IsSupported(string? tipo) => tipo is not null && SupportedTipos.Contains(tipo);
@@ -30,8 +35,81 @@ public static class DocumentOcrPrompts
         "impronta" => Impronta,
         "soat" => Soat,
         "rtm" => Rtm,
+        "mandato_config" => MandatoConfig,
         _ => null,
     };
+
+    /// <summary>
+    /// Prompt de CLASIFICACIÓN del cargue masivo. A diferencia de los prompts por tipo (que son
+    /// dirigidos: "esto es una factura, verifícala"), este es el inverso — recibe un documento
+    /// cualquiera y decide QUÉ hay en cada página. Es la única pieza del OCR que no sabe de antemano
+    /// qué está mirando, y por eso corre en el modelo fuerte y una sola vez por archivo: de su mapa
+    /// <c>tipo → páginas</c> salen los recortes que después verifica el prompt por tipo de arriba.
+    /// <para><paramref name="tipos"/> son los tipos que el trámite espera (varían por modalidad:
+    /// traspaso no lleva factura ni aduana), así el modelo no propone tipos que nadie va a recibir.</para>
+    /// </summary>
+    public static string ClassificationPrompt(IEnumerable<string> tipos)
+    {
+        var solicitados = string.Join(", ", tipos.Where(IsSupported));
+        return $$"""
+Analiza este documento PDF o imagen. Puede contener UN solo documento, o VARIOS documentos distintos
+concatenados en un mismo archivo (un expediente completo). Tu tarea es decir QUÉ documento hay en CADA
+página, y agrupar las páginas que forman cada documento.
+
+TIPOS QUE DEBES IDENTIFICAR (y SOLO estos): {{solicitados}}
+
+Cómo reconocer cada tipo:
+- factura: FACTURA ELECTRONICA DE VENTA, factura de venta, cuenta de cobro o documento equivalente por la
+  compraventa del vehiculo. Lleva numero de factura, CUFE o resolucion DIAN, emisor con NIT, comprador,
+  descripcion del vehiculo y valores (subtotal, IVA, total).
+- aduana: DECLARACION DE IMPORTACION (formulario DIAN/MUISCA), manifiesto de importacion, certificado de
+  homologacion o licencia de importacion. Lleva numero de declaracion, subpartida arancelaria (8703, 8704,
+  8711...), importador o agente de aduana, pais de origen y valores FOB/CIF. Tambien cuenta la certificacion
+  de nacionalizacion que expide el importador citando el numero de declaracion.
+- impronta: CERTIFICADO DE IMPRONTAS, hoja de improntas digitales, acta de improntas o fotoimpronta. Lleva
+  los numeros fisicos del vehiculo (motor, chasis, VIN, serie), normalmente en recuadros o calcos.
+  Cuenta tanto el certificado de un CDA como la hoja de "improntas del cliente" que solo trae la foto
+  de la placa VIN y los numeros transcritos: ambas son el documento de improntas.
+- soat: POLIZA SOAT o certificado de SOAT de una aseguradora colombiana. Lleva numero de poliza,
+  aseguradora, vigencia y datos del vehiculo.
+- rtm: CERTIFICADO DE REVISION TECNICO-MECANICA Y DE EMISIONES CONTAMINANTES expedido por un CDA. Lleva
+  numero de certificado, nombre del CDA, vigencia y resultado.
+
+DOCUMENTOS QUE NO SON NINGUNO DE LOS ANTERIORES:
+Los expedientes suelen traer muchas paginas que NO corresponden a ningun tipo solicitado. NO las fuerces
+dentro de un tipo: reportalas como no reconocidas. Ejemplos frecuentes:
+- Contrato privado de mandato o poder / autorizacion al apoderado
+- Solicitud de tramite de forma virtual
+- Carta de validacion de identidad, carta selfie, cedula o documento de identidad
+- Formulario del Ministerio de Transporte (FUR) y su hoja de instrucciones
+- Licencia de transito
+- Contrato de compraventa
+- Formato o datos de prenda / garantia
+- Certificado de paz y salvo de impuestos o de tradicion
+- Certificados de consulta al RUNT generados por una plataforma (NO son el SOAT ni el RTM originales:
+  son un reporte de consulta, no el certificado expedido por la aseguradora o el CDA)
+- Portadas del expediente y hojas sueltas de firmas, hashes y sellos de tiempo. OJO: muchas paginas
+  llevan al pie un bloque de "Firma digital impronta" o un hash; eso es la firma electronica de la
+  pagina y NO decide su tipo. Clasifica por el contenido principal de la pagina, no por ese bloque.
+
+REGLAS CRITICAS:
+1. Una pagina pertenece a UN solo documento. No repitas el mismo numero de pagina en dos entradas.
+2. Un documento puede ocupar varias paginas consecutivas: agrupalas en una sola entrada.
+3. Un mismo tipo puede aparecer MAS DE UNA VEZ en el archivo (dos facturas, dos improntas). Devuelve una
+   entrada por cada aparicion; no las fusiones.
+4. Si una pagina esta escaneada, borrosa, torcida o ilegible y no puedes determinar que es, va a
+   paginas_no_reconocidas. NO adivines.
+5. NO inventes tipos fuera de la lista solicitada.
+6. confianza es tu certeza real de 0.0 a 1.0. Si dudas, baja la confianza en vez de omitir el documento.
+7. total_paginas es el numero total de paginas del archivo. Para una imagen, es 1.
+8. Los numeros de pagina son base 1.
+9. No incluyas entradas con paginas vacias. Si un tipo no aparece en el archivo, simplemente no lo
+   pongas en documentos.
+
+Devuelve UNICAMENTE este JSON, sin markdown y sin texto adicional:
+{"total_paginas":0,"documentos":[{"tipo":"factura","paginas":[1,2],"confianza":0.95,"motivo":"Factura electronica de venta con CUFE y datos del vehiculo"}],"paginas_no_reconocidas":[3,4]}
+""";
+    }
 
     private const string Factura =
 """
@@ -319,5 +397,42 @@ EXTRAER:
 
 JSON valido sin markdown:
 {"tipo_documento":"rtm","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","cda_expide":"","cda_nit":"","fecha_expedicion":"","fecha_vigencia":"","fecha_vencimiento":"","estado":"no_determinado","resultado":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","observaciones":""}
+""";
+
+    /// <summary>
+    /// Extract de config de mandato para Plataforma → Mandatos. NO se usa en el lote de trámites.
+    /// El PDF subido solo aporta datos; el documento oficial se regenera con diseño FLIT.
+    /// </summary>
+    private const string MandatoConfig =
+"""
+Analiza este documento. Debe ser un CONTRATO PRIVADO DE MANDATO, poder o autorizacion a un apoderado
+para tramites de transito en Colombia (FLIT / organismos de transito / uniones temporales).
+
+NO es valido si es: FUR, SOAT, RTM, factura, cedula, compraventa, solicitud virtual sola.
+
+Heuristica de plantilla sugerida (suggestedTemplateCode):
+- "sabaneta" si menciona UT-SETSA, SETSA o Sabaneta como mandatario institucional
+- "bello" si menciona UT-MAB, MAB o Bello como mandatario institucional / union temporal
+- "generico" en cualquier otro caso (mandatario persona natural)
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1,2] o [3] o [1]). Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+EXTRAER JSON (sin markdown):
+- paginas_documento: [paginas], total_paginas: numero
+- suggestedTemplateCode: "generico" | "sabaneta" | "bello"
+- requiresForNaturalPerson: true si el texto implica que aplica tambien a persona natural; si no false
+- mandataryFamily: "organismo_transito" si el mandatario es una UT/organismo; "individuo" si es una persona
+- institutionalMandataryName: razon social del mandatario institucional (si aplica)
+- institutionalMandataryNit: NIT del mandatario institucional (si aplica)
+- chamberCity: ciudad de la Camara de Comercio mencionada (si aparece)
+- mandatarySigla: sigla tipo UT-SETSA / UT-MAB (si aparece)
+- notes: breve observacion
+
+JSON valido sin markdown:
+{"suggestedTemplateCode":"generico","requiresForNaturalPerson":false,"mandataryFamily":"individuo","institutionalMandataryName":"","institutionalMandataryNit":"","chamberCity":"","mandatarySigla":"","notes":"","paginas_documento":[1],"total_paginas":1}
 """;
 }

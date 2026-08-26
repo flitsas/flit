@@ -54,6 +54,32 @@ describe('tramitesClient — tenant/auth resolution (#1)', () => {
     expect(lastCall().headers['X-Tenant-Id']).toBe(OTHER);
   });
 
+  it('listInstances envía filtros y orden en el query string', async () => {
+    await tramitesClient.listInstances({
+      placa: 'ABC123',
+      vendedor: 'Pérez',
+      comprador: 'García',
+      gestor: 'Ana',
+      firmado: false,
+      createdFrom: '2026-01-01',
+      sortBy: 'vin',
+      sortDir: 'asc',
+      take: 200,
+    });
+    const mock = (globalThis.fetch as ReturnType<typeof vi.fn>).mock;
+    const [url] = mock.calls[mock.calls.length - 1];
+    expect(String(url)).toContain('/api/v1/tramites/instances?');
+    expect(String(url)).toContain('placa=ABC123');
+    expect(String(url)).toContain('vendedor=P%C3%A9rez');
+    expect(String(url)).toContain('comprador=Garc%C3%ADa');
+    expect(String(url)).toContain('gestor=Ana');
+    expect(String(url)).toContain('firmado=false');
+    expect(String(url)).toContain('createdFrom=2026-01-01T00%3A00%3A00.000Z');
+    expect(String(url)).toContain('sortBy=vin');
+    expect(String(url)).toContain('sortDir=asc');
+    expect(String(url)).toContain('take=200');
+  });
+
   it('llamada per-instance lleva Bearer y el tenant del JWT (company-user)', async () => {
     const token = makeToken({ sub: 'u1', role: 'AdminCompany', tenant_id: COMPANY });
     setCookieToken(token);

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -90,13 +92,12 @@ public sealed class ConsolidadoHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000099",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -113,13 +114,12 @@ public sealed class ConsolidadoHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000100",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -157,6 +157,32 @@ public sealed class ConsolidadoHandlerTests
         });
     }
 
+    /// <summary>
+    /// Variante de <see cref="AddAttachment"/> con <c>Source</c> y <c>UploadedAt</c> explícitos —
+    /// necesaria para ejercitar la precedencia declarada de <c>AttachmentSourcePrecedence</c> (DT-4,
+    /// HU #11319), que decide por origen y no solo por fecha de carga.
+    /// </summary>
+    private static void AddAttachmentWithSource(
+        ProcedureInstance instance, string tipo, string filename, string contentMarker,
+        string source, DateTimeOffset uploadedAt)
+    {
+        var path = $"{instance.Id:D}/{tipo}_{source}_{Guid.NewGuid():N}";
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = tipo,
+            Filename = filename,
+            Mimetype = "application/pdf",
+            SizeBytes = 10,
+            Sha256 = $"sha-{tipo}-{source}",
+            StoragePath = path,
+            Source = source,
+            UploadedAt = uploadedAt,
+        });
+    }
+
     private string ConsolidadoContent()
     {
         var path = _storage.Saved.Last();
@@ -180,6 +206,172 @@ public sealed class ConsolidadoHandlerTests
         error.Should().Be("migrado_solo_lectura");
         result.Should().BeNull();
         _storage.Saved.Should().BeEmpty(); // no generó/sobrescribió el consolidado
+    }
+
+    /// <summary>Prelación que el OT dejó configurada para el tipo de trámite (HU #11184).</summary>
+    private sealed class FakeOtOrderProvider(params string[] codigos) : IOtConfiguredDocumentOrderProvider
+    {
+        public int Calls { get; private set; }
+
+        public Task<IReadOnlyList<string>> GetConfiguredOrderAsync(
+            Guid procedureTypeId, Guid? transitOfficeId, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult<IReadOnlyList<string>>(codigos);
+        }
+    }
+
+    private sealed class FailingOtOrderProvider : IOtConfiguredDocumentOrderProvider
+    {
+        public Task<IReadOnlyList<string>> GetConfiguredOrderAsync(
+            Guid procedureTypeId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("prelación no disponible");
+    }
+
+    [Fact]
+    public async Task HU11184_AC1_AC2_ConPrelacionConfigurada_ElExpedienteSaleEnEseOrden_YElFurNoSeFuerzaAlPrincipio()
+    {
+        // El organismo bajó el FUR: primero compraventa y SOAT. Con la cabecera fija que anteponía
+        // los generados esto era imposible — el FUR salía siempre en la primera página.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var provider = new FakeOtOrderProvider("compraventa", "soat", "fur", "certificado_identidad");
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, null, null, provider);
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        provider.Calls.Should().Be(1);
+        var posiciones = PosicionesEnConsolidado("compraventa.pdf", "soat.pdf", "fur.pdf", "cert.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11184_AC3_SinPrelacionConfigurada_ConservaElOrdenDeSuModalidad()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, null, null, new FakeOtOrderProvider());
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var posiciones = PosicionesEnConsolidado("fur.pdf", "cert.pdf", "compraventa.pdf", "soat.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11184_AC3_SiFallaLaConsultaDePrelacion_ElExpedienteSeGeneraIgual()
+    {
+        // Un fallo leyendo la configuración del OT no puede dejar al gestor sin expediente.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, null, null, new FailingOtOrderProvider());
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        var posiciones = PosicionesEnConsolidado("fur.pdf", "compraventa.pdf");
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11184_AC4_ConPrelacionConfigurada_NoIncluyeConsolidadosPrevios()
+    {
+        // La regla "ningún expediente dentro de otro" tiene que sobrevivir al camino nuevo: olvidar
+        // `consolidado_maestro` fue lo que duplicaba el expediente entero al aprobar el OT.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        AddAttachment(instance, "consolidado_maestro", "maestro.pdf", "%PDF-maestro");
+        AddAttachment(instance, "biometric_selfie", "biometric.pdf", "%PDF-biometric");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var provider = new FakeOtOrderProvider("fur", "compraventa", "consolidado_maestro");
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, null, null, provider);
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().NotContain("maestro.pdf");
+        content.Should().NotContain("biometric.pdf");
+        content.Should().Contain("fur.pdf");
+    }
+
+    /// <summary>
+    /// Índice de cada documento dentro del consolidado, por su nombre de archivo (las pruebas
+    /// guardan el filename como contenido, así que el PDF fusionado es su concatenación).
+    /// </summary>
+    private IReadOnlyList<int> PosicionesEnConsolidado(params string[] filenames)
+    {
+        var content = ConsolidadoContent();
+        return [.. filenames.Select(f => content.IndexOf(f, StringComparison.Ordinal))];
+    }
+
+    [Fact]
+    public async Task HU11183_AC3_TraspasoSinPrelacionConfigurada_ConservaElOrdenDeHoy()
+    {
+        // Golden test del orden vigente de traspaso: la HU #11174 hace configurable la prelación,
+        // pero un OT que no ha configurado nada debe seguir recibiendo EXACTAMENTE este expediente.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        // FUR, certificados, compraventa e impronta por prelación; los que la lista no nombra
+        // (rtm, paz y salvo, cédulas) al final por fecha de carga.
+        var posiciones = PosicionesEnConsolidado(
+            "fur.pdf", "cert.pdf", "cert_vend.pdf", "compraventa.pdf", "impronta.pdf",
+            "soat.pdf", "rtm.pdf", "paz_salvo.pdf", "cedulas.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11183_AC4_MatriculaSinPrelacionConfigurada_ConservaElOrdenDeHoy()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var posiciones = PosicionesEnConsolidado(
+            "fur.pdf", "cert.pdf", "factura.pdf", "aduana.pdf", "impronta.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
     }
 
     [Fact]
@@ -212,7 +404,7 @@ public sealed class ConsolidadoHandlerTests
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
-        instance.ModalidadEntrada = "sucesion";
+        instance.ProcedureType = ProcedureTypeFixture.For("sucesion");
         foreach (var att in instance.Attachments)
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
 
@@ -266,6 +458,39 @@ public sealed class ConsolidadoHandlerTests
         result!.Document.Tipo.Should().Be("consolidado");
         instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado")
             .Which.Payload.Should().Contain("compraventa");
+    }
+
+    [Fact]
+    public async Task HandleAsync_Traspaso_ElCertificadoSoatRtmVaEntreLosCertificadosYNoAlFinal()
+    {
+        // HU #11307 — `certificado_soat_rtm` y `certificado_rues_vendedor` no estaban en la lista de
+        // prelación: caían al final por defecto (rank = Precedence.Length + 1), mezclados con "otro" y
+        // ordenados solo por fecha de carga. El expediente que ve el organismo de tránsito los
+        // presentaba en un sitio arbitrario que además podía cambiar entre regeneraciones.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        AddAttachment(instance, "certificado_soat_rtm", "soat_rtm_cert.pdf", "%PDF-soatrtmcert");
+        AddAttachment(instance, "otro", "otro.pdf", "%PDF-otro");
+
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        var idxIdentidad = content.IndexOf("cert.pdf", StringComparison.Ordinal);
+        var idxSoatRtm = content.IndexOf("soat_rtm_cert.pdf", StringComparison.Ordinal);
+        var idxCompraventa = content.IndexOf("compraventa.pdf", StringComparison.Ordinal);
+        var idxOtro = content.IndexOf("otro.pdf", StringComparison.Ordinal);
+
+        idxSoatRtm.Should().BeGreaterThan(idxIdentidad, "va con los certificados generados");
+        idxSoatRtm.Should().BeLessThan(idxCompraventa, "y antes de los documentos del checklist");
+        idxSoatRtm.Should().BeLessThan(idxOtro, "ya no cae al final junto a los no clasificados");
     }
 
     [Fact]
@@ -379,10 +604,22 @@ public sealed class ConsolidadoHandlerTests
         instance.ConsolidadoWizardVigente.Should().BeTrue();
     }
 
+    /// <summary>
+    /// HU #11642 — INVIERTE lo que esta prueba afirmaba. Se llamaba
+    /// <c>HandleAsync_ForceTrue_ConDocsExistentes_NoRegeneraHotDocs</c> y exigía <c>Calls == 0</c>:
+    /// congelaba como esperado el defecto que el gestor reportó. Con el FUR ya persistido, forzar la
+    /// regeneración invalidaba la caché y volvía a fusionar LA MISMA página, de modo que cualquier
+    /// corrección posterior a la primera generación no llegaba nunca al expediente. El caso reportado
+    /// fue un cambio de color de negro a azul sobre un borrador: el dato se guardaba, pero el
+    /// consolidado seguía diciendo negro por muchas veces que se pulsara regenerar.
+    ///
+    /// <para>Que el consolidado solo FUSIONE lo persistido sigue siendo cierto sin <c>force</c> (lo
+    /// fija <see cref="HandleAsync_SinForce_ConFurExistente_NoRegeneraHotDocs"/>). Lo que cambia es el
+    /// significado de <c>force</c>: pedir explícitamente una regeneración ahora rehace el FUR.</para>
+    /// </summary>
     [Fact]
-    public async Task HandleAsync_ForceTrue_ConDocsExistentes_NoRegeneraHotDocs()
+    public async Task HandleAsync_ForceTrue_ConDocsExistentes_RegeneraElFur()
     {
-        // Re-generar consolidado: invalida caché y reconstruye el PDF; no regenera documentos previos.
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
@@ -398,7 +635,62 @@ public sealed class ConsolidadoHandlerTests
 
         error.Should().BeNull();
         result!.Regenerado.Should().BeTrue();
+        regenerator.Calls.Should().Be(1,
+            "forzar la regeneración debe rehacer el FUR: si solo se refunde el expediente, el gestor " +
+            "recibe el documento anterior y sus correcciones no aparecen nunca");
+        result.AvisosCascada.Should().BeNull("la regeneración fue correcta: no hay nada que advertir");
+    }
+
+    /// <summary>
+    /// Sin <c>force</c> el contrato del Feature #11066 no cambia: el consolidado solo fusiona lo ya
+    /// persistido y no arrastra el coste de rehacer el paquete en caliente. Es la mitad que la HU
+    /// #11642 NO toca, y separarla evita que una futura simplificación regenere en cada acceso.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_SinForce_ConFurExistente_NoRegeneraHotDocs()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var regenerator = new FakeRegenerator();
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, regenerator);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, userId: null, force: false, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
         regenerator.Calls.Should().Be(0);
+    }
+
+    /// <summary>
+    /// HU #11642 (AC2) — la regeneración forzada falla pero el FUR anterior sigue en pie: el
+    /// consolidado se entrega igual (misma decisión que el resto de la cascada, HU #11050) CON un
+    /// aviso. Devolverlo en silencio dejaría al gestor creyendo que el documento recoge su último
+    /// cambio, que es exactamente el defecto que esta HU corrige.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_ForceTrue_RegeneracionFallaConFurPrevio_EntregaConAviso()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ConsolidadoWizardVigente = true;
+        AddAttachment(instance, "consolidado", "consolidado.pdf", "%PDF-cons");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, new FakeFailingRegenerator("organismo_requerido"));
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, userId: null, force: true, CancellationToken.None);
+
+        error.Should().BeNull("el expediente se entrega igual: el FUR anterior sigue disponible");
+        result!.AvisosCascada.Should().ContainSingle()
+            .Which.Should().Contain("fur").And.Contain("organismo_requerido",
+                "el gestor debe poder saber que lo que ve NO recoge su último cambio, y por qué");
     }
 
     [Fact]
@@ -748,6 +1040,307 @@ public sealed class ConsolidadoHandlerTests
         var generado = ConsolidadoContent();
         generado.Should().NotContain("maestro.pdf");
         Ocurrencias(generado, "fur.pdf").Should().Be(1);
+    }
+
+    // ── HU #11319 (Feature #11309, DT-4) — precedencia declarada SOLO para mandato/tramite_virtual ──
+    //
+    // Decisión de producto del PO (2026-08-10): la precedencia declarada aplica ÚNICAMENTE a
+    // `mandato` y `tramite_virtual`. La `compraventa` y CUALQUIER OTRO tipo conservan el criterio de
+    // siempre (la fila más reciente por `UploadedAt`), por ADR-0035 y para no cambiar el expediente
+    // de tenants que no pidieron esta funcionalidad.
+
+    [Fact]
+    public async Task HU11319_AC1_Mandato_GanaElDeOrigenUser_AunqueElDeCompanySeaMasReciente()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        // El de "company" es el MÁS RECIENTE, pero "user" (hecho del trámite) debe ganar igual: el
+        // desempate viejo era "la fecha de carga más reciente", que aquí daría "company" — el bug que
+        // esta HU cierra.
+        AddAttachmentWithSource(instance, "mandato", "mandato_company.pdf", "%PDF-mandato-company", "company", hoy);
+        AddAttachmentWithSource(instance, "mandato", "mandato_user.pdf", "%PDF-mandato-user", "user", ayer);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().Contain("mandato_user.pdf");
+        content.Should().NotContain("mandato_company.pdf");
+    }
+
+    [Fact]
+    public async Task HU11319_AC1_ElResultadoEsElMismoConIndependenciaDelOrdenDeEscritura()
+    {
+        // Mismo escenario que AC1, pero escribiendo los adjuntos en el orden inverso: el ganador no
+        // puede depender de cuál se agregó primero a la colección.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        AddAttachmentWithSource(instance, "mandato", "mandato_user.pdf", "%PDF-mandato-user", "user", ayer);
+        AddAttachmentWithSource(instance, "mandato", "mandato_company.pdf", "%PDF-mandato-company", "company", hoy);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        ConsolidadoContent().Should().Contain("mandato_user.pdf");
+    }
+
+    [Fact]
+    public async Task HU11319_AC2_TramiteVirtual_ConFechasIdenticas_SiemprePicaElDeOrigenUser()
+    {
+        // Los tres se escriben con LA MISMA fecha (el bug original: el bucle de persistencia escribe
+        // todo con el mismo `now`). Sin la precedencia declarada, el desempate por fecha es no
+        // determinista; con ella, el grado decide y "user" gana siempre.
+        for (var i = 0; i < 5; i++)
+        {
+            var id = Guid.NewGuid();
+            var tenantId = Guid.NewGuid();
+            var instance = TraspasoInstance(id, tenantId);
+            var mismaFecha = DateTimeOffset.UtcNow;
+            AddAttachmentWithSource(instance, "tramite_virtual", "tv_system.pdf", "%PDF-tv-system", "system", mismaFecha);
+            AddAttachmentWithSource(instance, "tramite_virtual", "tv_company.pdf", "%PDF-tv-company", "company", mismaFecha);
+            AddAttachmentWithSource(instance, "tramite_virtual", "tv_user.pdf", "%PDF-tv-user", "user", mismaFecha);
+            foreach (var att in instance.Attachments)
+                _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+            _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+            var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+            error.Should().BeNull();
+            var content = ConsolidadoContent();
+            content.Should().Contain("tv_user.pdf", $"ejecución #{i}");
+            content.Should().NotContain("tv_system.pdf", $"ejecución #{i}");
+            content.Should().NotContain("tv_company.pdf", $"ejecución #{i}");
+        }
+    }
+
+    [Fact]
+    public async Task HU11319_AC3_Mandato_OrigenNoDeclarado_NoDesplazaAlDeOrigenUser()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        // El origen desconocido es el MÁS RECIENTE, pero cae en grado 2 (configuración de compañía):
+        // no puede desplazar al de "user" (grado 1, hecho del trámite).
+        AddAttachmentWithSource(
+            instance, "mandato", "mandato_desconocido.pdf", "%PDF-mandato-x", "un_origen_inventado", hoy);
+        AddAttachmentWithSource(instance, "mandato", "mandato_user.pdf", "%PDF-mandato-user", "user", ayer);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().Contain("mandato_user.pdf");
+        content.Should().NotContain("mandato_desconocido.pdf");
+    }
+
+    [Fact]
+    public async Task HU11319_AC4_Compraventa_NoCambiaDeComportamiento_SigueGanandoLaDelSistemaMasReciente()
+    {
+        // La compraventa queda EXCLUIDA de la precedencia declarada (decisión del PO 2026-08-10,
+        // ADR-0035): sigue ganando la fila más reciente por UploadedAt, sea cual sea su Source. Si la
+        // precedencia se aplicara aquí por error, "user" (grado 1) ganaría — y ese es justo el cambio
+        // de comportamiento que el PO rechazó.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "compraventa"));
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        // La del usuario se cargó primero; el sistema la REGENERÓ después (fecha posterior).
+        AddAttachmentWithSource(
+            instance, "compraventa", "compraventa_user.pdf", "%PDF-cv-user", "user", ayer);
+        AddAttachmentWithSource(
+            instance, "compraventa", "compraventa_system.pdf", "%PDF-cv-system", "system", hoy);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().Contain("compraventa_system.pdf", "sigue ganando la del sistema, como antes de esta HU");
+        content.Should().NotContain("compraventa_user.pdf");
+        result!.Document.Sha256.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task HU11319_AC5_OtroTipoNoPersonalizable_NoCambiaDeComportamiento_SigueGanandoElMasReciente()
+    {
+        // "rtm" no es ni mandato ni tramite_virtual: debe seguir eligiéndose por fecha, sin mirar el
+        // Source. Aquí el más reciente es "system" (grado 3, el que PERDERÍA si se aplicara la
+        // precedencia declarada) — y debe ganar igual, porque a este tipo la regla nueva no le aplica.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "rtm"));
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        AddAttachmentWithSource(instance, "rtm", "rtm_user.pdf", "%PDF-rtm-user", "user", ayer);
+        AddAttachmentWithSource(instance, "rtm", "rtm_system.pdf", "%PDF-rtm-system", "system", hoy);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().Contain("rtm_system.pdf", "es el más reciente; este tipo no usa la precedencia por origen");
+        content.Should().NotContain("rtm_user.pdf");
+    }
+
+    [Fact]
+    public async Task HU11319_AC5_GoldenDeTraspaso_ProduceElMismoOrdenYContenidoQueAntesDeLaHU()
+    {
+        // Mismo escenario del golden existente HU11183_AC3 (sin ningún tipo personalizable de por
+        // medio): el conjunto y orden de `paginas_incluidas` no cambia por este Feature.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var posiciones = PosicionesEnConsolidado(
+            "fur.pdf", "cert.pdf", "cert_vend.pdf", "compraventa.pdf", "impronta.pdf",
+            "soat.pdf", "rtm.pdf", "paz_salvo.pdf", "cedulas.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11319_AC6_Mandato_ConTresOrigenes_QuedaExactamenteUnaVezEnElConsolidado()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        var hace2Dias = DateTimeOffset.UtcNow.AddDays(-2);
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        AddAttachmentWithSource(instance, "mandato", "mandato_system.pdf", "%PDF-mandato-system", "system", hace2Dias);
+        AddAttachmentWithSource(instance, "mandato", "mandato_company.pdf", "%PDF-mandato-company", "company", ayer);
+        AddAttachmentWithSource(instance, "mandato", "mandato_user.pdf", "%PDF-mandato-user", "user", hoy);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        Ocurrencias(content, "mandato_").Should().Be(1, "las tres filas de 'mandato' colapsan a exactamente una");
+        content.Should().Contain("mandato_user.pdf");
+        content.Should().NotContain("mandato_system.pdf");
+        content.Should().NotContain("mandato_company.pdf");
+        var evento = instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado").Subject;
+        evento.Payload.Should().Contain("mandato");
+        result.Should().NotBeNull();
+    }
+
+    // ---- HU #11318, AC3 — oráculo de NO REGRESIÓN, literal y end-to-end (cierra el pendiente de la
+    // HU #11316: aquí NO se argumenta "el comando no se tocó" — SÍ se tocó, en #11319, con la rama
+    // TiposConPrecedenciaDeclarada de SanitizeConsolidadoParts). ------------------------------------
+
+    /// <summary>
+    /// Técnica y su límite, explícitos (exigido por la HU #11318): <see cref="FakeStorage.SaveAsync"/>
+    /// devuelve <c>$"sha-{tipo}"</c> — un hash DETERMINISTA POR TIPO, no por contenido — así que
+    /// comparar <c>stored.Sha256</c> (o el <c>sha256</c> del evento <c>consolidado_generado</c>) NO
+    /// demuestra nada sobre el CONTENIDO del PDF fusionado. Por eso este oráculo calcula el SHA-256
+    /// REAL (<see cref="SHA256.HashData"/>) sobre los bytes que <see cref="FakeMerger.Merge"/>
+    /// efectivamente concatenó — la misma técnica de comparación byte a byte que ya usan los golden de
+    /// esta suite (<c>ConsolidadoContent()</c>/<c>PosicionesEnConsolidado</c>) — y la contrasta contra
+    /// un SHA-256 calculado de forma INDEPENDIENTE a partir del contenido esperado.
+    /// </summary>
+    [Fact]
+    public async Task HU11318_AC3_OraculoDeNoRegresion_Sha256YOrdenDePaginasIdenticosAAntesDelFeature()
+    {
+        // Escenario de un tenant SIN documentos personalizados activos (equivalente a un canal
+        // FLIT_SMTP: por AC del Feature, ese canal no puede dar de alta versiones personalizadas —
+        // PersonalizedDocumentHandlerTests AC4 — así que para este tenant el resultado DEBE ser
+        // exactamente el de antes del Feature #11309, con las siete HUs igual de integradas).
+        //
+        // Prueba matemática de por qué el argumento transitivo de la HU #11316 YA NO APLICA pero el
+        // resultado sigue siendo idéntico: SanitizeConsolidadoParts (tocado en la HU #11319) añadió una
+        // rama nueva para 'mandato'/'tramite_virtual' que llama a AttachmentSourcePrecedence.SelectWinner
+        // en vez de OrderByDescending(UploadedAt).First(). Ninguno de los dos tipos aparece en este
+        // trámite (TraspasoInstance() no genera ni mandato ni tramite_virtual), y aunque apareciera con
+        // una SOLA fila por tipo (el caso normal, sin personalización), ambas ramas devuelven el ÚNICO
+        // elemento del grupo — son observacionalmente idénticas para un grupo de un solo elemento. La
+        // rama nueva es, para este escenario, una función identidad: no hay forma de que cambie el
+        // resultado. Lo que sigue no es esa prueba de escritorio: es la ejecución real, byte a byte.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+
+        // Orden esperado: resuelto por TraspasoConsolidadoOrdering.Precedence (fur=0, ..., certificado_
+        // identidad=4, certificado_identidad_vendedor=5, compraventa=10, impronta=15, soat=16; rtm,
+        // paz_salvo y cedulas NO están en la tabla de precedencia ⇒ empatan al final y se desempatan por
+        // UploadedAt, que es el orden en que TraspasoInstance() los agrega). Es EL MISMO orden que ya
+        // prueba (con 'BeInAscendingOrder', sin fijar la lista completa) el golden HU11183_AC3/HU11319_AC5:
+        // aquí se declara la lista EXACTA y completa, no solo la relación de orden.
+        string[] tiposEsperados =
+        [
+            "fur", "certificado_identidad", "certificado_identidad_vendedor",
+            "compraventa", "impronta", "soat", "rtm", "paz_salvo", "cedulas",
+        ];
+        string[] filenamesEsperados =
+        [
+            "fur.pdf", "cert.pdf", "cert_vend.pdf",
+            "compraventa.pdf", "impronta.pdf", "soat.pdf", "rtm.pdf", "paz_salvo.pdf", "cedulas.pdf",
+        ];
+
+        // 1) paginas_incluidas del evento consolidado_generado: CONJUNTO y ORDEN, literal.
+        var evento = instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado").Subject;
+        using var payloadJson = JsonDocument.Parse(evento.Payload);
+        var paginasIncluidas = payloadJson.RootElement.GetProperty("paginas_incluidas")
+            .EnumerateArray().Select(e => e.GetString()).ToArray();
+        paginasIncluidas.Should().Equal(tiposEsperados,
+            "el conjunto Y el orden de paginas_incluidas deben ser idénticos a los de antes del Feature");
+
+        // 2) Contenido REAL fusionado (lo que el organismo de tránsito termina viendo), byte a byte,
+        // contra el contenido esperado construido de forma INDEPENDIENTE (misma técnica de concatenación
+        // que usa FakeMerger.Merge, aplicada aquí a mano sobre la lista esperada).
+        var rutaGuardada = _storage.Saved.Last();
+        var bytesReales = _storage.Files[rutaGuardada];
+        var bytesEsperados = filenamesEsperados
+            .SelectMany(System.Text.Encoding.UTF8.GetBytes)
+            .ToArray();
+        bytesReales.Should().Equal(bytesEsperados, "el PDF fusionado debe ser byte a byte idéntico al de antes del Feature");
+
+        // 3) SHA-256 REAL (no el 'sha-{tipo}' fijo del doble de storage) de ambos lados, para que quede
+        // registrado un hash comparable y no solo una igualdad de arreglos de bytes.
+        var sha256Real = Convert.ToHexStringLower(SHA256.HashData(bytesReales));
+        var sha256Esperado = Convert.ToHexStringLower(SHA256.HashData(bytesEsperados));
+        sha256Real.Should().Be(sha256Esperado);
     }
 
     private static int Ocurrencias(string texto, string aguja)

@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -64,8 +66,16 @@ public sealed class GenerarConsolidadoHandler(
     IAttachmentStorage storage,
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null,
-    IImprontaAutoGenerator? improntaGenerator = null)
+    IImprontaAutoGenerator? improntaGenerator = null,
+    IOtConfiguredDocumentOrderProvider? otOrderProvider = null,
+    Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null)
 {
+    // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
+    // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
+    // portada queda como estaba.
+    private readonly Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory _companiaRadicadoraDirectory =
+        companiaRadicadoraDirectory ?? Flit.Tramites.Domain.Integration.NullCompaniaRadicadoraDirectory.Instance;
+
     public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -100,15 +110,25 @@ public sealed class GenerarConsolidadoHandler(
         if (instance is null)
             return (null, "not_found");
 
-        // Migración V1→V2 — un trámite migrado es una FOTO de solo lectura: NO se regenera el
-        // consolidado. V1 ya trae su propio expediente consolidado (tipo 'consolidado', source=migration);
-        // regenerarlo aquí lo reemplazaría por uno nuevo del sistema, perdiendo el histórico.
+        // Migración V1→V2 — el "modo foto" solo aplica a los trámites migrados en estado FINAL. En
+        // aprobado o anulado V1 ya trae su propio expediente (tipo 'consolidado', source=migration) y
+        // regenerarlo lo reemplazaría por uno nuevo del sistema, perdiendo el histórico con el que el
+        // organismo de tránsito aprobó.
+        //
+        // Un BORRADOR migrado es lo contrario: se trajo precisamente para seguir trabajándolo en V2, y
+        // su consolidado debe generarse aquí. Antes este guard no miraba el estado y dejaba al gestor
+        // sin poder generar el expediente de un borrador que sí es suyo.
+        //
+        // Por la ruta del gestor los finales ya los frena GeneracionDocumentalGestorGuard (HU #11051)
+        // con un mensaje mejor ("su documentación es definitiva"). Este guard NO sobra: AdminOtEndpoints
+        // llama a este handler SIN pasar por aquel gate, y es el camino por el que el OT regenera al
+        // aprobar. Sin esta condición, ese camino borraría los PDF migrados de V1.
         //
         // Va ANTES del caché y de la regeneración en cascada de HU #10860 a propósito: un trámite
         // migrado llega con ConsolidadoWizardVigente en false (el default de la columna), así que si
         // este guard fuera después, la cascada regeneraría el FUR y los documentos en caliente —
         // exactamente lo que el modo foto existe para impedir.
-        if (instance.IsMigrated)
+        if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
             return (null, "migrado_solo_lectura");
 
         // HU #10860 (ADR-0032) — caché explícita del expediente del wizard: si está vigente y el
@@ -125,12 +145,20 @@ public sealed class GenerarConsolidadoHandler(
                 .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
         }
 
+        // Bug #11612 — el atajo de caché queda EXACTAMENTE como estaba. La compañía radicadora ya
+        // no deja marcador persistido (ver CompaniaRadicadoraResolver), así que condicionar el atajo a
+        // "falta la compañía" no sería "regenerar una vez por trámite" sino regenerar en CADA acceso.
+        // Limitación asumida (AC4 del Bug #11612): un trámite antiguo con el consolidado vigente
+        // conserva el guión en la portada hasta que se invalide por las vías normales (regenerar el
+        // FUR, cambiar de estado, adjuntar documentos o forzar la regeneración).
         if (!force && instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
         {
             var vigenteDto = new ConsolidadoDocumentDto(
                 consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
         }
+
+        var avisosCascada = new List<string>();
 
         // Feature #11066 — el consolidado SOLO fusiona el expediente ya persistido.
         // NO regenera certificados / mandato / compraventa / etc.: esos se generan en Preparar
@@ -142,16 +170,37 @@ public sealed class GenerarConsolidadoHandler(
         // HU #11017 — cascada: si falta el FUR se genera aquí, en vez de devolver `fur_requerido` y
         // dejar al gestor adivinando el orden correcto. Si aun así no aparece, se responde con el
         // motivo REAL del generador (p. ej. organismo_requerido) y no con "falta el FUR".
-        if (!TieneFur(instance))
+        // HU #11642 — `force` REGENERA el FUR, no solo lo produce cuando falta.
+        //
+        // El atajo anterior era `if (!TieneFur(instance))`: como el consolidado solo fusiona lo ya
+        // persistido, un trámite que ya tenía FUR se reconstruía SIEMPRE con la página vieja. El
+        // gestor corregía un dato en el wizard, pulsaba regenerar y recibía el mismo documento; el
+        // caso reportado fue un cambio de color de negro a azul sobre un borrador, donde el dato sí
+        // se había guardado. `InvalidarConsolidados()` baja las banderas pero no borra el adjunto
+        // `fur`, así que invalidar la caché no bastaba.
+        //
+        // La corrección va aquí y no en el botón del frontend a propósito: la ruta del wizard ya
+        // llamaba a `generarFur` antes de consolidar y por eso funcionaba, mientras que las dos
+        // entradas de `ExpedienteVisor` no. Arreglarlo en el llamador habría dejado el mismo defecto
+        // latente para cualquier consumidor futuro; arreglarlo aquí cierra la clase, no la instancia.
+        var faltaFur = !TieneFur(instance);
+        if (force || faltaFur)
         {
-            if (hotDocsRegenerator is null)
+            // Sin regenerador inyectado solo se puede fallar si además NO hay FUR: con el FUR en pie
+            // se sigue adelante y se fusiona lo que hay, que es el comportamiento de siempre. (Cortar
+            // aquí devolvería "ni resultado ni error", que el llamador lee como éxito con documento
+            // nulo.)
+            if (hotDocsRegenerator is null && faltaFur)
                 return (null, SubmitGate.FurRequerido);
 
-            string? errorFur;
+            string? errorFur = null;
             try
             {
-                errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
-                instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+                if (hotDocsRegenerator is not null)
+                {
+                    errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
+                    instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -164,6 +213,13 @@ public sealed class GenerarConsolidadoHandler(
 
             if (!TieneFur(instance))
                 return (null, errorFur ?? SubmitGate.FurRequerido);
+
+            // Regeneración forzada que falló pero dejó en pie el FUR anterior: el consolidado se
+            // entrega igual —misma decisión que el resto de la cascada (HU #11050)— pero el gestor
+            // tiene que enterarse de que lo que está viendo NO recoge su último cambio. Devolverlo en
+            // silencio es justamente el defecto que esta HU corrige.
+            if (errorFur is not null)
+                avisosCascada.Add($"fur: {errorFur}");
         }
 
         // HU #11017 — impronta en cascada. Best-effort y solo con usuario conocido: depende del RUNT
@@ -182,7 +238,11 @@ public sealed class GenerarConsolidadoHandler(
             : await matrixCompleteness.TryComputeAsync(instance, tenantId, ct);
         var faltantes = checklist?.FaltanObligatorios ?? FaltantesObligatorios(instance);
 
-        var ordered = ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada);
+        // HU #11184 — el expediente se arma en el orden que el OT configuró para este tipo de
+        // trámite. Hasta ahora el wizard ignoraba la matriz y usaba siempre la lista hardcodeada por
+        // modalidad, así que reordenar en la consola del OT no tenía ningún efecto sobre el PDF.
+        // Sin configuración del organismo la lista viene vacía y se conserva el orden de siempre.
+        var ordered = await OrdenarAsync(instance, ct).ConfigureAwait(false);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
@@ -204,10 +264,17 @@ public sealed class GenerarConsolidadoHandler(
             }
         }
 
+        // Bug #11612 — se resuelve aquí, después de los posibles ReloadAsync de la cascada (FUR /
+        // impronta) y solo cuando de verdad se va a componer el PDF. Viaja a la portada por parámetro:
+        // NO se escribe en field_values (el trigger de inmutabilidad lo prohíbe en trámites radicados).
+        var companiaRadicadora = await CompaniaRadicadoraResolver
+            .ResolverAsync(instance, tenantId, _companiaRadicadoraDirectory, ct)
+            .ConfigureAwait(false);
+
         // HU #10857 — expediente con portada institucional (primera página) para todos los tipos.
         var mergeRequest = new MergeRequest(
-            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo))).ToList(),
-            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance),
+            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo), DocumentLabels.ProfileFor(a.Tipo))).ToList(),
+            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance, companiaRadicadora),
             EstadoTramite: instance.Status);
         var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;
@@ -278,7 +345,8 @@ public sealed class GenerarConsolidadoHandler(
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(
-            dto, Regenerado: true, Incompleto: faltantes.Count > 0, DocumentosFaltantes: faltantes), null);
+            dto, Regenerado: true, Incompleto: faltantes.Count > 0, DocumentosFaltantes: faltantes,
+            AvisosCascada: avisosCascada.Count > 0 ? avisosCascada : null), null);
     }
 
     /// <summary>
@@ -295,6 +363,99 @@ public sealed class GenerarConsolidadoHandler(
         return await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct).ConfigureAwait(false) ?? fallback;
     }
 
+    /// <summary>
+    /// Orden del expediente (HU #11184): manda la prelación que el OT configuró para el tipo de
+    /// trámite; sin ella, el orden por modalidad de siempre.
+    /// <para>
+    /// El camino configurado NO antepone la cabecera fija de documentos generados: si el organismo
+    /// bajó el FUR de la primera página, el FUR baja. Esa cabecera era justamente lo que impedía
+    /// mover los documentos que genera el sistema.
+    /// </para>
+    /// <para>
+    /// Best-effort a propósito: un fallo leyendo la configuración del OT no puede dejar al gestor
+    /// sin expediente, así que se cae al orden por modalidad.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<ProcedureInstanceAttachment>> OrdenarAsync(
+        ProcedureInstance instance, CancellationToken ct)
+    {
+        IReadOnlyList<string> configurado = [];
+        if (otOrderProvider is not null)
+        {
+            try
+            {
+                configurado = await otOrderProvider
+                    .GetConfiguredOrderAsync(instance.ProcedureTypeId, instance.TransitOfficeId, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                configurado = [];
+            }
+        }
+
+        if (configurado.Count == 0)
+            return SanitizeConsolidadoParts(
+                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.FamilyCode));
+
+        return SanitizeConsolidadoParts(
+            GenericConsolidadoOrdering.SelectByPrecedence(
+                instance.Attachments,
+                ConsolidadoDocumentCodeMap.ToPrecedence(configurado)));
+    }
+
+    /// <summary>
+    /// Tipos documentales PERSONALIZABLES por compañía (Feature #11309, ADR-0042): son los únicos a
+    /// los que se les aplica <see cref="AttachmentSourcePrecedence"/> (DT-4) en vez del criterio de
+    /// "fecha de carga más reciente". Decisión del PO (2026-08-10): la <c>compraventa</c> queda
+    /// EXCLUIDA a propósito y conserva su comportamiento actual — aplicarle la precedencia declarada
+    /// invertiría quién gana (pasaría a ganar siempre la del usuario) y contradiría
+    /// <c>ADR-0035-compraventa-autogenerada-siempre-y-sin-membrete</c> (Aceptado), que exige que la
+    /// compraventa del sistema, con su sello de formato oficial e identidad, esté siempre en el
+    /// expediente. Todos los demás tipos —incluida la compraventa— NO se tocan por este Feature.
+    /// </summary>
+    private static readonly HashSet<string> TiposConPrecedenciaDeclarada =
+        new(StringComparer.OrdinalIgnoreCase) { "mandato", "tramite_virtual" };
+
+    /// <summary>
+    /// Evita el bug de expediente duplicado: ningún PDF cuyo tipo contenga "consolidado" puede
+    /// ser PARTE del merge (anidaría el paquete completo otra vez). Además, si hay varias filas
+    /// del mismo tipo (reemplazos / doble carga), se conserva una sola: para <c>mandato</c> y
+    /// <c>tramite_virtual</c> por la precedencia declarada de <see cref="AttachmentSourcePrecedence"/>
+    /// (DT-4); para CUALQUIER OTRO tipo —incluida la <c>compraventa</c>— por el criterio de siempre,
+    /// la más reciente por <c>UploadedAt</c>, SIN cambios de comportamiento.
+    /// </summary>
+    internal static IReadOnlyList<ProcedureInstanceAttachment> SanitizeConsolidadoParts(
+        IReadOnlyList<ProcedureInstanceAttachment> ordered)
+    {
+        var latestByTipo = ordered
+            .Where(a => a.Tipo.Contains("consolidado", StringComparison.OrdinalIgnoreCase) is false)
+            .GroupBy(a => a.Tipo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => TiposConPrecedenciaDeclarada.Contains(g.Key)
+                    ? AttachmentSourcePrecedence.SelectWinner(g, a => a.Source, a => a.UploadedAt)
+                    : g.OrderByDescending(x => x.UploadedAt).First(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<ProcedureInstanceAttachment>(latestByTipo.Count);
+        foreach (var a in ordered)
+        {
+            if (a.Tipo.Contains("consolidado", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!seen.Add(a.Tipo))
+                continue;
+            result.Add(latestByTipo[a.Tipo]);
+        }
+
+        return result;
+    }
+
     private static bool TieneFur(ProcedureInstance instance) =>
         instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
 
@@ -306,7 +467,7 @@ public sealed class GenerarConsolidadoHandler(
     {
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.FaltanObligatorios ?? [];
     }

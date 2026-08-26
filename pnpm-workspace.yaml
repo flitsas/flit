@@ -7,8 +7,18 @@ allowBuilds:
   esbuild: true
   '@biomejs/biome': true
 
+# ESTE es el sitio de los overrides. pnpm 11 ya NO lee el campo `pnpm` de package.json, así que
+# escribirlos allí no hace nada y solo avisa por consola. Si un override no surte efecto, mirar aquí.
+#
 # next@16.2.x pinnea sharp ^0.34.5 (CVE libvips). Forzar parche hasta que Next actualice.
-# next@16.2.x pinnea postcss 8.4.31 (GHSA-6g55-p6wh-862q). Forzar >=8.5.12.
+# next@16.2.x pinnea postcss 8.4.31 (GHSA-6g55-p6wh-862q). El aviso se amplió después: la corrección
+#   de la serie 8.5.x era incompleta y exige >=8.5.23, así que 8.5.22 sigue reportando el aviso
+#   moderado. Se sube a 8.5.23, verificado con build de producción del frontend en verde.
+# postcss pide nanoid ^3.3.16 y resuelve a 3.3.16 (GHSA-2v37-7h3g-55p8, severidad alta). El aviso se
+#   actualizó: la versión PARCHEADA es >=3.3.18 (3.3.17 SIGUE reportándose como vulnerable con el umbral
+#   `high` del workflow, que era lo que rompía `dependency-audit`). Se sube a 3.3.18. postcss pide
+#   ^3.3.16, así que 3.3.18 es compatible; verificar con build de producción del frontend.
 overrides:
   sharp: 0.35.3
-  postcss: 8.5.22
+  postcss: 8.5.23
+  nanoid: 3.3.18

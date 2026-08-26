@@ -331,7 +331,8 @@ jobs:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
     needs: [setup, build-core-api, build-core-ict, build-frontend, build-python-ml]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Incluye margen para reintentos SCP + pausa UFW (hasta ~4×45s + 120s dial).
+    timeout-minutes: 15
     # GitHub Environment por ambiente: cada uno (dev/qa/pdn) tiene SUS PROPIOS secrets
     # (HOSTINGER_SSH_*, HOSTINGER_DEPLOY_PATH, GHCR_PAT). Asi un mismo workflow despliega
     # al VPS correcto segun la rama.
@@ -343,19 +344,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Copia robusta via appleboy/scp-action (mismo manejo de clave/host-key que el
-      # paso de deploy). Crea el directorio destino automaticamente.
+      # SCP nativo (OpenSSH) + reintentos en shell.
+      # Historial: wretry + appleboy/scp-action (Docker) falló por (1) PEM multilínea
+      # dentro del YAML anidado, (2) key_path fuera del mount del contenedor, (3)
+      # timeouts SSH. El último CD verde usaba `key:` como input nativo; aquí
+      # replicamos ese modelo sin Docker y con espera > ventana UFW `limit ssh`.
       - name: Copy compose file to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: 22
-          source: docker-compose.prod.yml
-          # target debe ser directorio (trailing slash) para no anidar rutas.
-          target: ${{ secrets.HOSTINGER_DEPLOY_PATH }}/
-          overwrite: true
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          KEY_FILE="${RUNNER_TEMP}/hostinger_deploy_key"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          cleanup() { rm -f "$KEY_FILE"; }
+          trap cleanup EXIT
+
+          SSH_OPTS=(
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=accept-new
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+            -i "$KEY_FILE"
+            -P 22
+          )
+
+          for i in 1 2 3 4; do
+            echo "SCP attempt ${i}/4 → ${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/"
+            if scp "${SSH_OPTS[@]}" \
+                docker-compose.prod.yml \
+                "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/"; then
+              echo "SCP OK"
+              exit 0
+            fi
+            echo "SCP attempt ${i} failed (posible UFW limit ssh). Esperando 45s..."
+            sleep 45
+          done
+          echo "::error::SCP falló tras 4 intentos hacia ${SSH_HOST}"
+          exit 1
+
+      # Pausa breve para no encadenar el SSH de deploy dentro de la ventana UFW.
+      - name: Wait before SSH deploy (UFW rate limit)
+        run: sleep 35
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -364,6 +398,7 @@ jobs:
           username: ${{ secrets.HOSTINGER_SSH_USER }}
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: 22
+          timeout: 120s
           script: |
             set -eo pipefail
             DEPLOY_PATH="${{ secrets.HOSTINGER_DEPLOY_PATH }}"

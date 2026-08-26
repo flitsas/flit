@@ -71,12 +71,12 @@ public sealed class ConsolidadoMaestroHandlerTests
     {
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000099",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -320,5 +320,72 @@ public sealed class ConsolidadoMaestroHandlerTests
             .Should().BeLessThan(payload.IndexOf("factura", StringComparison.Ordinal));
         payload.IndexOf("factura", StringComparison.Ordinal)
             .Should().BeLessThan(payload.IndexOf("aduana", StringComparison.Ordinal));
+    }
+
+    /// <summary>Prelación que el OT dejó configurada para el tipo de trámite (HU #11184).</summary>
+    private sealed class FakeOtOrderProvider(params string[] codigos)
+        : Flit.Tramites.Domain.Repositories.IOtConfiguredDocumentOrderProvider
+    {
+        public Task<IReadOnlyList<string>> GetConfiguredOrderAsync(
+            Guid procedureTypeId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>(codigos);
+    }
+
+    [Fact]
+    public async Task HU11184_AC5_ConPrelacionDelOt_Manda_YElFurNoSeFuerzaAlPrincipio()
+    {
+        // El expediente que sale por el canal de radicación pasa por este handler, así que resolver
+        // aquí la prelación del OT es lo que hace que el envío use el mismo orden que su pantalla.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = InstanceWithAttachments(id, tenantId,
+            ("fur", "fur.pdf"),
+            ("factura", "factura.pdf"),
+            ("soat", "soat.pdf"));
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoMaestroHandler(
+            _repo, _merger, _storage, new FakeOtOrderProvider("soat", "fur", "factura"));
+
+        // La matriz del checklist llega igual que hoy; la configuración del OT tiene prioridad.
+        var (result, error) = await handler.HandleAsync(id, tenantId, ["factura", "soat"], ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+
+        var payload = instance.Events
+            .Should().ContainSingle(e => e.Tipo == "consolidado_maestro_generado").Which.Payload;
+        payload.IndexOf("soat", StringComparison.Ordinal)
+            .Should().BeLessThan(payload.IndexOf("fur", StringComparison.Ordinal));
+        payload.IndexOf("fur", StringComparison.Ordinal)
+            .Should().BeLessThan(payload.IndexOf("factura", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HU11184_AC3_SinPrelacionDelOt_ConservaElComportamientoAnterior()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = InstanceWithAttachments(id, tenantId,
+            ("fur", "fur.pdf"),
+            ("factura", "factura.pdf"),
+            ("soat", "soat.pdf"));
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoMaestroHandler(
+            _repo, _merger, _storage, new FakeOtOrderProvider());
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, ["soat", "factura"], ct);
+
+        error.Should().BeNull();
+        var payload = instance.Events
+            .Should().ContainSingle(e => e.Tipo == "consolidado_maestro_generado").Which.Payload;
+        // Cabecera de generados + matriz del checklist, exactamente como antes de la HU.
+        payload.IndexOf("fur", StringComparison.Ordinal)
+            .Should().BeLessThan(payload.IndexOf("soat", StringComparison.Ordinal));
+        payload.IndexOf("soat", StringComparison.Ordinal)
+            .Should().BeLessThan(payload.IndexOf("factura", StringComparison.Ordinal));
     }
 }

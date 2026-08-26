@@ -40,6 +40,8 @@ infra/secrets/
 *.pfx
 *.crt
 *.cer
+# Clave SSH temporal del CD (scp-action Docker monta solo el workspace)
+.ci/
 
 # .NET appsettings con secretos reales (solo Development y *.example deben commitearse)
 **/appsettings.Production.json
@@ -123,3 +125,8 @@ CLAUDE.md
 # Scripts de smoke/dev local (Postman, pruebas manuales — no van al repo)
 scripts/dev/
 
+
+# Renders del FUR generados por tools/fur-preview para calibrar y verificar.
+# Contienen datos personales (nombres, documentos, direcciones, acreedor prendario):
+# son evidencia local, nunca van al repo (Ley 1581).
+services/core-api/artifacts/fur-analysis*/

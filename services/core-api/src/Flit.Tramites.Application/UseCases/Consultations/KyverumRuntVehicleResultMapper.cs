@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Flit.Tramites.Application.UseCases.Certifications;
+using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -13,6 +16,12 @@ public static class KyverumRuntVehicleResultMapper
 {
     private const string Provider = "kyverum_runt";
 
+    private static readonly JsonSerializerOptions GravamenJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
     private const string Ok = "ok";
     private const string Warn = "warn";
     private const string Fail = "fail";
@@ -22,7 +31,19 @@ public static class KyverumRuntVehicleResultMapper
     private const string Yellow = "yellow";
     private const string Red = "red";
 
-    public static ConsultationResult MapVehicle(KyverumRuntVehicleResponse response)
+    /// <summary>
+    /// Versión del mapeo. Se persiste con cada fila certificada: cuando se corrige un mapper, es lo
+    /// que permite saber qué filas produjo el anterior y reprocesarlas desde el payload crudo sin
+    /// volver a pagar la consulta. <c>v2</c> = HU #11303, la que empieza a leer póliza, fechas de
+    /// expedición, número de certificado, CDA y fecha de matrícula.
+    /// </summary>
+    public const string MapperVersion = "kyverum-v2";
+
+    public static ConsultationResult MapVehicle(KyverumRuntVehicleResponse response) =>
+        MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).Date));
+
+    /// <summary>Sobrecarga con la fecha inyectada, para que las pruebas no dependan del reloj.</summary>
+    public static ConsultationResult MapVehicle(KyverumRuntVehicleResponse response, DateOnly today)
     {
         var vehiculo = response.Data?.Vehiculo;
 
@@ -36,8 +57,48 @@ public static class KyverumRuntVehicleResultMapper
 
         var hydrated = MapHydratedFields(response.Data);
         var overall = ComputeOverall(checks);
+        var certifications = MapCertifications(response.Data, today);
 
-        return new ConsultationResult(Provider, overall, checks, hydrated);
+        return new ConsultationResult(Provider, overall, checks, hydrated, Certifications: certifications);
+    }
+
+    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
+
+    /// <summary>
+    /// Traduce la respuesta al vocabulario canónico (HU #11303, ADR-0041). Se conserva el
+    /// <b>histórico completo</b> de pólizas y revisiones: ya vino en la misma respuesta pagada, y es
+    /// lo que permite cambiar el criterio de selección más adelante sin volver a consultar.
+    /// </summary>
+    private static CertificationBundle? MapCertifications(KyverumRuntVehicleData? data, DateOnly today)
+    {
+        var soat = (data?.Soat ?? [])
+            .Where(s => s is not null)
+            .Select(s => CertificationFactory.Soat(
+                s.NumSoat,
+                s.RazonSocialAsegur,
+                s.FechaExpediSoat ?? s.FechaExpedicion,
+                s.FechaInicioPoliza,
+                s.FechaVencimSoat,
+                s.Estado));
+
+        // OJO: la vigencia sale de `vigente`, NO de `estadoRvt`. Un "APROBADA" describe el resultado
+        // del trámite de la revisión; hay vehículos con cuatro APROBADA y ninguna vigente.
+        var rtm = (data?.Rtm ?? [])
+            .Where(r => r is not null)
+            .Select(r => CertificationFactory.Rtm(
+                r.NumeCerti,
+                r.NombreCda,
+                r.FechaExpedicionRvt,
+                // El RUNT no manda inicio de vigencia de la RTM; sí el vencimiento.
+                validFrom: null,
+                validUntil: r.FechaVencimientoRvt,
+                status: r.Vigente,
+                inspectionType: r.TipoRevision));
+
+        var vehicle = CertificationFactory.Vehicle(
+            data?.Vehiculo?.FechaRegistro ?? data?.Vehiculo?.FechaMatricula);
+
+        return CertificationFactory.VehicleBundle(soat, rtm, vehicle, today);
     }
 
     private static ConsultationCheck MapEstadoVehiculo(KyverumRuntVehiculo? vehiculo)
@@ -102,8 +163,16 @@ public static class KyverumRuntVehicleResultMapper
         if (sinGravamenes && sinPrendas)
             return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
 
-        return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Warn, Provider, "El vehículo tiene gravámenes o prendas");
+        return new ConsultationCheck(
+            "gravamenes",
+            "Gravámenes y limitaciones",
+            Warn,
+            Provider,
+            $"El vehículo tiene gravámenes o prendas (gravámenes: {NormSiNo(vehiculo.Gravamenes)} · prendas: {NormSiNo(vehiculo.Prendas)})");
     }
+
+    private static string NormSiNo(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
 
     private static bool IsSi(string? value) =>
         string.Equals(value, "SI", StringComparison.OrdinalIgnoreCase);
@@ -141,12 +210,43 @@ public static class KyverumRuntVehicleResultMapper
         Add(fields, "vehicle_weight", v.PesoBruto ?? data?.DatosTecnicos?.PesoBrutoVehicular);
         Add(fields, "vehicle_axles", v.NumeroEjes ?? data?.DatosTecnicos?.NoEjes);
 
+        // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta).
+        Add(fields, "runt_tiene_gravamenes", v.Gravamenes);
+        Add(fields, "runt_tiene_prendas", v.Prendas);
+
+        // Detalle de acreedores: Kyverum lo trae en data.garantias (+ garantiasPrendas). Sin esto
+        // el wizard solo veía SI/NO aunque el RUNT ya devolvía Bancolombia, NIT y fecha.
+        var detallePrenda = NormalizeGarantias(data?.Garantias, data?.GarantiasPrendas);
+        if (detallePrenda.Count > 0)
+        {
+            var primerAcreedor = detallePrenda
+                .Select(d => d.NombreAcreedor)
+                .FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
+            Add(fields, "runt_nombre_acreedor", primerAcreedor);
+            fields.Add(new HydratedField(
+                "runt_gravamenes",
+                null,
+                JsonSerializer.Serialize(detallePrenda, GravamenJsonOptions)));
+        }
+
+        // Fecha de matrícula (HU #11303): Kyverum la manda en `fechaRegistro`; `fechaMatricula` llega
+        // null en las tres capturas. Sin esta llave, la regla de antigüedad de la RTM no puede
+        // evaluarse y el bloque de revisión del certificado queda permanentemente en "no aplica".
+        Add(fields, "vehicle_registration_date", v.FechaRegistro ?? v.FechaMatricula);
+
         // SOAT: preferir vigente; si no, el primero disponible.
         var soat = data?.Soat?.FirstOrDefault(s =>
             string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase))
             ?? data?.Soat?.FirstOrDefault();
         Add(fields, "soat_vencimiento", soat?.FechaVencimSoat);
         Add(fields, "soat_aseguradora", soat?.RazonSocialAsegur);
+
+        // HU #11303 — póliza y fechas del SOAT. El proveedor las manda en las tres consultas reales;
+        // el DTO no las modelaba, así que estas celdas del certificado dependían del OCR del PDF y
+        // `soat_expedicion` no tenía UNA SOLA fila en todo el ambiente.
+        Add(fields, "soat_poliza", soat?.NumSoat);
+        Add(fields, "soat_expedicion", soat?.FechaExpediSoat ?? soat?.FechaExpedicion);
+        Add(fields, "soat_vigencia", soat?.FechaInicioPoliza);
         // HU #10856 — estado real del SOAT para el certificado.
         // HU #10973 — NORMALIZADO al vocabulario de SoatGate: esta llave alimenta también el gate de
         // aprobación del OT, y el frontend compara estricto contra "vigente" en minúscula
@@ -161,6 +261,13 @@ public static class KyverumRuntVehicleResultMapper
         Add(fields, "rtm_vencimiento", rtm?.FechaVencimientoRvt);
         Add(fields, "rtm_estado", MapVigencia(rtm?.Vigente)); // HU #10856 — estado real de la RTM para el certificado.
 
+        // HU #11303 — número, expedición y CDA de la revisión. Mismo caso que el SOAT: el proveedor
+        // los manda, el DTO no los leía, y las cuatro llaves quedaban en cero filas. `nombreCda` llega
+        // con espacio inicial en capturas reales, de ahí el Trim.
+        Add(fields, "rtm_numero", rtm?.NumeCerti);
+        Add(fields, "rtm_expedicion", rtm?.FechaExpedicionRvt);
+        Add(fields, "rtm_entidad", rtm?.NombreCda?.Trim());
+
         return fields;
     }
 
@@ -169,6 +276,50 @@ public static class KyverumRuntVehicleResultMapper
         if (!string.IsNullOrWhiteSpace(value))
             fields.Add(new HydratedField(key, value, null));
     }
+
+    /// <summary>
+    /// Une <c>garantias</c> + <c>garantiasPrendas</c> y normaliza al shape Intempo
+    /// (<c>nombreAcreedor</c>, etc.) para que el frontend parseé un solo contrato.
+    /// </summary>
+    private static List<NormalizedRuntGravamen> NormalizeGarantias(
+        List<KyverumRuntGarantia>? garantias,
+        List<KyverumRuntGarantia>? garantiasPrendas)
+    {
+        var result = new List<NormalizedRuntGravamen>();
+        foreach (var g in (garantias ?? []).Concat(garantiasPrendas ?? []))
+        {
+            if (g is null) continue;
+            var nombre = FirstNonEmpty(g.Acreedor, g.NombreAcreedor);
+            if (string.IsNullOrWhiteSpace(nombre)
+                && string.IsNullOrWhiteSpace(g.NumeroDocumentoAcreedor)
+                && g.IdPrenda is null
+                && string.IsNullOrWhiteSpace(g.FechaInscripcion))
+            {
+                continue;
+            }
+
+            result.Add(new NormalizedRuntGravamen(
+                g.IdPrenda,
+                g.TipoDocumentoAcreedor,
+                g.NumeroDocumentoAcreedor,
+                nombre,
+                g.FechaInscripcion,
+                g.EstadoPrenda));
+        }
+
+        return result;
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
+    private sealed record NormalizedRuntGravamen(
+        long? IdPrenda,
+        string? TipoDocumentoAcreedor,
+        string? NumeroDocumentoAcreedor,
+        string? NombreAcreedor,
+        string? FechaInscripcion,
+        string? EstadoPrenda);
 
     // Inverso de KyverumRuntDocType.Normalize: código RUNT del propietario → tipo de documento FLIT
     // (ActorDocumentType: CC/CE/NIT/PAS/TI). 'Y' u otros sin equivalente FLIT ⇒ null (no se siembra).

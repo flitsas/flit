@@ -1,7 +1,9 @@
-// Refactor adminOT — pestaña "Usuarios" del hub OT: 4 estados de UI + invitar +
-// suspender/reactivar (self-service, sin selector de rol).
+// Pestaña "Usuarios" del hub OT: 4 estados de UI + invitar (con selector de rol) +
+// suspender/reactivar. Desde la unificación de tablas comparte UsersTable con el módulo
+// Usuarios y la ficha de compañía, así que el vocabulario de estados es el común
+// ("Bloqueado", no "Suspendido") y la barra de filtros repite esos labels en un <select>.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
@@ -106,13 +108,33 @@ describe("OtUsersSection — refactor adminOT", () => {
   it("estado lleno: lista usuarios con su estado", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser, suspendedUser] });
     renderSection();
-    expect(await screen.findByText("Laura García")).toBeInTheDocument();
-    expect(screen.getByText("Carlos Pérez")).toBeInTheDocument();
-    expect(screen.getByText("Activo")).toBeInTheDocument();
-    expect(screen.getByText("Suspendido")).toBeInTheDocument();
+    // El chip se busca DENTRO de la fila: los mismos labels existen también como opciones
+    // del filtro de estado de la barra superior.
+    const activa = (await screen.findByText("Laura García")).closest("div.grid") as HTMLElement;
+    const bloqueada = screen.getByText("Carlos Pérez").closest("div.grid") as HTMLElement;
+    expect(within(activa).getByText("Activo")).toBeInTheDocument();
+    expect(within(bloqueada).getByText("Bloqueado")).toBeInTheDocument();
   });
 
-  it("invita a un usuario nuevo (solo email + nombre, sin selector de rol)", async () => {
+  // AC4 (HU #11551) — el hub OT es una de las tres pantallas que comparten UsersTable: Perfil
+  // y Rol deben quedar en columnas separadas y las acciones (Editar) siguen disponibles.
+  it("AC4 — muestra Perfil y Rol en columnas separadas y conserva las acciones", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    renderSection();
+
+    const fila = (await screen.findByText("Laura García")).closest("div.grid") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
+    expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
+    // Esta sección vive dentro de un organismo: el perfil de fila es siempre OT.
+    expect(within(fila).getByText("OT")).toBeInTheDocument();
+    expect(within(fila).getByText("Admin OT")).toBeInTheDocument();
+    expect(
+      within(fila).getByRole("button", { name: /editar usuario laura garcía/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("invita a un usuario nuevo sin marcar rol: el backend asigna ot_admin", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     vi.mocked(inviteOtUser).mockResolvedValue({
       invitationId: "inv-1",
@@ -124,7 +146,6 @@ describe("OtUsersSection — refactor adminOT", () => {
     await screen.findByText("Laura García");
 
     await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
-    expect(screen.queryByRole("combobox", { name: /rol/i })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
     await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
@@ -132,7 +153,8 @@ describe("OtUsersSection — refactor adminOT", () => {
 
     await waitFor(() =>
       expect(inviteOtUser).toHaveBeenCalledWith(
-        { email: "nuevo@transito.gov.co", fullName: "Nuevo Colaborador" },
+        // roleIds ausente = sin selección explícita: el backend conserva ot_admin.
+        { email: "nuevo@transito.gov.co", fullName: "Nuevo Colaborador", roleIds: undefined },
         { transitOfficeId: "ot-1" },
       ),
     );
@@ -204,5 +226,74 @@ describe("OtUsersSection — refactor adminOT", () => {
     await waitFor(() =>
       expect(unsuspendOtUser).toHaveBeenCalledWith("u-2", { transitOfficeId: "ot-1" }),
     );
+  });
+
+  // HU #11550 AC4 — la ruta OT (AdminOtEndpoints) responde con `{ error, message }`
+  // (no `code`, a diferencia de SecurityEndpoints); igual debe mostrar el mismo mensaje
+  // unificado que la ruta Security/AdminCompany para el conflicto de correo. HU #11580:
+  // el backend colapsó los tres códigos anteriores en un único EMAIL_ALREADY_IN_USE.
+  it("AC4 — EMAIL_ALREADY_IN_USE: invitar desde el hub OT muestra el mensaje unificado", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: "EMAIL_ALREADY_IN_USE", message: "…" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+
+    expect(
+      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).toBeInTheDocument();
+  });
+
+  it("un 409 que no es conflicto de correo al invitar desde el hub OT NO usa el mensaje unificado", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: "SOME_OTHER_CONFLICT" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+
+    expect(
+      await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
+  });
+
+  // HU #11580 — regresión: un código RETIRADO ya no se reconoce como conflicto de correo
+  // en la ruta OT (campo `error`), tampoco.
+  it("regresión: un código RETIRADO (USER_ALREADY_EXISTS) al invitar desde el hub OT NO usa el mensaje unificado", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: "USER_ALREADY_EXISTS", message: "…" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+
+    expect(
+      await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
   });
 });

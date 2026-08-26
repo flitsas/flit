@@ -1,4 +1,4 @@
-using Flit.Tramites.Domain.Entities;
+﻿using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -67,7 +67,18 @@ public sealed record InstanceSummaryDto(
     string? FirmaCompradorEstado = null,
                                               // Expediente consolidado del wizard (adjunto tipo 'consolidado') ya generado. El
                                               // id viaja para que la fila lo previsualice sin consultar los adjuntos (HU #11055).
-    Guid? ConsolidadoAttachmentId = null);
+    Guid? ConsolidadoAttachmentId = null,
+                                              // ADR-0050 — identidad del TIPO, no solo su familia. En MATRICULAS y TRASPASO la
+                                              // familia alcanza para identificar la fila, pero OTROS agrupa quince tipos
+                                              // distintos: un blindaje, un cambio de color y un levantamiento de prenda se
+                                              // veían los tres como «Otros» y no había forma de distinguirlos sin abrirlos.
+                                              // La navegación del tipo ya viene cargada en el grafo del listado.
+    string? TipoNombre = null,
+    string? TipoCodigo = null,
+                                              // Rótulo del paso en curso, tomado del recorrido del TIPO. El frontend lo derivaba de
+                                              // un array de nombres por familia, que para OTROS estaba vacío —salía «—»— y que de
+                                              // todos modos no puede acertar: cada tipo tiene su propio recorrido desde ADR-0050.
+    string? PasoNombre = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -115,8 +126,10 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
         // Ajuste del PO sobre HU #11056 — las columnas "Firmado" acreditan por identidad O por firma del
-        // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». La ruta de lote de la identidad
-        // no consulta el baúl a propósito (evitar N+1), así que se trae en su propia consulta única.
+        // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». UNA consulta para todos los
+        // tenants del listado, con la MISMA llave que la identidad (tenant|TIPO|NÚMERO).
+        // HU #11667 — ese mismo diccionario alimenta ahora la acreditación por baúl de los chips: sin él,
+        // el chip contradecía al gate de radicación y al FUR. Pasarlo no cuesta ninguna consulta.
         var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaUtcOffset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
@@ -124,7 +137,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         return instances
             .Select(e => ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.CreatedByUserId),
                 firmaBaul))
@@ -152,9 +165,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         var seller = e.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, SellerActorType, StringComparison.OrdinalIgnoreCase));
 
-        var modalidad = TramiteModalidadEntradaCodes.FromCode(e.ModalidadEntrada)
-                        ?? TramiteModalidadEntrada.MatriculaInicial;
-        var modalidadCode = TramiteModalidadEntradaCodes.ToCode(modalidad);
+        var modalidad = e.Family;
+        var modalidadCode = ProcedureFamilyCodes.ToCode(modalidad);
 
         // Estado server-driven del wizard: misma fuente de verdad que el frontend (canSubmit) y de
         // la que se deriva el progreso (PasoActual/TotalPasos). Se computa una sola vez.
@@ -200,7 +212,14 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             TramiteFuente.Desde(e.Origin, e.IsMigrated),
             DeriveFirmaParte(e, modalidad, SellerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
             DeriveFirmaParte(e, modalidad, BuyerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
-            DeriveConsolidadoAttachmentId(e));
+            DeriveConsolidadoAttachmentId(e),
+            e.TypeName,
+            e.TypeCode,
+            // `pasoActual` es 1-based sobre el MISMO `state.Steps` del que sale, así que el rótulo
+            // es el de esa posición. Null si el tipo no tiene recorrido parametrizado.
+            pasoActual >= 1 && pasoActual <= state.Steps.Count
+                ? state.Steps[pasoActual - 1].Label
+                : null);
     }
 
     /// <summary>
@@ -214,16 +233,31 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     ///   <item><b>pendiente</b> — no hay nada hecho todavía.</item>
     /// </list>
     /// <c>null</c> = NO APLICA: la parte no existe en esta modalidad (el vendedor en matrícula inicial).
+    ///
+    /// <para><b>Bug #11670 — el baúl solo cuenta si <see cref="FirmaBaulCobertura.Aplica"/> lo permite.</b>
+    /// Esta columna resolvía el baúl por su cuenta: bastaba con encontrar la llave de la persona en el
+    /// diccionario, sin mirar si el actor era jurídico ni qué mecanismo de firma eligió el gestor. Con la
+    /// HU #11667 el chip de identidad de la MISMA fila pasó a respetar el mecanismo, y las dos superficies
+    /// contiguas se contradecían: chip «pendiente» y columna «firmado» para un actor jurídico con
+    /// <c>mecanismoFirma = identidad</c> y baúl vigente. Es la raíz del Bug #11141 — consumidores que
+    /// resuelven el baúl por su cuenta en vez de delegar en el predicado único—, así que aquí también se
+    /// delega. Cuando el baúl no procede, no cuenta <i>en ninguno de los dos sentidos</i>: ni acredita ni
+    /// rechaza, y la parte queda a merced de su validación de identidad. Coste: cero consultas nuevas.</para>
+    ///
+    /// <para>La asimetría documentada en la HU #11667 se mantiene: el diccionario se materializa sin mirar
+    /// el flag <c>signature_vault_enabled</c> del tenant. Filtrarlo aquí exigiría una consulta de
+    /// configuración por tenant en la ruta de lote; la corrección pertenece al origen de las claves, que
+    /// sirve a la columna y al chip a la vez.</para>
     /// </summary>
     private static string? DeriveFirmaParte(
         ProcedureInstance e,
-        TramiteModalidadEntrada modalidad,
+        ProcedureFamily modalidad,
         string parte,
         IReadOnlySet<string> identidadAprobadaPartes,
         IReadOnlyDictionary<string, bool> firmaBaulPorPersona)
     {
         // El vendedor solo existe en traspaso; el comprador siempre.
-        if (modalidad != TramiteModalidadEntrada.Traspaso
+        if (modalidad != ProcedureFamily.Traspaso
             && string.Equals(parte, SellerActorType, StringComparison.OrdinalIgnoreCase))
             return null;
 
@@ -231,11 +265,14 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
 
         // Firma del baúl de la PERSONA que acredita a esta parte (el representante legal cuando el
-        // actor es jurídico), resuelta con la misma llave que la identidad.
+        // actor es jurídico), resuelta con la misma llave que la identidad. Bug #11670: solo se mira si
+        // el baúl PROCEDE para este actor —actor jurídico y mecanismo de firma compatible—, el mismo
+        // predicado que usan el gate de radicación, el chip del listado y el FUR.
         bool? baulVigente = null;
-        if (actor is not null)
+        if (FirmaBaulCobertura.Aplica(actor))
         {
-            var subject = IdentitySubjectResolver.For(actor);
+            // Aplica() ya descartó el actor nulo.
+            var subject = IdentitySubjectResolver.For(actor!);
             if (!string.IsNullOrWhiteSpace(subject.TipoDocumento)
                 && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             {
@@ -305,9 +342,9 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// <c>Parte</c> null o "comprador".
     /// </summary>
     private static string? DeriveIdentityStatus(
-        ProcedureInstance e, TramiteModalidadEntrada modalidad, IReadOnlySet<string> identidadAprobadaPartes)
+        ProcedureInstance e, ProcedureFamily modalidad, IReadOnlySet<string> identidadAprobadaPartes)
     {
-        var partes = modalidad == TramiteModalidadEntrada.Traspaso ? PartesTraspaso : PartesMatricula;
+        var partes = modalidad == ProcedureFamily.Traspaso ? PartesTraspaso : PartesMatricula;
 
         // Aprobado PER-PERSONA: TODAS las partes requeridas tienen identidad vigente aprobada (referenciada,
         // aunque el trámite no tenga fila propia). Se evalúa ANTES de mirar filas locales, porque un trámite
@@ -317,7 +354,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
 
         // Estados NO terminales/aprobados sí dependen de las validaciones PROPIAS del trámite (una captura en
         // curso o rechazada vive en su instancia): en_proceso / rechazado / sin iniciar.
-        var esMatricula = modalidad != TramiteModalidadEntrada.Traspaso;
+        var esMatricula = modalidad != ProcedureFamily.Traspaso;
         bool Relevant(ProcedureInstanceBiometricValidation v) =>
             partes.Any(p => string.Equals(v.PartyRole, p, StringComparison.OrdinalIgnoreCase))
             || (esMatricula && v.PartyRole is null);
@@ -339,9 +376,9 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// Firma de la compraventa pendiente (solo traspaso): alguna de las dos partes aún no tiene su firma
     /// <c>firmada</c>. En matrícula no aplica firma de compraventa → siempre false.
     /// </summary>
-    private static bool DeriveSignaturePending(ProcedureInstance e, TramiteModalidadEntrada modalidad)
+    private static bool DeriveSignaturePending(ProcedureInstance e, ProcedureFamily modalidad)
     {
-        if (modalidad != TramiteModalidadEntrada.Traspaso)
+        if (modalidad != ProcedureFamily.Traspaso)
             return false;
 
         bool Firmada(string parte) => e.Signatures.Any(s =>

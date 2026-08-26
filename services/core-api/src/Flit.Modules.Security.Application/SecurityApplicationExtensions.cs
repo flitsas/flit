@@ -5,6 +5,7 @@ using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Application.Modules;
@@ -16,6 +17,8 @@ using Flit.Modules.Security.Application.UserManagement.SuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UnsuspendUser;
 using Flit.Modules.Security.Application.UserManagement.UpdateUser;
 using Flit.Modules.Security.Application.UserRoles;
+using Flit.Modules.Security.Application.UiPreferences.GetUserUiPreference;
+using Flit.Modules.Security.Application.UiPreferences.UpsertUserUiPreference;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Modules.Security.Application;
@@ -32,6 +35,7 @@ public static class SecurityApplicationExtensions
         services.AddScoped<CreateInvitationHandler>();
         services.AddScoped<ResendInvitationHandler>(); // HU #10625 — reenviar invitación pendiente
         services.AddScoped<CancelInvitationHandler>(); // HU #10627 — cancelar invitación pendiente
+        services.AddScoped<ReactivateInvitationHandler>(); // HU #11552 — reactivar invitación cancelada
         services.AddScoped<ActivateAccountHandler>();
 
         // HU #10161 — CRUD módulos dinámicos Super Admin
@@ -75,6 +79,11 @@ public static class SecurityApplicationExtensions
         // HU #10623 — eliminar (soft-delete reversible) y restaurar (SOLO SuperAdmin) un usuario.
         services.AddScoped<DeleteUserHandler>();
         services.AddScoped<RestoreUserHandler>();
+
+        // Preferencias de UI por usuario — base compartida de "elegir columnas visibles" en las
+        // tablas de trámites (GET/PUT /api/v1/me/ui-preferences/{scope}).
+        services.AddScoped<GetUserUiPreferenceHandler>();
+        services.AddScoped<UpsertUserUiPreferenceHandler>();
 
         return services;
     }

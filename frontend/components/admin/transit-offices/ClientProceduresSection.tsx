@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { tramitesClient } from "@/lib/api/tramites-client";
@@ -16,7 +16,13 @@ import {
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
-import type { OtBandejaHealth, OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
+import type {
+  OtBandejaHealth,
+  OtClientProcedure,
+  OtProfile,
+  RejectionReason,
+} from "@/lib/api/types-ot";
+import { fetchRejectionReasons } from "@/lib/api/ot-metrics";
 import { fetchMandateSigners, type MandateSigner } from "@/lib/api/admin-mandate-signers";
 import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
@@ -24,7 +30,7 @@ import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { Modal } from "@/components/atom/Modal";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
-import { FolderOpen } from "lucide-react";
+import { ChevronDown, ChevronUp, FolderOpen } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import { ClientProcedureDetailPanel } from "./ClientProcedureDetailPanel";
 import {
@@ -35,8 +41,30 @@ import {
 } from "@/lib/api/admin-plate-ranges";
 import { OtDocumentosTab } from "./OtDocumentosTab";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
+import { formatDocumentWithType } from "@/lib/display/document-number";
 
 const PAGE_SIZE = 20;
+
+/** Extrae el motivo de fallo al asignar placa (ProblemDetails.detail o fallback legible). */
+export function readAssignPlateError(err: unknown): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { detail?: unknown; title?: unknown } | null | undefined;
+    if (typeof body?.detail === "string" && body.detail.trim()) return body.detail.trim();
+    if (typeof body?.title === "string" && body.title.trim() && body.title !== "Conflict") {
+      return body.title.trim();
+    }
+    // apiFetch (422 ProblemDetails, o cualquier no-ok) ya prioriza detail/title/error en message
+    // y nunca filtra la ruta interna (Bug #11626) — se puede usar tal cual.
+    if (err.message) return err.message;
+  }
+  if (err instanceof Error && err.message && err.message !== "Validación fallida") {
+    // Errores técnicos de red/fetch no ayudan al operador OT.
+    if (!/^(network|failed to fetch|load failed|aborted?)$/i.test(err.message.trim())) {
+      return err.message;
+    }
+  }
+  return "No se pudo asignar la placa.";
+}
 
 /**
  * Vista tenant admin — trámites de clientes OT (HU #10220).
@@ -56,6 +84,21 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
   const [statusFilter, setStatusFilter] = useState("entregado");
   const [typeFilter, setTypeFilter] = useState("");
+  // Borradores del formulario; se aplican al listado solo con "Aplicar filtros".
+  const [vinFilter, setVinFilter] = useState("");
+  const [placaFilter, setPlacaFilter] = useState("");
+  const [vendedorFilter, setVendedorFilter] = useState("");
+  const [compradorFilter, setCompradorFilter] = useState("");
+  const [gestorFilter, setGestorFilter] = useState("");
+  const [appliedVin, setAppliedVin] = useState("");
+  const [appliedPlaca, setAppliedPlaca] = useState("");
+  const [appliedVendedor, setAppliedVendedor] = useState("");
+  const [appliedComprador, setAppliedComprador] = useState("");
+  const [appliedGestor, setAppliedGestor] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  /** Panel de filtros colapsado por defecto para no saturar la bandeja. */
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
@@ -73,6 +116,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [revokeTarget, setRevokeTarget] = useState<OtClientProcedure | null>(null);
   const [revokePlateReason, setRevokePlateReason] = useState("");
   const [rejectReason, setRejectReason] = useState("");
+  // Causales del catálogo para el modal de rechazo. Se cargan según la familia del trámite: las
+  // causales no son intercambiables entre matrícula y traspaso.
+  const [rejectReasonCatalog, setRejectReasonCatalog] = useState<RejectionReason[]>([]);
+  const [rejectReasonIds, setRejectReasonIds] = useState<string[]>([]);
+  const [rejectCatalogError, setRejectCatalogError] = useState<string | null>(null);
+  /** Trámite cuya carga de causales es la vigente; descarta respuestas de aperturas anteriores. */
+  const rejectCatalogRequestRef = useRef<string | null>(null);
   // Licencia de Tránsito opcional al aprobar; también adjuntable después (fila aprobada).
   const [ltFile, setLtFile] = useState<File | null>(null);
   const [ltTarget, setLtTarget] = useState<OtClientProcedure | null>(null);
@@ -122,6 +172,34 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       .catch(() => setProcedureTypes([]));
   }, []);
 
+  // Deep-link desde el drill-down de reportes OT (?placa=/?vin=/?status=): abrir la lista de un
+  // bloque del panel debe aterrizar ya filtrado en el trámite, no en la bandeja completa. Se lee
+  // window.location directo (en vez de useSearchParams) para no requerir un boundary de router en
+  // este componente ni afectar los tests que lo montan fuera de una app real.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const placaParam = params.get("placa")?.trim();
+    const vinParam = params.get("vin")?.trim();
+    const statusParam = params.get("status")?.trim();
+    if (!placaParam && !vinParam && !statusParam) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- siembra desde la URL al montar: no hay otro momento para leerla */
+    if (placaParam) {
+      setPlacaFilter(placaParam);
+      setAppliedPlaca(placaParam);
+    }
+    if (vinParam) {
+      setVinFilter(vinParam);
+      setAppliedVin(vinParam);
+    }
+    if (statusParam) setStatusFilter(statusParam);
+    setFiltersOpen(true);
+    setPage(1);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // Solo al montar: es una precarga desde la URL de entrada, no una sincronización continua.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const load = useCallback(
     async (signal?: AbortSignal, targetPage = page) => {
       setStatus("loading");
@@ -130,6 +208,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           {
             status: statusFilter || undefined,
             procedureTypeId: typeFilter || undefined,
+            vin: appliedVin.trim() || undefined,
+            placa: appliedPlaca.trim() || undefined,
+            vendedor: appliedVendedor.trim() || undefined,
+            comprador: appliedComprador.trim() || undefined,
+            gestor: appliedGestor.trim() || undefined,
+            sortBy: sortBy || undefined,
+            sortDir,
             page: targetPage,
             pageSize: PAGE_SIZE,
           },
@@ -153,7 +238,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [statusFilter, typeFilter, page, transitOfficeId],
+    [statusFilter, typeFilter, appliedVin, appliedPlaca, appliedVendedor, appliedComprador, appliedGestor, sortBy, sortDir, page, transitOfficeId],
   );
 
   useEffect(() => {
@@ -164,8 +249,45 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   }, [load, page]);
 
   const applyFilters = () => {
+    setAppliedVin(vinFilter);
+    setAppliedPlaca(placaFilter);
+    setAppliedVendedor(vendedorFilter);
+    setAppliedComprador(compradorFilter);
+    setAppliedGestor(gestorFilter);
     setPage(1);
-    void load(undefined, 1);
+  };
+
+  const hasAdvancedFilters =
+    appliedVin.trim() !== "" ||
+    appliedPlaca.trim() !== "" ||
+    appliedVendedor.trim() !== "" ||
+    appliedComprador.trim() !== "" ||
+    appliedGestor.trim() !== "" ||
+    typeFilter !== "" ||
+    statusFilter !== "entregado";
+
+  const clearFilters = () => {
+    setStatusFilter("entregado");
+    setTypeFilter("");
+    setVinFilter("");
+    setPlacaFilter("");
+    setVendedorFilter("");
+    setCompradorFilter("");
+    setGestorFilter("");
+    setAppliedVin("");
+    setAppliedPlaca("");
+    setAppliedVendedor("");
+    setAppliedComprador("");
+    setAppliedGestor("");
+    setSortBy("createdAt");
+    setSortDir("desc");
+    setPage(1);
+  };
+
+  const handleSortChange = (nextSortBy: string, nextSortDir: "asc" | "desc") => {
+    setSortBy(nextSortBy);
+    setSortDir(nextSortDir);
+    setPage(1);
   };
 
   // OT sobre el que se listan los mandatarios (SuperAdmin: prop de la ruta; ot_admin: su perfil).
@@ -219,7 +341,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         setMandatarioTarget(null);
         show(
           "El mandatario debe validar su identidad (vigente) antes de firmar el mandato. " +
-            "Envíale la validación desde la pestaña «Mandatario».",
+            "La compañía se la envía desde la pestaña «Mandatarios» de su configuración.",
           "error",
         );
         return;
@@ -285,8 +407,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       setAssignTarget(null);
       setPlateInput("");
       show("Placa asignada al trámite.", "success");
-    } catch {
-      show("No se pudo asignar la placa.", "error");
+    } catch (err) {
+      // El backend explica la causa en el `detail` del ProblemDetails (placa ya asignada, fuera de
+      // los rangos, trámite en otro estado…). Antes se descartaba y el operador solo veía un toast
+      // genérico sin saber por qué no avanzaba el formulario.
+      show(readAssignPlateError(err), "error");
+      // El modal queda abierto a propósito: la corrección es escribir otra placa.
     } finally {
       setActing(false);
     }
@@ -419,16 +545,49 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
+  // Abre el modal y trae las causales activas de la familia del trámite. Si el catálogo falla, el
+  // rechazo NO se bloquea: la observación en texto libre basta para radicar la decisión, y dejar al
+  // revisor sin poder rechazar por un catálogo caído sería peor que perder el dato del reporte.
+  const openReject = async (procedure: OtClientProcedure) => {
+    setRejectTarget(procedure);
+    setRejectReason("");
+    setRejectReasonIds([]);
+    setRejectCatalogError(null);
+    setRejectReasonCatalog([]);
+    // El modal pudo cerrarse o reabrirse con otro trámite mientras esperábamos el catálogo: se
+    // marca cuál es la carga vigente para descartar la respuesta de una anterior, que pintaría
+    // las causales del trámite equivocado.
+    rejectCatalogRequestRef.current = procedure.id;
+    try {
+      const catalog = await fetchRejectionReasons({ family: procedure.familia });
+      if (rejectCatalogRequestRef.current !== procedure.id) return;
+      setRejectReasonCatalog(catalog);
+    } catch {
+      if (rejectCatalogRequestRef.current !== procedure.id) return;
+      setRejectCatalogError(
+        "No se pudieron cargar las causales. Puedes rechazar describiendo el motivo.",
+      );
+    }
+  };
+
+  const toggleRejectReason = (id: string) => {
+    setRejectReasonIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
   const confirmReject = async () => {
     if (!rejectTarget || !rejectReason.trim()) return;
     setActing(true);
     try {
       const updated = await rejectOtClientProcedure(rejectTarget.id, {
         reason: rejectReason.trim(),
+        rejectionReasonIds: rejectReasonIds.length > 0 ? rejectReasonIds : undefined,
       });
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setRejectTarget(null);
       setRejectReason("");
+      setRejectReasonIds([]);
       show("Trámite rechazado.", "success");
     } catch {
       show("No se pudo rechazar el trámite.", "error");
@@ -479,8 +638,42 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aprobarlos.
         </div>
       )}
+      <div className="rounded-2xl border bg-white dark:bg-[#0B0F14]">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            aria-expanded={filtersOpen}
+            aria-controls="ot-filtros-panel"
+            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-[#557EFF]/10"
+          >
+            {filtersOpen ? (
+              <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            Filtros
+            {hasAdvancedFilters ? (
+              <span className="ml-0.5 rounded-full bg-[#557EFF]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#557EFF]">
+                activos
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!hasAdvancedFilters && sortBy === "createdAt" && sortDir === "desc"}
+            className="rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ borderColor: "#557EFF", color: "#557EFF" }}
+            aria-label="Limpiar filtros de trámites OT"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+        {filtersOpen ? (
       <form
-        className={OT_FILTER_FORM_CLS}
+        id="ot-filtros-panel"
+        className={`${OT_FILTER_FORM_CLS} border-0 border-t rounded-none rounded-b-2xl`}
         onSubmit={(e) => {
           e.preventDefault();
           applyFilters();
@@ -517,7 +710,62 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             ))}
           </select>
         </label>
-        <div className="flex items-end">
+        <label className="text-xs font-semibold text-foreground">
+          VIN
+          <input
+            type="search"
+            aria-label="Filtrar por VIN"
+            className={`mt-1 ${OT_INPUT_CLS}`}
+            value={vinFilter}
+            onChange={(e) => setVinFilter(e.target.value)}
+            placeholder="Buscar VIN"
+          />
+        </label>
+        <label className="text-xs font-semibold text-foreground">
+          Placa
+          <input
+            type="search"
+            aria-label="Filtrar por placa"
+            className={`mt-1 ${OT_INPUT_CLS}`}
+            value={placaFilter}
+            onChange={(e) => setPlacaFilter(e.target.value)}
+            placeholder="Buscar placa"
+          />
+        </label>
+        <label className="text-xs font-semibold text-foreground">
+          Propietario / vendedor
+          <input
+            type="search"
+            aria-label="Filtrar por propietario o vendedor"
+            className={`mt-1 ${OT_INPUT_CLS}`}
+            value={vendedorFilter}
+            onChange={(e) => setVendedorFilter(e.target.value)}
+            placeholder="Buscar propietario"
+          />
+        </label>
+        <label className="text-xs font-semibold text-foreground">
+          Comprador
+          <input
+            type="search"
+            aria-label="Filtrar por comprador"
+            className={`mt-1 ${OT_INPUT_CLS}`}
+            value={compradorFilter}
+            onChange={(e) => setCompradorFilter(e.target.value)}
+            placeholder="Buscar comprador"
+          />
+        </label>
+        <label className="text-xs font-semibold text-foreground">
+          Gestor
+          <input
+            type="search"
+            aria-label="Filtrar por gestor"
+            className={`mt-1 ${OT_INPUT_CLS}`}
+            value={gestorFilter}
+            onChange={(e) => setGestorFilter(e.target.value)}
+            placeholder="Buscar gestor"
+          />
+        </label>
+        <div className="flex items-end gap-2">
           <button
             type="submit"
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
@@ -527,6 +775,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           </button>
         </div>
       </form>
+        ) : null}
+      </div>
 
       <UiStateBoundary
         status={status}
@@ -541,11 +791,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           page={page}
           pageSize={PAGE_SIZE}
           onPageChange={setPage}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSortChange={handleSortChange}
           onApprove={(row) => {
             setLtFile(null);
             setApproveTarget(row);
           }}
-          onReject={setRejectTarget}
+          onReject={(p) => void openReject(p)}
           onAssignPlate={!isReadOnly && !superAdmin ? openAssignPlate : undefined}
           onRevoke={!isReadOnly && !superAdmin ? (row) => { setRevokePlateReason(""); setRevokeTarget(row); } : undefined}
           showApprovalActions={!isReadOnly && !superAdmin}
@@ -629,8 +882,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
             {mandatarioOptions.length === 0 ? (
               <p className="mt-4 rounded-xl border p-3 text-center text-xs opacity-70">
-                No hay mandatarios activos para esta compañía en el organismo. Regístralos en la pestaña
-                «Mandatario» y reintenta.
+                No hay mandatarios activos para esta compañía en el organismo. Ahora los registra la
+                propia compañía, desde la pestaña «Mandatarios» de su configuración, marcando en qué
+                organismos aplican.
               </p>
             ) : (
               <fieldset className="mt-4 space-y-2" data-testid="mandatario-options">
@@ -651,7 +905,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                     <span className="flex-1">
                       <span className="font-semibold">{s.fullName}</span>
                       <span className="ml-2 font-mono text-xs opacity-60">
-                        {s.documentType} ••••{s.documentNumber.slice(-4)}
+                        {formatDocumentWithType(s.documentType, s.documentNumber)}
                       </span>
                     </span>
                   </label>
@@ -804,9 +1058,48 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <h2 className="text-lg font-semibold text-foreground">
               Motivo del rechazo
             </h2>
+
+            {/* Causales del catálogo: varias son válidas y esperadas. Un expediente puede llegar
+                con improntas borrosas, sin impronta y sin pago de impuestos a la vez, y el gestor
+                necesita saberlo todo para subsanar. */}
+            {rejectReasonCatalog.length > 0 && (
+              <fieldset className="mt-4" data-testid="reject-reason-catalog">
+                <legend className="text-xs font-semibold text-foreground">
+                  ¿Qué falló? Marca todo lo que aplique
+                </legend>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {rejectReasonCatalog.map((reason) => (
+                    <label
+                      key={reason.id}
+                      className="flex items-start gap-2 text-xs text-foreground"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={rejectReasonIds.includes(reason.id)}
+                        onChange={() => toggleRejectReason(reason.id)}
+                      />
+                      <span>{reason.description}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            {rejectCatalogError && (
+              <p className="mt-3 text-[11px] text-amber-700 dark:text-amber-400">
+                {rejectCatalogError}
+              </p>
+            )}
+
+            <label className="mt-4 block text-xs font-semibold text-foreground">
+              Observación para quien va a subsanar
+            </label>
+            {/* El texto libre NO lo sustituyen las causales: la causal dice QUÉ falló y esto dice
+                CÓMO corregirlo — qué documento exactamente, qué dato no cuadra. */}
             <textarea
-              className={`mt-3 ${OT_INPUT_CLS}`}
+              className={`mt-2 ${OT_INPUT_CLS}`}
               rows={3}
+              placeholder="Indica qué debe corregirse y con qué detalle"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />

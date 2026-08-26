@@ -9,14 +9,54 @@ public sealed class TenantSettings
     /// <summary>Tenant al que pertenece la configuración.</summary>
     public required Guid TenantId { get; init; }
 
-    /// <summary>Permite matrícula inicial (<c>allow_initial_registration</c>).</summary>
+    /// <summary>Permite matrícula inicial (<c>allow_initial_registration</c>). En UI se muestra invertido como «Bloquear matrículas».</summary>
     public required bool AllowInitialRegistration { get; init; }
+
+    /// <summary>Si true, no se pueden crear trámites familia TRASPASO.</summary>
+    public bool BlockProcedureFamilyTraspaso { get; init; }
+
+    /// <summary>Si true, no se pueden crear trámites familia OTROS.</summary>
+    public bool BlockProcedureFamilyOtros { get; init; }
 
     /// <summary>Permite misceláneos de vehículos nuevos (<c>allow_misc_new_vehicles</c>).</summary>
     public required bool AllowMiscNewVehicles { get; init; }
 
-    /// <summary>Restringe a vehículos propios (<c>only_own_vehicles</c>).</summary>
+    /// <summary>Restringe a vehículos propios en familia TRASPASO (<c>only_own_vehicles</c>).</summary>
     public required bool OnlyOwnVehicles { get; init; }
+
+    /// <summary>Restringe a vehículos propios en familia MATRICULAS.</summary>
+    public bool OnlyOwnVehiclesMatriculas { get; init; }
+
+    /// <summary>Restringe a vehículos propios en familia OTROS.</summary>
+    public bool OnlyOwnVehiclesOtros { get; init; }
+
+    /// <summary>
+    /// True si la familia está bloqueada para creación de trámites.
+    /// MATRICULAS ⇒ invertido de <see cref="AllowInitialRegistration"/>.
+    /// </summary>
+    public bool IsProcedureFamilyBlocked(string? procedureFamily)
+    {
+        if (string.Equals(procedureFamily, "MATRICULAS", StringComparison.OrdinalIgnoreCase))
+            return !AllowInitialRegistration;
+        if (string.Equals(procedureFamily, "TRASPASO", StringComparison.OrdinalIgnoreCase))
+            return BlockProcedureFamilyTraspaso;
+        if (string.Equals(procedureFamily, "OTROS", StringComparison.OrdinalIgnoreCase))
+            return BlockProcedureFamilyOtros;
+        return false;
+    }
+
+    /// <summary>
+    /// Resuelve el flag según <c>ProcedureFamily</c> (<c>MATRICULAS</c> | <c>TRASPASO</c> | <c>OTROS</c>).
+    /// Familia desconocida o vacía → TRASPASO (comportamiento legado).
+    /// </summary>
+    public bool ResolveOnlyOwnVehicles(string? procedureFamily)
+    {
+        if (string.Equals(procedureFamily, "MATRICULAS", StringComparison.OrdinalIgnoreCase))
+            return OnlyOwnVehiclesMatriculas;
+        if (string.Equals(procedureFamily, "OTROS", StringComparison.OrdinalIgnoreCase))
+            return OnlyOwnVehiclesOtros;
+        return OnlyOwnVehicles;
+    }
 
     /// <summary>Baúl de firmas activo (<c>signature_vault_enabled</c>).</summary>
     public required bool SignatureVaultEnabled { get; init; }
@@ -34,10 +74,32 @@ public sealed class TenantSettings
     /// </summary>
     public bool PlateFlowSkipToTerminado { get; init; }
 
+    /// <summary>
+    /// Al procesar en sub-estado asignado se valida el SOAT contra el RUNT y, sin SOAT vigente, el
+    /// avance se detiene. Desactivada, el hallazgo solo se informa.
+    /// </summary>
+    public bool ValidateSoatWithRunt { get; init; }
+
     /// <summary>Canal de enrutamiento de notificaciones (<c>notification_channel</c>).</summary>
     public required NotificationChannel NotificationChannel { get; init; }
 
-    /// <summary>Destinatario de notificaciones (<c>notification_target</c>).</summary>
+    /// <summary>
+    /// Interruptor propio de elegibilidad de documentos personalizados (<c>personalized_documents_enabled</c>,
+    /// HU #11357/#11362, ADR-0043). Gobierna si el tenant puede OPERAR las rutas de escritura de
+    /// documentos personalizados (crear/confirmar/activar/desactivar versión); desacoplado de
+    /// <see cref="NotificationChannel"/> — cambiar el canal ya NO enciende ni apaga esta capacidad.
+    /// No <c>required</c>: default false para no romper construcciones existentes.
+    /// </summary>
+    public bool PersonalizedDocumentsEnabled { get; init; }
+
+    public bool TramiteApprovedEmailsEnabled { get; init; } = true;
+
+    public bool TramiteRejectedEmailsEnabled { get; init; } = true;
+
+    public TramiteStateEmailRecipients StateEmailRecipients { get; init; } =
+        TramiteStateEmailRecipients.AllOn;
+
+    /// <summary>Destinatario legado (<c>notification_target</c>). Ya no gobierna el envío.</summary>
     public required NotificationTarget NotificationTarget { get; init; }
 
     /// <summary>Métodos de recaudo habilitados (<c>payment_methods</c>, jsonb).</summary>
@@ -79,12 +141,21 @@ public sealed class TenantSettings
     {
         TenantId = tenantId,
         AllowInitialRegistration = false,
+        BlockProcedureFamilyTraspaso = false,
+        BlockProcedureFamilyOtros = false,
         AllowMiscNewVehicles = true,
         OnlyOwnVehicles = false,
+        OnlyOwnVehiclesMatriculas = false,
+        OnlyOwnVehiclesOtros = false,
         SignatureVaultEnabled = false,
         PlatePreassignEnabled = false,
         PlateFlowSkipToTerminado = false,
+        ValidateSoatWithRunt = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
+        PersonalizedDocumentsEnabled = false,
+        TramiteApprovedEmailsEnabled = true,
+        TramiteRejectedEmailsEnabled = true,
+        StateEmailRecipients = TramiteStateEmailRecipients.AllOn,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],
         RuntFailoverTimeoutMs = 60_000,

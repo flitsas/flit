@@ -1,7 +1,15 @@
 namespace Flit.Modules.Security.Domain.Auth;
 
-/// <summary>Datos del usuario necesarios para componer el correo de recuperación.</summary>
-public sealed record PasswordRecoveryUser(Guid UserId, string Email, string DisplayName);
+/// <summary>
+/// Datos del usuario necesarios para componer el correo de recuperación.
+/// </summary>
+/// <param name="TenantId">
+/// HU #11358 — tenant del usuario, derivado de su asignación de rol activa igual que
+/// <see cref="AdminTargetUser.TenantId"/> (ver <c>UserAccountRepository</c>). Puede ser
+/// <c>null</c> si el usuario no tiene ninguna asignación de rol activa; ese es el único caso en
+/// que <see cref="EmailMessage.TenantId"/> viaja nulo hacia el puerto de envío.
+/// </param>
+public sealed record PasswordRecoveryUser(Guid UserId, string Email, string DisplayName, Guid? TenantId);
 
 /// <summary>Usuario objetivo de una acción administrativa (incluye tenant para el control de ámbito).</summary>
 public sealed record AdminTargetUser(Guid UserId, string Email, string DisplayName, Guid? TenantId);

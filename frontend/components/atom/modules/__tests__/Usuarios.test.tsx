@@ -2,9 +2,10 @@
 // Permisos") ya no crea siempre un AdminCompany: el rol se resuelve según el tipo de tenant
 // destino, elegido entre compañías y organismos de tránsito en un mismo selector.
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Usuarios } from "../Usuarios";
+import { getUsers } from "@/lib/api/security";
 
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
@@ -65,24 +66,91 @@ vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
   }),
 }));
 
-describe("Usuarios — invitar usuario (SuperAdmin, selector compañía/OT)", () => {
-  it("muestra compañías y organismos de tránsito agrupados, y resuelve el rol según el destino elegido", async () => {
+// El alta de usuario dejó de tener un único selector "empresa u organismo destino" con el rol
+// forzado por el backend: ahora se elige primero el PERFIL (context/usuarios-contex.md) y el
+// destino que se pide depende de él — el perfil FLIT no lleva compañía ni organismo.
+describe("Usuarios — invitar usuario (SuperAdmin, selector de perfil)", () => {
+  it("pide compañía destino para el perfil Gestor", async () => {
     const user = userEvent.setup();
     render(<Usuarios />);
 
     await user.click(await screen.findByRole("button", { name: /invitar usuario/i }));
+    await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
 
-    const tenantSelect = await screen.findByLabelText(/empresa u organismo destino/i);
+    // El destino es un combobox con buscador: las opciones solo existen con la lista abierta.
+    const tenantSelect = await screen.findByLabelText(/compañía destino/i);
+    await user.click(tenantSelect);
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /Compañía Demo/i })).toBeInTheDocument();
-      expect(screen.getByRole("option", { name: /Secretaría de Movilidad Demo/i })).toBeInTheDocument();
     });
+    expect(
+      screen.queryByRole("option", { name: /Secretaría de Movilidad Demo/i }),
+    ).not.toBeInTheDocument();
 
-    await user.selectOptions(tenantSelect, "company-1");
-    expect(await screen.findByText(/Administrador de Compañía/)).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Compañía Demo/i }));
+    expect(tenantSelect).toHaveValue("Compañía Demo");
+  });
 
-    await user.selectOptions(tenantSelect, "ot-tenant-1");
-    expect(await screen.findByText(/Administrador OT/)).toBeInTheDocument();
-    expect(screen.queryByText(/Administrador de Compañía/)).not.toBeInTheDocument();
+  it("pide organismo de tránsito destino para el perfil OT", async () => {
+    const user = userEvent.setup();
+    render(<Usuarios />);
+
+    await user.click(await screen.findByRole("button", { name: /invitar usuario/i }));
+    await user.click(await screen.findByRole("radio", { name: /Organismo de Tránsito/i }));
+
+    await user.click(await screen.findByLabelText(/organismo de tránsito destino/i));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("option", { name: /Secretaría de Movilidad Demo/i }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("option", { name: /Compañía Demo/i })).not.toBeInTheDocument();
+  });
+
+  it("no exige compañía ni organismo para el perfil FLIT", async () => {
+    const user = userEvent.setup();
+    render(<Usuarios />);
+
+    await user.click(await screen.findByRole("button", { name: /invitar usuario/i }));
+    await user.click(await screen.findByRole("radio", { name: /^FLIT/i }));
+
+    expect(screen.queryByLabelText(/compañía destino/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/organismo de tránsito destino/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/se creará con el rol de sistema/i)).toBeInTheDocument();
+  });
+});
+
+// AC4 (HU #11551) — el módulo Usuarios es una de las tres pantallas que comparten UsersTable:
+// las columnas Perfil y Rol deben quedar separadas y las acciones no se pierden.
+describe("Usuarios — tabla con columnas Perfil y Rol separadas (AC4)", () => {
+  it("muestra Perfil y Rol en columnas distintas y conserva las acciones", async () => {
+    vi.mocked(getUsers).mockResolvedValueOnce([
+      {
+        id: "u-modulo-1",
+        fullName: "Gina Paredes",
+        email: "gina@flit.local",
+        role: "Administrador de Compañía",
+        roleCode: "AdminCompany",
+        roleId: "role-admin-company",
+        status: "active",
+        createdAt: "2026-08-01T10:00:00Z",
+        isSuspended: false,
+        tenantType: "COMPANY",
+        profile: "GESTOR",
+        rowVersion: 1,
+      },
+    ]);
+
+    render(<Usuarios />);
+
+    const fila = (await screen.findByText("Gina Paredes")).closest("div.grid") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
+    expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
+    expect(within(fila).getByText("Gestor")).toBeInTheDocument();
+    expect(within(fila).getByText("Administrador de Compañía")).toBeInTheDocument();
+    expect(
+      within(fila).getByRole("button", { name: /editar usuario gina paredes/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Consultations.Avaluos;
@@ -10,6 +11,11 @@ using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Rues;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
+using Flit.Infrastructure.Notifications.DeliveryLog;
+using Flit.Infrastructure.Notifications.Renting;
+using Flit.Infrastructure.Notifications.Routing;
+using Flit.Infrastructure.Notifications;
+using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -26,6 +32,7 @@ using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
 using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
+using Flit.Modules.Security.Domain.UiPreferences;
 using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Infrastructure.Quipux;
@@ -47,6 +54,7 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -90,7 +98,13 @@ public static class InfrastructureExtensions
         // FEATURE-08 / HU-BE-06 (CFD-09) — feature flag F08_DynamicProcedures (por tenant, ot_feature_flags).
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IDynamicProceduresPolicy,
             OtRules.DynamicProceduresPolicy>();
+        // Validación del SOAT contra el RUNT al procesar, activable por compañía.
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
+            OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // HU #11196 — marcas de firma a posteriori (el lote que se firma cuando el representante valida).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IDeferredSignatureMarkRepository,
+            DeferredSignatureMarkRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
@@ -99,14 +113,25 @@ public static class InfrastructureExtensions
         // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonDataConsentRepository, PersonDataConsentRepository>();
+        // HU #11302 (Feature #11301, ADR-0041) — almacén propio de certificaciones externas
+        // (SOAT, RTM y registro mercantil) en modelo canónico, con payload crudo para reprocesar.
+        services.AddScoped<Flit.Tramites.Application.UseCases.Certifications.ICertificationRepository,
+            CertificationRepository>();
         // HU #10865 — entidad persona/sujeto a nivel tenant (Feature #10864, CF-00, ADR-0030).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
+        // Catálogo RUNT de colores de vehículo (transformaciones FUR) — búsqueda paginada.
+        services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleColorCatalog, DbVehicleColorCatalog>();
+        // Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019) — cerrado, 6 valores.
+        services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleServiceTypeCatalog, DbVehicleServiceTypeCatalog>();
         // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
         services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
+        // HU #11184 — orden del expediente configurado por el OT (admin.ot_document_precedence).
+        // Vacío = el OT no configuró nada ⇒ el consolidado conserva el orden por modalidad.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IOtConfiguredDocumentOrderProvider, Services.OtConfiguredDocumentOrderProvider>();
         // CF-06 (HU #10881) — override OT del documento de prenda (independiente del semáforo de gravámenes),
         // SNAPSHOT: solo overrides activos antes de crear el trámite.
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPrendaDocumentRequirementPolicy, Services.PrendaDocumentRequirementPolicy>();
@@ -147,8 +172,18 @@ public static class InfrastructureExtensions
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
         services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
+        services.AddScoped<Flit.Analytics.Application.CompanyQueries.ICompanyQueryRepository, CompanyQueryRepository>();
+        services.AddScoped<Flit.Analytics.Application.CompanyQueries.ISuperAdminSavedQueryRepository, SuperAdminSavedQueryRepository>();
+        services.AddScoped<Flit.Analytics.Application.IctQueries.IIctQueryRepository, IctQueryRepository>();
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
+        services.AddScoped<Analytics.Scheduling.UsageReportDocumentBuilder>(); // Reportes2 HU-D
+        services.AddScoped<Analytics.Scheduling.OtReportDocumentBuilder>(); // Reportes2 HU-D
+        services.AddScoped<Analytics.Scheduling.OtOwnReportDocumentBuilder>(); // Reportes2 HU-D, alcance OT
+        services.AddScoped<Analytics.Scheduling.OtQueryReportDocumentBuilder>(); // Reportes2 HU-D, alcance OT
+        services.AddScoped<Analytics.Scheduling.CompanyQueryReportDocumentBuilder>(); // Reportes2 HU-D 2da ola
+        services.AddScoped<Analytics.Scheduling.IctOwnReportDocumentBuilder>(); // Reportes2 HU-D, alcance ICT
+        services.AddScoped<Analytics.Scheduling.IctQueryReportDocumentBuilder>(); // Reportes2 HU-D, consulta alcance ICT
 
         // Reportes2 HU-D — informes programados + alertas por umbral (scheduler y repos).
         services.AddScoped<Flit.Analytics.Application.Scheduling.IReportScheduleRepository, ReportScheduleRepository>(); // Reportes2 HU-D
@@ -177,6 +212,9 @@ public static class InfrastructureExtensions
         // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
         // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.
         services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
+        // HU #11316 (Feature #11309, ADR-0042) — ÚNICO punto de sustitución por documento personalizado
+        // de compañía. Lista de tipos habilitados VACÍA hasta las HUs #11317/#11318 (ver la clase).
+        services.AddScoped<Flit.Tramites.Application.Documents.IPersonalizedDocumentResolver, Documents.PersonalizedDocumentResolver>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
         // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).
@@ -190,6 +228,7 @@ public static class InfrastructureExtensions
         AddIdentityValidation(services, configuration);
         AddImprontas(services, configuration);
         AddRues(services, configuration);
+        AddRentingChannel(services, configuration);
         AddOcr(services, configuration);
         AddQuipux(services);
 
@@ -225,6 +264,9 @@ public static class InfrastructureExtensions
         // suspensión/desactivación/reactivación de usuarios (mismo repositorio, IUserManagementRepository).
         services.AddScoped<IUserManagementRepository, UserManagementRepository>();
 
+        // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
+        services.AddScoped<IUserUiPreferenceRepository, UserUiPreferenceRepository>();
+
         // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
         services.AddScoped<IInvitationRepository, InvitationRepository>();
         services.AddScoped<IUserActivationRepository, UserActivationRepository>();
@@ -245,11 +287,73 @@ public static class InfrastructureExtensions
             .Get<EmailSettings>() ?? new EmailSettings();
         services.AddSingleton(emailSettings);
 
+        var emailAssets = configuration
+            .GetSection(NotificationEmailAssetsOptions.SectionName)
+            .Get<NotificationEmailAssetsOptions>() ?? new NotificationEmailAssetsOptions();
+        services.AddSingleton(Options.Create(emailAssets));
+        services.Configure<NotificationEmailAssetsOptions>(
+            configuration.GetSection(NotificationEmailAssetsOptions.SectionName));
+
         // SMTP real, o consola en Development cuando no hay host configurado.
-        if (environment.IsDevelopment() && string.IsNullOrWhiteSpace(emailSettings.Host))
-            services.AddSingleton<IEmailSender, ConsoleEmailSender>();
+        // HU #11358 AC5 — Scoped (no Singleton): todos los AddHttpClient<T> del repo son
+        // Transient, así que un adaptador HTTP debajo de IEmailSender (HU #11361) sería una
+        // dependencia cautiva si el puerto siguiera siendo instancia única.
+        var useConsoleEmailSender = environment.IsDevelopment() && string.IsNullOrWhiteSpace(emailSettings.Host);
+        if (useConsoleEmailSender)
+            services.AddScoped<ConsoleEmailSender>();
         else
-            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+            services.AddScoped<SmtpEmailSender>();
+
+        // HU #11368 (Feature #11349, AC8) — mismo booleano que decide el transporte, publicado como
+        // Singleton para que el banco de pruebas de notificaciones pueda declarar "esto fue consola,
+        // no salió correo real" sin inspeccionar el árbol de DI (ver EmailTransportDescriptor).
+        services.AddSingleton(new EmailTransportDescriptor(useConsoleEmailSender));
+
+        // HU #11363 (Feature #11348) — decorador que envuelve el sender real y escribe la bitácora
+        // append-only admin.notification_delivery_logs SIN tocar los 6 puntos de llamada de
+        // IEmailSender: mide duración con Stopwatch, delega el envío y registra el intento en un
+        // scope PROPIO (aislado del DbContext ambiente de la petición). Un fallo al escribir la
+        // bitácora NUNCA cambia el resultado del envío (AC6) — ver NotificationDeliveryLoggingEmailSender.
+        services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
+
+        // HU #11371 (Feature #11349, cierra el retorno-temprano fijo del banco de pruebas) —
+        // TenantChannelEmailRouter deja de construirse INLINE dentro de la fábrica de IEmailSender:
+        // se registra como servicio propio (Scoped) para que el banco de pruebas de notificaciones
+        // pueda alcanzarlo vía IExplicitChannelEmailSender y enviar por un canal explícito. El orden
+        // del pipeline de producción NO cambia: la fábrica de IEmailSender de abajo sigue resolviendo
+        // ESTA MISMA instancia como el "concreteSender" que NotificationDeliveryLoggingEmailSender
+        // envuelve — los 6 puntos de llamada de producción siguen viendo el mismo decorador
+        // envolviendo al mismo router. IRentingEmailApiSender solo está registrado cuando
+        // AddRentingChannel lo habilitó (RENTING_API_ENABLED=true); sp.GetService (no
+        // GetRequiredService) lo resuelve como null en cualquier otro ambiente — el router trata ese
+        // null como "canal no disponible" y responde ConfigurationIncomplete en vez de fallar al
+        // resolver el árbol de DI.
+        services.AddScoped<INotificationChannelResolver, NotificationChannelResolver>();
+
+        services.AddScoped(sp =>
+        {
+            IEmailSender flitTransport = useConsoleEmailSender
+                ? sp.GetRequiredService<ConsoleEmailSender>()
+                : sp.GetRequiredService<SmtpEmailSender>();
+
+            return new TenantChannelEmailRouter(
+                flitTransport,
+                sp.GetRequiredService<INotificationChannelResolver>(),
+                sp.GetService<IRentingEmailApiSender>(),
+                sp.GetRequiredService<IOptions<RentingChannelOptions>>(),
+                sp.GetRequiredService<ILogger<TenantChannelEmailRouter>>());
+        });
+        services.AddScoped<IExplicitChannelEmailSender>(sp => sp.GetRequiredService<TenantChannelEmailRouter>());
+
+        services.AddScoped<IEmailSender>(sp =>
+        {
+            TenantChannelEmailRouter router = sp.GetRequiredService<TenantChannelEmailRouter>();
+
+            return new NotificationDeliveryLoggingEmailSender(
+                router,
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<ILogger<NotificationDeliveryLoggingEmailSender>>());
+        });
 
         services.AddSecurityApplication();
 
@@ -519,17 +623,6 @@ public static class InfrastructureExtensions
         };
         services.AddSingleton(biometrics);
 
-        // HU #11028 — simulación de validaciones de identidad admin: APAGADA salvo que el ambiente la
-        // encienda explícitamente. Una identidad simulada habilita la firma del mandato, así que el
-        // default seguro es no permitirla.
-        services.AddSingleton(new Flit.Admin.Application.Identity.AdminIdentityMockOptions
-        {
-            Enabled = string.Equals(
-                Cfg("AdminIdentity:Mock:Enabled", "ADMIN_IDENTITY_MOCK_ENABLED"),
-                "true",
-                StringComparison.OrdinalIgnoreCase),
-        });
-
         services.Configure<KyverumOptions>(o =>
         {
             o.BaseUrl = Cfg("Kyverum:BaseUrl", "KYVERUM_BASE_URL") ?? "https://verify.kyverum.com";
@@ -595,6 +688,26 @@ public static class InfrastructureExtensions
         // despacha las filas pendientes hacia IProcedureStateChangeNotifier (webhooks OT) tras el commit.
         services.AddScoped<ITramiteTransitionPublisher, ProcedureStateChangeOutboxPublisher>();
         services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
+        // HU #11467 — worker de la cola de avisos de correo al cambio de estado (ADR-0045).
+        services.AddHostedService<ProcedureStateChangeEmailDispatchProcessor>();
+        // Bug #11613 — traza persistida de los fallos de regeneración documental (aprobar / asignar
+        // placa). Escribe con SQL parametrizado, sin pasar por el change tracker del intento fallido.
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IRegeneracionDocumentalTrazaWriter,
+            RegeneracionDocumentalTrazaWriter>();
+        // Bug #11612 — compañía radicadora de la portada del consolidado: razón social del tenant
+        // dueño del trámite (identity.tenants.legal_name), resuelta siempre por id.
+        services.AddScoped<Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory,
+            CompaniaRadicadoraDirectory>();
+        // HU #11485 (Feature #11482, ADR-0046) — sink post-asignación de placa (Flujo B).
+        services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailEnqueuer,
+            PlateAssignmentEmailEnqueuer>();
+        // HU #11486 — proyección del modelo y marca FLIT/Renting por NIT (worker #11487).
+        services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentBrandResolver,
+            PlateAssignmentBrandResolver>();
+        services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailModelProjector,
+            PlateAssignmentEmailModelProjectorService>();
+        // HU #11487 — worker de la cola de avisos de correo al asignar placa (ADR-0046).
+        services.AddHostedService<PlateAssignmentEmailDispatchProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.
@@ -666,6 +779,287 @@ public static class InfrastructureExtensions
     }
 
     /// <summary>
+    /// HU #11359 — canal de API del cliente Renting (envío de correo por API externa con mTLS).
+    /// OPT-IN por <see cref="RentingChannelOptions.Enabled"/> (AC2): sin el interruptor en
+    /// <c>true</c> se registra únicamente <c>IOptions&lt;RentingChannelOptions&gt;</c> con
+    /// <c>Enabled = false</c> — para que la HU #11362 (enrutamiento, AC6) pueda consultarlo sin
+    /// saber de antemano si el canal está habilitado — y NADA MÁS se valida ni se registra: ni el
+    /// material TLS, ni el <see cref="System.Net.Http.HttpClient"/>.
+    /// <para>
+    /// Habilitado, valida la presencia de TODAS las variables obligatorias (AC1) y registra un
+    /// <see cref="RentingClientCertificateProvider"/> <c>Singleton</c> cuyo <c>factory</c> carga y
+    /// valida el certificado (<see cref="RentingClientCertificateLoader"/>). Con
+    /// <c>ValidateOnBuild</c> —patrón vigente del repo, ver
+    /// <see cref="Security.JwtKeyMaterialLoader"/>— esa carga corre AL CONSTRUIR el
+    /// <see cref="IServiceProvider"/>, o sea en el arranque: un certificado inexistente, una
+    /// passphrase que no abre el archivo o una identidad de login que no coincide con el Subject
+    /// del certificado (AC4/AC5) tumban el arranque completo, no solo el primer envío.
+    /// </para>
+    /// </summary>
+    private static void AddRentingChannel(IServiceCollection services, IConfiguration configuration)
+    {
+        // Env var CRUDA primero (a diferencia de Fasecolda, que va config primero): este es un
+        // canal 100% de despliegue (12-factor), sin defaults propios de negocio en appsettings.json
+        // que deban ganarle a la variable del contenedor — mismo orden y motivo que Rues/Kyverum.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        var enabled = string.Equals(
+            Cfg("Notifications:Renting:Enabled", "RENTING_API_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+
+        if (!enabled)
+        {
+            // AC2 — el canal nace deshabilitado: no se exige ninguna variable del canal ni el
+            // material TLS. El servicio arranca con normalidad.
+            services.Configure<RentingChannelOptions>(o => o.Enabled = false);
+            return;
+        }
+
+        static string Require(string? value, string envName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(
+                    $"Canal Renting habilitado (RENTING_API_ENABLED=true) pero falta la variable de "
+                    + $"configuración '{envName}'.");
+            }
+
+            return value;
+        }
+
+        static int RequireInt(string? value, string envName)
+        {
+            if (!int.TryParse(value, out var result))
+            {
+                throw new InvalidOperationException(
+                    $"Canal Renting habilitado (RENTING_API_ENABLED=true) pero la variable de "
+                    + $"configuración '{envName}' es obligatoria y debe ser un entero (segundos).");
+            }
+
+            return result;
+        }
+
+        // ADR-0044 — interruptor AFIRMATIVO y PROPIO del despliegue: RENTING_API_ENABLED=true no
+        // vuelve a consultar IHostEnvironment para decidir si desvía. Tri-estado, a propósito:
+        // AUSENTE/VACÍA distingue del valor ININTELIGIBLE (bool.TryParse a secas no basta, porque
+        // "" y "ture" tratados igual dejarían degradar en silencio un error de escritura).
+        //   - ausente o vacía  ⇒ desviar (default seguro)
+        //   - "false"          ⇒ desviar (declaración explícita del default)
+        //   - "true"           ⇒ enviar real (en CUALQUIER ambiente)
+        //   - cualquier otro valor no vacío ⇒ falla el arranque (no degrada en silencio)
+        var realRecipientsRaw = Cfg(
+            "Notifications:Renting:SendEmailRealRecipientsEnabled",
+            "RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED");
+
+        // Variable derogada (HU #11364 original). Su sola PRESENCIA con valor no vacío, con el
+        // canal encendido, tumba el arranque — sin importar el valor de la variable nueva — para
+        // que un despliegue viejo no crea que sigue gobernando el desvío.
+        var deprecatedOverrideRaw = Cfg(
+            "Notifications:Renting:SendEmailDevelopmentRecipientOverrideEnabled",
+            "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED");
+        if (!string.IsNullOrWhiteSpace(deprecatedOverrideRaw))
+        {
+            throw new InvalidOperationException(
+                "Canal Renting: la variable 'RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED' "
+                + "quedó DEROGADA (ADR-0044) y ya no gobierna el desvío de destinatario. Retírela del "
+                + "despliegue. La decisión ahora la toma 'RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED' "
+                + "— el valor seguro es NO declararla (equivale a desviar al buzón de control).");
+        }
+
+        bool sendRealRecipients;
+        if (string.IsNullOrWhiteSpace(realRecipientsRaw))
+        {
+            sendRealRecipients = false;
+        }
+        else if (string.Equals(realRecipientsRaw, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            sendRealRecipients = true;
+        }
+        else if (string.Equals(realRecipientsRaw, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            sendRealRecipients = false;
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Canal Renting habilitado (RENTING_API_ENABLED=true) pero la variable de configuración "
+                + "'RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED' tiene un valor no reconocido. Valores "
+                + "válidos: 'true', 'false', o ausente/vacía (equivalente a 'false' — desvía al buzón de "
+                + "control).");
+        }
+
+        var divertRecipients = !sendRealRecipients;
+
+        // AC1 — se valida la presencia de TODAS las variables requeridas: ruta del certificado,
+        // passphrase, URL base, ruta de envío, ruta de login, tiempos de espera y datos del
+        // remitente. Las variables de caché de login (uso de la HU #11360) y las del "otro proxy"
+        // que comparte bloque de configuración (DEFAULT_SENDER_*) se modelan pero NO se exigen
+        // aquí — quedan fuera del alcance de esta HU (ver comentarios en RentingChannelOptions). El
+        // destinatario de desvío SÍ se exige cuando el interruptor está activo: sin él, el
+        // interruptor encendido no tendría a dónde desviar y el envío fallaría en silencio en vez
+        // de proteger al cliente final.
+        var options = new RentingChannelOptions
+        {
+            Enabled = true,
+            BaseUrl = Require(Cfg("Notifications:Renting:BaseUrl", "RENTING_API_BASE_URL"), "RENTING_API_BASE_URL"),
+            ApiKeyName = Require(
+                Cfg("Notifications:Renting:ApiKeyName", "RENTING_API_KEY_NAME"), "RENTING_API_KEY_NAME"),
+            ApiKeyValue = Require(
+                Cfg("Notifications:Renting:ApiKeyValue", "RENTING_API_KEY_VALUE"), "RENTING_API_KEY_VALUE"),
+            PfxCertificatePath = Require(
+                Cfg("Notifications:Renting:PfxCertificatePath", "RENTING_API_PFX_CERTIFICATE_PATH"),
+                "RENTING_API_PFX_CERTIFICATE_PATH"),
+            Passphrase = Require(
+                Cfg("Notifications:Renting:Passphrase", "RENTING_API_PASSPHRASE"), "RENTING_API_PASSPHRASE"),
+            SecondsTimeout = RequireInt(
+                Cfg("Notifications:Renting:SecondsTimeout", "RENTING_API_SECONDS_TIMEOUT"),
+                "RENTING_API_SECONDS_TIMEOUT"),
+            LoginPath = Require(
+                Cfg("Notifications:Renting:LoginPath", "RENTING_API_LOGIN_PATH"), "RENTING_API_LOGIN_PATH"),
+            LoginSecondsTimeout = RequireInt(
+                Cfg("Notifications:Renting:LoginSecondsTimeout", "RENTING_API_LOGIN_SECONDS_TIMEOUT"),
+                "RENTING_API_LOGIN_SECONDS_TIMEOUT"),
+            LoginSubject = Require(
+                Cfg("Notifications:Renting:LoginSubject", "RENTING_API_LOGIN_SUBJECT"), "RENTING_API_LOGIN_SUBJECT"),
+            SendEmailPath = Require(
+                Cfg("Notifications:Renting:SendEmailPath", "RENTING_API_SEND_EMAIL_PATH"),
+                "RENTING_API_SEND_EMAIL_PATH"),
+            SendEmailSecondsTimeout = RequireInt(
+                Cfg("Notifications:Renting:SendEmailSecondsTimeout", "RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT"),
+                "RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT"),
+            SendEmailSenderEmail = Require(
+                Cfg("Notifications:Renting:SendEmailSenderEmail", "RENTING_API_SEND_EMAIL_SENDER_EMAIL"),
+                "RENTING_API_SEND_EMAIL_SENDER_EMAIL"),
+            SendEmailSenderUsername = Require(
+                Cfg("Notifications:Renting:SendEmailSenderUsername", "RENTING_API_SEND_EMAIL_SENDER_USERNAME"),
+                "RENTING_API_SEND_EMAIL_SENDER_USERNAME"),
+
+            // No exigidas por esta HU (ver comentario arriba): se modelan si están presentes.
+            LoginCacheKey = Cfg("Notifications:Renting:LoginCacheKey", "RENTING_API_LOGIN_CACHE_KEY") ?? "",
+            LoginCacheSecondsTtl = int.TryParse(
+                Cfg("Notifications:Renting:LoginCacheSecondsTtl", "RENTING_API_LOGIN_CACHE_SECONDS_TTL"),
+                out var cacheTtl)
+                ? cacheTtl
+                : 3600,
+            LoginSecretName = Cfg("Notifications:Renting:LoginSecretName", "RENTING_API_LOGIN_SECRET_NAME") ?? "",
+            DefaultSenderEmail = Cfg(
+                "Notifications:Renting:DefaultSenderEmail", "RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL") ?? "",
+            DefaultSenderUsername = Cfg(
+                "Notifications:Renting:DefaultSenderUsername", "RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME") ?? "",
+            // ADR-0044 — con el desvío activo (default seguro) el buzón de control es OBLIGATORIO:
+            // sin él el interruptor no tendría a dónde desviar. Con envío real, el buzón puede
+            // quedar vacío (no hay desvío que necesite dónde caer).
+            SendEmailDevelopmentRecipientEmail = divertRecipients
+                ? Require(
+                    Cfg(
+                        "Notifications:Renting:SendEmailDevelopmentRecipientEmail",
+                        "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL"),
+                    "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL")
+                : Cfg(
+                    "Notifications:Renting:SendEmailDevelopmentRecipientEmail",
+                    "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL") ?? "",
+            SendEmailDevelopmentRecipientUsername = divertRecipients
+                ? Require(
+                    Cfg(
+                        "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
+                        "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME"),
+                    "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME")
+                : Cfg(
+                    "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
+                    "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME") ?? "",
+            SendRealRecipientsEnabled = sendRealRecipients,
+        };
+
+        // ADR-0044 — ninguna rama de este método vuelve a consultar IHostEnvironment: la decisión
+        // de desviar/enviar real ya quedó resuelta arriba, únicamente por
+        // RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED.
+
+        services.Configure<RentingChannelOptions>(o =>
+        {
+            o.Enabled = options.Enabled;
+            o.BaseUrl = options.BaseUrl;
+            o.ApiKeyName = options.ApiKeyName;
+            o.ApiKeyValue = options.ApiKeyValue;
+            o.PfxCertificatePath = options.PfxCertificatePath;
+            o.Passphrase = options.Passphrase;
+            o.SecondsTimeout = options.SecondsTimeout;
+            o.LoginPath = options.LoginPath;
+            o.LoginSecondsTimeout = options.LoginSecondsTimeout;
+            o.LoginCacheKey = options.LoginCacheKey;
+            o.LoginCacheSecondsTtl = options.LoginCacheSecondsTtl;
+            o.LoginSecretName = options.LoginSecretName;
+            o.LoginSubject = options.LoginSubject;
+            o.SendEmailPath = options.SendEmailPath;
+            o.SendEmailSecondsTimeout = options.SendEmailSecondsTimeout;
+            o.SendEmailSenderEmail = options.SendEmailSenderEmail;
+            o.SendEmailSenderUsername = options.SendEmailSenderUsername;
+            o.DefaultSenderEmail = options.DefaultSenderEmail;
+            o.DefaultSenderUsername = options.DefaultSenderUsername;
+            o.SendEmailDevelopmentRecipientEmail = options.SendEmailDevelopmentRecipientEmail;
+            o.SendEmailDevelopmentRecipientUsername = options.SendEmailDevelopmentRecipientUsername;
+            o.SendRealRecipientsEnabled = options.SendRealRecipientsEnabled;
+        });
+
+        // AC3/AC4/AC5 (HU #11359/#11360) — Singleton cuyo factory carga y valida el certificado.
+        // Con ValidateOnBuild esto se ejecuta al construir el IServiceProvider (arranque), no en el
+        // primer uso. ADR-0044 — mismo checkpoint de arranque: se aprovecha para dejar en el log
+        // real (no un logger de arranque aparte) en qué modo queda el canal — sin registrar
+        // secretos ni direcciones de correo.
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Flit.Infrastructure.Notifications.Renting");
+            RentingChannelStartupLog.LogMode(logger, divertRecipients);
+            var certificate = RentingClientCertificateLoader.Load(options, logger);
+            return new RentingClientCertificateProvider(certificate);
+        });
+
+        // Cliente HTTP de transporte con el certificado cliente adjunto (mTLS) y verificación del
+        // servidor ACTIVA (no se toca la validación por defecto). Solo transporte: el adaptador de
+        // envío/multipart es de la HU #11361 y el login es de la HU #11360.
+        services.AddHttpClient(RentingChannelOptions.HttpClientName, (sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<RentingChannelOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.SecondsTimeout);
+            if (!string.IsNullOrWhiteSpace(o.ApiKeyName))
+                c.DefaultRequestHeaders.TryAddWithoutValidation(o.ApiKeyName, o.ApiKeyValue);
+        })
+        .ConfigurePrimaryHttpMessageHandler(sp =>
+        {
+            var certificateProvider = sp.GetRequiredService<RentingClientCertificateProvider>();
+            return RentingHttpMessageHandlerFactory.Create(certificateProvider.Certificate);
+        });
+
+        // HU #11360 — login, caché de token (anti-estampida, AC1/AC2/AC3) y el ejecutor que aplica
+        // la política de reintento ante 401 (AC4/AC5/AC6). El reloj es TimeProvider inyectado (no
+        // DateTimeOffset.UtcNow directo) para que las pruebas de TTL puedan adelantar el tiempo sin
+        // dormir el TTL real; TryAddSingleton porque otro punto de composición puede haberlo
+        // registrado ya. IRentingTokenCache DEBE ser Singleton: su estado (el token cacheado y el
+        // semáforo de anti-estampida) tiene que sobrevivir entre requests — si fuera Scoped, cada
+        // request vería la caché vacía y el AC1/AC2 dejarían de cumplirse. Que dependa de
+        // IRentingLoginClient (Transient) no es dependencia cautiva: .NET solo prohíbe que un
+        // Singleton dependa de un Scoped, no de un Transient.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddTransient<IRentingLoginClient, RentingLoginClient>();
+        services.AddSingleton<IRentingTokenCache, RentingTokenCache>();
+        services.AddScoped<RentingAuthenticatedRequestExecutor>();
+
+        // HU #11361 — adaptador de envío/multipart. HU #11364 — IRentingRecipientOverride es el
+        // desvío OBLIGATORIO de destinatario fuera de producción: se registra SIEMPRE que el canal
+        // esté habilitado (única rama en la que este método corre) porque la propia implementación
+        // decide, por su interruptor propio (AC5), si desvía o no — nunca por el ambiente. La
+        // validación de arranque de arriba (AC3/AC4) ya garantiza que el interruptor está en el
+        // valor correcto para el ambiente actual. Quién CONSUME IRentingEmailApiSender es la
+        // HU #11362 (enrutamiento) — no se enchufa a IEmailSender aquí.
+        services.TryAddSingleton<IRentingRecipientOverride, RentingRecipientOverride>();
+        services.AddScoped<IRentingEmailApiSender, RentingEmailApiSender>();
+    }
+
+    /// <summary>
     /// Integración Quipux: radicación de trámites en las secretarías de tránsito.
     /// </summary>
     /// <remarks>
@@ -704,6 +1098,13 @@ public static class InfrastructureExtensions
         // LOG QX (HU #10793): lectura de trazabilidad para soporte/admin. Solo consulta (sin claim ni
         // transiciones), cross-tenant por el mismo motivo que la consola de cola.
         services.AddScoped<IQuipuxLogRepository, DbQuipuxLogRepository>();
+
+        // Bandeja del LOG QX (HU #11786): universo por TRÁMITE (no por radicación), con los
+        // elegibles sin radicar incluidos. SQL crudo — el predicado depende del jsonb external_refs.
+        services.AddScoped<IQuipuxBandejaRepository, DbQuipuxBandejaRepository>();
+
+        // Trazabilidad de una radicación (HU #11787): cabecera + eventos para hitos + log paginado.
+        services.AddScoped<IQuipuxTrazabilidadRepository, DbQuipuxTrazabilidadRepository>();
         services.AddSingleton<IQuipuxAuditLog, QuipuxSubmissionAuditLog>();
         services.AddSingleton<IQuipuxJobRunLog, QuipuxJobRunLog>();
 
@@ -746,16 +1147,22 @@ public static class InfrastructureExtensions
             o.Model = Cfg("Anthropic:Model", "ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
             o.TimeoutSeconds = int.TryParse(Cfg("Anthropic:TimeoutSeconds", "ANTHROPIC_TIMEOUT_SECONDS"), out var t) ? t : 60;
             o.MaxTokens = int.TryParse(Cfg("Anthropic:MaxTokens", "ANTHROPIC_MAX_TOKENS"), out var m) ? m : 2000;
+            o.ClassifierModel = Cfg("Anthropic:ClassifierModel", "ANTHROPIC_CLASSIFIER_MODEL") ?? "claude-sonnet-5";
+            o.ClassifierMaxTokens = int.TryParse(Cfg("Anthropic:ClassifierMaxTokens", "ANTHROPIC_CLASSIFIER_MAX_TOKENS"), out var cm) ? cm : 8000;
+            o.ClassifierTimeoutSeconds = int.TryParse(Cfg("Anthropic:ClassifierTimeoutSeconds", "ANTHROPIC_CLASSIFIER_TIMEOUT_SECONDS"), out var ctd) ? ctd : 180;
         });
 
-        // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum).
+        // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum). El timeout del cliente es
+        // el MAYOR de los dos deadlines (analizador y clasificador); cada llamada impone el suyo con un
+        // CTS enlazado, así el analizador conserva sus 60s y el clasificador dispone de los suyos.
         services.AddHttpClient<AnthropicMessagesClient>((sp, c) =>
         {
             var o = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
             c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+            c.Timeout = TimeSpan.FromSeconds(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds));
         });
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
+        services.AddScoped<AnthropicDocumentBatchClassifier>();
 
         // Recorte de páginas de PDFs multi-documento (PdfSharpCore). Stateless ⇒ singleton. El handler
         // (Application) lo usa tras el análisis para devolver sólo el subconjunto de páginas del tipo.
@@ -766,9 +1173,15 @@ public static class InfrastructureExtensions
         // Application; el handler (AnalyzeDocumentHandler) se registra en Application DI y no cambia.
         var provider = Cfg("Ocr:Provider", "OCR_PROVIDER") ?? "mock";
         if (string.Equals(provider, "anthropic", StringComparison.OrdinalIgnoreCase))
+        {
             services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<AnthropicDocumentOcrAnalyzer>());
+            services.AddScoped<IDocumentBatchClassifier>(sp => sp.GetRequiredService<AnthropicDocumentBatchClassifier>());
+        }
         else
+        {
             services.AddScoped<IDocumentOcrAnalyzer, MockDocumentOcrAnalyzer>();
+            services.AddScoped<IDocumentBatchClassifier, MockDocumentBatchClassifier>();
+        }
     }
 
     public static async Task InitializeInfrastructureAsync(
@@ -781,5 +1194,32 @@ public static class InfrastructureExtensions
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
         await db.Database.MigrateAsync(cancellationToken);
         await DevelopmentAuthSeeder.SeedAsync(db, hasher, env, cancellationToken);
+    }
+}
+
+/// <summary>
+/// ADR-0044 — log de arranque (source-generated, CA1848) que deja constancia inequívoca del modo
+/// en que quedó el canal Renting. Nunca registra secretos ni direcciones de correo: solo el modo.
+/// </summary>
+internal static partial class RentingChannelStartupLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Canal Renting: arranca en modo DESVÍO. Todo envío por este canal va al buzón de "
+            + "control, no a destinatarios reales (RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED "
+            + "ausente/vacía o 'false').")]
+    public static partial void LogDivertMode(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Canal Renting: arranca en modo ENVÍO REAL. ESTE DESPLIEGUE ENVÍA A DESTINATARIOS "
+            + "REALES DE CLIENTES por la API PRODUCTIVA de Renting "
+            + "(RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED=true).")]
+    public static partial void LogRealRecipientsMode(ILogger logger);
+
+    public static void LogMode(ILogger logger, bool divertRecipients)
+    {
+        if (divertRecipients)
+            LogDivertMode(logger);
+        else
+            LogRealRecipientsMode(logger);
     }
 }

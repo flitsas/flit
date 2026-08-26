@@ -37,7 +37,7 @@ public sealed class SetImprontaDiferidaHandler(IProcedureInstanceRepository repo
 
         // Se resuelve el Id real del ítem (no se asume el literal "impronta"): en la ruta de matriz los
         // ítems conservan el id del catálogo, así que este mismo Id es la clave válida en ambos caminos.
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var item = TramiteTipologiaCatalog.Get(codigo)?.Checklist
             .FirstOrDefault(i => string.Equals(i.DocTipo, "impronta", StringComparison.OrdinalIgnoreCase));
         if (item is null)

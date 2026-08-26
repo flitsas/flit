@@ -43,13 +43,12 @@ public sealed class FinalizeDraftProcedureInstanceTests
     private static ProcedureInstance Instance(Guid id, Guid tenant, string status = TramiteEstado.Borrador) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoMatriculaInicial ?? "matricula_inicial"),
             Id = id,
             TenantId = tenant,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoMatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -245,6 +244,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdAsync(id, tenant, ct).Returns(instance);
@@ -300,6 +300,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdAsync(id, tenant, ct).Returns(instance);

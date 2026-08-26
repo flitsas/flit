@@ -3,6 +3,7 @@ using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -23,7 +24,11 @@ public sealed class ForgotPasswordHandlerTests
     {
         _handler = new ForgotPasswordHandler(
             _userAccountRepository, _tokenRepository, _tokenGenerator, _emailSender, _options,
-            _auditWriter, _auditContext);
+            _auditWriter, _auditContext, NullLogger<ForgotPasswordHandler>.Instance);
+        // HU #11358 — el puerto ya no es "void": por defecto el sender simula éxito, igual que
+        // antes lo hacía implícitamente un Task no configurado.
+        _emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
     }
 
     [Fact]
@@ -31,7 +36,7 @@ public sealed class ForgotPasswordHandlerTests
     {
         var userId = Guid.NewGuid();
         _userAccountRepository.FindActiveByEmailAsync("demo@flit.local", Arg.Any<CancellationToken>())
-            .Returns(new PasswordRecoveryUser(userId, "demo@flit.local", "Demo User"));
+            .Returns(new PasswordRecoveryUser(userId, "demo@flit.local", "Demo User", Guid.NewGuid()));
         _tokenGenerator.Generate().Returns(new GeneratedToken("raw-token", "hash-token"));
 
         await _handler.HandleAsync(new ForgotPasswordCommand("demo@flit.local"), CancellationToken.None);
@@ -65,5 +70,40 @@ public sealed class ForgotPasswordHandlerTests
         await _userAccountRepository.DidNotReceiveWithAnyArgs()
             .FindActiveByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _emailSender.DidNotReceiveWithAnyArgs().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #11358 AC1 — el tenant del usuario (resuelto por el repositorio) viaja explícito en la
+    // solicitud de envío.
+    [Fact]
+    public async Task HandleAsync_SendsMessageWithUserTenantId()
+    {
+        var tenantId = Guid.NewGuid();
+        _userAccountRepository.FindActiveByEmailAsync("demo@flit.local", Arg.Any<CancellationToken>())
+            .Returns(new PasswordRecoveryUser(Guid.NewGuid(), "demo@flit.local", "Demo User", tenantId));
+        _tokenGenerator.Generate().Returns(new GeneratedToken("raw-token", "hash-token"));
+
+        await _handler.HandleAsync(new ForgotPasswordCommand("demo@flit.local"), CancellationToken.None);
+
+        await _emailSender.Received(1).SendAsync(
+            Arg.Is<EmailMessage>(m => m.TenantId == tenantId), Arg.Any<CancellationToken>());
+    }
+
+    // HU #11358 AC3 — un fallo tipado del transporte NO se propaga como excepción: el token ya
+    // quedó persistido y el handler termina con normalidad (mismo 202 genérico del endpoint).
+    [Fact]
+    public async Task HandleAsync_EmailTransportFails_DoesNotThrowAndTokenStaysPersisted()
+    {
+        var userId = Guid.NewGuid();
+        _userAccountRepository.FindActiveByEmailAsync("demo@flit.local", Arg.Any<CancellationToken>())
+            .Returns(new PasswordRecoveryUser(userId, "demo@flit.local", "Demo User", Guid.NewGuid()));
+        _tokenGenerator.Generate().Returns(new GeneratedToken("raw-token", "hash-token"));
+        _emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable)));
+
+        var act = () => _handler.HandleAsync(new ForgotPasswordCommand("demo@flit.local"), CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        await _tokenRepository.Received(1).CreateAsync(
+            userId, "hash-token", "password_reset", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 }

@@ -93,8 +93,27 @@ internal sealed class ProcedureTypeRepository(FlitDbContext db) : IProcedureType
     public Task AddFormFieldsAsync(IEnumerable<FormField> fields, CancellationToken ct) =>
         db.Set<FormField>().AddRangeAsync(fields, ct);
 
+    /// <summary>
+    /// ¿El tipo tiene expedientes? Es la guarda que impide archivar un tipo que alguien está usando.
+    /// <para>Devolvía <c>false</c> constante —un stub—, así que la guarda nunca se disparaba y
+    /// cualquier tipo se podía archivar con trámites vivos colgando. Los borrados lógicos no cuentan:
+    /// un expediente eliminado ya no ata al tipo.</para>
+    /// </summary>
     public Task<bool> HasInstancesAsync(Guid procedureTypeId, CancellationToken ct) =>
-        Task.FromResult(false);
+        db.ProcedureInstances
+            .AsNoTracking()
+            .AnyAsync(i => i.ProcedureTypeId == procedureTypeId && i.DeletedAt == null, ct);
+
+    /// <summary>
+    /// ¿Ya existe un tipo con este código? El código es la llave del catálogo —lo usan las
+    /// integraciones y los snapshots congelados—, y la base tiene un UNIQUE. Sin esta comprobación
+    /// el alta desde el configurador moría con un 500 del constraint en vez de decir qué pasó.
+    /// Incluye archivados a propósito: su código sigue ocupado.
+    /// </summary>
+    public Task<bool> CodeExistsAsync(string code, CancellationToken ct) =>
+        db.ProcedureTypes
+            .AsNoTracking()
+            .AnyAsync(t => t.Code == code, ct);
 
     public Task SaveChangesAsync(CancellationToken ct) =>
         db.SaveChangesAsync(ct).ContinueWith(_ => { }, ct);

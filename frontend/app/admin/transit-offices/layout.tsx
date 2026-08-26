@@ -10,7 +10,8 @@ import { useAuthGate } from '@/hooks/useAuthGate';
  * Layout de /admin/transit-offices/*. Igual que el de /admin/companies: replica el chrome
  * de la SPA (auth real por JWT + Shell con dock) para que el dock NO desaparezca al entrar
  * a la consola de organismos de tránsito ni a sus subpantallas. El dock navega de vuelta
- * a la SPA (/?m=…) o a /tramites; el botón "Tránsito" del dock queda resaltado por la ruta.
+ * a la SPA (/?m=…) o a /tramites. Admin OT navega el hub desde el dock; SuperAdmin
+ * conserva la píldora «Tránsito» hacia el listado de organismos.
  */
 export default function AdminTransitOfficesLayout({ children }: { children: ReactNode }) {
   const router = useRouter();

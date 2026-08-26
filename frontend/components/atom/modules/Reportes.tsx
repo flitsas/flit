@@ -17,13 +17,15 @@ import { ProcedureDetailPanel } from "./_reportes/ProcedureDetailPanel";
 import { isValidRange } from "./_reportes/range";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
 import { SchedulingPanel } from "./_reportes/scheduling/SchedulingPanel";
+import type { SchedulePresetConsulta } from "./_reportes/scheduling/ScheduleForm";
 import { OperacionTab } from "./_reportes/tabs/OperacionTab";
 import { OrganismoTab } from "./_reportes/tabs/OrganismoTab";
 import { ProductividadTab } from "./_reportes/tabs/ProductividadTab";
 import { ResumenTab } from "./_reportes/tabs/ResumenTab";
 import { UsoTab } from "./_reportes/tabs/UsoTab";
+import { ConsultasTab } from "./_reportes/tabs/ConsultasTab";
 
-type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad";
+type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad" | "consultas";
 
 /** Pestañas + slug RBAC que las hace visibles (§3). SuperAdmin las ve todas. */
 const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
@@ -32,6 +34,7 @@ const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
   { id: "ot", label: "Organismo de Tránsito", slug: "reportes.ot.read" },
   { id: "uso", label: "Uso del aplicativo", slug: "reportes.uso.read" },
   { id: "productividad", label: "Productividad", slug: "reportes.productividad.read" },
+  { id: "consultas", label: "Consultas personalizadas", slug: "reportes.consultas.read" },
 ];
 
 /** Slug legado: hace visible al menos "Resumen general" (compatibilidad §3). */
@@ -50,9 +53,29 @@ interface SelectedSegment {
   status?: string;
 }
 
+/**
+ * La compañía elegida viaja en la dirección, junto a la pestaña y a la consulta.
+ *
+ * <p>Sin esto, un enlace copiado desde Consultas llega incompleto a quien lo abre: lleva los
+ * filtros de la consulta pero no sobre qué compañía se preguntaba, así que un Super Admin lo abre
+ * en «Todas las compañías» y ve el aviso de que falta elegir una — con la consulta cargada y sin un
+ * solo dato. Al organismo no le pasa porque su identificador va en la ruta.</p>
+ *
+ * <p>Es el identificador interno del tenant, el mismo que ya viaja en las llamadas a la API; no
+ * lleva nada de la persona que abre el enlace.</p>
+ */
+const COMPANY_QUERY_PARAM = "compania";
+
 function initialTab(): string {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get(TAB_QUERY_PARAM) ?? "";
+}
+
+function initialFilters(): ReportFilters {
+  const base = defaultFilters();
+  if (typeof window === "undefined") return base;
+  const tenantId = new URLSearchParams(window.location.search).get(COMPANY_QUERY_PARAM);
+  return tenantId ? { ...base, tenantId } : base;
 }
 
 export function Reportes() {
@@ -87,7 +110,21 @@ export function Reportes() {
   }, []);
 
   // Filtros globales persistentes: se conservan al cambiar de pestaña.
-  const [filters, setFilters] = useState<ReportFilters>(() => defaultFilters());
+  const [filters, setFiltersState] = useState<ReportFilters>(() => initialFilters());
+
+  // La compañía se refleja en la dirección con `replaceState`, igual que la pestaña: con
+  // `pushState`, cambiar de compañía tres veces obligaría a tres «atrás» para salir del módulo.
+  const setFilters = useCallback((next: ReportFilters) => {
+    setFiltersState(next);
+    try {
+      const url = new URL(window.location.href);
+      if (next.tenantId) url.searchParams.set(COMPANY_QUERY_PARAM, next.tenantId);
+      else url.searchParams.delete(COMPANY_QUERY_PARAM);
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* entorno sin history (tests/SSR): el estado local basta */
+    }
+  }, []);
   const rangeValid = isValidRange(filters.range);
 
   // Los 4 endpoints nuevos EXIGEN tenantId para SuperAdmin (§4): sin compañía
@@ -113,6 +150,9 @@ export function Reportes() {
   // Programación y alertas (HU-D): visible con su permiso; SuperAdmin bypass.
   const canManageScheduling = isSuper || permissions.includes(SCHEDULING_SLUG);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
+  // "Programar este informe" (HU-D, segunda ola) — abre el panel directo en el formulario de
+  // creación, con la consulta guardada ya fijada. Null = el panel se abre en modo normal.
+  const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
 
   // Drill-down compartido: cualquier gráfica abre el panel lateral de detalle.
   const [segment, setSegment] = useState<SelectedSegment | null>(null);
@@ -132,7 +172,7 @@ export function Reportes() {
           <p className="text-sm font-medium">No tienes permisos para ver reportes.</p>
           <p className="text-xs opacity-70 max-w-md">
             Pide a tu administrador que te asigne acceso a alguna pestaña de reportes
-            (Resumen general, Operación, Organismo de Tránsito, Uso o Productividad).
+            (Resumen general, Operación, Organismo de Tránsito, Uso, Productividad o Consultas).
           </p>
         </div>
       </div>
@@ -146,9 +186,23 @@ export function Reportes() {
         subtitle="Monitorea el desempeño operativo por pestañas temáticas."
       />
 
-      {/* Filtros globales (persisten entre pestañas) + exportaciones */}
+      <ReportesTabBar
+        tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
+        activeId={activeTab ?? ""}
+        onChange={selectTab}
+        ariaLabel="Pestañas de reportes"
+      />
+
+      {/* Filtros globales (persisten entre pestañas) + exportaciones. Van debajo de las pestañas:
+          el usuario primero elige qué quiere ver y luego filtra esa vista. */}
       <div className="flex flex-wrap items-end gap-3 shrink-0">
-        <GlobalFilters filters={filters} onChange={setFilters} isSuper={isSuper} companies={companies} />
+        <GlobalFilters
+          filters={filters}
+          onChange={setFilters}
+          isSuper={isSuper}
+          companies={companies}
+          onlyCompany={activeTab === "consultas"}
+        />
         {canManageScheduling && (
           <button
             type="button"
@@ -173,14 +227,7 @@ export function Reportes() {
         )}
       </div>
 
-      <ReportesTabBar
-        tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
-        activeId={activeTab ?? ""}
-        onChange={selectTab}
-        ariaLabel="Pestañas de reportes"
-      />
-
-      {!rangeValid ? (
+      {!rangeValid && activeTab !== "consultas" ? (
         <div
           role="alert"
           className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
@@ -204,14 +251,35 @@ export function Reportes() {
           {activeTab === "ot" && <OrganismoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "uso" && <UsoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "productividad" && <ProductividadTab filters={filters} />}
+          {activeTab === "consultas" && (
+            <ConsultasTab
+              tenantId={filters.tenantId || undefined}
+              needsCompany={needsCompany}
+              isSuper={isSuper}
+              onScheduleQuery={
+                canManageScheduling
+                  ? (query, scope) => {
+                      setSchedulePreset({ savedQueryId: query.id, savedQueryScope: scope, queryName: query.nombre });
+                      setSchedulingOpen(true);
+                    }
+                  : undefined
+              }
+            />
+          )}
         </div>
       )}
 
       {canManageScheduling && (
         <SchedulingPanel
           open={schedulingOpen}
-          onClose={() => setSchedulingOpen(false)}
+          onClose={() => {
+            setSchedulingOpen(false);
+            setSchedulePreset(null);
+          }}
           tenantId={filters.tenantId || undefined}
+          needsCompany={needsCompany}
+          presetConsulta={schedulePreset}
+          onConsumePreset={() => setSchedulePreset(null)}
         />
       )}
 

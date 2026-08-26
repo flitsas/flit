@@ -1,0 +1,24 @@
+---
+description: Casillas y observaciones del FUR (numeral 3) son reglas de las tres tablas canónicas; no improvisar.
+globs: "**/Documents/Fur/**,**/Fur*.cs,**/fur-field-manifest.json,frontend/**/fur/**,docs/ot/fur/**"
+alwaysApply: false
+---
+
+# FUR — numeral 3 es artefacto, no ocurrencia
+
+Antes de crear o modificar overlay, mapper, observaciones, simulador o tipos que alimenten el FUR:
+
+1. Leer `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md` (fuente canónica).
+2. Consultar `expert-doc-engine` si hay duda de casilla, firma o literal.
+3. Casillas = unión **tabla 1 (tipo)** ∪ **tabla 2 (prenda)** ∪ **tabla 3 (transformaciones)**, sin duplicar.
+4. La casilla **1** solo matrícula; la **2** solo traspaso. No marcar 1 en «otros» aislados.
+5. Observaciones (párrafo 23): tipo leasing/unilateral → gravamen → transformaciones → vinculadora → texto libre. Concatenar; literales exactos del artefacto.
+6. Numeral 20 (DATOS DE ALERTA): inscripción/registro → LIM. PROPIEDAD + A FAVOR DE; levantamiento → OTRO + A FAVOR DE.
+7. Si cambias una casilla o un texto, **actualiza el markdown canónico en el mismo PR**.
+
+```
+// ❌ BAD — “como no es traspaso, pinto matrícula”
+MarkCheckbox(dict, "requested_process_1", !esTraspaso);
+
+// ✅ GOOD — la tabla 1 del tipo; prenda y transformaciones se suman aparte
+```

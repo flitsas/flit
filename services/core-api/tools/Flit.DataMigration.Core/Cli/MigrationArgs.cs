@@ -35,7 +35,7 @@ public sealed class MigrationArgs
     /// <summary>
     /// Migra también las imágenes sueltas de la validación de identidad (<c>frontalCard.jpg</c>,
     /// <c>backCard.jpg</c>, <c>userSelfie.jpg</c>), que por defecto se omiten porque la carta selfie
-    /// que materializa la instancia 3 ya las contiene. Ver <c>IdentityAttachmentPolicy</c>.
+    /// que materializa la instancia 3 ya las contiene. Ver <c>IdentityPolicy</c>.
     /// </summary>
     public bool KeepIdentityImages { get; private init; }
 

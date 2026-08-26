@@ -28,7 +28,7 @@ public sealed class LegalRepresentativeItem
 {
     public Guid Id { get; init; }
     public Guid TenantId { get; init; }
-    public Guid RepresentedCompanyId { get; init; }
+    public Guid? RepresentedCompanyId { get; init; }
 
     /// <summary>NIT de la compañía representada (denormalizado para el listado).</summary>
     public string CompanyDocumentNumber { get; init; } = string.Empty;
@@ -97,6 +97,14 @@ public sealed class LegalRepresentativeItem
 public sealed record LegalRepresentativeCompanySummary(Guid Id, string Nit, string Name)
 {
     /// <summary>
+    /// HU #11177 — bandera explícita que indica si esta es la compañía principal del representante.
+    /// Exactamente UNA compañía viene marcada como principal en cada respuesta. La principal es la
+    /// compañía primaria registrada al crear el representante (<c>RepresentedCompanyId</c>); el resto
+    /// se ordena por fecha de asociación al puente. No inferir de la columna denormalizada deprecada.
+    /// </summary>
+    public bool IsPrimary { get; init; }
+
+    /// <summary>
     /// Historial de escrituras de la compañía (HU #10933): vigentes y vencidas, ordenadas por
     /// <c>VigenciaHasta</c> descendente. Solo se puebla en el detalle del representante; en el listado
     /// y en el consumo del wizard queda vacío para no cargar el M:N innecesariamente.
@@ -158,6 +166,16 @@ public sealed record RepresentativeDeedSummary(
         return new RepresentativeDeedSummary(id, description, vigenciaDesde, vigenciaHasta, isActive, estado);
     }
 }
+
+/// <summary>
+/// Proyección ligera de un representante para enriquecer escrituras en el wizard (nombre + documento).
+/// Sin email/dirección ni historial de escrituras.
+/// </summary>
+public sealed record LegalRepresentativeBrief(
+    Guid Id,
+    string FullName,
+    string DocumentType,
+    string DocumentNumber);
 
 /// <summary>
 /// Read model de una escritura para el listado/detalle admin y el consumo del wizard — HU #10900.

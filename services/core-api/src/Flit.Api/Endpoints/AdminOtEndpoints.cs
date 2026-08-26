@@ -38,6 +38,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
@@ -417,6 +418,24 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        // HU #11552 / ADR-0048 — reactiva una invitación cancelada del tenant OT resuelto (propio
+        // para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin). Necesaria además de
+        // la de SecurityEndpoints porque AdminCompanyPolicy no incluye ot_admin: con solo esa, el
+        // OT podría cancelar pero no reactivar. Reactivar es UNA sola acción: pending + token
+        // nuevo + reenvío del correo, no idempotente (segunda llamada → 409).
+        group.MapPost("/invitations/{invitationId:guid}/reactivate", ReactivateInvitationAsync)
+            .WithName("AdminOtReactivateInvitation")
+            .WithSummary("Reactiva una invitación cancelada del tenant OT")
+            .WithDescription("Vuelve la invitación a 'pending' con un token SIEMPRE nuevo (el enlace anterior deja "
+                + "de ser válido) y reenvía el correo. 409 si no está cancelada, si el correo ya está en uso o si "
+                + "algún rol de la invitación ya no está activo; 429 si no ha pasado el cooldown anti-abuso.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status429TooManyRequests);
+
         return app;
     }
 
@@ -759,6 +778,13 @@ public static class AdminOtEndpoints
         ITransitOfficeCatalog transitOfficeCatalog,
         string? status,
         Guid? procedureTypeId,
+        string? vin,
+        string? placa,
+        string? vendedor,
+        string? comprador,
+        string? gestor,
+        string? sortBy,
+        string? sortDir,
         int? page,
         int? pageSize,
         [FromQuery] Guid? transitOfficeId,
@@ -788,6 +814,13 @@ public static class AdminOtEndpoints
             TransitOfficeId = scopedOfficeId,
             Status = status,
             ProcedureTypeId = procedureTypeId,
+            Vin = vin,
+            Placa = placa,
+            Vendedor = vendedor,
+            Comprador = comprador,
+            Gestor = gestor,
+            SortBy = sortBy,
+            SortDir = sortDir,
             Page = page,
             PageSize = pageSize,
         }, cancellationToken).ConfigureAwait(false);
@@ -867,7 +900,7 @@ public static class AdminOtEndpoints
         ApproveOtClientProcedureHandler handler,
         IOtClientProcedureRepository otRepository,
         MandatoApprovalHandler mandatoApproval,
-        GenerarFurHandler furHandler,
+        RegenerarDocumentosTrazadoHandler regeneracionTrazada,
         ILoggerFactory loggerFactory,
         ITransitOfficeCatalog transitOfficeCatalog,
         [FromQuery] Guid? transitOfficeId,
@@ -946,17 +979,36 @@ public static class AdminOtEndpoints
         // NO revierte la aprobación ya persistida.
         if (result.Status == ApproveOtClientProcedureStatus.Approved)
         {
+            // Bug #11613 — el retorno del generador es una tupla (Result, Error) y un error de negocio
+            // NO lanza excepción: descartarlo dejaba el trámite sin documentos regenerados, sin log y
+            // con 200 OK. El handler trazado inspecciona ese retorno, loguea a Error y persiste un
+            // evento consultable en la instancia. Sigue siendo best-effort: la aprobación NO se revierte.
             try
             {
-                await otRepository
+                // El retorno NO se descarta (es la forma exacta del defecto que originó este bug): si
+                // la regeneración falló y además no se pudo dejar la traza en la instancia, el único
+                // rastro posible es este log — sin él el fallo desaparecería por completo.
+                var regeneracion = await otRepository
                     .ExecuteInClientTenantScopeAsync(
                         procedure.ClientTenantId,
-                        () => furHandler.HandleAsync(id, procedure.ClientTenantId, cancellationToken),
+                        () => regeneracionTrazada.HandleAsync(
+                            id,
+                            procedure.ClientTenantId,
+                            RegeneracionDocumentalOrigen.AprobacionOt,
+                            cancellationToken),
                         cancellationToken)
                     .ConfigureAwait(false);
+
+                if (!regeneracion.Ok && !regeneracion.TrazaPersistida)
+                {
+                    AdminOtMandatoLog.RegeneracionSinTraza(
+                        loggerFactory.CreateLogger("AdminOt.ApproveMandato"), id, regeneracion.Error ?? "desconocido");
+                }
             }
             catch (Exception ex)
             {
+                // Red de seguridad: el handler trazado ya absorbe los fallos del generador; aquí solo
+                // caen los del propio scope RLS / conexión, que no tienen dónde persistirse.
                 AdminOtMandatoLog.RegeneracionMandatoOmitida(
                     loggerFactory.CreateLogger("AdminOt.ApproveMandato"), ex, id);
             }
@@ -1594,28 +1646,72 @@ public static class AdminOtEndpoints
             return Results.Unauthorized();
         }
 
-        // El rol destino se resuelve automáticamente: en un tenant OT solo existe el
-        // rol de sistema ot_admin (sin roles personalizados — decisión de alcance v1).
+        // El alta OT ya no fuerza siempre ot_admin: acepta los roles que el administrador
+        // seleccione del catálogo TRANSIT_OFFICE. Sin selección explícita se conserva el
+        // comportamiento histórico (ot_admin), para no romper a los clientes existentes.
         // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id), así que
         // se resuelve por Code únicamente (una sola fila ot_admin en todo el sistema).
-        var role = await db.Roles.AsNoTracking()
-            .FirstOrDefaultAsync(
-                r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var requestedRoleIds = (request.RoleIds ?? []).Distinct().ToList();
+        List<Guid> roleIds;
 
-        if (role is null)
+        // Un usuario tiene UN rol: lo que define lo que puede hacer son los permisos de ese rol.
+        if (requestedRoleIds.Count > 1)
         {
             return Results.Json(
-                new { error = "ROLE_NOT_FOUND", message = "El tenant OT no tiene configurado el rol ot_admin." },
-                statusCode: StatusCodes.Status409Conflict);
+                new { error = "SINGLE_ROLE_ONLY", message = "Un usuario solo puede tener un rol. Selecciona uno." },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (requestedRoleIds.Count == 0)
+        {
+            var role = await db.Roles.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (role is null)
+            {
+                return Results.Json(
+                    new { error = "ROLE_NOT_FOUND", message = "El tenant OT no tiene configurado el rol ot_admin." },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            roleIds = [role.Id];
+        }
+        else
+        {
+            var selectedRoles = await db.Roles.AsNoTracking()
+                .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (selectedRoles.Count != requestedRoleIds.Count)
+            {
+                return Results.Json(
+                    new { error = "ROLE_NOT_FOUND", message = "Alguno de los roles seleccionados no existe o está inactivo." },
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+
+            if (selectedRoles.Exists(r => r.TargetEntityType != TenantTypes.TransitOffice))
+            {
+                return Results.Json(
+                    new
+                    {
+                        error = "ROLE_TARGET_ENTITY_TYPE_MISMATCH",
+                        message = "Alguno de los roles seleccionados no aplica a un organismo de tránsito.",
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            roleIds = requestedRoleIds;
         }
 
         try
         {
             var result = await handler.HandleAsync(
                 new CreateInvitationCommand(
-                    tenantId, request.Email, request.FullName ?? string.Empty, [role.Id], invitedBy.Value),
+                    tenantId, request.Email, request.FullName ?? string.Empty, roleIds, invitedBy.Value),
                 cancellationToken).ConfigureAwait(false);
 
             return Results.Created(
@@ -1630,21 +1726,30 @@ public static class AdminOtEndpoints
         }
         catch (InvitationAlreadyPendingException)
         {
+            // HU #11580 — código único de cara al cliente (indistinguibilidad); la causa
+            // concreta queda en auditoría vía ConfigAuditFailureContext, no en la respuesta.
+            // NOTA: esta ruta (/users/invite) no tiene AdminAuditFilter ni ConfigAuditFailureFilter
+            // enganchado — SetErrorCode aquí no tiene efecto hasta que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "invitation_already_pending");
             return Results.Json(
-                new { error = "INVITATION_ALREADY_PENDING", message = "Ya existe una invitación pendiente para este correo." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserAlreadyExistsException)
         {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
-        catch (UserEmailBelongsToDeletedAccountException ex)
+        catch (UserEmailBelongsToDeletedAccountException)
         {
             // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
+            // HU #11580 — código único de cara al cliente; la causa concreta queda en
+            // auditoría vía ConfigAuditFailureContext.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = ex.Message },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
     }
@@ -1764,10 +1869,22 @@ public static class AdminOtEndpoints
 
         var pending = await db.UserInvitations
             .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.Status == "pending")
+            .Where(x => x.TenantId == tenantId && InvitationListingStatuses.Visible.Contains(x.Status))
             .OrderByDescending(x => x.CreatedAt)
+            // El rol de la invitación pendiente/cancelada ya está decidido: se muestra para que
+            // la columna Perfil / Rol no quede en "—" hasta que el usuario active su cuenta.
             .Select(x => new OtUserDto(
-                x.Id.ToString(), x.FullName, x.Email, null, null, null, "pending", x.CreatedAt, false, 0L))
+                x.Id.ToString(),
+                x.FullName,
+                x.Email,
+                db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Name).FirstOrDefault(),
+                db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Code).FirstOrDefault(),
+                x.RoleId,
+                // HU #11552 / ADR-0048: estado real, no el literal "pending" hardcodeado.
+                x.Status,
+                x.CreatedAt,
+                false,
+                0L))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(new { data = activeUsers.Concat(usersWithoutRole).Concat(pending).ToList() });
@@ -1816,14 +1933,21 @@ public static class AdminOtEndpoints
         }
         catch (UserAlreadyExistsException)
         {
+            // NOTA: esta ruta (PATCH /users/{userId}) no tiene AdminAuditFilter ni
+            // ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
+            // que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
-        catch (UserEmailBelongsToDeletedAccountException ex)
+        catch (UserEmailBelongsToDeletedAccountException)
         {
+            // HU #11580 — código único de cara al cliente; la causa concreta queda en
+            // auditoría vía ConfigAuditFailureContext.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = ex.Message },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserProfileConcurrencyException ex)
@@ -2089,6 +2213,92 @@ public static class AdminOtEndpoints
         }
     }
 
+    private static async Task<IResult> ReactivateInvitationAsync(
+        Guid invitationId,
+        HttpContext httpContext,
+        FlitDbContext db,
+        ReactivateInvitationHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var reactivatedBy = ResolveUserId(httpContext.User);
+        if (reactivatedBy is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            var result = await handler.HandleAsync(
+                new ReactivateInvitationCommand(invitationId, tenantId, reactivatedBy.Value),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new { invitationId = result.InvitationId, email = result.Email, emailSent = result.EmailSent });
+        }
+        catch (InvitationNotFoundException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_FOUND", message = "La invitación no existe o no pertenece al tenant OT resuelto." },
+                statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (InvitationNotCancelledException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_CANCELLED", message = "La invitación no está cancelada, así que no se puede reactivar." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (InvitationAlreadyPendingException)
+        {
+            // NOTA: esta ruta (/invitations/{invitationId}/reactivate) no tiene AdminAuditFilter
+            // ni ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
+            // que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "invitation_already_pending");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserAlreadyExistsException)
+        {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserEmailBelongsToDeletedAccountException)
+        {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (RoleNotFoundException)
+        {
+            return Results.Json(
+                new { error = "ROLE_NOT_FOUND", message = "Alguno de los roles de la invitación ya no existe o está inactivo." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (ResendCooldownActiveException ex)
+        {
+            var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(ex.RetryAfter.TotalSeconds));
+            httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+            return Results.Json(
+                new
+                {
+                    error = "RESEND_COOLDOWN_ACTIVE",
+                    message = $"Debes esperar antes de reactivar esta invitación de nuevo. Intenta en {retryAfterSeconds} segundos.",
+                    retryAfterSeconds,
+                },
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+    }
+
     /// <summary>Código del único rol de tenant OT — ver <c>TransitOfficeTenantWriteRepository.OtAdminRoleCode</c>.</summary>
     private const string TransitOfficeTenantWriteRepositoryRoleCode = "ot_admin";
 
@@ -2140,7 +2350,9 @@ public static class AdminOtEndpoints
         return (targetTenantId, null);
     }
 
-    private sealed record InviteOtUserRequest(string Email, string? FullName);
+    // RoleIds opcional: si viene vacío se conserva el comportamiento histórico (ot_admin
+    // forzado); si trae roles, deben pertenecer al catálogo TRANSIT_OFFICE.
+    private sealed record InviteOtUserRequest(string Email, string? FullName, Guid[]? RoleIds = null);
 
     // HU #10621 — DisplayName/Email opcionales ("no tocar ese campo"); RowVersion obligatorio
     // (concurrencia optimista, AC4 — el valor que el frontend leyó de OtUserDto.RowVersion).
@@ -2175,4 +2387,8 @@ internal static partial class AdminOtMandatoLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo regenerar el mandato al aprobar el trámite {InstanceId}; se conserva el mandato previo.")]
     public static partial void RegeneracionMandatoOmitida(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "La regeneración documental al aprobar el trámite {InstanceId} falló con {CodigoError} y la traza NO quedó persistida; el diagnóstico solo existe en estos logs.")]
+    public static partial void RegeneracionSinTraza(ILogger logger, Guid instanceId, string codigoError);
 }

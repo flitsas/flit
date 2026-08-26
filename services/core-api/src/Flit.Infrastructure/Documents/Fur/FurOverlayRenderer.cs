@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
@@ -5,7 +7,7 @@ using PdfSharpCore.Pdf.IO;
 namespace Flit.Infrastructure.Documents.Fur;
 
 /// <summary>Superpone valores sobre plantillas PDF blank con PdfSharpCore.</summary>
-public static class FurOverlayRenderer
+public static partial class FurOverlayRenderer
 {
     /// <summary>Ancho máximo de la imagen de firma del baúl dentro del campo (el resto es metadatos).</summary>
     private const double SignatureImageMaxWidth = 115;
@@ -21,7 +23,12 @@ public static class FurOverlayRenderer
 
     /// <summary>Tamaño de fuente del bloque de metadatos junto a la firma.</summary>
     private const double SignatureSidecarFontSize = 3;
-    public static byte[] RenderPage1(byte[] templatePdf, FurFieldManifest manifest, IReadOnlyDictionary<string, FurFieldValue> values)
+    public static byte[] RenderPage1(
+        byte[] templatePdf,
+        FurFieldManifest manifest,
+        IReadOnlyDictionary<string, FurFieldValue> values,
+        ILogger? logger = null,
+        string? referenceNumber = null)
     {
         ArgumentNullException.ThrowIfNull(templatePdf);
         ArgumentNullException.ThrowIfNull(manifest);
@@ -38,7 +45,7 @@ public static class FurOverlayRenderer
         {
             if (!values.TryGetValue(field.Id, out var value))
                 continue;
-            DrawField(gfx, field, value);
+            DrawField(gfx, field, value, logger ?? NullLogger.Instance, referenceNumber);
         }
 
         using var ms = new MemoryStream();
@@ -66,7 +73,9 @@ public static class FurOverlayRenderer
     private static void DrawField(
         XGraphics gfx,
         FurFieldDefinition field,
-        FurFieldValue value)
+        FurFieldValue value,
+        ILogger logger,
+        string? referenceNumber)
     {
         if (value.ImageBytes is { Length: > 0 })
         {
@@ -86,7 +95,7 @@ public static class FurOverlayRenderer
             case FurFieldType.Multiline:
             case FurFieldType.Text:
                 if (!string.IsNullOrWhiteSpace(value.Text))
-                    DrawText(gfx, field, value.Text!, value.FontSizeDelta);
+                    DrawText(gfx, field, value.Text!, value.FontSizeDelta, logger, referenceNumber);
                 break;
         }
     }
@@ -102,7 +111,9 @@ public static class FurOverlayRenderer
         XGraphics gfx,
         FurFieldDefinition field,
         string text,
-        double fontSizeDelta = 0)
+        double fontSizeDelta,
+        ILogger logger,
+        string? referenceNumber)
     {
         // HU #11031 — cuerpo efectivo = el del manifiesto ± el ajuste que traiga el valor, con un
         // mínimo legible. Lo usa el sello de identidad, que va 2pt por debajo del resto del campo.
@@ -111,7 +122,27 @@ public static class FurOverlayRenderer
 
         if (field.Type == FurFieldType.Multiline)
         {
-            lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (field.AutoFit)
+            {
+                // HU #11256 — opt-in por manifiesto (CF12): solo los campos que declaran
+                // `autoFit: true` (hoy, `observations` y `linked_company_name`) pasan por el
+                // auto-encaje. Los sellos de firma, también `multiline`, NUNCA entran aquí: siguen
+                // partiendo exclusivamente por `\n` explícitos, como hoy, sin medir ni un carácter.
+                var fit = FurTextFitter.FitMultiline(
+                    text,
+                    field.W,
+                    field.H,
+                    fontSize,
+                    (value, size) => gfx.MeasureString(value, CreateFont(size, field.Bold)).Width,
+                    elidedChars => LogTextTruncated(logger, referenceNumber ?? "(sin id)", field.Id, elidedChars),
+                    field.MinFontSize);
+                lines = [.. fit.Lines];
+                fontSize = fit.FontSize;
+            }
+            else
+            {
+                lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
         }
         else
         {
@@ -124,9 +155,25 @@ public static class FurOverlayRenderer
                 field.W,
                 field.H,
                 fontSize,
-                (value, size) => gfx.MeasureString(value, CreateFont(size, field.Bold)).Width);
+                (value, size) => gfx.MeasureString(value, CreateFont(size, field.Bold)).Width,
+                field.MinFontSize);
             lines = [.. fit.Lines];
             fontSize = fit.FontSize;
+
+            // HU #11643 (AC4) — el aviso de truncado también para los campos `text`. El comentario de
+            // LogTextTruncated ya afirmaba que `linked_company_name` (casilla 19) lo disparaba, pero
+            // era falso: el callback solo se engancha en la rama multilínea con auto-encaje, y ese
+            // campo es de tipo `text`. Una razón social recortada se imprimía a medias sin dejar el
+            // menor rastro, que es la peor forma de perder un dato: nadie puede enterarse después.
+            // `FurTextFitter.Fit` no admite callback, así que el truncado se detecta por la elipsis
+            // que el propio fitter inserta —misma constante en ambas rutas— sin cambiarle la firma.
+            var truncado = lines.Any(l => l.Contains(FurTextFitter.EllipsisChar, StringComparison.Ordinal));
+            if (truncado && !text.Contains(FurTextFitter.EllipsisChar, StringComparison.Ordinal))
+            {
+                var impresos = lines.Sum(l => l.Length) - 1; // -1 por la elipsis añadida
+                LogTextTruncated(
+                    logger, referenceNumber ?? "(sin id)", field.Id, Math.Max(1, text.Length - impresos));
+            }
         }
 
         var font = CreateFont(fontSize, field.Bold);
@@ -259,4 +306,13 @@ public static class FurOverlayRenderer
         var style = bold ? XFontStyle.Bold : XFontStyle.Regular;
         return new XFont("Arial", size, style);
     }
+
+    // HU #11256 (R4), generalizado HU sin ADO 2026-08-11 (cuarta tanda) — último recurso de
+    // FurTextFitter.FitMultiline: el texto no cupo ni al piso de cuerpo y se truncó con elipsis. Se
+    // deja constancia del trámite y de cuánto se elidió; nunca se dibuja fuera de la caja. Antes solo
+    // lo disparaba `observations`; desde la HU #11643 también los campos `text` con auto-encaje, entre
+    // ellos `linked_company_name` (casilla 19), de ahí el nombre genérico "texto".
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "FUR {ReferenceNumber}: texto truncado en el campo {FieldId} — {ElidedChars} caracteres elididos")]
+    private static partial void LogTextTruncated(ILogger logger, string referenceNumber, string fieldId, int elidedChars);
 }

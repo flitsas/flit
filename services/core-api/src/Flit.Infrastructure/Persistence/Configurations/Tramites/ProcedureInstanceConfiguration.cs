@@ -28,12 +28,13 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("borrador");
 
         // Rework trámites (Slice 1)
-        builder.Property(x => x.ModalidadEntrada)
-            .HasColumnName("modalidad_entrada")
-            .HasMaxLength(20).IsRequired().HasDefaultValue("matricula_inicial");
-        builder.Property(x => x.TipologiaCodigo)
-            .HasColumnName("tipologia_codigo")
-            .HasMaxLength(40);
+        // ADR-0050 — clasificación derivada del tipo: se calcula desde la navegación
+        // ProcedureType, no son columnas.
+        builder.Ignore(x => x.Family);
+        builder.Ignore(x => x.TypeCode);
+        builder.Ignore(x => x.TypeName);
+        builder.Ignore(x => x.FamilyCode);
+
         builder.Property(x => x.ChecklistEstado)
             .HasColumnName("checklist_estado")
             .HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
@@ -74,6 +75,12 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("subsanacion_count")
             .IsRequired()
             .HasDefaultValue(0);
+
+        // Baseline del diff de re-radicación. Antes viajaba en el metadata de una fila
+        // rechazado→rechazado del historial, que el timeline pintaba como un rechazo repetido.
+        builder.Property(x => x.SubsanacionBaseline)
+            .HasColumnName("subsanacion_baseline")
+            .HasColumnType("jsonb");
 
         // Feature #10701 — vigencia del consolidado maestro. Columna agregada por migración SQL
         // cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea para el modelo EF. La baja
@@ -150,6 +157,31 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
 
         builder.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAt })
             .HasDatabaseName("ix_procedure_instances_tenant_id_status_created_at");
+
+        // Migración TramitesCamposBusqueda — vin/plate/vendedor_nombre/comprador_nombre denormalizados
+        // por trigger (ver Ddl/47-tramites-campos-busqueda.sql) para filtrar/ordenar el listado en SQL.
+        // Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se
+        // mapean para el modelo EF. Solo lectura de facto: nada en el aplicativo debería escribirlas
+        // directamente (la fuente de verdad sigue siendo FieldValues/Actors).
+        builder.Property(x => x.Vin).HasColumnName("vin").HasMaxLength(20);
+        builder.Property(x => x.Plate).HasColumnName("plate").HasMaxLength(20);
+        builder.Property(x => x.VendedorNombre).HasColumnName("vendedor_nombre").HasMaxLength(200);
+        builder.Property(x => x.CompradorNombre).HasColumnName("comprador_nombre").HasMaxLength(200);
+
+        builder.HasIndex(x => new { x.TenantId, x.Vin })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_vin");
+        builder.HasIndex(x => new { x.TenantId, x.Plate })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_plate");
+        builder.HasIndex(x => new { x.TenantId, x.CompradorNombre })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_comprador_nombre");
+        builder.HasIndex(x => new { x.TenantId, x.VendedorNombre })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_vendedor_nombre");
+        builder.HasIndex(x => new { x.TenantId, x.CreatedAt })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_created_at");
+        builder.HasIndex(x => new { x.TenantId, x.UpdatedAt })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_updated_at");
+        builder.HasIndex(x => new { x.TenantId, x.CreatedByUserId })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_created_by_user_id");
 
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();

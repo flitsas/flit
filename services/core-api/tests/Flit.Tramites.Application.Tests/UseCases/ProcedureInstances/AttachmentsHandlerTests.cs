@@ -92,13 +92,12 @@ public sealed class AttachmentsHandlerTests
         bool subsanacionActiva = false) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             ChecklistEstado = checklistEstado,
             SubsanacionActiva = subsanacionActiva,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -738,17 +737,36 @@ public sealed class AttachmentsHandlerTests
     }
 
     [Fact]
-    public async Task Checklist_UnknownTipologia_Returns422()
+    public async Task Checklist_TipoSinDocumentosConfigurados_DevuelveListaVacia_NoError()
     {
+        // ANTES devolvía 422 «La tipología del trámite no está configurada», y el paso de Requisitos
+        // entero se rompía con un mensaje sobre una estructura interna que el gestor no puede
+        // accionar. `TramiteTipologiaCatalog` describe DOS códigos —es el catálogo previo a
+        // ADR-0050— así que cualquiera de los otros diecinueve tipos que aún no tuviera matriz
+        // documental caía ahí. «Todavía no hay documentos configurados» es un estado legítimo y el
+        // asistente ya sabe pintarlo.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        var instance = Instance(id, tenant, modalidad: "desconocida", tipologia: "no_existe");
+        var instance = Instance(id, tenant);
+        instance.ProcedureType = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "BLINDAJE",
+            Name = "Blindaje",
+            Family = ProcedureFamilyCodes.Otros,
+        };
         _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _checklist.HandleAsync(id, tenant, ct);
+        var (result, error) = await _checklist.HandleAsync(id, tenant, ct);
 
-        error.Should().Be("tipologia_not_found");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Items.Should().BeEmpty();
+        result.FaltanObligatorios.Should().BeEmpty();
+        // Sin obligatorios que satisfacer, el checklist no bloquea. No se pierde ninguna guarda: el
+        // gate de radicación ya trataba la ausencia de catálogo como «completo».
+        result.Completo.Should().BeTrue();
     }
 
     // ── HU #10522 (RF17/RF22) — checklist desde la matriz viva del gestor ─────────
@@ -776,8 +794,10 @@ public sealed class AttachmentsHandlerTests
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Items.Select(i => i.Key).Should().Equal("factura", "soat");
+        // Matriz del gestor + mandato autogenerado (ADR-0036: ExigeMandato siempre).
+        result!.Items.Select(i => i.Key).Should().Equal("factura", "soat", "mandato");
         result.FaltanObligatorios.Should().Contain("soat"); // el gestor lo hizo obligatorio
+        result.FaltanObligatorios.Should().NotContain("mandato"); // mandato es Add no-obligatorio
     }
 
     [Fact]

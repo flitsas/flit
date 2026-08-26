@@ -153,6 +153,7 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
                     entity.Address = aggregate.Address;
                     entity.City = aggregate.City;
                     entity.Phone = aggregate.Phone;
+                    entity.RepresentedCompanyId = data.RepresentedCompanyId;
                     entity.SignatureVaultId = aggregate.SignatureVaultId;
                     entity.IdentityValidationRef = aggregate.IdentityValidationRef;
                     entity.UpdatedAt = DateTimeOffset.UtcNow;
@@ -166,9 +167,10 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
                 // HU #10932: el representante-persona puede tener varias compañías. Sincroniza el
                 // puente admin.legal_representative_companies con el conjunto solicitado (la primaria
                 // es data.RepresentedCompanyId; el resto llega en RepresentedCompanyIds).
+                // Lista vacía = persona sin NITs (limpia el puente).
                 var companyIds = (data.RepresentedCompanyIds is { Count: > 0 }
                         ? data.RepresentedCompanyIds
-                        : [data.RepresentedCompanyId])
+                        : data.RepresentedCompanyId is { } primary ? [primary] : Array.Empty<Guid>())
                     .Where(c => c != Guid.Empty)
                     .Distinct()
                     .ToList();

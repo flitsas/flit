@@ -1,3 +1,6 @@
+using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
+
 namespace Flit.Tramites.Application.Documents;
 
 /// <summary>Datos de una parte para el documento (FUR / compraventa).</summary>
@@ -67,6 +70,23 @@ public sealed record FirmaBaulMetadata(
 /// Datos del trámite ensamblados para generar los documentos. Vehículo (atributos completos),
 /// partes (comprador/vendedor), organismo de tránsito, valor, causal y referencias del sello de firma.
 /// </summary>
+/// <summary>
+/// HU #11641 — transformaciones que el trámite declara como subtrámite simultáneo, para marcar sus
+/// casillas en la rejilla "3. TRÁMITE SOLICITADO" del FUR.
+///
+/// <para>Es información distinta de la que va a OBSERVACIONES. El texto de observaciones se DERIVA
+/// del diff snapshot RUNT vs efectivo (ADR-0029) y declara a qué se transformó; la casilla declara
+/// QUÉ TRÁMITE se está solicitando. Por eso aquí basta con que el gestor lo haya declarado: si el
+/// RUNT no devolvió el valor original no hay diff que calcular, pero el trámite de cambio de color
+/// se solicitó igual y el formulario debe decirlo. Antes de esta HU el FUR quedaba mudo en ese caso,
+/// mientras el wizard mostraba el subtrámite como activo.</para>
+/// </summary>
+public readonly record struct FurTransformacionesDeclaradas(
+    bool Color = false,
+    bool Carroceria = false,
+    bool Combustible = false,
+    bool Blindaje = false);
+
 public sealed record FurDocumentData(
     Guid ProcedureInstanceId,
     string ReferenceNumber,
@@ -89,24 +109,52 @@ public sealed record FurDocumentData(
     // documento, uuid, serie/hash del certificado (firmaSerie de Kyverum) y fechas de aprobación/vencimiento.
     // Se pinta en el espacio de firma del FUR. Vacío/null ⇒ se cae al sello previo (SellosFirma).
     IReadOnlyDictionary<string, string>? SellosIdentidad = null,
-    // HU #10601 (Feature #10585) — marcación de prenda/gravamen en el FUR: TienePrenda marca el
-    // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
-    // (solicitar/registrar). Por defecto sin prenda.
-    bool TienePrenda = false,
-    // Beneficiario del gravamen. HU #10989: su TEXTO ya no se transporta hasta el mapper — se compone
-    // en GenerarFurHandler (FurPrendaObservation) y llega impreso dentro de Observaciones, porque el
-    // recuadro OBSERVACIONES es el sitio del formulario donde se declara (decisión D2 del plan de
-    // completitud documental). Este campo queda como dato del modelo para consumidores futuros.
+    // HU #10601 (Feature #10585), ampliado por HU #11257 (Feature #11254) — marcación de prenda/gravamen
+    // en el FUR: PrendaMarking resuelve, YA en el dominio (PrendaDecision.ToFurMarking), qué casilla
+    // marca el mapper: Constitucion → requested_process_11 (solicitar/registrar), Levantamiento →
+    // requested_process_12 (levantar), Ninguna → ninguna de las dos. Antes de esta HU el modelo
+    // transportaba solo `bool TienePrenda`: `levantar` colapsaba al mismo `false` que "sin prenda", así
+    // que el generador no podía distinguirlos. Por defecto sin marcación.
+    FurPrendaMarking PrendaMarking = FurPrendaMarking.Ninguna,
+    // Beneficiario del gravamen. Se imprime en el numeral 20 «A FAVOR DE» (alert_data_code_5) y, si hay
+    // nombre, también en el párrafo 23 vía FurPrendaObservation. Sin nombre: sí casilla de alerta, campo vacío.
     string? AcreedorPrenda = null,
-    // ADR-0036 (HU #10914/#10915) — las firmas (mandato / solicitud virtual) solo se muestran en
-    // estado distinto de borrador. Por defecto true (no afecta FUR/compraventa).
-    bool FirmasVisibles = true,
     // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
     // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).
-    FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor)
+    FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor,
+    // Casilla 19 "EMPRESA VINCULADORA" del FUR: solo aplica a servicio público (transporte vinculado a
+    // una empresa habilitada); en particular/matrícula sin vinculación queda null y la casilla sale en
+    // blanco (comportamiento por defecto, sin romper trámites existentes que no traen este dato).
+    string? EmpresaVinculadoraRazonSocial = null,
+    string? EmpresaVinculadoraNit = null,
+    // HU #11641 — subtrámites simultáneos declarados (color / carrocería / combustible / blindaje),
+    // que marcan sus casillas propias. Blindaje usa SI/NO de vehículo blindado; las otras tres van
+    // a la rejilla de trámite solicitado. Por defecto ninguno.
+    FurTransformacionesDeclaradas Transformaciones = default,
+    /// <summary>Código de <c>tramites.procedure_types.code</c> (p. ej. <c>MATRICULA_NUEVA</c>).</summary>
+    string? ProcedureTypeCode = null,
+    /// <summary>Nombre de <c>tramites.procedure_types.name</c>. El mandato lo usa como objeto del contrato.</summary>
+    string? ProcedureTypeName = null,
+    /// <summary>Familia de <c>tramites.procedure_types.family</c> (<c>MATRICULAS</c> | <c>TRASPASO</c> | <c>OTROS</c>).</summary>
+    string? ProcedureFamily = null,
+    /// <summary>
+    /// ADR-0050 — el tipo declara si hay parte VENDEDORA (<c>gate_profile.requiresSeller</c>).
+    /// <para>Convive con <see cref="ProcedureFamily"/> y no lo duplica: la familia dice QUÉ ES el
+    /// trámite y esta bandera QUÉ EXIGE. Es la que decide si el FUR estampa sección de comprador y
+    /// si el mandato se redacta con parte otorgante, preguntas que son de capacidad. Sustituye a
+    /// deducirlo por substring sobre la tipología o la modalidad, que daba por traspaso cualquier
+    /// código que contuviera esa palabra.</para>
+    /// </summary>
+    bool RequiereVendedor = false)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
+
+    // HU #11257 — aquí vivía `TienePrenda`, conservada como propiedad calculada para que los
+    // call-sites que la pasaban como parámetro con nombre rompieran la compilación. Cumplida esa
+    // función y migrados todos, se elimina: no le quedaba ningún consumidor y su nombre engañaba
+    // —un trámite en `levantar` SÍ tiene prenda y la propiedad devolvía `false`—. La única fuente
+    // de verdad es `PrendaMarking`.
 
     /// <summary>La parte radicadora (comprador en matrícula; comprador en traspaso es el adquiriente).</summary>
     public DocumentParte? Radicador => Partes.FirstOrDefault(p =>
@@ -184,7 +232,11 @@ public sealed record MandatarioFirmante(
     // baúl si la tiene, y si no el sello de su validación de identidad. Sin ninguna, el PDF deja la
     // línea en blanco (comportamiento previo).
     byte[]? FirmaImagen = null,
-    string? SelloIdentidad = null);
+    string? SelloIdentidad = null,
+    // HU #11170 — trazabilidad de la firma del baúl del mandatario (vigencia y hash), que se estampa
+    // bajo la imagen. No se resuelve por rol del trámite como la de las partes: el mandatario no es
+    // parte, así que sus metadatos viajan aquí.
+    FirmaBaulMetadata? FirmaBaulMetadatos = null);
 
 /// <summary>
 /// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que
@@ -201,7 +253,57 @@ public sealed record MandatoData(
     string TemplateCode,
     string? InstitutionalMandataryName,
     string? InstitutionalMandataryNit,
-    MandatarioFirmante? Mandatario);
+    MandatarioFirmante? Mandatario,
+    // HU #11204 — familia del mandatario y datos propios del OT que antes estaban incrustados en el
+    // generador. La familia dice QUIÉN firma como mandatario (una persona o el propio organismo); la
+    // redacción la sigue eligiendo <see cref="TemplateCode"/>, porque dos OT de la misma familia pueden
+    // tener textos legales distintos (Bello y Sabaneta lo son).
+    MandatoFamilia Familia = MandatoFamilia.Individuo,
+    string? ChamberCity = null,
+    string? MandatarySigla = null,
+    // HU #11206 — transformaciones declaradas en el trámite (claves de field_values). Se componen DENTRO
+    // del objeto del contrato, sin cláusula nueva: ninguna plantilla del PO las menciona.
+    IReadOnlyList<string>? Transformaciones = null,
+    /// <summary>
+    /// Qué hacer con el bloque de firma del MANDATARIO. Se resuelve fuera del generador porque depende
+    /// del convenio comercial compañía↔organismo y de la marca de firma física del mandatario, datos que
+    /// viven en Admin.
+    /// </summary>
+    MandatarioFirmaModo ModoFirmaMandatario = MandatarioFirmaModo.Estampada,
+    /// <summary>none | pdf | editor — plantilla propia del OT.</summary>
+    string CustomTemplateKind = "none",
+    /// <summary>Cuerpo del editor (placeholders {{placa}}, {{mandante_nombre}}, …).</summary>
+    string? CustomTemplateBody = null,
+    /// <summary>Bytes del PDF blank propio (cargados por el caller antes de generar).</summary>
+    byte[]? CustomTemplatePdf = null);
+
+/// <summary>
+/// Cómo aparece el MANDATARIO en el recuadro de firmas del contrato de mandato.
+///
+/// <para>Sus datos siguen nombrados en el CUERPO del contrato en los tres casos: lo que cambia es solo
+/// el recuadro de firmas.</para>
+/// </summary>
+public enum MandatarioFirmaModo
+{
+    /// <summary>
+    /// Bloque con estampa: firma del baúl si la tiene, si no el sello de su validación de identidad, y
+    /// si no la línea vacía. Es el caso por defecto — el mandatario es un actor obligatorio.
+    /// </summary>
+    Estampada,
+
+    /// <summary>
+    /// Bloque con línea de guiones bajos y sus datos debajo, sin estampa: firma a mano. Lo activan la
+    /// marca de firma física del mandatario en ese organismo y los organismos cuyo mandatario es el
+    /// propio organismo (familia <c>organismo_transito</c>).
+    /// </summary>
+    Manual,
+
+    /// <summary>
+    /// Sin bloque de mandatario: el recuadro de firmas solo lleva al MANDANTE. Lo activa el convenio
+    /// comercial entre la compañía y el organismo.
+    /// </summary>
+    SinBloque,
+}
 
 /// <summary>
 /// Contrato del generador del <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). Solo aplica

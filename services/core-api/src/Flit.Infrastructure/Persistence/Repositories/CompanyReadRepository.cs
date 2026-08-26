@@ -35,6 +35,11 @@ internal sealed class CompanyReadRepository : ICompanyReadRepository
 
         var query = ApplyFilters(_context.Tenants.AsNoTracking(), filter);
 
+        if (filter.ExcludeTransitOffices)
+        {
+            query = query.Where(t => !_context.TransitOfficeProfiles.Any(p => p.TenantId == t.Id));
+        }
+
         var totalCount = await query.LongCountAsync(cancellationToken).ConfigureAwait(false);
 
         if (totalCount == 0)
@@ -54,6 +59,7 @@ internal sealed class CompanyReadRepository : ICompanyReadRepository
                 RazonSocial = t.LegalName,
                 Code = t.Code,
                 TenantType = t.TenantType,
+                IsTransitOffice = _context.TransitOfficeProfiles.Any(p => p.TenantId == t.Id),
                 EstadoActivo = t.IsActive,
                 FechaCreacion = t.CreatedAt,
                 RowVersion = t.RowVersion,
@@ -75,6 +81,7 @@ internal sealed class CompanyReadRepository : ICompanyReadRepository
                 RazonSocial = t.LegalName,
                 Code = t.Code,
                 TenantType = t.TenantType,
+                IsTransitOffice = _context.TransitOfficeProfiles.Any(p => p.TenantId == t.Id),
                 EstadoActivo = t.IsActive,
                 FechaCreacion = t.CreatedAt,
                 RowVersion = t.RowVersion,

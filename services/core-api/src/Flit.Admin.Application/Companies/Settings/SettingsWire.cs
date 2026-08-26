@@ -69,6 +69,20 @@ public static class SettingsWire
         _ => TargetNinguno,
     };
 
+    public static bool IsSingleEmail(string value)
+    {
+        try
+        {
+            var parsed = new System.Net.Mail.MailAddress(value);
+            return string.Equals(parsed.Address, value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parsed.Address, value.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
     private static string Normalize(string? value) =>
         value?.Trim().ToUpperInvariant() ?? string.Empty;
 }

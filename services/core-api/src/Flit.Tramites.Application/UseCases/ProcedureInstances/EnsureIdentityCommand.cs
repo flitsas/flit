@@ -122,7 +122,13 @@ public sealed class EnsureIdentityHandler(
         // actores jurídicos: las personas naturales caen al flujo de identidad sin cambios. La política es
         // null-safe cuando el baúl está deshabilitado o no hay firma vigente (devuelve null → se sigue al 2).
         // actor no es null aquí: si lo fuera, subject sería null y ya habríamos retornado SinActor arriba.
-        if (EsActorJuridico(actor!.DocumentType))
+        //
+        // Bug #11141 (bug espejo) — la condición es FirmaBaulCobertura.Aplica y no una copia local del
+        // "¿es jurídico?": ese predicado incluye además el MECANISMO elegido por el gestor. Con la copia
+        // local, elegir «Sello de validación de identidad» teniendo baúl vigente devolvía firma_baul y la
+        // biométrica que el gestor acababa de pedir no se lanzaba nunca. El Bug #11141 unificó la regla en
+        // la vista y en el generador; esta ruta se quedó con la tercera copia.
+        if (FirmaBaulCobertura.Aplica(actor))
         {
             var vaultMatch = await _vaultPolicy.ResolveAsync(tenantId, tipoActual, docActual, ct);
             if (vaultMatch is not null)
@@ -147,17 +153,6 @@ public sealed class EnsureIdentityHandler(
         // Persiste la invalidación de las validaciones de la persona anterior (si las hubo).
         if (changed) await repo.SaveChangesAsync(ct);
         return (new EnsureIdentityResult(EnsureIdentityOutcomes.RequiereValidacion), null);
-    }
-
-    /// <summary>
-    /// ¿El actor es una persona JURÍDICA (NIT)? Solo estos consumen el baúl de firmas (ADR-0025 §4).
-    /// Acepta "NIT" y "N" (código corto), sin distinguir mayúsculas ni espacios.
-    /// </summary>
-    private static bool EsActorJuridico(string documentType)
-    {
-        var t = documentType.Trim();
-        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>¿La validación corresponde al documento (tipo + número) del actor actual de la parte?</summary>

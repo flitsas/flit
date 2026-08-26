@@ -18,7 +18,7 @@ namespace Flit.Admin.Tests.Security;
 
 /// <summary>
 /// HU #10508 — Gobernanza de roles exclusiva de SuperAdmin. Integración real (WebApplicationFactory
-/// + FlitDbContext real, mismo patrón que <see cref="Flit.Admin.Tests.Security.MultiRoleUserAssignmentEndpointsTests"/>):
+/// + FlitDbContext real, mismo patrón que <see cref="Flit.Admin.Tests.Security.UserRoleAssignmentEndpointsTests"/>):
 /// <list type="bullet">
 ///   <item>AC1: SuperAdmin gestiona el ciclo de vida completo de un rol
 ///   (crear/editar permisos/desactivar/activar/eliminar) vía <c>/api/v1/superadmin/roles*</c>.</item>
@@ -260,7 +260,7 @@ public sealed class SuperAdminRoleGovernanceEndpointsTests : IClassFixture<WebAp
             Id = _tenantId,
             Code = $"CO-HU10508-{Guid.NewGuid():N}"[..20],
             LegalName = "Compañía gobernanza roles de prueba",
-            TaxId = "900666666-6",
+            TaxId = TestNit.Unique(),
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

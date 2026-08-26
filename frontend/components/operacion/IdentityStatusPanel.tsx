@@ -1,12 +1,17 @@
 'use client';
 
+import { esFamiliaTraspaso } from './wizardCapabilities';
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, Clock, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Clock, Info, XCircle } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { presentarMotivoNoEnvio } from './envio-validacion-motivos';
 import type {
   BiometricParte,
   BiometricValidation,
+  EnvioValidacionMotivo,
   IdentityValidationAlert,
   IdentityValidationAlertKind,
   ProcedureActor,
@@ -93,15 +98,22 @@ function ordenarPartes(actors: ProcedureActor[]): ProcedureActor[] {
 }
 
 function buildOutcomeRows(
-  modalidad: WizardModalidad,
+  familia: ProcedureFamily | WizardModalidad,
   actors: ProcedureActor[],
   validations: BiometricValidation[],
 ): OutcomeRow[] {
   const rows: OutcomeRow[] = [];
+  // ADR-0050 — el estado del asistente trae la FAMILIA en el campo `modalidad`, así que comparar
+  // contra `'traspaso'` nunca acertaba: las validaciones del vendedor se atribuían al comprador.
+  const dosPartes = esFamiliaTraspaso(familia);
   for (const actor of ordenarPartes(actors)) {
+    // El locatario no valida identidad: en el leasing quien firma es el propietario. Y con una sola
+    // parte biométrica el filtro de abajo acepta `partyRole === 'comprador'`, así que dejarlo pasar
+    // le habría atribuido al arrendatario las validaciones del propietario.
+    if (actor.rol === 'locatario') continue;
     const parte = actor.rol;
     const matches = validations.filter((v) =>
-      modalidad === 'traspaso'
+      dosPartes
         ? v.partyRole === parte
         : v.partyRole === null || v.partyRole === 'comprador',
     );
@@ -129,7 +141,10 @@ export function IdentityStatusPanel({
   const [actors, setActors] = useState<ProcedureActor[] | null>(null);
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
   const [alerts, setAlerts] = useState<IdentityValidationAlert[] | null>(null);
-  const [wizardModalidad, setWizardModalidad] = useState<WizardModalidad | null>(null);
+  // HU #11666 — motivos tipificados de no envío del estado biométrico (derivados al vuelo por el
+  // backend). Se refrescan con cada carga, igual que las validaciones.
+  const [motivos, setMotivos] = useState<EnvioValidacionMotivo[]>([]);
+  const [wizardFamilia, setWizardFamilia] = useState<ProcedureFamily | WizardModalidad | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const fetchingRef = useRef(false);
@@ -147,9 +162,10 @@ export function IdentityStatusPanel({
         tramitesClient.getBiometricState(instanceId),
         tramitesClient.getInstanceIdentityValidationAlerts(instanceId),
       ]);
-      setWizardModalidad(wizardRes?.modalidad ?? null);
+      setWizardFamilia(wizardRes?.modalidad ?? null);
       setActors(actorsRes);
       setValidations(biometricRes.validations);
+      setMotivos(biometricRes.motivosNoEnvio ?? []);
       setAlerts(alertsRes.alerts);
       loadedOnceRef.current = true;
     } catch (err) {
@@ -186,8 +202,8 @@ export function IdentityStatusPanel({
 
   const hasData = actors !== null && validations !== null && alerts !== null;
   const initialLoading = open && loading && !hasData && error === null;
-  const effModalidad = modalidad ?? wizardModalidad ?? 'traspaso';
-  const outcomes = hasData ? buildOutcomeRows(effModalidad, actors, validations) : [];
+  const effFamilia = modalidad ?? wizardFamilia ?? 'TRASPASO';
+  const outcomes = hasData ? buildOutcomeRows(effFamilia, actors, validations) : [];
   const accionables =
     hasData
       ? alerts.filter((a) => a.alertKind != null)
@@ -225,7 +241,7 @@ export function IdentityStatusPanel({
         </button>
         {open && needsLive && (
           <span
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
             style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
             role="status"
             aria-live="polite"
@@ -245,7 +261,7 @@ export function IdentityStatusPanel({
             borderRadius: 12,
             padding: 16,
           }}
-          className="dark:bg-[#0B0F14]"
+          className="dark:bg-[#162744]"
         >
           {error && (
             <div
@@ -261,7 +277,7 @@ export function IdentityStatusPanel({
                 <button
                   type="button"
                   onClick={() => void load()}
-                  className="mt-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-white"
+                  className="mt-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-white"
                   style={{ background: '#FF4E00' }}
                 >
                   Reintentar
@@ -280,7 +296,7 @@ export function IdentityStatusPanel({
           )}
 
           {!initialLoading && !error && hasData && actors.length === 0 && (
-            <p className="text-[11px] opacity-60">
+            <p className="text-xs opacity-60">
               No hay actores registrados en este trámite todavía.
             </p>
           )}
@@ -291,8 +307,16 @@ export function IdentityStatusPanel({
                 <AlertsBanner alerts={accionables} reminders={reminders} />
               )}
 
+              {/* HU #11666 — por qué no se envió la validación de identidad de una parte. Se lista
+                  junto a las alertas porque responde la misma pregunta del gestor («¿por qué este
+                  trámite no avanza?»), pero cada motivo conserva su naturaleza: los informativos
+                  no son alertas. */}
+              {motivos.map((m) => (
+                <MotivoNoEnvioRow key={`${m.parte}-${m.codigo}`} motivo={m} />
+              ))}
+
               {outcomes.length === 0 ? (
-                <p className="text-[11px] opacity-60">
+                <p className="text-xs opacity-60">
                   Aún no hay aprobaciones ni rechazos registrados.
                 </p>
               ) : (
@@ -317,7 +341,7 @@ export function IdentityStatusPanel({
                             </span>
                             {row.vigente && (
                               <span
-                                className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+                                className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
                                 style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
                               >
                                 Vigente
@@ -325,18 +349,18 @@ export function IdentityStatusPanel({
                             )}
                           </div>
                           {row.actorName && (
-                            <p className="truncate text-[11px] opacity-70" title={row.actorName}>
+                            <p className="truncate text-xs opacity-70" title={row.actorName}>
                               {row.actorName}
                             </p>
                           )}
                           {v.status === 'rechazado' && v.rejectionReason && (
-                            <p className="truncate text-[10.5px] opacity-60" title={v.rejectionReason}>
+                            <p className="truncate text-xs opacity-60" title={v.rejectionReason}>
                               {v.rejectionReason}
                             </p>
                           )}
                         </div>
                         <time
-                          className="shrink-0 text-[11px] font-medium opacity-65"
+                          className="shrink-0 text-xs font-medium opacity-65"
                           dateTime={when ?? undefined}
                         >
                           {formatFecha(when)}
@@ -351,6 +375,37 @@ export function IdentityStatusPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * HU #11666 — una línea por motivo de no envío, con la misma división que la tarjeta del paso de
+ * identidad: bloqueo (se anuncia, hay algo que corregir) frente a información (ausencia legítima,
+ * tono neutro y sin sugerir corrección). El texto sale del mismo mapa de copy que la tarjeta, para
+ * que el gestor no lea dos explicaciones distintas del mismo código.
+ */
+function MotivoNoEnvioRow({ motivo }: { motivo: EnvioValidacionMotivo }) {
+  const parte = parteLabel(motivo.parte);
+  const copy = presentarMotivoNoEnvio(motivo.codigo, parte);
+  const bloqueo = !motivo.informativo && copy.naturaleza === 'bloqueo';
+  const { color, background, border } = INLINE_ALERT_TONES[bloqueo ? 'error' : 'info'];
+  const Icono = bloqueo ? AlertTriangle : Info;
+
+  return (
+    <div
+      className="flex items-start gap-2 rounded-xl border p-3 text-xs"
+      style={{ borderColor: border, background, color }}
+      role={bloqueo ? 'alert' : 'status'}
+      aria-live="polite"
+    >
+      <Icono className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <div className="space-y-0.5">
+        <p className="font-semibold">
+          {parte}: {copy.titulo}
+        </p>
+        <p>{copy.detalle}</p>
+      </div>
+    </div>
   );
 }
 

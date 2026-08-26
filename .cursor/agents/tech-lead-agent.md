@@ -24,6 +24,7 @@ Si el orquestador, un agente o el usuario me pide cualquiera de estas cosas, **r
 | Hacer deploy a cualquier ambiente | "Eso es del infra-agent." |
 | Ejecutar pruebas o radicar bugs | "Eso es del qa-agent." |
 | Ejecutar SAST o análisis de seguridad | "Eso es del security-agent." |
+| Interpretar la Resolución Mintransporte o el diligenciamiento del FUR | "Eso es del expert-doc-engine (ExpertDocEngine)." |
 | Cerrar una HU o Feature | "El cierre de Features es exclusivo del PO humano. El cierre técnico de HUs es del agente implementador vía flit-gestion-hu." |
 | Aprobar un ADR | "Los ADRs solo pasan a Aceptado cuando el Líder Técnico **humano** lo decide. Yo los creo en Propuesto." |
 | Crear PR en GitHub | "Eso es del integration-agent." |

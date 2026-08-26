@@ -7,7 +7,7 @@ using Flit.Tramites.Application.Documents;
 var vendedor = new DocumentParte(
     "vendedor",
     "COMERCIALIZADORA DE VEHICULOS DEL NORTE S.A.S.",
-    "900123456-7",
+    "890903938",
     "contacto@comercializadora.com",
     "NIT",
     "6041112233",
@@ -46,17 +46,93 @@ var data = new FurDocumentData(
     ValorVenta: 45000000,
     Causal: null,
     SellosFirma: [],
-    SellosIdentidad: sellos,
-    FirmasVisibles: true);
+    SellosIdentidad: sellos);
 
 var mandato = new MandatoPdfGenerator().GenerateMandato(
     new MandatoData(data, "generico", null, null, new MandatarioFirmante("CARLOS ANDRES RUIZ", "71234567")));
 File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato.pdf"), mandato.Content);
+
+// Verificación visual del fix de negrita (mandato por segmentos, no por lista de palabras clave):
+// las tres variantes que mostró el usuario.
+
+// 1) Institucional — el mandatario es el propio organismo (Sabaneta, UT-SETSA por fallback literal).
+var mandatoInstitucional = new MandatoPdfGenerator().GenerateMandato(
+    new MandatoData(data, "sabaneta", null, null, null));
+File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-institucional.pdf"), mandatoInstitucional.Content);
+
+// 2) Mandatario persona — nombre y documento del mandatario en negrita (mismo escenario que mandato.pdf,
+// con nombre propio para que quede claro en el PDF cuál es cuál).
+var mandatoPersona = new MandatoPdfGenerator().GenerateMandato(
+    new MandatoData(data, "generico", null, null, new MandatarioFirmante("LUIS FERNANDO CASTRO OSPINA", "79795089")));
+File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-persona.pdf"), mandatoPersona.Content);
+
+// 3) Abierto — el mandatario va en líneas en blanco (Manual + sin firmante resuelto): los guiones no
+// deben romperse ni salir en negrita de forma rara.
+var mandatoAbierto = new MandatoPdfGenerator().GenerateMandato(
+    new MandatoData(data, "sabaneta", null, null, null, ModoFirmaMandatario: MandatarioFirmaModo.Manual));
+File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-abierto.pdf"), mandatoAbierto.Content);
+
+// 4) Plantilla personalizada del OT (editor con placeholders {{...}}) — mismo fix, por sustitución de
+// TOKEN conocido en vez de contenido.
+var cuerpoEditor =
+    "Yo, {{mandante_nombre}}, identificado con {{mandante_documento}}, otorgo mandato a {{mandatario_nombre}}, " +
+    "identificado con {{mandatario_documento}}, para el trámite de {{tramite}} del vehículo de placas " +
+    "{{placa}} ante {{organismo}} en {{ciudad}}, el {{fecha}}.";
+var mandatoEditor = new MandatoPdfGenerator().GenerateMandato(new MandatoData(
+    data, "generico", null, null, new MandatarioFirmante("LUIS FERNANDO CASTRO OSPINA", "79795089"),
+    CustomTemplateKind: "editor", CustomTemplateBody: cuerpoEditor));
+File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-editor.pdf"), mandatoEditor.Content);
 
 var virtual_ = new SolicitudVirtualPdfGenerator().GenerateSolicitudVirtual(data);
 File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "virtual.pdf"), virtual_.Content);
 
 var fur = new FurOverlayDocumentGenerator().GenerateFur(data);
 File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "fur.pdf"), fur.Content);
+
+// HU #11170 — variante FIRMADA CON EL BAÚL, para comprobar que la vigencia y el hash acompañan a la
+// imagen en los cuatro documentos (antes solo los llevaba el FUR). Requiere una imagen de firma:
+// FIRMA_PNG=<ruta a un png>. Sin la variable se omite y el render normal no cambia.
+var firmaPng = Environment.GetEnvironmentVariable("FIRMA_PNG");
+if (!string.IsNullOrWhiteSpace(firmaPng) && File.Exists(firmaPng))
+{
+    var imagen = File.ReadAllBytes(firmaPng);
+    var metaVendedor = new FirmaBaulMetadata(
+        "1038409485", "MARIA FERNANDA GONZALEZ RESTREPO",
+        new DateOnly(2026, 1, 15), new DateOnly(2027, 1, 14), Guid.NewGuid(), "BAUL-7F3A21");
+    var metaComprador = new FirmaBaulMetadata(
+        "1020304050", "JUAN ESTEBAN PEREZ",
+        new DateOnly(2026, 3, 1), new DateOnly(2027, 2, 28), Guid.NewGuid(), "BAUL-9C55E0");
+
+    var conBaul = data with
+    {
+        FirmaImagenes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["vendedor"] = imagen,
+            ["comprador"] = imagen,
+        },
+        FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["vendedor"] = metaVendedor,
+            ["comprador"] = metaComprador,
+        },
+        // Bug #11146 — quien firma por el baúl no lleva además el sello de identidad.
+        SellosIdentidad = null,
+    };
+
+    var mandatoBaul = new MandatoPdfGenerator().GenerateMandato(new MandatoData(
+        conBaul, "generico", null, null,
+        new MandatarioFirmante("CARLOS ANDRES RUIZ", "71234567", imagen, null, metaComprador)));
+    File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-baul.pdf"), mandatoBaul.Content);
+
+    var virtualBaul = new SolicitudVirtualPdfGenerator().GenerateSolicitudVirtual(conBaul);
+    File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "virtual-baul.pdf"), virtualBaul.Content);
+
+    File.WriteAllBytes(
+        Path.Combine(AppContext.BaseDirectory, "compraventa-baul.pdf"),
+        FurCompraventaDocumentGenerator.Generate(conBaul));
+
+    var furBaul = new FurOverlayDocumentGenerator().GenerateFur(conBaul);
+    File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "fur-baul.pdf"), furBaul.Content);
+}
 
 Console.WriteLine($"OK {AppContext.BaseDirectory}");

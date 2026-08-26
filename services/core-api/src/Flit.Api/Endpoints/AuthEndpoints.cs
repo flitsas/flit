@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Flit.Api.Authorization;
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
@@ -94,9 +95,17 @@ public static class AuthEndpoints
                     new ErrorResponse("WEAK_PASSWORD", "La contraseña no cumple los requisitos mínimos."),
                     statusCode: StatusCodes.Status400BadRequest);
             }
+            catch (PasswordReusedException)
+            {
+                // HU #11553 AC2 — el token de recuperación sigue vigente; el usuario puede reintentar.
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
         });
 
         // HU #10170 AC1 — reset administrativo: el admin restablece la contraseña de un usuario de su ámbito.
+        // AdminCompany auth-parity: mismo tenant vía rol AdminCompany o permiso security.users.reset_password.
         group.MapPost("/admin/reset-password", async (
             [FromBody] AdminResetPasswordRequest request,
             ClaimsPrincipal caller,
@@ -105,8 +114,9 @@ public static class AuthEndpoints
         {
             var tenantClaim = caller.FindFirstValue("tenant_id");
             var callerTenantId = Guid.TryParse(tenantClaim, out var tid) ? tid : (Guid?)null;
-            var roleCode = caller.FindFirstValue("role_code") ?? string.Empty;
-            var permissions = caller.FindAll("permissions").Select(c => c.Value).ToList();
+            // Multi-rol (HU #10506): FindFirstValue puede no ver SuperAdmin/AdminCompany si no es el primer claim.
+            var roleCode = ResolveCallerRoleCode(caller);
+            var permissions = ExtractPermissionSlugs(caller);
 
             try
             {
@@ -127,6 +137,12 @@ public static class AuthEndpoints
                 return Results.Json(
                     new ErrorResponse("USER_NOT_FOUND", "Usuario no encontrado."),
                     statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (PasswordReusedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
             }
         }).RequireAuthorization();
 
@@ -164,6 +180,12 @@ public static class AuthEndpoints
             catch (InvalidCredentialsException)
             {
                 return Results.Unauthorized();
+            }
+            catch (PasswordReusedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
             }
         }).RequireAuthorization();
 
@@ -264,6 +286,60 @@ public static class AuthEndpoints
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Prioriza SuperAdmin y AdminCompany entre todos los claims de rol (multi-rol HU #10506).
+    /// </summary>
+    private static string ResolveCallerRoleCode(ClaimsPrincipal caller)
+    {
+        static bool HasRole(ClaimsPrincipal user, string role) =>
+            user.Claims.Any(c =>
+                (c.Type == "role_code" || c.Type == AdminAuthorization.RoleClaimType)
+                && string.Equals(c.Value, role, StringComparison.OrdinalIgnoreCase));
+
+        if (HasRole(caller, AdminAuthorization.SuperAdminRole))
+            return AdminAuthorization.SuperAdminRole;
+        if (HasRole(caller, AdminAuthorization.AdminCompanyRole))
+            return AdminAuthorization.AdminCompanyRole;
+
+        return caller.FindFirstValue("role_code")
+            ?? caller.FindFirstValue(AdminAuthorization.RoleClaimType)
+            ?? string.Empty;
+    }
+
+    /// <summary>
+    /// El JWT emite <c>permissions</c> como JSON array (un claim); también puede llegar expandido
+    /// en varios claims del mismo tipo. Normaliza ambos casos a slugs sueltos.
+    /// </summary>
+    private static List<string> ExtractPermissionSlugs(ClaimsPrincipal caller)
+    {
+        var slugs = new List<string>();
+        foreach (var claim in caller.FindAll("permissions"))
+        {
+            var raw = claim.Value?.Trim() ?? string.Empty;
+            if (raw.Length == 0)
+                continue;
+
+            if (raw.StartsWith('[') && raw.EndsWith(']'))
+            {
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<string[]>(raw);
+                    if (parsed is not null)
+                        slugs.AddRange(parsed.Where(s => !string.IsNullOrWhiteSpace(s)));
+                    continue;
+                }
+                catch (JsonException)
+                {
+                    // cae al valor literal
+                }
+            }
+
+            slugs.Add(raw);
+        }
+
+        return slugs;
     }
 
     private sealed record ActivateAccountRequest(string Token, string Password);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useRevalidateOnFocus } from './useRevalidateOnFocus';
 import type {
   ChecklistView,
   DocumentOcrResult,
@@ -26,7 +27,7 @@ export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
  * pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente al
  * RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
  */
-const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
+export const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
 
 /** Límite del OCR (10 MB, el del endpoint). Archivos mayores (≤20 MB) se suben sin analizar. */
 export const OCR_MAX_BYTES = 10 * 1024 * 1024;
@@ -61,6 +62,46 @@ export function normalizeVin(value: string | null | undefined): string {
 }
 
 /**
+ * Un documento puede amparar VARIOS vehículos: una declaración de importación cubre el lote entero
+ * que entró en el contenedor, y el OCR devuelve los VIN separados por comas en un solo campo. Por eso
+ * el cruce es por pertenencia y no por igualdad — comparar la cadena completa rechazaría una
+ * declaración legítima sólo por traer a los otros 49 vehículos del lote.
+ *
+ * No se parte por espacios a propósito: `normalizeVin` ya los ignora dentro de un VIN ("VIN 123").
+ */
+const SEPARADOR_VINS = /[,;/\n]+/;
+
+export function vinsDelDocumento(value: string): string[] {
+  return value
+    .split(SEPARADOR_VINS)
+    .map((v) => normalizeVin(v))
+    .filter(Boolean);
+}
+
+/** Cuántos VIN se muestran antes de resumir el resto. Un lote de 50 hace ilegible el mensaje. */
+const MAX_VINS_VISIBLES = 2;
+
+/** Deja el listado de VIN en algo legible: los primeros y un contador del resto. */
+export function resumirVins(value: string): string {
+  const vins = value.split(SEPARADOR_VINS).map((v) => v.trim()).filter(Boolean);
+  if (vins.length <= MAX_VINS_VISIBLES) return value;
+  const resto = vins.length - MAX_VINS_VISIBLES;
+  return `${vins.slice(0, MAX_VINS_VISIBLES).join(', ')} y ${resto} más`;
+}
+
+/** Motivo del rechazo por tipo, usando lo que el propio OCR haya explicado. */
+function motivoDeTipo(data: Record<string, unknown>): string {
+  const base = 'El documento no pasó la validación de tipo';
+  const nota = pickString(data.observaciones).trim();
+  if (nota) return `${base}: ${nota.length > 200 ? `${nota.slice(0, 200)}…` : nota}`;
+  const identificado = pickString(data.tipo_documento).trim();
+  if (identificado && identificado !== 'otro') {
+    return `${base}: el análisis lo identificó como «${identificado.replace(/_/g, ' ')}».`;
+  }
+  return `${base}: no se reconoció como el documento esperado.`;
+}
+
+/**
  * Aplica las validaciones del frontend sobre el JSON del OCR: validez de tipo
  * (`es_factura_valida` para factura, `es_valido` para el resto) y cruce del VIN del documento
  * (`vehiculo_vin` o `vehiculo_chasis`) con el VIN del trámite. Devuelve si el documento queda rechazado.
@@ -74,15 +115,15 @@ export function evaluateOcr(
   }
   const validez = data.es_factura_valida ?? data.es_valido;
   if (validez === false) {
-    return { rechazado: true, motivo: 'El documento no pasó la validación de tipo.' };
+    return { rechazado: true, motivo: motivoDeTipo(data) };
   }
   const docVin = pickString(data.vehiculo_vin) || pickString(data.vehiculo_chasis);
   const tramite = normalizeVin(instanceVin);
-  const documento = normalizeVin(docVin);
-  if (tramite && documento && tramite !== documento) {
+  const documento = vinsDelDocumento(docVin);
+  if (tramite && documento.length > 0 && !documento.includes(tramite)) {
     return {
       rechazado: true,
-      motivo: `El VIN del documento (${docVin}) no coincide con el del trámite.`,
+      motivo: `El VIN del documento (${resumirVins(docVin)}) no coincide con el del trámite.`,
     };
   }
   return { rechazado: false };
@@ -167,30 +208,57 @@ export function useProcedureDocuments(
   // instancia; en la modalidad VIN-first el paso de documentos viene después de consultar/persistir el VIN.
   const vinRef = useRef<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!instanceId) return;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const [checklist, attachments] = await Promise.all([
-        tramitesClient.getChecklist(instanceId, tenantId),
-        tramitesClient.getAttachments(instanceId, tenantId),
-      ]);
-      setState((s) => ({ ...s, checklist, attachments, loading: false }));
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : 'Error al cargar los documentos',
-      }));
-    }
-  }, [instanceId, tenantId]);
+  // Marca de refresco en vuelo: al volver a la pestaña pueden llegar `focus` y `visibilitychange`
+  // casi a la vez, y sin esto se pedirían dos checklists para la misma vuelta.
+  const refrescandoRef = useRef(false);
+
+  /**
+   * Relee checklist y adjuntos.
+   *
+   * En segundo plano (`background`) NO toca `loading` ni `error`: se dispara sola al recuperar el
+   * foco, y poner la vista en «cargando» o pintar un error mientras el gestor está capturando sería
+   * peor que el dato viejo que viene a corregir. Si falla, se conserva lo que ya está en pantalla.
+   */
+  const refresh = useCallback(
+    async (opts?: { background?: boolean }) => {
+      if (!instanceId) return;
+      if (refrescandoRef.current) return;
+      refrescandoRef.current = true;
+      if (!opts?.background) setState((s) => ({ ...s, loading: true, error: null }));
+      try {
+        const [checklist, attachments] = await Promise.all([
+          tramitesClient.getChecklist(instanceId, tenantId),
+          tramitesClient.getAttachments(instanceId, tenantId),
+        ]);
+        setState((s) => ({ ...s, checklist, attachments, loading: false }));
+      } catch (err) {
+        if (opts?.background) return;
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Error al cargar los documentos',
+        }));
+      } finally {
+        refrescandoRef.current = false;
+      }
+    },
+    [instanceId, tenantId],
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Un documento dado de alta en Documental mientras esta pantalla estaba abierta no llegaba hasta
+  // reabrir el trámite: sin casilla donde cargarlo y sin frenar el paso. Al volver a la pestaña se
+  // relee el checklist, que es donde el servidor ya declara el requisito nuevo.
+  const revalidarEnFoco = useCallback(() => {
+    void refresh({ background: true });
+  }, [refresh]);
+  useRevalidateOnFocus(revalidarEnFoco, Boolean(instanceId));
 
   // Lee el VIN de la instancia (best-effort; su fallo no bloquea el checklist).
   useEffect(() => {

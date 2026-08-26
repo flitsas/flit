@@ -1,3 +1,5 @@
+using Flit.Tramites.Application.Documents;
+
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
@@ -27,6 +29,9 @@ public static class DocumentLabels
         ["factura"] = "Factura",
         ["aduana"] = "Declaración de importación",
         ["cedulas"] = "Documentos de identidad",
+        // Sin curar caería a «Certificado blindaje», que es lo que ya se leía en el pie del
+        // consolidado cuando el certificado viajaba como «Otro documento».
+        ["certificado_blindaje"] = "Certificado de blindaje",
     };
 
     public static string Display(string? tipo)
@@ -39,4 +44,16 @@ public static class DocumentLabels
         var text = tipo.Trim().Replace('_', ' ');
         return char.ToUpperInvariant(text[0]) + text[1..];
     }
+
+    /// <summary>
+    /// Perfil de estampado (ADR-0049) del pie de página según el tipo técnico del documento. Solo el
+    /// FUR (<c>tipo == "fur"</c>) usa el margen reducido <see cref="StampProfile.Formulario"/> — el
+    /// perfil aplica a TODAS sus páginas (hoja 1 y hoja 2, en los tres formatos AUTOMOTOR/MAQUINARIA/
+    /// REMOLQUES), no hay resolución por número de página. El resto de tipos usa
+    /// <see cref="StampProfile.Default"/>.
+    /// </summary>
+    public static StampProfile ProfileFor(string? tipo) =>
+        string.Equals(tipo?.Trim(), "fur", StringComparison.OrdinalIgnoreCase)
+            ? StampProfile.Formulario
+            : StampProfile.Default;
 }

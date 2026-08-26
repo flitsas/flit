@@ -13,6 +13,11 @@ public interface ISignatureVaultRepository
     Task<Guid> CreateAsync(CreateSignatureVaultData data, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Edita los datos corregibles de una firma ACTIVA. <c>false</c> si no existe o está revocada.
+    /// </summary>
+    Task<bool> UpdateAsync(UpdateSignatureVaultData data, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Revoca una firma (baja lógica: estado → 'revocada'), con efecto inmediato en el próximo
     /// consumo. <c>false</c> si no existe o ya estaba revocada (idempotente).
     /// </summary>
@@ -38,6 +43,28 @@ public sealed record CreateSignatureVaultData(
     Guid? CreatedBy,
     Guid? CorrelationId,
     string? CodigoHash = null);
+
+/// <summary>
+/// Datos editables de una firma del baúl.
+///
+/// <para><b>Qué NO se puede editar, y por qué.</b> El <b>documento</b> identifica a la persona dueña de
+/// la firma: cambiarlo convertiría la fila en la firma de otra persona conservando su historial y su
+/// artefacto. El <b>artefacto</b> tampoco: los documentos ya emitidos se estamparon con esa imagen y
+/// con su huella, así que sustituirla en sitio invalidaría en silencio lo ya firmado. Para cambiar la
+/// imagen se captura una firma nueva, que revoca la anterior y la conserva como histórico.</para>
+///
+/// <para>Queda editable lo que es un dato de captura y puede estar mal escrito: el nombre, el código
+/// hash y la vigencia.</para>
+/// </summary>
+public sealed record UpdateSignatureVaultData(
+    Guid Id,
+    Guid TenantId,
+    string FullName,
+    string? CodigoHash,
+    DateOnly VigenciaDesde,
+    DateOnly VigenciaHasta,
+    Guid? ChangedBy,
+    Guid? CorrelationId);
 
 /// <summary>Datos de revocación de una firma del baúl.</summary>
 public sealed record RevokeSignatureVaultData(

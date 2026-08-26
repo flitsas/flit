@@ -31,6 +31,13 @@ public sealed class ListOtClientProceduresHandler
             {
                 Status = query.Status,
                 ProcedureTypeId = query.ProcedureTypeId,
+                Vin = query.Vin,
+                Placa = query.Placa,
+                Vendedor = query.Vendedor,
+                Comprador = query.Comprador,
+                Gestor = query.Gestor,
+                SortBy = query.SortBy,
+                SortDir = query.SortDir,
                 Page = page,
                 PageSize = pageSize,
             },

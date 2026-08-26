@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.ValueObjects;
 
 namespace Flit.Tramites.Domain.Services;
@@ -24,8 +25,69 @@ public sealed class ProcedureTypeValidator : IProcedureTypeValidator
         ValidateVinPlateRule(procedureType, activeRules, allFields, result);
         ValidateNitPersonTypeRule(allFields, result);
         ValidateConsultationTemplateFieldCoverage(allFields, result);
+        ValidateFamily(procedureType, result);
+        ValidateGateProfile(procedureType, result);
+        ValidateSectionTypes(procedureType, result);
 
         return result;
+    }
+
+    /// <summary>
+    /// ADR-0050 — la familia gobierna clasificación, filtros, causales y gates por compañía. Fuera del
+    /// dominio, <c>ProcedureFamilyCodes.FromCodeOrOtros</c> degradaría el tipo a OTROS en silencio, y
+    /// el CHECK del DDL rechazaría el guardado más abajo con un error mucho menos legible.
+    /// </summary>
+    private static void ValidateFamily(ProcedureType procedureType, ValidationResult result)
+    {
+        if (!ProcedureFamilyCodes.IsValid(procedureType.Family))
+            result.AddError(
+                "FAMILY_INVALID",
+                $"La familia '{procedureType.Family}' no pertenece al dominio "
+                + $"({string.Join(" | ", ProcedureFamilyCodes.All)}).",
+                "family");
+    }
+
+    /// <summary>
+    /// ADR-0050 — el <c>gate_profile</c> gobierna el recorrido del wizard, así que un
+    /// <c>entryMode</c> inválido deja el tipo sin forma de entrar. Se valida solo cuando viene
+    /// informado: el perfil es configuración opcional y ausente equivale a "sin exigencias".
+    /// </summary>
+    private static void ValidateGateProfile(ProcedureType procedureType, ValidationResult result)
+    {
+        var profile = ProcedureTypeGateProfile.FromJson(procedureType.GateProfile);
+
+        if (profile.EntryMode is not null && !ProcedureTypeGateProfile.IsValidEntryMode(profile.EntryMode))
+            result.AddError(
+                "GATE_PROFILE_ENTRY_MODE_INVALID",
+                $"entryMode '{profile.EntryMode}' no es válido (PLATE | VIN | BOTH).",
+                "gateProfile.entryMode");
+
+        if (profile.RequiresBiometrics && profile.BiometricActors.Count == 0)
+            result.AddError(
+                "GATE_PROFILE_BIOMETRIC_ACTORS_MISSING",
+                "requiresBiometrics exige al menos un actor en biometricActors; sin actores el gate "
+                + "biométrico se satisface siempre y la validación de identidad nunca bloquea.",
+                "gateProfile.biometricActors");
+    }
+
+    /// <summary>
+    /// CFD-09 — cada sección debe declarar un <c>section_type</c> del catálogo cerrado: es lo que
+    /// elige el renderer del frontend y la rama del <c>DynamicGateEvaluator</c>. Un valor fuera del
+    /// catálogo cae en el <c>default</c> del evaluador, que nunca bloquea.
+    /// </summary>
+    private static void ValidateSectionTypes(ProcedureType procedureType, ValidationResult result)
+    {
+        foreach (var step in procedureType.Steps)
+        {
+            foreach (var section in step.Sections)
+            {
+                if (!ProcedureSectionTypes.IsValid(section.SectionType))
+                    result.AddError(
+                        "SECTION_TYPE_INVALID",
+                        $"section_type '{section.SectionType}' no pertenece al catálogo CFD-09.",
+                        $"steps.{step.Code}.sections.{section.Code}.sectionType");
+            }
+        }
     }
 
     private static List<FormField> GetAllFields(ProcedureType procedureType) =>
@@ -40,7 +102,7 @@ public sealed class ProcedureTypeValidator : IProcedureTypeValidator
         List<FormField> allFields,
         ValidationResult result)
     {
-        if (procedureType.Family != ProcedureFamily.Matriculas)
+        if (ProcedureFamilyCodes.FromCode(procedureType.Family) != ProcedureFamily.Matriculas)
             return;
 
         bool hasVehicleActive = activeRules.Any(r =>

@@ -1,23 +1,23 @@
 'use client';
 
 import { TramitesTable } from './TramitesTable';
-import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
  * M0 — Entrada por MODALIDAD (desligada de Parametrización). La vista es el
- * listado de trámites (TramitesTable), que ya hospeda —siguiendo el diseño— el
- * funnel de estados, los botones de registro por modalidad (bajo el funnel) y la
- * búsqueda desplegable. Track B: al elegir modalidad, delega en la ruta
- * (onStartTramite → /tramites/nuevo/[modalidad]) la creación + navegación.
+ * listado de trámites (TramitesTable), que hospeda —según flit-tramites-chrome— título,
+ * tabs+filtros, KPIs por estado y la tabla.
+ *
+ * Flujo del diseño: "Nuevo trámite" entra DIRECTO al asistente (`/tramites/nuevo`) y el tipo se
+ * elige dentro del paso 1. El listado ya no decide la modalidad.
  */
 interface OperacionViewProps {
-  onStartTramite: (modalidad: WizardModalidad) => void;
+  onNewTramite: () => void;
 }
 
-export function OperacionView({ onStartTramite }: OperacionViewProps) {
+export function OperacionView({ onNewTramite }: OperacionViewProps) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <TramitesTable onStartTramite={onStartTramite} />
+      <TramitesTable onNewTramite={onNewTramite} />
     </div>
   );
 }

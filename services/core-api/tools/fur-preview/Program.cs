@@ -1,11 +1,53 @@
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 var coreApiRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 var outDir = Path.Combine(coreApiRoot, "artifacts", "fur-analysis");
 Directory.CreateDirectory(outDir);
 
 var generator = new FurOverlayDocumentGenerator();
+
+// HU #11255 — textos de observación cortos/medios/largos usados por los escenarios 05-09.
+const string ObsCorta = "SIN OBSERVACIONES ADICIONALES.";
+
+const string ObsMedia =
+    "VEHICULO VERIFICADO CONTRA EL RUNT SIN NOVEDADES. SE ADJUNTA SOAT Y RTM VIGENTES A LA FECHA " +
+    "DE RADICACION DEL TRAMITE PARA CONSTANCIA DEL ORGANISMO DE TRANSITO.";
+
+const string ObsLarga =
+    "VEHICULO VERIFICADO CONTRA EL RUNT SIN NOVEDADES REPORTADAS A LA FECHA DE RADICACION. SE " +
+    "ADJUNTA SOAT Y RTM VIGENTES. EL PROPIETARIO DECLARA BAJO GRAVEDAD DE JURAMENTO QUE LA " +
+    "INFORMACION SUMINISTRADA EN EL PRESENTE FORMULARIO ES VERAZ Y COMPLETA, Y QUE EL VEHICULO NO " +
+    "SE ENCUENTRA REPORTADO COMO HURTADO NI PRESENTA MEDIDAS CAUTELARES VIGENTES ANTE LA " +
+    "AUTORIDAD COMPETENTE. CUALQUIER INCONSISTENCIA SERA INFORMADA AL ORGANISMO DE TRANSITO PARA " +
+    "LOS FINES PERTINENTES DENTRO DEL TRAMITE EN CURSO.";
+
+// HU #11256 — observación DESMEDIDA (~2.000 caracteres): fuerza el último recurso de
+// `FurTextFitter.FitMultiline` (cuerpo al piso de 5 pt + truncado con elipsis). Verifica CF2/CF3: el
+// texto queda dentro del recuadro, sin tinta fuera, por arriba y por abajo.
+const string ObsDesmedida =
+    "GRAVAMEN / PRENDA A FAVOR DE: BANCO FINANCIERO DE COLOMBIA S.A. - NIT 890900608-1. " +
+    "VEHICULO VERIFICADO CONTRA EL RUNT SIN NOVEDADES REPORTADAS A LA FECHA DE RADICACION DEL " +
+    "TRAMITE ANTE EL ORGANISMO DE TRANSITO COMPETENTE. SE ADJUNTA SOAT Y RTM VIGENTES A LA FECHA. " +
+    "EL PROPIETARIO DECLARA BAJO GRAVEDAD DE JURAMENTO QUE LA INFORMACION SUMINISTRADA EN EL " +
+    "PRESENTE FORMULARIO ES VERAZ Y COMPLETA, Y QUE EL VEHICULO NO SE ENCUENTRA REPORTADO COMO " +
+    "HURTADO NI PRESENTA MEDIDAS CAUTELARES VIGENTES ANTE LA AUTORIDAD COMPETENTE. CUALQUIER " +
+    "INCONSISTENCIA SERA INFORMADA AL ORGANISMO DE TRANSITO PARA LOS FINES PERTINENTES DENTRO DEL " +
+    "TRAMITE EN CURSO. TRANSFORMACION REGISTRADA CONFORME ADR-0029: CAMBIO DE COLOR DE BLANCO " +
+    "PERLA A NEGRO MATE, CON SOPORTE FOTOGRAFICO Y CERTIFICADO DE TALLER AUTORIZADO ADJUNTO AL " +
+    "EXPEDIENTE DIGITAL DEL TRAMITE. EL GESTOR CERTIFICA HABER VERIFICADO FISICAMENTE LA " +
+    "CORRESPONDENCIA ENTRE EL NUMERO DE MOTOR, EL NUMERO DE CHASIS Y LOS DATOS REGISTRADOS EN EL " +
+    "SISTEMA RUNT, SIN ENCONTRAR NOVEDADES QUE IMPIDAN LA CONTINUACION DEL TRAMITE SOLICITADO POR " +
+    "EL INTERESADO ANTE ESTE ORGANISMO DE TRANSITO, DE CONFORMIDAD CON LA NORMATIVIDAD VIGENTE " +
+    "APLICABLE EN MATERIA DE TRANSITO Y TRANSPORTE TERRESTRE AUTOMOTOR EN EL TERRITORIO NACIONAL " +
+    "COLOMBIANO, SEGUN LO ESTABLECIDO POR EL MINISTERIO DE TRANSPORTE Y LA SUPERINTENDENCIA DE " +
+    "TRANSPORTE PARA ESTE TIPO DE TRAMITES DE REGISTRO AUTOMOTOR NACIONAL.";
+
+// HU #11257 — acreedor de prueba compartido por los seis escenarios de prenda.
+const string AcreedorPrendaNombre = "BANCO FINANCIERO DE COLOMBIA S.A.";
+const string AcreedorPrendaDocumento = "890900608-1";
 
 var scenarios = new (string Slug, FurDocumentData Data)[]
 {
@@ -15,6 +57,130 @@ var scenarios = new (string Slug, FurDocumentData Data)[]
     ("02-maquinaria-retroexcavadora", MaquinariaData()),
     ("03-remolques-semirremolque", RemolquesData()),
     ("04-automotor-traspaso", AutomotorTraspasoData()),
+
+    // HU #11255 — escenarios con observations/vehicle_serial_number con contenido real, para medir
+    // con pymupdf el desplazamiento (-2,-5) de observations y (0,-5) de vehicle_serial_number.
+    ("05-automotor-obs-corta", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { NumeroSerie = "SN-AUTO-000001" },
+        Observaciones = ObsCorta,
+    }),
+    ("06-automotor-obs-media", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { NumeroSerie = "SN-AUTO-000002" },
+        Observaciones = ObsMedia,
+    }),
+    ("07-automotor-obs-larga", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { NumeroSerie = "SN-AUTO-000003" },
+        Observaciones = ObsLarga,
+    }),
+    // Maquinaria NO tiene casilla vehicle_serial_number en el manifest (CF10/AC3): aunque el dato
+    // venga poblado (como en MaquinariaData()), no debe imprimirse nada en esa zona.
+    ("08-maquinaria-obs-media", MaquinariaData() with { Observaciones = ObsMedia }),
+    ("09-remolques-obs-media", RemolquesData() with
+    {
+        Vehiculo = RemolquesData().Vehiculo with { NumeroSerie = "SN-REM-000004" },
+        Observaciones = ObsMedia,
+    }),
+
+    // HU #11256 — observación DESMEDIDA (~2.000 car.) en los tres formatos: CF2/CF3, último recurso
+    // de FitMultiline (piso 5 pt + truncado con elipsis, sin tinta fuera del recuadro).
+    ("10-automotor-obs-desmedida", AutomotorData() with { Observaciones = ObsDesmedida }),
+    ("11-maquinaria-obs-desmedida", MaquinariaData() with { Observaciones = ObsDesmedida }),
+    ("12-remolques-obs-desmedida", RemolquesData() with { Observaciones = ObsDesmedida }),
+
+    // HU #11256 (CF12) — sello "NO FIRMADO" explícito (IdentidadValidada=false) en `vehicle_owner_signature`,
+    // multiline sin autoFit: debe salir idéntico antes/después en los tres formatos.
+    ("13-automotor-no-firmado", AutomotorData() with { IdentidadValidada = false }),
+    ("14-maquinaria-no-firmado", MaquinariaData() with { IdentidadValidada = false }),
+    ("15-remolques-no-firmado", RemolquesData() with { IdentidadValidada = false }),
+
+    // HU #11257 (Feature #11254) — modalidad de prenda en los tres formatos: constitución marca 11,
+    // levantamiento marca 12 (nunca la contraria) y el recuadro OBSERVACIONES declara el literal propio
+    // de cada modalidad (CF11). `Observaciones` se compone igual que `FurCommand.AssembleData` para que
+    // el render sea representativo del handler real.
+    ("16-automotor-prenda-constitucion", AutomotorData() with
+    {
+        PrendaMarking = FurPrendaMarking.Constitucion,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Constitucion, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("17-automotor-prenda-levantamiento", AutomotorData() with
+    {
+        PrendaMarking = FurPrendaMarking.Levantamiento,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("18-maquinaria-prenda-constitucion", MaquinariaData() with
+    {
+        PrendaMarking = FurPrendaMarking.Constitucion,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Constitucion, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("19-maquinaria-prenda-levantamiento", MaquinariaData() with
+    {
+        PrendaMarking = FurPrendaMarking.Levantamiento,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("20-remolques-prenda-constitucion", RemolquesData() with
+    {
+        PrendaMarking = FurPrendaMarking.Constitucion,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Constitucion, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("21-remolques-prenda-levantamiento", RemolquesData() with
+    {
+        PrendaMarking = FurPrendaMarking.Levantamiento,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+
+    // Casilla 19 "EMPRESA VINCULADORA" — verificación visual de calibración (x/y nuevos en el
+    // manifest AUTOMOTOR). `linked_company_name` es `multiline` + `autoFit` con piso de 7pt (cuarta
+    // tanda): hasta 3 líneas, nunca por debajo de 7pt, x/y/fontSize base sin cambios frente a la
+    // versión `text` original para que el caso corto no se mueva ni cambie de tamaño.
+    // 22: valores cortos que caben en una línea (NO debe cambiar de aspecto).
+    // 23: razón social larga (79 car., el ejemplo sintético original) — entra completa en 2-3 líneas.
+    // 24: razón social real del sector de transporte público (69 car., la que pidió el coordinador)
+    //     — debe entrar COMPLETA, sin puntos suspensivos.
+    // 25: nombre absurdamente largo (134 car.) para comprobar que el truncado a 7pt SIGUE
+    //     funcionando cuando de verdad no cabe ni en 3 líneas, sin desbordar la casilla.
+    ("22-automotor-empresa-vinculadora-corta", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { TipoServicio = "PUBLICO" },
+        EmpresaVinculadoraRazonSocial = "TRANSPORTES DEL NORTE S.A.S.",
+        EmpresaVinculadoraNit = "900123456-7",
+    }),
+    ("23-automotor-empresa-vinculadora-larga", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { TipoServicio = "PUBLICO" },
+        EmpresaVinculadoraRazonSocial =
+            "TRANSPORTE ESPECIAL Y MASIVO DE PASAJEROS DEL EJE CAFETERO Y ALREDEDORES S.A.S.",
+        EmpresaVinculadoraNit = "900987654-3",
+    }),
+    ("24-automotor-empresa-vinculadora-cooperativa", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { TipoServicio = "PUBLICO" },
+        EmpresaVinculadoraRazonSocial =
+            "COOPERATIVA DE TRANSPORTADORES ESPECIALES DEL ORIENTE ANTIOQUEÑO S.A.S.",
+        EmpresaVinculadoraNit = "890912345-1",
+    }),
+    ("25-automotor-empresa-vinculadora-absurda", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { TipoServicio = "PUBLICO" },
+        EmpresaVinculadoraRazonSocial =
+            "COOPERATIVA MULTIACTIVA DE TRANSPORTADORES ESPECIALES Y SERVICIOS COMPLEMENTARIOS " +
+            "DE LOS MUNICIPIOS DEL SUR DEL VALLE DE ABURRA S.A.S.",
+        EmpresaVinculadoraNit = "800123987-2",
+    }),
 };
 
 foreach (var (slug, data) in scenarios)
@@ -73,7 +239,6 @@ static FurDocumentData AutomotorTraspasoData() => AutomotorData() with
 {
     ReferenceNumber = "TRM-2026-IWL38D",
     Modalidad = "traspaso",
-    TipologiaCodigo = "traspaso_standard",
     Vehiculo = AutomotorData().Vehiculo with
     {
         Marca = "BAJAJ", Linea = "PULSAR 200", Modelo = "2023", Color = "NEGRO",
@@ -140,7 +305,6 @@ static FurDocumentData RemolquesData() => AutomotorData() with
 {
     ReferenceNumber = "TRM-2026-REM001",
     Modalidad = "traspaso",
-    TipologiaCodigo = "traspaso_standard",
     Vehiculo = AutomotorData().Vehiculo with
     {
         Marca = "PLANATRAILER",

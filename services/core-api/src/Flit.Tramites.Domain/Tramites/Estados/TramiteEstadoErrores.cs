@@ -56,6 +56,41 @@ public static class TramiteEstadoErrores
     public const string PrendaDocumentoRequerido = "prenda_documento_requerido";
 
     /// <summary>
+    /// CF-06 (HU #10881) — el override compañía+OT exige el documento de prenda y no está adjunto
+    /// (409). Código PROPIO, distinto de <see cref="PrendaDocumentoRequerido"/>, desde 2026-08-12:
+    /// ambos caminos compartían código y el wizard pintaba el copy del gate del traspaso ("la decisión
+    /// de prenda seleccionada requiere…") para un bloqueo cuyo origen es una regla del organismo, no
+    /// la decisión del gestor. El backend ya distinguía los dos casos en el <c>detail</c>; el listado
+    /// de blockers del wizard no, porque solo transporta el código. Separarlos permite que el mensaje
+    /// diga de dónde viene, sin romper la coincidencia wizard/submit: ambos emiten ESTE código para
+    /// este camino.
+    /// </summary>
+    public const string PrendaDocumentoRequeridoOt = "prenda_documento_requerido_ot";
+
+    /// <summary>
+    /// HU #11591 — la decisión de prenda vigente CONSTITUYE gravamen (<c>solicitar</c>/<c>registrar</c>,
+    /// ver <see cref="Flit.Tramites.Domain.Tramites.ValueObjects.PrendaDecision.ImplicaGravamen"/>) y no
+    /// tiene diligenciado el acreedor (<c>AcreedorNombre</c> y/o <c>AcreedorDocumento</c>): el FUR no
+    /// puede salir con el gravamen sin beneficiario identificado (409).
+    /// </summary>
+    public const string PrendaAcreedorRequerido = "prenda_acreedor_requerido";
+
+    /// <summary>
+    /// El trámite de LEVANTAMIENTO de prenda no tiene diligenciada la entidad ante la que se levantó
+    /// el gravamen (409). Es lo que el párrafo 23 del FUR declara en este trámite: sin ella el
+    /// recuadro sale mudo mientras la casilla 12 afirma que hubo levantamiento. No aplica a traspaso
+    /// ni a matrícula, donde <c>levantar</c> es una decisión entre varias y conserva su literal.
+    /// </summary>
+    public const string PrendaEntidadLevantamientoRequerida = "prenda_entidad_levantamiento_requerida";
+
+    /// <summary>
+    /// El trámite declara un organismo de DESTINO —el traslado de cuenta— y no está diligenciado, o
+    /// el elegido no está habilitado para la compañía (409). Sin él el FUR no puede decir a dónde va
+    /// la cuenta, que es el objeto entero del trámite.
+    /// </summary>
+    public const string OrganismoDestinoRequerido = "organismo_destino_requerido";
+
+    /// <summary>
     /// HU #11051 — el gestor pidió generar o regenerar documentación de un trámite en estado final
     /// (aprobado/anulado), cuya documentación ya es definitiva (409). No aplica a la regeneración
     /// interna del sistema (aprobación del OT, asignación de placa, identidad validada).

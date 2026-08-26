@@ -139,6 +139,29 @@ export function canReadIctLogs(payload: JwtPayload | null): boolean {
   return isSuperAdmin(payload) || hasPermission(payload, ICT_LOGS_READ_PERMISSION);
 }
 
+/** Permiso para administrar (CRUD) los clientes de integración ICT (ronda 2, Feature #10888). */
+export const ICT_CLIENTS_MANAGE_PERMISSION = "ict.clients.manage";
+
+/** Puede administrar los clientes ICT (submódulo de Usuarios y Roles): permiso `ict.clients.manage` o SuperAdmin. */
+export function canManageIctClients(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, ICT_CLIENTS_MANAGE_PERMISSION);
+}
+
+/** Permiso de reset administrativo de contraseña en el propio tenant (HU #10170). */
+export const RESET_PASSWORD_PERMISSION = "security.users.reset_password";
+
+/**
+ * Puede restablecer contraseñas de usuarios del tenant: SuperAdmin (global), AdminCompany
+ * (mismo tenant en API) o el permiso `security.users.reset_password`.
+ */
+export function canAdminResetPassword(payload: JwtPayload | null): boolean {
+  return (
+    isSuperAdmin(payload) ||
+    isAdminCompany(payload) ||
+    hasPermission(payload, RESET_PASSWORD_PERMISSION)
+  );
+}
+
 /**
  * Indica si el payload contiene el rol ot_admin (comparación case-insensitive).
  */

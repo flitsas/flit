@@ -14,7 +14,9 @@ export interface OtUserItem {
   role: string | null;
   roleCode: string | null;
   roleId: string | null;
-  status: "active" | "inactive" | "pending";
+  /** HU #11552 / ADR-0048: "cancelled" es un cuarto valor — invitación cancelada, visible y
+   *  reactivable. El `id` de la fila sigue siendo el `invitationId` en "pending" y "cancelled". */
+  status: "active" | "inactive" | "pending" | "cancelled";
   createdAt: string | null;
   isSuspended: boolean;
   /** HU #10621: versiÃ³n de concurrencia optimista, obligatoria al editar (PATCH). */
@@ -31,6 +33,11 @@ export interface OtUserListResponse {
 export interface InviteOtUserRequest {
   email: string;
   fullName?: string;
+  /**
+   * Roles del catálogo TRANSIT_OFFICE con los que entra el usuario. Si se omite, el backend
+   * conserva el comportamiento histórico y asigna el rol de sistema `ot_admin`.
+   */
+  roleIds?: string[];
 }
 
 export interface InviteOtUserResponse {
@@ -121,8 +128,8 @@ export function unsuspendOtUser(userId: string, scope?: OtApiScope): Promise<voi
 }
 
 /** PATCH /api/v1/admin/ot/users/{userId} â€” edita nombre y/o correo del usuario (HU #10621).
- *  409 con cÃ³digo USER_ALREADY_EXISTS | EMAIL_BELONGS_TO_DELETED_USER | CONCURRENCY_CONFLICT
- *  (rowVersion desactualizado); 404 si el usuario ya no existe. */
+ *  409 con cÃ³digo EMAIL_ALREADY_IN_USE | CONCURRENCY_CONFLICT (rowVersion desactualizado);
+ *  404 si el usuario ya no existe. */
 export function updateOtUser(
   userId: string,
   body: UpdateOtUserRequest,
@@ -182,4 +189,32 @@ export function cancelOtInvitation(invitationId: string, scope?: OtApiScope): Pr
     method: "DELETE",
     query: scopeQuery(scope),
   });
+}
+
+/** Resultado de reactivar una invitación cancelada (HU #11552) — mismo shape que
+ *  ResendOtInvitationResponse. */
+export interface ReactivateOtInvitationResponse {
+  invitationId: string;
+  email: string;
+  emailSent: boolean;
+}
+
+/** POST /api/v1/admin/ot/invitations/{invitationId}/reactivate â€” reactiva una invitaciÃ³n
+ *  cancelada del tenant OT resuelto (propio para ot_admin, o el indicado por
+ *  `scope.transitOfficeId` para SuperAdmin) â€” HU #11552 / ADR-0048. SIEMPRE regenera el token
+ *  de activaciÃ³n y reenvÃ­a el correo. El `id` de la fila YA es el `invitationId` cuando
+ *  `status === "cancelled"` (`OtUserItem.id`). Sin cuerpo de peticiÃ³n. Errores: 404 si no
+ *  existe en el tenant OT resuelto; 409 INVITATION_NOT_CANCELLED si ya no estÃ¡ cancelada, o el
+ *  mismo trÃ­o de conflictos de correo que crear invitaciÃ³n; 429 con
+ *  `{ error, message, retryAfterSeconds }` si el cooldown anti-abuso sigue activo â€” este
+ *  endpoint usa `error` (no `code`, misma inconsistencia preexistente que resendOtInvitation).
+ */
+export function reactivateOtInvitation(
+  invitationId: string,
+  scope?: OtApiScope,
+): Promise<ReactivateOtInvitationResponse> {
+  return apiFetch<ReactivateOtInvitationResponse>(
+    `${base}/invitations/${invitationId}/reactivate`,
+    { method: "POST", query: scopeQuery(scope) },
+  );
 }

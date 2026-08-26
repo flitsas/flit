@@ -22,9 +22,18 @@ internal static class SettingsDiff
         AddBool(changes, "allow_initial_registration", previous.AllowInitialRegistration, updated.AllowInitialRegistration);
         AddBool(changes, "allow_misc_new_vehicles", previous.AllowMiscNewVehicles, updated.AllowMiscNewVehicles);
         AddBool(changes, "only_own_vehicles", previous.OnlyOwnVehicles, updated.OnlyOwnVehicles);
+        AddBool(changes, "only_own_vehicles_matriculas", previous.OnlyOwnVehiclesMatriculas, updated.OnlyOwnVehiclesMatriculas);
+        AddBool(changes, "only_own_vehicles_otros", previous.OnlyOwnVehiclesOtros, updated.OnlyOwnVehiclesOtros);
+        AddBool(changes, "block_procedure_family_traspaso", previous.BlockProcedureFamilyTraspaso, updated.BlockProcedureFamilyTraspaso);
+        AddBool(changes, "block_procedure_family_otros", previous.BlockProcedureFamilyOtros, updated.BlockProcedureFamilyOtros);
         AddBool(changes, "signature_vault_enabled", previous.SignatureVaultEnabled, updated.SignatureVaultEnabled);
         AddBool(changes, "plate_preassign_enabled", previous.PlatePreassignEnabled, updated.PlatePreassignEnabled);
+        AddBool(changes, "validate_soat_with_runt", previous.ValidateSoatWithRunt, updated.ValidateSoatWithRunt);
         AddBool(changes, "plate_flow_skip_to_terminado", previous.PlateFlowSkipToTerminado, updated.PlateFlowSkipToTerminado);
+        // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, campo propio.
+        AddBool(changes, "personalized_documents_enabled", previous.PersonalizedDocumentsEnabled, updated.PersonalizedDocumentsEnabled);
+        AddBool(changes, "tramite_approved_emails_enabled", previous.TramiteApprovedEmailsEnabled, updated.TramiteApprovedEmailsEnabled);
+        AddBool(changes, "tramite_rejected_emails_enabled", previous.TramiteRejectedEmailsEnabled, updated.TramiteRejectedEmailsEnabled);
 
         // FEATURE 02 — fuente de comparendos (internal | external).
         AddString(changes, "fines_query_source", previous.FinesQuerySource, updated.FinesQuerySource);
@@ -40,6 +49,14 @@ internal static class SettingsDiff
             "notification_target",
             TenantSettingsCodes.ToDb(previous.NotificationTarget),
             TenantSettingsCodes.ToDb(updated.NotificationTarget));
+
+        var previousRecipients = JsonStateRecipients(previous.StateEmailRecipients);
+        var updatedRecipients = JsonStateRecipients(updated.StateEmailRecipients);
+        if (!string.Equals(previousRecipients, updatedRecipients, StringComparison.Ordinal))
+        {
+            changes.Add(new TenantConfigChange(
+                "tramite_state_email_recipients", previousRecipients, updatedRecipients));
+        }
 
         if (!previous.PaymentMethods.SequenceEqual(updated.PaymentMethods, StringComparer.Ordinal))
         {
@@ -121,6 +138,17 @@ internal static class SettingsDiff
 
         builder.Append('}');
         return builder.ToString();
+    }
+
+    private static string JsonStateRecipients(TramiteStateEmailRecipients value)
+    {
+        var extra = value.ExtraEmail is null ? "null" : JsonString(value.ExtraEmail);
+        return "{"
+            + JsonString("comprador") + ":" + JsonBool(value.Comprador) + ","
+            + JsonString("vendedorOPropietario") + ":" + JsonBool(value.VendedorOPropietario) + ","
+            + JsonString("radicador") + ":" + JsonBool(value.Radicador) + ","
+            + JsonString("extraEmail") + ":" + extra
+            + "}";
     }
 
     private static void AddBool(List<TenantConfigChange> changes, string field, bool previous, bool updated)

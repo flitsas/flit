@@ -45,10 +45,24 @@ public sealed class UpdateTenantSettingsHandler
                 "enrutamientoSMTP", $"Valor inválido. Valores permitidos: {SettingsWire.AllowedChannels}."));
         }
 
-        if (!SettingsWire.TryParseTarget(request.NotificationTarget, out var target))
+        NotificationTarget target = default;
+        if (request.NotificationTarget is not null
+            && !SettingsWire.TryParseTarget(request.NotificationTarget, out target))
         {
             errors.Add(new SettingsValidationError(
                 "notificationTarget", $"Valor inválido. Valores permitidos: {SettingsWire.AllowedTargets}."));
+        }
+
+        var extraEmail = request.DestinatariosNotificacion?.ExtraEmail;
+        if (!string.IsNullOrWhiteSpace(extraEmail))
+        {
+            var trimmed = extraEmail.Trim();
+            if (trimmed.Contains(',') || trimmed.Length > 320 || !SettingsWire.IsSingleEmail(trimmed))
+            {
+                errors.Add(new SettingsValidationError(
+                    "destinatariosNotificacion.extraEmail",
+                    "Debe ser un único correo válido (máximo 320 caracteres)."));
+            }
         }
 
         var methods = request.MetodosRecaudo ?? [];
@@ -94,17 +108,57 @@ public sealed class UpdateTenantSettingsHandler
             ?? TenantSettings.Default(command.TenantId);
 
         var switches = request.SwitchesMatricula!;
+        var byFamily = switches.OnlyOwnVehiclesByFamily;
+        // Nuevo contrato: onlyOwnVehiclesByFamily manda. Legado: onlyOwnVehicles solo actualiza TRASPASO.
+        var onlyTraspaso = byFamily?.Traspaso ?? switches.OnlyOwnVehicles;
+        var onlyMatriculas = byFamily?.Matriculas ?? previous.OnlyOwnVehiclesMatriculas;
+        var onlyOtros = byFamily?.Otros ?? previous.OnlyOwnVehiclesOtros;
+        if (byFamily is null)
+        {
+            // Cliente legado sin byFamily: el booleano único sigue siendo TRASPASO.
+            onlyTraspaso = switches.OnlyOwnVehicles;
+        }
+
+        // Bloqueo por familia: blockProcedureFamily manda; si no viene, MATRICULAS sigue en allowInitial
+        // (invertido) y TRASPASO/OTROS conservan el valor previo.
+        var block = switches.BlockProcedureFamily;
+        var allowInitial = block is null
+            ? switches.AllowInitialRegistration
+            : !block.Matriculas;
+        var blockTraspaso = block?.Traspaso ?? previous.BlockProcedureFamilyTraspaso;
+        var blockOtros = block?.Otros ?? previous.BlockProcedureFamilyOtros;
+
         var updated = new TenantSettings
         {
             TenantId = command.TenantId,
-            AllowInitialRegistration = switches.AllowInitialRegistration,
+            AllowInitialRegistration = allowInitial,
+            BlockProcedureFamilyTraspaso = blockTraspaso,
+            BlockProcedureFamilyOtros = blockOtros,
             AllowMiscNewVehicles = switches.AllowMiscNewVehicles,
-            OnlyOwnVehicles = switches.OnlyOwnVehicles,
+            OnlyOwnVehicles = onlyTraspaso,
+            OnlyOwnVehiclesMatriculas = onlyMatriculas,
+            OnlyOwnVehiclesOtros = onlyOtros,
             SignatureVaultEnabled = request.BaulFirmasActivo,
             PlatePreassignEnabled = request.PreasignacionPlacaActiva,
+            ValidateSoatWithRunt = request.ValidarSoatConRunt,
             PlateFlowSkipToTerminado = request.PlateFlowSkipToTerminado,
             NotificationChannel = channel,
-            NotificationTarget = target,
+            // HU #11357/#11362 (ADR-0043) — campo propio, ya no derivado del canal. Opcional: si el
+            // request no lo envía, se conserva el valor previo (ver UpdateTenantSettingsRequest).
+            PersonalizedDocumentsEnabled = request.DocumentosPersonalizadosActivo ?? previous.PersonalizedDocumentsEnabled,
+            TramiteApprovedEmailsEnabled = request.AvisosAprobacionActivos
+                ?? request.AvisosCambioEstadoActivos
+                ?? previous.TramiteApprovedEmailsEnabled,
+            TramiteRejectedEmailsEnabled = request.AvisosRechazoActivos
+                ?? request.AvisosCambioEstadoActivos
+                ?? previous.TramiteRejectedEmailsEnabled,
+            StateEmailRecipients = request.DestinatariosNotificacion is { } dest
+                ? TramiteStateEmailRecipients.FromJson(
+                    dest.Comprador, dest.VendedorOPropietario, dest.Radicador, dest.ExtraEmail)
+                : previous.StateEmailRecipients,
+            NotificationTarget = request.NotificationTarget is null
+                ? previous.NotificationTarget
+                : target,
             PaymentMethods = [.. methods],
             // Campos opcionales HU #10478: si el request los omite, se conserva el valor previo.
             RuntFailoverTimeoutMs = request.RuntFailoverTimeoutMs ?? previous.RuntFailoverTimeoutMs,
