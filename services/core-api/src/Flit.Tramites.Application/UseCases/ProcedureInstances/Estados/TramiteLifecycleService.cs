@@ -368,11 +368,37 @@ public sealed class TramiteLifecycleService(
         // NUEVA. En modo warn/off no bloquea (mismo interruptor por ambiente que el preflight).
         if (_validationPolicy.VehicleBodyTypeRequired == TramiteValidationMode.Block
             && VehicleBodyTypePolicy.ExigeCarroceriaPrevia(instance.TypeCode)
-            && string.IsNullOrWhiteSpace(FieldValue(instance, VehicleBodyTypePolicy.BodyTypeRuntFieldKey)))
+            && VehicleBodyTypePolicy.SinCarroceria(FieldValue(instance, VehicleBodyTypePolicy.BodyTypeRuntFieldKey)))
         {
             return (VehicleBodyTypePolicy.ErrorCode,
                 "No se puede preparar el trámite: el vehículo no tiene carrocería registrada en el RUNT, "
                 + "así que no hay carrocería que cambiar. Vuelve a consultar el vehículo o radica el trámite que corresponda.");
+        }
+
+        // El traslado de cuenta declara a qué organismo va, y ese dato es el objeto del trámite: sin
+        // él el FUR no puede decir a dónde se traslada. Se exige habilitado para la compañía —será
+        // ella quien radique allí después— igual que el organismo del propio trámite.
+        //
+        // No se confunde con el radicado, que es el trámite espejo: allí el destino ES el organismo
+        // del trámite y lo valida el gate de entrega, no este.
+        if (ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile)
+                .RequiresDestinationTransitOffice)
+        {
+            var destinoError = await ValidarOrganismoDestinoAsync(instance, ct).ConfigureAwait(false);
+            if (destinoError is not null)
+                return destinoError.Value;
+        }
+
+        // Misma naturaleza para el levantamiento de prenda: se comprueba sobre el ÚLTIMO semáforo
+        // persistido, no sobre los field_values, porque es el check quien distingue «el RUNT dice que
+        // no tiene» de «el RUNT no trajo el dato». Cierra la puerta de atrás de un borrador abierto
+        // antes de que la guarda del paso 1 existiera.
+        if (_validationPolicy.VehiclePrendaRequired == TramiteValidationMode.Block
+            && VehiclePrendaPolicy.Evaluar(instance.TypeCode, EstadoGravamenDelSnapshot(instance)) is not null)
+        {
+            return (VehiclePrendaPolicy.ErrorCode,
+                "No se puede preparar el trámite: el RUNT no reporta prenda sobre este vehículo, así que "
+                + "no hay gravamen que levantar. Vuelve a consultar el vehículo o radica el trámite que corresponda.");
         }
 
         // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
@@ -487,9 +513,69 @@ public sealed class TramiteLifecycleService(
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
 
+    /// <summary>
+    /// Organismo de DESTINO declarado: presente y habilitado para la compañía. Devuelve <c>null</c>
+    /// si puede avanzar, o el par (código, detalle) del bloqueo.
+    /// </summary>
+    private async Task<(string? Code, string? Detail)?> ValidarOrganismoDestinoAsync(
+        ProcedureInstance instance,
+        CancellationToken ct)
+    {
+        var destinoId = FieldValue(instance, TransitOfficeFieldKeys.DestinoId);
+        if (!Guid.TryParse(destinoId, out var id) || id == Guid.Empty)
+        {
+            return (TramiteEstadoErrores.OrganismoDestinoRequerido,
+                "Selecciona la secretaría de destino: es a dónde se traslada la cuenta y el FUR la declara.");
+        }
+
+        var habilitado = await transitOfficeGrantGate
+            .IsEnabledForTenantAsync(instance.TenantId, id, ct)
+            .ConfigureAwait(false);
+
+        // El grant pudo revocarse entre la elección y la radicación: el borrador vive días.
+        return habilitado
+            ? null
+            : (TramiteEstadoErrores.OrganismoDestinoRequerido,
+                "La secretaría de destino ya no está habilitada para la compañía. Selecciona otra "
+                + "antes de preparar el trámite.");
+    }
+
     private static string? FieldValue(ProcedureInstance instance, string fieldKey) =>
         instance.FieldValues.FirstOrDefault(f =>
             string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase))?.ValueText;
+
+    /// <summary>
+    /// Estado del check <c>gravamenes</c> en el último semáforo persistido, o <c>null</c> si no hay
+    /// snapshot o el check no está. Hermano de <see cref="HasGravamenWarn"/>, que responde lo
+    /// contrario (¿hay gravamen?) y no distingue «no tiene» de «no se sabe».
+    /// </summary>
+    private static string? EstadoGravamenDelSnapshot(ProcedureInstance instance)
+    {
+        var snapshot = instance.PreflightSnapshots
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefault();
+        if (snapshot is null || string.IsNullOrWhiteSpace(snapshot.Checks))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(snapshot.Checks);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                if (JsonStringEquals(el, "key", VehiclePrendaPolicy.GravamenCheckKey))
+                    return JsonStringValue(el, "status");
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// FEATURE-08 / HU-BE-06 (AC-06) — gate de preparación para tipos dinámicos: computa los blockers
@@ -653,6 +739,23 @@ public sealed class TramiteLifecycleService(
                 "Registra la decisión de prenda antes de preparar el trámite.");
         }
 
+        // El gravamen ES el trámite (inscribir / levantar prenda). Estos tipos caían en el `return`
+        // final: el único trámite cuyo objeto es la prenda era el único SIN gate de prenda, así que
+        // podía radicarse sin decisión, sin acreedor y sin certificado — y el FUR salía con la
+        // casilla 11 o 12 marcada, el numeral 20 en blanco y sin bloque en el párrafo 23.
+        //
+        // `PrendaGate` ya tenía el núcleo preparado para esto; lo que faltaba era llamarlo.
+        if (ProcedureTypeLayers.EsPrendaDeAccionUnica(instance.TypeCode))
+        {
+            return MapPrendaGateResult(
+                PrendaGate.EvaluateAccionUnica(prenda, docTipos),
+                prenda,
+                // El certificado no es opcional aquí aunque el OT no lo exija por configuración: es
+                // el soporte del acto que se está radicando, no un requisito añadido del organismo.
+                documentoExigido: true,
+                "Registra la información de la prenda antes de preparar el trámite.");
+        }
+
         return (null, null);
     }
 
@@ -673,6 +776,9 @@ public sealed class TramiteLifecycleService(
                     "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
             TramiteEstadoErrores.PrendaAcreedorRequerido =>
                 (TramiteEstadoErrores.PrendaAcreedorRequerido, DescribirAcreedorFaltante(prenda)),
+            TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida =>
+                (TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida,
+                    "Indica ante qué entidad se levantó la prenda: es lo que el FUR declara en las observaciones."),
             _ => (null, null),
         };
 
@@ -726,6 +832,21 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>Compara (case-insensitive) una propiedad JSON con un valor, probando Pascal y camelCase.</summary>
+    /// <summary>
+    /// Valor de una propiedad de texto tolerando el casing con que se serializó el snapshot (los hay
+    /// en <c>camelCase</c> y en <c>PascalCase</c>), igual que <see cref="JsonStringEquals"/>.
+    /// </summary>
+    private static string? JsonStringValue(JsonElement el, string prop)
+    {
+        foreach (var name in new[] { prop, char.ToUpperInvariant(prop[0]) + prop[1..] })
+        {
+            if (el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String)
+                return v.GetString();
+        }
+
+        return null;
+    }
+
     private static bool JsonStringEquals(JsonElement el, string prop, string expected)
     {
         foreach (var name in new[] { prop, char.ToUpperInvariant(prop[0]) + prop[1..] })

@@ -1,3 +1,5 @@
+using System.Reflection;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Xunit;
@@ -177,6 +179,24 @@ public sealed class FieldValueContractGuardTests
         // Organismo de tránsito y campos del FUR — los escribe el wizard vía PatchFieldValues.
         ["transit_office_code"] = new(WizardFur, Modo.Literal),
         ["transit_office_city"] = new(WizardFur, Modo.Literal),
+
+        // Organismo donde el vehículo está matriculado HOY, cuando NO coincide con el del trámite.
+        // Solo lo escribe el radicado de cuenta, cuyo organismo canónico es el DESTINO (quien
+        // aprueba); el encabezado del FUR necesita el actual y lo lee de aquí. Llaves CONSTRUIDAS en
+        // ejecución por `RedirigirOrganismoDelRunt`, reetiquetando las canónicas.
+        //
+        // `transit_office_actual_id` NO se declara: se escribe (el id resuelto es útil en pantalla y
+        // para diagnóstico) pero ningún documento lo lee, y este registro describe lo que los
+        // documentos consumen. Declararlo sería ruido que esconde el siguiente hueco real.
+        // Organismo al que va la cuenta en el TRASLADO, que lo declara sin radicarse allí: el trámite
+        // lo expide el de origen. Lo escribe el paso 1 del asistente vía PatchFieldValues, igual que
+        // las observaciones del trámite. (En el radicado el destino ES el organismo del trámite, así
+        // que va en las canónicas y no por aquí.)
+        ["transit_office_destino_name"] = new(WizardTramite, Modo.Literal),
+
+        ["transit_office_actual_code"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
+        ["transit_office_actual_name"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
+        ["transit_office_actual_city"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
         ["fur_observations"] = new(WizardTramite, Modo.Literal), // HU #10987 — productor en P6 del wizard
         ["fur_processing_date"] = new(WizardFur, Modo.Literal), // HU #10988
 
@@ -287,6 +307,24 @@ public sealed class FieldValueContractGuardTests
         {
             llaves.Add(m.Groups[1].Value);
             llaves.Add(m.Groups[2].Value);
+        }
+
+        // Llaves referidas por CONSTANTE en vez de por literal. El organismo de tránsito las tiene
+        // así porque las comparten tres capas y el radicado de cuenta introdujo una segunda familia
+        // (`transit_office_actual_*`) que no puede quedar a merced de un typo. Se resuelven por
+        // reflexión sobre la clase de constantes, de modo que añadir una allí la registra aquí sola.
+        var porConstante = typeof(TransitOfficeFieldKeys)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .ToDictionary(f => f.Name, f => (string)f.GetRawConstantValue()!, StringComparer.Ordinal);
+
+        foreach (Match m in Regex.Matches(
+                     fuente,
+                     $@"{nameof(TransitOfficeFieldKeys)}\.(\w+)",
+                     RegexOptions.CultureInvariant))
+        {
+            if (porConstante.TryGetValue(m.Groups[1].Value, out var llave))
+                llaves.Add(llave);
         }
 
         // HU #11305 — las llaves `rues_*` que el lector enumera para el respaldo también son consumo,

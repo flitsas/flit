@@ -38,6 +38,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => false,
   isVehicleBodyTypeMissing: () => false,
+  isVehiclePrendaMissing: () => false,
 }));
 
 vi.mock('@/components/admin/Toast', () => ({ useToast: () => ({ show: vi.fn() }) }));
@@ -112,14 +113,26 @@ describe('ADR-0050 — un trámite de la familia OTROS ya no se comporta como un
   it('pide la placa, porque el vehículo ya está matriculado', async () => {
     renderBlindaje();
 
-    expect(await screen.findByLabelText('Placa')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Placa del vehículo')).toBeInTheDocument();
     expect(screen.queryByLabelText('Número VIN')).not.toBeInTheDocument();
+  });
+
+  it('la consulta del vehículo nombra el trámite elegido, no «el traspaso»', async () => {
+    // El copy se bifurcaba solo por VIN/placa, así que TODO lo que entra por placa —la familia OTROS
+    // entera— anunciaba «antes de iniciar el traspaso».
+    renderBlindaje();
+
+    await screen.findByLabelText('Placa del vehículo');
+    expect(
+      screen.getByText(/antes de iniciar el trámite de blindaje/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/iniciar el traspaso/i)).not.toBeInTheDocument();
   });
 
   it('no ofrece elegir el organismo de tránsito: lo impone el RUNT', async () => {
     renderBlindaje();
 
-    await screen.findByLabelText('Placa');
+    await screen.findByLabelText('Placa del vehículo');
     expect(
       screen.queryByRole('combobox', { name: /secretaría de tránsito/i }),
     ).not.toBeInTheDocument();
@@ -135,11 +148,48 @@ describe('ADR-0050 — un trámite de la familia OTROS ya no se comporta como un
     expect(screen.getByRole('button', { name: 'Cambiar tipo' })).toBeInTheDocument();
   });
 
+  it('el radicado de cuenta escoge secretaría, pero no dígito de placa ni prioridad', async () => {
+    // La tarjeta de radicación se pinta aquí porque el trámite ELIGE organismo —llevar la cuenta a
+    // otro ES el trámite—, no porque pida una placa nueva. Cuando esas dos preguntas compartían
+    // condición, el radicado acababa preguntando en qué dígito prefiere que termine una placa que el
+    // vehículo ya tiene, y duplicando el interruptor de prioridad que vive en la tarjeta del
+    // organismo actual.
+    mocks.getWizardPreview.mockResolvedValue({
+      ...WIZARD_BLINDAJE,
+      tipologiaCodigo: 'RADICADO_CUENTA',
+      typeName: 'Radicado de cuenta',
+      capabilities: { ...CAPS_OTROS, operatorChoosesTransitOffice: true },
+    });
+    mocks.listTransitOffices.mockResolvedValue([
+      { id: 'ot-1', code: '25175000', name: 'SECRETARIA DE MOVILIDAD DE CHIA', cityCode: '25175' },
+    ]);
+
+    render(
+      <TramiteWizard
+        procedureTypeCode="RADICADO_CUENTA"
+        family="OTROS"
+        title="Radicado de cuenta"
+        onCreated={() => {}}
+        onExit={() => {}}
+      />,
+    );
+
+    // La secretaría sí: es el destino, y se escoge antes de consultar.
+    await screen.findByText('Organismo de Tránsito y Radicación');
+
+    expect(
+      screen.queryByLabelText('Dígito de preasignación de placa'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Trámite prioritario' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('pide el checklist informativo por el código del tipo', async () => {
     const user = userEvent.setup();
     renderBlindaje();
 
-    await screen.findByLabelText('Placa');
+    await screen.findByLabelText('Placa del vehículo');
     await user.click(screen.getByRole('button', { name: 'Documentos a tener listos' }));
 
     // Antes se pedía por modalidad, así que un blindaje recibía los documentos de un traspaso.

@@ -138,6 +138,7 @@ const PRENDA_SIN_PRENDA: PrendaData = {
   estado: 'vigente',
   acreedorNombre: null,
   acreedorDocumento: null,
+  levantamientoEntidad: null,
   createdAt: '2026-08-18T00:00:00Z',
 };
 

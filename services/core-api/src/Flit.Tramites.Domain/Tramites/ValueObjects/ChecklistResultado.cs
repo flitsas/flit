@@ -16,4 +16,25 @@ public sealed record ChecklistResultado(
     int ObligatoriosTotal,
     int ObligatoriosSatisfechos,
     IReadOnlyList<string> FaltanObligatorios,
-    bool Completo);
+    bool Completo)
+{
+    /// <summary>
+    /// Checklist de un trámite cuyo tipo todavía no tiene documentos configurados: cero ítems y, por
+    /// tanto, completo (no falta ningún obligatorio porque no hay ninguno).
+    ///
+    /// <para>Es un estado legítimo desde ADR-0050: el catálogo en código describe dos tipos y el
+    /// resto vive en la matriz documental, que un administrador puede no haber configurado aún. Antes
+    /// esa combinación no tenía representación y el endpoint respondía 422.</para>
+    /// </summary>
+    public static ChecklistResultado Vacio(string? codigo) =>
+        new(
+            Codigo: codigo ?? string.Empty,
+            Nombre: codigo ?? string.Empty,
+            Items: [],
+            Total: 0,
+            Satisfechos: 0,
+            ObligatoriosTotal: 0,
+            ObligatoriosSatisfechos: 0,
+            FaltanObligatorios: [],
+            Completo: true);
+}

@@ -22,7 +22,7 @@ export const PLATE_PREFERRED_LAST_DIGIT_DECLARED_KEY = 'plate_preferred_last_dig
 
 /**
  * Verdadero cuando el selector de dígito de preferencia está realmente en juego y por tanto exige
- * una elección consciente antes de continuar: paso de matrícula, el vehículo no trae placa del RUNT,
+ * una elección consciente antes de continuar: el trámite PIDE una placa nueva al organismo, el vehículo no trae placa del RUNT,
  * ya hay organismo elegido y ese organismo (o la compañía) tiene la ruta de preasignación activa.
  *
  * Con la preasignación apagada, sin organismo todavía o mientras se consulta el estado de la ruta,
@@ -30,13 +30,13 @@ export const PLATE_PREFERRED_LAST_DIGIT_DECLARED_KEY = 'plate_preferred_last_dig
  * de continuar (AC4 de la HU #11628).
  */
 export function isPlateDigitDecisionRequired(params: {
-  muestraRadicacion: boolean;
+  muestraDigitoPlaca: boolean;
   vehiculoConPlacaRunt: boolean;
   transitOfficeId: string;
   preasignacionActiva: boolean | null;
 }): boolean {
   return (
-    params.muestraRadicacion &&
+    params.muestraDigitoPlaca &&
     !params.vehiculoConPlacaRunt &&
     !!params.transitOfficeId &&
     params.preasignacionActiva === true
@@ -48,7 +48,7 @@ export function isPlateDigitDecisionRequired(params: {
  * la tomó (`digitoPlacaUiValue === ''`). Gatea "Continuar y guardar" en el paso de matrícula (AC1).
  */
 export function isPlateDigitUndecided(params: {
-  muestraRadicacion: boolean;
+  muestraDigitoPlaca: boolean;
   vehiculoConPlacaRunt: boolean;
   transitOfficeId: string;
   preasignacionActiva: boolean | null;

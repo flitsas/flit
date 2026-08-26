@@ -60,6 +60,38 @@ public sealed record ProcedureTypeGateProfile
     /// </summary>
     public bool? AllowsComplementaryPrenda { get; init; }
 
+    /// <summary>
+    /// Quién decide el organismo de tránsito del trámite: el RUNT o el operador.
+    ///
+    /// <para>Hasta ahora esto se deducía del modo de entrada —entra por VIN ⇒ lo elige el operador;
+    /// entra por placa ⇒ lo impone el RUNT— y funcionaba porque las dos ramas agotaban el catálogo.
+    /// Un radicado de cuenta lo rompe: entra por placa (el vehículo ya está matriculado) y sin
+    /// embargo el organismo lo elige el operador, porque el trámite consiste precisamente en llevar
+    /// la cuenta a OTRO organismo. Deducirlo del identificador no puede describir ese caso.</para>
+    ///
+    /// <para><c>null</c> NO es <c>RUNT</c>: significa «lo que diga el modo de entrada», que es el
+    /// comportamiento previo. Resuélvelo SIEMPRE con <see cref="OperatorChoosesTransitOffice"/>.</para>
+    /// </summary>
+    public string? TransitOfficeSource { get; init; }
+
+    /// <summary>El organismo lo impone el RUNT (donde el vehículo está matriculado).</summary>
+    public const string TransitOfficeSourceRunt = "RUNT";
+
+    /// <summary>El organismo lo elige el operador entre los habilitados para su compañía.</summary>
+    public const string TransitOfficeSourceOperator = "OPERATOR";
+
+    /// <summary>
+    /// El trámite DECLARA un organismo de destino además del suyo. No es lo mismo que
+    /// <see cref="TransitOfficeSource"/>: aquí el trámite se radica y se aprueba donde siempre —el
+    /// organismo actual del vehículo— y el destino es un dato que el formulario declara.
+    ///
+    /// <para>Es el traslado de cuenta: lo expide el organismo de ORIGEN, que valida el paz y salvo y
+    /// da salida a la cuenta; el propietario tiene después 60 días hábiles para radicarla en el
+    /// nuevo. El radicado de cuenta es el trámite espejo y NO lleva esta llave: allí el destino es el
+    /// organismo del trámite, no un dato declarado.</para>
+    /// </summary>
+    public bool RequiresDestinationTransitOffice { get; init; }
+
     /// <summary>Entrada por placa (vehículo ya matriculado).</summary>
     public const string EntryModePlate = "PLATE";
 
@@ -109,4 +141,19 @@ public sealed record ProcedureTypeGateProfile
     /// <summary>¿Admite un gravamen complementario? Misma precedencia perfil → familia.</summary>
     public bool ComplementaryPrendaAllowed(string? familyCode) =>
         AllowsComplementaryPrenda ?? ProcedureTypeLayers.FamiliaAcumulaComplementarios(familyCode);
+
+    /// <summary>
+    /// ¿El organismo de tránsito lo elige el operador? Lo declarado manda; sin declaración decide el
+    /// modo de entrada (VIN ⇒ el vehículo aún no tiene organismo, lo elige el operador), que es el
+    /// comportamiento previo a esta llave.
+    /// </summary>
+    public bool OperatorChoosesTransitOffice()
+    {
+        if (string.Equals(TransitOfficeSource, TransitOfficeSourceOperator, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(TransitOfficeSource, TransitOfficeSourceRunt, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return string.Equals(EntryMode, EntryModeVin, StringComparison.OrdinalIgnoreCase);
+    }
 }

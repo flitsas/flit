@@ -68,9 +68,35 @@ public static class VehicleBodyTypePolicy
             return null;
         if (!consultaRespondio)
             return null;
-        if (!string.IsNullOrWhiteSpace(carroceriaReportada))
+        if (!SinCarroceria(carroceriaReportada))
             return null;
 
         return new VehicleBodyTypeBlock(ProcedureTypeCambioCarroceria);
     }
+
+    /// <summary>
+    /// «No tiene carrocería» tiene DOS formas en el RUNT y hay que reconocer las dos: el campo puede
+    /// no venir, o venir con el valor <c>SIN CARROCERIA</c>.
+    ///
+    /// <para><b>Por qué no basta con mirar si está vacío.</b> <c>SIN CARROCERIA</c> no es relleno: es
+    /// una entrada real del catálogo oficial (código <c>0</c> en <c>carroceria.xlsx</c>) y es la
+    /// ÚNICA opción de seis clases —motocicleta, mototriciclo, cuatrimoto, ciclomotor, tricimoto y
+    /// cuadriciclo—, así que para esos vehículos el RUNT siempre responde con un valor no vacío que
+    /// significa exactamente lo contrario de tener carrocería. Comprobando solo el vacío, una
+    /// motocicleta pasaba el pre-vuelo y llegaba a un paso donde el selector de carrocería nueva
+    /// no tenía ni una opción que ofrecer (el catálogo excluye el valor actual del RUNT).</para>
+    /// </summary>
+    public static bool SinCarroceria(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+            return true;
+
+        var norm = Norm(valor);
+        // El guion es el hueco que el propio formulario pinta cuando no hay dato.
+        return norm is "SIN CARROCERIA" or "SIN CARROCERÍA" or "-";
+    }
+
+    /// <summary>Trim + mayúsculas + espacios internos colapsados, para no fallar por un doble espacio.</summary>
+    private static string Norm(string valor) =>
+        string.Join(' ', valor.Trim().ToUpperInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
 }

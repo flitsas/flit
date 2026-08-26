@@ -251,6 +251,7 @@ describe('PrendaForm (matrícula, R4)', () => {
         decision: 'registrar',
         acreedorNombre: 'Banco XYZ',
         acreedorDocumento: '900123456',
+        levantamientoEntidad: null,
       }),
     );
   });
@@ -344,6 +345,7 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
       decision: 'solicitar',
       acreedorNombre: 'Banco ABC',
       acreedorDocumento: '900555666',
+      levantamientoEntidad: null,
     });
   });
 
@@ -382,6 +384,7 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
       decision: 'sin_prenda',
       acreedorNombre: null,
       acreedorDocumento: null,
+      levantamientoEntidad: null,
     });
   });
 
@@ -407,6 +410,7 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
       decision: 'omitir',
       acreedorNombre: null,
       acreedorDocumento: null,
+      levantamientoEntidad: null,
     });
   });
 
@@ -589,5 +593,96 @@ describe('PrendaForm — decisión fija del tipo (familia OTROS)', () => {
       await screen.findByText('¿Al vehículo se le asociará una prenda?'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Este trámite es/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Trámite de levantamiento de prenda: su FUR declara en el párrafo 23 ANTE QUIÉN se levantó, y en el
+ * numeral 20 «A FAVOR DE» al acreedor. Por eso aquí se captura la entidad y —a diferencia del
+ * traspaso— el acreedor SÍ se persiste: antes se mostraba precargado del RUNT pero viajaba como
+ * null, y el formulario salía afirmando el levantamiento sin decir de quién.
+ */
+describe('PrendaForm — levantamiento como trámite propio', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client.getPrenda.mockResolvedValue(null);
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+    client.getAttachments.mockResolvedValue([]);
+    client.putPrenda.mockResolvedValue({
+      id: '1',
+      decision: 'levantar',
+      estado: 'vigente',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: null,
+      createdAt: '2026-08-25T00:00:00Z',
+    } as never);
+  });
+
+  it('captura la entidad ante la que se levantó y persiste también el acreedor', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['levantar']}
+        exigeEntidadLevantamiento
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const entidad = await screen.findByLabelText('Entidad ante la que se levantó', {
+      exact: false,
+    });
+    fireEvent.change(entidad, { target: { value: 'Notaría 15 de Medellín' } });
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledWith('abc', {
+      decision: 'levantar',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: 'Notaría 15 de Medellín',
+    });
+  });
+
+  it('sin entidad no guarda y explica por qué', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['levantar']}
+        exigeEntidadLevantamiento
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+    await screen.findByLabelText('Entidad ante la que se levantó', { exact: false });
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(false);
+    expect(client.putPrenda).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByText(/ante qué entidad se levantó la prenda/i)).toBeInTheDocument(),
+    );
+  });
+
+  it('en traspaso NO se pide la entidad: ese flujo conserva su literal', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    expect(
+      screen.queryByLabelText('Entidad ante la que se levantó', { exact: false }),
+    ).not.toBeInTheDocument();
   });
 });

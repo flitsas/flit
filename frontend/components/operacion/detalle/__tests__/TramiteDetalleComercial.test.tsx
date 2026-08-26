@@ -56,6 +56,7 @@ describe('TramiteDetalleComercial — estado lleno', () => {
       estado: 'vigente',
       acreedorNombre: null,
       acreedorDocumento: null,
+      levantamientoEntidad: null,
       createdAt: '2026-05-17T10:38:00Z',
     });
 
@@ -147,6 +148,7 @@ describe('TramiteDetalleComercial — fallo de una sola llamada', () => {
       estado: 'vigente',
       acreedorNombre: 'Banco XYZ',
       acreedorDocumento: '900123456',
+      levantamientoEntidad: null,
       createdAt: '2026-01-01T00:00:00Z',
     });
 

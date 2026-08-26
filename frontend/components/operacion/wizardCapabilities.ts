@@ -47,6 +47,33 @@ export interface CapacidadesEfectivas {
    * lo responde {@link esTipoDePrenda} y ahí la prenda se pinta igual, porque es el trámite.
    */
   permitePrendaComplementaria: boolean;
+  /**
+   * El organismo de tránsito lo escoge el gestor entre los habilitados de su compañía, en vez de
+   * imponerlo el RUNT.
+   *
+   * <p>Antes esto era `entraPorVin`: entra por VIN ⇒ el vehículo aún no tiene organismo ⇒ lo elige el
+   * gestor. Con veintiún tipos deja de bastar — un radicado de cuenta entra por PLACA y aun así lo
+   * elige, porque el trámite es precisamente llevar la cuenta a otro organismo.</p>
+   */
+  eligeOrganismo: boolean;
+  /**
+   * El trámite DECLARA a qué organismo va, además del suyo. Es el traslado de cuenta: lo expide el
+   * organismo de ORIGEN —él valida el paz y salvo y él aprueba— y el destino solo se declara, para
+   * que el FUR diga a dónde se traslada.
+   *
+   * <p>Es el ESPEJO de {@link eligeOrganismo}, no lo mismo: allí el organismo elegido es el del
+   * trámite (radicado de cuenta); aquí el del trámite lo sigue imponiendo el RUNT.</p>
+   */
+  declaraOrganismoDestino: boolean;
+  /**
+   * El trámite PIDE una placa nueva al organismo: matrícula, rematrícula, duplicado de placa.
+   *
+   * <p>Es lo que decide si la preferencia de dígito de preasignación tiene sentido. Antes se
+   * deducía de {@link eligeOrganismo}, y por eso un radicado de cuenta —que elige organismo porque
+   * el trámite es llevar la cuenta a otro— acababa preguntando en qué dígito prefiere que termine
+   * una placa que el vehículo ya tiene.</p>
+   */
+  pidePlaca: boolean;
 }
 
 /**
@@ -84,6 +111,12 @@ function desdeModalidad(familia: ProcedureFamily | WizardModalidad): Capacidades
     validaIdentidadDelVendedor: esTraspaso,
     permiteTransformacionesComplementarias: familiaAcumula(familia),
     permitePrendaComplementaria: familiaAcumula(familia),
+    // El respaldo reproduce el criterio previo: solo elige organismo quien entra por VIN.
+    eligeOrganismo: !esTraspaso && familia !== 'OTROS',
+    // Ningún tipo del respaldo declara destino: son las dos modalidades heredadas.
+    declaraOrganismoDestino: false,
+    // El respaldo reproduce el criterio previo: pide placa quien entra por VIN.
+    pidePlaca: !esTraspaso && familia !== 'OTROS',
   };
 }
 
@@ -114,6 +147,15 @@ export function capacidadesEfectivas(
       capabilities.allowsComplementaryTransformations ?? familiaAcumula(familia),
     permitePrendaComplementaria:
       capabilities.allowsComplementaryPrenda ?? familiaAcumula(familia),
+    // Ausente ⇒ el criterio anterior a la llave: lo elige quien entra por VIN.
+    eligeOrganismo:
+      capabilities.operatorChoosesTransitOffice ??
+      (capabilities.entryMode ?? '').toUpperCase() === 'VIN',
+    declaraOrganismoDestino: capabilities.requiresDestinationTransitOffice ?? false,
+    // Ausente ⇒ el criterio anterior a la llave: pide placa quien entra por VIN.
+    pidePlaca:
+      capabilities.requiresPlateRequest ??
+      (capabilities.entryMode ?? '').toUpperCase() === 'VIN',
   };
 }
 
@@ -150,6 +192,20 @@ export function esTipoDePrenda(codigo: string | null | undefined): boolean {
     v === 'LEVANTAR_INSCRIBIR_PRENDA' ||
     v === 'CAMBIO_ACREEDOR'
   );
+}
+
+/**
+ * Tipos prendarios de UNA sola acción sobre el gravamen. Espejo de
+ * `ProcedureTypeLayers.EsPrendaDeAccionUnica` en el dominio.
+ *
+ * <p>En ellos el certificado NO es opcional aunque la compañía haya desactivado la exigencia del
+ * organismo: es el soporte del acto que se está radicando, no un requisito añadido por el OT. El
+ * gate del servidor lo exige siempre, así que la pantalla no puede rotularlo «Opcional» y bloquear
+ * después al radicar.</p>
+ */
+export function esPrendaDeAccionUnica(codigo: string | null | undefined): boolean {
+  const v = (codigo ?? '').trim().toUpperCase();
+  return v === 'PRENDA_INSCRIPCION' || v === 'LEVANTAMIENTO_PRENDA';
 }
 
 /**

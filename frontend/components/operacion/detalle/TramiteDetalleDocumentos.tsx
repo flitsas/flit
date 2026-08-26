@@ -8,6 +8,7 @@ import {
 } from '@/components/operacion/TramiteDocumentosModal';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { documentLabel } from '@/lib/tramites/document-labels';
+import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
 import { formatFecha } from '@/lib/format/date';
 import type {
   ChecklistItemView,
@@ -173,9 +174,12 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
     };
   }, [instanceId, tenantId, reloadKey]);
 
-  const checklistDocTipos = new Set(checklist.map((i) => i.docTipo).filter(Boolean));
+  const satisfiedCount = checklist.filter((i) => i.satisfied).length;
+  const checklistDocTipos = new Set(
+    checklist.map((i) => i.docTipo?.toLowerCase()).filter(Boolean),
+  );
   const otrosAdjuntos = attachments.filter(
-    (a) => a.source !== 'system' && !checklistDocTipos.has(a.tipo),
+    (a) => a.source !== 'system' && !checklistDocTipos.has(a.tipo.toLowerCase()),
   );
   const isEmpty = checklist.length === 0 && otrosAdjuntos.length === 0;
 
@@ -205,15 +209,21 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
 
   return (
     <div className="flex flex-col gap-4">
-      <TarjetaDetalle titulo="Documentos del trámite" className="h-full">
+      <TarjetaDetalle
+        titulo="Documentos del trámite"
+        className="h-full"
+        accion={
+          <span className="shrink-0 text-xs font-semibold text-[#162744] dark:text-white">
+            {satisfiedCount} de {checklist.length} requisitos cumplidos
+          </span>
+        }
+      >
         {checklist.length === 0 ? (
           <SeccionVacia mensaje="Este trámite no tiene requisitos de documentos configurados." />
         ) : (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Requisitos del trámite">
             {checklist.map((item) => {
-              const attachment = item.docTipo
-                ? attachments.find((a) => a.tipo === item.docTipo)
-                : undefined;
+              const attachment = findAttachmentByDocTipo(attachments, item.docTipo);
               return (
                 <RequisitoRow
                   key={item.key}

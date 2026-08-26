@@ -243,7 +243,17 @@ public static class ChecklistEngine
         IReadOnlyCollection<string>? docTipos)
     {
         var manual = checklistEstado ?? new Dictionary<string, bool>();
-        var docs = new HashSet<string>(docTipos ?? []);
+        // El emparejamiento docTipo ↔ tipo del adjunto IGNORA mayúsculas, porque los dos extremos no
+        // guardan el código igual: `document_types.code` conserva lo que escribió el administrador en
+        // el módulo Documental (el saneador solo filtra a [A-Za-z0-9-]), mientras que la subida
+        // persiste `procedure_instance_attachments.tipo` en minúsculas. Con comparación sensible, un
+        // documento con una sola mayúscula en el código se subía —fichero y fila incluidos— y el
+        // checklist seguía pidiéndolo: para el gestor, «no carga».
+        //
+        // No se arregla normalizando el catálogo: conviven a propósito códigos con distinto casing
+        // (`SOAT` del seed de organismos y `soat` del catálogo operativo), así que pasarlos todos a
+        // minúsculas los colisionaría contra uq_document_types_code.
+        var docs = new HashSet<string>(docTipos ?? [], StringComparer.OrdinalIgnoreCase);
 
         var items = checklistItems.Select(it =>
         {

@@ -167,6 +167,10 @@ services:
       # Matriz acordada: DEV warn/warn · QA block/warn · PDN block/block (local va por appsettings.Development.json).
       TramiteValidations__DuplicateActiveProcedure__Mode: ${TRAMITE_VALIDATION_DUPLICATE_MODE:-block}
       TramiteValidations__VehicleRegistrationState__Mode: ${TRAMITE_VALIDATION_VEHICLE_STATE_MODE:-block}
+      # Cambio de carrocería sobre un vehículo que el RUNT reporta SIN CARROCERIA (o sin el dato).
+      TramiteValidations__VehicleBodyTypeRequired__Mode: ${TRAMITE_VALIDATION_BODY_TYPE_MODE:-block}
+      # Levantamiento de prenda sobre un vehículo que el RUNT no reporta con gravamen.
+      TramiteValidations__VehiclePrendaRequired__Mode: ${TRAMITE_VALIDATION_PRENDA_MODE:-block}
       # SMTP — vars ya presentes en el .env del VPS
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}

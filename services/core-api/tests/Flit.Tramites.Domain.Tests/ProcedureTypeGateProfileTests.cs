@@ -94,4 +94,34 @@ public sealed class ProcedureTypeGateProfileTests
     {
         ProcedureTypeGateProfile.IsValidEntryMode(value).Should().Be(valid);
     }
+
+    // ── Quién elige el organismo de tránsito ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("OPERATOR", true)]
+    [InlineData("operator", true)]
+    [InlineData("RUNT", false)]
+    [InlineData("runt", false)]
+    public void OperatorChoosesTransitOffice_LoDeclaradoManda(string fuente, bool esperado)
+    {
+        // Un radicado de cuenta entra por PLACA y aun así lo elige el operador: deducirlo del
+        // identificador no puede describir ese caso, por eso se declara.
+        var perfil = ProcedureTypeGateProfile.FromJson(
+            $$"""{"entryMode":"PLATE","transitOfficeSource":"{{fuente}}"}""");
+
+        perfil.OperatorChoosesTransitOffice().Should().Be(esperado);
+    }
+
+    [Theory]
+    [InlineData("VIN", true)]
+    [InlineData("PLATE", false)]
+    [InlineData(null, false)]
+    public void OperatorChoosesTransitOffice_SinDeclarar_CaeAlModoDeEntrada(string? entryMode, bool esperado)
+    {
+        // Ausente NO es RUNT: es el criterio anterior a la llave, para que los veinte tipos
+        // restantes y los snapshots ya congelados se comporten exactamente igual que antes.
+        var json = entryMode is null ? "{}" : $$"""{"entryMode":"{{entryMode}}"}""";
+
+        ProcedureTypeGateProfile.FromJson(json).OperatorChoosesTransitOffice().Should().Be(esperado);
+    }
 }

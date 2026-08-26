@@ -137,6 +137,25 @@ describe('trámites complementarios (art. 5.1.8)', () => {
     expect(capacidadesEfectivas(OTROS, 'OTROS').permiteTransformacionesComplementarias).toBe(false);
   });
 
+  it('la cancelación de matrícula no acumula nada, aunque su familia sí', () => {
+    // Acumular presupone un vehículo que sigue inscrito; la cancelación lo saca del registro. Es la
+    // excepción por TIPO que las llaves del perfil existen para declarar (DDL 93): sin ellas, el
+    // asistente le pintaba «Asignación de Prenda» y «Trámites Simultáneos» por ser MATRICULAS.
+    const caps = capacidadesEfectivas(
+      {
+        ...MATRICULA,
+        allowsComplementaryTransformations: false,
+        allowsComplementaryPrenda: false,
+      },
+      'MATRICULAS',
+    );
+
+    expect(caps.permitePrendaComplementaria).toBe(false);
+    expect(caps.permiteTransformacionesComplementarias).toBe(false);
+    // La excepción es de este tipo, no de la familia: la matrícula inicial conserva los suyos.
+    expect(capacidadesEfectivas(MATRICULA, 'MATRICULAS').permitePrendaComplementaria).toBe(true);
+  });
+
   it('el respaldo sin capacidades también distingue la familia', () => {
     expect(capacidadesEfectivas(null, 'OTROS').permitePrendaComplementaria).toBe(false);
     expect(capacidadesEfectivas(null, 'TRASPASO').permitePrendaComplementaria).toBe(true);

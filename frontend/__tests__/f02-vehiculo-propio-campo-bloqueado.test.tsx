@@ -34,6 +34,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => false,
   isVehicleBodyTypeMissing: () => false,
+  isVehiclePrendaMissing: () => false,
 }));
 
 // El NIT del tenant sale del JWT; sin él no hay con qué precargar ni qué bloquear.

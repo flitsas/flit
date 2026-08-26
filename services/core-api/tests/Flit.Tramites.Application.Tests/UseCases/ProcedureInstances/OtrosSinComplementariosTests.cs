@@ -235,4 +235,39 @@ public sealed class OtrosSinComplementariosTests
 
         error.Should().BeNull();
     }
+
+    [Theory]
+    [InlineData("cambio_color")]
+    [InlineData("cambio_carroceria")]
+    [InlineData("cambio_combustible")]
+    public async Task Cancelacion_NoAdmiteTransformacionesComplementarias(string bandera)
+    {
+        // Declararle un cambio de color al vehículo que deja de circular no es un trámite
+        // simultáneo. Misma excepción por TIPO que la prenda (DDL 93), sobre una familia que sí
+        // acumula: por eso el asistente le pintaba «Trámites Simultáneos».
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance(ProcedureTypeFixture.Cancelacion, ("vehicle_color_runt", "BLANCO"));
+
+        var (_, error) = await Patch(instance, ct, (bandera, "true"), ("vehicle_color", "NEGRO"));
+
+        error.Should().Be(PatchFieldValuesHandler.ComplementoNoAdmitidoError);
+    }
+
+    [Theory]
+    [InlineData(PrendaDecision.Registrar)]
+    [InlineData(PrendaDecision.SinPrenda)]
+    public async Task Cancelacion_NoAdmitePrendaComplementaria_AunqueSuFamiliaAcumule(string decision)
+    {
+        // La excepción por TIPO dentro de una familia que sí acumula (DDL 93): inscribir una
+        // limitación a la propiedad sobre una matrícula que se está cancelando no es un trámite
+        // simultáneo, es una contradicción. El asistente le pintaba la sección por ser MATRICULAS.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance(ProcedureTypeFixture.Cancelacion);
+
+        var (result, error) = await PrendaSut(instance, ct)
+            .HandleAsync(instance.Id, Tenant, new RegistrarPrendaInput(decision, "Banco XYZ", "900123456"), ct: ct);
+
+        error.Should().Be(RegistrarPrendaHandler.PrendaNoAdmitidaError);
+        result.Should().BeNull();
+    }
 }

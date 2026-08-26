@@ -46,6 +46,36 @@ public static class ProcedureTypeLayers
         _ => false,
     };
 
+    /// <summary>
+    /// Tipos prendarios de UNA sola acción sobre el gravamen: inscribirlo o levantarlo.
+    ///
+    /// <para>Al ser una sola, la decisión la fija el tipo y el asistente no ofrece elegir: afirma lo
+    /// que va a pasar y pide únicamente lo que hay que capturar. Eso permite además que el gate
+    /// exija TODO lo que esa acción necesita para el formulario —incluido el acreedor de un
+    /// levantamiento, que llena el numeral 20 «A FAVOR DE»—, cosa que no se puede hacer donde la
+    /// decisión es una elección del gestor entre varias.</para>
+    ///
+    /// <para><b>Por qué no son los cuatro de <see cref="EsTipoPrendaBase"/>.</b>
+    /// <c>LEVANTAR_INSCRIBIR_PRENDA</c> y <c>CAMBIO_ACREEDOR</c> ejecutan DOS acciones en el mismo
+    /// trámite (se levanta un gravamen y se inscribe otro), y el expediente guarda una sola decisión
+    /// de prenda: cómo se capturan esas dos caras está sin resolver. Ambos están inactivos en el
+    /// catálogo, así que quedan fuera hasta que se decida, en vez de forzarlos a un modelo de una
+    /// sola acción que no los describe.</para>
+    /// </summary>
+    public static bool EsPrendaDeAccionUnica(string? code) => Norm(code) switch
+    {
+        "PRENDA_INSCRIPCION" or "LEVANTAMIENTO_PRENDA" => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// El trámite actúa sobre un gravamen que YA existe, así que exige que el RUNT lo reporte: sin
+    /// prenda inscrita no hay nada que levantar. <c>PRENDA_INSCRIPCION</c> no entra —constituye el
+    /// gravamen, no lo presupone— y puede inscribirse aunque el vehículo ya tenga otro.
+    /// </summary>
+    public static bool ExigePrendaPreviaEnRunt(string? code) =>
+        Norm(code) == "LEVANTAMIENTO_PRENDA";
+
     /// <summary>Atributo que el tipo cambia por definición; <see cref="TransformacionBase.Ninguna"/> si no cambia ninguno.</summary>
     public static TransformacionBase TransformacionDelTipo(string? code) => Norm(code) switch
     {

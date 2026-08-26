@@ -38,6 +38,23 @@ internal static class ProcedureTypeFixture
 
     public static ProcedureType Traspaso => TraspasoInstance;
 
+    /// <summary>
+    /// Cancelación de matrícula: familia MATRICULAS —que acumula— con los complementarios apagados
+    /// por TIPO (DDL 93). Acumular presupone un vehículo que sigue inscrito, y este trámite lo saca
+    /// del registro.
+    /// </summary>
+    public static ProcedureType Cancelacion => CancelacionInstance;
+
+    private static readonly ProcedureType CancelacionInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000a9"),
+        Code = "CANCELACION_MATRICULA",
+        Name = "Cancelación de matrícula",
+        Family = "MATRICULAS",
+        GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"validateOtOperability":true,"allowsComplementaryTransformations":false,"allowsComplementaryPrenda":false}""",
+        Steps = MatriculaSteps(),
+    };
+
     // ── Familia OTROS (ADR-0050 / DDL 87) ────────────────────────────────────────────────────────
     // Perfiles con los complementarios apagados, como los deja `87-otros-sin-complementarios.sql`.
     // El recorrido es el NOVEDAD/PRENDA del DDL 82: el titular se captura en el paso «propietario»
@@ -61,6 +78,16 @@ internal static class ProcedureTypeFixture
         Id = Guid.Parse("00000000-0000-0000-0000-0000000000a4"),
         Code = "CAMBIO_COLOR",
         Name = "Cambio de color",
+        Family = "OTROS",
+        GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"allowsComplementaryTransformations":false,"allowsComplementaryPrenda":false}""",
+        Steps = NovedadSteps(),
+    };
+
+    private static readonly ProcedureType CambioCarroceriaInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000a7"),
+        Code = "CAMBIO_CARROCERIA",
+        Name = "Cambio de carrocería",
         Family = "OTROS",
         GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"allowsComplementaryTransformations":false,"allowsComplementaryPrenda":false}""",
         Steps = NovedadSteps(),
@@ -99,8 +126,24 @@ internal static class ProcedureTypeFixture
     /// <summary>Tipo de OTROS cuyo cambio de color ES el trámite (capa base, no complemento).</summary>
     public static ProcedureType CambioColor => CambioColorInstance;
 
+    /// <summary>Tipo de OTROS cuyo cambio de carrocería ES el trámite; exige carrocería de partida.</summary>
+    public static ProcedureType CambioCarroceria => CambioCarroceriaInstance;
+
     /// <summary>Tipo de OTROS prendario: la decisión de gravamen ES el trámite.</summary>
     public static ProcedureType LevantamientoPrenda => LevantamientoPrendaInstance;
+
+    /// <summary>Tipo de OTROS prendario que CONSTITUYE el gravamen (no lo presupone).</summary>
+    public static ProcedureType PrendaInscripcion => PrendaInscripcionInstance;
+
+    private static readonly ProcedureType PrendaInscripcionInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000a8"),
+        Code = "PRENDA_INSCRIPCION",
+        Name = "Inscribir prenda",
+        Family = "OTROS",
+        GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresBiometrics":true,"biometricActors":["BUYER"],"requiresSignature":true,"allowsComplementaryTransformations":false,"allowsComplementaryPrenda":false}""",
+        Steps = PrendaSteps(),
+    };
 
     /// <summary>
     /// Tipo equivalente a la modalidad que el test venía usando. Preserva la semántica de los

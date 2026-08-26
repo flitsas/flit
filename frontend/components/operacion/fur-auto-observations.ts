@@ -4,6 +4,11 @@ import {
   blindajeObservacionFur,
   parseBlindajeOpcion,
 } from '@/lib/catalogs/blindaje';
+import {
+  CANCELACION_CAUSAL_FIELD_KEY,
+  cancelacionObservacionFur,
+  parseCancelacionCausal,
+} from '@/lib/catalogs/cancelacion';
 
 /**
  * Texto que el backend AÑADE por su cuenta al recuadro de observaciones del FUR, para poder
@@ -50,6 +55,14 @@ export function furAutoObservations(fields: FieldValue[] | null | undefined): st
   if (!fields?.length) return [];
 
   const segments: string[] = [];
+
+  // Causal de la cancelación de matrícula. Va primero, como en el backend: es el bloque del TIPO, y
+  // el campo solo lo escribe la tarjeta de CANCELACION_MATRICULA, así que su presencia ya significa
+  // que el trámite es ese.
+  const cancelacion = cancelacionObservacionFur(
+    parseCancelacionCausal(valueOf(fields, CANCELACION_CAUSAL_FIELD_KEY)),
+  );
+  if (cancelacion) segments.push(cancelacion);
 
   // ADR-0029 — transformaciones declaradas: solo se imprime el valor NUEVO, porque los campos del
   // vehículo en el FUR conservan el dato original del RUNT.

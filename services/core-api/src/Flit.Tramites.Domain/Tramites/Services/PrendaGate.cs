@@ -57,9 +57,27 @@ public static class PrendaGate
         IReadOnlyCollection<string> docTipos)
         => EvaluateNucleo(prendaVigente, docTipos);
 
-    private static string? EvaluateNucleo(
+    /// <summary>
+    /// El gravamen ES el trámite y con UNA sola acción
+    /// (<see cref="ProcedureTypeLayers.EsPrendaDeAccionUnica"/>): mismo núcleo, pero el acreedor se
+    /// exige TAMBIÉN en el levantamiento.
+    ///
+    /// <para><b>Por qué el acreedor en un levantamiento.</b> El FUR de estos trámites tiene que salir
+    /// tan completo como el de un traspaso: la casilla 12 sola dice que se levanta un gravamen, pero
+    /// el numeral 20 «A FAVOR DE» y el bloque del párrafo 23 nombran a quién. Sin acreedor el
+    /// formulario sale marcado y mudo. En traspaso NO se exige —y no se toca— porque allí
+    /// <c>levantar</c> es una elección entre varias sobre un vehículo que puede traer el dato
+    /// incompleto; aquí el trámite entero existe para eso, y el acreedor lo precarga el propio RUNT.</para>
+    /// </summary>
+    public static string? EvaluateAccionUnica(
         ProcedureInstancePrenda? prendaVigente,
         IReadOnlyCollection<string> docTipos)
+        => EvaluateNucleo(prendaVigente, docTipos, exigeAcreedorEnLevantamiento: true);
+
+    private static string? EvaluateNucleo(
+        ProcedureInstancePrenda? prendaVigente,
+        IReadOnlyCollection<string> docTipos,
+        bool exigeAcreedorEnLevantamiento = false)
     {
         if (prendaVigente is null)
             return TramiteEstadoErrores.PrendaDecisionRequerida;
@@ -73,10 +91,25 @@ public static class PrendaGate
                 return TramiteEstadoErrores.PrendaDocumentoRequerido;
         }
 
-        if (PrendaDecision.ImplicaGravamen(prendaVigente.Decision)
+        var esLevantamiento = string.Equals(
+            prendaVigente.Decision, PrendaDecision.Levantar, StringComparison.OrdinalIgnoreCase);
+
+        var exigeAcreedor = PrendaDecision.ImplicaGravamen(prendaVigente.Decision)
+            || (exigeAcreedorEnLevantamiento && esLevantamiento);
+
+        if (exigeAcreedor
             && (string.IsNullOrWhiteSpace(prendaVigente.AcreedorNombre) || string.IsNullOrWhiteSpace(prendaVigente.AcreedorDocumento)))
         {
             return TramiteEstadoErrores.PrendaAcreedorRequerido;
+        }
+
+        // La entidad ante la que se levantó es lo que el párrafo 23 declara en este trámite: sin ella
+        // el recuadro se queda mudo mientras la casilla 12 afirma que hubo levantamiento. Se exige por
+        // el mismo interruptor que el acreedor, así que traspaso y matrícula no la piden.
+        if (exigeAcreedorEnLevantamiento && esLevantamiento
+            && string.IsNullOrWhiteSpace(prendaVigente.LevantamientoEntidad))
+        {
+            return TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida;
         }
 
         return null;

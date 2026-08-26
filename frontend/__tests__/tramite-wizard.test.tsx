@@ -122,6 +122,14 @@ function isVehicleBodyTypeMissing(err: unknown): boolean {
   return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
 }
 
+// Levantamiento de prenda sobre un vehículo sin gravamen: misma reimplementación local.
+function isVehiclePrendaMissing(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'VEHICLE_PRENDA_MISSING';
+}
+
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   DEV_TENANT_ID: 'tenant-dev',
@@ -130,6 +138,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
   isVehicleBodyTypeMissing,
+  isVehiclePrendaMissing,
   // Mismo duck-typing que la implementación real (`err.status === 503`): lo importa
   // DeclaracionesTramite, que el paso de requisitos monta siempre.
   isRuesPreviewUnavailable: (err: unknown) =>

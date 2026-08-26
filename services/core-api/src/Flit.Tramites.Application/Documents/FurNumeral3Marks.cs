@@ -68,10 +68,16 @@ public static class FurNumeral3Marks
             return [1];
         if (code.Contains("TRASPASO", StringComparison.Ordinal))
             return [2];
+        // El traslado marca ADEMÁS la 18, igual que el radicado: la 3 dice que la matrícula se
+        // traslada, pero el formulario no tiene casilla para «a qué organismo», que es el dato del
+        // trámite. La 18 (Otros) acompaña y el destino se nombra en el párrafo 23.
         if (code is "TRASLADO_CUENTA")
-            return [3];
+            return [3, 18];
+        // El radicado marca ADEMÁS la 18: la casilla 4 dice que se radica una cuenta, pero el
+        // formulario no tiene casilla para «a otro organismo», que es lo que el trámite hace. La 18
+        // (Otros) lo acompaña y el destino se nombra en el párrafo 23.
         if (code is "RADICADO_CUENTA")
-            return [4];
+            return [4, 18];
         if (code is "CAMBIO_COLOR")
             return [5];
         if (code is "REGRABAR_MOTOR_CHASIS")

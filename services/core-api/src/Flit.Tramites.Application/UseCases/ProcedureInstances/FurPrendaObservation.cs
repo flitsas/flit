@@ -23,8 +23,14 @@ public static class FurPrendaObservation
     /// <summary>Inscripción / registro de prenda (casilla 11).</summary>
     public const string Etiqueta = "Inscripción de prenda a favor de";
 
-    /// <summary>Levantamiento de prenda (casilla 12).</summary>
+    /// <summary>Levantamiento de prenda (casilla 12) cuando solo se conoce el acreedor.</summary>
     public const string EtiquetaLevantamiento = "Levantamiento de prenda a favor de";
+
+    /// <summary>
+    /// Levantamiento de prenda declarando la entidad ante la que se hizo. Es el literal del trámite
+    /// de levantamiento de prenda, donde el gestor sí captura ese dato.
+    /// </summary>
+    public const string EtiquetaLevantamientoEntidad = "Levantamiento de prenda ante";
 
     /// <summary>
     /// Devuelve el bloque de gravamen, o <c>null</c> si no hay nada que declarar.
@@ -35,13 +41,31 @@ public static class FurPrendaObservation
     /// <para>Si hay nombre pero no documento se imprime solo el nombre, sin guiones ni separadores
     /// sueltos que delaten un campo vacío.</para>
     /// </summary>
-    public static string? Compose(FurPrendaMarking marking, string? acreedorNombre, string? acreedorDocumento)
+    /// <param name="levantamientoEntidad">
+    /// Entidad ante la que se extinguió el gravamen. Cuando viene, el bloque de levantamiento declara
+    /// DÓNDE se hizo en vez de a favor de quién — el acreedor ya lo nombra el numeral 20 «A FAVOR DE»,
+    /// y repetirlo en el recuadro gastaba renglones sin añadir información. Solo lo captura el trámite
+    /// de levantamiento de prenda; en traspaso y matrícula llega <c>null</c> y el literal es el de
+    /// siempre, así que esos dos flujos no cambian.
+    /// </param>
+    public static string? Compose(
+        FurPrendaMarking marking,
+        string? acreedorNombre,
+        string? acreedorDocumento,
+        string? levantamientoEntidad = null)
     {
         if (marking == FurPrendaMarking.Ambos)
         {
             return Join(
-                Compose(FurPrendaMarking.Levantamiento, acreedorNombre, acreedorDocumento),
+                Compose(FurPrendaMarking.Levantamiento, acreedorNombre, acreedorDocumento, levantamientoEntidad),
                 Compose(FurPrendaMarking.Constitucion, acreedorNombre, acreedorDocumento));
+        }
+
+        if (marking == FurPrendaMarking.Levantamiento)
+        {
+            var entidad = levantamientoEntidad?.Trim();
+            if (!string.IsNullOrEmpty(entidad))
+                return $"{EtiquetaLevantamientoEntidad} {entidad}";
         }
 
         var etiqueta = marking switch

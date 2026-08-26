@@ -41,6 +41,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => false,
   isVehicleBodyTypeMissing: () => false,
+  isVehiclePrendaMissing: () => false,
 }));
 
 vi.mock('@/lib/api/admin-plate-ranges', () => plateMocks);

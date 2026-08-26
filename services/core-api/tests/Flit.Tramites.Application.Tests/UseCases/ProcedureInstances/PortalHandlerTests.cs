@@ -4,6 +4,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -267,6 +268,52 @@ public sealed class PortalHandlerTests
             token, new SubirDocumentoPortalInput("nope", "s.pdf", "application/pdf", 4, Doc()), ct);
 
         error.Should().Be("invalid_tipo");
+    }
+
+    [Fact]
+    public async Task Upload_TipoDelCatalogo_SeAcepta_AunqueNoEsteEnLaListaFija()
+    {
+        // El comentario del handler decía que la validación era «idéntica al flujo autenticado», pero
+        // comprobaba SOLO contra la lista fija: un documento dado de alta en el módulo Documental
+        // —que vive en el catálogo— se rechazaba con `invalid_tipo`, así que el participante veía en
+        // su checklist un requisito obligatorio que el portal nunca le dejaba cargar.
+        var ct = TestContext.Current.CancellationToken;
+        var (participante, token) = Seed(consent: true);
+        var upload = new SubirDocumentoPortalHandler(
+            _repo, _storage, new AttachmentValidator(new FakeDocumentTypeCatalog("certificado-blindaje")));
+
+        var (result, error) = await upload.HandleAsync(
+            token,
+            new SubirDocumentoPortalInput("certificado-blindaje", "cert.pdf", "application/pdf", 4, Doc()),
+            ct);
+
+        error.Should().BeNull();
+        result!.Tipo.Should().Be("certificado-blindaje");
+        participante.ProcedureInstance!.Attachments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Upload_ConCatalogo_SigueRechazandoLoQueNoExiste()
+    {
+        // La contraparte: aceptar el catálogo no puede convertir el portal en un buzón abierto.
+        var ct = TestContext.Current.CancellationToken;
+        var (_, token) = Seed(consent: true);
+        var upload = new SubirDocumentoPortalHandler(
+            _repo, _storage, new AttachmentValidator(new FakeDocumentTypeCatalog("certificado-blindaje")));
+
+        var (_, error) = await upload.HandleAsync(
+            token, new SubirDocumentoPortalInput("nope", "s.pdf", "application/pdf", 4, Doc()), ct);
+
+        error.Should().Be("invalid_tipo");
+    }
+
+    /// <summary>Catálogo en memoria: los códigos indicados existen, con los límites globales.</summary>
+    private sealed class FakeDocumentTypeCatalog(params string[] codes) : IDocumentTypeCatalog
+    {
+        private readonly HashSet<string> _codes = new(codes, StringComparer.Ordinal);
+
+        public Task<DocumentTypeRule?> GetRuleAsync(string tipo, CancellationToken ct = default) =>
+            Task.FromResult(_codes.Contains(tipo) ? new DocumentTypeRule(tipo, [], 0) : null);
     }
 
     // ── Finalizar (uso único) ──────────────────────────────────────────────────

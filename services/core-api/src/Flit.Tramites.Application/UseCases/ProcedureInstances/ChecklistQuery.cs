@@ -102,8 +102,21 @@ public sealed class GetChecklistHandler(
 
         // Fallback (sin matriz configurada): catálogo plano + condicionales ⇒ sin regresión.
         computed ??= ChecklistEngine.ComputeConditional(codigo, manual, docTipos, context, rules, parametros);
-        if (computed is null)
-            return (null, "tipologia_not_found");
+
+        // Sin matriz Y sin entrada en el catálogo en código ⇒ checklist VACÍO, no error.
+        //
+        // `TramiteTipologiaCatalog` describe DOS códigos (MATRICULA_NUEVA y TRASPASO_STANDARD): es el
+        // catálogo anterior a ADR-0050, cuando esas dos modalidades agotaban el mundo. Con veintiún
+        // tipos, cualquiera que aún no tenga matriz documental configurada caía aquí y el paso de
+        // Requisitos entero respondía 422 «La tipología del trámite no está configurada» — un mensaje
+        // sobre una estructura interna que el gestor no puede accionar, en una pantalla que solo
+        // quería listar documentos.
+        //
+        // «Todavía no hay documentos configurados» es un estado legítimo y el asistente ya lo sabe
+        // pintar. Y no se pierde ninguna guarda: el gate de radicación ya trataba la ausencia de
+        // catálogo como «completo» (`computed?.Completo ?? true`), así que el 422 no protegía nada
+        // — solo rompía la pantalla.
+        computed ??= ChecklistResultado.Vacio(codigo);
 
         // Límites por-tipo (MIME/tamaño, RF08/09): el front los usa para pre-validar inline con el
         // límite real. Sin catálogo inyectado (tests) o tipo sin regla ⇒ límites null ⇒ default global.

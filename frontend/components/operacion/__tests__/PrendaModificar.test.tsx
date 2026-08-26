@@ -41,6 +41,7 @@ describe('PrendaModificar (R17)', () => {
       estado: 'vigente',
       acreedorNombre: 'Banco XYZ',
       acreedorDocumento: null,
+      levantamientoEntidad: null,
       createdAt: '2026-07-07T00:00:00Z',
     });
     render(<PrendaModificar instanceId="abc" />);
@@ -61,6 +62,7 @@ describe('PrendaModificar (R17)', () => {
       estado: 'vigente',
       acreedorNombre: null,
       acreedorDocumento: null,
+      levantamientoEntidad: null,
       createdAt: '2026-07-07T00:00:00Z',
     });
     render(<PrendaModificar instanceId="abc" />);

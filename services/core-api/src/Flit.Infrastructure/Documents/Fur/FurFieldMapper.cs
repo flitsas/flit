@@ -212,6 +212,9 @@ public static class FurFieldMapper
     /// <summary>
     /// Numeral 20 DATOS DE ALERTA. Inscripción/registro de prenda → LIM. PROPIEDAD (2) + A FAVOR DE.
     /// Levantamiento → OTRO (4) + A FAVOR DE. Hurto (1) y embargo (3) no se marcan desde el gravamen.
+    /// <para>Duplicado de placa y duplicado de tarjeta marcan también OTRO (4), pero por TIPO de
+    /// trámite y no por gravamen: ahí no hay acreedor, así que A FAVOR DE queda vacía — la misma
+    /// convención que un gravamen sin nombre (sí X en la columna, campo vacío).</para>
     /// </summary>
     private static void MarkAlertas(Dictionary<string, FurFieldValue> dict, FurDocumentData data)
     {
@@ -221,9 +224,20 @@ public static class FurFieldMapper
         MarkCheckbox(dict, "alert_data_code_1", false);
         MarkCheckbox(dict, "alert_data_code_2", inscribe);
         MarkCheckbox(dict, "alert_data_code_3", false);
-        MarkCheckbox(dict, "alert_data_code_4", levanta);
+        MarkCheckbox(dict, "alert_data_code_4", levanta || MarcaOtroPorTipo(Norm(data.TipologiaCodigo)));
         dict["alert_data_code_5"] = Text(inscribe || levanta ? Upper(data.AcreedorPrenda) : "");
     }
+
+    /// <summary>
+    /// Tipos cuyo numeral 20 se marca en OTRO por sí mismos, sin gravamen de por medio
+    /// (<c>docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md</c>, numeral 20).
+    ///
+    /// <para><c>RADICADO_CUENTA</c> entra por la misma vía que los duplicados: marca OTRO por el tipo
+    /// de trámite, no por un gravamen, así que «A FAVOR DE» queda vacía — no hay acreedor que
+    /// escribir. El organismo de destino se declara en el párrafo 23, no aquí.</para>
+    /// </summary>
+    private static bool MarcaOtroPorTipo(string code) =>
+        code is "DUPLICADO_PLACA" or "DUPLICADO_TARJETA" or "RADICADO_CUENTA" or "TRASLADO_CUENTA";
 
     private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)
     {

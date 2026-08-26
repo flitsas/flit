@@ -76,6 +76,21 @@ public static class TramiteEstadoErrores
     public const string PrendaAcreedorRequerido = "prenda_acreedor_requerido";
 
     /// <summary>
+    /// El trámite de LEVANTAMIENTO de prenda no tiene diligenciada la entidad ante la que se levantó
+    /// el gravamen (409). Es lo que el párrafo 23 del FUR declara en este trámite: sin ella el
+    /// recuadro sale mudo mientras la casilla 12 afirma que hubo levantamiento. No aplica a traspaso
+    /// ni a matrícula, donde <c>levantar</c> es una decisión entre varias y conserva su literal.
+    /// </summary>
+    public const string PrendaEntidadLevantamientoRequerida = "prenda_entidad_levantamiento_requerida";
+
+    /// <summary>
+    /// El trámite declara un organismo de DESTINO —el traslado de cuenta— y no está diligenciado, o
+    /// el elegido no está habilitado para la compañía (409). Sin él el FUR no puede decir a dónde va
+    /// la cuenta, que es el objeto entero del trámite.
+    /// </summary>
+    public const string OrganismoDestinoRequerido = "organismo_destino_requerido";
+
+    /// <summary>
     /// HU #11051 — el gestor pidió generar o regenerar documentación de un trámite en estado final
     /// (aprobado/anulado), cuya documentación ya es definitiva (409). No aplica a la regeneración
     /// interna del sistema (aprobación del OT, asignación de placa, identidad validada).

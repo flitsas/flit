@@ -14,6 +14,16 @@ public sealed class PrendaGateTests
     private static ProcedureInstancePrenda Prenda(string decision) =>
         new() { Decision = decision, Estado = PrendaEstado.Vigente };
 
+    private static ProcedureInstancePrenda PrendaLevantamientoCompleta(string? entidad) =>
+        new()
+        {
+            Decision = PrendaDecision.Levantar,
+            Estado = PrendaEstado.Vigente,
+            AcreedorNombre = "BANCO XYZ",
+            AcreedorDocumento = "890900608",
+            LevantamientoEntidad = entidad,
+        };
+
     private static ProcedureInstancePrenda PrendaConAcreedor(
         string decision, string? acreedorNombre, string? acreedorDocumento) =>
         new()
@@ -311,6 +321,93 @@ public sealed class PrendaGateTests
         // aunque no haya prenda vigente registrada. El bloqueo duro de la HU #11592 es EXCLUSIVO de
         // `EvaluateMatriculaInicial`; `Evaluate` conserva su comportamiento previo.
         PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: false, prendaVigente: null, docTipos: [])
+            .Should().BeNull();
+    }
+
+    // ── Tipos prendarios de acción única (inscribir / levantar prenda) ──────────────────────────
+
+    [Fact]
+    public void AccionUnica_SinDecision_Bloquea()
+    {
+        // Estos trámites caían fuera de todo gate: el único cuyo objeto ES el gravamen podía
+        // radicarse sin decisión, sin acreedor y sin certificado.
+        PrendaGate.EvaluateAccionUnica(prendaVigente: null, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void AccionUnica_Levantar_ExigeCertificado()
+    {
+        PrendaGate.EvaluateAccionUnica(
+            PrendaConAcreedor(PrendaDecision.Levantar, "BANCO XYZ", "890900608"), docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public void AccionUnica_Levantar_ExigeAcreedor()
+    {
+        // La diferencia con traspaso: aquí el acreedor NO es opcional en un levantamiento, porque el
+        // numeral 20 «A FAVOR DE» y el bloque del párrafo 23 lo nombran. Sin él, el FUR sale marcado
+        // y mudo.
+        PrendaGate.EvaluateAccionUnica(
+            Prenda(PrendaDecision.Levantar), docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Fact]
+    public void AccionUnica_Levantar_ExigeLaEntidadAnteLaQueSeLevanto()
+    {
+        // Es lo que el párrafo 23 declara en este trámite: sin ella el recuadro sale mudo mientras la
+        // casilla 12 afirma que hubo levantamiento.
+        PrendaGate.EvaluateAccionUnica(
+            PrendaLevantamientoCompleta(entidad: null), docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().Be(TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida);
+    }
+
+    [Fact]
+    public void AccionUnica_Levantar_Completo_Avanza()
+    {
+        PrendaGate.EvaluateAccionUnica(
+            PrendaLevantamientoCompleta("NOTARÍA 15 DE MEDELLÍN"),
+            docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void AccionUnica_Registrar_ExigeAcreedorYCertificado()
+    {
+        PrendaGate.EvaluateAccionUnica(Prenda(PrendaDecision.Registrar), docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+
+        PrendaGate.EvaluateAccionUnica(
+            Prenda(PrendaDecision.Registrar), docTipos: [PrendaDocTipos.Registro])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+
+        PrendaGate.EvaluateAccionUnica(
+            PrendaConAcreedor(PrendaDecision.Registrar, "BANCO XYZ", "890900608"),
+            docTipos: [PrendaDocTipos.Registro])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Traspaso_ConLevantarSinAcreedor_SIGUE_Avanzando()
+    {
+        // No regresión deliberada: la exigencia de acreedor en el levantamiento es EXCLUSIVA de los
+        // tipos de acción única. En traspaso `levantar` es una elección entre varias sobre un
+        // vehículo que puede traer el dato incompleto, y ese flujo no se toca.
+        PrendaGate.Evaluate(
+            esTraspaso: true,
+            hasGravamenWarn: true,
+            Prenda(PrendaDecision.Levantar),
+            docTipos: [PrendaDocTipos.Levantamiento])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConLevantarSinAcreedor_SIGUE_Avanzando()
+    {
+        PrendaGate.EvaluateMatriculaInicial(
+            Prenda(PrendaDecision.Levantar), docTipos: [PrendaDocTipos.Levantamiento])
             .Should().BeNull();
     }
 }

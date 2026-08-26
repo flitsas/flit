@@ -358,6 +358,19 @@ export function isVehicleBodyTypeMissing(err: unknown): boolean {
   return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
 }
 
+/**
+ * Detecta el bloqueo DURO «el vehículo no tiene prenda que levantar» (422
+ * `VEHICLE_PRENDA_MISSING`). Booleano por la misma razón que
+ * {@link isVehicleBodyTypeMissing}: aplica a un solo tipo de trámite y la salida del gestor es
+ * siempre la misma — escoger otro tipo.
+ */
+export function isVehiclePrendaMissing(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'VEHICLE_PRENDA_MISSING';
+}
+
 export function isTransitOfficeUnavailable(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const { status, problem } = err as { status?: unknown; problem?: unknown };

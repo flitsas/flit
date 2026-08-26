@@ -141,4 +141,51 @@ public sealed class FurPrendaObservationTests
         texto.Should().Contain(FurPrendaObservation.Etiqueta);
         texto.Should().NotContain("NIT");
     }
+
+    // ── Levantamiento con entidad: el trámite dedicado declara DÓNDE se hizo ─────────────────────
+
+    [Fact]
+    public void Compose_Levantamiento_ConEntidad_DeclaraDondeSeHizo()
+    {
+        // El acreedor ya lo nombra el numeral 20 «A FAVOR DE»; repetirlo en el recuadro gastaba
+        // renglones sin añadir información. Lo que falta decir es ante quién se levantó.
+        var texto = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, "BANCO SANTANDER COLOMBIA S.A.", "890903938",
+            levantamientoEntidad: "NOTARÍA 15 DE MEDELLÍN");
+
+        texto.Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Compose_Levantamiento_SinEntidad_ConservaElLiteralDeSiempre(string? entidad)
+    {
+        // No regresión: traspaso y matrícula NO capturan la entidad, así que su texto no cambia.
+        var texto = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", "890900608", entidad);
+
+        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A.");
+    }
+
+    [Fact]
+    public void Compose_Levantamiento_ConEntidadYSinAcreedor_SigueDeclarando()
+    {
+        // La entidad basta para que el recuadro diga algo: la casilla 12 ya no queda muda aunque el
+        // acreedor falte (el gate lo exige aparte, pero el documento no debe salir en blanco).
+        FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, null, null, "NOTARÍA 15 DE MEDELLÍN")
+            .Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+    }
+
+    [Fact]
+    public void Compose_Ambos_ConEntidad_UsaLaEntidadSoloEnElLevantamiento()
+    {
+        var texto = FurPrendaObservation.Compose(
+            FurPrendaMarking.Ambos, "BANCO XYZ S.A.", "890900608", "NOTARÍA 15 DE MEDELLÍN");
+
+        texto.Should().StartWith("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+        texto.Should().Contain("Inscripción de prenda a favor de BANCO XYZ S.A.");
+    }
 }
