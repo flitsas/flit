@@ -4,11 +4,11 @@ using Flit.Tramites.Application.Biometrics;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
-using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -363,9 +363,23 @@ public sealed class ListBiometriaHandler(
         // parte pero la PERSONA (documento del actor) sí tiene una en otro trámite, se expone ESA (sin clonar)
         // para que la UI muestre "identidad verificada". La validación referenciada se rotula con la parte
         // actual (su PartyRole de origen puede diferir, p.ej. matrícula→traspaso).
-        var esTraspaso = instance.Family
-                         == ProcedureFamily.Traspaso;
-        var partes = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
+        //
+        // ADR-0051 Decisión 3 — las partes que participan del listado (y de la prevalencia de abajo) las
+        // decide `biometricActors` del perfil, no `instance.Family == Traspaso`. Reutiliza el MISMO
+        // traductor que ya usa el disparador de identidad (`PutActorsHandler.RolesQueValidanIdentidad`),
+        // sin escribir una tercera copia de catálogo→rol interno.
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        var rolesQueValidan = PutActorsHandler.RolesQueValidanIdentidad(instance);
+        var rolesEfectivos = rolesQueValidan is { Count: > 0 } roles
+            ? OrdenPartesBiometricas.Where(roles.Contains)
+            : profile.RequiresSeller
+                ? [ParteRol.Comprador, ParteRol.Vendedor]
+                : (IEnumerable<ParteRol>)[ParteRol.Comprador];
+        var partes = rolesEfectivos.Select(ActorTypeDeParteRol).ToArray();
+        // Legacy (matrícula/OTROS): filas sin rol se atribuyen a "comprador" por documento
+        // (BiometricListPrevalence.Pertenece). Cualquier otra combinación de partes — incluido
+        // TRASPASO_UNILATERAL con solo "vendedor" — exige coincidencia exacta de rol, igual que traspaso.
+        var esTraspaso = !(partes.Length == 1 && partes[0] == BiometricRules.ParteComprador);
         var firmaBaulPartes = new List<string>(partes.Length);
         // Bug #11615 — identidad que PREVALECE por parte (aprobada + vigente, propia o referenciada) y
         // resto de entradas aprobadas+vigentes de esa parte. Con esto el listado deja de depender de en
@@ -530,6 +544,23 @@ public sealed class ListBiometriaHandler(
             && !string.IsNullOrWhiteSpace(dto.DocumentNumber)
             && string.Equals(subject.NumeroDocumento.Trim(), dto.DocumentNumber.Trim(), StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// ADR-0051 — orden de exposición cuando <c>biometricActors</c> sí trae roles: mismo orden que el
+    /// arreglo previo a esta llave (<c>["comprador","vendedor"]</c>), con <c>locatario</c> al final por
+    /// si algún día valida identidad (hoy ninguna llave lo declara).
+    /// </summary>
+    private static readonly ParteRol[] OrdenPartesBiometricas =
+        [ParteRol.Comprador, ParteRol.Vendedor, ParteRol.Locatario];
+
+    /// <summary>Traduce el rol interno (dominio) al <c>actor_type</c> string que usa este listado.</summary>
+    private static string ActorTypeDeParteRol(ParteRol rol) => rol switch
+    {
+        ParteRol.Comprador => "comprador",
+        ParteRol.Vendedor => "vendedor",
+        ParteRol.Locatario => "locatario",
+        _ => rol.ToString().ToLowerInvariant(),
+    };
 }
 
 // ── Handler 2: info por token (público) ─────────────────────────────────────

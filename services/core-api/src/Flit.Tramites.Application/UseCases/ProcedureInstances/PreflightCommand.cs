@@ -1047,24 +1047,33 @@ public sealed class RunPreflightHandler(
     /// matriculado. Estaba atado al código de una sola tipología, así que la familia OTROS dejaba el
     /// organismo sin resolver y el gestor lo elegía a mano, pudiendo escoger uno distinto al del RUNT.
     /// En matrícula inicial no hace nada: allí no hay inscripción previa y el operador sí elige.</para>
+    ///
+    /// <para>ADR-0051 — TRASPASO_UNILATERAL queda cubierto sin tocar TRASPASO_TRANSFERENCIA_DE_DOMINIO
+    /// (fuera de alcance, comportamiento preexistente): se añade la capacidad <c>!SellerCapturedViaForm</c>
+    /// dentro de la familia TRASPASO, no la igualdad de código. TRASPASO_UNILATERAL declara
+    /// <c>sellerCapturedViaForm:false</c> (el vendedor se sincroniza desde RUNT/RUES, no se teclea) y por
+    /// eso su organismo también lo fija el RUNT, igual que TRASPASO_STANDARD. TRASPASO_TRANSFERENCIA_DE_DOMINIO
+    /// no declara la llave (default <c>true</c>, captura por formulario) y sigue SIN entrar por esta rama,
+    /// exactamente como hoy.</para>
     /// </summary>
     private async Task AutoBindTransitOfficeFromRuntAsync(
         ProcedureInstance instance,
         Guid tenantId,
         CancellationToken ct)
     {
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
         var esTraspasoStandard = string.Equals(
             instance.TypeCode, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.Ordinal);
-        if (!esTraspasoStandard && instance.Family != ProcedureFamily.Otros)
+        var esTraspasoSinCapturaPorFormulario =
+            instance.Family == ProcedureFamily.Traspaso && !profile.SellerCapturedViaForm;
+        if (!esTraspasoStandard && !esTraspasoSinCapturaPorFormulario && instance.Family != ProcedureFamily.Otros)
             return;
 
         // Cuando el organismo lo ELIGE el operador, el del RUNT no es el destino del trámite: es
         // dónde está el vehículo hoy. Escribirlo en las claves canónicas pisaría en cada consulta la
         // secretaría de destino que el gestor acaba de escoger —y con ella el grant, la bandeja y
         // quién aprueba—, así que va a las claves descriptivas.
-        var eligeElOperador = ProcedureTypeGateProfile
-            .FromJson(instance.ProcedureType?.GateProfile)
-            .OperatorChoosesTransitOffice();
+        var eligeElOperador = profile.OperatorChoosesTransitOffice();
 
         var runtName = instance.FieldValues
             .FirstOrDefault(f => string.Equals(

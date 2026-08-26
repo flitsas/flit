@@ -662,8 +662,12 @@ public sealed class PutActorsHandler(
     /// <para>Un perfil SIN <c>biometricActors</c> devuelve <c>null</c> y el llamador no filtra nada:
     /// es el comportamiento previo, y degradar a «ninguno» apagaría el disparador en todo tipo cuyo
     /// perfil llegue vacío o corrupto.</para>
+    ///
+    /// <para>ADR-0051 — expuesto como <c>internal</c> para que <see cref="BiometricaCommand"/>
+    /// (<c>ListBiometriaHandler</c>) lo reutilice en vez de escribir una tercera traducción de
+    /// <c>biometricActors</c> → rol interno.</para>
     /// </summary>
-    private static HashSet<ParteRol>? RolesQueValidanIdentidad(ProcedureInstance instance)
+    internal static HashSet<ParteRol>? RolesQueValidanIdentidad(ProcedureInstance instance)
     {
         var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
         if (profile.BiometricActors.Count == 0)
