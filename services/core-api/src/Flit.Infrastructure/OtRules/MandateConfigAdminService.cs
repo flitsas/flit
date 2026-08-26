@@ -659,20 +659,18 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         var now = DateTimeOffset.UtcNow;
         if (entity is null)
         {
-            var builtin = MandatoSystemOfficeTemplates.TryGetByOfficeCode(
-                _catalog.GetById(officeId)?.Code);
             entity = new TransitOfficeMandateConfigEntity
             {
                 Id = Guid.NewGuid(),
                 TransitOfficeId = officeId,
-                TemplateCode = builtin?.TemplateCode ?? MandatoTemplateResolver.Generico,
-                RequiresForNaturalPerson = builtin?.RequiresForNaturalPerson ?? true,
-                MandataryFamily = builtin?.MandataryFamily ?? MandatoFamiliaCodes.Individuo,
-                AssignmentMode = MandatoAssignmentModeCodes.Signer,
-                InstitutionalMandataryName = builtin?.InstitutionalMandataryName,
-                InstitutionalMandataryNit = builtin?.InstitutionalMandataryNit,
-                ChamberCity = builtin?.ChamberCity,
-                MandatarySigla = builtin?.MandatarySigla,
+                TemplateCode = MandatoOtBirthDefaults.TemplateCode,
+                RequiresForNaturalPerson = MandatoOtBirthDefaults.RequiresForNaturalPerson,
+                MandataryFamily = MandatoOtBirthDefaults.MandataryFamily,
+                AssignmentMode = MandatoOtBirthDefaults.AssignmentMode,
+                InstitutionalMandataryName = null,
+                InstitutionalMandataryNit = null,
+                ChamberCity = null,
+                MandatarySigla = null,
                 CustomTemplateKind = MandatoCustomTemplateKindCodes.None,
                 CreatedAt = now,
                 CreatedBy = userId,

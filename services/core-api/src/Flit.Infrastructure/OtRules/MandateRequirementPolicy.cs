@@ -87,6 +87,7 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
                 cfg.MandataryFamily,
                 cfg.ChamberCity,
                 cfg.MandatarySigla,
+                cfg.AssignmentMode,
                 cfg.CustomTemplateKind,
                 cfg.CustomTemplateBody,
                 cfg.CustomTemplateStoragePath,
@@ -95,33 +96,40 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        var rule = await LoadCompanyRuleAsync(officeId, companyTenantId, cancellationToken)
+            .ConfigureAwait(false);
+        var assignmentMode = MandatoAssignmentModeCodes.ResolveEffective(
+            rule?.AssignmentMode, otRow?.AssignmentMode, otConfigExists: otRow is not null);
+        var companySigner = rule is not null
+            && MandatoAssignmentModeCodes.Resolve(rule.AssignmentMode) == MandatoAssignmentModeCodes.Signer;
+
         if (otRow is null)
         {
-            var ruleOnly = await LoadCompanyRuleAsync(officeId, companyTenantId, cancellationToken)
-                .ConfigureAwait(false);
             var builtin = MandatoSystemOfficeTemplates.TryGetByOfficeCode(code);
-
             return new MandateOtConfig(
                 officeId,
-                MandatoSystemOfficeTemplates.ResolveTemplateCode(code, null, null),
+                ResolveClientTemplate(
+                    companySigner,
+                    MandatoSystemOfficeTemplates.ResolveTemplateCode(code, null, null),
+                    hasCustom: false),
                 builtin?.RequiresForNaturalPerson ?? false,
-                builtin?.InstitutionalMandataryName,
-                builtin?.InstitutionalMandataryNit,
+                OpenOrValue(assignmentMode, builtin?.InstitutionalMandataryName),
+                OpenOrValue(assignmentMode, builtin?.InstitutionalMandataryNit),
                 builtin?.MandataryFamily ?? MandatoFamiliaCodes.Individuo,
                 builtin?.ChamberCity,
                 builtin?.MandatarySigla,
-                MandatoAssignmentModeCodes.Resolve(ruleOnly?.AssignmentMode),
-                DefaultMandateSignerId: SignerDefaultOrNull(ruleOnly));
+                assignmentMode,
+                DefaultMandateSignerId: SignerDefaultOrNull(rule));
         }
 
-        var rule = await LoadCompanyRuleAsync(officeId, companyTenantId, cancellationToken)
-            .ConfigureAwait(false);
         var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(otRow.CustomTemplateKind);
         var builtinForOffice = MandatoSystemOfficeTemplates.TryGetByOfficeCode(code);
-        var templateCode = MandatoSystemOfficeTemplates.ResolveTemplateCode(
-            code, otRow.TemplateCode, otRow.CustomTemplateKind);
+        var templateCode = ResolveClientTemplate(
+            companySigner,
+            MandatoSystemOfficeTemplates.ResolveTemplateCode(
+                code, otRow.TemplateCode, otRow.CustomTemplateKind),
+            hasCustom);
 
-        // Metadatos institucionales: fila > builtin sistema (Sabaneta/Bello) > null.
         var family = !string.IsNullOrWhiteSpace(rule?.MandataryFamily)
             ? rule!.MandataryFamily
             : !string.IsNullOrWhiteSpace(otRow.MandataryFamily)
@@ -132,16 +140,20 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
             otRow.TransitOfficeId,
             templateCode,
             otRow.RequiresForNaturalPerson || (builtinForOffice?.RequiresForNaturalPerson ?? false),
-            rule?.InstitutionalMandataryName
-                ?? otRow.InstitutionalMandataryName
-                ?? builtinForOffice?.InstitutionalMandataryName,
-            rule?.InstitutionalMandataryNit
-                ?? otRow.InstitutionalMandataryNit
-                ?? builtinForOffice?.InstitutionalMandataryNit,
+            OpenOrValue(
+                assignmentMode,
+                rule?.InstitutionalMandataryName
+                    ?? otRow.InstitutionalMandataryName
+                    ?? builtinForOffice?.InstitutionalMandataryName),
+            OpenOrValue(
+                assignmentMode,
+                rule?.InstitutionalMandataryNit
+                    ?? otRow.InstitutionalMandataryNit
+                    ?? builtinForOffice?.InstitutionalMandataryNit),
             family,
             rule?.ChamberCity ?? otRow.ChamberCity ?? builtinForOffice?.ChamberCity,
             rule?.MandatarySigla ?? otRow.MandatarySigla ?? builtinForOffice?.MandatarySigla,
-            MandatoAssignmentModeCodes.Resolve(rule?.AssignmentMode),
+            assignmentMode,
             hasCustom ? otRow.CustomTemplateKind : MandatoCustomTemplateKindCodes.None,
             hasCustom ? otRow.CustomTemplateBody : null,
             hasCustom ? otRow.CustomTemplateStoragePath : null,
@@ -171,5 +183,20 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
         if (MandatoAssignmentModeCodes.SkipsPersonSigner(rule.AssignmentMode))
             return null;
         return rule.DefaultMandateSignerId;
+    }
+
+    private static string? OpenOrValue(string assignmentMode, string? value) =>
+        MandatoAssignmentModeCodes.IsOpen(assignmentMode) ? null : value;
+
+    /// <summary>
+    /// Mandato de la empresa que radica (<c>signer</c>): plantilla genérica, salvo PDF/editor propio.
+    /// </summary>
+    private static string ResolveClientTemplate(bool companySigner, string templateCode, bool hasCustom)
+    {
+        if (hasCustom)
+            return templateCode;
+        if (companySigner)
+            return MandatoTemplateResolver.Generico;
+        return templateCode;
     }
 }

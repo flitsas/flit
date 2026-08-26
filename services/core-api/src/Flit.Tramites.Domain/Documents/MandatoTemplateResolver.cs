@@ -58,6 +58,19 @@ public static class MandatoAssignmentModeCodes
         };
     }
 
+    /// <summary>
+    /// Modo efectivo al generar el mandato: regla compañía×OT, si existe; si no, el del OT;
+    /// si el OT aún no tiene fila (legado), <see cref="Signer"/>.
+    /// </summary>
+    public static string ResolveEffective(string? companyRuleMode, string? otConfigMode, bool otConfigExists)
+    {
+        if (!string.IsNullOrWhiteSpace(companyRuleMode))
+            return Resolve(companyRuleMode);
+        if (otConfigExists)
+            return Resolve(otConfigMode);
+        return Signer;
+    }
+
     /// <summary>True si el flujo no debe exigir ni fijar un firmante persona (institucional u abierto).</summary>
     public static bool SkipsPersonSigner(string? mode)
     {
@@ -275,4 +288,15 @@ public static class MandatoSystemOfficeTemplates
 
         return MandatoTemplateResolver.Generico;
     }
+}
+
+/// <summary>
+/// Valores con los que nace un OT al activarse: formato abierto, plantilla genérica y mandatario vacío.
+/// </summary>
+public static class MandatoOtBirthDefaults
+{
+    public const string TemplateCode = MandatoTemplateResolver.Generico;
+    public const string AssignmentMode = MandatoAssignmentModeCodes.Open;
+    public const string MandataryFamily = MandatoFamiliaCodes.Individuo;
+    public const bool RequiresForNaturalPerson = false;
 }
