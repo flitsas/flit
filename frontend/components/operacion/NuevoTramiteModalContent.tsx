@@ -5,7 +5,6 @@ import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametriza
 import { useTiposHabilitados } from '@/hooks/useTiposHabilitados';
 import {
   TIPOS_UI_MOCKUP,
-  TRANSFORMACIONES_MOCKUP,
   resolveNuevoTramiteCode,
   type FamiliasBloqueadasResolver,
   type ModalidadTraspasoUi,
@@ -45,7 +44,6 @@ export function NuevoTramiteModalContent({
   const [leasing, setLeasing] = useState(false);
   const [modalidad, setModalidad] = useState<ModalidadTraspasoUi>('bilateral');
   const [subtipoOtros, setSubtipoOtros] = useState('');
-  const [transformaciones, setTransformaciones] = useState<string[]>([]);
   const [resolveError, setResolveError] = useState<string | null>(null);
 
   const tiposPlanos: ProcedureTypeSummary[] = useMemo(
@@ -70,7 +68,6 @@ export function NuevoTramiteModalContent({
     setLeasing(false);
     setModalidad('bilateral');
     setSubtipoOtros('');
-    setTransformaciones([]);
     setResolveError(null);
   };
 
@@ -78,12 +75,6 @@ export function NuevoTramiteModalContent({
     if (estaBloqueada(id)) return;
     setTipo(id);
     resetConfig();
-  };
-
-  const toggleTransformacion = (id: string) => {
-    setTransformaciones((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
   };
 
   const puedeIniciar =
@@ -103,8 +94,6 @@ export function NuevoTramiteModalContent({
       tiposPlanos,
       bloqueadas,
     );
-    // transformaciones: UI mockup; el wizard las declara en paso 1 (handoff mínimo).
-    void transformaciones;
     if (!result.ok) {
       setResolveError(result.message);
       return;
@@ -300,33 +289,7 @@ export function NuevoTramiteModalContent({
                 Solo se puede radicar un trámite a la vez.
               </span>
             </label>
-          ) : (
-            <div>
-              <p className="text-[13px] font-bold text-[#162744] dark:text-white">
-                Transformaciones del vehículo (opcional)
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {TRANSFORMACIONES_MOCKUP.map((s) => {
-                  const on = transformaciones.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => toggleTransformacion(s.id)}
-                      className="rounded-full border-2 px-3.5 py-1.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-                      style={{
-                        background: on ? BLUE : '#fff',
-                        color: on ? '#fff' : '#162744',
-                        borderColor: on ? BLUE : BORDER,
-                      }}
-                    >
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       ) : null}
 

@@ -77,6 +77,30 @@ describe('NuevoTramiteModalContent', () => {
     );
   });
 
+  it('no muestra transformaciones del vehículo en matrícula ni traspaso', async () => {
+    mocks.listPublishedProcedureTypes.mockResolvedValue([
+      tipo('MATRICULA_NUEVA', 'Matrícula inicial', 'MATRICULAS'),
+      tipo('TRASPASO_STANDARD', 'Traspaso', 'TRASPASO'),
+      tipo('BLINDAJE', 'Blindaje', 'OTROS'),
+    ]);
+    const user = userEvent.setup();
+
+    render(<NuevoTramiteModalContent onElegir={vi.fn()} tituloEnContenedor />);
+
+    await user.click(await screen.findByRole('button', { name: /Matrícula Inicial/ }));
+    expect(
+      screen.queryByText(/Transformaciones del vehículo \(opcional\)/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Inscribir Prenda' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cambio de Color' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Traspaso/ }));
+    expect(
+      screen.queryByText(/Transformaciones del vehículo \(opcional\)/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Blindaje' })).not.toBeInTheDocument();
+  });
+
   it('Iniciar emite el code resuelto', async () => {
     const onElegir = vi.fn();
     mocks.listPublishedProcedureTypes.mockResolvedValue([
