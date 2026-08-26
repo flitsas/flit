@@ -375,6 +375,14 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 if (grants.Count == 0)
                     return (IReadOnlyList<CompanyOtMandateRuleView>)[];
 
+                var otCfg = await _db.TransitOfficeMandateConfigs.AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.TransitOfficeId == officeId, ct)
+                    .ConfigureAwait(false);
+                var inheritedMode = MandatoAssignmentModeCodes.ResolveEffective(
+                    companyRuleMode: null,
+                    otConfigMode: otCfg?.AssignmentMode,
+                    otConfigExists: otCfg is not null);
+
                 Dictionary<Guid, CompanyOtMandateRuleEntity> rules;
                 try
                 {
@@ -385,7 +393,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 }
                 catch (Exception ex) when (IsMissingRelation(ex))
                 {
-                    // Migración 61 aún no aplicada: listar compañías con default signer.
+                    // Migración 61 aún no aplicada: listar compañías con el modo heredado del OT.
                     rules = new Dictionary<Guid, CompanyOtMandateRuleEntity>();
                 }
 
@@ -417,7 +425,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                         return new CompanyOtMandateRuleView(
                             t.Id,
                             t.LegalName,
-                            MandatoAssignmentModeCodes.Signer,
+                            inheritedMode,
                             MandatoFamiliaCodes.Individuo,
                             null,
                             null,

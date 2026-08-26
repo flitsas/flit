@@ -266,7 +266,7 @@ public sealed class MandateRequirementPolicyTests
     }
 
     [Fact]
-    public async Task ResolveAsync_EnvigadoSinConfig_UsaPlantillaMunicipio()
+    public async Task ResolveAsync_EnvigadoSinConfig_UsaPlantillaSabaneta()
     {
         await using var ctx = NewContext();
         var envigadoId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
@@ -279,8 +279,8 @@ public sealed class MandateRequirementPolicyTests
 
         var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5266000", CompanyA, Ct);
 
-        config!.TemplateCode.Should().Be("municipio");
-        config.MandataryFamily.Should().Be("individuo");
+        config!.TemplateCode.Should().Be("sabaneta");
+        config.MandataryFamily.Should().Be("organismo_transito");
         MandatoCustomTemplateKindCodes.HasCustom(config.CustomTemplateKind).Should().BeFalse();
     }
 

@@ -180,6 +180,36 @@ public static class MandatoTemplateResolver
             Municipio => MandatoVariante.Municipio,
             _ => MandatoVariante.Generico,
         };
+
+    /// <summary>
+    /// Redacción que se EMITE en el trámite (no la fila cruda de Plataforma).
+    /// Formato abierto → genérico en blanco. Persona jurídica / institucional → Sabaneta
+    /// (misma redacción que Envigado). Persona natural / mandato cliente → genérico por defecto;
+    /// Bello conserva su plantilla; Funza y Medellín conservan la redacción municipal corta.
+    /// El código de OT es el canónico del trámite (destino), no el organismo “actual” del FUR.
+    /// </summary>
+    public static string ResolveEmissionCode(
+        string? assignmentMode,
+        bool mandanteEsJuridica,
+        string? officeCode)
+    {
+        var mode = MandatoAssignmentModeCodes.Resolve(assignmentMode);
+        if (mode == MandatoAssignmentModeCodes.Open)
+            return Generico;
+
+        if (mode == MandatoAssignmentModeCodes.Institutional || mandanteEsJuridica)
+            return Sabaneta;
+
+        var code = officeCode?.Trim();
+        if (string.Equals(code, MandatoSystemOfficeTemplates.BelloOfficeCode, StringComparison.OrdinalIgnoreCase))
+            return Bello;
+
+        if (string.Equals(code, MandatoSystemOfficeTemplates.FunzaOfficeCode, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(code, MandatoSystemOfficeTemplates.MedellinOfficeCode, StringComparison.OrdinalIgnoreCase))
+            return Municipio;
+
+        return Generico;
+    }
 }
 
 /// <summary>
@@ -234,6 +264,19 @@ public static class MandatoSystemOfficeTemplates
         "Medellín",
         null);
 
+    /// <summary>
+    /// Envigado usa la misma redacción de persona jurídica que Sabaneta; los datos de la UT salen
+    /// de la config del OT, no de SETSA.
+    /// </summary>
+    public static readonly Builtin Envigado = new(
+        MandatoTemplateResolver.Sabaneta,
+        MandatoFamiliaCodes.OrganismoTransito,
+        RequiresForNaturalPerson: true,
+        string.Empty,
+        string.Empty,
+        "Envigado",
+        null);
+
     /// <summary>Redacción corta compartida; la ciudad del cierre sale del OT del trámite.</summary>
     public static readonly Builtin Municipio = new(
         MandatoTemplateResolver.Municipio,
@@ -253,8 +296,9 @@ public static class MandatoSystemOfficeTemplates
             return Sabaneta;
         if (string.Equals(code, BelloOfficeCode, StringComparison.OrdinalIgnoreCase))
             return Bello;
-        if (string.Equals(code, EnvigadoOfficeCode, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(code, FunzaOfficeCode, StringComparison.OrdinalIgnoreCase)
+        if (string.Equals(code, EnvigadoOfficeCode, StringComparison.OrdinalIgnoreCase))
+            return Envigado;
+        if (string.Equals(code, FunzaOfficeCode, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, MedellinOfficeCode, StringComparison.OrdinalIgnoreCase))
             return Municipio;
         return null;

@@ -21,6 +21,7 @@ function OtMandatosPageInner() {
       transitOfficeId={params.id}
       activeTab="mandatos"
       moduleTitle="Administración OT — Mandatos"
+      surface="plano"
     >
       <OtMandatosSection transitOfficeId={params.id} />
     </OtHubLayout>

@@ -60,11 +60,28 @@ export interface MandatoOtConfigFormProps {
   office: MandateOtConfigView;
   /** Panel: plantilla del mandato (OT) o tipo/mandatario por compañía. */
   mode: MandatoOtConfigPanelMode;
+  /** Al abrir desde una tarjeta de compañía, centra el listado en esa empresa. */
+  highlightCompanyId?: string | null;
+  /**
+   * Si se informa, el panel de compañías solo muestra esa empresa. Plataforma no lo pasa: el
+   * catálogo sigue listando todas las que radican en el OT.
+   */
+  lockToCompanyId?: string | null;
+  /** Abre el alta de mandatario de esa empresa (hub OT). */
+  onRegisterSigner?: (companyTenantId: string) => void;
   onClose: () => void;
   onSaved: (view: MandateOtConfigView) => void;
 }
 
-export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoOtConfigFormProps) {
+export function MandatoOtConfigForm({
+  office,
+  mode,
+  highlightCompanyId,
+  lockToCompanyId,
+  onRegisterSigner,
+  onClose,
+  onSaved,
+}: MandatoOtConfigFormProps) {
   const pdfRef = useRef<HTMLInputElement>(null);
 
   const [view, setView] = useState(office);
@@ -103,14 +120,17 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
     family === "organismo_transito";
 
   const filteredCompanyRules = useMemo(() => {
+    const scoped = lockToCompanyId
+      ? companyRules.filter((row) => row.companyTenantId === lockToCompanyId)
+      : companyRules;
     const q = companySearch.trim().toLowerCase();
-    return companyRules.filter((row) => {
+    return scoped.filter((row) => {
       const tipo = resolveTipoNegocio(row.assignmentMode);
       if (companyTipoFilter !== "all" && tipo !== companyTipoFilter) return false;
       if (!q) return true;
       return row.companyName.toLowerCase().includes(q);
     });
-  }, [companyRules, companySearch, companyTipoFilter]);
+  }, [companyRules, companySearch, companyTipoFilter, lockToCompanyId]);
 
   const companyLastPage = Math.max(1, Math.ceil(filteredCompanyRules.length / COMPANY_PAGE_SIZE));
   const safeCompanyPage = Math.min(companyPage, companyLastPage);
@@ -138,6 +158,13 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
       ]);
       setCompanyRules(items);
       setOtSigners(signers.filter((s) => s.isActive));
+      if (highlightCompanyId) {
+        const focused = items.find((row) => row.companyTenantId === highlightCompanyId);
+        if (focused) {
+          setCompanySearch(focused.companyName);
+          setCompanyPage(1);
+        }
+      }
       setRulesStatus("ready");
     } catch (err) {
       setRulesStatus("error");
@@ -154,7 +181,7 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
         setError("No se pudieron cargar las compañías. Reintentar.");
       }
     }
-  }, [office.officeId]);
+  }, [office.officeId, highlightCompanyId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
@@ -431,34 +458,45 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
           const defaultValue = row.defaultMandateSignerId ?? "";
           if (tipo !== "persona_rl") {
             return (
-              <span className="text-[11px] text-[#59677D] dark:text-white/45">No aplica</span>
+              <span className="text-xs text-[#59677D] dark:text-white/45">No aplica</span>
             );
           }
           return (
-            <select
-              value={defaultValue}
-              disabled={busy || rowBusy || candidates.length === 0}
-              onChange={(e) => void handleDefaultSignerChange(row, e.target.value)}
-              className="w-full max-w-full rounded-lg border border-[#DFE5ED] bg-white px-1.5 py-1.5 text-[11px] text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
-              aria-label={`Mandatario por defecto para ${row.companyName}`}
-              data-testid={`mandato-company-default-signer-${row.companyTenantId}`}
-            >
-              <option value="">
-                {candidates.length === 0 ? "Sin mandatarios" : "Sin default"}
-              </option>
-              {candidates.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.fullName}
+            <div className="flex flex-col gap-1">
+              <select
+                value={defaultValue}
+                disabled={busy || rowBusy || candidates.length === 0}
+                onChange={(e) => void handleDefaultSignerChange(row, e.target.value)}
+                className="w-full max-w-full rounded-lg border border-[#DFE5ED] bg-white px-1.5 py-1.5 text-xs text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                aria-label={`Mandatario por defecto para ${row.companyName}`}
+                data-testid={`mandato-company-default-signer-${row.companyTenantId}`}
+              >
+                <option value="">
+                  {candidates.length === 0 ? "Sin mandatarios" : "Sin default"}
                 </option>
-              ))}
-            </select>
+                {candidates.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}
+                  </option>
+                ))}
+              </select>
+              {onRegisterSigner ? (
+                <button
+                  type="button"
+                  className="text-left text-xs font-semibold text-[#557EFF] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                  onClick={() => onRegisterSigner(row.companyTenantId)}
+                >
+                  Registrar mandatario
+                </button>
+              ) : null}
+            </div>
           );
         },
       },
     ],
     // Handlers son estables por cierre de render; deps cubren estado que cambia las celdas.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers del mismo render
-    [busy, savingCompanyId, otSigners, office.officeId, templateCode],
+    [busy, savingCompanyId, otSigners, office.officeId, templateCode, onRegisterSigner],
   );
 
   return (
@@ -777,8 +815,8 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
                   Tipo de mandatario por compañía
                 </h3>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Default sin regla: Persona/RL. En Persona/RL puedes fijar un mandatario preferido
-                  (preselección en el paso FUR).{" "}
+                  Sin regla propia la empresa usa el modelo del organismo. En Persona/RL puedes
+                  fijar un mandatario preferido (preselección en el paso FUR).{" "}
                   {rulesStatus === "ready" ? (
                     <span className="font-medium text-[#162244] dark:text-white/80">
                       {companyRules.length} compañía{companyRules.length === 1 ? "" : "s"}
@@ -819,6 +857,7 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
 
             {companyRules.length > 0 ? (
               <div data-testid="mandato-company-rules-list" className="flex flex-col gap-2">
+                {!lockToCompanyId ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="relative min-w-[10rem] flex-1">
                     <span className="sr-only">Buscar compañía</span>
@@ -859,6 +898,7 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
                     </select>
                   </label>
                 </div>
+                ) : null}
 
                 <DataTable
                   columns={companyColumns}

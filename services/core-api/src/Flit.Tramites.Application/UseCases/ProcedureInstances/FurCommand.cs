@@ -300,7 +300,13 @@ public sealed class GenerarFurHandler(
         // ADR-0036 (HU #10915) — Contrato de mandato. El firmante persona puede venir ya elegido
         // en el wizard (MandateSignerId); si no, el PDF lleva placeholders y la aprobación lo regenera.
         var mandato = await TryGenerateMandatoAsync(
-            instance, data, Get(fv, "transit_office_code"), TransformacionesActivas(fv, data), ct);
+            instance,
+            data,
+            Get(fv, TransitOfficeFieldKeys.Code),
+            Get(fv, TransitOfficeFieldKeys.Name),
+            Get(fv, TransitOfficeFieldKeys.City),
+            TransformacionesActivas(fv, data),
+            ct);
         if (mandato is not null)
         {
             generated.Add(mandato);
@@ -1100,11 +1106,23 @@ public sealed class GenerarFurHandler(
         ProcedureInstance instance,
         FurDocumentData data,
         string? transitOfficeCode,
+        string? transitOfficeName,
+        string? transitOfficeCity,
         IReadOnlyList<string> transformaciones,
         CancellationToken ct)
     {
         if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
             return null;
+
+        // El FUR puede encabezar con el OT “actual” (RUNT). El mandato se emite para el OT canónico
+        // al que va el trámite; si se usa el actual, Bogotá pintaba redacción de Bello.
+        data = data with
+        {
+            Organismo = new OrganismoTransito(
+                transitOfficeCode,
+                transitOfficeName ?? data.Organismo.Nombre,
+                TransitOfficeCity.Legible(transitOfficeCity) ?? data.Organismo.Ciudad),
+        };
 
         // El ORGANISMO se llavea por id cuando el trámite lo tiene, y solo si no, por el código. El
         // código de field_values no es una llave confiable —conviven RUNT de 7 dígitos con DIVIPOLA de
@@ -1125,10 +1143,21 @@ public sealed class GenerarFurHandler(
         // elección explícita ya guardada → default del OT (si sigue habilitado) → único candidato. Sin
         // eso, el PDF pintaba placeholders (o el firmante equivocado) hasta que alguien elegía a mano.
         // Abierto / institucional: no se asigna firmante persona (aunque hubiera MandateSignerId).
+        var assignmentMode = config?.AssignmentMode;
+        var partesVisibles = string.Equals(
+            instance.Status, TramiteEstado.Aprobado, StringComparison.OrdinalIgnoreCase);
+        var esJuridica = data.Mandante?.EsJuridica ?? false;
+        var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind);
+        var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
+        if (!hasCustom)
+        {
+            templateCode = MandatoTemplateResolver.ResolveEmissionCode(
+                assignmentMode, esJuridica, transitOfficeCode);
+        }
+
         MandatarioFirmante? mandatario = null;
         Guid? resolvedSignerId = null;
-        var assignmentMode = config?.AssignmentMode;
-        if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
+        if (partesVisibles && !MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
             if (transitOfficeId is { } officeId)
             {
@@ -1199,21 +1228,19 @@ public sealed class GenerarFurHandler(
 
         var mandatoData = new MandatoData(
             data,
-            config?.TemplateCode ?? MandatoTemplateResolver.Generico,
-            config?.InstitutionalMandataryName,
-            config?.InstitutionalMandataryNit,
+            templateCode,
+            partesVisibles ? config?.InstitutionalMandataryName : null,
+            partesVisibles ? config?.InstitutionalMandataryNit : null,
             mandatario,
-            // HU #11204 — familia del mandatario y datos propios del OT. Sin configuración el generador
-            // aplica los mismos valores de siempre, así que un OT sin fila sale como hasta ahora (AC5).
             MandatoFamiliaCodes.Resolve(config?.MandataryFamily),
             config?.ChamberCity,
             config?.MandatarySigla,
-            // HU #11206 — las transformaciones entran DENTRO del objeto del contrato, sin cláusula nueva.
             transformaciones,
             modoFirmaMandatario,
             customKind,
             config?.CustomTemplateBody,
-            customPdf);
+            customPdf,
+            PartesVisibles: partesVisibles);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }

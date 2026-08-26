@@ -27,4 +27,44 @@ public sealed class MandatoTemplateResolverTests
     [InlineData("desconocido")]
     public void Resolve_FallsBackToGenerico(string? code) =>
         MandatoTemplateResolver.Resolve(code).Should().Be(MandatoVariante.Generico);
+
+    [Fact]
+    public void ResolveEmissionCode_Open_IsGenerico() =>
+        MandatoTemplateResolver.ResolveEmissionCode("open", mandanteEsJuridica: false, "11001000")
+            .Should().Be(MandatoTemplateResolver.Generico);
+
+    [Fact]
+    public void ResolveEmissionCode_PersonaJuridica_IsSabaneta_EvenForBogota() =>
+        MandatoTemplateResolver.ResolveEmissionCode("institutional", mandanteEsJuridica: true, "11001000")
+            .Should().Be(MandatoTemplateResolver.Sabaneta);
+
+    [Fact]
+    public void ResolveEmissionCode_EnvigadoJuridica_SameAsSabaneta() =>
+        MandatoTemplateResolver.ResolveEmissionCode("institutional", mandanteEsJuridica: true, "5266000")
+            .Should().Be(MandatoTemplateResolver.Sabaneta);
+
+    [Fact]
+    public void ResolveEmissionCode_BogotaPersonaNatural_IsGenerico_NotBello() =>
+        MandatoTemplateResolver.ResolveEmissionCode("signer", mandanteEsJuridica: false, "11001000")
+            .Should().Be(MandatoTemplateResolver.Generico);
+
+    [Fact]
+    public void ResolveEmissionCode_BelloPersonaNatural_IsBello() =>
+        MandatoTemplateResolver.ResolveEmissionCode("signer", mandanteEsJuridica: false, "5088000")
+            .Should().Be(MandatoTemplateResolver.Bello);
+
+    [Fact]
+    public void ResolveEmissionCode_CompradorJuridicoEnSigner_IsSabaneta() =>
+        MandatoTemplateResolver.ResolveEmissionCode("signer", mandanteEsJuridica: true, "11001000")
+            .Should().Be(MandatoTemplateResolver.Sabaneta);
+
+    [Fact]
+    public void ResolveEmissionCode_EnvigadoPersonaNatural_IsGenerico() =>
+        MandatoTemplateResolver.ResolveEmissionCode("signer", mandanteEsJuridica: false, "5266000")
+            .Should().Be(MandatoTemplateResolver.Generico);
+
+    [Fact]
+    public void ResolveEmissionCode_FunzaPersonaNatural_IsMunicipio() =>
+        MandatoTemplateResolver.ResolveEmissionCode("signer", mandanteEsJuridica: false, "25286000")
+            .Should().Be(MandatoTemplateResolver.Municipio);
 }

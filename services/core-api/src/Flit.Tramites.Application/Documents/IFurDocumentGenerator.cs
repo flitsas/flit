@@ -275,7 +275,12 @@ public sealed record MandatoData(
     /// <summary>Cuerpo del editor (placeholders {{placa}}, {{mandante_nombre}}, …).</summary>
     string? CustomTemplateBody = null,
     /// <summary>Bytes del PDF blank propio (cargados por el caller antes de generar).</summary>
-    byte[]? CustomTemplatePdf = null);
+    byte[]? CustomTemplatePdf = null,
+    /// <summary>
+    /// False en borrador y entregado: mandante y mandatario salen en blanco (<c>___</c>).
+    /// True al aprobar, si el modelo lo permite.
+    /// </summary>
+    bool PartesVisibles = true);
 
 /// <summary>
 /// Cómo aparece el MANDATARIO en el recuadro de firmas del contrato de mandato.
