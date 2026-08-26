@@ -86,7 +86,7 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     IProcedureTypeRepository? typeRepo = null,
     // ADR-0051 Decisión 5 — best-effort, opcional: los tests que no lo inyectan simplemente no
     // sincronizan (comportamiento previo a esta pieza).
-    SyncSellerActorFromRuntHandler? sellerSyncHandler = null)
+    SyncSellerActorFromConsultationsHandler? sellerSyncHandler = null)
 {
     // HU #10970 — mismo modo por ambiente que el resto del flujo. Sin inyectar ⇒ bloqueo duro.
     private readonly TramiteValidationPolicy _validationPolicy =
@@ -275,7 +275,8 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         // de capacidades) no captura al vendedor por formulario: sin esto, ningún camino crea el actor
         // "vendedor" y FinalizeDraftGate bloquearía el 100% de sus borradores con actores_incompletos.
         // Reusa el documento ya tecleado en el paso 1 (owner_document_type/number, recién persistidos
-        // arriba) para un lookup best-effort en el RUNT — nunca bloquea la creación del trámite.
+        // arriba) para un lookup best-effort — RUNT si es persona natural, RUES si es NIT — que nunca
+        // bloquea la creación del trámite.
         if (perfilTipo.RequiresSeller && !perfilTipo.SellerCapturedViaForm && sellerSyncHandler is not null)
         {
             await sellerSyncHandler.SyncAsync(
