@@ -10,36 +10,47 @@ namespace Flit.DataMigration.V1.Loading;
 /// </summary>
 public sealed class AttachmentMapStore(Flit.Infrastructure.Persistence.FlitDbContext db)
 {
+    /// <summary>
+    /// El esquema de la libreta de adjuntos, en un solo sitio.
+    /// <para>
+    /// Lo comparte <see cref="MigrationMapStore.EnsureCreatedAsync"/>: su
+    /// <see cref="MigrationMapStore.DeleteMigratedAsync"/> borra de las DOS libretas, así que la de
+    /// adjuntos tiene que existir aunque solo se haya corrido la instancia 1. Duplicar el DDL en dos
+    /// sitios era la alternativa, y las dos copias habrían divergido.
+    /// </para>
+    /// </summary>
+    internal const string Ddl =
+        """
+        CREATE SCHEMA IF NOT EXISTS migration;
+
+        CREATE TABLE IF NOT EXISTS migration.migration_attachment_map (
+            v1_table                 text         NOT NULL,
+            v1_id                    bigint       NOT NULL,
+            v1_column                text         NOT NULL,
+            source_file_id           text         NOT NULL,
+            v2_attachment_id         uuid         NOT NULL,
+            v2_procedure_instance_id uuid         NOT NULL,
+            tenant_id                uuid         NOT NULL,
+            tipo                     varchar(40)  NOT NULL,
+            mode                     text         NOT NULL,
+            storage_path             text         NOT NULL,
+            sha256                   varchar(64)  NOT NULL,
+            size_bytes               bigint       NOT NULL,
+            filename                 text         NOT NULL,
+            mimetype                 varchar(150) NOT NULL,
+            batch_id                 text         NOT NULL,
+            migrated_at              timestamptz  NOT NULL DEFAULT now(),
+            CONSTRAINT pk_migration_attachment_map PRIMARY KEY (v1_table, v1_id, v1_column)
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_migration_attachment_map_instance
+            ON migration.migration_attachment_map (v2_procedure_instance_id);
+        CREATE INDEX IF NOT EXISTS ix_migration_attachment_map_batch
+            ON migration.migration_attachment_map (batch_id);
+        """;
+
     public async Task EnsureCreatedAsync(CancellationToken cancellationToken) =>
-        await db.Database.ExecuteSqlRawAsync(
-            """
-            CREATE SCHEMA IF NOT EXISTS migration;
-
-            CREATE TABLE IF NOT EXISTS migration.migration_attachment_map (
-                v1_table                 text        NOT NULL,
-                v1_id                    bigint      NOT NULL,
-                v1_column                text        NOT NULL,
-                source_file_id           text        NOT NULL,
-                v2_attachment_id         uuid        NOT NULL,
-                v2_procedure_instance_id uuid        NOT NULL,
-                tenant_id                uuid        NOT NULL,
-                tipo                     varchar(40) NOT NULL,
-                mode                     text        NOT NULL,
-                storage_path             text        NOT NULL,
-                sha256                   varchar(64) NOT NULL,
-                size_bytes               bigint      NOT NULL,
-                filename                 text        NOT NULL,
-                mimetype                 varchar(150) NOT NULL,
-                batch_id                 text        NOT NULL,
-                migrated_at              timestamptz NOT NULL DEFAULT now(),
-                CONSTRAINT pk_migration_attachment_map PRIMARY KEY (v1_table, v1_id, v1_column)
-            );
-
-            CREATE INDEX IF NOT EXISTS ix_migration_attachment_map_instance
-                ON migration.migration_attachment_map (v2_procedure_instance_id);
-            CREATE INDEX IF NOT EXISTS ix_migration_attachment_map_batch
-                ON migration.migration_attachment_map (batch_id);
-            """, cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(Ddl, cancellationToken);
 
     /// <summary>Columnas de adjunto ya migradas para un trámite (para saltarlas si no hay <c>--force</c>).</summary>
     public async Task<IReadOnlySet<string>> MigratedColumnsAsync(
