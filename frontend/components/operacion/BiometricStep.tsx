@@ -20,13 +20,17 @@ import { WizardAccordion } from './WizardAccordion';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { motivoDeParte, presentarMotivoNoEnvio } from './envio-validacion-motivos';
+import {
+  FirmaElectronicaCard,
+  signatureBadge,
+  signatureHashLabel,
+} from './FirmaElectronicaCard';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import type {
   BiometricEstado,
   BiometricParte,
   BiometricValidation,
   EnvioValidacionMotivo,
-  MecanismoFirma,
   ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
@@ -502,35 +506,14 @@ function ParteBlock({
   if (vaultCovered) {
     return (
       <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-        <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
-          Método de Firma
-        </p>
-        <div
-          className="flex items-center justify-center rounded-xl border p-5 text-center"
-          style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
-        >
-          <div>
-            <p
-              className="text-[11px] font-medium uppercase tracking-wide"
-              style={{ color: '#59677D' }}
-            >
-              Firma electrónica
-            </p>
-            <p
-              className="mt-2 select-none text-2xl font-semibold italic"
-              style={{ color: '#1A2B4C' }}
-            >
-              {sigNombre}
-            </p>
-            <div className="mt-2">
-              <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
-            </div>
-            <p className="mt-2 text-xs opacity-70">{sigDetalle}</p>
-          </div>
-        </div>
-        <div className="mt-3">
-          <VaultCoveredView />
-        </div>
+        <FirmaElectronicaCard
+          nombre={sigNombre}
+          validated
+          badgeLabel={sigBadge.label}
+          badgeTone={sigBadge.tone}
+          detalle={sigDetalle}
+          footer={<VaultCoveredView />}
+        />
       </div>
     );
   }
@@ -608,71 +591,21 @@ function ParteBlock({
       </div>
 
       <div className="flex flex-col rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-        <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
-          Método de Firma
-        </p>
-        <div
-          className="flex flex-1 items-center justify-center rounded-xl border p-5 text-center"
-          style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
-        >
-          <div>
-            <p
-              className="text-[11px] font-medium uppercase tracking-wide"
-              style={{ color: '#59677D' }}
-            >
-              Firma electrónica
-            </p>
-            <p
-              className="mt-2 select-none text-2xl font-semibold italic"
-              style={{ color: '#1A2B4C', filter: isValidated ? undefined : 'blur(4px)' }}
-            >
-              {sigNombre}
-            </p>
-            <div className="mt-2">
-              <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
-            </div>
-            <p className="mt-2 text-xs opacity-70">{sigDetalle}</p>
-            {hashLine !== null && (
-              <p className="mt-2 text-xs opacity-70">Hash: {hashLine}</p>
-            )}
-          </div>
-        </div>
-        <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
+        <FirmaElectronicaCard
+          nombre={sigNombre}
+          validated={isValidated}
+          badgeLabel={sigBadge.label}
+          badgeTone={sigBadge.tone}
+          detalle={sigDetalle}
+          hashLine={hashLine}
+          stretch
+          footer={
+            <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
+          }
+        />
       </div>
     </div>
   );
-}
-
-/** Etiqueta de hash de firma: solo con dato real o "—" si aprobado sin hash; pendiente → null. */
-function signatureHashLabel(validation: BiometricValidation | null): string | null {
-  const hash = validation?.certificateHash?.trim();
-  if (hash) {
-    return hash;
-  }
-  if (validation?.status === 'aprobado' && !validation.expired) {
-    return '—';
-  }
-  return null;
-}
-
-/**
- * Badge del recuadro de firma en la columna derecha de cada parte, en tres niveles según el dato
- * REAL disponible (nunca se fabrica): 1) cubierta por el baúl (`vaultCovered`); 2) mecanismo
- * elegido explícitamente por el gestor cuando el representante tiene baúl e identidad vigentes a
- * la vez (`actor.representanteLegal.mecanismoFirma === 'identidad'`, HU #11061); 3) sin ninguno
- * de los dos datos, la parte no tiene firma registrada.
- */
-function signatureBadge(
-  vaultCovered: boolean,
-  mecanismoFirma: MecanismoFirma | undefined,
-): { label: string; tone: StatusTone } {
-  if (vaultCovered) {
-    return { label: 'Firma electrónica activa', tone: 'success' };
-  }
-  if (mecanismoFirma === 'identidad') {
-    return { label: 'Firmará con validación de identidad', tone: 'info' };
-  }
-  return { label: 'Sin firma registrada', tone: 'neutral' };
 }
 
 /**

@@ -132,6 +132,8 @@ describe('TramiteDetalleIdentidad', () => {
     const fila = (await screen.findByText('Comprador')).closest('li') as HTMLElement;
     expect(within(fila).getByText('Aprobado')).toBeInTheDocument();
     expect(within(fila).getByText('2026/06/20')).toBeInTheDocument();
+    expect(within(fila).getByText('Método de Firma')).toBeInTheDocument();
+    expect(within(fila).getByText('Firma electrónica')).toBeInTheDocument();
   });
 
   it('traspaso: un renglón por parte, con estados distintos y sin mezclar datos entre partes', async () => {
@@ -170,6 +172,8 @@ describe('TramiteDetalleIdentidad', () => {
 
     const filaComprador = (await screen.findByText('Comprador')).closest('li') as HTMLElement;
     expect(within(filaComprador).getByText('Sin iniciar')).toBeInTheDocument();
+    expect(within(filaComprador).getByText('Sin firma registrada')).toBeInTheDocument();
+    expect(within(filaComprador).getByText('Método de Firma')).toBeInTheDocument();
   });
 
   it('una parte acreditada por firma del baúl se rotula distinto y sin botón de certificado', async () => {
@@ -182,6 +186,7 @@ describe('TramiteDetalleIdentidad', () => {
 
     const filaComprador = (await screen.findByText('Comprador')).closest('li') as HTMLElement;
     expect(within(filaComprador).getByText('Acreditado por firma del baúl')).toBeInTheDocument();
+    expect(within(filaComprador).getByText('Firma electrónica activa')).toBeInTheDocument();
     expect(within(filaComprador).queryByRole('button')).not.toBeInTheDocument();
   });
 

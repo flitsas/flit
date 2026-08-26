@@ -18,7 +18,12 @@ import {
   TarjetaDetalle,
   type SeccionDetalleProps,
 } from './primitivos';
+import {
+  FirmaElectronicaCard,
+  signatureHashLabel,
+} from '@/components/operacion/FirmaElectronicaCard';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
+import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 /**
  * Sección «Validación de identidad» del modal de detalle (Frente C).
@@ -66,6 +71,13 @@ interface FilaIdentidad {
   timestamp: string | null;
   validationId: string | null;
   certificado: boolean;
+  nombre: string;
+  enBaul: boolean;
+  validated: boolean;
+  hashLine: string | null;
+  sigBadgeLabel: string;
+  sigBadgeTone: StatusTone;
+  sigDetalle: string;
 }
 
 /**
@@ -78,8 +90,16 @@ function construirFilas(
   modalidad: ProcedureFamily,
   validations: BiometricValidation[],
   firmaBaulPartes: string[],
+  item: InstanceSummary,
 ): FilaIdentidad[] | null {
   const partes = modalidad === 'TRASPASO' ? PARTES_TRASPASO : PARTES_MATRICULA;
+
+  const nombreParte = (parte: BiometricParte): string => {
+    if (parte === 'vendedor') {
+      return item.vendedorNombre?.trim() || PARTE_LABEL.vendedor;
+    }
+    return item.compradorNombre?.trim() || PARTE_LABEL.comprador;
+  };
 
   const resueltas = partes.map((parte) => {
     const matches = validations.filter((v) =>
@@ -87,7 +107,6 @@ function construirFilas(
         ? v.partyRole === parte
         : v.partyRole === null || v.partyRole === 'comprador',
     );
-    // La última del arreglo es la vigente (mismo criterio que el panel de historial de identidad).
     const ultima = matches.length > 0 ? matches[matches.length - 1]! : null;
     const enBaul = firmaBaulPartes.includes(parte);
     return { parte, ultima, enBaul };
@@ -97,7 +116,21 @@ function construirFilas(
   if (!tieneAlgo) return null;
 
   return resueltas.map(({ parte, ultima, enBaul }) => {
+    const parteNombre = nombreParte(parte);
+    const sigNombre = ultima?.name?.trim() || parteNombre;
+    const validated =
+      enBaul || (ultima?.status === 'aprobado' && !ultima.expired);
+    const hashLine = enBaul ? null : signatureHashLabel(ultima);
+
     if (ultima) {
+      const sigBadgeLabel = validated
+        ? 'Firma electrónica activa'
+        : 'Sin firma registrada';
+      const sigBadgeTone: StatusTone = validated ? 'success' : 'neutral';
+      const sigDetalle = validated
+        ? `${PARTE_LABEL[parte]} firmará con el sello de la validación de identidad (biométrica) como mecanismo de firma.`
+        : `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`;
+
       return {
         key: ultima.id,
         label: PARTE_LABEL[parte],
@@ -106,6 +139,13 @@ function construirFilas(
         timestamp: ultima.validatedAt ?? ultima.createdAt ?? null,
         validationId: ultima.id,
         certificado: ultima.status === 'aprobado',
+        nombre: sigNombre,
+        enBaul,
+        validated,
+        hashLine,
+        sigBadgeLabel,
+        sigBadgeTone,
+        sigDetalle,
       };
     }
     if (enBaul) {
@@ -117,6 +157,13 @@ function construirFilas(
         timestamp: null,
         validationId: null,
         certificado: false,
+        nombre: sigNombre,
+        enBaul: true,
+        validated: true,
+        hashLine: null,
+        sigBadgeLabel: 'Firma electrónica activa',
+        sigBadgeTone: 'success' as StatusTone,
+        sigDetalle: `${PARTE_LABEL[parte]} firmará con la firma electrónica precargada en el baúl.`,
       };
     }
     return {
@@ -127,6 +174,13 @@ function construirFilas(
       timestamp: null,
       validationId: null,
       certificado: false,
+      nombre: sigNombre,
+      enBaul: false,
+      validated: false,
+      hashLine: null,
+      sigBadgeLabel: 'Sin firma registrada',
+      sigBadgeTone: 'neutral' as StatusTone,
+      sigDetalle: `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`,
     };
   });
 }
@@ -170,7 +224,15 @@ function FilaValidacion({
           ) : null}
         </span>
       </div>
-      {fila.validationId ? (
+      <FirmaElectronicaCard
+        nombre={fila.nombre}
+        validated={fila.validated}
+        badgeLabel={fila.sigBadgeLabel}
+        badgeTone={fila.sigBadgeTone}
+        detalle={fila.sigDetalle}
+        hashLine={fila.hashLine}
+      />
+      {fila.validationId && !fila.enBaul ? (
         <IdentityValidationTrackingPanel validationId={fila.validationId} />
       ) : null}
     </li>
@@ -237,7 +299,7 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
     );
   }
 
-  const filas = construirFilas(item.modalidad, validations, firmaBaulPartes);
+  const filas = construirFilas(item.modalidad, validations, firmaBaulPartes, item);
 
   if (filas === null) {
     return (

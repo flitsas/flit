@@ -17,6 +17,11 @@ import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { WIZARD_CARD, WIZARD_INPUT, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { BiometricStep } from './BiometricStep';
+import {
+  FirmaElectronicaCard,
+  signatureBadge,
+  signatureHashLabel,
+} from './FirmaElectronicaCard';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
 import { WizardReadOnlyProvider } from './WizardReadOnlyContext';
 
@@ -374,6 +379,20 @@ function CertificadoIdButton({
   );
 }
 
+function resumenFirmaDetalle(
+  parteLabel: string,
+  firmaBaul: boolean,
+  bio: BiometricValidation | null | undefined,
+): string {
+  if (firmaBaul) {
+    return `${parteLabel} firmará con la firma electrónica precargada en el baúl.`;
+  }
+  if (bio?.status === 'aprobado' && !bio.expired) {
+    return `${parteLabel} firmará con el sello de la validación de identidad (biométrica) como mecanismo de firma.`;
+  }
+  return `${parteLabel} todavía no tiene un mecanismo de firma electrónica registrado.`;
+}
+
 function ActorBlock({
   actor,
   bio,
@@ -383,6 +402,8 @@ function ActorBlock({
   certCache,
   showRepresentante,
   hideValidacion = false,
+  parteLabel,
+  mecanismoFirma,
 }: {
   actor: ResumenActor;
   bio?: BiometricValidation | null;
@@ -393,7 +414,19 @@ function ActorBlock({
   showRepresentante: boolean;
   /** Cuando la captura biométrica va embebida debajo, no repetir el campo Validación. */
   hideValidacion?: boolean;
+  parteLabel: string;
+  mecanismoFirma?: 'baul' | 'identidad';
 }) {
+  const showFirmaCard =
+    !hideValidacion && (firmaBaul || bio != null || !!actor.nombre);
+  const firmaValidated = firmaBaul || (bio?.status === 'aprobado' && !bio?.expired);
+  const firmaNombre = bio?.name || actor.nombre || parteLabel;
+  const sigBadge = signatureBadge(firmaBaul, mecanismoFirma);
+  const resolvedSigBadge =
+    firmaValidated && !firmaBaul
+      ? { label: 'Firma electrónica activa', tone: 'success' as const }
+      : sigBadge;
+  const hashLine = firmaBaul ? null : signatureHashLabel(bio ?? null);
   return (
     <div className="space-y-3">
       {/* Datos del actor: `grid-cols-2 sm:grid-cols-3` (captura Step5, traducido a los tokens FLIT). */}
@@ -427,6 +460,16 @@ function ActorBlock({
             Validación de identidad
           </p>
           <IdentidadStatusBanner bio={bio} firmaBaul={firmaBaul} />
+          {showFirmaCard ? (
+            <FirmaElectronicaCard
+              nombre={firmaNombre}
+              validated={firmaValidated}
+              badgeLabel={resolvedSigBadge.label}
+              badgeTone={resolvedSigBadge.tone}
+              detalle={resumenFirmaDetalle(parteLabel, firmaBaul, bio)}
+              hashLine={hashLine}
+            />
+          ) : null}
           <CertificadoIdButton
             label={certLabel}
             bio={bio}
@@ -807,6 +850,7 @@ export default function MatriculaResumen({
                 certCache={certCache}
                 showRepresentante={vendedor.tipoDoc === 'NIT'}
                 hideValidacion={showBioVendedor}
+                parteLabel="Vendedor"
               />
               {showBioVendedor ? embedBiometric('vendedor') : null}
             </div>
@@ -830,6 +874,7 @@ export default function MatriculaResumen({
                   certCache={certCache}
                   showRepresentante={comprador.tipoDoc === 'NIT'}
                   hideValidacion={showBioComprador}
+                  parteLabel="Comprador"
                 />
                 {showBioComprador ? embedBiometric('comprador') : null}
               </div>

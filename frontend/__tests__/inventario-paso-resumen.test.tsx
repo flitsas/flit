@@ -359,6 +359,8 @@ describe('MatriculaResumen — inventario: actores del trámite', () => {
     for (const seccion of [vendedor, comprador]) {
       expect(within(seccion).getByText('Validación de identidad')).toBeInTheDocument();
       expect(within(seccion).getByText(/Identidad verificada — 95\/100/)).toBeInTheDocument();
+      expect(within(seccion).getByText('Método de Firma')).toBeInTheDocument();
+      expect(within(seccion).getByText('Firma electrónica')).toBeInTheDocument();
     }
     // Un certificado por parte, rotulado con la parte a la que pertenece.
     expect(
