@@ -63,6 +63,44 @@ public static class ConditionalDocumentRules
     }
 
     /// <summary>
+    /// Reglas de la cancelación de matrícula: los documentos que acredita CADA causal.
+    ///
+    /// <para>Una cancelación por decisión judicial se prueba con el acto del juez; una pérdida total
+    /// —por fuerza mayor o por accidente— con los tres certificados a la vez (DIJIN o Policía,
+    /// aseguradora o perito, autoridad administrativa); y una decisión voluntaria con el certificado
+    /// de la DIJIN. Todos los de la causal son obligatorios: no basta uno cualquiera.</para>
+    ///
+    /// <para>Los documentos de las OTRAS causales se ocultan en cuanto hay una declarada, para que el
+    /// gestor no vea como opcional un certificado que su trámite no usa. Sin causal declarada no se
+    /// exige ni se oculta nada: el checklist queda como estaba y el paso no deja continuar hasta que
+    /// el gestor elija, que es donde corresponde pedírselo.</para>
+    ///
+    /// <para>El certificado de tradición NO sale de aquí: es obligatorio de base en las cuatro
+    /// causales y lo pone el catálogo.</para>
+    /// </summary>
+    private static IEnumerable<ConditionalRule> Cancelacion()
+    {
+        foreach (var docTipo in CancelacionCausales.TodosLosDocumentos)
+        {
+            var doc = docTipo;
+            var item = Item(doc, CancelacionCausales.EtiquetaDocumento(doc), true, doc);
+
+            yield return new ConditionalRule(
+                $"cancelacion_{doc}",
+                c => CancelacionCausales.Exige(c.CancelacionCausal, doc),
+                ConditionalEffect.Require,
+                item);
+
+            yield return new ConditionalRule(
+                $"cancelacion_{doc}_no_aplica",
+                c => c.CancelacionCausal != CancelacionCausal.Ninguna
+                    && !CancelacionCausales.Exige(c.CancelacionCausal, doc),
+                ConditionalEffect.Hide,
+                item);
+        }
+    }
+
+    /// <summary>
     /// Reglas condicionales para una tipología, o lista vacía si la tipología no tiene reglas
     /// (⇒ el checklist queda idéntico al base, sin cambios de comportamiento).
     /// </summary>
@@ -71,6 +109,11 @@ public static class ConditionalDocumentRules
         // Matrícula inicial no tiene reglas propias: aduana es obligatorio de base (catálogo + matriz).
         TramiteTipologiaCatalog.CodigoMatriculaInicial => Comunes().ToList(),
         TramiteTipologiaCatalog.CodigoTraspasoStandard => Traspaso().Concat(Comunes()).ToList(),
+        // Cancelación de matrícula: SOLO sus reglas de causal, sin `Comunes()`. Ningún tipo de la
+        // familia OTROS aplicaba condicionales hasta ahora, así que encenderle de paso mandato,
+        // cédulas y poderes sería un cambio de comportamiento que nadie pidió — y que además tocaría
+        // por igual a los otros doce tipos el día que se sumen.
+        CancelacionCausales.TipoCodigo => Cancelacion().ToList(),
         // Tipología desconocida ⇒ sin reglas (checklist base sin cambios).
         _ => [],
     };

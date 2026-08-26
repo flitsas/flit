@@ -10,6 +10,7 @@ import {
 } from '@/lib/documents/open-document-tab';
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
 import { WizardCardHeader } from './wizard-atoms';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type {
@@ -268,9 +269,7 @@ function DocumentosCargadosCard({
               key={item.key}
               instanceId={instanceId}
               item={item}
-              attachment={
-                item.docTipo ? attachments.find((a) => a.tipo === item.docTipo) : undefined
-              }
+              attachment={findAttachmentByDocTipo(attachments, item.docTipo)}
             />
           ))}
         </ul>

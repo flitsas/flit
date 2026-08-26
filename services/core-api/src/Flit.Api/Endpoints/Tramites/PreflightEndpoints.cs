@@ -59,6 +59,16 @@ internal static class PreflightEndpoints
                     {
                         ["procedureType"] = VehicleBodyTypePolicy.ProcedureTypeCambioCarroceria,
                     }),
+                // Levantamiento de prenda sobre un vehículo que el RUNT no reporta con gravamen: no
+                // hay nada que levantar. Bloqueo DURO, no subsanable.
+                VehiclePrendaPolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehiclePrendaPolicy.ErrorCode,
+                    detail: "El vehículo no tiene prenda registrada en el RUNT: no hay gravamen que levantar.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["procedureType"] = VehiclePrendaPolicy.ProcedureTypeLevantamiento,
+                    }),
                 _ => Results.Ok(result),
             };
         }).WithName("RunProcedureInstancePreflight");

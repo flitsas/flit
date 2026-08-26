@@ -87,6 +87,13 @@ public static class TramiteDocumentContextMapper
         // Producto: el contrato de mandato aplica siempre (persona natural y jurídica).
         const bool exigeMandato = true;
 
+        // Causal de la cancelación de matrícula, declarada por el gestor en el paso de requerimientos.
+        // Se lee siempre (no solo si el tipo es CANCELACION_MATRICULA): el campo no existe en los
+        // demás trámites, así que ahí resuelve a `Ninguna` y no exige nada — y las reglas que la
+        // consumen solo se cargan para ese tipo.
+        var cancelacionCausal = CancelacionCausales.Parse(
+            LeerTexto(fieldValues, CancelacionCausales.FieldKey));
+
         return new TramiteDocumentContext(
             // Aduana es obligatorio de base en matrícula (catálogo + matriz del gestor); no se
             // condiciona a una bandera del operador, así que EsImportado queda siempre false.
@@ -100,7 +107,8 @@ public static class TramiteDocumentContextMapper
             TieneTramitador: tieneTramitador,
             CambioCarroceria: cambioCarroceria,
             ServicioEspecial: servicioEspecial,
-            ExigeMandato: exigeMandato);
+            ExigeMandato: exigeMandato,
+            CancelacionCausal: cancelacionCausal);
     }
 
     private static string? LeerTexto(IEnumerable<ProcedureInstanceFieldValue> fieldValues, string fieldKey) =>

@@ -37,6 +37,12 @@ UPDATE tramites.procedure_types
 -- Guarda: matrícula y traspaso NO pueden quedar marcadas. Apagarles los complementarios rompería en
 -- silencio el art. 5.1.8 —los simultáneos desaparecerían de la pantalla sin que nadie lo pidiera— y
 -- el defecto solo se vería al abrir un traspaso.
+--
+-- Excepción declarada: `CANCELACION_MATRICULA` (DDL 93). Es de MATRICULAS, pero acumular presupone un
+-- vehículo que sigue inscrito y la cancelación lo saca del registro: una limitación a la propiedad
+-- sobre una matrícula que se cancela es una contradicción, no un trámite simultáneo. En una base
+-- nueva este DDL corre ANTES que el 93, así que la guarda no la vería igual; se excluye de forma
+-- explícita para que una reaplicación posterior tampoco la denuncie como un error.
 DO $$
 DECLARE
     marcados text;
@@ -44,6 +50,7 @@ BEGIN
     SELECT string_agg(code, ', ') INTO marcados
     FROM tramites.procedure_types
     WHERE family <> 'OTROS'
+      AND code <> 'CANCELACION_MATRICULA'
       AND (gate_profile ->> 'allowsComplementaryTransformations' = 'false'
            OR gate_profile ->> 'allowsComplementaryPrenda' = 'false');
 

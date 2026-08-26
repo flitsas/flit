@@ -233,6 +233,9 @@ public sealed class GenerarFurHandler(
         // Ninguna: una fila previa 'registrar' que se reemplazó por 'levantar' no arrastra su acreedor
         // al FUR porque siempre se lee de la fila VIGENTE (prendaRepo.GetVigenteAsync), nunca de historia.
         var acreedorPrendaDocumento = prendaMarking != FurPrendaMarking.Ninguna ? prendaVigente!.AcreedorDocumento : null;
+        // Entidad ante la que se levantó el gravamen: la declara el párrafo 23 en el trámite de
+        // levantamiento de prenda. Vacía en traspaso y matrícula, donde el literal no cambia.
+        var entidadLevantamiento = prendaMarking != FurPrendaMarking.Ninguna ? prendaVigente!.LevantamientoEntidad : null;
 
         // HU #10645 (ADR-0025 §4) — imagen REAL de la firma del baúl por parte NIT cubierta: se descarga el
         // artefacto (best-effort) y se alimenta FurDocumentData.FirmaImagenes; el mapper la estampa en el
@@ -276,7 +279,7 @@ public sealed class GenerarFurHandler(
         // una función pura y síncrona.
         var nombresRlDirectorio = await ResolverNombresDelDirectorioAsync(instance, esTraspaso, ct);
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat, nombresRlDirectorio);
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento, firmaImagenes, firmaBaulMetadatos, templateFormat, nombresRlDirectorio);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -664,6 +667,7 @@ public sealed class GenerarFurHandler(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
         FurPrendaMarking prendaMarking, string? acreedorPrenda, string? acreedorPrendaDocumento,
+        string? entidadLevantamiento,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
         FurTemplateFormat templateFormat,
@@ -706,10 +710,15 @@ public sealed class GenerarFurHandler(
             PesoBruto: Get(fv, "vehicle_weight"),
             NumeroEjes: Get(fv, "vehicle_axles"));
 
+        // El encabezado del FUR lleva el organismo donde el vehículo está matriculado HOY. En casi
+        // todos los tipos coincide con el canónico; en un radicado de cuenta no, porque ahí el
+        // canónico es el DESTINO —quien aprueba— y el actual vive en las claves descriptivas. La
+        // caída deja intactos los tipos que no las escriben.
         var organismo = new OrganismoTransito(
-            Codigo: Get(fv, "transit_office_code"),
-            Nombre: Get(fv, "transit_office_name"),
-            Ciudad: TransitOfficeCity.Legible(Get(fv, "transit_office_city")));
+            Codigo: Get(fv, TransitOfficeFieldKeys.ActualCode) ?? Get(fv, TransitOfficeFieldKeys.Code),
+            Nombre: Get(fv, TransitOfficeFieldKeys.ActualName) ?? Get(fv, TransitOfficeFieldKeys.Name),
+            Ciudad: TransitOfficeCity.Legible(
+                Get(fv, TransitOfficeFieldKeys.ActualCity) ?? Get(fv, TransitOfficeFieldKeys.City)));
 
         // ADR-0050 — en la familia OTROS solo entra la transformación que ES el trámite. Las banderas
         // y el diff RUNT↔efectivo son las dos vías por las que una transformación complementaria se
@@ -769,6 +778,7 @@ public sealed class GenerarFurHandler(
                 prendaMarking,
                 acreedorPrenda,
                 acreedorPrendaDocumento,
+                entidadLevantamiento,
                 fv,
                 transformaciones,
                 blindajeOpcion),
@@ -815,14 +825,30 @@ public sealed class GenerarFurHandler(
         FurPrendaMarking prendaMarking,
         string? acreedorPrenda,
         string? acreedorPrendaDocumento,
+        string? entidadLevantamiento,
         Dictionary<string, string?> fv,
         FurTransformacionesDeclaradas transformaciones,
         BlindajeOpcion blindajeOpcion)
     {
         var automatico = FurPrendaObservation.Join(
-            FurTramiteObservation.Compose(codigo, partes),
+            // La causal de la cancelación entra por el bloque del TIPO, junto a los de leasing: es lo
+            // que la casilla 13 no alcanza a decir, igual que el nivel es lo que no dice la casilla
+            // de blindado.
+            // El organismo DESTINO es el canónico (`transit_office_name`): es quien aprueba. El del
+            // encabezado, en cambio, es el actual del vehículo, que vive en las claves descriptivas.
+            FurTramiteObservation.Compose(
+                codigo,
+                partes,
+                new FurTramiteObservationContext(
+                    CancelacionCausal: Get(fv, CancelacionCausales.FieldKey),
+                    // El destino sale de la clave DECLARATIVA cuando el trámite lo declara (traslado:
+                    // lo expide el organismo de origen) y de la canónica cuando el destino ES el
+                    // organismo del trámite (radicado). La caída cubre los dos sin ramificar por tipo.
+                    OrganismoDestino: Get(fv, TransitOfficeFieldKeys.DestinoName)
+                                      ?? Get(fv, TransitOfficeFieldKeys.Name),
+                    Placa: Get(fv, "plate"))),
             FurPrendaObservation.Join(
-                FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
+                FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento),
                 FurPrendaObservation.Join(
                     FurTransformationObservations.ComposeDeclaradas(
                         transformaciones,

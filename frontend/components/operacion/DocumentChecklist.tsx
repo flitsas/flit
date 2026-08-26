@@ -767,9 +767,14 @@ export function DocumentChecklist({
   const batch = useProcedureBatchUpload(instanceId, { modalidad });
   const readOnly = useWizardReadOnly();
 
+  // Se indexa en minúsculas porque los dos extremos no guardan el código igual: el `docTipo` del
+  // checklist conserva el casing con que se creó el tipo en el módulo Documental, y el `tipo` del
+  // adjunto lo persiste el backend en minúsculas. Emparejar tal cual dejaba la casilla vacía —y al
+  // gestor reintentando— con un documento que en realidad ya estaba cargado.
   const attachmentByTipo = new Map<string, ProcedureAttachment>();
   for (const a of attachments) {
-    if (!attachmentByTipo.has(a.tipo)) attachmentByTipo.set(a.tipo, a);
+    const key = a.tipo.toLowerCase();
+    if (!attachmentByTipo.has(key)) attachmentByTipo.set(key, a);
   }
 
   // Prenda se carga en PrendaForm (`prenda_*` / `inscripcion_prenda`); no duplicar aquí.
@@ -1015,7 +1020,7 @@ export function DocumentChecklist({
             })
             .map((item) => {
             const tipo = item.docTipo ?? item.key;
-            const attachment = attachmentByTipo.get(tipo);
+            const attachment = attachmentByTipo.get(tipo.toLowerCase());
             return (
               <DocumentSlot
                 key={item.key}

@@ -120,4 +120,110 @@ public sealed class FurTramiteObservationTests
         FurTramiteObservation.Compose("MATRICULA_NUEVA",
             [new DocumentParte("comprador", "ANA", "1", null, "CC")]).Should().BeNull();
     }
+
+    // ── Cancelación de matrícula: la causal (tabla 5 del artefacto) ───────────
+
+    [Theory]
+    [InlineData("DECISION_JUDICIAL", "CANCELACIÓN POR DECISIÓN JUDICIAL.")]
+    [InlineData("PERDIDA_TOTAL_FUERZA_MAYOR", "CANCELACIÓN POR PÉRDIDA TOTAL - FUERZA MAYOR.")]
+    [InlineData("PERDIDA_TOTAL_ACCIDENTE", "CANCELACIÓN POR PÉRDIDA TOTAL - ACCIDENTE.")]
+    [InlineData("DECISION_VOLUNTARIA", "CANCELACIÓN POR DECISIÓN VOLUNTARIA.")]
+    public void Cancelacion_DeclaraLaCausalDeclarada(string causal, string esperado)
+    {
+        FurTramiteObservation.Compose("CANCELACION_MATRICULA", [], new FurTramiteObservationContext(CancelacionCausal: causal))
+            .Should().Be(esperado, "la casilla 13 no distingue una causal de otra");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("PERDIDA_TOTAL")]
+    public void Cancelacion_SinCausalDeclarada_NoInventaMotivo(string? causal)
+    {
+        // Regla del artefacto: faltan datos ⇒ sí casilla, no texto. Escribir una causal por defecto
+        // declararía ante el organismo un motivo que nadie eligió — y de él cuelgan los documentos
+        // con los que el trámite se acredita.
+        FurTramiteObservation.Compose("CANCELACION_MATRICULA", [], new FurTramiteObservationContext(CancelacionCausal: causal)).Should().BeNull();
+    }
+
+    [Fact]
+    public void Cancelacion_LaCausalSoloLaMiraSuTipo()
+    {
+        FurTramiteObservation.Compose("DUPLICADO_PLACA", [], new FurTramiteObservationContext(CancelacionCausal: "DECISION_JUDICIAL")).Should().BeNull();
+    }
+
+    // ── Radicado de cuenta ───────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void RadicadoCuenta_DeclaraElOrganismoDeDestino()
+    {
+        // El encabezado del FUR lleva el organismo donde el vehículo está matriculado HOY, así que
+        // sin esta línea el formulario no dice a dónde va la cuenta — que es el trámite entero.
+        FurTramiteObservation.Compose("RADICADO_CUENTA", [], new FurTramiteObservationContext(OrganismoDestino: "Secretaría de Tránsito de Envigado"))
+            .Should().Be("Radicado de cuenta en SECRETARÍA DE TRÁNSITO DE ENVIGADO");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void RadicadoCuenta_SinDestino_NoInventaElTexto(string? destino)
+    {
+        // Regla del artefacto: faltan datos ⇒ sí casilla y sí tipo, no se inventa el bloque.
+        FurTramiteObservation.Compose("RADICADO_CUENTA", [], new FurTramiteObservationContext(OrganismoDestino: destino))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void OtroTipo_ConDestino_NoLoImprime()
+    {
+        FurTramiteObservation.Compose("CAMBIO_COLOR", [], new FurTramiteObservationContext(OrganismoDestino: "OT ENVIGADO"))
+            .Should().BeNull();
+    }
+
+    // ── Traslado de cuenta: el ESPEJO del radicado ───────────────────────────────────────────
+
+    [Fact]
+    public void TrasladoCuenta_DeclaraPlacaYDestino()
+    {
+        // El traslado lo expide el organismo de ORIGEN —él valida el paz y salvo y da salida a la
+        // cuenta— así que el encabezado del FUR lleva el de origen y el destino solo cabe aquí.
+        FurTramiteObservation.Compose(
+            "TRASLADO_CUENTA", [],
+            new FurTramiteObservationContext(
+                OrganismoDestino: "Secretaría de Tránsito de Envigado", Placa: "abc123"))
+            .Should().Be(
+                "Traslado de cuenta del Vehículo con placa ABC123 para la nueva secretaria de "
+                + "SECRETARÍA DE TRÁNSITO DE ENVIGADO");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void TrasladoCuenta_SinDestino_NoInventaElTexto(string? destino)
+    {
+        FurTramiteObservation.Compose(
+            "TRASLADO_CUENTA", [], new FurTramiteObservationContext(OrganismoDestino: destino, Placa: "ABC123"))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void TrasladoCuenta_SinPlaca_NoOmiteElBloque()
+    {
+        // La placa la trae siempre el expediente (el trámite entra por placa); si faltara, el destino
+        // sigue siendo lo que el organismo necesita leer.
+        FurTramiteObservation.Compose(
+            "TRASLADO_CUENTA", [], new FurTramiteObservationContext(OrganismoDestino: "OT ENVIGADO"))
+            .Should().Be("Traslado de cuenta del Vehículo con placa - para la nueva secretaria de OT ENVIGADO");
+    }
+
+    [Fact]
+    public void TrasladoYRadicado_NoComparten_Literal()
+    {
+        // Son los dos tiempos del mismo movimiento y el organismo distingue uno de otro por el texto.
+        var ctx = new FurTramiteObservationContext(OrganismoDestino: "OT ENVIGADO", Placa: "ABC123");
+
+        FurTramiteObservation.Compose("TRASLADO_CUENTA", [], ctx)
+            .Should().NotBe(FurTramiteObservation.Compose("RADICADO_CUENTA", [], ctx));
+    }
 }

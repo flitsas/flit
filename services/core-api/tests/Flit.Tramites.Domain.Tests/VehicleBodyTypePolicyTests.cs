@@ -30,6 +30,38 @@ public sealed class VehicleBodyTypePolicyTests
             .Should().NotBeNull();
     }
 
+    [Theory]
+    [InlineData("SIN CARROCERIA")]
+    [InlineData("sin carroceria")]
+    [InlineData("  Sin   Carroceria  ")]
+    [InlineData("SIN CARROCERÍA")]
+    [InlineData("-")]
+    public void SinCarroceriaComoVALOR_TambienBloquea(string reportada)
+    {
+        // El caso que se escapaba: una motocicleta NO trae el campo vacío, trae «SIN CARROCERIA», que
+        // es una entrada real del catálogo oficial (código 0) y la única opción de su clase. Mirando
+        // solo el vacío, el vehículo pasaba el pre-vuelo y llegaba a un paso donde el selector de
+        // carrocería nueva no tenía ni una opción que ofrecer.
+        VehicleBodyTypePolicy
+            .Evaluar("CAMBIO_CARROCERIA", consultaRespondio: true, carroceriaReportada: reportada)
+            .Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("PICKUP")]
+    [InlineData("ESTACAS")]
+    [InlineData("FURGON")]
+    [InlineData("CARROCERIA METALICA")]
+    public void UnaCarroceriaDeVerdad_NoBloquea(string reportada)
+    {
+        // La contraparte: reconocer el centinela no puede tragarse valores que sí son carrocerías,
+        // incluidos los que contienen la palabra.
+        VehicleBodyTypePolicy.SinCarroceria(reportada).Should().BeFalse();
+        VehicleBodyTypePolicy
+            .Evaluar("CAMBIO_CARROCERIA", consultaRespondio: true, carroceriaReportada: reportada)
+            .Should().BeNull();
+    }
+
     [Fact]
     public void ConCarroceria_NoBloquea()
     {

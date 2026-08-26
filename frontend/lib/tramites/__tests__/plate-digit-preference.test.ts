@@ -1,7 +1,7 @@
 // HU #11628 — el dígito de preferencia de placa exige una elección consciente.
 //
 // Uso de ejemplo:
-//   isPlateDigitUndecided({ muestraRadicacion: true, vehiculoConPlacaRunt: false,
+//   isPlateDigitUndecided({ muestraDigitoPlaca: true, vehiculoConPlacaRunt: false,
 //     transitOfficeId: 'ot-1', preasignacionActiva: true, digitoPlacaUiValue: '' }) → true
 //   toPlateDigitFieldValues('none') → [{ fieldKey: 'plate_preferred_last_digit', valueText: '' },
 //     { fieldKey: 'plate_preferred_last_digit_declared', valueText: 'true' }]
@@ -18,7 +18,7 @@ import {
 } from '../plate-digit-preference';
 
 const baseParams = {
-  muestraRadicacion: true,
+  muestraDigitoPlaca: true,
   vehiculoConPlacaRunt: false,
   transitOfficeId: 'ot-1',
   preasignacionActiva: true as boolean | null,
@@ -46,7 +46,7 @@ describe('isPlateDigitDecisionRequired', () => {
   });
 
   it('no exige decisión fuera del paso de matrícula (traspaso)', () => {
-    expect(isPlateDigitDecisionRequired({ ...baseParams, muestraRadicacion: false })).toBe(false);
+    expect(isPlateDigitDecisionRequired({ ...baseParams, muestraDigitoPlaca: false })).toBe(false);
   });
 });
 

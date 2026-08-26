@@ -785,6 +785,16 @@ internal static class ProcedureInstanceEndpoints
                     {
                         ["procedureType"] = VehicleBodyTypePolicy.ProcedureTypeCambioCarroceria,
                     }),
+                // El vehículo no tiene prenda que levantar. Igual que el anterior: se avisa con el
+                // trámite todavía sin crear, para que el gestor pueda escoger otro tipo.
+                VehiclePrendaPolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehiclePrendaPolicy.ErrorCode,
+                    detail: "El vehículo no tiene prenda registrada en el RUNT: no hay gravamen que levantar.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["procedureType"] = VehiclePrendaPolicy.ProcedureTypeLevantamiento,
+                    }),
                 _ => Results.Ok(result),
             };
         }).WithName("RunProcedureInstancePreflightPreview");

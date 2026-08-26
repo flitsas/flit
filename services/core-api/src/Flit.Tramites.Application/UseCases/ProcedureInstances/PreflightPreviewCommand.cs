@@ -187,11 +187,9 @@ public sealed class RunPreflightPreviewHandler(
         // Qué identificador pide la consulta lo declara el tipo (`entryMode`): un trámite de la
         // familia OTROS entra por placa, y por familia habría pedido un VIN que el vehículo ya
         // matriculado no es lo que lo identifica.
+        var perfil = ProcedureTypeGateProfile.FromJson(procedureType?.GateProfile);
         var esMatricula = procedureType is not null
-            ? string.Equals(
-                ProcedureTypeGateProfile.FromJson(procedureType.GateProfile).EntryMode,
-                "VIN",
-                StringComparison.OrdinalIgnoreCase)
+            ? string.Equals(perfil.EntryMode, "VIN", StringComparison.OrdinalIgnoreCase)
             : modalidad == ProcedureFamily.Matriculas;
         var vin = Trim(request.Vin);
         var plate = Trim(request.Plate);
@@ -214,15 +212,28 @@ public sealed class RunPreflightPreviewHandler(
         // El requisito NO desaparece: `CreateFromConsultaCommand` sigue cortando con
         // `transit_office_required` al crear el trámite, que es cuando el organismo tiene que
         // quedar guardado. Aquí solo se consulta el RUNT y no se persiste nada.
+        // Un radicado de cuenta invierte el orden: el organismo de DESTINO no depende del vehículo
+        // —es a dónde se lleva la cuenta— y sin él la consulta no tiene sentido, porque el destino es
+        // quien aprueba. Así que aquí sí es requisito previo, y se rechaza antes de gastar el RUNT.
+        var eligeElOperador = perfil.OperatorChoosesTransitOffice();
+        var destinoObligatorio = eligeElOperador && !esMatricula;
+
         ResolvedTransitOffice? secretaria = null;
-        if (esMatricula && request.TransitOfficeId is { } elegido && elegido != Guid.Empty)
+        if (request.TransitOfficeId is { } elegido && elegido != Guid.Empty)
         {
-            secretaria = await transitOfficeResolver
-                .ResolveEnabledByIdAsync(request.TenantId, elegido, ct)
-                .ConfigureAwait(false);
-            if (secretaria is null
-                || !await _otOperability.IsOperableAsync(secretaria.Id, ct).ConfigureAwait(false))
-                return (null, TransitOfficeSelectionPolicy.UnavailableErrorCode, null, null);
+            if (esMatricula || eligeElOperador)
+            {
+                secretaria = await transitOfficeResolver
+                    .ResolveEnabledByIdAsync(request.TenantId, elegido, ct)
+                    .ConfigureAwait(false);
+                if (secretaria is null
+                    || !await _otOperability.IsOperableAsync(secretaria.Id, ct).ConfigureAwait(false))
+                    return (null, TransitOfficeSelectionPolicy.UnavailableErrorCode, null, null);
+            }
+        }
+        else if (destinoObligatorio)
+        {
+            return (null, TransitOfficeSelectionPolicy.RequiredErrorCode, null, null);
         }
 
         var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
@@ -280,7 +291,11 @@ public sealed class RunPreflightPreviewHandler(
         // vehículo). Lo que se adelanta al paso 1 es la comprobación de que ahí se puede radicar. Va
         // aquí, justo después de la consulta del vehículo y antes de los comparendos, para no gastar
         // consultas de un trámite que no va a poder seguir.
-        if (!esMatricula)
+        // Se salta cuando el organismo lo ELIGE el operador: ahí el del RUNT es de dónde SALE la
+        // cuenta, no a dónde va. Comprobar que la compañía puede radicar en él bloquearía justo el
+        // caso normal de un radicado —irse de un organismo con el que no se opera— y el que sí
+        // importa, el destino, ya se validó arriba contra los grants.
+        if (!esMatricula && !eligeElOperador)
         {
             var bloqueoOt = await ValidarOrganismoDelRuntAsync(request.TenantId, vehicleFields, ct)
                 .ConfigureAwait(false);
@@ -336,6 +351,24 @@ public sealed class RunPreflightPreviewHandler(
                     return (null, VehicleBodyTypePolicy.ErrorCode, null, null);
 
                 checks.Add(RunPreflightHandler.BuildCarroceriaAusenteCheck());
+            }
+        }
+
+        // Levantamiento de prenda sobre un vehículo sin gravamen reportado. Se comprueba aquí, con el
+        // trámite aún sin crear, porque es el momento en que el gestor todavía puede escoger otro
+        // tipo. Sin información de gravámenes no se bloquea (ver VehiclePrendaPolicy).
+        if (_validationPolicy.VehiclePrendaRequired != TramiteValidationMode.Off)
+        {
+            var prendaBlock = VehiclePrendaPolicy.Evaluar(
+                procedureType?.Code,
+                RunPreflightHandler.EstadoDelCheck(checks, VehiclePrendaPolicy.GravamenCheckKey));
+
+            if (prendaBlock is not null)
+            {
+                if (_validationPolicy.VehiclePrendaRequired == TramiteValidationMode.Block)
+                    return (null, VehiclePrendaPolicy.ErrorCode, null, null);
+
+                checks.Add(RunPreflightHandler.BuildPrendaAusenteCheck());
             }
         }
 

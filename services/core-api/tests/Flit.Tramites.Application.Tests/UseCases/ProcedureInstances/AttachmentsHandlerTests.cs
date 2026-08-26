@@ -737,14 +737,17 @@ public sealed class AttachmentsHandlerTests
     }
 
     [Fact]
-    public async Task Checklist_TipoSinChecklistConfigurado_Returns422()
+    public async Task Checklist_TipoSinDocumentosConfigurados_DevuelveListaVacia_NoError()
     {
+        // ANTES devolvía 422 «La tipología del trámite no está configurada», y el paso de Requisitos
+        // entero se rompía con un mensaje sobre una estructura interna que el gestor no puede
+        // accionar. `TramiteTipologiaCatalog` describe DOS códigos —es el catálogo previo a
+        // ADR-0050— así que cualquiera de los otros diecinueve tipos que aún no tuviera matriz
+        // documental caía ahí. «Todavía no hay documentos configurados» es un estado legítimo y el
+        // asistente ya sabe pintarlo.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        // ADR-0050 — la tipología ya no es un string libre: es el code del tipo, garantizado por FK.
-        // El 422 solo puede darse ahora cuando el tipo existe pero aún no tiene checklist configurado
-        // en TramiteTipologiaCatalog, que es el caso de los tipos de la familia OTROS sin parametrizar.
         var instance = Instance(id, tenant);
         instance.ProcedureType = new ProcedureType
         {
@@ -755,9 +758,15 @@ public sealed class AttachmentsHandlerTests
         };
         _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _checklist.HandleAsync(id, tenant, ct);
+        var (result, error) = await _checklist.HandleAsync(id, tenant, ct);
 
-        error.Should().Be("tipologia_not_found");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Items.Should().BeEmpty();
+        result.FaltanObligatorios.Should().BeEmpty();
+        // Sin obligatorios que satisfacer, el checklist no bloquea. No se pierde ninguna guarda: el
+        // gate de radicación ya trataba la ausencia de catálogo como «completo».
+        result.Completo.Should().BeTrue();
     }
 
     // ── HU #10522 (RF17/RF22) — checklist desde la matriz viva del gestor ─────────

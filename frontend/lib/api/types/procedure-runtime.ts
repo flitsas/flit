@@ -1043,6 +1043,30 @@ export interface WizardCapabilities {
    * ahí la prenda es el trámite y su paso se pinta igual. Ausente ⇒ `true`.
    */
   allowsComplementaryPrenda?: boolean;
+  /**
+   * El organismo de tránsito lo ELIGE el operador entre los habilitados de su compañía, en vez de
+   * imponerlo el RUNT. Dejó de deducirse de `entryMode`: un radicado de cuenta entra por placa y aun
+   * así lo elige, porque el trámite consiste en llevar la cuenta a OTRO organismo.
+   *
+   * Ausente ⇒ se cae a `entryMode === 'VIN'`, que es el criterio anterior a esta llave.
+   */
+  operatorChoosesTransitOffice?: boolean;
+  /**
+   * El trámite DECLARA un organismo de destino además del suyo: el traslado de cuenta, que expide el
+   * organismo de ORIGEN pero tiene que decir a dónde va la cuenta.
+   *
+   * No confundir con `operatorChoosesTransitOffice`: ahí el organismo elegido ES el del trámite (el
+   * radicado de cuenta). Aquí el del trámite lo sigue imponiendo el RUNT y el destino es un dato más.
+   */
+  requiresDestinationTransitOffice?: boolean;
+  /**
+   * El trámite PIDE una placa nueva al organismo (matrícula, rematrícula, duplicado de placa). Es lo
+   * que decide si la preferencia de dígito de preasignación tiene sentido: en un radicado de cuenta
+   * el vehículo ya tiene placa y no hay ninguna que asignar.
+   *
+   * Ausente ⇒ se cae a `entryMode === 'VIN'`, que es como se decidía antes de esta llave.
+   */
+  requiresPlateRequest?: boolean;
 }
 
 export interface WizardState {
@@ -1162,6 +1186,12 @@ export interface PrendaData {
   estado: 'vigente' | 'reemplazada';
   acreedorNombre: string | null;
   acreedorDocumento: string | null;
+  /**
+   * Entidad ante la que se levantó el gravamen. Solo la captura el trámite de levantamiento de
+   * prenda: es lo que su FUR declara en el párrafo 23. En traspaso y matrícula llega `null` y el
+   * literal de esas modalidades no cambia.
+   */
+  levantamientoEntidad: string | null;
   createdAt: string;
 }
 
@@ -1170,6 +1200,7 @@ export interface PrendaInput {
   decision: PrendaDecision;
   acreedorNombre?: string | null;
   acreedorDocumento?: string | null;
+  levantamientoEntidad?: string | null;
 }
 
 // ── Biométrica (Slice 6) ────────────────────────────────────────────

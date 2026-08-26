@@ -550,6 +550,71 @@ public sealed class FurHandlerTests
         capturing.Captured.Transformaciones.Blindaje.Should().BeFalse();
     }
 
+    // ── Tipos prendarios: el FUR sale tan completo como el de un traspaso ────────────────────────
+
+    /// <summary>Genera el FUR de un tipo prendario con la decisión de prenda vigente indicada.</summary>
+    private async Task<CapturingFurGenerator> GenerarPrendario(
+        ProcedureType tipo, string decision, CancellationToken ct, string? entidadLevantamiento = null)
+    {
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.ProcedureType = tipo;
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _prendaRepo.GetVigenteAsync(id, tenant, ct).Returns(new ProcedureInstancePrenda
+        {
+            Decision = decision,
+            Estado = PrendaEstado.Vigente,
+            AcreedorNombre = "BANCO XYZ S.A.",
+            AcreedorDocumento = "890900608",
+            LevantamientoEntidad = entidadLevantamiento,
+        });
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        return capturing;
+    }
+
+    [Fact]
+    public async Task Levantamiento_FurDeclaraCasilla12_Numeral20_YParrafo23()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarPrendario(
+            ProcedureTypeFixture.LevantamientoPrenda, PrendaDecision.Levantar, ct,
+            entidadLevantamiento: "NOTARÍA 15 DE MEDELLÍN");
+
+        var data = capturing.Captured!;
+        // Casilla del numeral 3: la pone el tipo (tabla 1).
+        FurNumeral3Marks.Resolve(data).Should().Contain(12);
+        // Numeral 20 «A FAVOR DE»: sale del acreedor del gravamen que se levanta.
+        data.AcreedorPrenda.Should().Be("BANCO XYZ S.A.");
+        data.PrendaMarking.Should().Be(FurPrendaMarking.Levantamiento);
+        // Párrafo 23: el bloque que nombra a quién se le levanta.
+        // El acreedor lo nombra el numeral 20; el recuadro dice ante quién se levantó.
+        data.Observaciones.Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+    }
+
+    [Fact]
+    public async Task Inscripcion_FurDeclaraCasilla11_Numeral20_YParrafo23()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var capturing = await GenerarPrendario(
+            ProcedureTypeFixture.PrendaInscripcion, PrendaDecision.Registrar, ct);
+
+        var data = capturing.Captured!;
+        FurNumeral3Marks.Resolve(data).Should().Contain(11);
+        data.AcreedorPrenda.Should().Be("BANCO XYZ S.A.");
+        data.PrendaMarking.Should().Be(FurPrendaMarking.Constitucion);
+        data.Observaciones.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
+    }
+
     /// <summary>Genera el FUR de un trámite del tipo <c>BLINDAJE</c> con los field_values indicados.</summary>
     private async Task<CapturingFurGenerator> GenerarBlindaje(
         CancellationToken ct, params (string Key, string Value)[] fieldValues)

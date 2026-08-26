@@ -158,7 +158,24 @@ public sealed record WizardCapabilitiesDto(
     IReadOnlyList<string> BiometricActors,
     bool HasPrendaGate,
     bool AllowsComplementaryTransformations,
-    bool AllowsComplementaryPrenda)
+    bool AllowsComplementaryPrenda,
+    /// <summary>
+    /// El organismo de tránsito lo ELIGE el operador entre los habilitados de su compañía, en vez de
+    /// imponerlo el RUNT. Deja de deducirse del modo de entrada: un radicado de cuenta entra por
+    /// placa y aun así lo elige, porque el trámite consiste en llevar la cuenta a otro organismo.
+    /// </summary>
+    bool OperatorChoosesTransitOffice,
+    /// <summary>
+    /// El trámite DECLARA un organismo de destino además del suyo (traslado de cuenta): se captura y
+    /// se imprime en el FUR, pero el trámite se radica y se aprueba en el organismo de origen.
+    /// </summary>
+    bool RequiresDestinationTransitOffice,
+    /// <summary>
+    /// El trámite PIDE una placa nueva al organismo (matrícula, rematrícula, duplicado de placa).
+    /// Solo en ellos tiene sentido la preferencia de dígito de preasignación: en un radicado de
+    /// cuenta o un levantamiento de prenda el vehículo ya tiene placa y no hay nada que asignar.
+    /// </summary>
+    bool RequiresPlateRequest)
 {
     /// <param name="familyCode">
     /// Familia del expediente. Resuelve los dos flags de acumulación cuando el perfil no los declara
@@ -186,7 +203,10 @@ public sealed record WizardCapabilitiesDto(
             profile.BiometricActors,
             ProcedureTypeLayers.ExigeDecisionDePrenda(typeCode, runtReportaGravamen),
             profile.ComplementaryTransformationsAllowed(familyCode),
-            profile.ComplementaryPrendaAllowed(familyCode));
+            profile.ComplementaryPrendaAllowed(familyCode),
+            profile.OperatorChoosesTransitOffice(),
+            profile.RequiresDestinationTransitOffice,
+            profile.RequiresPlateRequest);
 }
 
 /// <summary>

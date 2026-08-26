@@ -120,16 +120,25 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         // Qué identificador exige el trámite lo declara el tipo (`entryMode`), no la familia: es la
         // diferencia entre pedir el VIN de un vehículo sin placa y la placa de uno ya matriculado.
         // Un trámite de la familia OTROS entra por placa, y por familia habría entrado por VIN.
+        var perfilTipo = ProcedureTypeGateProfile.FromJson(procedureType?.GateProfile);
         var entraPorVin = procedureType is not null
-            ? string.Equals(
-                ProcedureTypeGateProfile.FromJson(procedureType.GateProfile).EntryMode,
-                "VIN",
-                StringComparison.OrdinalIgnoreCase)
+            ? string.Equals(perfilTipo.EntryMode, "VIN", StringComparison.OrdinalIgnoreCase)
             : modalidad == ProcedureFamily.Matriculas;
 
-        // La secretaría y la casilla 18 siguen siendo cosa de los trámites que MATRICULAN el
-        // vehículo, que son exactamente los que entran por VIN.
+        // La casilla 18 sigue siendo cosa de los trámites que MATRICULAN el vehículo, que son
+        // exactamente los que entran por VIN.
         var esMatricula = entraPorVin;
+
+        // La SECRETARÍA, en cambio, ya no se deduce del identificador: un radicado de cuenta entra
+        // por placa y aun así la elige el operador, porque el trámite consiste en llevar la cuenta a
+        // otro organismo. Lo declara el tipo.
+        //
+        // Sin tipo resuelto se cae a `entraPorVin` —es decir, a la familia— y NO al perfil por
+        // defecto: un perfil vacío diría «no la elige el operador» y una matrícula creada por
+        // modalidad heredada se quedaría sin escribir su organismo.
+        var exigeSecretaria = procedureType is not null
+            ? perfilTipo.OperatorChoosesTransitOffice()
+            : entraPorVin;
         var vin = Trim(request.Vin);
         var plate = Trim(request.Plate)?.ToUpperInvariant();
 
@@ -140,7 +149,7 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         // preview: entre la consulta y el avance al paso 2 pudieron revocar el grant o desactivar el
         // organismo, y este es el punto donde la elección se vuelve permanente.
         ResolvedTransitOffice? secretaria = null;
-        if (esMatricula)
+        if (exigeSecretaria)
         {
             if (request.TransitOfficeId is not { } elegido || elegido == Guid.Empty)
                 return (null, TransitOfficeSelectionPolicy.RequiredErrorCode, null, null);
@@ -193,21 +202,26 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         var items = new List<FieldValueInput>();
         // Casillas 18/19 del FUR: se escriben en un patch APARTE, después del preflight (ver abajo).
         var tipoServicioFieldValues = new List<FieldValueInput>();
-        if (esMatricula)
+        // El organismo elegido se escribe SIEMPRE que lo elija el operador, entre por VIN o por placa.
+        // HU #11199 (AC4) — queda escrito con el trámite, así que el paso del FUR ya no tiene nada que
+        // preguntar. `transit_office_origen` distingue estos trámites de los borradores anteriores al
+        // cambio, que siguen eligiendo el organismo en el FUR (D8).
+        if (exigeSecretaria)
         {
-            items.Add(new FieldValueInput(null, "vin", vin, null));
-            // HU #11199 (AC4) — el organismo queda escrito con el trámite, así que el paso del FUR ya no
-            // tiene nada que preguntar. `transit_office_origen` distingue estos trámites de los
-            // borradores anteriores al cambio, que siguen eligiendo el organismo en el FUR (D8).
-            items.Add(new FieldValueInput(null, "transit_office_id", secretaria!.Id.ToString(), null));
-            items.Add(new FieldValueInput(null, "transit_office_code", secretaria.Code, null));
-            items.Add(new FieldValueInput(null, "transit_office_name", secretaria.Name, null));
-            items.Add(new FieldValueInput(null, "transit_office_city", secretaria.CityCode, null));
+            items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.Id, secretaria!.Id.ToString(), null));
+            items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.Code, secretaria.Code, null));
+            items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.Name, secretaria.Name, null));
+            items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.City, secretaria.CityCode, null));
             items.Add(new FieldValueInput(
                 null,
                 TransitOfficeSelectionPolicy.OrigenFieldKey,
                 TransitOfficeSelectionPolicy.OrigenPasoUno,
                 null));
+        }
+
+        if (esMatricula)
+        {
+            items.Add(new FieldValueInput(null, "vin", vin, null));
 
             // HU sin ADO 2026-08-11 — casilla 18 (tipo de servicio) y casilla 19 (empresa vinculadora)
             // del FUR. `vehicle_service` es el MISMO field_value que hidrata el RUNT en traspaso

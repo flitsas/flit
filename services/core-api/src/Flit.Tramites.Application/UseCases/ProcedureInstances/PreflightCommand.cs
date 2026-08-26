@@ -87,6 +87,9 @@ public sealed class RunPreflightHandler(
     // Tampoco es un CriterioDeCheck: la ausencia de carrocería no es un hallazgo de proveedor que la
     // compañía pueda relajar por OT, es una precondición del tipo de trámite.
     private const string CheckCarroceriaAusente = "carroceria_ausente";
+    // Tampoco es un CriterioDeCheck: no es un hallazgo del proveedor que la compañía pueda relajar
+    // por OT, es una precondición del tipo de trámite.
+    private const string CheckPrendaAusente = "prenda_ausente";
 
     // A4/B4 (HU #10673, ADR-0029) — atributos del vehículo que el operador puede TRANSFORMAR durante el
     // trámite (color/combustible). Cada valor efectivo (el que va al FUR) mapea con su flag de cambio
@@ -220,7 +223,7 @@ public sealed class RunPreflightHandler(
         // devolvió los atributos del RUNT (marca/línea/color/…). Los persistimos en field_values
         // (source="consultation") para la tarjeta "Datos del vehículo", evitando una segunda
         // consulta dedicada. Idempotente: upsert por field_key.
-        UpsertHydratedFields(instance, tenantId, vehicleFields);
+        UpsertHydratedFields(instance, tenantId, RedirigirOrganismoDelRunt(instance, vehicleFields));
 
         // B11 (HU #10659) — en TRASPASO y en la familia OTROS el vehículo ya tiene OT en RUNT: tras
         // hidratar transit_office_name, resolver el OT habilitado de la empresa y fijar también
@@ -263,6 +266,25 @@ public sealed class RunPreflightHandler(
                     return (null, VehicleBodyTypePolicy.ErrorCode, null, null);
 
                 checks.Add(BuildCarroceriaAusenteCheck());
+            }
+        }
+
+        // Levantamiento de prenda sobre un vehículo que el RUNT no reporta con gravamen: no hay nada
+        // que levantar, y el acreedor del numeral 20 lo precarga justamente ese gravamen. Se lee del
+        // check ya compuesto, no de los field_values: el semáforo es quien sabe si el proveedor
+        // afirmó la ausencia o simplemente no trajo el dato.
+        if (_validationPolicy.VehiclePrendaRequired != TramiteValidationMode.Off)
+        {
+            var prendaBlock = VehiclePrendaPolicy.Evaluar(
+                instance.ProcedureType?.Code,
+                EstadoDelCheck(checks, VehiclePrendaPolicy.GravamenCheckKey));
+
+            if (prendaBlock is not null)
+            {
+                if (_validationPolicy.VehiclePrendaRequired == TramiteValidationMode.Block)
+                    return (null, VehiclePrendaPolicy.ErrorCode, null, null);
+
+                checks.Add(BuildPrendaAusenteCheck());
             }
         }
 
@@ -544,6 +566,22 @@ public sealed class RunPreflightHandler(
     /// expediente. En modo <c>block</c> este check no existe: allí viaja como 422 y el snapshot ni se
     /// persiste.
     /// </summary>
+    /// <summary>Estado del check indicado, o <c>null</c> si el semáforo no llegó a emitirlo.</summary>
+    internal static string? EstadoDelCheck(IReadOnlyList<PreflightCheckDto> checks, string key) =>
+        checks.FirstOrDefault(c => string.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase))?.Status;
+
+    /// <summary>
+    /// Bloqueo «sin prenda que levantar» en modo <c>warn</c>: no corta el flujo pero pinta el
+    /// semáforo en amarillo. En modo <c>block</c> este check no existe: allí viaja como 422.
+    /// </summary>
+    internal static PreflightCheckDto BuildPrendaAusenteCheck() =>
+        new(CheckPrendaAusente,
+            "Vehículo sin prenda registrada",
+            "warn",
+            SystemSource,
+            "El RUNT no reporta gravamen sobre este vehículo, así que no hay prenda que levantar. "
+            + "El bloqueo está en modo advertencia en este ambiente.");
+
     internal static PreflightCheckDto BuildCarroceriaAusenteCheck() =>
         new(CheckCarroceriaAusente,
             "Vehículo sin carrocería registrada",
@@ -842,6 +880,41 @@ public sealed class RunPreflightHandler(
     /// en la misma consulta del preflight, con Source="consultation". Reusa la convención de
     /// valores "loose" (FormFieldId null) de <c>RunConsultationHandler</c>. Idempotente.
     /// </summary>
+    /// <summary>
+    /// Cuando el organismo lo elige el operador, el que reporta el RUNT es el organismo ACTUAL del
+    /// vehículo, no el destino del trámite: se reetiqueta a <c>transit_office_actual_*</c> antes de
+    /// persistirlo.
+    ///
+    /// <para>Sin esto, cada consulta al RUNT sobrescribía con el organismo de origen la secretaría de
+    /// destino que el gestor acababa de elegir — y con ella el grant, la bandeja y quién aprueba el
+    /// trámite. En los tipos cuyo organismo impone el RUNT no se toca nada: la lista pasa tal cual.</para>
+    /// </summary>
+    private static IReadOnlyList<HydratedField> RedirigirOrganismoDelRunt(
+        ProcedureInstance instance,
+        IReadOnlyList<HydratedField> vehicleFields)
+    {
+        var eligeElOperador = ProcedureTypeGateProfile
+            .FromJson(instance.ProcedureType?.GateProfile)
+            .OperatorChoosesTransitOffice();
+        if (!eligeElOperador || vehicleFields.Count == 0)
+            return vehicleFields;
+
+        return [.. vehicleFields.Select(f => RenombrarOrganismo(f.FieldKey) is { } destino
+            ? f with { FieldKey = destino }
+            : f)];
+    }
+
+    /// <summary>Clave descriptiva equivalente, o <c>null</c> si el campo no es del organismo.</summary>
+    private static string? RenombrarOrganismo(string fieldKey) =>
+        fieldKey.ToLowerInvariant() switch
+        {
+            TransitOfficeFieldKeys.Id => TransitOfficeFieldKeys.ActualId,
+            TransitOfficeFieldKeys.Code => TransitOfficeFieldKeys.ActualCode,
+            TransitOfficeFieldKeys.Name => TransitOfficeFieldKeys.ActualName,
+            TransitOfficeFieldKeys.City => TransitOfficeFieldKeys.ActualCity,
+            _ => null,
+        };
+
     private void UpsertHydratedFields(
         ProcedureInstance instance,
         Guid tenantId,
@@ -985,8 +1058,19 @@ public sealed class RunPreflightHandler(
         if (!esTraspasoStandard && instance.Family != ProcedureFamily.Otros)
             return;
 
+        // Cuando el organismo lo ELIGE el operador, el del RUNT no es el destino del trámite: es
+        // dónde está el vehículo hoy. Escribirlo en las claves canónicas pisaría en cada consulta la
+        // secretaría de destino que el gestor acaba de escoger —y con ella el grant, la bandeja y
+        // quién aprueba—, así que va a las claves descriptivas.
+        var eligeElOperador = ProcedureTypeGateProfile
+            .FromJson(instance.ProcedureType?.GateProfile)
+            .OperatorChoosesTransitOffice();
+
         var runtName = instance.FieldValues
-            .FirstOrDefault(f => string.Equals(f.FieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(f => string.Equals(
+                f.FieldKey,
+                eligeElOperador ? TransitOfficeFieldKeys.ActualName : TransitOfficeFieldKeys.Name,
+                StringComparison.OrdinalIgnoreCase))
             ?.ValueText;
         if (string.IsNullOrWhiteSpace(runtName))
             return;
@@ -996,13 +1080,21 @@ public sealed class RunPreflightHandler(
             return; // Sin OT habilitado que coincida: se deja solo el nombre RUNT (no se inventa id).
 
         // Reusa el upsert idempotente de campos hidratados (Source="consultation").
-        UpsertHydratedFields(instance, tenantId,
-        [
-            new HydratedField("transit_office_id", match.Id.ToString(), null),
-            new HydratedField("transit_office_code", match.Code, null),
-            new HydratedField("transit_office_name", match.Name, null),
-            new HydratedField("transit_office_city", match.CityCode, null),
-        ]);
+        UpsertHydratedFields(instance, tenantId, eligeElOperador
+            ?
+            [
+                new HydratedField(TransitOfficeFieldKeys.ActualId, match.Id.ToString(), null),
+                new HydratedField(TransitOfficeFieldKeys.ActualCode, match.Code, null),
+                new HydratedField(TransitOfficeFieldKeys.ActualName, match.Name, null),
+                new HydratedField(TransitOfficeFieldKeys.ActualCity, match.CityCode, null),
+            ]
+            :
+            [
+                new HydratedField(TransitOfficeFieldKeys.Id, match.Id.ToString(), null),
+                new HydratedField(TransitOfficeFieldKeys.Code, match.Code, null),
+                new HydratedField(TransitOfficeFieldKeys.Name, match.Name, null),
+                new HydratedField(TransitOfficeFieldKeys.City, match.CityCode, null),
+            ]);
     }
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>

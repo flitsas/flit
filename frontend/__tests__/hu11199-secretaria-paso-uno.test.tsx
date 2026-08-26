@@ -37,6 +37,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => transitOfficeUnavailable.value,
   isVehicleBodyTypeMissing: () => false,
+  isVehiclePrendaMissing: () => false,
 }));
 
 // HU #11628 — el dígito de preferencia de placa (mismo consumidor que HU #10805/#10806) exige

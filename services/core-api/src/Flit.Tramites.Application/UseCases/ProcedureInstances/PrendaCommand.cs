@@ -14,6 +14,8 @@ public sealed record PrendaDto(
     string Estado,
     string? AcreedorNombre,
     string? AcreedorDocumento,
+    /// <summary>Entidad ante la que se levantó el gravamen; solo la usa el trámite de levantamiento.</summary>
+    string? LevantamientoEntidad,
     DateTimeOffset CreatedAt);
 
 /// <summary>Datos de una decisión de prenda a registrar.</summary>
@@ -21,6 +23,7 @@ public sealed record RegistrarPrendaInput(
     string Decision,
     string? AcreedorNombre = null,
     string? AcreedorDocumento = null,
+    string? LevantamientoEntidad = null,
     string? MetadataJson = null);
 
 /// <summary>
@@ -127,6 +130,7 @@ public sealed class RegistrarPrendaHandler(
             Estado = PrendaEstado.Vigente,
             AcreedorNombre = Trimmed(input.AcreedorNombre),
             AcreedorDocumento = Trimmed(input.AcreedorDocumento),
+            LevantamientoEntidad = Trimmed(input.LevantamientoEntidad),
             Metadata = string.IsNullOrWhiteSpace(input.MetadataJson) ? "{}" : input.MetadataJson,
             CreatedAt = now,
             CreatedBy = userId,
@@ -138,7 +142,7 @@ public sealed class RegistrarPrendaHandler(
     }
 
     internal static PrendaDto ToDto(ProcedureInstancePrenda p) =>
-        new(p.Id, p.Decision, p.Estado, p.AcreedorNombre, p.AcreedorDocumento, p.CreatedAt);
+        new(p.Id, p.Decision, p.Estado, p.AcreedorNombre, p.AcreedorDocumento, p.LevantamientoEntidad, p.CreatedAt);
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

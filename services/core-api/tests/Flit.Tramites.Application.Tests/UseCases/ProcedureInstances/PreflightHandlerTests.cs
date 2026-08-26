@@ -445,6 +445,156 @@ public sealed class PreflightHandlerTests
         result.Provider.Should().NotContain("proveedor_vin");
     }
 
+    // ── Cambio de carrocería sobre un vehículo sin carrocería ────────────────────────────────────
+
+    /// <summary>Preflight de un CAMBIO_CARROCERIA cuyo RUNT devuelve la carrocería indicada.</summary>
+    private async Task<string?> PreflightCambioCarroceria(
+        CancellationToken ct, params HydratedField[] hidratados)
+    {
+        var instance = InstanceOf(ProcedureTypeFixture.CambioCarroceria, Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var handler = HandlerWith(
+            CadenaPorIdentificador(),
+            ("proveedor_placa", new StubProvider("proveedor_placa",
+                new ConsultationResult("proveedor_placa", "green", [Check("ok")], hidratados))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        return error;
+    }
+
+    [Fact]
+    public async Task CambioCarroceria_RuntReportaSinCarroceria_Bloquea()
+    {
+        // El caso real de una motocicleta: el RUNT NO devuelve el campo vacío, devuelve
+        // «SIN CARROCERIA». Mirando solo el vacío, el trámite pasaba el pre-vuelo y el gestor llegaba
+        // a un paso donde el selector de carrocería nueva no tenía ni una opción que ofrecer.
+        var ct = TestContext.Current.CancellationToken;
+
+        var error = await PreflightCambioCarroceria(
+            ct,
+            new HydratedField("vehicle_class", "MOTOCICLETA", null),
+            new HydratedField("vehicle_body_type", "SIN CARROCERIA", null));
+
+        error.Should().Be(VehicleBodyTypePolicy.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CambioCarroceria_RuntNoTraeElCampo_Bloquea()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var error = await PreflightCambioCarroceria(
+            ct, new HydratedField("vehicle_class", "CAMION", null));
+
+        error.Should().Be(VehicleBodyTypePolicy.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CambioCarroceria_ConCarroceriaDeVerdad_NoBloquea()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var error = await PreflightCambioCarroceria(
+            ct,
+            new HydratedField("vehicle_class", "CAMION", null),
+            new HydratedField("vehicle_body_type", "ESTACAS", null));
+
+        error.Should().BeNull();
+    }
+
+    // ── Levantamiento de prenda sobre un vehículo sin gravamen ──────────────────────────────────
+
+    /// <summary>Check del semáforo de gravámenes con el estado indicado.</summary>
+    private static ConsultationCheck CheckGravamenes(string status) =>
+        new("gravamenes", "Gravámenes y limitaciones", status, "stub", null);
+
+    /// <summary>Preflight de un tipo prendario cuyo RUNT devuelve el semáforo de gravámenes dado.</summary>
+    private async Task<string?> PreflightPrendario(
+        ProcedureType tipo, CancellationToken ct, params ConsultationCheck[] checks)
+    {
+        var instance = InstanceOf(tipo, Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var handler = HandlerWith(
+            CadenaPorIdentificador(),
+            ("proveedor_placa", new StubProvider("proveedor_placa",
+                new ConsultationResult("proveedor_placa", "green", checks, []))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        return error;
+    }
+
+    [Fact]
+    public async Task Levantamiento_RuntSinGravamen_Bloquea()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var error = await PreflightPrendario(
+            ProcedureTypeFixture.LevantamientoPrenda, ct, Check("ok"), CheckGravamenes("ok"));
+
+        error.Should().Be(VehiclePrendaPolicy.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Levantamiento_RuntConGravamen_NoBloquea()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var error = await PreflightPrendario(
+            ProcedureTypeFixture.LevantamientoPrenda, ct, Check("ok"), CheckGravamenes("warn"));
+
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Levantamiento_RuntSinInformacionDeGravamenes_NoBloquea()
+    {
+        // «No se sabe» no es «no tiene»: sin dato del proveedor no se le niega el trámite al gestor.
+        var ct = TestContext.Current.CancellationToken;
+
+        var error = await PreflightPrendario(
+            ProcedureTypeFixture.LevantamientoPrenda, ct, Check("ok"), CheckGravamenes("unknown"));
+
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Inscripcion_SobreVehiculoSinGravamen_NoBloquea()
+    {
+        // La inscripción CONSTITUYE el gravamen: presuponerlo sería impedir el trámite justo en su
+        // caso normal.
+        var ct = TestContext.Current.CancellationToken;
+
+        var error = await PreflightPrendario(
+            ProcedureTypeFixture.PrendaInscripcion, ct, Check("ok"), CheckGravamenes("ok"));
+
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OtroTipoDeOtros_SinCarroceria_NoSeBloquea()
+    {
+        // La carrocería solo es precondición del trámite que la cambia: un blindaje sobre la misma
+        // motocicleta tiene que poder radicarse.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = InstanceOf(ProcedureTypeFixture.Blindaje, Actor("comprador", "111"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var handler = HandlerWith(
+            CadenaPorIdentificador(),
+            ("proveedor_placa", new StubProvider("proveedor_placa",
+                new ConsultationResult("proveedor_placa", "green", [Check("ok")],
+                    [new HydratedField("vehicle_body_type", "SIN CARROCERIA", null)]))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+    }
+
     [Fact]
     public async Task Post_Matricula_SigueConsultandoPorVin()
     {

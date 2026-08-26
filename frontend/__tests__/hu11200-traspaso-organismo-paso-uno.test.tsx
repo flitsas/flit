@@ -34,6 +34,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => otNoDisponible.value,
   isVehicleBodyTypeMissing: () => false,
+  isVehiclePrendaMissing: () => false,
 }));
 
 vi.mock('@/components/admin/Toast', () => ({

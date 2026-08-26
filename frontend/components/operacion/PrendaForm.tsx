@@ -109,6 +109,15 @@ interface Props {
   /** Mensaje opcional del check RUNT (detalle). */
   runtGravamenMessage?: string | null;
   /**
+   * El trámite ES el levantamiento del gravamen (`LEVANTAMIENTO_PRENDA`): captura la entidad ante la
+   * que se levantó —lo que su FUR declara en el párrafo 23— y PERSISTE el acreedor, que el numeral 20
+   * necesita en «A FAVOR DE».
+   *
+   * <p>En traspaso y matrícula queda en `false`: allí `levantar` es una decisión entre varias, el
+   * literal del FUR es otro y ese flujo no cambia.</p>
+   */
+  exigeEntidadLevantamiento?: boolean;
+  /**
    * Modalidad del trámite (OCR / documentos). Default matrícula.
    */
   modalidad?: WizardModalidad;
@@ -249,6 +258,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     runtGravamenMessage = null,
     modalidad = 'matricula_inicial',
     documentRequired = true,
+    exigeEntidadLevantamiento = false,
     onDocumentGateChange,
   },
   ref,
@@ -258,6 +268,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [decision, setDecision] = useState<PrendaDecision | ''>('');
   const [acreedorNombre, setAcreedorNombre] = useState('');
   const [acreedorDocumento, setAcreedorDocumento] = useState('');
+  const [levantamientoEntidad, setLevantamientoEntidad] = useState('');
   /**
    * Bug #11614 — captura del usuario sin persistir. Se marca en los manejadores de edición (no
    * comparando estados) para que ni la rehidratación desde el backend ni las precargas del RUNT
@@ -327,6 +338,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
           );
           setAcreedorNombre(filled.nombre);
           setAcreedorDocumento(filled.documento);
+          setLevantamientoEntidad(p.levantamientoEntidad ?? '');
         } else if (hasRuntAcreedorDetail(summary) || runtHasGravamen) {
           // Consulta con prenda: sugerir "registrar" y precargar acreedor/NIT.
           if (offersRegistrar) {
@@ -420,6 +432,13 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         return false;
       }
     }
+    // El trámite de levantamiento declara en el FUR ANTE QUIÉN se levantó: sin ese dato el párrafo 23
+    // sale mudo mientras la casilla 12 afirma que hubo levantamiento. Mismo criterio que el acreedor:
+    // se valida al guardar, no solo al radicar.
+    if (exigeEntidadLevantamiento && decision === 'levantar' && !levantamientoEntidad.trim()) {
+      setError('Indica ante qué entidad se levantó la prenda: es lo que el FUR declara en observaciones.');
+      return false;
+    }
     setFieldErrors({});
     setSaving(true);
     setSaved(false);
@@ -427,10 +446,17 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     // El payload queda congelado aquí: lo que se capture mientras el PUT viaja sigue pendiente.
     const settle = pending.beginSettle();
     try {
+      // En el trámite de levantamiento el acreedor TAMBIÉN se persiste. Con `capturaAcreedor` a secas
+      // se mostraba precargado desde el RUNT pero viajaba como null, y el numeral 20 «A FAVOR DE»
+      // salía vacío: el formulario afirmaba el levantamiento sin decir de quién.
+      const persisteAcreedor =
+        capturaAcreedor || (exigeEntidadLevantamiento && decision === 'levantar');
       await tramitesClient.putPrenda(instanceId, {
         decision,
-        acreedorNombre: capturaAcreedor ? acreedorNombre.trim() || null : null,
-        acreedorDocumento: capturaAcreedor ? acreedorDocumento.trim() || null : null,
+        acreedorNombre: persisteAcreedor ? acreedorNombre.trim() || null : null,
+        acreedorDocumento: persisteAcreedor ? acreedorDocumento.trim() || null : null,
+        levantamientoEntidad:
+          decision === 'levantar' ? levantamientoEntidad.trim() || null : null,
       });
       setSaved(true);
       settle();
@@ -787,6 +813,36 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       </p>
                     )}
                   </div>
+                </div>
+              )}
+              {/* Lo que el FUR de este trámite declara en observaciones: ante quién se levantó. El
+                  acreedor ya lo nombra el numeral 20, así que aquí va el DÓNDE, no el a favor de. */}
+              {exigeEntidadLevantamiento && decision === 'levantar' && (
+                <div>
+                  <label htmlFor="prenda-levantamiento-entidad" className={REQUIRED_LABEL}>
+                    Entidad ante la que se levantó
+                    <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                      *
+                    </span>
+                  </label>
+                  <input
+                    id="prenda-levantamiento-entidad"
+                    type="text"
+                    required
+                    value={levantamientoEntidad}
+                    onChange={(e) => {
+                      pending.markDirty();
+                      setLevantamientoEntidad(e.target.value);
+                    }}
+                    readOnly={readOnly}
+                    disabled={readOnly}
+                    maxLength={200}
+                    placeholder="Ej. Notaría 15 de Medellín"
+                    className={INPUT_BASE}
+                  />
+                  <p className="mt-1 text-xs opacity-70">
+                    Se imprime en las observaciones del FUR: «Levantamiento de prenda ante …».
+                  </p>
                 </div>
               )}
             </>

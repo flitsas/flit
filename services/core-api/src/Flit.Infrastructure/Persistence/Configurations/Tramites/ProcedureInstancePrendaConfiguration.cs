@@ -27,6 +27,8 @@ internal sealed class ProcedureInstancePrendaConfiguration : IEntityTypeConfigur
         builder.Property(x => x.Estado).HasMaxLength(20).IsRequired().HasDefaultValue("vigente");
         builder.Property(x => x.AcreedorNombre).HasColumnName("acreedor_nombre").HasMaxLength(200);
         builder.Property(x => x.AcreedorDocumento).HasColumnName("acreedor_documento").HasMaxLength(20);
+        builder.Property(x => x.LevantamientoEntidad)
+            .HasColumnName("levantamiento_entidad").HasMaxLength(200);
         builder.Property(x => x.Metadata).HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
