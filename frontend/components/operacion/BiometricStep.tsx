@@ -228,9 +228,6 @@ export function BiometricStep({
   const partes = onlyPartes?.length
     ? partesFor(modalidad).filter((p) => onlyPartes.includes(p))
     : partesFor(modalidad);
-  // Solo lectura (Track C): sin iniciar/simular validación.
-  const readOnly = useWizardReadOnly();
-
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
   const [provider, setProvider] = useState<string>('mock');
   // Partes cubiertas por el baúl según el BACKEND. Se consulta en vez de depender solo de la prop

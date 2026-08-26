@@ -66,7 +66,6 @@ import type {
   InstanceSummary,
   ListInstancesParams,
   TramiteFuente,
-  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { IdentidadParteTrackingModal } from './IdentidadParteTrackingModal';
