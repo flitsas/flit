@@ -111,4 +111,73 @@ public sealed class DocumentOcrPromptsTests
     {
         DocumentOcrPrompts.PromptFor("rtm")!.Should().Contain("NO inventes ni deduzcas fechas");
     }
+
+    // ── v3 — declaraciones de importación que amparan un lote ────────────────
+    // Medido sobre 22 expedientes: aduana acertaba el VIN en 13 de 31 documentos porque una sola
+    // declaración ampara 30-50 vehículos y el prompt pedía el esquema de uno.
+
+    [Fact]
+    public void Prompt_aduana_manda_vaciar_el_vin_cuando_la_declaracion_ampara_varios_vehiculos()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("aduana")!;
+
+        prompt.Should().Contain("ampara_multiples_vehiculos");
+        // Declarado también en el JSON de salida, o el modelo lo omite.
+        prompt.Should().Contain("\"ampara_multiples_vehiculos\":false");
+        // La regla que evita el peor fallo: un VIN plausible pero de otro vehículo del lote.
+        prompt.Should().Contain("VACIOS");
+        prompt.Should().Contain("NO uses el primero");
+    }
+
+    [Fact]
+    public void Prompt_aduana_prohibe_concatenar_vins_y_numerar_campos()
+    {
+        // Las dos improvisaciones que rompían el parseo: 50 VIN en un campo, o vehiculo_vin_1..N
+        // hasta agotar max_tokens y truncar el JSON.
+        var prompt = DocumentOcrPrompts.PromptFor("aduana")!;
+
+        prompt.Should().Contain("NO concatenes todos los VIN");
+        prompt.Should().Contain("vehiculo_vin_1");
+    }
+
+    [Theory]
+    [InlineData("factura")]
+    [InlineData("aduana")]
+    public void Prompts_de_factura_y_aduana_advierten_de_la_confusion_de_caracteres(string tipo)
+    {
+        // `impronta` ya la llevaba y acertó 35 de 35 VIN; factura falló uno justo por ahí
+        // (leyó LGAX30139T9634772 en vez de LGAX3D139T9834772).
+        var prompt = DocumentOcrPrompts.PromptFor(tipo)!;
+
+        prompt.Should().Contain("0 vs O vs D");
+        prompt.Should().Contain("EXACTAMENTE 17 caracteres");
+    }
+
+    [Fact]
+    public void El_formato_FTH_002_queda_fuera_de_aduana_en_los_dos_extremos_del_pipeline()
+    {
+        // El clasificador lo proponía como aduana y el extractor lo rechazaba: la pieza llegaba a la
+        // pantalla de revisión propuesta y marcada inválida a la vez.
+        DocumentOcrPrompts.PromptFor("aduana")!.Should().Contain("FTH-002");
+        DocumentOcrPrompts.ClassificationPrompt(["factura", "aduana", "impronta"])
+            .Should().Contain("FTH-002");
+    }
+
+    [Fact]
+    public void El_clasificador_sabe_que_una_declaracion_de_lote_ocupa_varias_paginas()
+    {
+        // Sin esto tiende a abrir una entrada por página en vez de agrupar las 2-5 de la declaración.
+        var prompt = DocumentOcrPrompts.ClassificationPrompt(["aduana"]);
+
+        prompt.Should().Contain("LOTE de 30 a 50");
+        prompt.Should().Contain("Agrupalas TODAS en una sola entrada");
+    }
+
+    [Fact]
+    public void El_clasificador_conoce_el_certificado_individual_de_aduanas_de_ensamblado_nacional()
+    {
+        // Los vehículos ensamblados en Colombia (Sofasa) no traen Declaración de Importación.
+        DocumentOcrPrompts.ClassificationPrompt(["aduana"])
+            .Should().Contain("ENSAMBLADO en Colombia");
+    }
 }
