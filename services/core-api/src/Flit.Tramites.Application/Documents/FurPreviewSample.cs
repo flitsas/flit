@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.Documents;
@@ -104,13 +105,22 @@ public static class FurPreviewSample
     /// Si un flag es null, se infiere del código de trámite (compatibilidad). Si viene true/false,
     /// esa es la fuente de verdad del simulador.
     /// </param>
+    /// <param name="profile">
+    /// ADR-0051 — perfil real del tipo (<c>gate_profile</c>), cuando el caller lo tiene
+    /// (<c>PreviewFurHandler</c>, que ya consulta el <c>ProcedureType</c>). Con perfil, la preview
+    /// deriva SIEMPRE de las mismas capacidades que <c>FurCommand</c> (<c>RequiresSeller</c> /
+    /// <c>signatureActors</c>) en vez de la heurística de código/familia — que es exactamente la
+    /// fuente de la discrepancia entre preview y FUR real que cierra este ADR. Sin perfil (tests
+    /// unitarios que ejercitan <c>Build</c> directo) se conserva la heurística previa.
+    /// </param>
     public static FurDocumentData Build(
         string procedureCode,
         string family,
         string sellerPersonKind,
         string buyerPersonKind,
         string vehicleKind,
-        FurPreviewFlags? flags = null)
+        FurPreviewFlags? flags = null,
+        ProcedureTypeGateProfile? profile = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(procedureCode);
 
@@ -121,16 +131,16 @@ public static class FurPreviewSample
             throw new ArgumentOutOfRangeException(nameof(vehicleKind), "Parámetros de simulación inválidos.");
         }
 
-        var esTraspaso = IsTraspaso(family, procedureCode);
+        var requiresSeller = profile?.RequiresSeller ?? IsTraspaso(family, procedureCode);
         var (template, clase, placa) = VehicleAssets(vehicle);
         var partes = new List<DocumentParte>();
-        if (esTraspaso)
+        if (requiresSeller)
             partes.Add(BuildParte("vendedor", sellerKind, esVendedor: true));
         partes.Add(BuildParte("comprador", buyerKind, esVendedor: false));
         if (IsLeasing(procedureCode))
             partes.Add(BuildLocatario());
 
-        var modalidad = esTraspaso ? "traspaso" : "matricula_inicial";
+        var modalidad = requiresSeller ? "traspaso" : "matricula_inicial";
         var inferred = ResolveTransformaciones(procedureCode);
         var transformaciones = new FurTransformacionesDeclaradas(
             Color: flags?.CambioColor ?? inferred.Color,
@@ -138,7 +148,14 @@ public static class FurPreviewSample
             Combustible: flags?.CambioCombustible ?? inferred.Combustible,
             Blindaje: flags?.Blindaje ?? inferred.Blindaje);
         var prendaMarking = flags?.Prenda ?? ResolvePrenda(procedureCode);
-        var firmas = BuildFirmas(partes, omitirFirmaComprador: IsUnilateral(procedureCode));
+        // ADR-0051 — mismo criterio que FurCommand: quién firma lo declara `signatureActors`, no un
+        // `if (IsUnilateral(code))` que solo este simulador conocía (y que el FUR real ignoraba).
+        var signatureRoles = profile is not null
+            ? ResolveSignatureRoles(profile)
+            : LegacySignatureRoles(procedureCode, requiresSeller);
+        var firmas = BuildFirmas(
+            partes,
+            omitirFirmaComprador: !signatureRoles.Contains("comprador", StringComparer.OrdinalIgnoreCase));
         var vehiculo = new VehiculoDatos(
                 Marca: "[MARCA]",
                 Linea: "[LINEA]",
@@ -166,7 +183,7 @@ public static class FurPreviewSample
             Vehiculo: vehiculo,
             Organismo: new OrganismoTransito("05001000", "[NOMBRE DEL ORGANISMO DE TRÁNSITO]", "Medellín"),
             Partes: partes,
-            ValorVenta: esTraspaso ? 1m : null,
+            ValorVenta: requiresSeller ? 1m : null,
             Causal: null,
             SellosFirma: [],
             FechaTramite: new DateTime(2026, 8, 21, 0, 0, 0, DateTimeKind.Utc),
@@ -177,8 +194,27 @@ public static class FurPreviewSample
             PrendaMarking: prendaMarking,
             AcreedorPrenda: prendaMarking is FurPrendaMarking.Ninguna ? null : PhAcreedor,
             TemplateFormat: template,
-            Transformaciones: transformaciones);
+            Transformaciones: transformaciones,
+            RequiereVendedor: requiresSeller,
+            SignatureActors: signatureRoles);
     }
+
+    /// <summary>ADR-0051 — traduce <c>signatureActors</c> del perfil real al mismo vocabulario que usa el mapper.</summary>
+    private static string[] ResolveSignatureRoles(ProcedureTypeGateProfile profile) =>
+        profile.ResolveSignatureActors()
+            .Select(RuntConsultaExigida.ActorTypeDeEntidad)
+            .Where(r => r is not null)
+            .Select(r => r!)
+            .ToArray();
+
+    /// <summary>
+    /// Sin perfil real (tests que ejercitan <c>Build</c> directo): conserva la heurística previa a
+    /// ADR-0051, incluido el <c>if (IsUnilateral(code))</c> que antes gobernaba <c>omitirFirmaComprador</c>.
+    /// </summary>
+    private static string[] LegacySignatureRoles(string procedureCode, bool requiresSeller) =>
+        IsUnilateral(procedureCode)
+            ? ["vendedor"]
+            : requiresSeller ? ["vendedor", "comprador"] : ["comprador"];
 
     public static bool IsUnilateral(string? code) =>
         string.Equals(code?.Trim(), "TRASPASO_UNILATERAL", StringComparison.OrdinalIgnoreCase);

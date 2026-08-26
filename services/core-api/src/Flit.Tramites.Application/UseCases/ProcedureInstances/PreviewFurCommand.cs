@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -54,6 +55,9 @@ public sealed class PreviewFurHandler(
         if (type is null)
             return new PreviewFurResult(PreviewFurStatus.NotFound, "procedure_type_no_encontrado", null, null);
 
+        // ADR-0051 — la preview deriva del gate_profile REAL del tipo, no de una heurística de código/
+        // familia: unifica el simulador con FurCommand para que dejen de contradecirse.
+        var profile = ProcedureTypeGateProfile.FromJson(type.GateProfile);
         var data = FurPreviewSample.Build(
             type.Code,
             type.Family,
@@ -65,7 +69,8 @@ public sealed class PreviewFurHandler(
                 request.CambioCombustible,
                 request.CambioCarroceria,
                 request.Blindaje,
-                prenda));
+                prenda),
+            profile);
         var doc = generator.GenerateFur(data);
         return new PreviewFurResult(PreviewFurStatus.Ok, null, doc, null);
     }

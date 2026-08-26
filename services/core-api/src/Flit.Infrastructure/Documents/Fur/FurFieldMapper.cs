@@ -86,15 +86,26 @@ public static class FurFieldMapper
             dict["vehicle_buyer_address"] = Text(DisplayOrDash(comprador.Address));
             dict["vehicle_buyer_city"] = Text(DisplayOrDash(comprador.City));
             dict["vehicle_buyer_phone"] = Text(DisplayOrDash(comprador.Phone));
-            // HU #11035 — el sello del comprador baja 4pt (el campo declara 8pt, frente a 6,5pt del
-            // propietario): con la reducción uniforme de 2pt seguía saliéndose del recuadro.
-            SetSignature(
-                dict,
-                "vehicle_buyer_signature",
-                data,
-                comprador.Rol,
-                IdentidadOrSello(data, "comprador", ["comprador"]),
-                selloFontSizeDelta: -4);
+            // ADR-0051 — el comprador solo lleva sello/imagen de firma si el tipo lo declara firmante
+            // (data.SignatureActors). TRASPASO_UNILATERAL declara ["vendedor"]: el comprador (locatario)
+            // NO firma, aunque sí aparece con sus datos en esta sección. `null` (llave ausente) = sin
+            // restricción, comportamiento previo a esta llave.
+            if (data.SignatureActors is null || data.SignatureActors.Contains("comprador", StringComparer.OrdinalIgnoreCase))
+            {
+                // HU #11035 — el sello del comprador baja 4pt (el campo declara 8pt, frente a 6,5pt del
+                // propietario): con la reducción uniforme de 2pt seguía saliéndose del recuadro.
+                SetSignature(
+                    dict,
+                    "vehicle_buyer_signature",
+                    data,
+                    comprador.Rol,
+                    IdentidadOrSello(data, "comprador", ["comprador"]),
+                    selloFontSizeDelta: -4);
+            }
+            else
+            {
+                dict["vehicle_buyer_signature"] = Text("");
+            }
             MarkDocType(dict, comprador.Documento, comprador.DocumentType, "vehicle_buyer");
         }
         else
@@ -118,10 +129,14 @@ public static class FurFieldMapper
 
         // HU #10463 — sin validación de identidad aprobada, el espacio de firma del FUR muestra
         // "NO FIRMADO" (matrícula: propietario; traspaso: vendedor + comprador).
+        // ADR-0051 — el comprador solo recibe el sello "NO FIRMADO" si el tipo lo declara firmante:
+        // sin esta guarda, TRASPASO_UNILATERAL estampaba "NO FIRMADO" en un espacio de firma que el
+        // tipo ni siquiera exige (el comprador/locatario no firma este documento).
         if (!data.IdentidadValidada)
         {
             dict["vehicle_owner_signature"] = Text(NoFirmadoSello);
-            if (esTraspaso)
+            if (esTraspaso
+                && (data.SignatureActors is null || data.SignatureActors.Contains("comprador", StringComparer.OrdinalIgnoreCase)))
                 dict["vehicle_buyer_signature"] = Text(NoFirmadoSello);
         }
 

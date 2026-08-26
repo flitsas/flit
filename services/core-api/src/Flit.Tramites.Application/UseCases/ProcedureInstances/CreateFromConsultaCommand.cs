@@ -83,7 +83,10 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     ITransitOfficeResolver transitOfficeResolver,
     TramiteValidationPolicy? validationPolicy = null,
     IOtOperabilityGate? otOperability = null,
-    IProcedureTypeRepository? typeRepo = null)
+    IProcedureTypeRepository? typeRepo = null,
+    // ADR-0051 Decisión 5 — best-effort, opcional: los tests que no lo inyectan simplemente no
+    // sincronizan (comportamiento previo a esta pieza).
+    SyncSellerActorFromRuntHandler? sellerSyncHandler = null)
 {
     // HU #10970 — mismo modo por ambiente que el resto del flujo. Sin inyectar ⇒ bloqueo duro.
     private readonly TramiteValidationPolicy _validationPolicy =
@@ -267,6 +270,17 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
             summary.Id, request.TenantId, new PatchFieldValuesRequest(items), ct);
         if (patchError is not null)
             return (null, patchError, null, null);
+
+        // ADR-0051 Decisión 5 — TRASPASO_UNILATERAL (y cualquier tipo futuro con la misma combinación
+        // de capacidades) no captura al vendedor por formulario: sin esto, ningún camino crea el actor
+        // "vendedor" y FinalizeDraftGate bloquearía el 100% de sus borradores con actores_incompletos.
+        // Reusa el documento ya tecleado en el paso 1 (owner_document_type/number, recién persistidos
+        // arriba) para un lookup best-effort en el RUNT — nunca bloquea la creación del trámite.
+        if (perfilTipo.RequiresSeller && !perfilTipo.SellerCapturedViaForm && sellerSyncHandler is not null)
+        {
+            await sellerSyncHandler.SyncAsync(
+                summary.Id, request.TenantId, request.OwnerDocumentType, request.OwnerDocumentNumber, ct);
+        }
 
         // Preflight autoritativo sobre la instancia real, reusando la consulta del paso 1: hidrata los
         // atributos del vehículo, fija el OT en traspaso y persiste el snapshot, sin segunda llamada al

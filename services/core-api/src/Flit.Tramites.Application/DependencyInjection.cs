@@ -109,6 +109,9 @@ public static class DependencyInjection
         // que crear el trámite no repita la llamada al proveedor externo.
         services.AddSingleton<IPreflightPreviewStore, InMemoryPreflightPreviewStore>();
         services.AddScoped<RunPreflightPreviewHandler>();
+        // ADR-0051 Decisión 5 — sincroniza el actor "vendedor" desde el RUNT cuando el tipo no lo
+        // captura por formulario (TRASPASO_UNILATERAL). Registrado ANTES de su consumidor.
+        services.AddScoped<SyncSellerActorFromRuntHandler>();
         services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
         // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
