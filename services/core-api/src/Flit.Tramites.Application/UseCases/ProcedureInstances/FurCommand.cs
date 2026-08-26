@@ -1144,8 +1144,6 @@ public sealed class GenerarFurHandler(
         // eso, el PDF pintaba placeholders (o el firmante equivocado) hasta que alguien elegía a mano.
         // Abierto / institucional: no se asigna firmante persona (aunque hubiera MandateSignerId).
         var assignmentMode = config?.AssignmentMode;
-        var partesVisibles = string.Equals(
-            instance.Status, TramiteEstado.Aprobado, StringComparison.OrdinalIgnoreCase);
         var esJuridica = data.Mandante?.EsJuridica ?? false;
         var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind);
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
@@ -1157,7 +1155,7 @@ public sealed class GenerarFurHandler(
 
         MandatarioFirmante? mandatario = null;
         Guid? resolvedSignerId = null;
-        if (partesVisibles && !MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
+        if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
             if (transitOfficeId is { } officeId)
             {
@@ -1229,8 +1227,8 @@ public sealed class GenerarFurHandler(
         var mandatoData = new MandatoData(
             data,
             templateCode,
-            partesVisibles ? config?.InstitutionalMandataryName : null,
-            partesVisibles ? config?.InstitutionalMandataryNit : null,
+            config?.InstitutionalMandataryName,
+            config?.InstitutionalMandataryNit,
             mandatario,
             MandatoFamiliaCodes.Resolve(config?.MandataryFamily),
             config?.ChamberCity,
@@ -1239,8 +1237,7 @@ public sealed class GenerarFurHandler(
             modoFirmaMandatario,
             customKind,
             config?.CustomTemplateBody,
-            customPdf,
-            PartesVisibles: partesVisibles);
+            customPdf);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }

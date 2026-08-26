@@ -34,8 +34,7 @@ public sealed class TransitionProcedureInstanceHandler(
         if (!outcome.Success)
             return (null, outcome.ErrorCode, outcome.ErrorDetail);
 
-        // Al entregar: expediente con mandante/mandatario en blanco.
-        // Al aprobar: siempre regenerar el mandato (abierto/institucional también llenan al mandante).
+        // Al entregar o aprobar: regenerar el mandato con mandante/mandatario (si el modo lo permite).
         if (furHandler is not null
             && (status == TramiteEstado.Entregado || status == TramiteEstado.Aprobado))
         {

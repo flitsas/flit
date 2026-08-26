@@ -277,8 +277,9 @@ public sealed record MandatoData(
     /// <summary>Bytes del PDF blank propio (cargados por el caller antes de generar).</summary>
     byte[]? CustomTemplatePdf = null,
     /// <summary>
-    /// False en borrador y entregado: mandante y mandatario salen en blanco (<c>___</c>).
-    /// True al aprobar, si el modelo lo permite.
+    /// Mandante (otorgante: comprador en matrícula, vendedor en traspaso) y mandatario se pintan
+    /// en cualquier estado. False solo en pruebas o plantillas que deban salir en blanco.
+    /// El modo abierto sigue sin firmante persona.
     /// </summary>
     bool PartesVisibles = true);
 

@@ -110,7 +110,7 @@ public sealed class MandatoDatosPorOrganismoTests
     }
 
     [Fact]
-    public void PartesOcultas_MandanteYMandatarioSalenEnBlanco()
+    public void PartesVisibles_MandanteYMandatarioSePintan()
     {
         var parte = new DocumentParte("vendedor", "Juan Pérez", "123456", "juan@x.com", "CC");
         var tramite = Tramite(parte, "11001000", "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA", "Bogotá");
@@ -119,27 +119,19 @@ public sealed class MandatoDatosPorOrganismoTests
             MandatoTemplateResolver.Generico,
             null,
             null,
-            new MandatarioFirmante("Carlos Ruiz", "70111222"),
-            PartesVisibles: false);
+            new MandatarioFirmante("Carlos Ruiz", "70111222"));
 
         var parrafos = (List<IReadOnlyList<MandatoPdfGenerator.ParrafoSegmento>>)BuildParrafos.Invoke(
             null,
             [
-                data, Anon(parte), false, MandatoVariante.Generico,
+                data, parte, false, MandatoVariante.Generico,
                 "MATRÍCULA INICIAL", "ABC123", "Bogotá", "Bogotá", "1 de agosto de 2026",
             ])!;
         var texto = string.Join("\n", parrafos.Select(p => string.Concat(p.Select(s => s.Texto))));
 
-        texto.Should().NotContain("Juan Pérez");
-        texto.Should().NotContain("Carlos Ruiz");
-        texto.Should().Contain("___");
+        texto.Should().Contain("Juan Pérez");
+        texto.Should().Contain("Carlos Ruiz");
     }
-
-    private static DocumentParte Anon(DocumentParte p) => p with
-    {
-        Nombre = null, Documento = null, Email = null, Phone = null, Address = null,
-        RepresentanteLegalNombre = null, RepresentanteLegalTipoDoc = null, RepresentanteLegalDocumento = null,
-    };
 
     private static FurDocumentData Tramite(
         DocumentParte parte, string code, string name, string city) =>
