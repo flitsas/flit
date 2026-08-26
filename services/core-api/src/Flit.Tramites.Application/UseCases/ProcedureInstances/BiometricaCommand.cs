@@ -43,7 +43,9 @@ public sealed record BiometricValidationDto(
     string? Modalidad = null,
     IReadOnlyList<LinkedProcedureDto>? LinkedProcedures = null,
     /// <summary>Fecha de registro de la validación (para ordenar historial más reciente → más antigua).</summary>
-    DateTimeOffset? CreatedAt = null);
+    DateTimeOffset? CreatedAt = null,
+    /// <summary>Hash del certificado de firma digital (estampa), cuando la validación está aprobada.</summary>
+    string? CertificateHash = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -246,7 +248,8 @@ public sealed class IniciarBiometriaHandler(
                     : null,
             ExtractMotivoRechazo(v),
             ExtractUltimoIntentoMotivo(v),
-            CreatedAt: v.CreatedAt);
+            CreatedAt: v.CreatedAt,
+            CertificateHash: v.CertificateHash);
 
     /// <summary>
     /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado

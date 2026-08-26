@@ -1270,6 +1270,8 @@ export interface BiometricValidation {
   linkedProcedures?: LinkedProcedureRef[] | null;
   /** Fecha de registro (historial por persona: más reciente → más antigua). */
   createdAt?: string | null;
+  /** Hash del certificado de firma digital (estampa), cuando la validación está aprobada. */
+  certificateHash?: string | null;
 }
 
 /**

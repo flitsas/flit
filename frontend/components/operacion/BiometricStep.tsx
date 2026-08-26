@@ -455,10 +455,9 @@ function BiometricSkeleton({
 }
 
 /**
- * Bloque de UNA parte del trámite. Un solo método visible (override vs mockup dual):
+ * Bloque de UNA parte del trámite:
  *  - Cubierta por baúl → solo «Método de Firma» / firma electrónica (sin bitácora Kyverum).
- *  - Validación de identidad → Datos de Identificación + estado biométrico + acciones +
- *    un disclosure «Ver trazabilidad de validación».
+ *  - Sin baúl → layout dual: identidad + biométrica (izq.) y método de firma + canvas (der.).
  */
 function ParteBlock({
   parte,
@@ -495,10 +494,11 @@ function ParteBlock({
     ? `${PARTE_LABEL[parte]} firmará con el sello de la validación de identidad (biométrica) como mecanismo de firma.`
     : `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`;
 
+  // Nombre en el canvas: con blur si la parte NO está validada/firmada.
+  const isValidated =
+    vaultCovered || (validation?.status === 'aprobado' && !validation?.expired);
   const sigNombre = info?.nombre ?? PARTE_LABEL[parte];
 
-  // Un solo método visible: baúl → solo firma electrónica (sin bitácora Kyverum);
-  // identidad/biométrica → solo panel de validación + un disclosure de trazabilidad.
   if (vaultCovered) {
     return (
       <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
@@ -568,43 +568,91 @@ function ParteBlock({
       <StartAction parte={parte} instanceId={instanceId} provider={provider} onStarted={onChanged} />
     );
 
+  const hashLine = signatureHashLabel(validation);
+
   return (
-    <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-      <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
-        Datos de Identificación
-      </p>
-      {info && (
-        <>
-          <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
-            {info.nombre} — {PARTE_LABEL[parte]}
-          </p>
-          <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
-        </>
-      )}
-      <div className="mt-4">
-        <p
-          className="text-[11px] font-medium uppercase tracking-wide"
-          style={{ color: '#59677D' }}
-        >
-          Estado Biométrico
+    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+      <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+        <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
+          Datos de Identificación
         </p>
-        <div className="mt-2">
-          <StatusBadge label={bioBadge.label} tone={bioBadge.tone} />
+        {info && (
+          <>
+            <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
+              {info.nombre} — {PARTE_LABEL[parte]}
+            </p>
+            <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
+          </>
+        )}
+        <div className="mt-4">
+          <p
+            className="text-[11px] font-medium uppercase tracking-wide"
+            style={{ color: '#59677D' }}
+          >
+            Estado Biométrico
+          </p>
+          <div className="mt-2">
+            <StatusBadge label={bioBadge.label} tone={bioBadge.tone} />
+          </div>
         </div>
+        {motivoNoEnvio && (
+          <div className="mt-3">
+            <MotivoNoEnvioAviso
+              parte={parte}
+              motivo={motivoNoEnvio}
+              onIrAActores={onIrAActores}
+            />
+          </div>
+        )}
+        <div className="mt-3">{actionView}</div>
       </div>
-      {motivoNoEnvio && (
-        <div className="mt-3">
-          <MotivoNoEnvioAviso
-            parte={parte}
-            motivo={motivoNoEnvio}
-            onIrAActores={onIrAActores}
-          />
+
+      <div className="flex flex-col rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+        <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
+          Método de Firma
+        </p>
+        <div
+          className="flex flex-1 items-center justify-center rounded-xl border p-5 text-center"
+          style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+        >
+          <div>
+            <p
+              className="text-[11px] font-medium uppercase tracking-wide"
+              style={{ color: '#59677D' }}
+            >
+              Firma electrónica
+            </p>
+            <p
+              className="mt-2 select-none text-2xl font-semibold italic"
+              style={{ color: '#1A2B4C', filter: isValidated ? undefined : 'blur(4px)' }}
+            >
+              {sigNombre}
+            </p>
+            <div className="mt-2">
+              <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
+            </div>
+            <p className="mt-2 text-xs opacity-70">{sigDetalle}</p>
+            {hashLine !== null && (
+              <p className="mt-2 text-xs opacity-70">Hash: {hashLine}</p>
+            )}
+          </div>
         </div>
-      )}
-      <div className="mt-3">{actionView}</div>
-      <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
+        <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
+      </div>
     </div>
   );
+}
+
+/** Etiqueta de hash de firma: solo con dato real o "—" si aprobado sin hash; pendiente → null. */
+function signatureHashLabel(validation: BiometricValidation | null): string | null {
+  const hash = validation?.certificateHash?.trim();
+  if (hash) {
+    return hash;
+  }
+  if (validation?.status === 'aprobado' && !validation.expired) {
+    return '—';
+  }
+  return null;
 }
 
 /**
