@@ -52,7 +52,8 @@ import {
   WIZARD_CTA_GRADIENT,
   WIZARD_BTN_SOLID,
 } from './wizard-field-styles';
-import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
+import { WizardCardHeader } from './wizard-atoms';
+import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 
@@ -133,12 +134,23 @@ export function isIdentityConsultationReady(
   return status === 'found';
 }
 
+/**
+ * Documentos que puede declarar un actor. Es el ÚNICO control de la naturaleza de la persona:
+ * NIT ⇒ jurídica (se consulta el RUES), cualquier otro ⇒ natural (se consulta el RUNT).
+ *
+ * <p>La tarjeta de identidad NO está: ninguno de los dos proveedores de conductor la consulta.
+ * Verifik solo admite <c>CC · CE · PA · PPT</c> en <c>/v2/co/runt/conductor</c> (no existe un valor
+ * para TI), y aunque Kyverum sí tiene el código <c>T</c>, nunca lo recibe porque el orquestador le
+ * entrega el documento ya traducido al dialecto de Verifik — donde TI viaja como <c>PPT</c> y su
+ * normalizador lo vuelve <c>P</c>, pasaporte. Ofrecerla solo servía para trabar el paso: la consulta
+ * no encuentra a nadie y el gate de avance exige consulta exitosa. Si el negocio la pide, primero
+ * hay que decidir qué se le manda a cada proveedor.</p>
+ */
 const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
   { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
   { value: 'CE', label: 'Cédula de extranjería (CE)' },
   { value: 'NIT', label: 'NIT' },
   { value: 'PAS', label: 'Pasaporte (PAS)' },
-  { value: 'TI', label: 'Tarjeta de identidad (TI)' },
 ];
 
 const ROL_LABEL: Record<ActorRol, string> = {
@@ -154,10 +166,19 @@ function rolesFor(modalidad: ActorsModalidad): ActorRol[] {
     : ['vendedor', 'comprador'];
 }
 
-const PERSON_TYPE_OPTIONS: { value: ActorPersonType; label: string }[] = [
-  { value: 'natural', label: 'Persona Natural' },
-  { value: 'juridical', label: 'Persona Jurídica' },
-];
+/**
+ * Naturaleza de la persona DERIVADA del documento. Ya no se teclea: el gestor elige el tipo de
+ * documento y esto se deduce, que es lo que el backend cree desde siempre — cinco de las reglas que
+ * leen `person_type` caen a «NIT ⇒ jurídica» cuando la columna viene vacía.
+ */
+function personTypeForDoc(tipoDocumento: ActorDocumentType): ActorPersonType {
+  return tipoDocumento === 'NIT' ? 'juridical' : 'natural';
+}
+
+/** Rótulo de lectura de la naturaleza de la persona (insignia de la tarjeta). */
+function personTypeLabel(actor: ProcedureActor): string {
+  return isJuridical(actor) ? 'Persona Jurídica' : 'Persona Natural';
+}
 
 function emptyActor(rol: ActorRol): ProcedureActor {
   return {
@@ -1054,6 +1075,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         // especiales. Se re-sanea el documento al cambiar de tipo (p.ej. PAS→CC).
         if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined)
           next.numeroDocumento = sanitizeDocNumber(next.numeroDocumento, next.tipoDocumento);
+        // El documento manda sobre la naturaleza de la persona: el selector de tipo de documento es
+        // el único control, y todo lo demás (RUES/RUNT autopoblando, siembra del propietario del
+        // paso 1) pasa por aquí, así que la coherencia NIT ⇔ jurídica no depende de quién escriba.
+        if (patch.tipoDocumento !== undefined)
+          next.personType = personTypeForDoc(next.tipoDocumento);
         if (patch.telefono !== undefined)
           next.telefono = digitsOnly(next.telefono ?? '');
         if (patch.nombreCompleto !== undefined)
@@ -1638,25 +1664,43 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const isRuntFound = (index: number) => runt[index]?.status === 'found';
   const isNameLockedByRunt = (index: number, actor: ProcedureActor) =>
     isRuntFound(index) && !isJuridical(actor);
-  const isPersonTypeLockedByRunt = (index: number) => autoConsultRunt && isRuntFound(index);
+  /**
+   * Bloqueo de la identidad traída del registro: con el vendedor fijado desde el RUNT por la placa,
+   * el documento NO se cambia a mano — cambiarlo dejaría al trámite a nombre de otro. Antes bloqueaba
+   * el interruptor de tipo de persona; ahora bloquea el selector de documento, que es su reemplazo.
+   */
+  const isDocTypeLockedByRunt = (index: number) => autoConsultRunt && isRuntFound(index);
 
-  const personTypeSelector = (index: number, locked = false) => {
-    const current = actors[index].personType ?? 'natural';
+  /**
+   * Selector de tipo de documento: el único control de la identidad del actor. Elegir NIT es lo que
+   * declara la persona jurídica (y desvía la consulta al RUES); `updateActor` deriva `personType`.
+   */
+  const docTypeSelector = (
+    index: number,
+    idPrefix: string,
+    locked = false,
+    /* Suelto se acota el ancho para no estirar un desplegable de cuatro opciones a toda la fila;
+       dentro de una rejilla de identificación se pasa '' y manda la celda. */
+    wrapperClassName = 'sm:max-w-xs',
+  ) => {
+    const id = `${idPrefix}-tipoDoc`;
     return (
-      <WizardSegmented
-        ariaLabel="Tipo de persona"
-        value={current}
-        options={PERSON_TYPE_OPTIONS}
-        disabled={readOnly || locked}
-        onChange={(value) => {
-          if (locked) return;
-          // Jurídica ⇒ documento NIT (RUES). Volver a natural desde NIT ⇒ CC por defecto.
-          const patch: Partial<ProcedureActor> = { personType: value };
-          if (value === 'juridical') patch.tipoDocumento = 'NIT';
-          else if (actors[index].tipoDocumento === 'NIT') patch.tipoDocumento = 'CC';
-          updateActor(index, patch);
-        }}
-      />
+      <div className={cn('min-w-0', wrapperClassName)}>
+        <label htmlFor={id} className={`${WIZARD_LABEL} mb-1.5`}>
+          Tipo de documento
+        </label>
+        <select
+          id={id}
+          value={actors[index].tipoDocumento}
+          disabled={readOnly || locked}
+          onChange={(e) => updateActor(index, { tipoDocumento: e.target.value as ActorDocumentType })}
+          className={WIZARD_SELECT}
+        >
+          {DOC_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
     );
   };
 
@@ -2516,6 +2560,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         <WizardAccordion
           title={esPropietarioInscrito ? 'Datos del propietario actual' : `Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
           defaultOpen
+          /* Misma insignia de lectura que las tarjetas del traspaso: dice a qué registro se está
+             consultando. Este layout no la tenía porque el interruptor PN/PJ ya lo decía por dentro;
+             al quitarlo se quedaba sin ninguna lectura explícita de la naturaleza declarada. */
+          badge={
+            <StatusBadge
+              tone={isJuridical(actor) ? 'info' : 'neutral'}
+              label={personTypeLabel(actor)}
+            />
+          }
         >
           <p className="text-xs opacity-70 mb-3">
             {esPropietarioInscrito
@@ -2527,12 +2580,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   : 'Registra la persona natural o jurídica que figurará como propietario del vehículo.'}
           </p>
           <div className="space-y-3">
-            {personTypeSelector(0, isPersonTypeLockedByRunt(0))}
-            {/* Grid de identificación: sin selector de tipo — CC por defecto (RUNT puede corregirlo).
-                Rejilla: número (col-span-2) | Consultar RUNT | hint a lo ancho. */}
+            {/* Identificación en UNA fila: tipo | número | Consultar. El selector de tipo estuvo un
+                momento suelto en su propio renglón —era el hueco que dejó el interruptor PN/PJ al
+                salir— y ahí solo gastaba alto: es un campo más de la misma captura. */}
             {!isJuridical(actor) ? (
-              /* Natural: Número (col-span-2) | Consultar RUNT | hint col-span-3 */
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-end">
+              /* Natural: tipo | Número (col-span-2) | Consultar RUNT | hint col-span-4 */
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-end">
+                {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0), '')}
                 <div className="lg:col-span-2">
                   <label htmlFor="comprador-numeroDoc" className={`${WIZARD_LABEL} mb-1.5`}>
                     Número de documento
@@ -2613,7 +2667,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     {runtState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
                   </button>
                 )}
-                <p className="text-xs opacity-70 lg:col-span-3">
+                <p className="text-xs opacity-70 lg:col-span-4">
                   {esPropietarioInscrito
                     ? 'Los datos de identidad se toman de la consulta al RUNT del propietario actual.'
                     : actor.rol === 'comprador'
@@ -2622,8 +2676,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </p>
               </div>
             ) : (
-              /* Jurídica: NIT (col-span-2) | Consultar RUES | hint col-span-4 */
+              /* Jurídica: tipo | NIT (col-span-2) | Consultar RUES | hint col-span-4 */
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-end">
+                {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0), '')}
                 <div className="lg:col-span-2">
                   <label htmlFor="comprador-numeroDoc" className={`${WIZARD_LABEL} mb-1.5`}>
                     NIT
@@ -3005,34 +3060,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     ? 'Los datos de identidad se toman automáticamente de la consulta en RUNT.'
                     : undefined
               }
+              /* La naturaleza de la persona pasa a ser SIEMPRE lectura: la declara el selector de
+                 documento de adentro, y aquí se acusa recibo de lo que quedó declarado. La única
+                 excepción es el propietario del registro mientras el RUNT no ha respondido: ahí
+                 todavía no hay nada que acusar y manda el estado de la consulta. */
               badge={
-                vendedorSincronizado ? (
+                esPropietarioDelRegistro && !vendedorSincronizado && !(autoConsultRunt && isRuntFound(index)) ? (
+                  <StatusBadge label={statusPill.text} tone={statusPill.tone} />
+                ) : (
                   <StatusBadge
                     tone={isJuridical(actor) ? 'info' : 'neutral'}
-                    label={isJuridical(actor) ? 'Persona Jurídica' : 'Persona Natural'}
-                  />
-                ) : esPropietarioDelRegistro ? (
-                  autoConsultRunt && isRuntFound(index) ? (
-                    <StatusBadge
-                      tone={isJuridical(actor) ? 'info' : 'neutral'}
-                      label={isJuridical(actor) ? 'Persona Jurídica' : 'Persona Natural'}
-                    />
-                  ) : (
-                    <StatusBadge label={statusPill.text} tone={statusPill.tone} />
-                  )
-                ) : (
-                  <WizardSegmented
-                    ariaLabel="Tipo de persona"
-                    value={actors[index].personType ?? 'natural'}
-                    options={PERSON_TYPE_OPTIONS}
-                    disabled={readOnly || isPersonTypeLockedByRunt(index)}
-                    onChange={(value) => {
-                      if (isPersonTypeLockedByRunt(index)) return;
-                      const patch: Partial<ProcedureActor> = { personType: value };
-                      if (value === 'juridical') patch.tipoDocumento = 'NIT';
-                      else if (actors[index].tipoDocumento === 'NIT') patch.tipoDocumento = 'CC';
-                      updateActor(index, patch);
-                    }}
+                    label={personTypeLabel(actor)}
                   />
                 )
               }
@@ -3091,9 +3129,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   </div>
                 )}
 
-                {/* Vendedor sin RUNT fijo: puede elegir PN/PJ. Con RUNT OK el badge va en cabecera. */}
+                {/* Vendedor sin RUNT fijo: elige documento. Con RUNT OK la identidad ya vino del
+                    registro y solo se lee en el badge de la cabecera. */}
                 {!vendedorSincronizado && esPropietarioDelRegistro && !(autoConsultRunt && isRuntFound(index)) && (
-                  personTypeSelector(index, isPersonTypeLockedByRunt(index))
+                  docTypeSelector(index, prefix, isDocTypeLockedByRunt(index))
                 )}
 
                 {/* ── Identificación ── */}
@@ -3104,17 +3143,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       <label htmlFor={`${prefix}-tipoDoc`} className={`${WIZARD_LABEL} mb-1.5`}>
                         Tipo de documento
                       </label>
+                      {/* Sin filtrar ni deshabilitar: este selector ES el control de la naturaleza
+                          de la persona. Antes obedecía al interruptor PN/PJ —se apagaba en jurídica
+                          y escondía el NIT en natural— y ahora es al revés. */}
                       <select
                         id={`${prefix}-tipoDoc`}
                         value={actor.tipoDocumento}
-                        disabled={readOnly || isJuridical(actor)}
+                        disabled={readOnly}
                         onChange={(e) => updateActor(index, { tipoDocumento: e.target.value as ActorDocumentType })}
                         className={`${WIZARD_SELECT} mt-1.5`}
                       >
-                        {(isJuridical(actor)
-                          ? DOC_OPTIONS
-                          : DOC_OPTIONS.filter((o) => o.value !== 'NIT')
-                        ).map((o) => (
+                        {DOC_OPTIONS.map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                       </select>

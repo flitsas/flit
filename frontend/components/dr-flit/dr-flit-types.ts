@@ -24,3 +24,11 @@ export interface DrFlitValidacionResult {
   /** Si hay trámite ligado, enlace al wizard. */
   tramiteHref: string | null;
 }
+
+export interface DrFlitHelpResult {
+  slug: string;
+  title: string;
+  audience: string;
+  summary: string;
+  href: string;
+}

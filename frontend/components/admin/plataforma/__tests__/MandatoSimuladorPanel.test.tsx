@@ -122,7 +122,7 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
         officeId: "ot-funza",
         personType: "natural",
         procedureTypeCode: "MATRICULA_NUEVA",
-        assignmentMode: null,
+        assignmentMode: "signer",
         mandateSignerId: "signer-1",
         prenda: "ninguna",
         cambioColor: false,
@@ -197,15 +197,15 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
     );
   });
 
-  it("edge case — en modo institucional el mandatario no aplica y queda deshabilitado", async () => {
+  it("el tipo de mandatario queda fijo en Persona o RL", async () => {
     const user = userEvent.setup();
     renderPanel();
 
     await user.selectOptions(screen.getByTestId("simulador-ot"), "ot-funza");
     await screen.findByRole("option", { name: /Ana Gestora/ });
-    await user.selectOptions(screen.getByTestId("simulador-tipo"), "institucional");
 
-    expect(screen.getByTestId("simulador-mandatario")).toBeDisabled();
+    expect(screen.getByTestId("simulador-tipo")).toHaveTextContent(/persona o rl/i);
+    expect(screen.getByTestId("simulador-mandatario")).not.toBeDisabled();
   });
 
   it("envía prenda y transformaciones al generar el PDF", async () => {

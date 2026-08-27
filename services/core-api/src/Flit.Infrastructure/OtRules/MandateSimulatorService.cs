@@ -243,17 +243,14 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
 
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
         var esJuridica = MandateSimulationPersonTypes.IsJuridica(personType);
-        if (!MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind))
-        {
-            templateCode = MandatoTemplateResolver.ResolveEmissionCode(
-                assignmentMode, esJuridica, office.Code);
-        }
 
-        // Mismo orden que el trámite: elección explícita → default de la regla compañía×OT.
+        // Mismo orden que el trámite: elección explícita → default cliente×OT → default OT.
         MandatarioFirmante? mandatario = null;
         if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
-            var signerId = mandateSignerId ?? config?.DefaultMandateSignerId;
+            var signerId = mandateSignerId
+                ?? config?.DefaultMandateSignerId
+                ?? config?.OtDefaultMandateSignerId;
             if (signerId is { } id && id != Guid.Empty)
             {
                 var signer = await _signerDirectory.GetByIdAsync(id, ct).ConfigureAwait(false);

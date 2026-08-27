@@ -1,6 +1,6 @@
 import { createRef } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
@@ -105,7 +105,7 @@ describe('ActorsForm — layout split (un comprador)', () => {
   it('en persona jurídica, Datos de contacto va antes del representante legal', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'NIT');
     const contact = screen.getByRole('heading', { name: 'Datos de contacto' });
     const rl = screen.getByRole('heading', { name: 'Representante legal' });
     expect(contact.compareDocumentPosition(rl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -122,7 +122,7 @@ describe('ActorsForm — layout split (un comprador)', () => {
     });
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'NIT');
     await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '890903938');
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
     expect(await screen.findByText(/Empresa encontrada en RUES/i)).toBeInTheDocument();
@@ -355,23 +355,28 @@ describe('ActorsForm — submit', () => {
 });
 
 describe('ActorsForm — tipo de persona (HU #10543)', () => {
-  it('por defecto persona natural: selector activo', async () => {
+  it('por defecto arranca en cédula, es decir persona natural', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    // La naturaleza ya no se teclea: se deriva del documento. CC ⇒ natural.
+    expect(await screen.findByLabelText('Tipo de documento')).toHaveValue('CC');
+  });
+
+  it('el selector de documento no ofrece tarjeta de identidad', async () => {
+    // Ningún proveedor de conductor la consulta: Verifik solo admite CC/CE/PA/PPT y a Kyverum le
+    // llega ya traducida al dialecto de Verifik, donde TI viaja como PPT y termina siendo pasaporte.
+    // Ofrecerla solo servía para trabar el paso, porque el gate de avance exige consulta exitosa.
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    const tipoDoc = await screen.findByLabelText('Tipo de documento');
     expect(
-      await screen.findByRole('button', { name: 'Persona Natural' }),
-    ).toHaveAttribute('aria-pressed', 'true');
-    expect(
-      screen.getByRole('button', { name: 'Persona Jurídica' }),
-    ).toHaveAttribute('aria-pressed', 'false');
+      within(tipoDoc).queryByRole('option', { name: /Tarjeta de identidad/ }),
+    ).toBeNull();
   });
 
   it('al elegir persona jurídica: guarda personType=juridical', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    await user.click(
-      await screen.findByRole('button', { name: 'Persona Jurídica' }),
-    );
+    await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'NIT');
     // El bloque de representante legal añade su propio «Número de documento»: se apunta al del actor
     // por su placeholder para que la query no sea ambigua.
     await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900123');

@@ -223,7 +223,8 @@ public interface ISolicitudVirtualGenerator
 /// Firmante del mandato (MANDATARIO) resuelto para el trámite (ADR-0036, HU #10915/#10916): el
 /// representante que el OT registró en <c>admin.mandate_signers</c> y firma en nombre de la compañía
 /// gestora. <c>null</c> mientras el trámite está en <i>preparado</i> y aún no se ha elegido/filtrado el
-/// firmante (se regenera al aprobar, HU #10916): el PDF pinta placeholders y no muestra el bloque de firmas.
+/// firmante. En borrador se pintan nombre y documento aunque no haya baúl ni identidad (HU-L9);
+/// el recuadro muestra «Sin firmar» hasta que regeneren el FUR con estampa.
 /// </summary>
 public sealed record MandatarioFirmante(
     string? Nombre,

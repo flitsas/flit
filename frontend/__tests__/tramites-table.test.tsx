@@ -1486,3 +1486,52 @@ describe('TramitesTable — paso en curso', () => {
     expect(progreso.parentElement?.textContent).toContain('—');
   });
 });
+
+/**
+ * Enrutamiento de la fila. El detalle de un radicado es de SOLO LECTURA, así que un trámite en
+ * subsanación no puede acabar ahí: ni "Re-radicar" ni "Cancelar la subsanación" existen fuera del
+ * asistente, y mandarlo al modal dejaba al gestor sin salida de lo que él mismo activó.
+ */
+describe('TramitesTable — abrir un trámite en subsanación', () => {
+  const rechazado = (subsanacionActiva: boolean): InstanceSummary => ({
+    ...makeInstances(1)[0],
+    estado: 'rechazado',
+    subsanacionActiva,
+    ultimoRechazoMotivo: 'Corrige el documento del comprador.',
+  });
+
+  it('con la subsanación activa abre el asistente de pasos, no el detalle', async () => {
+    mocks.listInstances.mockResolvedValue([rechazado(true)]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir trámite TR-0001' }));
+
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-0001');
+    expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).not.toBeInTheDocument();
+  });
+
+  it('rechazado SIN subsanación activa sigue abriendo el detalle (ahí se activa)', async () => {
+    mocks.listInstances.mockResolvedValue([rechazado(false)]);
+    mocks.getInstance.mockResolvedValue({ statusHistory: [], fieldValues: [], actors: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    mocks.listBiometricExpediente.mockResolvedValue({ validations: [], firmaBaulPartes: [] });
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir trámite TR-0001' }));
+
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('la acción de la fila se llama "Continuar" en subsanación, no "Ver"', async () => {
+    mocks.listInstances.mockResolvedValue([rechazado(true)]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    await abrirAcciones();
+    expect(screen.getByRole('menuitem', { name: /Continuar/ })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /^Ver$/ })).not.toBeInTheDocument();
+  });
+});
