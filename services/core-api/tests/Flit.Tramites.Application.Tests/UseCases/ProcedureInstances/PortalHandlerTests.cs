@@ -314,6 +314,9 @@ public sealed class PortalHandlerTests
 
         public Task<DocumentTypeRule?> GetRuleAsync(string tipo, CancellationToken ct = default) =>
             Task.FromResult(_codes.Contains(tipo) ? new DocumentTypeRule(tipo, [], 0) : null);
+
+        public Task<IReadOnlySet<string>> ListSystemGeneratedCodesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     }
 
     // ── Finalizar (uso único) ──────────────────────────────────────────────────

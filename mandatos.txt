@@ -1,0 +1,50 @@
+Habilitar la opción para registrar mandatarios de una compañia desde el modulo del OT
+
+-Agregar un tab al modulo de OT que diga mandatarios y debe ser visible para el rol de Admin OT y SuperAdmin
+
+-Esta seccion debe tener la opción seleccionar el o los tramites a los que va a aplicar un mandatario
+
+-la opcion debe terner la opcion de los tres tipo de mantdato (Mantato OT, Mandato abierto, Mandato cliente - "este debe ser apalancado desde la configuracion del cliente")
+
+-Si el OT tiene configurado un mandatario y la compañia tambien darle prioridad al mandato / mandatario del OT, en caso contrario tomar la informacion del mandato / mandatario de la configuracion de la compañia que radica el trámite
+
+-La firma del mandatario es por identidad
+
+
+Aplicar al registrar los mandatos, aplicar la siguiente logica
+
+1. El ot selecciona la empresa a la que va a incluir un mandatario
+2. el OT selecciona los tipos de tramites a los que aplica el mandato
+3. El ot selecciona el mandato que aplica
+4. Solo se permite un modelo de mandato por cliente / empresa
+
+
+Mantato OT. (Lo configura el OT)
+-Si el OT tiene mandatario y la compañia tambien tiene mandatario aplica el mandato del OT
+-si el OT tiene mandatario y la compañia no, aplica el mandato OT
+-Si el OT NO tiene mandatario y la compañia si tiene mandatario, aplica el mandato de la compañia con la informacion del mandatario la la compañia
+
+
+Mandato abierto (Lo configura el OT)
+-Si el OT tiene mandatario y la compañia tambien tiene mandatario aplica el mandato abierto
+-si el OT tiene mandatario y la compañia no, aplica el mandato abierto
+-Si el OT NO tiene mandatario y la compañia si tiene mandatario, aplica el mandato abierto con la informacion del mandatario la la compañia
+
+-NO FIRMA ___ raya para firmar (sin bloque de firmas)
+
+Mandato cliente (Lo configura el cliente)
+-Si el OT NO tiene mandatario y la compañia si tiene mandatario aplica el mandato del Mandato cliente
+-si el OT NO tiene mandatario y la compañia si, aplica el Mandato cliente
+-Si el OT NO tiene mandatario y la compañia si tiene mandatario, aplica el mandato del cliente con la informacion del mandatario la la compañia
+
+
+Adicionalmente
+
+-Dependiendo el mandato configurado por el OT se envia el contenido de las plantillas que ya existen y estan clasificadas por el modelo al que aplican
+
+-En el modulo de compañias solo configuran mandantarios para persona natural
+
+-En el modulo del OT se configuran los mandatos para persona natural o jurídica. Tener en cuenta que el contenido del mandato cambia dependiendo la selección del tipo de persona seleccionado. "tener presente el tipo de persona natural / juridica para aplicar el contenido del mandato"
+
+-Garantizar que se refleje en la documentación y el consolidado
+-En la configuracion de la empresa, seccion mandatarios, agregar el tipo de trámite al que aplica (traspasos, matrículas, otros). y Siempre aplica el formato **Mandato cliente**

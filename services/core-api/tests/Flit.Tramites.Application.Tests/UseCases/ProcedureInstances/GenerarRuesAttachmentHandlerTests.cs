@@ -37,6 +37,9 @@ public sealed class GenerarRuesAttachmentHandlerTests
 
         public Task<DocumentTypeRule?> GetRuleAsync(string tipo, CancellationToken ct = default) =>
             Task.FromResult(_rules.TryGetValue(tipo, out var r) ? r : null);
+
+        public Task<IReadOnlySet<string>> ListSystemGeneratedCodesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     }
 
     private sealed class FakeRuesExternalClient : IRuesExternalClient

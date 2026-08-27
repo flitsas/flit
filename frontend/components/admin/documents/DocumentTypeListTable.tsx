@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { DocumentType } from "@/lib/api/types-documents";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -8,7 +8,7 @@ import { RowActions } from "@/components/atom/RowActions";
 import { Pagination } from "@/components/atom/Pagination";
 
 // Tabla paginada del catálogo de tipos de documento (HU #10198, AC1). Columnas:
-// Código, Nombre, Estado, Fecha de creación + acciones Editar/Desactivar.
+// Código, Nombre, Origen (cargue/autogenerado), Estado, Fecha de creación + acciones.
 // Paginación server-side: la tabla solo emite el cambio de página.
 export interface DocumentTypeListTableProps {
   items: DocumentType[];
@@ -19,6 +19,7 @@ export interface DocumentTypeListTableProps {
   onEdit: (documentType: DocumentType) => void;
   onDeactivate: (documentType: DocumentType) => void;
   onReactivate: (documentType: DocumentType) => void;
+  onDelete: (documentType: DocumentType) => void;
 }
 
 export function DocumentTypeListTable({
@@ -30,6 +31,7 @@ export function DocumentTypeListTable({
   onEdit,
   onDeactivate,
   onReactivate,
+  onDelete,
 }: DocumentTypeListTableProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -42,6 +44,9 @@ export function DocumentTypeListTable({
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
               Nombre
+            </th>
+            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              Origen
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
               Estado
@@ -68,6 +73,12 @@ export function DocumentTypeListTable({
                 </td>
                 <td className="border-y px-4 py-3">
                   <StatusBadge
+                    label={d.esAutogenerado ? "Autogenerado" : "Cargue"}
+                    tone={d.esAutogenerado ? "info" : "neutral"}
+                  />
+                </td>
+                <td className="border-y px-4 py-3">
+                  <StatusBadge
                     label={activo ? "Activo" : "Inactivo"}
                     tone={activo ? "success" : "danger"}
                   />
@@ -84,6 +95,12 @@ export function DocumentTypeListTable({
                           label: `Editar ${d.nombre}`,
                           onClick: () => onEdit(d),
                           tone: "primary",
+                        },
+                        {
+                          icon: Trash2,
+                          label: `Eliminar ${d.nombre}`,
+                          onClick: () => onDelete(d),
+                          tone: "danger",
                         },
                       ]}
                     />

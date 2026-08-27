@@ -97,7 +97,7 @@ const REASON_COPY: Record<string, string> = {
     'La consulta de comparendos no corresponde al documento del comprador: vuelve al paso 1 y repite la consulta',
   simit_multas: 'El comprador tiene comparendos pendientes en el SIMIT',
   // datos comerciales
-  comercial_incompleto: 'Faltan datos comerciales (valor, causal, impuestos)',
+  comercial_incompleto: 'Faltan datos comerciales (valor de venta)',
   comercial_valor: 'Ingresa un valor de venta mayor a cero',
   // identidad / firma / FUR (Slice 6-7)
   identidad_pendiente: 'Validación biométrica pendiente',

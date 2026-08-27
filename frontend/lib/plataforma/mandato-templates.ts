@@ -54,7 +54,7 @@ export const MANDATO_TIPOS: readonly {
     value: "persona_rl",
     label: "Persona o RL",
     summary:
-      "Una persona natural (mandatario registrado o representante legal) firma como mandatario. Default de los OT sin configuración propia.",
+      "Una persona natural (mandatario de la empresa que radica) firma como mandatario. Si elige este tipo, el PDF usa la plantilla genérica.",
   },
   {
     value: "institucional",
@@ -66,7 +66,7 @@ export const MANDATO_TIPOS: readonly {
     value: "abierto",
     label: "Abierto (sin asumir)",
     summary:
-      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas. No se exige firmante persona al aprobar.",
+      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Es el default al nacer un OT.",
   },
 ] as const;
 
@@ -156,7 +156,7 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
     code: "sabaneta",
     label: "Sabaneta",
     summary:
-      "Plantilla del sistema para el organismo de Sabaneta. Mandatario institucional UT-SETSA; solo firma el mandante.",
+      "Plantilla del sistema para Sabaneta y Envigado (persona jurídica / institucional). Mandatario institucional; solo firma el mandante. En Sabaneta los datos de la UT-SETSA salen de la config del OT.",
     familia: "organismo_transito",
     familiaLabel: "Organismo de tránsito",
     tipoTipico: "institucional",
@@ -172,6 +172,12 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
         institutionalMandataryNit: "900273813-7",
         mandatarySigla: "UT-SETSA",
         chamberCity: "Medellín",
+      },
+      {
+        officeCode: "5266000",
+        officeName: "Envigado",
+        hasExplicitConfig: true,
+        chamberCity: "Envigado",
       },
     ],
   },
@@ -198,21 +204,15 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
   },
   {
     code: "municipio",
-    label: "Envigado, Funza y Medellín",
+    label: "Funza y Medellín",
     summary:
-      "Misma plantilla del sistema para estos tres organismos. Redacción corta; firman mandante y mandatario. La ciudad del cierre cambia según el OT del trámite.",
+      "Plantilla corta de persona natural para Funza y Medellín. Firman mandante y mandatario. La ciudad del cierre cambia según el OT del trámite. Envigado persona jurídica usa la misma redacción que Sabaneta; persona natural usa el genérico (mandato cliente).",
     familia: "individuo",
     familiaLabel: "Individuo",
     tipoTipico: "persona_rl",
     requiresForNaturalPerson: true,
     mandatarioFirma: "Mandante y mandatario",
     bindings: [
-      {
-        officeCode: "5266000",
-        officeName: "Envigado",
-        hasExplicitConfig: true,
-        chamberCity: "Envigado",
-      },
       {
         officeCode: "25286000",
         officeName: "Funza",
@@ -247,11 +247,9 @@ export interface MandatoOtApplicationRow {
  * HU #11718 — qué tercero ajeno quedaría citado en el contrato si se aplica `templateCode` al
  * organismo `officeCode`, o `null` si la combinación es coherente.
  *
- * <p>Las redacciones del sistema llevan datos quemados en `MandatoPdfGenerator`: la de Bello cierra
- * con su municipio y nombra a la UT-MAB; la de Sabaneta nombra a UT-SETSA como mandatario y la
- * Cámara de Comercio de Medellín. Desde que la plantilla se elige por OT (Feature #11702) se puede
- * aplicar cualquiera a cualquier organismo, y el documento sale nombrando a alguien que no tiene
- * nada que ver — Bello aplicado a Bogotá cierra «en el municipio de Bello, Antioquia».</p>
+ * <p>Al emitir el trámite, el generador ya no aplica Bello ni SETSA por el organismo “actual”
+ * del FUR: usa el OT canónico y <c>ResolveEmissionCode</c>. Esta alerta sigue sirviendo en
+ * Plataforma si alguien asigna a mano una redacción de otro organismo.</p>
  *
  * <p><b>Advierte, no bloquea</b> (decisión de producto del 2026-08-21): restringir contradiría la
  * libertad de parametrización que introdujo el Feature #11702.</p>

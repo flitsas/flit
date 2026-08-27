@@ -64,17 +64,6 @@ interface Props {
   vaultCoveredPartes?: BiometricParte[];
   /** Borrador finalizado: biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
-  /**
-   * Rediseño Step5 (punto 6) — «Confirmaciones pendientes» de `ExpedienteVisor` (las casillas del
-   * expediente consolidado, nacidas desmarcadas: datos del vehículo, autorización de datos,
-   * radicación, trámites simultáneos). Se dispara con la lista de textos SIN confirmar cada vez que
-   * cambia — `[]` cuando no falta ninguna o cuando el expediente todavía no aplica (trámite en
-   * estado final o sin `instanceId`). Las casillas NO gatean nada por sí mismas — solo abren el PDF
-   * del consolidado en pestaña, que no exige confirmación—; es el wizard (`TramiteWizard`) quien
-   * debe sumar esta lista a «Requisitos pendientes antes del envío» y usarla para deshabilitar
-   * «Finalizar y enviar trámite», el mismo mecanismo que ya usa para sus otros bloqueos.
-   */
-  onConfirmacionesExpedienteChange?: (pendientes: string[]) => void;
 }
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
@@ -244,7 +233,6 @@ export function FirmaFurStep({
   onPaqueteStatusChange,
   vaultCoveredPartes = [],
   biometricForceEditable = false,
-  onConfirmacionesExpedienteChange,
 }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
@@ -696,10 +684,7 @@ export function FirmaFurStep({
         checklist={checklist}
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
-        organismoNombre={organismo.name}
-        tramitesSimultaneos={transformacionesDeclaradas}
         onBeforeGenerateConsolidado={guardarFechaTramite}
-        onConfirmacionesPendientesChange={onConfirmacionesExpedienteChange}
         onAttachmentsChange={() => {
           void loadExpediente();
           onRefresh?.();

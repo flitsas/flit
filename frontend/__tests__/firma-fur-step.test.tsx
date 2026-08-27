@@ -71,14 +71,6 @@ import { FirmaFurStep } from '@/components/operacion/FirmaFurStep';
 
 const INSTANCE = 'inst-1';
 
-/** Las tres casillas base de «Expediente consolidado» (punto 6, rediseño Step5). Los tests de este
- * archivo no declaran transformaciones, así que no hay cuarta casilla. */
-const CONFIRMACIONES_BASE = (organismo = 'Secretaría Distrital de Movilidad de Bogotá') => [
-  'Confirmo que los datos del vehículo coinciden con la factura de venta.',
-  'Confirmo que el comprador autorizó el tratamiento de sus datos personales.',
-  `Confirmo la radicación ante ${organismo}.`,
-];
-
 const FIRMA_ENVIADA: Signature = {
   id: 'sig-1',
   parte: 'comprador',
@@ -343,10 +335,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     });
   });
 
-  // Punto 6 del rediseño (captura Step5) — las casillas nacen desmarcadas, pero NO gatean el botón:
-  // ver el PDF no es un acto que haya que confirmar. Lo que sí deben condicionar es radicar, y ese
-  // gateo vive en el wizard (`Requisitos pendientes antes del envío`), fuera de este paso.
-  it('las casillas de confirmación nacen desmarcadas y NO bloquean «Ver expediente consolidado»', async () => {
+  it('«Ver expediente consolidado» no exige confirmaciones previas', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
@@ -355,36 +344,13 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
       name: 'Ver expediente consolidado (PDF)',
     });
     expect(boton).toBeEnabled();
-
-    for (const texto of CONFIRMACIONES_BASE()) {
-      expect(screen.getByLabelText(texto)).not.toBeChecked();
-    }
+    expect(screen.queryByRole('group', { name: 'Confirmaciones del expediente consolidado' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Confirmo que los datos del vehículo coinciden/i),
+    ).not.toBeInTheDocument();
 
     await user.click(boton);
     await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true));
-  });
-
-  // Contrato de `onConfirmacionesExpedienteChange`: reporta las confirmaciones SIN marcar, para que
-  // el wizard (dueño de `TramiteWizard.tsx`) las sume a sus requisitos pendientes.
-  it('reporta las confirmaciones pendientes y las retira al marcarlas', async () => {
-    mocks.getAttachments.mockResolvedValue([]);
-    const user = userEvent.setup();
-    const reportes: string[][] = [];
-    render(
-      <FirmaFurStep
-        instanceId={INSTANCE}
-        modalidad="traspaso"
-        onConfirmacionesExpedienteChange={(pendientes) => reportes.push(pendientes)}
-      />,
-    );
-
-    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
-    await waitFor(() => expect(reportes.at(-1)).toEqual(CONFIRMACIONES_BASE()));
-
-    for (const texto of CONFIRMACIONES_BASE()) {
-      await user.click(screen.getByLabelText(texto));
-    }
-    await waitFor(() => expect(reportes.at(-1)).toEqual([]));
   });
 
   it('lista el FUR en Documentos del expediente y no vuelve a generarFur', async () => {

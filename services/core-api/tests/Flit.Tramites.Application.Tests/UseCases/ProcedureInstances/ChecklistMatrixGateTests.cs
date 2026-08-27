@@ -57,14 +57,14 @@ public sealed class ChecklistMatrixGateTests
     }
 
     [Fact]
-    public async Task Servicio_SinMatriz_DevuelveNull()
+    public async Task Servicio_SinMatriz_CompletoPorqueNoHayDocumentosAsociados()
     {
-        SetMatrix(); // matriz vacía ⇒ no aplica ⇒ fallback
+        SetMatrix();
         var svc = new ChecklistMatrixCompleteness(_companyParams, _matrix);
 
         var result = await svc.TryComputeCompletoAsync(Matricula(), Guid.NewGuid(), TestContext.Current.CancellationToken);
 
-        result.Should().BeNull();
+        result.Should().BeTrue();
     }
 
     [Fact]
@@ -77,6 +77,17 @@ public sealed class ChecklistMatrixGateTests
         var result = await svc.TryComputeCompletoAsync(Matricula(), Guid.NewGuid(), TestContext.Current.CancellationToken);
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Servicio_DocumentoGeneradoObligatorio_NoIncompleta()
+    {
+        SetMatrix(new ResolvedChecklistDoc("soat", "SOAT", true, 10, EsGeneradoSistema: true));
+        var svc = new ChecklistMatrixCompleteness(_companyParams, _matrix);
+
+        var result = await svc.TryComputeCompletoAsync(Matricula(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+
+        result.Should().BeTrue();
     }
 
     // ── Override en los gates ────────────────────────────────────────────────

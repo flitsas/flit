@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, GripVertical, Trash2 } from "lucide-react";
 import { ScopeBadge } from "@/components/admin/documents/panels/ScopeBadge";
+import { catalogDocumentTitle } from "@/lib/tramites/document-labels";
+import { DocumentCatalogCaption } from "@/components/shared/DocumentCatalogCaption";
 import type { DocumentOrderOverride } from "@/lib/api/types-documents";
 
 // Lista de overrides de orden de una combinación (trámite, scope, referencia)
@@ -30,6 +32,9 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
     next.splice(to, 0, moved);
     onReorder(next);
   };
+
+  const displayName = (o: DocumentOrderOverride) =>
+    catalogDocumentTitle(o.documento.codigo, o.documento.nombre);
 
   return (
     <ul className="flex flex-col gap-2" aria-label="Overrides de orden">
@@ -62,8 +67,9 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
             {o.orden}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold">{o.documento.nombre}</p>
-            <p className="truncate font-mono text-[10px] opacity-60">{o.documento.codigo}</p>
+            <p className="truncate text-xs font-semibold">
+              <DocumentCatalogCaption nombre={o.documento.nombre} codigo={o.documento.codigo} />
+            </p>
           </div>
 
           <div className="flex items-center gap-1">
@@ -71,7 +77,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               type="button"
               onClick={() => move(index, index - 1)}
               disabled={busy || index === 0}
-              aria-label={`Subir ${o.documento.nombre}`}
+              aria-label={`Subir ${displayName(o)}`}
               className="rounded-lg border p-1 disabled:opacity-30"
             >
               <ArrowUp className="h-3.5 w-3.5" />
@@ -80,7 +86,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               type="button"
               onClick={() => move(index, index + 1)}
               disabled={busy || index === overrides.length - 1}
-              aria-label={`Bajar ${o.documento.nombre}`}
+              aria-label={`Bajar ${displayName(o)}`}
               className="rounded-lg border p-1 disabled:opacity-30"
             >
               <ArrowDown className="h-3.5 w-3.5" />
@@ -89,7 +95,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               type="button"
               onClick={() => onDelete(o)}
               disabled={busy}
-              aria-label={`Eliminar override de ${o.documento.nombre}`}
+              aria-label={`Eliminar override de ${displayName(o)}`}
               className="rounded-lg border p-1 disabled:opacity-40"
               style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
             >

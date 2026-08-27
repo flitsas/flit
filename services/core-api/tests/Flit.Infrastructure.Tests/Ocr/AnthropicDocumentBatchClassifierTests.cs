@@ -27,14 +27,36 @@ public sealed class AnthropicDocumentBatchClassifierTests
             Options.Create(new AnthropicOptions { ApiKey = "sk-ant-test" }),
             NullLogger<AnthropicDocumentBatchClassifier>.Instance);
 
-    private static MockHttpMessageHandler Responds(string modelText) =>
-        new((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+    /// <summary>
+    /// Cuerpo SSE equivalente a lo que devuelve Anthropic en streaming. El texto se parte en dos
+    /// deltas a propósito: si el cliente se quedara con el primer bloque en vez de concatenar, estos
+    /// tests lo cazarían.
+    /// </summary>
+    private static string Sse(string modelText)
+    {
+        var corte = modelText.Length / 2;
+        var sb = new StringBuilder();
+        sb.Append("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{}}}\n\n");
+        foreach (var trozo in new[] { modelText[..corte], modelText[corte..] })
         {
-            Content = new StringContent(
-                $$"""{"content":[{"type":"text","text":{{System.Text.Json.JsonSerializer.Serialize(modelText)}}}]}""",
-                Encoding.UTF8,
-                "application/json"),
-        });
+            sb.Append("event: content_block_delta\ndata: ")
+              .Append("{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":")
+              .Append(System.Text.Json.JsonSerializer.Serialize(trozo))
+              .Append("}}\n\n");
+        }
+        sb.Append("event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n");
+        sb.Append("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n");
+        return sb.ToString();
+    }
+
+    private static HttpResponseMessage SseResponse(string modelText) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(Sse(modelText), Encoding.UTF8, "text/event-stream"),
+        };
+
+    private static MockHttpMessageHandler Responds(string modelText) =>
+        new((_, _) => SseResponse(modelText));
 
     [Fact]
     public async Task Mapea_documentos_y_paginas_no_reconocidas()
@@ -223,13 +245,7 @@ public sealed class AnthropicDocumentBatchClassifierTests
         var handler = new MockHttpMessageHandler((req, _) =>
         {
             body = req.Content!.ReadAsStringAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    """{"content":[{"type":"text","text":"{\"total_paginas\":1,\"documentos\":[],\"paginas_no_reconocidas\":[1]}"}]}""",
-                    Encoding.UTF8,
-                    "application/json"),
-            };
+            return SseResponse("""{"total_paginas":1,"documentos":[],"paginas_no_reconocidas":[1]}""");
         });
 
         await Classifier(handler).ClassifyAsync(
@@ -239,6 +255,66 @@ public sealed class AnthropicDocumentBatchClassifierTests
         // con Sonnet el thinking cuenta contra max_tokens y un tope corto trunca el JSON.
         body.Should().Contain("claude-sonnet-5");
         body.Should().Contain("\"max_tokens\":8000");
+        // Sin streaming, un expediente pesado muere por «connection reset» antes de responder.
+        body.Should().Contain("\"stream\":true");
+    }
+
+    [Fact]
+    public async Task Concatena_los_deltas_de_texto_del_stream()
+    {
+        // El JSON llega partido en varios `text_delta`; quedarse con uno solo daría JSON invalido.
+        var handler = Responds("""
+            {"total_paginas":9,
+             "documentos":[{"tipo":"aduana","paginas":[2,3,4,5],"confianza":0.9,"motivo":"Declaracion de importacion de lote"}],
+             "paginas_no_reconocidas":[1,6,7,8,9]}
+            """);
+
+        var r = await Classifier(handler).ClassifyAsync(
+            Matricula, PdfBytes, "application/pdf", TestContext.Current.CancellationToken);
+
+        r.Ok.Should().BeTrue();
+        r.TotalPaginas.Should().Be(9);
+        r.Documentos.Should().ContainSingle().Which.Paginas.Should().Equal(2, 3, 4, 5);
+    }
+
+    [Fact]
+    public async Task Un_error_a_mitad_del_stream_degrada_a_503()
+    {
+        // El proveedor responde 200 y falla despues, dentro del SSE. Sin tratarlo, el fallo se
+        // confundiria con una respuesta vacia.
+        var handler = new MockHttpMessageHandler((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"{\\\"total\"}}\n\n"
+                + "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"}}\n\n",
+                Encoding.UTF8,
+                "text/event-stream"),
+        });
+
+        var r = await Classifier(handler).ClassifyAsync(
+            Matricula, PdfBytes, "application/pdf", TestContext.Current.CancellationToken);
+
+        r.Ok.Should().BeFalse();
+        r.Status.Should().Be(503);
+        r.Message.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Rescata_el_json_aunque_el_modelo_escriba_prosa_alrededor()
+    {
+        // Medido en produccion: ante un documento que no encaja del todo en el esquema, el modelo
+        // cierra el JSON y añade un parrafo explicandolo. Antes eso costaba la clasificacion entera.
+        var handler = Responds(
+            "Analicé el expediente y encontré lo siguiente:\n\n"
+            + """{"total_paginas":2,"documentos":[{"tipo":"soat","paginas":[1],"confianza":0.9}],"paginas_no_reconocidas":[2]}"""
+            + "\n\n**Nota:** la página 2 es una hoja de firmas y no corresponde a ningún tipo solicitado.");
+
+        var r = await Classifier(handler).ClassifyAsync(
+            Matricula, PdfBytes, "application/pdf", TestContext.Current.CancellationToken);
+
+        r.Ok.Should().BeTrue();
+        r.Documentos.Should().ContainSingle().Which.Tipo.Should().Be("soat");
+        r.PaginasNoReconocidas.Should().Equal(2);
     }
 
     private sealed class MockHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, HttpResponseMessage> responder)

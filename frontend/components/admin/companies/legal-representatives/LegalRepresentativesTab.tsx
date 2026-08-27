@@ -422,8 +422,9 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
           title="Eliminar representante"
         >
           <p className="mt-2 text-sm" style={{ color: RL_COLOR.secondary }}>
-            Vas a eliminar a <strong>{fullName(toDelete)}</strong> del directorio de representantes de
-            esta compañía. Esta acción no se puede deshacer.
+            Vas a eliminar a <strong>{fullName(toDelete)}</strong> del directorio. No aparecerá en
+            esta pantalla ni se precargará en trámites nuevos. Los trámites ya radicados conservan
+            la relación.
           </p>
           <div className="mt-5 flex gap-3">
             <button

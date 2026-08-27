@@ -83,6 +83,12 @@ function renderTab() {
   );
 }
 
+async function elegirOt(user: ReturnType<typeof userEvent.setup>) {
+  const combo = await screen.findByRole("combobox", { name: /organismo de tránsito/i });
+  await user.click(combo);
+  await user.click(await screen.findByRole("option", { name: /secretaría bogotá/i }));
+}
+
 describe("OtOverridesTab — limpieza acoplada orden ↔ obligatoriedad", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,11 +105,11 @@ describe("OtOverridesTab — limpieza acoplada orden ↔ obligatoriedad", () => 
     renderTab();
 
     // Selecciona el OT → cargan overrides de orden y obligatoriedad.
-    await user.selectOptions(await screen.findByLabelText("Organismo de Tránsito"), OT);
+    await elegirOt(user);
 
     // La obligatoriedad arranca en «Obligatorio» (REQUIRED).
     const reqSelect = (await screen.findByLabelText(
-      "Obligatoriedad de Documento A",
+      /Obligatoriedad de Documento A/,
     )) as HTMLSelectElement;
     await waitFor(() => expect(reqSelect.value).toBe("REQUIRED"));
 
@@ -124,7 +130,7 @@ describe("OtOverridesTab — limpieza acoplada orden ↔ obligatoriedad", () => 
     expect(removeDocumentOrderOverride).toHaveBeenCalledWith("ord-a");
     // El documento desaparece de «Obligatoriedad por OT» (membresía acoplada al orden).
     await waitFor(() =>
-      expect(screen.queryByLabelText("Obligatoriedad de Documento A")).not.toBeInTheDocument(),
+      expect(screen.queryByLabelText(/Obligatoriedad de Documento A/)).not.toBeInTheDocument(),
     );
   });
 
@@ -133,12 +139,29 @@ describe("OtOverridesTab — limpieza acoplada orden ↔ obligatoriedad", () => 
     const user = userEvent.setup();
     renderTab();
 
-    await user.selectOptions(await screen.findByLabelText("Organismo de Tránsito"), OT);
+    await elegirOt(user);
     await user.click(
       await screen.findByRole("button", { name: /eliminar override de Documento A/i }),
     );
 
     await waitFor(() => expect(removeDocumentOrderOverride).toHaveBeenCalledWith("ord-a"));
     expect(setDocumentRequirementOverride).not.toHaveBeenCalled();
+  });
+
+  it("el selector de OT es un buscador: teclear filtra por nombre", async () => {
+    vi.mocked(fetchTransitOffices).mockResolvedValue([
+      office,
+      { id: "bbbbbbbb-0001-4000-8000-000000000002", name: "Tránsito Medellín", code: "05001" } as TransitOffice,
+    ]);
+    const user = userEvent.setup();
+    renderTab();
+
+    const combo = await screen.findByRole("combobox", { name: /organismo de tránsito/i });
+    await user.click(combo);
+    await user.keyboard("medell");
+
+    const opciones = screen.getAllByRole("option");
+    expect(opciones).toHaveLength(1);
+    expect(opciones[0]).toHaveTextContent(/tránsito medellín/i);
   });
 });

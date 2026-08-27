@@ -10,18 +10,15 @@ import type {
   UpdateDocumentTypeRequest,
 } from "@/lib/api/types-documents";
 import {
-  hasLetterOrDigit,
-  sanitizeDocCode,
   sanitizeName,
   sanitizeNoAngleBrackets,
   validateReadableName,
 } from "@/lib/validation/fieldRules";
 import { sanitizeDecimalInput } from "@/lib/format/currency";
 
-// Modal de alta/edición de tipo de documento (HU #10198, AC1). Valida campos
-// obligatorios (código, nombre) en cliente antes de enviar y mapea los errores 422
-// del backend por campo (error inline). La llamada a la API se inyecta vía
-// `onSubmit` (componente presentacional, igual que CreateCompanyDialog).
+// Modal de alta/edición de tipo de documento (HU #10198, AC1). El código lo genera
+// el sistema; en alta no se pide y en edición es solo lectura. Valida el nombre
+// en cliente y mapea los errores 422 del backend.
 export interface CreateDocumentTypeDialogProps {
   open: boolean;
   /** Documento a editar; si es null/undefined el modal está en modo alta. */
@@ -34,7 +31,7 @@ export interface CreateDocumentTypeDialogProps {
   onSaved: (documentType: DocumentType, mode: "create" | "edit") => void;
 }
 
-type FieldErrors = Partial<Record<"codigo" | "nombre" | "descripcion", string>>;
+type FieldErrors = Partial<Record<"nombre" | "descripcion" | "form", string>>;
 
 // RF08 — formatos configurables por tipo (los mismos que el respaldo global del backend).
 const MIME_OPTIONS: { mime: string; label: string }[] = [
@@ -60,6 +57,7 @@ export function CreateDocumentTypeDialog({
   // RF08/09 — límites por tipo. mimes vacío / MB vacío ⇒ se aplican los globales por defecto.
   const [mimes, setMimes] = useState<string[]>([]);
   const [maxSizeMb, setMaxSizeMb] = useState("");
+  const [esAutogenerado, setEsAutogenerado] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -73,6 +71,7 @@ export function CreateDocumentTypeDialog({
       setMimes(editing?.mimeTypesAllowed ?? []);
       const bytes = editing?.maxSizeBytes ?? 0;
       setMaxSizeMb(bytes > 0 ? String(Math.round((bytes / BYTES_PER_MB) * 100) / 100) : "");
+      setEsAutogenerado(editing?.esAutogenerado === true);
       setErrors({});
     }
   }, [open, editing]);
@@ -94,10 +93,7 @@ export function CreateDocumentTypeDialog({
   // Validación client-side de campos requeridos antes de llamar a la API.
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
-    const cod = codigo.trim();
     const nom = nombre.trim();
-    if (!cod) next.codigo = "El código es obligatorio.";
-    else if (!hasLetterOrDigit(cod)) next.codigo = "El código debe contener al menos una letra o número.";
     if (!nom) next.nombre = "El nombre es obligatorio.";
     else { const e = validateReadableName(nom, "El nombre"); if (e) next.nombre = e; }
     return next;
@@ -115,27 +111,28 @@ export function CreateDocumentTypeDialog({
     try {
       const mb = maxSizeMb.trim() ? Number(maxSizeMb) : NaN;
       const saved = await onSubmit({
-        codigo: codigo.trim(),
         nombre: nombre.trim(),
         descripcion: descripcion.trim() || null,
-        // Vacío ⇒ null ⇒ el backend aplica los límites globales por defecto.
         mimeTypesAllowed: mimes.length > 0 ? mimes : null,
         maxSizeBytes: Number.isFinite(mb) && mb > 0 ? Math.round(mb * BYTES_PER_MB) : null,
+        esAutogenerado,
       });
       onSaved(saved, mode);
     } catch (error) {
       if (error instanceof ApiValidationError) {
         const mapped: FieldErrors = {};
         for (const { field, message } of error.errors) {
-          if (field === "codigo" || field === "nombre" || field === "descripcion") {
+          if (field === "nombre" || field === "descripcion") {
             mapped[field] = message;
+          } else {
+            mapped.form = message;
           }
         }
         setErrors(
-          Object.keys(mapped).length > 0 ? mapped : { codigo: "No se pudo guardar el documento." },
+          Object.keys(mapped).length > 0 ? mapped : { form: "No se pudo guardar el documento." },
         );
       } else {
-        setErrors({ codigo: "No se pudo guardar el documento. Intenta de nuevo." });
+        setErrors({ form: "No se pudo guardar el documento. Intenta de nuevo." });
       }
     } finally {
       setSubmitting(false);
@@ -155,18 +152,29 @@ export function CreateDocumentTypeDialog({
       titleClassName="text-base font-bold text-[#557EFF]"
     >
       <div className="space-y-3.5">
-          <Field label="Código" htmlFor="dt-codigo" error={errors.codigo} hint="Identificador único (máx. 50).">
-            <input
-              id="dt-codigo"
-              type="text"
-              value={codigo}
-              onChange={(e) => setCodigo(sanitizeDocCode(e.target.value))}
-              maxLength={50}
-              aria-describedby={errors.codigo ? "dt-codigo-error" : undefined}
-              className="w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-              style={{ borderColor: errors.codigo ? "#FF4E00" : "#DFE5ED" }}
-            />
-          </Field>
+          {mode === "edit" && (
+            <Field
+              label="Código"
+              htmlFor="dt-codigo"
+              hint="Lo asigna el sistema y no se puede cambiar."
+            >
+              <input
+                id="dt-codigo"
+                type="text"
+                value={codigo}
+                readOnly
+                aria-readonly="true"
+                className="w-full cursor-not-allowed rounded-xl border px-3 py-2 font-mono text-xs outline-none opacity-80"
+                style={{ borderColor: "#DFE5ED", background: "#F4F7FB" }}
+              />
+            </Field>
+          )}
+
+          {errors.form && (
+            <p className="text-[10px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+              {errors.form}
+            </p>
+          )}
 
           <Field label="Nombre" htmlFor="dt-nombre" error={errors.nombre}>
             <input
@@ -193,6 +201,44 @@ export function CreateDocumentTypeDialog({
               style={{ borderColor: errors.descripcion ? "#FF4E00" : "#DFE5ED" }}
             />
           </Field>
+
+          <fieldset>
+            <legend className="mb-1 block text-xs font-semibold">Origen del documento</legend>
+            <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="Origen del documento">
+              <label
+                className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                style={!esAutogenerado ? { borderColor: "#557EFF" } : undefined}
+              >
+                <input
+                  type="radio"
+                  name="dt-origen"
+                  value="cargue"
+                  checked={!esAutogenerado}
+                  onChange={() => setEsAutogenerado(false)}
+                  className="h-4 w-4 accent-[#557EFF]"
+                />
+                Cargue
+              </label>
+              <label
+                className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                style={esAutogenerado ? { borderColor: "#557EFF" } : undefined}
+              >
+                <input
+                  type="radio"
+                  name="dt-origen"
+                  value="autogenerado"
+                  checked={esAutogenerado}
+                  onChange={() => setEsAutogenerado(true)}
+                  className="h-4 w-4 accent-[#557EFF]"
+                />
+                Autogenerado
+              </label>
+            </div>
+            <p className="mt-1 text-xs opacity-60">
+              Cargue aparece en Requisitos y bloquea la radicación si falta. Autogenerado solo
+              entra al consolidado (mandato, SOAT, RTM, identidad, compraventa, trámite virtual).
+            </p>
+          </fieldset>
 
           <div>
             <label className="mb-1 block text-xs font-semibold">Formatos permitidos</label>

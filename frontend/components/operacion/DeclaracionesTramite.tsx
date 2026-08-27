@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { Info, Search } from 'lucide-react';
 import { isRuesPreviewUnavailable, tramitesClient } from '@/lib/api/tramites-client';
+import { shortRuesRazonSocial } from '@/lib/tramites/rues-razon-social';
 import type {
   FieldValue,
   VehicleServiceTypeOption,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
-import { WizardCardHeader, WizardFieldToggle } from './wizard-atoms';
+import { WizardCardHeader } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WIZARD_BTN, WIZARD_BTN_SOLID, WIZARD_INPUT, WIZARD_SELECT } from './wizard-field-styles';
@@ -29,7 +30,8 @@ const inputClass = WIZARD_INPUT;
 
 /**
  * Declaraciones del paso de requisitos: TIPO DE SERVICIO (casilla 18 del FUR, con la empresa
- * vinculadora de la casilla 19) y TRANSFORMACIONES Y CONDICIONES del trámite.
+ * vinculadora de la casilla 19) y TRANSFORMACIONES del trámite.
+ * El leasing no se declara aquí: se elige al crear (matrícula leasing / traspaso unilateral).
  *
  * Las dos vivían en el paso 1. Se mueven aquí porque es donde las pone el repo de diseño
  * (`MatriculaInicial.tsx`, Step 3 «Documentos y requisitos del trámite»): el paso 1 es la consulta
@@ -206,10 +208,7 @@ export function DeclaracionesTramite({
   };
 
   /**
-   * Misma escalera que usa el actor jurídico (HU #10906, R3): PRIMERO el directorio de la compañía,
-   * y solo si el NIT no está ahí se gasta una consulta al proveedor externo. Dos motivos: es
-   * instantáneo cuando la empresa ya se consultó antes, y deja de depender de que el RUES esté arriba
-   * para el caso más común. Si el directorio falla no se bloquea nada — se cae al RUES.
+   * Consulta RUES (siempre) para la razón social. El directorio de RL no sustituye al RUES.
    */
   const handleConsultarRues = async () => {
     const nit = empresaVinculadoraNit.trim();
@@ -222,25 +221,9 @@ export function DeclaracionesTramite({
     setRuesUnavailable(false);
     setRazonSocialDesdeDirectorio(false);
     try {
-      const preload = await tramitesClient
-        .lookupLegalRepresentativeByNit(nit)
-        .catch(() => null); // el directorio es un atajo, no un requisito: su fallo no corta el flujo
-      const razonSocialDirectorio = preload?.company.razonSocial?.trim();
-      if (razonSocialDirectorio) {
-        const nitDirectorio = preload!.company.nit || nit;
-        setEmpresaVinculadoraNit(nitDirectorio);
-        setEmpresaVinculadoraRazonSocial(razonSocialDirectorio);
-        setRazonSocialDesdeDirectorio(true);
-        await persistir([
-          { fieldKey: 'empresa_vinculadora_nit', valueText: nitDirectorio },
-          { fieldKey: 'empresa_vinculadora_razon_social', valueText: razonSocialDirectorio },
-        ]);
-        return;
-      }
-
       const result = await tramitesClient.ruesPreview({ documentNumber: nit });
       if (result.found) {
-        const razonSocial = result.razonSocial ?? '';
+        const razonSocial = shortRuesRazonSocial(result.razonSocial);
         setEmpresaVinculadoraRazonSocial(razonSocial);
         await persistir([
           { fieldKey: 'empresa_vinculadora_nit', valueText: nit },
@@ -268,11 +251,6 @@ export function DeclaracionesTramite({
   const saveTransformacion = async (items: { fieldKey: string; valueText: string }[]) => {
     await persistir(items);
   };
-
-  // Banderas manuales que gatillan documentos condicionales (el backend las lee en
-  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso; la prenda se gestiona aparte
-  // con PrendaForm (Feature #10585) y la carrocería vive en VehicleTransformationsCard (P2/P3).
-  const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
 
   return (
     <div className="space-y-4">
@@ -458,30 +436,6 @@ export function DeclaracionesTramite({
           saving={saving}
           onPatch={saveTransformacion}
         />
-      )}
-
-      {/* Leasing (solo traspaso): toggle del prototipo Lovable — «No aplica» / «Sí, en leasing». */}
-      {!esMatricula && (
-        <div className={noCardWrapper ? 'space-y-2' : 'space-y-2 rounded-2xl border bg-white p-4 dark:bg-[#162744]'}>
-          {!noCardWrapper && (
-            <WizardCardHeader
-              title="Condiciones del trámite"
-              subtitle="Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente."
-            />
-          )}
-          <WizardFieldToggle
-            id="condicion-leasing"
-            label="Vehículo en leasing"
-            description="Exige contrato de leasing y declaración de la arrendadora."
-            checked={esLeasing}
-            labelOn="Sí, en leasing"
-            labelOff="No aplica"
-            disabled={readOnly || saving}
-            onChange={(next) =>
-              void persistir([{ fieldKey: 'es_leasing', valueText: next ? 'true' : 'false' }])
-            }
-          />
-        </div>
       )}
     </div>
   );

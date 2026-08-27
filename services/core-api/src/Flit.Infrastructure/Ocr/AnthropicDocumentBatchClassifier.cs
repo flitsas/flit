@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Flit.Tramites.Application.Ocr;
 using Microsoft.Extensions.Logging;
@@ -43,16 +42,8 @@ internal sealed class AnthropicDocumentBatchClassifier(
         if (!vision.Ok)
             return BatchClassification.Failure(vision.Status, vision.Message);
 
-        var json = StripCodeFences(vision.Text!);
-        JsonObject? root;
-        try
-        {
-            root = JsonNode.Parse(json) as JsonObject;
-        }
-        catch (JsonException)
-        {
-            root = null;
-        }
+        // Mismo criterio tolerante que el analizador por tipo; ver OcrModelJson.
+        var root = OcrModelJson.ExtractObject(vision.Text);
 
         if (root is null)
         {
@@ -141,19 +132,6 @@ internal sealed class AnthropicDocumentBatchClassifier(
 
     private static double ReadDouble(JsonObject node, string property) =>
         node.TryGetPropertyValue(property, out var v) && v is JsonValue jv && jv.TryGetValue<double>(out var d) ? d : 0d;
-
-    /// <summary>Quita fences de markdown (```json … ```) que el modelo pueda envolver alrededor del JSON.</summary>
-    private static string StripCodeFences(string text)
-    {
-        var t = text.Trim();
-        if (t.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-            t = t["```json".Length..];
-        else if (t.StartsWith("```", StringComparison.Ordinal))
-            t = t["```".Length..];
-        if (t.EndsWith("```", StringComparison.Ordinal))
-            t = t[..^3];
-        return t.Trim();
-    }
 }
 
 /// <summary>Logging source-generated (CA1848) del clasificador. No loguea el contenido del documento.</summary>

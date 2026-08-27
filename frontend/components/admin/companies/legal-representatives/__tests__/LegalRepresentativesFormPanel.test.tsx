@@ -558,7 +558,14 @@ describe("RepresentativeCompaniesAccordion — grid de compañías", () => {
     openSpy.mockRestore();
   });
 
-  it("AC4: en modo edit aparece el botón «Asociar escritura» en la tarjeta", async () => {
+  it("AC4: en modo companies la compañía CON escritura no muestra «Asociar escritura»", async () => {
+    renderPanel("companies");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+    const xyz = screen.getByRole("article", { name: /empresa comercializadora xyz/i });
+    expect(within(xyz).queryByRole("button", { name: /asociar escritura/i })).not.toBeInTheDocument();
+  });
+
+  it("AC4: en modo companies aparece «Asociar escritura» si la ficha aún no tiene ninguna", async () => {
     renderPanel("companies");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
     const btns = await screen.findAllByRole("button", { name: /asociar escritura/i });

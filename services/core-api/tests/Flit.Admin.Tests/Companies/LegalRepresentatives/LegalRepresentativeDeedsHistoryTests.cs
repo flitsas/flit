@@ -132,10 +132,11 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         await using var ctx = NewContext();
         var repA = await SeedRepAsync(ctx, [NitA], doc: "111");
         var repB = await SeedRepAsync(ctx, [NitA], doc: "222");
-        var companyA = await CompanyIdAsync(ctx, repA, NitA); // misma compañía (upsert por NIT).
+        var companyA = await CompanyIdAsync(ctx, repA, NitA);
+        var companyB = await CompanyIdAsync(ctx, repB, NitA);
 
         var deedA = await SeedDeedAsync(ctx, "Escritura de A", new(2026, 1, 1), new(2026, 12, 31), [companyA], repA);
-        var deedB = await SeedDeedAsync(ctx, "Escritura de B", new(2026, 1, 1), new(2026, 12, 31), [companyA], repB);
+        var deedB = await SeedDeedAsync(ctx, "Escritura de B", new(2026, 1, 1), new(2026, 12, 31), [companyB], repB);
         await SeedDeedAsync(ctx, "Escritura legada", new(2026, 1, 1), new(2026, 12, 31), [companyA], representativeId: null);
 
         var reader = new DbLegalRepresentativeReader(ctx, Clock);

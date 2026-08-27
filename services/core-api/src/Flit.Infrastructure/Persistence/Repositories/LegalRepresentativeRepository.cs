@@ -33,14 +33,18 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
             data.TenantId,
             async () =>
             {
+                var ownerId = data.RepresentativeId;
                 var existing = await _context.RepresentedCompanies
                     .FirstOrDefaultAsync(
-                        c => c.TenantId == data.TenantId && c.DocumentNumber == nit, cancellationToken)
+                        c => c.TenantId == data.TenantId
+                            && c.DocumentNumber == nit
+                            && c.IsActive
+                            && c.RepresentativeId == ownerId,
+                        cancellationToken)
                     .ConfigureAwait(false);
 
                 if (existing is not null)
                 {
-                    // Rehidrata + aplica invariantes de actualización antes de tocar la fila.
                     var aggregate = RepresentedCompany.Rehydrate(
                         existing.Id, existing.TenantId, existing.DocumentType, existing.DocumentNumber,
                         existing.Name, existing.Email, existing.Address, existing.City, existing.Phone);
@@ -51,6 +55,7 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
                     existing.Address = aggregate.Address;
                     existing.City = aggregate.City;
                     existing.Phone = aggregate.Phone;
+                    existing.RepresentativeId = ownerId;
                     existing.UpdatedAt = DateTimeOffset.UtcNow;
                     existing.UpdatedBy = data.ActorBy;
 
@@ -72,6 +77,8 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
                     Address = company.Address,
                     City = company.City,
                     Phone = company.Phone,
+                    RepresentativeId = ownerId,
+                    IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
                     CreatedBy = data.ActorBy,
                 };
@@ -206,6 +213,20 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
                 entity.IsActive = false;
                 entity.UpdatedAt = DateTimeOffset.UtcNow;
                 entity.UpdatedBy = changedBy;
+
+                var owned = await _context.RepresentedCompanies
+                    .Where(c => c.TenantId == tenantId && c.RepresentativeId == id && c.IsActive)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                foreach (var company in owned)
+                {
+                    company.IsActive = false;
+                    company.UpdatedAt = DateTimeOffset.UtcNow;
+                    company.UpdatedBy = changedBy;
+                    await DeactivateDeedsForCompanyAsync(company.Id, changedBy, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return true;
             },
@@ -275,6 +296,20 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
         var toRemove = existing.Where(e => !desired.Contains(e.RepresentedCompanyId)).ToList();
         if (toRemove.Count > 0)
         {
+            var removedCompanyIds = toRemove.Select(e => e.RepresentedCompanyId).Distinct().ToList();
+            var owned = await _context.RepresentedCompanies
+                .Where(c => removedCompanyIds.Contains(c.Id) && c.RepresentativeId == representativeId)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var company in owned)
+            {
+                company.IsActive = false;
+                company.UpdatedAt = DateTimeOffset.UtcNow;
+                company.UpdatedBy = actorBy;
+                await DeactivateDeedsForCompanyAsync(company.Id, actorBy, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             _context.LegalRepresentativeCompanies.RemoveRange(toRemove);
         }
 
@@ -290,6 +325,33 @@ internal sealed class LegalRepresentativeRepository : ILegalRepresentativeReposi
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedBy = actorBy,
             });
+        }
+    }
+
+    private async Task DeactivateDeedsForCompanyAsync(
+        Guid representedCompanyId,
+        Guid? changedBy,
+        CancellationToken cancellationToken)
+    {
+        var deedIds = await _context.CompanyDeedCompanies
+            .Where(dc => dc.RepresentedCompanyId == representedCompanyId)
+            .Select(dc => dc.DeedId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (deedIds.Count == 0)
+        {
+            return;
+        }
+
+        var deeds = await _context.CompanyDeeds
+            .Where(d => deedIds.Contains(d.Id) && d.IsActive)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var deed in deeds)
+        {
+            deed.IsActive = false;
+            deed.UpdatedAt = DateTimeOffset.UtcNow;
+            deed.UpdatedBy = changedBy;
         }
     }
 }

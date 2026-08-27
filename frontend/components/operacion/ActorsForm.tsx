@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import { AlertTriangle, Info, Loader2, Search } from 'lucide-react';
-import { INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
+import { InlineAlert, INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
 import { usePendingChanges } from './pending-changes';
@@ -21,6 +21,7 @@ import { useProcedureActors } from '@/hooks/useProcedureActors';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { filterCiudades } from '@/lib/catalogs/ciudades-co';
 import { digitsOnly } from '@/lib/format/currency';
+import { shortRuesRazonSocial } from '@/lib/tramites/rues-razon-social';
 import {
   sanitizeDocNumber,
   validateDocNumber,
@@ -32,6 +33,7 @@ import type {
   ActorDocumentType,
   ActorPersonType,
   ActorRol,
+  LegalRepresentativeLookupCompany,
   LegalRepresentativeLookupResult,
   LegalRepresentativeOption,
   MecanismoFirma,
@@ -93,9 +95,18 @@ interface Props {
    * automática. `vendedor` en el traspaso (el propietario que sale); `comprador` donde no hay parte
    * vendedora y el vehículo ya está matriculado (familia OTROS: el titular no vende ni compra, solo
    * hace cambios sobre su vehículo, y se persiste como comprador porque el modelo no tiene rol
-   * 'propietario'). Default `vendedor`, que es como se comportaba cuando solo existía el traspaso.
+   * 'propietario').
+   *
+   * ADR-0051 — `null` cuando NINGÚN rol pintado en pantalla es el propietario inscrito: hay parte
+   * vendedora pero no se captura por formulario en este paso (`TRASPASO_UNILATERAL`, sincronizada
+   * aparte por el backend desde el RUNT). Pasarle un rol aquí que no es de verdad el propietario
+   * —p. ej. `comprador` cuando ese comprador es el locatario, no quien figura en el RUNT— sería
+   * sembrarle a esa persona el documento de otra: el traspaso encubierto que este componente existe
+   * para impedir. Default `vendedor` (comportamiento previo, para quien use este componente fuera
+   * del wizard sin declarar la prop). Dentro del wizard, `TramiteWizard.tsx` la pasa siempre
+   * explícita —incluida `null`— así que este default no gobierna el paso `actores`.
    */
-  rolDelPropietario?: ActorRol;
+  rolDelPropietario?: ActorRol | null;
   /**
    * Paso del propietario: si ya hay número de documento (seed o rehidratación), consulta RUNT al
    * montar, oculta el botón manual y deja el documento en solo lectura.
@@ -267,6 +278,9 @@ function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
       telefono: blankToUndef(a.telefono),
       ciudad: blankToUndef(a.ciudad),
       direccion: blankToUndef(a.direccion),
+      nombreCompleto: isJuridical(a)
+        ? shortRuesRazonSocial(a.nombreCompleto) || a.nombreCompleto
+        : a.nombreCompleto,
     };
   });
 }
@@ -303,12 +317,24 @@ type LookupState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'found'; kind: 'runt'; result: RuntPersonLookupResult }
-  | { status: 'found'; kind: 'rues'; result: RuesPersonLookupResult }
-  // HU #10906 — precarga desde el directorio del tenant por NIT (corta RUES/RUNT). El resultado
-  // trae la compañía representada + representante + banderas de firma/identidad vigentes.
+  | {
+      status: 'found';
+      kind: 'rues';
+      result: RuesPersonLookupResult;
+      /** Datos básicos empresa/RL del directorio OT; la razón social sigue siendo la de RUES. */
+      directory?: LegalRepresentativeLookupResult | null;
+    }
+  // Snapshot viejo (sessionStorage): precarga que cortaba RUES. Se rehidrata, no se vuelve a escribir.
   | { status: 'found'; kind: 'preload'; result: LegalRepresentativeLookupResult }
   | { status: 'not_found' }
   | { status: 'error'; message: string };
+
+function directoryFromLookup(state: LookupState | undefined): LegalRepresentativeLookupResult | null {
+  if (!state || state.status !== 'found') return null;
+  if (state.kind === 'preload') return state.result;
+  if (state.kind === 'rues') return state.directory ?? null;
+  return null;
+}
 
 /** Solo estados `found` son candidatas a rehidratación al volver al paso. */
 type FoundLookupState = Extract<LookupState, { status: 'found' }>;
@@ -466,6 +492,39 @@ function repsOf(result: LegalRepresentativeLookupResult): LegalRepresentativeOpt
   ];
 }
 
+/** Empata cédulas del directorio aunque vengan con ceros a la izquierda o puntuación. */
+function personDocKey(tipoDocumento: string, numeroDocumento: string): string | null {
+  const digits = digitsOnly(numeroDocumento || '');
+  if (!digits) return null;
+  const tipo = (tipoDocumento || 'CC').trim().toUpperCase() || 'CC';
+  return `${tipo}:${digits.replace(/^0+/, '') || '0'}`;
+}
+
+function samePersonDocument(
+  tipoA: string,
+  numeroA: string,
+  tipoB: string,
+  numeroB: string,
+): boolean {
+  const a = personDocKey(tipoA, numeroA);
+  const b = personDocKey(tipoB, numeroB);
+  return a != null && a === b;
+}
+
+function findDirectoryRep(
+  directory: LegalRepresentativeLookupResult,
+  tipoDocumento: string,
+  numeroDocumento: string,
+): { rep: LegalRepresentativeOption; index: number } | null {
+  if (!personDocKey(tipoDocumento, numeroDocumento)) return null;
+  const reps = repsOf(directory);
+  const index = reps.findIndex((r) =>
+    samePersonDocument(r.tipoDoc || 'CC', r.documento, tipoDocumento, numeroDocumento),
+  );
+  if (index < 0) return null;
+  return { rep: reps[index], index };
+}
+
 /** Tipos de documento del representante legal: persona natural (excluye NIT). */
 const RL_DOC_OPTIONS = DOC_OPTIONS.filter((o) => o.value !== 'NIT');
 
@@ -576,6 +635,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     embeddedInWizard = false,
     layout,
     seedDocumentoFromOwner = false,
+    // Default `'vendedor'`: comportamiento previo para quien use `ActorsForm` sin pasar la prop
+    // (fuera del wizard). Dentro del wizard, `TramiteWizard.tsx` SIEMPRE la pasa explícita —
+    // incluida `null`— así que este default nunca decide por el paso `actores`.
     rolDelPropietario = 'vendedor',
     autoConsultRunt = false,
     rnmcEnabled = false,
@@ -606,6 +668,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [showErrors, setShowErrors] = useState(false);
   // Estado de la consulta de identidad por índice de actor (RUNT o RUES, autopoblado).
   const [runt, setRunt] = useState<Record<number, LookupState>>({});
+  const runtRef = useRef(runt);
+  useEffect(() => {
+    runtRef.current = runt;
+  }, [runt]);
   // NITs cuya razón social vino de RUES (o precarga directorio): no editable mientras aplique.
   const [ruesRazonLockedNits, setRuesRazonLockedNits] = useState<Set<string>>(() =>
     readRuesRazonLocks(instanceId),
@@ -664,10 +730,58 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       (rl?.numeroDocumento ?? '').trim() !== (baseline.numeroDocumento ?? '').trim()
     );
   };
+
+  const rlMatchesDirectoryRep = (index: number): boolean => {
+    const directory = directoryFromLookup(runt[index]);
+    if (!directory) return false;
+    const rl = actors[index]?.representanteLegal;
+    return (
+      findDirectoryRep(directory, rl?.tipoDocumento ?? 'CC', rl?.numeroDocumento ?? '') !== null
+    );
+  };
+
+  /** RL del directorio actualmente aplicado (el elegido), no cualquier coincidencia de cédula. */
+  const rlMatchesAppliedDirectoryRep = (index: number): boolean => {
+    if (directoryAbandoned[index]) return false;
+    const directory = directoryFromLookup(runt[index]);
+    if (!directory) return false;
+    const reps = repsOf(directory);
+    if (reps.length === 0) return false;
+    const applied = reps[selectedRepIdx[index] ?? 0] ?? reps[0];
+    const rl = actors[index]?.representanteLegal;
+    return samePersonDocument(
+      applied.tipoDoc || 'CC',
+      applied.documento,
+      rl?.tipoDocumento ?? 'CC',
+      rl?.numeroDocumento ?? '',
+    );
+  };
+
+  /** Cédula de un RL activo distinto al aplicado: hay que confirmar la precarga (sin RUNT). */
+  const needsRlDirectoryApply = (index: number): boolean => {
+    const directory = directoryFromLookup(runt[index]);
+    if (!directory || repsOf(directory).length === 0) return false;
+    if (rlMatchesAppliedDirectoryRep(index)) return false;
+    return rlMatchesDirectoryRep(index);
+  };
+
+  /** Si el NIT trajo RL del directorio y la cédula actual no es de ninguno, hay que consultar RUNT. */
+  const needsRlRunt = (index: number): boolean => {
+    const directory = directoryFromLookup(runt[index]);
+    if (!directory || repsOf(directory).length === 0) return false;
+    if (rlMatchesAppliedDirectoryRep(index)) return false;
+    return !rlMatchesDirectoryRep(index);
+  };
   // HU #10937 — representante ELEGIDO (índice en la lista precargada) por índice de actor jurídico,
   // cuando la compañía tiene varios. Default 0 (el primario). Gobierna qué representante se precarga y
   // firma, y las banderas mostradas.
   const [selectedRepIdx, setSelectedRepIdx] = useState<Record<number, number>>({});
+  /** Tras consultar un RL que NO está en el directorio, la precarga de firma deja de usarse. */
+  const [directoryAbandoned, setDirectoryAbandoned] = useState<Record<number, boolean>>({});
+  const [rlSwitchConfirm, setRlSwitchConfirm] = useState<{ variant: 'runt' | 'preload' } | null>(
+    null,
+  );
+  const rlSwitchResolverRef = useRef<((ok: boolean) => void) | null>(null);
   // Autocomplete de ciudad por índice de actor.
   const [ciudadOpen, setCiudadOpen] = useState<Record<number, boolean>>({});
   // Fecha de expedición del documento (RNMC) por índice de actor, en formato de input (YYYY-MM-DD).
@@ -898,7 +1012,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const validation = validateActors(actors, modalidad);
 
   const setRuntFor = (index: number, value: LookupState) =>
-    setRunt((prev) => ({ ...prev, [index]: value }));
+    setRunt((prev) => {
+      const next = { ...prev, [index]: value };
+      runtRef.current = next;
+      return next;
+    });
 
   const updateActor = (
     index: number,
@@ -981,28 +1099,65 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
   // HU #10937 — precarga en el actor el representante ELEGIDO (su documento + contacto). El actor
   // guarda este representante embebido; el backend firma/valida identidad por SU documento.
-  const applySelectedRep = (
-    index: number,
-    rep: LegalRepresentativeOption,
-    opts?: { preserveConsultation?: boolean },
-  ) =>
-    updateRepLegal(index, {
-      tipoDocumento: (rep.tipoDoc as ActorDocumentType) || 'CC',
-      numeroDocumento: rep.documento,
-      nombreCompleto: repFullName(rep),
-      email: rep.email ?? undefined,
-      telefono: rep.telefono ?? undefined,
-    }, opts);
+  /**
+   * Escribe el RL del directorio y el contacto de su ficha en un solo `setActors`.
+   * Encadenar `updateRepLegal` + `updateActor` dejaba el formulario con el RL anterior
+   * (el banner/selector sí cambiaban porque `selectedRepIdx` se actualizaba aparte).
+   */
+  const commitDirectoryRep = (
+    actorIndex: number,
+    match: { rep: LegalRepresentativeOption; index: number },
+    company: LegalRepresentativeLookupCompany | undefined,
+    opts?: {
+      preserveConsultation?: boolean;
+      applyCompanyContact?: boolean;
+      mecanismoFirma?: MecanismoFirma;
+    },
+  ) => {
+    if (!opts?.preserveConsultation) markDirty();
+    setSelectedRepIdx((prev) => ({ ...prev, [actorIndex]: match.index }));
+    setDirectoryAbandoned((prev) => ({ ...prev, [actorIndex]: false }));
+    const tipo = (match.rep.tipoDoc as ActorDocumentType) || 'CC';
+    setActors((prev) => {
+      const nextActors = prev.map((a, i) => {
+        if (i !== actorIndex) return a;
+        const next: ProcedureActor = {
+          ...a,
+          representanteLegal: {
+            tipoDocumento: tipo,
+            numeroDocumento: sanitizeDocNumber(match.rep.documento ?? '', tipo),
+            nombreCompleto: sanitizeName(repFullName(match.rep)),
+            email: (match.rep.email ?? '').trim(),
+            telefono: digitsOnly(match.rep.telefono ?? ''),
+            mecanismoFirma: opts?.mecanismoFirma,
+          },
+        };
+        if (opts?.applyCompanyContact && company) {
+          next.email = (match.rep.companyEmail ?? company.email ?? '').trim();
+          next.direccion = (match.rep.companyAddress ?? company.address ?? '').trim();
+          next.ciudad = (match.rep.companyCity ?? company.city ?? '').trim();
+          next.telefono = digitsOnly(match.rep.companyPhone ?? company.phone ?? '');
+        }
+        return next;
+      });
+      actorsRef.current = nextActors;
+      return nextActors;
+    });
+  };
 
-  // Cambia el representante elegido del actor jurídico (selector cuando la compañía tiene varios) y
-  // reprecarga sus datos. Las banderas mostradas se derivan del representante elegido.
-  const handleSelectRep = (index: number, repIdx: number) => {
-    const lookup = runt[index];
-    if (!lookup || lookup.status !== 'found' || lookup.kind !== 'preload') return;
-    const rep = repsOf(lookup.result)[repIdx];
+  const handleSelectRep = (
+    index: number,
+    repIdx: number,
+    directoryOverride?: LegalRepresentativeLookupResult | null,
+  ) => {
+    const directory =
+      directoryOverride ??
+      directoryFromLookup(runtRef.current[index]) ??
+      directoryFromLookup(runt[index]);
+    if (!directory) return;
+    const rep = repsOf(directory)[repIdx];
     if (!rep) return;
-    setSelectedRepIdx((prev) => ({ ...prev, [index]: repIdx }));
-    applySelectedRep(index, rep);
+    commitDirectoryRep(index, { rep, index: repIdx }, directory.company);
   };
 
   // Consulta de identidad por documento. Bifurca por tipo de persona: jurídica → RUES (por NIT),
@@ -1014,10 +1169,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
    */
   const [consultasManuales, setConsultasManuales] = useState(0);
 
-  /** Envuelve una consulta para que levante el velo de espera; solo la usan los botones. */
-  const conVelo = (consulta: Promise<unknown>) => {
+  /**
+   * Envuelve una consulta para que levante el velo de espera; solo la usan los botones.
+   *
+   * Genérico, no `Promise<unknown>`: con `unknown` el resultado se estrechaba a `{}` en el
+   * `if` de quien lo llamaba, y guardar eso en el estado de la ficha no compilaba (`{}` no es
+   * un `LookupState`). El velo no mira lo que devuelve la consulta, así que el tipo pasa de largo.
+   */
+  const conVelo = <T,>(consulta: Promise<T>): Promise<T> => {
     setConsultasManuales((n) => n + 1);
-    void consulta.finally(() => setConsultasManuales((n) => Math.max(0, n - 1)));
+    return consulta.finally(() => setConsultasManuales((n) => Math.max(0, n - 1)));
   };
 
   const handleIdentityLookup = async (index: number) => {
@@ -1029,69 +1190,50 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setRuntFor(index, { status: 'loading' });
     try {
       if (isJuridical(actor)) {
-        // HU #10906 (R3) — precarga por NIT desde el directorio del tenant ANTES de consultar RUES:
-        // si el NIT coincide con un representante registrado del tenant, se precargan razón social +
-        // datos del representante legal y se CORTA la consulta externa (siempre que haya match, sin
-        // importar si es comprador o vendedor). Sin match (404 → null) ⇒ flujo RUES normal.
-        const preload = await tramitesClient.lookupLegalRepresentativeByNit(documentNumber);
-        if (preload) {
-          const nit = preload.company.nit || documentNumber;
+        const [ruesResult, directory] = await Promise.all([
+          tramitesClient.ruesPersonLookup(instanceId, { documentNumber }),
+          tramitesClient.lookupLegalRepresentativeByNit(documentNumber).catch(() => null),
+        ]);
+        if (ruesResult.found) {
+          const nit = ruesResult.documentNumber || actor.numeroDocumento;
+          const razonSocial =
+            shortRuesRazonSocial(ruesResult.razonSocial) || actor.nombreCompleto;
+          const reps = directory ? repsOf(directory) : [];
           updateActor(
             index,
             {
-              nombreCompleto: preload.company.razonSocial,
+              nombreCompleto: razonSocial,
               tipoDocumento: 'NIT',
               numeroDocumento: nit,
             },
             { preserveConsultation: true },
           );
-          // HU #10937 — si la compañía tiene varios representantes, se precarga el primero por defecto
-          // y el gestor puede cambiarlo con el selector (handleSelectRep). Con uno solo, comportamiento
-          // previo (auto-seleccionado). El representante elegido queda embebido en el actor.
-          const reps = repsOf(preload);
-          setSelectedRepIdx((prev) => ({ ...prev, [index]: 0 }));
-          if (reps[0]) applySelectedRep(index, reps[0], { preserveConsultation: true });
-          const foundPreload = { status: 'found' as const, kind: 'preload' as const, result: preload };
-          setRuntFor(index, foundPreload);
-          rememberActorConsultation(instanceId, {
-            ...actor,
-            tipoDocumento: 'NIT',
-            numeroDocumento: nit,
-            nombreCompleto: preload.company.razonSocial,
-          }, foundPreload);
-          lockRuesRazonSocial(nit);
-          // HU #10956 (AC2) — identidad resuelta (match del directorio): precarga el contacto conocido.
-          void runContactLookup(index, 'NIT', nit);
-          return;
-        }
-
-        const result = await tramitesClient.ruesPersonLookup(instanceId, {
-          documentNumber,
-        });
-        if (result.found) {
-          const nit = result.documentNumber || actor.numeroDocumento;
-          updateActor(
-            index,
-            {
-              nombreCompleto: result.razonSocial ?? actor.nombreCompleto,
-              tipoDocumento: 'NIT',
-              numeroDocumento: nit,
-            },
-            { preserveConsultation: true },
-          );
-          setRuntFor(index, { status: 'found', kind: 'rues', result });
+          if (directory && reps[0]) {
+            commitDirectoryRep(
+              index,
+              { rep: reps[0], index: 0 },
+              directory.company,
+              { preserveConsultation: true, applyCompanyContact: true },
+            );
+          }
+          const foundRues = {
+            status: 'found' as const,
+            kind: 'rues' as const,
+            result: ruesResult,
+            directory,
+          };
+          setRuntFor(index, foundRues);
           rememberActorConsultation(
             instanceId,
             {
               ...actor,
               tipoDocumento: 'NIT',
               numeroDocumento: nit,
-              nombreCompleto: result.razonSocial ?? actor.nombreCompleto,
+              nombreCompleto: razonSocial,
             },
-            { status: 'found', kind: 'rues', result },
+            foundRues,
           );
-          if (result.razonSocial?.trim()) lockRuesRazonSocial(nit);
-          // HU #10956 (AC2) — identidad resuelta en RUES: precarga el contacto conocido.
+          if (shortRuesRazonSocial(ruesResult.razonSocial)) lockRuesRazonSocial(nit);
           void runContactLookup(index, 'NIT', nit);
         } else {
           setRuntFor(index, { status: 'not_found' });
@@ -1139,15 +1281,37 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
   };
 
-  // Consulta RUNT del representante legal (persona natural) de un actor jurídico. Autopobla el
-  // nombre del RL; nunca bloquea la captura manual.
-  const handleRlLookup = async (index: number) => {
-    const rl = actors[index].representanteLegal;
+  // Consulta RUNT del representante legal (persona natural). Si el NIT ya trajo RL del directorio,
+  // pedir confirmación: la firma del anterior deja de apalancarse. Si la cédula es de un RL activo
+  // se precarga; si no, se consulta RUNT y se descarta la información básica previa.
+  const executeRlLookup = async (index: number) => {
+    const rl = actorsRef.current[index]?.representanteLegal;
     const documentNumber = rl?.numeroDocumento?.trim();
     const documentType = rl?.tipoDocumento ?? 'CC';
-    if (!instanceId || !documentNumber || rlRunt[index]?.status === 'loading') {
+    if (!instanceId || !documentNumber) return;
+
+    const directory = directoryFromLookup(runtRef.current[index]);
+    const match = directory ? findDirectoryRep(directory, documentType, documentNumber) : null;
+
+    if (match && directory) {
+      commitDirectoryRep(index, match, directory.company);
+      setRlRuntFor(index, { status: 'idle' });
       return;
     }
+
+    if (directory && repsOf(directory).length > 0) {
+      setDirectoryAbandoned((prev) => ({ ...prev, [index]: true }));
+    }
+
+    updateRepLegal(index, {
+      tipoDocumento: documentType,
+      numeroDocumento: documentNumber,
+      nombreCompleto: '',
+      email: '',
+      telefono: '',
+      mecanismoFirma: undefined,
+    });
+
     setRlRuntFor(index, { status: 'loading' });
     try {
       const result = await tramitesClient.runtPersonLookup(instanceId, {
@@ -1156,14 +1320,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       });
       if (result.found) {
         updateRepLegal(index, {
-          nombreCompleto: result.fullName ?? rl?.nombreCompleto,
-          tipoDocumento:
-            (result.documentType as ActorDocumentType) || documentType,
+          nombreCompleto: result.fullName ?? '',
+          tipoDocumento: (result.documentType as ActorDocumentType) || documentType,
           numeroDocumento: result.documentNumber || documentNumber,
+          email: '',
+          telefono: '',
+          mecanismoFirma: undefined,
         });
         setRlRuntFor(index, { status: 'found', kind: 'runt', result });
-        // Novedad 28 (AC6) — ya no hace falta apagar nada aquí: la exigencia es derivada
-        // (`isRlDocDivergent`), se apaga sola cuando el documento coincide con la línea base.
       } else {
         setRlRuntFor(index, { status: 'not_found' });
       }
@@ -1173,6 +1337,50 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         message: err instanceof Error ? err.message : 'Error consultando RUNT',
       });
     }
+  };
+
+  const startRlLookup = async (index: number) => {
+    const actor = actorsRef.current[index];
+    const rl = actor?.representanteLegal;
+    const documentNumber = rl?.numeroDocumento?.trim();
+    const documentType = rl?.tipoDocumento ?? 'CC';
+    const companyNit = actor?.numeroDocumento?.trim();
+    if (!instanceId || !documentNumber || rlRunt[index]?.status === 'loading') {
+      return;
+    }
+
+    // Consulta el directorio de ESTA compañía (NIT del actor), no RL de otras fichas.
+    let directory = directoryFromLookup(runtRef.current[index]);
+    if (companyNit) {
+      const fresh = await conVelo(
+        tramitesClient.lookupLegalRepresentativeByNit(companyNit).catch(() => null),
+      );
+      if (fresh) {
+        directory = fresh;
+        setRunt((prev) => {
+          const cur = prev[index];
+          if (cur?.status !== 'found' || cur.kind !== 'rues') return prev;
+          const next = { ...prev, [index]: { ...cur, directory: fresh } };
+          runtRef.current = next;
+          return next;
+        });
+      }
+    }
+    if (!directory) {
+      directory = directoryFromLookup(runtRef.current[index]);
+    }
+
+    const match = directory ? findDirectoryRep(directory, documentType, documentNumber) : null;
+    if (directory && repsOf(directory).length > 0) {
+      const confirmed = await requestRlSwitchConfirm(match ? 'preload' : 'runt');
+      if (!confirmed) return;
+      if (match) {
+        commitDirectoryRep(index, match, directory.company);
+        setRlRuntFor(index, { status: 'idle' });
+        return;
+      }
+    }
+    conVelo(executeRlLookup(index));
   };
 
   // Rehidrata consultas de identidad ya hechas en este trámite (Continuar → Anterior) sin
@@ -1197,9 +1405,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     });
   }, [instanceId, actors]);
 
-  // Paso del propietario: dispara la consulta en cuanto el documento está disponible (sembrado desde
-  // el paso 1 o rehidratado del backend), sin clic manual. HU #10906 — el cortocircuito de precarga
-  // por NIT vive dentro de handleIdentityLookup (rama jurídica).
+  // ── Paso del propietario: dispara la consulta en cuanto el documento está disponible (sembrado desde
+  // el paso 1 o rehidratado del backend), sin clic manual. La razón social jurídica sale de RUES;
+  // el directorio de RL aporta datos básicos de empresa y representante.
   // Split (una sola parte) o MULTI unificado (índice del rol propietario).
   // Si ya hay snapshot restaurado (`found`), no vuelve a consultar.
   const propietarioIndex = actors.findIndex((a) => a.rol === rolDelPropietario);
@@ -1256,6 +1464,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setEmailChangeConfirm(null);
     emailChangeResolverRef.current?.(confirmed);
     emailChangeResolverRef.current = null;
+  };
+
+  const requestRlSwitchConfirm = (variant: 'runt' | 'preload'): Promise<boolean> =>
+    new Promise((resolve) => {
+      rlSwitchResolverRef.current = resolve;
+      setRlSwitchConfirm({ variant });
+    });
+
+  const resolveRlSwitchConfirm = (confirmed: boolean) => {
+    setRlSwitchConfirm(null);
+    rlSwitchResolverRef.current?.(confirmed);
+    rlSwitchResolverRef.current = null;
   };
 
   /**
@@ -1321,7 +1541,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       actors.some(
         (_, i) =>
           !isIdentityConsultationReady(runt[i]?.status) ||
-          (isRlDocDivergent(i) && !isIdentityConsultationReady(rlRunt[i]?.status)),
+          needsRlDirectoryApply(i) ||
+          (needsRlRunt(i) && !isIdentityConsultationReady(rlRunt[i]?.status)),
       )
     ) {
       return false;
@@ -1358,7 +1579,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const consultationReady = actors.every(
     (_, i) =>
       isIdentityConsultationReady(runt[i]?.status) &&
-      (!isRlDocDivergent(i) || isIdentityConsultationReady(rlRunt[i]?.status)),
+      !needsRlDirectoryApply(i) &&
+      (!needsRlRunt(i) || isIdentityConsultationReady(rlRunt[i]?.status)),
   );
   useEffect(() => {
     onConsultationGateChange?.(consultationReady);
@@ -1466,6 +1688,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       const reps = repsOf(runtState.result);
       const sel = selectedRepIdx[index] ?? 0;
       const rep = reps[sel] ?? reps[0];
+      const razonSocial = rep?.razonSocial?.trim() || company.razonSocial;
       const firmaVigente = rep?.firmaVigente ?? false;
       const identidadVigente = rep?.identidadVigente ?? false;
       return (
@@ -1484,7 +1707,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <div className="col-span-2">
                 <span className="opacity-60 font-normal">Razón social: </span>
                 <span className="font-semibold" style={{ color: '#162744' }}>
-                  {company.razonSocial}
+                  {razonSocial}
                 </span>
               </div>
               <div>
@@ -1514,7 +1737,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   id={`${index}-rep-select`}
                   value={sel}
                   disabled={readOnly}
-                  onChange={(e) => handleSelectRep(index, Number(e.target.value))}
+                  onChange={(e) =>
+                    handleSelectRep(index, Number(e.target.value), runtState.result)
+                  }
                   className={WIZARD_SELECT}
                 >
                   {reps.map((r, i) => (
@@ -1584,7 +1809,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <div className="col-span-2">
                 <span className="opacity-60 font-normal">Razón social: </span>
                 <span className="font-semibold" style={{ color: '#162744' }}>
-                  {r.razonSocial ?? '—'}
+                  {shortRuesRazonSocial(r.razonSocial) || '—'}
                 </span>
               </div>
               <div>
@@ -1612,10 +1837,109 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               )}
             </div>
           </div>
+          {runtState.directory ? (
+            <div className="rounded-xl p-3 text-xs border" style={cardTone('info').card}>
+              <p
+                className="font-semibold mb-2 flex items-center gap-1.5"
+                style={cardTone('info').title}
+              >
+                <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {directoryAbandoned[index]
+                  ? 'Ya no se utilizará la precarga del directorio'
+                  : 'Precargado desde el directorio de la compañía'}
+              </p>
+              {directoryAbandoned[index] ? (
+                <p>
+                  Consultaste otro representante no registrado. La firma e identidad del RL
+                  anterior no se apalancan en este trámite.
+                </p>
+              ) : (
+                (() => {
+                const directory = runtState.directory;
+                const reps = repsOf(directory);
+                const sel = selectedRepIdx[index] ?? 0;
+                const rep = reps[sel] ?? reps[0];
+                const firmaVigente = rep?.firmaVigente ?? false;
+                const identidadVigente = rep?.identidadVigente ?? false;
+                return (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                      <div className="col-span-2">
+                        <span className="opacity-60 font-normal">Representante: </span>
+                        <span className="font-semibold" style={{ color: '#162744' }}>
+                          {rep ? repFullName(rep) || rep.documento : '—'}
+                        </span>
+                      </div>
+                    </div>
+                    {reps.length > 1 && (
+                      <div className="mt-2">
+                        <label
+                          htmlFor={`${index}-rep-select`}
+                          className="opacity-60 font-normal block mb-1"
+                        >
+                          Representante legal que firma
+                        </label>
+                        <select
+                          id={`${index}-rep-select`}
+                          value={sel}
+                          disabled={readOnly}
+                          onChange={(e) =>
+                            handleSelectRep(index, Number(e.target.value), directory)
+                          }
+                          className={WIZARD_SELECT}
+                        >
+                          {reps.map((option, i) => (
+                            <option key={`${option.tipoDoc}-${option.documento}`} value={i}>
+                              {`${repFullName(option) || option.documento} · ${option.tipoDoc} ${option.documento}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <StatusBadge
+                        tone={firmaVigente ? 'success' : 'neutral'}
+                        label={firmaVigente ? 'Firma vigente' : 'Sin firma vigente'}
+                      />
+                      <StatusBadge
+                        tone={identidadVigente ? 'success' : 'neutral'}
+                        label={identidadVigente ? 'Identidad vigente' : 'Sin identidad vigente'}
+                      />
+                    </div>
+                    {firmaVigente && identidadVigente && (
+                      <div className="mt-2">
+                        <label
+                          htmlFor={`${index}-mecanismo-firma`}
+                          className="opacity-60 font-normal block mb-1"
+                        >
+                          Firma con la que se registra el trámite
+                        </label>
+                        <select
+                          id={`${index}-mecanismo-firma`}
+                          value={actors[index]?.representanteLegal?.mecanismoFirma ?? 'baul'}
+                          disabled={readOnly}
+                          onChange={(e) =>
+                            updateRepLegal(index, {
+                              mecanismoFirma: e.target.value as MecanismoFirma,
+                            })
+                          }
+                          className={WIZARD_SELECT}
+                        >
+                          <option value="baul">Firma del baúl</option>
+                          <option value="identidad">Sello de validación de identidad</option>
+                        </select>
+                      </div>
+                    )}
+                  </>
+                );
+              })()
+              )}
+            </div>
+          ) : null}
         </div>
       );
     }
-    if (runtState.status === 'found') {
+    if (runtState.status === 'found' && runtState.kind === 'runt') {
       const r = runtState.result;
       const hasLicenses = r.hasActiveLicense ?? (r.licenseStatus != null);
       const nombres =
@@ -1827,9 +2151,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // ese estado transitorio sino la divergencia DERIVADA contra la línea base (`rlBaselineDoc`):
     // si el operador revierte el documento del RL a su valor original, deja de divergir y la
     // precarga "revive" sin volver a consultar nada.
-    const rawPreloadedLive = runtState.status === 'found' && runtState.kind === 'preload';
+    const rawPreloadedLive = directoryFromLookup(runtState) !== null;
     let baseline = rlBaselineDoc[index];
-    const isPreloaded = rawPreloadedLive && !isRlDocDivergent(index);
+    const isPreloaded = rlMatchesAppliedDirectoryRep(index);
 
     // Solo el cambio de documento (número/tipo) del RL invalida la consulta RUES/directorio
     // y pide volver a consultar. Nombre, correo, teléfono y demás datos básicos se pueden
@@ -1852,13 +2176,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         // Novedad 28 (AC6) — primera vez que se toca el documento de un RL precargado: fija la
         // línea base con los valores PREVIOS al patch (incluido `mecanismoFirma`, para poder
         // restituirlo si el operador termina revirtiendo al número original).
+        // El lookup RUES/directorio del NIT se conserva: hace falta para confirmar un cambio de
+        // cédula, precargar otro RL activo o consultar RUNT si no está en el directorio.
         baseline = {
           tipoDocumento: rl.tipoDocumento,
           numeroDocumento: rl.numeroDocumento,
           mecanismoFirma: rl.mecanismoFirma,
         };
         setRlBaselineDoc((prev) => ({ ...prev, [index]: baseline! }));
-        setRuntFor(index, { status: 'idle' });
       }
 
       const nextTipo = patch.tipoDocumento !== undefined ? patch.tipoDocumento : rl.tipoDocumento;
@@ -1873,6 +2198,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       // corresponde a un número que ya no es el vigente se cuela en el gate, o queda colgado el
       // mensaje "Representante encontrado en RUNT" tras revertir.
       setRlRuntFor(index, { status: 'idle' });
+      if (staysAtBaseline) {
+        setDirectoryAbandoned((prev) => ({ ...prev, [index]: false }));
+      }
+      const directory =
+        directoryFromLookup(runtRef.current[index]) ?? directoryFromLookup(runtState);
+      const match = directory
+        ? findDirectoryRep(directory, nextTipo ?? 'CC', nextNumero ?? '')
+        : null;
+      // Cédula de un RL del directorio: copiar nombre/correo/teléfono ya. Si solo se parchea el
+      // documento, el selector puede mostrar al RL correcto y el formulario se queda con el anterior.
+      if (match && directory) {
+        commitDirectoryRep(index, match, directory.company, {
+          mecanismoFirma: staysAtBaseline ? baseline.mecanismoFirma : undefined,
+        });
+        return;
+      }
       updateRepLegal(index, {
         ...patch,
         // Al revertir exactamente al documento de la línea base, se restituye el mecanismo de
@@ -1930,7 +2271,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  conVelo(handleRlLookup(index));
+                  void startRlLookup(index);
                 }
               }}
               className={`${INPUT_BASE} mt-1.5 font-mono`}
@@ -1939,7 +2280,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           {!readOnly && !isPreloaded && (
             <button
               type="button"
-              onClick={() => conVelo(handleRlLookup(index))}
+              onClick={() => void startRlLookup(index)}
               disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
               className="h-[42px] shrink-0 rounded-xl bg-[#557EFF] px-3 text-xs font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
@@ -2334,14 +2675,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           </div>
         </WizardAccordion>
 
-        {/* Prototipo Lovable MI: Representante legal ANTES de Datos de contacto (PJ). */}
-        {isJuridical(actor) && (
-          <WizardAccordion title="Representante legal" defaultOpen>
-            {rlSection(0)}
-          </WizardAccordion>
-        )}
-
-        {/* Sección B — Datos de contacto (prototipo MI: grilla 3×2) */}
+        {/* Datos de contacto ANTES del representante legal en todos los trámites. */}
         <WizardAccordion title="Datos de contacto" defaultOpen>
           {/* Art. 5.1.10 — la notificación SÍ es editable aunque la identidad esté bloqueada: el
               RUNT puede traer un correo o una dirección desactualizados, y ahí es donde llegan los
@@ -2366,7 +2700,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <input
                 id="comprador-nombre"
                 type="text"
-                value={actor.nombreCompleto}
+                value={
+                  isJuridical(actor)
+                    ? shortRuesRazonSocial(actor.nombreCompleto) || actor.nombreCompleto
+                    : actor.nombreCompleto
+                }
                 onChange={(e) => updateActor(0, { nombreCompleto: e.target.value })}
                 readOnly={nombreBloqueado}
                 aria-invalid={!!errors.nombreCompleto}
@@ -2545,6 +2883,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           {rnmcIssueDate ? <div className="mt-4 max-w-sm">{rnmcIssueDate}</div> : null}
         </WizardAccordion>
 
+        {isJuridical(actor) && (
+          <WizardAccordion title="Representante legal" defaultOpen>
+            {rlSection(0)}
+          </WizardAccordion>
+        )}
+
         {footer}
        </fieldset>
       </form>
@@ -2553,6 +2897,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           changes={emailChangeConfirm}
           onCancel={() => resolveEmailChangeConfirm(false)}
           onConfirm={() => resolveEmailChangeConfirm(true)}
+        />
+      )}
+      {rlSwitchConfirm && (
+        <RlSwitchConfirmModal
+          variant={rlSwitchConfirm.variant}
+          onCancel={() => resolveRlSwitchConfirm(false)}
+          onConfirm={() => resolveRlSwitchConfirm(true)}
         />
       )}
       </>
@@ -2613,6 +2964,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           // `ActorsForm` también se usa fuera del asistente, sin consulta automática.
           const esPropietarioDelRegistro =
             actor.rol === 'vendedor' || (actor.rol === rolDelPropietario && autoConsultRunt);
+          // ADR-0051 — la tarjeta 'vendedor' está en pantalla por `revealSellerForm` (excepción por
+          // instancia), NO porque este paso la capture (`rolDelPropietario !== 'vendedor'`): el
+          // backend ya sincronizó a este propietario desde el RUNT por su cuenta. Su identidad
+          // (documento, nombre, tipo de persona) va en solo lectura — no hay consulta que disparar
+          // ni documento que sembrarle aquí — y el formulario se acota a lo que falta para poder
+          // solicitarle la firma: representante legal (jurídica) o correo (natural).
+          const vendedorSincronizado = actor.rol === 'vendedor' && rolDelPropietario !== 'vendedor';
           // Píldora de estado de la cabecera (Vendedor sin autoConsultRunt) — tintada, no sólida.
           const statusPill: { text: string; tone: StatusTone } =
             runtState.status === 'found'
@@ -2641,12 +2999,19 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               regionLabel={rotulo}
               className="flex h-full flex-col"
               subtitle={
-                esPropietarioDelRegistro && autoConsultRunt
-                  ? 'Los datos de identidad se toman automáticamente de la consulta en RUNT.'
-                  : undefined
+                vendedorSincronizado
+                  ? 'Excepción: el propietario ya está sincronizado, pero falta un dato para poder solicitarle la firma.'
+                  : esPropietarioDelRegistro && autoConsultRunt
+                    ? 'Los datos de identidad se toman automáticamente de la consulta en RUNT.'
+                    : undefined
               }
               badge={
-                esPropietarioDelRegistro ? (
+                vendedorSincronizado ? (
+                  <StatusBadge
+                    tone={isJuridical(actor) ? 'info' : 'neutral'}
+                    label={isJuridical(actor) ? 'Persona Jurídica' : 'Persona Natural'}
+                  />
+                ) : esPropietarioDelRegistro ? (
                   autoConsultRunt && isRuntFound(index) ? (
                     <StatusBadge
                       tone={isJuridical(actor) ? 'info' : 'neutral'}
@@ -2674,13 +3039,65 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             >
               <div className="space-y-4">
 
+                {/* ADR-0051 — vendedor sincronizado por el backend (revelado por excepción): la
+                    identidad ya está resuelta y no se teclea aquí. Solo se pinta lo que falta para
+                    poder solicitarle la firma (representante legal o correo, más abajo). */}
+                {vendedorSincronizado && (
+                  <div className="space-y-3">
+                    <InlineAlert tone="info">
+                      Este es el propietario que figura en el RUNT. Sus datos de identidad ya se
+                      sincronizaron automáticamente al vehículo; faltan{' '}
+                      {isJuridical(actor) ? 'los del representante legal' : 'sus datos de contacto'}{' '}
+                      para poder enviarle la validación de identidad y la firma del trámite. Es una
+                      excepción de este trámite — en el resto de traspasos el propietario se captura
+                      en su propio formulario.
+                    </InlineAlert>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor={`${prefix}-numeroDoc`} className={`${WIZARD_LABEL} mb-1.5`}>
+                          {isJuridical(actor) ? 'NIT' : 'Número de documento'}
+                        </label>
+                        <input
+                          id={`${prefix}-numeroDoc`}
+                          type="text"
+                          value={actor.numeroDocumento}
+                          readOnly
+                          disabled
+                          aria-label={isJuridical(actor) ? 'NIT del propietario' : 'Número de documento del propietario'}
+                          className={`${INPUT_BASE} font-mono opacity-80`}
+                          style={{ background: 'rgba(223,229,237,0.35)' }}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor={`${prefix}-nombre`} className={`${WIZARD_LABEL} mb-1.5`}>
+                          {isJuridical(actor) ? 'Razón social' : 'Nombres y apellidos'}
+                        </label>
+                        <input
+                          id={`${prefix}-nombre`}
+                          type="text"
+                          value={
+                            isJuridical(actor)
+                              ? shortRuesRazonSocial(actor.nombreCompleto) || actor.nombreCompleto || 'No registra'
+                              : actor.nombreCompleto || 'No registra'
+                          }
+                          readOnly
+                          disabled
+                          aria-label={isJuridical(actor) ? 'Razón social del propietario' : 'Nombre del propietario'}
+                          className={`${INPUT_BASE} opacity-80`}
+                          style={{ background: 'rgba(223,229,237,0.35)' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Vendedor sin RUNT fijo: puede elegir PN/PJ. Con RUNT OK el badge va en cabecera. */}
-                {esPropietarioDelRegistro && !(autoConsultRunt && isRuntFound(index)) && (
+                {!vendedorSincronizado && esPropietarioDelRegistro && !(autoConsultRunt && isRuntFound(index)) && (
                   personTypeSelector(index, isPersonTypeLockedByRunt(index))
                 )}
 
                 {/* ── Identificación ── */}
-                {!esPropietarioDelRegistro ? (
+                {!vendedorSincronizado && (!esPropietarioDelRegistro ? (
                   /* Comprador: grid sm:grid-cols-3 — Tipo de doc | Número | Consultar (Lovable P1) */
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                     <div>
@@ -2819,17 +3236,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     )}
                   </div>
                   ) : null
-                )}
+                ))}
 
                 {/* Validación de identidad (RUNT/RUES) — al frente, antes del contacto. */}
-                {runt[index] && runt[index].status !== 'idle' && (
+                {!vendedorSincronizado && runt[index] && runt[index].status !== 'idle' && (
                   <div>{runtResult(index)}</div>
                 )}
 
                 {/* Nombre / razón social — oculto cuando la identidad natural ya viene en runtResult
                     (prototipo: RuntPersona). Comprador PN con RUNT OK no debe repetir
-                    «Nombres y apellidos». Jurídica sigue mostrando razón social. */}
-                {!(isRuntFound(index) && !isJuridical(actor)) && (
+                    «Nombres y apellidos». Jurídica sigue mostrando razón social. Oculto también
+                    cuando el nombre ya se pintó en solo lectura arriba (vendedor sincronizado). */}
+                {!vendedorSincronizado && !(isRuntFound(index) && !isJuridical(actor)) && (
                 <div>
                   <label htmlFor={`${prefix}-nombre`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     {isJuridical(actor) ? 'Razón social' : 'Nombres y apellidos'}
@@ -2838,7 +3256,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   <input
                     id={`${prefix}-nombre`}
                     type="text"
-                    value={actor.nombreCompleto}
+                    value={
+                      isJuridical(actor)
+                        ? shortRuesRazonSocial(actor.nombreCompleto) || actor.nombreCompleto
+                        : actor.nombreCompleto
+                    }
                     onChange={(e) => updateActor(index, { nombreCompleto: e.target.value })}
                     readOnly={razonLocked || isNameLockedByRunt(index, actor)}
                     aria-invalid={!!errors.nombreCompleto}
@@ -2865,7 +3287,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </div>
                 )}
 
-                {/* ── Datos de contacto (nested bordered box — Lovable P1) ── */}
+                {/* ── Datos de contacto (nested bordered box — Lovable P1) ──
+                    ADR-0051 — para el vendedor sincronizado (revelado por excepción) esta caja
+                    sigue obligatoria para TODO tipo de persona: son campos requeridos del actor
+                    (HU #11595) igual que en el resto del formulario, y hoy ya se capturan a mano
+                    incluso cuando la identidad viene bloqueada por RUNT (`esPropietarioDelRegistro`
+                    con `autoConsultRunt`). En persona jurídica, además, falta el representante
+                    legal — capturado aparte en `rlSection` más abajo. */}
                 <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: '#DFE5ED' }}>
                   <p className="text-[13px] font-semibold" style={{ color: '#162744' }}>Datos de contacto</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3019,7 +3447,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </div>
 
                 {/* Fecha de expedición del documento (RNMC, solo persona natural) */}
-                {issueDateField(index)}
+                {!vendedorSincronizado && issueDateField(index)}
 
                 {/* Representante legal DESPUÉS del contacto de la empresa (Lovable Traspaso P1) */}
                 {rlSection(index)}
@@ -3039,6 +3467,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         changes={emailChangeConfirm}
         onCancel={() => resolveEmailChangeConfirm(false)}
         onConfirm={() => resolveEmailChangeConfirm(true)}
+      />
+    )}
+    {rlSwitchConfirm && (
+      <RlSwitchConfirmModal
+        variant={rlSwitchConfirm.variant}
+        onCancel={() => resolveRlSwitchConfirm(false)}
+        onConfirm={() => resolveRlSwitchConfirm(true)}
       />
     )}
     </>
@@ -3086,6 +3521,76 @@ function EmailReenvioConfirmModal({
             </p>
           ))}
           <p className="opacity-70">¿Continuar?</p>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-xl text-xs font-semibold border border-[#DFE5ED] dark:border-white/10"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-white"
+            style={{ background: GRADIENT }}
+          >
+            Continuar
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function RlSwitchConfirmModal({
+  variant,
+  onCancel,
+  onConfirm,
+}: {
+  variant: 'runt' | 'preload';
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+
+  useWizardFocusTrap(containerRef, { active: true, onEscape: onCancel, initialFocusRef: cancelRef });
+
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      title="Cambiar representante legal"
+      icon={AlertTriangle}
+      iconBg="#B26A00"
+      size="sm"
+    >
+      <div ref={containerRef} className="space-y-4">
+        <div className="space-y-2 text-xs" role="alert">
+          {variant === 'preload' ? (
+            <>
+              <p>
+                Encontramos un representante legal registrado en esta compañía con ese documento. Al
+                continuar se precargará su información en el formulario.
+              </p>
+              <p>
+                La firma e identidad del representante anterior dejarán de apalancarse en este
+                trámite.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                Vas a consultar otro documento en <span className="font-semibold">RUNT</span>. La
+                firma e identidad del representante precargado ya no se apalancarán en este trámite.
+              </p>
+              <p>Los datos básicos del representante anterior se reemplazarán por el resultado.</p>
+            </>
+          )}
+          <p className="opacity-70">¿Deseas continuar?</p>
         </div>
         <div className="flex items-center justify-end gap-2">
           <button

@@ -38,7 +38,10 @@ public sealed class ListDocumentTypesHandler
         {
             Page = page,
             PageSize = pageSize,
-            IncludeInactive = query.IncludeInactive ?? false,
+            IncludeInactive = (query.IncludeInactive ?? false) || ParseEstado(query.Estado) == false,
+            Search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
+            IsSystemGenerated = ParseOrigen(query.Origen),
+            IsActive = ParseEstado(query.Estado),
         };
 
         var result = await _repository.ListAsync(filter, cancellationToken).ConfigureAwait(false);
@@ -62,4 +65,20 @@ public sealed class ListDocumentTypesHandler
 
         return pageSize.Value > MaxPageSize ? MaxPageSize : pageSize.Value;
     }
+
+    private static bool? ParseOrigen(string? origen) =>
+        origen?.Trim().ToLowerInvariant() switch
+        {
+            "autogenerado" => true,
+            "cargue" => false,
+            _ => null,
+        };
+
+    private static bool? ParseEstado(string? estado) =>
+        estado?.Trim().ToLowerInvariant() switch
+        {
+            "activo" => true,
+            "inactivo" => false,
+            _ => null,
+        };
 }

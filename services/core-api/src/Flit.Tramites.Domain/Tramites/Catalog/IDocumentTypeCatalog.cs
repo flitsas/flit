@@ -22,4 +22,10 @@ public interface IDocumentTypeCatalog
     /// <paramref name="tipo"/>, o <c>null</c> si no existe en el catálogo (⇒ respaldo global).
     /// </summary>
     Task<DocumentTypeRule?> GetRuleAsync(string tipo, CancellationToken ct = default);
+
+    /// <summary>
+    /// Códigos de <c>document_types</c> con <c>is_system_generated</c>. El checklist de carga y los
+    /// gates de radicación los omiten; el consolidado sigue incluyéndolos.
+    /// </summary>
+    Task<IReadOnlySet<string>> ListSystemGeneratedCodesAsync(CancellationToken ct = default);
 }

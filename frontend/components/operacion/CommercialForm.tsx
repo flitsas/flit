@@ -2,16 +2,13 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { digitsOnly, groupThousands, sanitizeDecimalInput } from '@/lib/format/currency';
+import { digitsOnly, groupThousands } from '@/lib/format/currency';
 import { usePendingChanges } from './pending-changes';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { AvaluoComercialCard } from './AvaluoComercialCard';
 import type { WizardStepFormHandle } from './wizard-step-form';
-import type {
-  CommercialCausal,
-  CommercialData,
-} from '@/lib/api/types/procedure-runtime';
-import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import type { CommercialData } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { WizardCardHeader } from './wizard-atoms';
 import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { cn } from '@/lib/utils';
@@ -35,24 +32,10 @@ interface Props {
   embeddedInWizard?: boolean;
 }
 
-const CAUSAL_OPTIONS: { value: CommercialCausal; label: string }[] = [
-  { value: 'COMPRAVENTA', label: 'Compraventa' },
-  { value: 'DONACION', label: 'Donación' },
-  { value: 'DACION_EN_PAGO', label: 'Dación en pago' },
-  { value: 'ADJUDICACION', label: 'Adjudicación' },
-];
-
-/** Catálogo del prototipo Lovable (Traspaso · Método de pago). */
-const METODO_PAGO_OPTIONS = [
-  'PSE',
-  'Transferencia bancaria',
-  'Efectivo',
-  'Tarjeta de crédito',
-] as const;
+/** Causal que el API sigue exigiendo; en captura ya no se elige. */
+const CAUSAL_POR_DEFECTO = 'COMPRAVENTA' as const;
 
 const INPUT_BASE = WIZARD_INPUT;
-/** Rótulo de campo: mismo color/tamaño del sistema (`wizard-field-styles`), con hueco para el asterisco. */
-const FIELD_LABEL = 'text-xs font-medium text-[#59677D] dark:text-white/70 mb-1.5 block';
 const REQUIRED_LABEL = 'text-xs font-medium text-[#59677D] dark:text-white/70 mb-1.5 flex items-center gap-1.5';
 
 const EMPTY: CommercialData = {
@@ -63,23 +46,10 @@ const EMPTY: CommercialData = {
   metodoPago: null,
 };
 
-function integerOrNull(v: string): number | null {
-  const digits = digitsOnly(v);
-  if (digits === '') return null;
-  const n = Number(digits);
-  return Number.isFinite(n) ? n : null;
-}
-
-function decimalOrNull(v: string): number | null {
-  const cleaned = sanitizeDecimalInput(v);
-  if (cleaned === '' || cleaned === '.') return null;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : null;
-}
-
 /**
- * Datos Comerciales del traspaso (prototipo Lovable):
- * columna izquierda Avalúo Comercial · columna derecha Condiciones Comerciales.
+ * Datos Comerciales del traspaso: avalúo + valor de venta.
+ * Causal (siempre compraventa), tasa, derechos y método de pago no se capturan aquí:
+ * el PUT los reenvía si ya estaban persistidos, para no borrar borradores viejos.
  */
 export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
   function CommercialForm(
@@ -102,8 +72,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     pending.markDirty();
     setData(updater);
   };
-  /** Borrador de tasa para permitir tipar "1." sin perder el separador. */
-  const [tasaText, setTasaText] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -122,7 +90,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         const d = await tramitesClient.getCommercial(instanceId);
         if (active && d) {
           setData({ ...EMPTY, ...d });
-          setTasaText(d.tasaImpuesto != null ? String(d.tasaImpuesto) : '');
           // Lo cargado ES lo persistido: no cuenta como cambio pendiente (salvo que el gestor
           // haya capturado algo mientras la petición estaba en vuelo).
           settle();
@@ -140,15 +107,14 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     // `pending` es estable (instancia única por montaje): no re-dispara la carga.
   }, [instanceId, pending]);
 
-  const valid =
-    data.valorVenta != null && data.valorVenta > 0 && data.causal != null;
+  const valid = data.valorVenta != null && data.valorVenta > 0;
 
   // Valida + persiste. Núcleo compartido por el submit propio y el save() del
   // ref (footer "Guardar y continuar" del wizard). Devuelve true si persistió.
   const submit = async (): Promise<boolean> => {
     if (!instanceId) return false;
     if (!valid) {
-      setError('Ingresa el valor de venta y la causal para continuar.');
+      setError('Ingresa el valor de venta para continuar.');
       return false;
     }
     setSaving(true);
@@ -157,7 +123,10 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     // El payload queda congelado aquí: lo que se teclee mientras el PUT viaja sigue pendiente.
     const settle = pending.beginSettle();
     try {
-      await tramitesClient.putCommercial(instanceId, data);
+      await tramitesClient.putCommercial(instanceId, {
+        ...data,
+        causal: CAUSAL_POR_DEFECTO,
+      });
       setSaved(true);
       settle();
       onSaved?.();
@@ -178,10 +147,6 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     e.preventDefault();
     await submit();
   };
-
-  const metodoKnown =
-    data.metodoPago != null &&
-    (METODO_PAGO_OPTIONS as readonly string[]).includes(data.metodoPago);
 
   return (
     <form
@@ -217,10 +182,14 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         </InlineAlert>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-        {/* Izquierda — Avalúo (prototipo). En solo lectura no se ofrece captura por sugerencia. */}
+      {/* Los tres datos del paso —sugerido, fuentes y valor de venta— caben en una sola línea:
+          el avalúo ocupa dos columnas (aporta sugerido + fuentes) y el valor de venta la tercera.
+          Antes cada mitad apilaba título, subtítulo y cajas, y el card crecía sin necesidad. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        {/* Avalúo (prototipo). En solo lectura no se ofrece captura por sugerencia. */}
         {!readOnly ? (
           <AvaluoComercialCard
+            className="lg:col-span-2"
             instanceId={instanceId}
             disabled={readOnly}
             accepted={data.valueOrigin === 'suggestion'}
@@ -235,16 +204,13 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             }
           />
         ) : (
-          <div aria-hidden="true" />
+          <div className="lg:col-span-2" aria-hidden="true" />
         )}
 
-        {/* Derecha — Condiciones Comerciales */}
-        <fieldset disabled={readOnly} className="h-full min-w-0 border-0 p-0">
+        {/* Tercera columna — Condiciones Comerciales */}
+        <fieldset disabled={readOnly} className="min-w-0 border-0 p-0">
           <legend className="sr-only">Condiciones Comerciales</legend>
-          <h4 className="mb-3 text-[13px] font-bold text-[#162744] dark:text-white">
-            Condiciones Comerciales
-          </h4>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label htmlFor="comercial-valor" className={REQUIRED_LABEL}>
                 Valor de venta <span className="font-normal opacity-70">($)</span>
@@ -263,129 +229,21 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
                   id="comercial-valor"
                   type="text"
                   inputMode="numeric"
-                  // Formato COP en vivo: el estado guarda el entero de pesos; aquí se
-                  // pinta agrupado con separador de miles y se parsea a dígitos.
                   value={data.valorVenta != null ? groupThousands(String(data.valorVenta)) : ''}
                   onChange={(e) => {
                     const digits = digitsOnly(e.target.value);
                     editData((d) => ({
                       ...d,
                       valorVenta: digits === '' ? null : Number(digits),
-                      // Edición manual: el valor deja de ser el sugerido (trazabilidad).
                       valueOrigin: 'manual',
                     }));
                   }}
                   placeholder="Ej: 82.300.000"
-                  className={`${INPUT_BASE} pl-7 font-mono`}
+                  /* `h-9`: misma altura que las cajas del avalúo, para que los tres datos de la
+                     línea queden a la misma cota. */
+                  className={`${INPUT_BASE} h-9 pl-7 font-mono`}
                 />
               </div>
-            </div>
-
-            <div>
-              <label htmlFor="comercial-causal" className={REQUIRED_LABEL}>
-                Causal
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">
-                  *
-                </span>
-              </label>
-              <select
-                id="comercial-causal"
-                value={data.causal ?? ''}
-                onChange={(e) =>
-                  editData((d) => ({
-                    ...d,
-                    causal: (e.target.value || null) as CommercialCausal | null,
-                  }))
-                }
-                className={WIZARD_SELECT}
-              >
-                <option value="">Selecciona una causal…</option>
-                {CAUSAL_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="comercial-tasa" className={FIELD_LABEL}>
-                Tasa de Impuesto <span className="font-normal opacity-70">(%)</span>
-              </label>
-              <input
-                id="comercial-tasa"
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                value={tasaText}
-                onChange={(e) => {
-                  const raw = sanitizeDecimalInput(e.target.value);
-                  pending.markDirty();
-                  setTasaText(raw);
-                  editData((d) => ({ ...d, tasaImpuesto: decimalOrNull(raw) }));
-                }}
-                placeholder="Ej: 1.0"
-                aria-describedby="comercial-tasa-hint"
-                className={INPUT_BASE}
-              />
-              <p id="comercial-tasa-hint" className="sr-only">
-                Porcentaje del impuesto de vehículos aplicado sobre el valor de venta.
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="comercial-derechos" className={FIELD_LABEL}>
-                Derechos <span className="font-normal opacity-70">($)</span>
-              </label>
-              <input
-                id="comercial-derechos"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoComplete="off"
-                value={data.derechos != null ? groupThousands(String(data.derechos)) : ''}
-                onChange={(e) =>
-                  editData((d) => ({ ...d, derechos: integerOrNull(e.target.value) }))
-                }
-                placeholder="Ej: 212.400"
-                aria-describedby="comercial-derechos-hint"
-                className={`${INPUT_BASE} font-mono`}
-              />
-              <p id="comercial-derechos-hint" className="sr-only">
-                Derechos de tránsito (tarifa fija del organismo).
-              </p>
-            </div>
-
-            <div className="sm:col-span-2">
-              <label htmlFor="comercial-metodo" className={FIELD_LABEL}>
-                Método de pago
-              </label>
-              <select
-                id="comercial-metodo"
-                value={metodoKnown ? (data.metodoPago ?? '') : data.metodoPago ? '__custom__' : ''}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === '' || v === '__custom__') {
-                    editData((d) => ({
-                      ...d,
-                      metodoPago: v === '__custom__' ? d.metodoPago : null,
-                    }));
-                    return;
-                  }
-                  editData((d) => ({ ...d, metodoPago: v }));
-                }}
-                className={WIZARD_SELECT}
-              >
-                <option value="">Selecciona…</option>
-                {METODO_PAGO_OPTIONS.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-                {data.metodoPago && !metodoKnown && (
-                  <option value="__custom__">{data.metodoPago}</option>
-                )}
-              </select>
             </div>
           </div>
         </fieldset>

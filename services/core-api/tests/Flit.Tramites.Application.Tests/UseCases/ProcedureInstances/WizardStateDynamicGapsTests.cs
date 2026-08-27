@@ -177,6 +177,20 @@ public sealed class WizardStateDynamicGapsTests
     }
 
     [Fact]
+    public async Task DocumentoGenerado_NoBloquea_AunqueSeaObligatorio()
+    {
+        var matrix = new StubMatrixProvider(
+            new ResolvedChecklistDoc(
+                "soat", "SOAT vigente", Obligatorio: true, Orden: 1, EsGeneradoSistema: true));
+        var (handler, instance) = Armar(matrix: matrix);
+
+        var (result, _) = await handler.HandleAsync(instance.Id, instance.TenantId, TestContext.Current.CancellationToken);
+
+        result!.Blockers.Should().NotContain(DocumentRequirementGate.BlockerFor("soat"));
+        result.Blockers.Should().NotContain("documentos_incompletos");
+    }
+
+    [Fact]
     public async Task SectionConfig_SeAsigna_ConLasCapacidadesDelTipo()
     {
         // La propiedad existía en el contrato desde F08 y jamás se asignaba.

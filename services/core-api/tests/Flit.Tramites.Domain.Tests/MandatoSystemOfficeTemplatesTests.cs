@@ -9,7 +9,7 @@ public sealed class MandatoSystemOfficeTemplatesTests
     [Theory]
     [InlineData("5631000", MandatoTemplateResolver.Sabaneta)]
     [InlineData("5088000", MandatoTemplateResolver.Bello)]
-    [InlineData("5266000", MandatoTemplateResolver.Municipio)]
+    [InlineData("5266000", MandatoTemplateResolver.Sabaneta)]
     [InlineData("25286000", MandatoTemplateResolver.Municipio)]
     [InlineData("5001000", MandatoTemplateResolver.Municipio)]
     [InlineData("9999999", MandatoTemplateResolver.Generico)]

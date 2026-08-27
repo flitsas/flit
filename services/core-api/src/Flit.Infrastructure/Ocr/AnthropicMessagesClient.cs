@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -11,7 +12,9 @@ internal sealed record AnthropicVisionResult(bool Ok, string? Text, int Status, 
 
 /// <summary>
 /// Cliente HTTP resiliente de la Anthropic Messages API para el OCR semántico de documentos de trámites.
-/// Timeout (60s vía HttpClient), 1 reintento ante fallos de transporte (red/timeout) y degradación
+/// La respuesta llega SIEMPRE en streaming (SSE): con ~100k tokens de entrada por expediente, una
+/// petición sin streaming pasa minutos en silencio y la conexión se corta sola. Timeout, 1 reintento
+/// ante fallos de transporte (red/timeout/corte del stream) y degradación
 /// graceful: ante cualquier fallo devuelve 503 con un mensaje usable que invita a adjuntar el documento
 /// manualmente. Logging SIN PII: nunca se loguea el binario del documento ni los datos extraídos; solo
 /// status/tipo de error. Sigue las convenciones de los clientes HTTP de Infrastructure (typed HttpClient,
@@ -94,7 +97,10 @@ internal sealed class AnthropicMessagesClient(
                 message.Headers.TryAddWithoutValidation("x-api-key", _options.ApiKey);
                 message.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
 
-                using var response = await http.SendAsync(message, timeoutCts.Token);
+                // ResponseHeadersRead: no se bufferiza el cuerpo, que aquí es un stream SSE que se
+                // consume evento a evento.
+                using var response = await http.SendAsync(
+                    message, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
 
                 // Una respuesta HTTP completa (aun no-200) NO se reintenta: es un fallo del proveedor,
                 // no de transporte. Se degrada a 503 con mensaje de carga manual.
@@ -104,14 +110,22 @@ internal sealed class AnthropicMessagesClient(
                     return new AnthropicVisionResult(false, null, 503, MsgManual);
                 }
 
-                var body = await response.Content.ReadFromJsonAsync<AnthropicMessagesResponse>(JsonOptions, timeoutCts.Token);
-                if (body?.Error is not null)
+                var (text, stopReason, providerError) =
+                    await ReadStreamAsync(response, timeoutCts.Token).ConfigureAwait(false);
+
+                // En streaming el proveedor puede fallar DESPUÉS del 200, con un evento `error` a
+                // mitad del stream. Sin este caso el fallo pasaría por respuesta vacía.
+                if (providerError is not null)
                 {
-                    AnthropicLog.ProviderError(logger, body.Error.Type ?? "unknown");
+                    AnthropicLog.ProviderError(logger, providerError);
                     return new AnthropicVisionResult(false, null, 503, MsgManual);
                 }
 
-                var text = FirstText(body);
+                // El tope de salida cortó la respuesta: el JSON viene a media llave y no hay objeto
+                // que rescatar. Se avisa aparte porque la salida es subir max_tokens, no reintentar.
+                if (string.Equals(stopReason, "max_tokens", StringComparison.Ordinal))
+                    AnthropicLog.Truncated(logger);
+
                 if (string.IsNullOrWhiteSpace(text))
                     return new AnthropicVisionResult(false, null, 503, MsgManual);
 
@@ -131,9 +145,10 @@ internal sealed class AnthropicMessagesClient(
                 }
                 AnthropicLog.Retrying(logger, attempt);
             }
-            catch (HttpRequestException ex)
+            catch (Exception ex) when (ex is HttpRequestException or IOException)
             {
-                // Error de red: reintentable. En el último intento, degrada.
+                // Error de red, o el stream se cortó a mitad (IOException). Reintentable: el texto
+                // parcial acumulado se descarta y se pide de nuevo. En el último intento, degrada.
                 if (isLastAttempt)
                 {
                     AnthropicLog.Network(logger, ex.Message);
@@ -153,23 +168,86 @@ internal sealed class AnthropicMessagesClient(
         return new AnthropicVisionResult(false, null, 503, MsgManual);
     }
 
-    private static string? FirstText(AnthropicMessagesResponse? body)
+    /// <summary>
+    /// Consume el stream SSE y devuelve el texto concatenado de los bloques de texto, el
+    /// <c>stop_reason</c> final y el tipo de error del proveedor si llegó uno a mitad del stream.
+    /// Los eventos que no aportan texto (ping, content_block_start/stop) se ignoran a propósito.
+    /// </summary>
+    private static async Task<(string Text, string? StopReason, string? Error)> ReadStreamAsync(
+        HttpResponseMessage response,
+        CancellationToken ct)
     {
-        if (body?.Content is null)
-            return null;
-        foreach (var block in body.Content)
+        var text = new StringBuilder();
+        string? stopReason = null;
+
+        var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        await using (stream.ConfigureAwait(false))
         {
-            if (block.Type == "text" && !string.IsNullOrEmpty(block.Text))
-                return block.Text;
+            using var reader = new StreamReader(stream);
+
+            while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+            {
+                if (!line.StartsWith("data:", StringComparison.Ordinal))
+                    continue;
+
+                var payload = line["data:".Length..].Trim();
+                if (payload.Length == 0)
+                    continue;
+
+                using var doc = JsonDocument.Parse(payload);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("type", out var typeProperty))
+                    continue;
+
+                switch (typeProperty.GetString())
+                {
+                    case "content_block_delta":
+                        if (root.TryGetProperty("delta", out var delta)
+                            && delta.TryGetProperty("type", out var deltaType)
+                            && deltaType.GetString() == "text_delta"
+                            && delta.TryGetProperty("text", out var chunk))
+                        {
+                            text.Append(chunk.GetString());
+                        }
+                        break;
+
+                    case "message_delta":
+                        if (root.TryGetProperty("delta", out var messageDelta)
+                            && messageDelta.TryGetProperty("stop_reason", out var reason)
+                            && reason.ValueKind == JsonValueKind.String)
+                        {
+                            stopReason = reason.GetString();
+                        }
+                        break;
+
+                    case "error":
+                        var tipo = root.TryGetProperty("error", out var error)
+                            && error.TryGetProperty("type", out var errorType)
+                                ? errorType.GetString()
+                                : null;
+                        return (text.ToString(), stopReason, tipo ?? "unknown");
+
+                    case "message_stop":
+                        return (text.ToString(), stopReason, null);
+                }
+            }
         }
-        return null;
+
+        return (text.ToString(), stopReason, null);
     }
 
     // ── Contrato Anthropic Messages API (payload de visión) ───────────────────
+    /// <param name="Stream">
+    /// Siempre true. Una petición de visión con un expediente escaneado lleva ~100k tokens de entrada,
+    /// y sin streaming la conexión pasa minutos en silencio esperando la respuesta completa: medido,
+    /// un expediente de 9,7 MB moría por «connection reset» a los 2m09s, y el mismo archivo en
+    /// streaming resolvía en 19 s.
+    /// </param>
     private sealed record AnthropicMessagesRequest(
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("max_tokens")] int MaxTokens,
-        [property: JsonPropertyName("messages")] IReadOnlyList<AnthropicMessage> Messages);
+        [property: JsonPropertyName("messages")] IReadOnlyList<AnthropicMessage> Messages,
+        [property: JsonPropertyName("stream")] bool Stream = true);
 
     private sealed record AnthropicMessage(
         [property: JsonPropertyName("role")] string Role,
@@ -184,17 +262,6 @@ internal sealed class AnthropicMessagesClient(
         [property: JsonPropertyName("type")] string Type,
         [property: JsonPropertyName("media_type")] string MediaType,
         [property: JsonPropertyName("data")] string Data);
-
-    private sealed record AnthropicMessagesResponse(
-        [property: JsonPropertyName("content")] IReadOnlyList<AnthropicResponseBlock>? Content,
-        [property: JsonPropertyName("error")] AnthropicError? Error);
-
-    private sealed record AnthropicResponseBlock(
-        [property: JsonPropertyName("type")] string? Type,
-        [property: JsonPropertyName("text")] string? Text);
-
-    private sealed record AnthropicError(
-        [property: JsonPropertyName("type")] string? Type);
 }
 
 /// <summary>Logging source-generated (CA1848) del cliente Anthropic. Nunca loguea imágenes, PDFs ni datos extraídos.</summary>
@@ -220,4 +287,7 @@ internal static partial class AnthropicLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Anthropic OCR: respuesta no interpretable (JSON)")]
     public static partial void InvalidResponse(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Anthropic OCR: la respuesta se cortó por max_tokens; el JSON llega incompleto")]
+    public static partial void Truncated(ILogger logger);
 }

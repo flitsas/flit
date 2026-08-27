@@ -87,7 +87,7 @@ describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', ()
     renderDeclaraciones('traspaso');
 
     expect(
-      await screen.findByLabelText('Agregar trámite simultáneo'),
+      await screen.findByRole('switch', { name: 'Cambio de Color' }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText('Tipo de servicio')).not.toBeInTheDocument();
     expect(mocks.listVehicleServiceTypes).not.toHaveBeenCalled();
@@ -144,16 +144,12 @@ describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', ()
     expect(gateVigente(onGate)).toBe(false);
   });
 
-  /**
-   * Misma escalera que el actor jurídico (HU #10906): si la empresa ya está en el directorio del
-   * tenant NO se gasta una consulta al proveedor externo. Es instantáneo y sigue funcionando aunque
-   * el RUES esté caído — el caso más común, porque las vinculadoras se repiten entre trámites.
-   */
-  it('si la empresa ya está en el directorio, la precarga sin consultar el RUES', async () => {
+  it('si la empresa está en el directorio, igual consulta RUES y usa esa razón social', async () => {
     mocks.lookupLegalRepresentativeByNit.mockResolvedValue({
       company: { nit: NIT_EMPRESA, razonSocial: 'BANCOLOMBIA S.A.S' },
       representatives: [],
     });
+    mocks.ruesPreview.mockResolvedValue({ found: true, nit: NIT_EMPRESA, razonSocial: 'TRANSPORTES SAS' });
     const user = userEvent.setup();
     const onGate = renderDeclaraciones();
 
@@ -161,12 +157,10 @@ describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', ()
     await user.type(await screen.findByLabelText('NIT empresa vinculadora'), NIT_EMPRESA);
     await user.click(screen.getByRole('button', { name: 'Buscar empresa en RUES' }));
 
+    await waitFor(() => expect(mocks.ruesPreview).toHaveBeenCalled());
     const razonSocial = await screen.findByLabelText('Razón social');
-    expect(razonSocial).toHaveTextContent(/^BANCOLOMBIA S\.A\.S$/);
-    // El proveedor externo NO se toca cuando el directorio ya tenía el dato.
-    expect(mocks.ruesPreview).not.toHaveBeenCalled();
-    // Y se dice de dónde salió: no se consultó el RUES, y el gestor tiene derecho a saberlo.
-    expect(await screen.findByText(/Precargado desde el directorio/i)).toBeInTheDocument();
+    expect(razonSocial).toHaveTextContent(/^TRANSPORTES SAS$/);
+    expect(screen.queryByText(/Precargado desde el directorio/i)).toBeNull();
     await waitFor(() => expect(gateVigente(onGate)).toBe(true));
   });
 

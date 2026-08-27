@@ -98,6 +98,21 @@ public sealed record ProcedureTypeGateProfile
     /// <summary>Entrada por VIN (vehículo nuevo, aún sin placa).</summary>
     public const string EntryModeVin = "VIN";
 
+    /// <summary>
+    /// Cómo se obtiene la impronta en este tipo. Independiente de <c>is_mandatory</c> en la matriz.
+    /// Ausente ⇒ se puede generar (Kyverum / FUR), incluso si el documento es opcional.
+    /// </summary>
+    public string? ImprontaSource { get; init; }
+
+    /// <summary>El sistema genera la impronta (Kyverum / consolidado / paso FUR).</summary>
+    public const string ImprontaSourceAuto = "AUTO";
+
+    /// <summary>Solo carga de archivo; no se llama al proveedor ni se difiere al FUR.</summary>
+    public const string ImprontaSourceManual = "MANUAL";
+
+    /// <summary>El gestor elige generar o cargar, y puede revertir.</summary>
+    public const string ImprontaSourceOperatorChoice = "OPERATOR_CHOICE";
+
     /// <summary>Entrada por placa o VIN (el operador elige).</summary>
     public const string EntryModeBoth = "BOTH";
 
@@ -156,4 +171,12 @@ public sealed record ProcedureTypeGateProfile
 
         return string.Equals(EntryMode, EntryModeVin, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// ¿Este tipo admite generación automática de impronta? Solo <see cref="ImprontaSourceManual"/>
+    /// la apaga. Ausente, <c>AUTO</c> o <c>OPERATOR_CHOICE</c> la permiten — el obligatorio de la
+    /// matriz no entra en esta pregunta.
+    /// </summary>
+    public bool AllowsAutomaticImpronta() =>
+        !string.Equals(ImprontaSource, ImprontaSourceManual, StringComparison.OrdinalIgnoreCase);
 }

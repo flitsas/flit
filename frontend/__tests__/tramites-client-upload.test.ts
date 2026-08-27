@@ -222,6 +222,18 @@ describe('evaluateOcr / helpers OCR', () => {
     expect(evaluateOcr({ es_valido: true, vehiculo_vin: 'AAA' }, null).rechazado).toBe(false);
   });
 
+  it('rechaza cuando la API marca ok=false aunque el JSON traiga es_valido', () => {
+    const r = evaluateOcr({ es_valido: true }, null, false);
+    expect(r.rechazado).toBe(true);
+    expect(r.motivo).toContain('no confirmó');
+  });
+
+  it('con ok=false y es_valido false usa el motivo de tipo', () => {
+    expect(
+      evaluateOcr({ es_valido: false, observaciones: 'Es una factura.' }, null, false).motivo,
+    ).toContain('Es una factura.');
+  });
+
   it('normalizeVin deja sólo alfanuméricos en mayúsculas', () => {
     expect(normalizeVin('abc-123 xyz')).toBe('ABC123XYZ');
     expect(normalizeVin(null)).toBe('');
@@ -233,6 +245,7 @@ describe('evaluateOcr / helpers OCR', () => {
     expect(isOcrTipo('matricula_inicial', 'otro')).toBe(false);
     expect(isOcrTipo('traspaso', 'impronta')).toBe(true);
     expect(isOcrTipo('traspaso', 'factura')).toBe(false);
+    expect(isOcrTipo('matricula_inicial', 'SOAT')).toBe(true);
   });
 
   it('base64ToPdfFile produce un File PDF con nombre .pdf', () => {
