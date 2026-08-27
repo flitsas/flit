@@ -184,12 +184,15 @@ describe('ActorsForm — inventario: matrícula inicial (un comprador, layout pa
     expect(screen.getByRole('heading', { name: 'Datos del comprador' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Datos de contacto' })).toBeInTheDocument();
 
-    // 1 · Tipo de persona: grupo con las dos naturalezas posibles del actor.
-    const tipoPersona = screen.getByRole('group', { name: 'Tipo de persona' });
-    expect(within(tipoPersona).getByRole('button', { name: 'Persona Natural' })).toBeInTheDocument();
+    // 1 · Tipo de documento: es el único control de la naturaleza de la persona (elegir NIT es lo
+    // que la declara jurídica). Antes había aquí un interruptor Persona Natural / Jurídica aparte.
+    const tipoDoc = screen.getByLabelText('Tipo de documento');
+    expect(tipoDoc).toHaveValue('CC');
     expect(
-      within(tipoPersona).getByRole('button', { name: 'Persona Jurídica' }),
+      within(tipoDoc).getByRole('option', { name: 'NIT' }),
     ).toBeInTheDocument();
+    // La tarjeta de identidad NO se ofrece: ningún proveedor de conductor la consulta.
+    expect(within(tipoDoc).queryByRole('option', { name: /Tarjeta de identidad/ })).toBeNull();
 
     // 2 · Identificación: número de documento + su consulta a la fuente oficial.
     expect(screen.getByLabelText('Número de documento')).toBeInTheDocument();
@@ -222,7 +225,7 @@ describe('ActorsForm — inventario: matrícula inicial (un comprador, layout pa
   it('persona jurídica: el nombre pasa a razón social y la consulta al RUES', async () => {
     const user = await renderMatricula();
 
-    await user.click(screen.getByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(screen.getByLabelText('Tipo de documento'), 'NIT');
 
     expect(screen.getByLabelText(/^Razón social/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Consultar RUES' })).toBeInTheDocument();
@@ -235,7 +238,7 @@ describe('ActorsForm — inventario: matrícula inicial (un comprador, layout pa
 
     expect(screen.getByLabelText(/^Fecha de expedición del documento/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(screen.getByLabelText('Tipo de documento'), 'NIT');
     expect(screen.queryByLabelText(/^Fecha de expedición del documento/)).toBeNull();
   });
 
@@ -249,16 +252,17 @@ describe('ActorsForm — inventario: matrícula inicial (un comprador, layout pa
 describe('ActorsForm — inventario: representante legal (persona jurídica)', () => {
   it('conserva todos los datos del representante legal', async () => {
     const user = await renderMatricula();
-    await user.click(screen.getByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(screen.getByLabelText('Tipo de documento'), 'NIT');
 
-    // Tipo de documento del representante: Persona Natural, por eso NO ofrece NIT.
-    const tipoDoc = screen.getByLabelText('Tipo de documento');
+    // Tipo de documento del representante: Persona Natural, por eso NO ofrece NIT. Se busca por id
+    // porque ahora el actor también tiene su propio selector con la misma etiqueta.
+    const tipoDoc = document.getElementById('0-rl-tipoDoc') as HTMLSelectElement;
+    expect(tipoDoc).not.toBeNull();
     const opciones = within(tipoDoc).getAllByRole('option');
     expect(opciones.map((o) => o.textContent)).toEqual([
       'Cédula de ciudadanía (CC)',
       'Cédula de extranjería (CE)',
       'Pasaporte (PAS)',
-      'Tarjeta de identidad (TI)',
     ]);
     expect(within(tipoDoc).queryByRole('option', { name: 'NIT' })).toBeNull();
 
@@ -280,7 +284,7 @@ describe('ActorsForm — inventario: representante legal (persona jurídica)', (
 
     const user = await renderMatricula();
     await user.type(screen.getByLabelText('Número de documento'), '900555666');
-    await user.click(screen.getByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(screen.getByLabelText('Tipo de documento'), 'NIT');
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
 
     const selector = await screen.findByLabelText('Representante legal que firma');
@@ -292,7 +296,7 @@ describe('ActorsForm — inventario: representante legal (persona jurídica)', (
 
     const user = await renderMatricula();
     await user.type(screen.getByLabelText('Número de documento'), '900555666');
-    await user.click(screen.getByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(screen.getByLabelText('Tipo de documento'), 'NIT');
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
 
     const mecanismo = await screen.findByLabelText('Firma con la que se registra el trámite');
@@ -317,20 +321,16 @@ describe('ActorsForm — inventario: traspaso (vendedor y comprador)', () => {
       await renderTraspaso();
       const tarjeta = screen.getByRole('group', { name: rol });
 
-      const tipoPersona = within(tarjeta).getByRole('group', { name: 'Tipo de persona' });
-      expect(
-        within(tipoPersona).getByRole('button', { name: 'Persona Natural' }),
-      ).toBeInTheDocument();
-      expect(
-        within(tipoPersona).getByRole('button', { name: 'Persona Jurídica' }),
-      ).toBeInTheDocument();
-
       expect(within(tarjeta).getByLabelText(/^Número de documento/)).toBeInTheDocument();
-      // Comprador ahora tiene selector de tipo de documento (Lovable P1); vendedor mantiene personTypeSelector.
+      // Las DOS tarjetas tienen ahora selector de tipo de documento: es el único control de la
+      // naturaleza de la persona, así que el vendedor ya no puede quedarse sin él (antes tenía en su
+      // lugar el interruptor Persona Natural / Jurídica).
+      expect(within(tarjeta).getByLabelText('Tipo de documento')).toBeInTheDocument();
+      // La naturaleza declarada se lee en la insignia de la cabecera. El vendedor es la excepción:
+      // mientras el RUNT no responda, su insignia muestra el estado de la consulta, porque todavía
+      // no hay identidad que acusar.
       if (rol === 'Comprador') {
-        expect(within(tarjeta).getByLabelText('Tipo de documento')).toBeInTheDocument();
-      } else {
-        expect(within(tarjeta).queryByLabelText('Tipo de documento')).not.toBeInTheDocument();
+        expect(within(tarjeta).getByText('Persona Natural')).toBeInTheDocument();
       }
       expect(within(tarjeta).getByRole('button', { name: 'Consultar RUNT' })).toBeInTheDocument();
       expect(within(tarjeta).getByLabelText(/^Nombres y apellidos/)).toBeInTheDocument();
@@ -341,12 +341,14 @@ describe('ActorsForm — inventario: traspaso (vendedor y comprador)', () => {
     },
   );
 
-  it('vendedor no captura tipo de documento a mano; comprador sí lo captura (CC por defecto)', async () => {
+  it('vendedor y comprador capturan ambos el tipo de documento (CC por defecto)', async () => {
+    // Antes solo el comprador lo capturaba y el vendedor declaraba su naturaleza con el interruptor
+    // Persona Natural / Jurídica. Ahora el documento es el único control, así que va en los dos.
     await renderTraspaso();
-    const vendedor = screen.getByRole('group', { name: 'Vendedor' });
-    const comprador = screen.getByRole('group', { name: 'Comprador' });
-    expect(within(vendedor).queryByLabelText('Tipo de documento')).not.toBeInTheDocument();
-    expect(within(comprador).getByLabelText('Tipo de documento')).toBeInTheDocument();
+    for (const rol of ['Vendedor', 'Comprador']) {
+      const tarjeta = screen.getByRole('group', { name: rol });
+      expect(within(tarjeta).getByLabelText('Tipo de documento')).toHaveValue('CC');
+    }
   });
 
   it('con RNMC cada actor conserva su fecha de expedición', async () => {
@@ -393,7 +395,7 @@ describe('ActorsForm — inventario: reglas que el rediseño no puede aflojar', 
     // Se escribe el NIT ANTES de cambiar a jurídica: mientras el actor es natural el rótulo
     // «Número de documento» todavía es único (el representante legal aún no está en pantalla).
     await user.type(screen.getByLabelText('Número de documento'), '900555666');
-    await user.click(screen.getByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(screen.getByLabelText('Tipo de documento'), 'NIT');
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
     await screen.findByText(/Empresa encontrada en RUES/i);
 
@@ -414,14 +416,14 @@ describe('ActorsForm — inventario: reglas que el rediseño no puede aflojar', 
  * muestra NIT directamente. El representante legal conserva su propio selector.
  */
 describe('Tipo de documento del actor', () => {
-  it('matrícula NO muestra selector de tipo en el comprador natural; la consulta usa CC por defecto', async () => {
+  it('matrícula muestra el selector de tipo y consulta con lo elegido (CC por defecto)', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" layout="split" />);
     await screen.findByRole('form', { name: 'Captura de actores del trámite' });
 
-    // No debe haber selector de tipo en el layout split de matrícula.
-    expect(screen.queryByLabelText('Tipo de documento')).toBeNull();
-    expect(document.getElementById('comprador-tipoDoc')).toBeNull();
+    // El layout partido no tenía ningún selector: asumía CC y ahí no se podía declarar una empresa
+    // compradora. Ahora lo tiene, con CC de arranque para no cambiarle el default a nadie.
+    expect(screen.getByLabelText('Tipo de documento')).toHaveValue('CC');
 
     await user.type(
       screen.getByPlaceholderText(/Número de documento del comprador/),
@@ -437,13 +439,17 @@ describe('Tipo de documento del actor', () => {
     );
   });
 
-  it('en persona jurídica el grid cambia a NIT y el selector de tipo (comprador-tipoDoc) no aparece', async () => {
+  it('elegir NIT declara la persona jurídica: el grid pasa a NIT y la consulta se va al RUES', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" layout="split" />);
     await screen.findByRole('form', { name: 'Captura de actores del trámite' });
 
-    await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
-    // Al cambiar a jurídica el grid muestra NIT directamente; comprador-tipoDoc no se renderiza.
-    expect(document.getElementById('comprador-tipoDoc')).toBeNull();
+    await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'NIT');
+
+    // El selector se queda (es el control, ya no un accesorio del interruptor) y el resto del paso
+    // reacciona: rótulo NIT, insignia de lectura y la consulta apuntando al registro mercantil.
+    expect(document.getElementById('comprador-tipoDoc')).toHaveValue('NIT');
+    expect(screen.getByLabelText('NIT')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Consultar RUES' })).toBeInTheDocument();
   });
 });

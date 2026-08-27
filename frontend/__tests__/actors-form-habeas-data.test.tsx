@@ -68,7 +68,7 @@ describe('ActorsForm — AC1 (HU #10956) el check de Habeas Data ya no se ofrece
   it('matrícula (SPLIT, persona jurídica): tampoco muestra el checkbox', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
+    await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'NIT');
     expect(
       screen.queryByRole('checkbox', { name: /Autorizo la reutilización/i }),
     ).not.toBeInTheDocument();
