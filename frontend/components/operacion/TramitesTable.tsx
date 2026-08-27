@@ -987,8 +987,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               rangoPropioHasta={rangoPropioHasta}
               onRangoPropioDesdeChange={setRangoPropioDesde}
               onRangoPropioHastaChange={setRangoPropioHasta}
-              estado={estado}
-              onEstadoChange={handleEstadoChange}
               filtrosEspecificos={filtrosEspecificos}
               onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
               placa={placaFilter}
@@ -1023,11 +1021,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           }
         />
 
-        {/* KPIs por estado (solo lectura) + CTA Nuevo trámite */}
+        {/* KPIs por estado (filtro) + CTA Nuevo trámite */}
         <div className="flex items-stretch gap-4">
           {!loading && !error ? (
             <div className="min-w-0 flex-1">
-              <EstadoFunnel counts={estadoCounts} />
+              <EstadoFunnel
+                counts={estadoCounts}
+                selected={estado}
+                onSelect={handleEstadoChange}
+              />
             </div>
           ) : null}
           <button

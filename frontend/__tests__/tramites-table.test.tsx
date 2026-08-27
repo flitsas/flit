@@ -186,6 +186,31 @@ describe('TramitesTable — paginación', () => {
   });
 });
 
+describe('TramitesTable — filtro por estado en el slider KPI', () => {
+  it('filtra la tabla al clic en una tarjeta y no expone el filtro en + Filtro', async () => {
+    const [a, b] = makeInstances(2);
+    mocks.listInstances.mockResolvedValue([
+      { ...a, estado: 'borrador', placa: 'AAA111' },
+      { ...b, estado: 'entregado', placa: 'BBB222' },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('AAA111');
+    expect(screen.getByText('BBB222')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Entregado: 1 trámite' }));
+    expect(screen.queryByText('AAA111')).not.toBeInTheDocument();
+    expect(screen.getByText('BBB222')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Entregado: 1 trámite' }));
+    expect(screen.getByText('AAA111')).toBeInTheDocument();
+    expect(screen.getByText('BBB222')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
+    expect(screen.queryByText('Filtrar por estado')).not.toBeInTheDocument();
+  });
+});
+
 describe('TramitesTable — validación de identidad async (HU #10350, AC3)', () => {
   const [base] = makeInstances(1);
 
