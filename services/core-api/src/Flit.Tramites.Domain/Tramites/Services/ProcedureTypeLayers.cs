@@ -103,9 +103,36 @@ public static class ProcedureTypeLayers
     ///
     /// <para>La inscripción de prenda entra por el primer disparador y no por el segundo: crea un
     /// gravamen que todavía no existe, así que el RUNT no reporta nada.</para>
+    ///
+    /// <para><b>El segundo disparador solo cuenta donde la prenda cabe.</b> «El RUNT reportó un
+    /// gravamen» es un hecho del VEHÍCULO; que haya que resolverlo es responsabilidad del TRÁMITE, y
+    /// no son lo mismo. Sin esa distinción, un cambio de color sobre un carro con prenda exigía una
+    /// decisión de prenda que el asistente no pinta (la familia OTROS no acumula gravamen, ADR-0050) y
+    /// que <c>RegistrarPrendaHandler</c> rechaza con <c>prenda_no_admitida_en_tipo</c>: bloqueo sin
+    /// salida, el mismo defecto que ya se corrigió en el override del OT y que entraba también por
+    /// aquí. Se resuelve con el MISMO predicado —<see cref="ProcedureTypeGateProfile.AdmiteDimensionDePrenda"/>—
+    /// que gobierna el gate de preparación, el blocker del organismo y el registro de la decisión.</para>
+    ///
+    /// <para>El perfil y la familia son parámetros y no una consulta interna A PROPÓSITO: obligan a
+    /// cada llamador a aportarlos, así que no queda una sobrecarga que ignore la familia a la que
+    /// caerse por descuido. El trámite cuya prenda ES el trámite pasa igual por el primer disparador:
+    /// <see cref="EsTipoPrendaBase"/> también satisface el predicado.</para>
+    ///
+    /// <para>El prevuelo NO se toca: el semáforo <c>gravamenes</c> lo produce el mapper de la consulta
+    /// y se sigue mostrando en amarillo aunque el trámite no tenga nada que decidir. Informar no es
+    /// exigir.</para>
     /// </summary>
-    public static bool ExigeDecisionDePrenda(string? code, bool runtReportaGravamen) =>
-        EsTipoPrendaBase(code) || runtReportaGravamen;
+    public static bool ExigeDecisionDePrenda(
+        ProcedureTypeGateProfile perfil,
+        string? familyCode,
+        string? code,
+        bool runtReportaGravamen)
+    {
+        ArgumentNullException.ThrowIfNull(perfil);
+
+        return perfil.AdmiteDimensionDePrenda(familyCode, code)
+            && (EsTipoPrendaBase(code) || runtReportaGravamen);
+    }
 
     /// <summary><c>true</c> si la familia acumula trámites complementarios sobre el tipo base.</summary>
     /// <remarks>
