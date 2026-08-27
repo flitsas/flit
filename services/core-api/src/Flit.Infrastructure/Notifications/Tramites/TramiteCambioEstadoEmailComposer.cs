@@ -17,7 +17,9 @@ public sealed record TramiteCambioEstadoEmailModel(
     bool EsTraspaso,
     IReadOnlyList<string>? CausalesRechazo = null,
     string? ObservacionRechazo = null,
-    string NombreTipoTramite = "");
+    string NombreTipoTramite = "",
+    string DestinatarioNombre = "",
+    bool DestinatarioEsEmpresa = false);
 
 /// <summary>
 /// Composer compartido de <c>tramites.aprobado</c> y <c>tramites.rechazado</c>:
@@ -86,6 +88,18 @@ public static class TramiteCambioEstadoEmailComposer
         return (subject, html);
     }
 
+    /// <summary>
+    /// Nombre con el que abre el correo. Cada destinatario recibe su propio envío (HU QA: el
+    /// vendedor ya no lee el saludo del comprador), así que el saludo sale de
+    /// <see cref="TramiteCambioEstadoEmailModel.DestinatarioNombre"/>. Cuando viene vacío — vista
+    /// previa, envío de prueba, o un lote sin partes con correo — se conserva el comprador, que
+    /// era el destinatario único antes de separar.
+    /// </summary>
+    private static string GreetingName(TramiteCambioEstadoEmailModel model) =>
+        string.IsNullOrWhiteSpace(model.DestinatarioNombre)
+            ? model.CompradorNombre
+            : model.DestinatarioNombre.Trim();
+
     private static string BuildSubject(string placa, string estado) =>
         $"[FLIT] Notificación radicación del trámite — {placa} — {estado}";
 
@@ -115,9 +129,10 @@ public static class TramiteCambioEstadoEmailComposer
         var logoUrl = EncAttr(ResolveLogoUrl(assetsBaseUrl));
         var estadoEnc = Enc(estado);
 
-        var saludo = model.EsTraspaso
-            ? $"Estimados Señor/a <strong style=\"color:{PrimaryBlue}\">{Enc(model.VendedorNombre)}</strong> y Señor/a <strong style=\"color:{PrimaryBlue}\">{comprador}</strong>."
-            : $"Estimado/a Señor/a <strong style=\"color:{PrimaryBlue}\">{comprador}</strong>.";
+        var destinatario = Enc(GreetingName(model));
+        var saludo = model.DestinatarioEsEmpresa
+            ? $"Estimados señores <strong style=\"color:{PrimaryBlue}\">{destinatario}</strong>."
+            : $"Estimado/a Señor/a <strong style=\"color:{PrimaryBlue}\">{destinatario}</strong>.";
 
         var introParte = ProcedureNounPhrase(model, placa, forRentingLead: false);
 
@@ -221,8 +236,12 @@ public static class TramiteCambioEstadoEmailComposer
         sb.Append(CultureInfo.InvariantCulture,
             $"<tr><td class=\"renting-header-bg\" bgcolor=\"#ffffff\" style=\"padding:0;background-color:#ffffff !important;\"><img src=\"{headerUrl}\" alt=\"Compra Tu Usado — Renting Colombia\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;background-color:#ffffff;\"/></td></tr>");
         sb.Append("<tr><td class=\"renting-body-bg\" style=\"padding:28px 32px 8px;font-size:15px;line-height:1.55;background-color:#ffffff;\">");
+        var destinatario = Enc(GreetingName(model));
+        var saludoRenting = model.DestinatarioEsEmpresa
+            ? $"<strong>{destinatario}</strong>, ¡Es un gusto saludarlos!"
+            : $"<strong>{destinatario}</strong>, ¡Es un gusto saludarte!";
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 16px;\"><strong>{comprador}</strong>, ¡Es un gusto saludarte!</p>");
+            $"<p style=\"margin:0 0 16px;\">{saludoRenting}</p>");
         sb.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 20px;\">{lead}</p>");
         sb.Append("<p style=\"margin:0 0 10px;\"><strong>Detalles clave:</strong></p>");
         if (model.EsTraspaso)
