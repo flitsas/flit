@@ -1169,8 +1169,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
    */
   const [consultasManuales, setConsultasManuales] = useState(0);
 
-  /** Envuelve una consulta para que levante el velo de espera; solo la usan los botones. */
-  const conVelo = (consulta: Promise<unknown>) => {
+  /**
+   * Envuelve una consulta para que levante el velo de espera; solo la usan los botones.
+   *
+   * Genérico, no `Promise<unknown>`: con `unknown` el resultado se estrechaba a `{}` en el
+   * `if` de quien lo llamaba, y guardar eso en el estado de la ficha no compilaba (`{}` no es
+   * un `LookupState`). El velo no mira lo que devuelve la consulta, así que el tipo pasa de largo.
+   */
+  const conVelo = <T,>(consulta: Promise<T>): Promise<T> => {
     setConsultasManuales((n) => n + 1);
     return consulta.finally(() => setConsultasManuales((n) => Math.max(0, n - 1)));
   };
@@ -1350,7 +1356,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         tramitesClient.lookupLegalRepresentativeByNit(companyNit).catch(() => null),
       );
       if (fresh) {
-        directory = fresh as LegalRepresentativeLookupResult;
+        directory = fresh;
         setRunt((prev) => {
           const cur = prev[index];
           if (cur?.status !== 'found' || cur.kind !== 'rues') return prev;
