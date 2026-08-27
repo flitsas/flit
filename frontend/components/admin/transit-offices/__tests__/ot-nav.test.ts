@@ -10,6 +10,12 @@ import {
 } from "../ot-nav";
 
 describe("ot-nav — refactor adminOT", () => {
+  it("incluye el tab 'mandatos' en OT_HUB_TABS", () => {
+    const tab = OT_HUB_TABS.find((t) => t.id === "mandatos");
+    expect(tab).toBeDefined();
+    expect(tab?.label).toBe("Mandatos");
+  });
+
   it("incluye el tab 'usuarios' en OT_HUB_TABS", () => {
     const tab = OT_HUB_TABS.find((t) => t.id === "usuarios");
     expect(tab).toBeDefined();

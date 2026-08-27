@@ -41,7 +41,7 @@ public sealed class TransitOfficeMandateConfigEntity
     /// Modo de asignación: <c>signer</c> | <c>institutional</c> | <c>open</c>.
     /// Independiente de <see cref="TemplateCode"/> (redacción).
     /// </summary>
-    public string AssignmentMode { get; set; } = "signer";
+    public string AssignmentMode { get; set; } = "open";
 
     /// <summary><c>none</c> | <c>pdf</c> | <c>editor</c>. Sin propia ⇒ se usa <see cref="TemplateCode"/>.</summary>
     public string CustomTemplateKind { get; set; } = "none";

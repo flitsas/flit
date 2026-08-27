@@ -77,10 +77,8 @@ public sealed class ConsumptionHandlerTests
     }
 
     [Fact]
-    public async Task ActiveDeeds_ReturnsAllVigentesForSameCompany_DoesNotCollapse()
+    public async Task ActiveDeeds_SameCompany_KeepsMostRecentOnly()
     {
-        // Feature #10929: dos escrituras VIGENTES de la MISMA compañía → el paso 1 debe ver AMBAS,
-        // ya no se colapsa a una sola fila por NIT.
         await using var ctx = NewContext();
         var deedRepo = new DeedRepository(ctx);
         var companyRepo = new LegalRepresentativeRepository(ctx);
@@ -90,7 +88,7 @@ public sealed class ConsumptionHandlerTests
 
         var nearest = new DateOnly(2026, 9, 30);
         var farthest = new DateOnly(2027, 3, 31);
-        var idCorta = await deedRepo.CreateAsync(new SaveDeedData(
+        await deedRepo.CreateAsync(new SaveDeedData(
             Tenant, null, "Corta", "path-1", "sha-1", new DateOnly(2026, 1, 1), nearest, [companyId], null), Ct);
         var idLarga = await deedRepo.CreateAsync(new SaveDeedData(
             Tenant, null, "Larga", "path-2", "sha-2", new DateOnly(2026, 1, 1), farthest, [companyId], null), Ct);
@@ -100,15 +98,9 @@ public sealed class ConsumptionHandlerTests
 
         var result = await handler.HandleAsync(new ListActiveDeedsForTenantQuery { TenantId = Tenant }, Ct);
 
-        // Ambas escrituras del mismo NIT, ordenadas por vigencia más próxima primero.
-        result.Should().HaveCount(2);
-        result.Should().OnlyContain(d => d.Nit == Nit);
-        result[0].VigenciaHasta.Should().Be(nearest);
-        result[0].Id.Should().Be(idCorta);
-        result[0].Description.Should().Be("Corta");
-        result[1].VigenciaHasta.Should().Be(farthest);
-        result[1].Id.Should().Be(idLarga);
-        result[1].Description.Should().Be("Larga");
+        result.Should().ContainSingle();
+        result[0].Id.Should().Be(idLarga);
+        result[0].Description.Should().Be("Larga");
     }
 
     [Fact]

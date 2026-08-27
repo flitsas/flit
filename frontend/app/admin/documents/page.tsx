@@ -10,6 +10,12 @@ import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { DocumentTypeListTable } from "@/components/admin/documents/DocumentTypeListTable";
 import { CreateDocumentTypeDialog } from "@/components/admin/documents/CreateDocumentTypeDialog";
 import {
+  DocumentTypeFiltersBar,
+  EMPTY_DOCUMENT_TYPE_FILTERS,
+  type DocumentTypeCatalogFilters,
+} from "@/components/admin/documents/DocumentTypeFiltersBar";
+import { ConfirmDeleteDocumentTypeDialog } from "@/components/admin/documents/ConfirmDeleteDocumentTypeDialog";
+import {
   DocumentInUseDialog,
   type DocumentInUseProcedureType,
 } from "@/components/admin/documents/DocumentInUseDialog";
@@ -17,6 +23,7 @@ import {
   createDocumentType,
   deactivateDocumentType,
   fetchDocumentTypes,
+  purgeDocumentType,
   reactivateDocumentType,
   updateDocumentType,
 } from "@/lib/api/admin-document-types";
@@ -39,10 +46,13 @@ function DocumentsCatalog() {
   const router = useRouter();
   const { show } = useToast();
   const [page, setPage] = useState(1);
+  const [draftFilters, setDraftFilters] = useState<DocumentTypeCatalogFilters>(EMPTY_DOCUMENT_TYPE_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<DocumentTypeCatalogFilters>(EMPTY_DOCUMENT_TYPE_FILTERS);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<DocumentTypePagedResult | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DocumentType | null>(null);
+  const [deleting, setDeleting] = useState<DocumentType | null>(null);
   // Documento que no se pudo desactivar por estar en uso (abre el modal emergente 409).
   const [inUse, setInUse] = useState<{
     documentName: string;
@@ -57,7 +67,14 @@ function DocumentsCatalog() {
         // siguen visibles (badge «Inactivo», acción Desactivar deshabilitada) en lugar
         // de desaparecer. La asociación a trámites sigue ofreciendo solo activos.
         const data = await fetchDocumentTypes(
-          { page, pageSize: PAGE_SIZE, includeInactive: true },
+          {
+            page,
+            pageSize: PAGE_SIZE,
+            includeInactive: true,
+            q: appliedFilters.q || undefined,
+            origen: appliedFilters.origen || undefined,
+            estado: appliedFilters.estado || undefined,
+          },
           signal,
         );
         if (signal?.aborted) {
@@ -71,7 +88,7 @@ function DocumentsCatalog() {
         }
       }
     },
-    [page],
+    [page, appliedFilters],
   );
 
   useEffect(() => {
@@ -127,6 +144,29 @@ function DocumentsCatalog() {
     }
   };
 
+  const applyFilters = (next?: DocumentTypeCatalogFilters) => {
+    const value = next ?? draftFilters;
+    setDraftFilters(value);
+    setAppliedFilters(value);
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setDraftFilters(EMPTY_DOCUMENT_TYPE_FILTERS);
+    setAppliedFilters(EMPTY_DOCUMENT_TYPE_FILTERS);
+    setPage(1);
+  };
+
+  const handlePurge = async () => {
+    if (!deleting) {
+      return;
+    }
+    await purgeDocumentType(deleting.id);
+    show(`Documento «${deleting.nombre}» eliminado.`, "success");
+    setDeleting(null);
+    void load();
+  };
+
   const handleReactivate = async (documentType: DocumentType) => {
     try {
       await reactivateDocumentType(documentType.id);
@@ -167,10 +207,20 @@ function DocumentsCatalog() {
       </div>
 
       <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+        <DocumentTypeFiltersBar
+          value={draftFilters}
+          onChange={setDraftFilters}
+          onApply={applyFilters}
+          onClear={clearFilters}
+        />
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}
-          emptyMessage="No hay tipos de documento en el catálogo."
+          emptyMessage={
+            appliedFilters.q || appliedFilters.origen || appliedFilters.estado
+              ? "Ningún documento coincide con los filtros."
+              : "No hay tipos de documento en el catálogo."
+          }
           emptyCta={
             <CreateButton label="Crear documento" icon={FilePlus} onClick={openCreate} />
           }
@@ -186,6 +236,7 @@ function DocumentsCatalog() {
               onEdit={openEdit}
               onDeactivate={handleDeactivate}
               onReactivate={handleReactivate}
+              onDelete={setDeleting}
             />
           )}
         </UiStateBoundary>
@@ -203,6 +254,14 @@ function DocumentsCatalog() {
         }
         onSaved={handleSaved}
       />
+
+      {deleting && (
+        <ConfirmDeleteDocumentTypeDialog
+          documentType={deleting}
+          onClose={() => setDeleting(null)}
+          onConfirm={handlePurge}
+        />
+      )}
 
       {inUse && (
         <DocumentInUseDialog

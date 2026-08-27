@@ -102,6 +102,35 @@ describe('ActorsForm — layout split (un comprador)', () => {
     expect(screen.queryByRole('group', { name: 'Vendedor' })).toBeNull();
   });
 
+  it('en persona jurídica, Datos de contacto va antes del representante legal', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
+    const contact = screen.getByRole('heading', { name: 'Datos de contacto' });
+    const rl = screen.getByRole('heading', { name: 'Representante legal' });
+    expect(contact.compareDocumentPosition(rl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('RUES: si la razón social trae coma, el campo solo muestra el tramo anterior', async () => {
+    mocks.ruesPersonLookup.mockResolvedValue({
+      found: true,
+      razonSocial:
+        'BANCOLOMBIA S.A., ADEMÁS  PODRÁ GIRAR BAJO LA DENOMINACIÓN BANCO DE COLOMBIA S.A.',
+      documentNumber: '890903938',
+      source: 'RUES',
+      mode: 'real',
+    });
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
+    await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '890903938');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
+    expect(await screen.findByText(/Empresa encontrada en RUES/i)).toBeInTheDocument();
+    const razon = screen.getByLabelText(/^Razón social/);
+    expect(razon).toHaveValue('BANCOLOMBIA S.A.');
+    expect(screen.queryByDisplayValue(/ADEMÁS/)).toBeNull();
+  });
+
   it('ciudad autocomplete: filtra y selecciona (≥2 chars)', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);

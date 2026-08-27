@@ -9,6 +9,7 @@ import {
   modalidadPorPartes,
   rolesDeActores,
   transformacionDelTipo,
+  permiteGenerarImprontaAutomatica,
 } from '../wizardCapabilities';
 import type { WizardCapabilities } from '@/lib/api/types/procedure-runtime';
 
@@ -231,5 +232,25 @@ describe('esFamiliaTraspaso', () => {
     expect(esFamiliaTraspaso('MATRICULAS')).toBe(false);
     expect(esFamiliaTraspaso('OTROS')).toBe(false);
     expect(esFamiliaTraspaso(null)).toBe(false);
+  });
+});
+
+describe('generación automática de impronta', () => {
+  it('MANUAL la apaga; el resto (o ausente) la permite', () => {
+    expect(permiteGenerarImprontaAutomatica('MANUAL')).toBe(false);
+    expect(permiteGenerarImprontaAutomatica('manual')).toBe(false);
+    expect(permiteGenerarImprontaAutomatica('AUTO')).toBe(true);
+    expect(permiteGenerarImprontaAutomatica('OPERATOR_CHOICE')).toBe(true);
+    expect(permiteGenerarImprontaAutomatica(null)).toBe(true);
+    expect(permiteGenerarImprontaAutomatica(undefined)).toBe(true);
+  });
+
+  it('viaja en las capacidades efectivas', () => {
+    expect(
+      capacidadesEfectivas({ ...TRASPASO, improntaSource: 'MANUAL' }, 'TRASPASO')
+        .permiteGenerarImprontaAutomatica,
+    ).toBe(false);
+    expect(capacidadesEfectivas(TRASPASO, 'TRASPASO').permiteGenerarImprontaAutomatica).toBe(true);
+    expect(capacidadesEfectivas(null, 'TRASPASO').permiteGenerarImprontaAutomatica).toBe(true);
   });
 });

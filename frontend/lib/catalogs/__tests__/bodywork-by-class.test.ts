@@ -94,6 +94,25 @@ describe('getBodyworksForVehicleClass', () => {
     const result = getBodyworksForVehicleClass('ANFIBIO');
     expect(result).toEqual([]);
   });
+
+  it('no lista el catálogo completo: AUTOMOVIL no incluye carrocerías de CAMION', () => {
+    const auto = getBodyworksForVehicleClass('AUTOMOVIL').map((o) => o.name);
+    expect(auto).toContain('SEDAN');
+    expect(auto).not.toContain('ESTACAS');
+    expect(auto.length).toBeLessThan(getBodyworksForVehicleClass('CAMION').length);
+  });
+
+  it('CAMION no incluye carrocerías de AUTOMOVIL (SEDAN)', () => {
+    const camion = getBodyworksForVehicleClass('CAMION').map((o) => o.name);
+    expect(camion).toContain('ESTACAS');
+    expect(camion).not.toContain('SEDAN');
+  });
+
+  it('clase RUNT con calificativo resuelve la clave de catálogo (CAMION CISTERNA → CAMION)', () => {
+    const cisterna = getBodyworksForVehicleClass('CAMION CISTERNA').map((o) => o.name);
+    expect(cisterna).toEqual(getBodyworksForVehicleClass('CAMION').map((o) => o.name));
+    expect(cisterna).not.toContain('SEDAN');
+  });
 });
 
 describe('findBodyworkName — mismo tratamiento vía getBodyworksForVehicleClass', () => {

@@ -58,6 +58,12 @@ export interface BatchReviewState {
   errores: BatchOcrFileError[];
   /** Archivos originales del lote: los «no reconocidos» se resuelven cargándolos a mano. */
   archivos: File[];
+  /**
+   * Avance del análisis, para que la espera diga por dónde va en vez de ser una barra ciega. Sólo
+   * tiene sentido en `analyzing`: el lote se manda un archivo por petición, así que el operador puede
+   * saber cuántos van. null fuera de esa fase.
+   */
+  progreso: { hechos: number; total: number } | null;
   /** Error del lote completo (no de un archivo suelto). */
   error: string | null;
 }
@@ -68,6 +74,7 @@ const INITIAL_STATE: BatchReviewState = {
   noReconocidos: [],
   errores: [],
   archivos: [],
+  progreso: null,
   error: null,
 };
 
@@ -207,7 +214,12 @@ export function useProcedureBatchUpload(
         return false;
       }
 
-      setState({ ...INITIAL_STATE, phase: 'analyzing', archivos: files });
+      setState({
+        ...INITIAL_STATE,
+        phase: 'analyzing',
+        archivos: files,
+        progreso: { hechos: 0, total: files.length },
+      });
 
       // El VIN del trámite alimenta el mismo cruce que hace el cargue campo a campo. Best-effort: si no
       // se puede leer, las piezas se evalúan sin ese contraste en vez de bloquear la revisión entera.
@@ -219,25 +231,61 @@ export function useProcedureBatchUpload(
         // Silencio intencionado: ver comentario de arriba.
       }
 
-      try {
-        const result = await tramitesClient.analyzeBatch(tipos, files, tenantId);
-        setState({
-          phase: 'reviewing',
-          items: buildReviewItems(result.piezas, attachments, vin),
-          noReconocidos: result.noReconocidos,
-          errores: result.errores,
-          archivos: files,
-          error: null,
-        });
-        return true;
-      } catch (err) {
+      // Un archivo por petición, en serie. Mandar el lote entero en una sola petición hacía que un
+      // lote de 4 expedientes acumulara ~90 s de silencio y el proxy lo cortara con un 504, perdiendo
+      // TODO el lote. Trocear no cambia el trabajo ni el orden —el backend ya procesaba en serie por
+      // el límite de tasa del proveedor—, pero ninguna petición individual se acerca ya a ese corte, y
+      // un archivo que falle deja de llevarse por delante a los demás.
+      const piezas: BatchOcrPiece[] = [];
+      const noReconocidos: BatchOcrUnrecognized[] = [];
+      const errores: BatchOcrFileError[] = [];
+      let algunoRespondio = false;
+      let hechos = 0;
+
+      for (const file of files) {
+        try {
+          const result = await tramitesClient.analyzeBatch(tipos, [file], tenantId);
+          piezas.push(...result.piezas);
+          noReconocidos.push(...result.noReconocidos);
+          errores.push(...result.errores);
+          algunoRespondio = true;
+        } catch (err) {
+          // El fallo de un archivo es información para el operador, no el fin del lote: baja a la
+          // misma lista de errores por archivo que ya pinta la pantalla de revisión.
+          errores.push({
+            filename: file.name,
+            motivo: err instanceof Error ? err.message : 'No se pudo analizar el archivo.',
+          });
+        }
+
+        hechos++;
+        setState((s) => ({ ...s, progreso: { hechos, total: files.length } }));
+      }
+
+      if (!algunoRespondio) {
         setState((s) => ({
           ...s,
           phase: 'idle',
-          error: err instanceof Error ? err.message : 'No se pudo analizar la carga.',
+          items: [],
+          progreso: null,
+          error: errores[0]?.motivo ?? 'No se pudo analizar la carga.',
         }));
         return false;
       }
+
+      // buildReviewItems se calcula sobre TODAS las piezas del lote, nunca por archivo: la regla
+      // «gana la de mejor confianza por tipo» es del lote entero, y aplicarla por trozo marcaría la
+      // primera factura que llegue aunque la del último archivo sea mejor.
+      setState({
+        phase: 'reviewing',
+        items: buildReviewItems(piezas, attachments, vin),
+        noReconocidos,
+        errores,
+        archivos: files,
+        progreso: null,
+        error: null,
+      });
+      return true;
     },
     [instanceId, tenantId, modalidad],
   );

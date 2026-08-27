@@ -134,6 +134,8 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<VehicleColor> VehicleColors => Set<VehicleColor>();
 
+    public DbSet<VehicleBodywork> VehicleBodyworks => Set<VehicleBodywork>();
+
     /// <summary>Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019).</summary>
     public DbSet<VehicleServiceType> VehicleServiceTypes => Set<VehicleServiceType>();
 

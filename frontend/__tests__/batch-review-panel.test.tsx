@@ -30,6 +30,7 @@ function estado(over: Partial<BatchReviewState> = {}): BatchReviewState {
     noReconocidos: [],
     errores: [],
     archivos: [],
+    progreso: null,
     error: null,
     ...over,
   };
@@ -59,10 +60,12 @@ describe('BatchReviewPanel', () => {
     expect(screen.getByText(/De expediente\.pdf/)).toBeInTheDocument();
   });
 
-  it('reutiliza el resumen OCR del cargue campo a campo', () => {
+  it('reutiliza el resumen OCR del cargue campo a campo', async () => {
+    const user = userEvent.setup();
     renderPanel(estado({ items: buildReviewItems([pieza()], [], null) }));
 
-    // Mismos campos y mismas etiquetas que ve el operador al cargar el SOAT en su casilla.
+    await user.click(screen.getByRole('button', { name: /OCR SOAT: Verificado/ }));
+
     expect(screen.getByText('SOAT-123')).toBeInTheDocument();
     expect(screen.getByText('SEGUROS DEL ESTADO')).toBeInTheDocument();
   });

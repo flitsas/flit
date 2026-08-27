@@ -123,6 +123,7 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
         // Catálogo RUNT de colores de vehículo (transformaciones FUR) — búsqueda paginada.
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleColorCatalog, DbVehicleColorCatalog>();
+        services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog, DbVehicleBodyworkCatalog>();
         // Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019) — cerrado, 6 valores.
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleServiceTypeCatalog, DbVehicleServiceTypeCatalog>();
         // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
@@ -1144,7 +1145,7 @@ public static class InfrastructureExtensions
         {
             o.BaseUrl = Cfg("Anthropic:BaseUrl", "ANTHROPIC_BASE_URL") ?? "https://api.anthropic.com";
             o.ApiKey = Cfg("Anthropic:ApiKey", "ANTHROPIC_API_KEY") ?? "";
-            o.Model = Cfg("Anthropic:Model", "ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
+            o.Model = Cfg("Anthropic:Model", "ANTHROPIC_MODEL") ?? "claude-haiku-4-5";
             o.TimeoutSeconds = int.TryParse(Cfg("Anthropic:TimeoutSeconds", "ANTHROPIC_TIMEOUT_SECONDS"), out var t) ? t : 60;
             o.MaxTokens = int.TryParse(Cfg("Anthropic:MaxTokens", "ANTHROPIC_MAX_TOKENS"), out var m) ? m : 2000;
             o.ClassifierModel = Cfg("Anthropic:ClassifierModel", "ANTHROPIC_CLASSIFIER_MODEL") ?? "claude-sonnet-5";

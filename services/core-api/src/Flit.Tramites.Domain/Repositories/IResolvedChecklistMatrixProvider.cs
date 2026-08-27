@@ -12,7 +12,9 @@ public sealed record ResolvedChecklistDoc(
     bool Obligatorio,
     short Orden,
     /// <summary>Buzón dummy (CFD-06): se lista en el checklist pero no bloquea el avance.</summary>
-    bool EsDummy = false);
+    bool EsDummy = false,
+    /// <summary>Lo genera el sistema: no se pide en Requisitos ni bloquea el wizard/radicación.</summary>
+    bool EsGeneradoSistema = false);
 
 /// <summary>
 /// Puerto que provee la matriz documental resuelta del gestor para un trámite (HU #10522,

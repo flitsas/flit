@@ -23,6 +23,14 @@ export interface CapacidadesEfectivas {
   entraPorVin: boolean;
   /** Hay parte vendedora: el trámite transfiere la propiedad. */
   pideVendedor: boolean;
+  /**
+   * ADR-0051 — esa parte vendedora se captura tecleando datos en `ActorsForm`, en vez de llegar de
+   * otra fuente. Es DISTINTO de {@link pideVendedor}: en `TRASPASO_UNILATERAL` hay vendedor (va en
+   * el FUR, el backend lo sincroniza desde el RUNT) pero no se le pinta formulario — salvo la
+   * excepción puntual de `revealSellerForm` (`sectionConfig.actor_form`, por instancia, no por
+   * tipo). `rolesDeActores()` decide con ESTA llave, no con `pideVendedor`.
+   */
+  vendedorCapturaPorFormulario: boolean;
   /** Hay parte compradora o titular. */
   pideComprador: boolean;
   /**
@@ -74,6 +82,11 @@ export interface CapacidadesEfectivas {
    * una placa que el vehículo ya tiene.</p>
    */
   pidePlaca: boolean;
+  /**
+   * El tipo admite generar la impronta (Kyverum / paso FUR), aunque el documento sea opcional.
+   * Lo apaga solo `gate_profile.improntaSource === 'MANUAL'`.
+   */
+  permiteGenerarImprontaAutomatica: boolean;
 }
 
 /**
@@ -102,6 +115,10 @@ function desdeModalidad(familia: ProcedureFamily | WizardModalidad): Capacidades
   return {
     entraPorVin: !esTraspaso && familia !== 'OTROS',
     pideVendedor: esTraspaso,
+    // El respaldo reproduce las dos modalidades heredadas: ninguna de las dos tenía captura oculta
+    // (eso llegó con `TRASPASO_UNILATERAL`, posterior a estas dos ramas), así que aquí siempre
+    // coincide con `pideVendedor`.
+    vendedorCapturaPorFormulario: esTraspaso,
     pideComprador: true,
     // El respaldo no puede saber de locatarios: los tipos que lo llevan son posteriores a las dos
     // ramas heredadas, así que un borrador sin capacidades nunca es uno de ellos.
@@ -117,6 +134,8 @@ function desdeModalidad(familia: ProcedureFamily | WizardModalidad): Capacidades
     declaraOrganismoDestino: false,
     // El respaldo reproduce el criterio previo: pide placa quien entra por VIN.
     pidePlaca: !esTraspaso && familia !== 'OTROS',
+    // Un borrador sin capacidades no debe perder el check de generar impronta.
+    permiteGenerarImprontaAutomatica: true,
   };
 }
 
@@ -133,6 +152,13 @@ export function capacidadesEfectivas(
     // tipo lo dice, porque pedir un VIN a un trámite que ya tiene placa es un callejón sin salida.
     entraPorVin: (capabilities.entryMode ?? '').toUpperCase() === 'VIN',
     pideVendedor: capabilities.requiresSeller,
+    // Ausente ⇒ el criterio anterior a la llave: `requiresSeller`. Todo tipo que hoy captura al
+    // vendedor por formulario (todo el que declara `requiresSeller:true` salvo
+    // `TRASPASO_UNILATERAL`) sigue haciéndolo sin cambio; y un tipo SIN parte vendedora (OTROS,
+    // MATRICULA_*) nunca la infla a `true` por la sola ausencia de la llave — si no,
+    // `rolesDeActores()` (que ya NO mira `pideVendedor`) le pintaría un formulario de vendedor a un
+    // trámite que no tiene parte vendedora.
+    vendedorCapturaPorFormulario: capabilities.sellerCapturedViaForm ?? capabilities.requiresSeller,
     pideComprador: capabilities.requiresBuyer,
     pideLocatario: capabilities.requiresLessee ?? false,
     pideValorComercial: capabilities.requiresCommercialValue,
@@ -156,7 +182,14 @@ export function capacidadesEfectivas(
     pidePlaca:
       capabilities.requiresPlateRequest ??
       (capabilities.entryMode ?? '').toUpperCase() === 'VIN',
+    // Ausente ⇒ se puede generar (también si el documento es opcional). Solo MANUAL la apaga.
+    permiteGenerarImprontaAutomatica: permiteGenerarImprontaAutomatica(capabilities.improntaSource),
   };
+}
+
+/** `MANUAL` apaga Kyverum / diferir al FUR. Cualquier otro valor (o ausente) la permite. */
+export function permiteGenerarImprontaAutomatica(source: string | null | undefined): boolean {
+  return (source ?? '').trim().toUpperCase() !== 'MANUAL';
 }
 
 /**
@@ -237,7 +270,10 @@ export function decisionesDelTipoDePrenda(
  */
 export function rolesDeActores(caps: CapacidadesEfectivas): ActorRol[] {
   const roles: ActorRol[] = [];
-  if (caps.pideVendedor) roles.push('vendedor');
+  // ADR-0051 — NO es `caps.pideVendedor`: hay tipos con parte vendedora que no se captura aquí
+  // (`TRASPASO_UNILATERAL`, sincronizada desde el RUNT). Pintar su formulario es la excepción
+  // `revealSellerForm` que añade `TramiteWizard.tsx` por instancia, no la capacidad del tipo.
+  if (caps.vendedorCapturaPorFormulario) roles.push('vendedor');
   if (caps.pideComprador) roles.push('comprador');
   // El locatario va al final y SIEMPRE en paso aparte (ver `rolesDelPasoDeActores`): no se unifica
   // con el propietario porque son dos personas distintas, no las dos caras de una transferencia.

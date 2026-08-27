@@ -34,18 +34,9 @@ public sealed class TransitionProcedureInstanceHandler(
         if (!outcome.Success)
             return (null, outcome.ErrorCode, outcome.ErrorDetail);
 
-        // ADR-0036 §D9 (HU #10916) — al aprobar con firmante resuelto, regenerar el mandato con el
-        // mandatario (el generado en preparado llevaba placeholders).
-        // HU #11032 — y al ENTREGAR al organismo, regenerar TODO el expediente para que se estampen las
-        // firmas y los sellos que se hayan conseguido después de generar los documentos.
-        // Nota: esta regeneración nació para compensar que en borrador los documentos salían SIN firmas
-        // (el gate FirmasVisibles, ya retirado). Ese motivo desapareció, pero sigue haciendo falta: entre
-        // la generación y la entrega pueden completarse validaciones de identidad o capturarse firmas del
-        // baúl, y es aquí donde el expediente recoge lo que existe en el momento de salir.
-        // Best-effort en ambos casos: un fallo aquí NO revierte la transición ya persistida.
+        // Al entregar o aprobar: regenerar el mandato con mandante/mandatario (si el modo lo permite).
         if (furHandler is not null
-            && (status == TramiteEstado.Entregado
-                || (status == TramiteEstado.Aprobado && outcome.Instance!.MandateSignerId is not null)))
+            && (status == TramiteEstado.Entregado || status == TramiteEstado.Aprobado))
         {
             var (_, regenError) = await furHandler.HandleAsync(id, tenantId, ct).ConfigureAwait(false);
             if (regenError is not null && logger is not null)

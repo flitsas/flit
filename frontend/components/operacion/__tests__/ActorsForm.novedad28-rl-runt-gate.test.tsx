@@ -89,12 +89,27 @@ beforeEach(() => {
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getInstance.mockResolvedValue({ fieldValues: [] });
   mocks.patchFieldValues.mockResolvedValue(undefined);
+  mocks.ruesPersonLookup.mockResolvedValue({
+    found: true,
+    razonSocial: 'Razón social RUES SAS',
+    estado: 'ACTIVA',
+    documentNumber: '900555666',
+    matriculaMercantil: null,
+    camaraComercio: null,
+    documentType: 'NIT',
+    source: 'RUES',
+    mode: 'live',
+  });
 });
 
 /** Completa los campos obligatorios del actor (comprador) para llegar al gate de guardado. */
 async function fillRequiredActorFields(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(document.getElementById('comprador-email') as HTMLInputElement, 'contacto@valle.co');
-  await user.type(document.getElementById('comprador-telefono') as HTMLInputElement, '3001234567');
+  const email = document.getElementById('comprador-email') as HTMLInputElement;
+  await user.clear(email);
+  await user.type(email, 'contacto@valle.co');
+  const tel = document.getElementById('comprador-telefono') as HTMLInputElement;
+  await user.clear(tel);
+  await user.type(tel, '3001234567');
   await user.type(screen.getByLabelText(/^Ciudad/), 'Bogota');
   await user.type(screen.getByLabelText(/^Dirección/), 'Calle 1 # 2-3');
 }
@@ -104,9 +119,10 @@ async function renderPreloadedJuridicalBuyer() {
   mocks.lookupLegalRepresentativeByNit.mockResolvedValue(MATCH);
   const user = userEvent.setup({ delay: null });
   render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-  await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+  await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
   await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
+  await screen.findByText('Empresa encontrada en RUES');
   await screen.findByText('Precargado desde el directorio de la compañía');
   return user;
 }
@@ -159,7 +175,15 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       // Al ejecutar la consulta RUNT del representante y resolver "found", el gate se levanta.
       mocks.runtPersonLookup.mockResolvedValue(RUNT_FOUND);
       await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+      await user.click(await screen.findByRole('button', { name: 'Continuar' }));
       await screen.findByText('Representante encontrado en RUNT.');
+
+      const rlEmail = document.getElementById('0-rl-email') as HTMLInputElement;
+      await user.clear(rlEmail);
+      await user.type(rlEmail, 'ana.runt@example.com');
+      const rlTel = document.getElementById('0-rl-telefono') as HTMLInputElement;
+      await user.clear(rlTel);
+      await user.type(rlTel, '3009998877');
 
       await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
       await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
@@ -185,7 +209,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
 
       const user = userEvent.setup({ delay: null });
       render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-      await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+      await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
       await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900999888');
       await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
       await screen.findByText(/Empresa encontrada en RUES/i);
@@ -245,6 +269,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
 
       mocks.runtPersonLookup.mockResolvedValue(RUNT_FOUND);
       await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+      await user.click(await screen.findByRole('button', { name: 'Continuar' }));
       await screen.findByText('Representante encontrado en RUNT.');
 
       // El documento vuelve a cambiar: el `found` anterior corresponde a un número que ya no es el
@@ -269,9 +294,10 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       });
       const user = userEvent.setup({ delay: null });
       render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-      await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+      await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
       await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
       await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
+      await screen.findByText('Empresa encontrada en RUES');
       await screen.findByText('Precargado desde el directorio de la compañía');
 
       const mecanismo = document.getElementById('0-mecanismo-firma') as HTMLSelectElement;

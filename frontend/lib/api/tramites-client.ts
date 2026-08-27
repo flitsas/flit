@@ -621,6 +621,24 @@ export const tramitesClient = {
     return res?.items ?? [];
   },
 
+  /** Catálogo RUNT de carrocerías (BD). Con clase: solo esa clase; sin clase: respaldo. */
+  searchVehicleBodyworks: async (
+    vehicleClass?: string,
+    search?: string,
+    limit = 200,
+    signal?: AbortSignal,
+  ): Promise<{ id: string; code: string; name: string; classVehicle: string | null }[]> => {
+    const params = new URLSearchParams();
+    if (vehicleClass?.trim()) params.set('vehicleClass', vehicleClass.trim());
+    if (search?.trim()) params.set('search', search.trim());
+    params.set('limit', String(limit));
+    const qs = params.toString();
+    const res = await request<{
+      items: { id: string; code: string; name: string; classVehicle: string | null }[];
+    }>(`/api/v1/tramites/vehicle-bodyworks${qs ? `?${qs}` : ''}`, { signal });
+    return res?.items ?? [];
+  },
+
   // HU #11203 — mandatarios que pueden firmar el mandato de este trámite (los habilitados para su
   // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
   listMandateSigners: (id: string, tenantId?: string) =>
@@ -740,7 +758,8 @@ export const tramitesClient = {
     ),
 
   // Autopopulado JURÍDICO del actor desde RUES por NIT (bifurcación del "Consultar RUNT" para
-  // persona jurídica). Siempre 200 ante petición válida; `found=false` => fallback manual.
+  // persona jurídica). 200 con found=false => NIT inexistente (ingreso manual). 503 => proveedor
+  // caído o token inválido (no se confunde con "no encontrado").
   ruesPersonLookup: (
     instanceId: string,
     input: RuesPersonLookupInput,

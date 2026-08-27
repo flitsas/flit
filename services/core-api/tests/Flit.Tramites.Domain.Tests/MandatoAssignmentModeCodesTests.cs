@@ -48,4 +48,28 @@ public sealed class MandatoAssignmentModeCodesTests
     {
         MandatoAssignmentModeCodes.IsInstitutional(mode).Should().Be(expected);
     }
+
+    [Fact]
+    public void ResolveEffective_PrefersCompanyRule()
+    {
+        MandatoAssignmentModeCodes
+            .ResolveEffective("open", "institutional", otConfigExists: true)
+            .Should().Be(MandatoAssignmentModeCodes.Open);
+    }
+
+    [Fact]
+    public void ResolveEffective_UsesOtMode_WhenNoCompanyRule()
+    {
+        MandatoAssignmentModeCodes
+            .ResolveEffective(null, "open", otConfigExists: true)
+            .Should().Be(MandatoAssignmentModeCodes.Open);
+    }
+
+    [Fact]
+    public void ResolveEffective_LegacyWithoutOtRow_IsSigner()
+    {
+        MandatoAssignmentModeCodes
+            .ResolveEffective(null, null, otConfigExists: false)
+            .Should().Be(MandatoAssignmentModeCodes.Signer);
+    }
 }

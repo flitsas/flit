@@ -789,27 +789,30 @@ public sealed class AttachmentsHandlerTests
                 new ResolvedChecklistDoc("factura", "Factura de Venta", true, 10),
                 new ResolvedChecklistDoc("soat", "SOAT (vigente)", true, 20),
             ]));
-        var handler = new GetChecklistHandler(_repo, _companyParams, matrixProvider);
+        var catalog = Substitute.For<IDocumentTypeCatalog>();
+        catalog.ListSystemGeneratedCodesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlySet<string>>(
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "soat", "mandato" }));
+        var handler = new GetChecklistHandler(_repo, _companyParams, matrixProvider, catalog);
 
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        // Matriz del gestor + mandato autogenerado (ADR-0036: ExigeMandato siempre).
-        result!.Items.Select(i => i.Key).Should().Equal("factura", "soat", "mandato");
-        result.FaltanObligatorios.Should().Contain("soat"); // el gestor lo hizo obligatorio
-        result.FaltanObligatorios.Should().NotContain("mandato"); // mandato es Add no-obligatorio
+        result!.Items.Select(i => i.Key).Should().Equal("factura");
+        result.FaltanObligatorios.Should().Contain("factura");
+        result.FaltanObligatorios.Should().NotContain("soat");
+        result.Items.Should().NotContain(i => i.Key == "mandato");
     }
 
     [Fact]
-    public async Task Checklist_SinMatriz_CaeAlCatalogo()
+    public async Task Checklist_SinMatriz_ListaVacia_NoUsaCatalogoHardcodeado()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoTraspasoStandard);
         _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
-        // El gestor no tiene matriz para este procedure_type ⇒ matriz vacía ⇒ catálogo.
         var matrixProvider = Substitute.For<IResolvedChecklistMatrixProvider>();
         matrixProvider
             .GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
@@ -819,10 +822,9 @@ public sealed class AttachmentsHandlerTests
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        // Catálogo vivo de matrícula intacto: aduana obligatorio, "otro" presente.
-        result!.Items.Should().Contain(i => i.Key == "aduana");
-        result.Items.Should().Contain(i => i.Key == "otro");
-        result.FaltanObligatorios.Should().Contain("aduana");
+        result!.Items.Should().BeEmpty();
+        result.Completo.Should().BeTrue();
+        result.FaltanObligatorios.Should().BeEmpty();
     }
 
     [Fact]

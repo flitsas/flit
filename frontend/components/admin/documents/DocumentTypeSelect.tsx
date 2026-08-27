@@ -1,6 +1,7 @@
 "use client";
 
 import type { DocumentType } from "@/lib/api/types-documents";
+import { catalogDocumentTitle } from "@/lib/tramites/document-labels";
 
 // Selector de documento del catálogo (HU #10198). Solo lista documentos activos
 // (`estado === "activo"`): la asociación a un trámite y los overrides exigen
@@ -46,7 +47,7 @@ export function DocumentTypeSelect({
         </option>
         {available.map((d) => (
           <option key={d.id} value={d.id}>
-            {d.nombre} ({d.codigo})
+            {catalogDocumentTitle(d.codigo, d.nombre)}
           </option>
         ))}
       </select>

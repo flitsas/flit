@@ -29,8 +29,8 @@ const overrides: DocumentOrderOverride[] = [
 describe("OverridesList (#2 — reordenable)", () => {
   it("renderiza cada override con su badge de orden", () => {
     render(<OverridesList overrides={overrides} onReorder={vi.fn()} onDelete={vi.fn()} />);
-    expect(screen.getByText("Documento A")).toBeInTheDocument();
-    expect(screen.getByText("Documento B")).toBeInTheDocument();
+    expect(screen.getByText(/Documento A/)).toBeInTheDocument();
+    expect(screen.getByText(/Documento B/)).toBeInTheDocument();
     expect(screen.getByLabelText("Orden 10")).toBeInTheDocument();
   });
 

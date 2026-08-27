@@ -654,13 +654,15 @@ export interface LegalRepresentativeOption {
   telefono?: string | null;
   firmaVigente: boolean;
   identidadVigente: boolean;
+  razonSocial?: string | null;
+  companyEmail?: string | null;
+  companyAddress?: string | null;
+  companyCity?: string | null;
+  companyPhone?: string | null;
 }
 
-// GET /api/v1/tramites/legal-representatives/lookup?nit=NNN — precarga comprador/vendedor por NIT.
-// 200 con el match (compañía + representante(s) + banderas de firma/identidad VIGENTES al momento) o
-// 404 → null (el FE cae a la consulta RUES/RUNT normal). HU #10937: `representantes` trae TODOS los
-// representantes activos de la compañía para el selector; `representante`/`firmaVigente`/
-// `identidadVigente` reflejan el primario (primero) por compatibilidad con el consumo previo.
+// GET /api/v1/tramites/legal-representatives/lookup?nit=NNN — datos básicos de empresa y RL
+// para el wizard. La razón social del actor jurídico sale de RUES (ruesPersonLookup), no de aquí.
 export interface LegalRepresentativeLookupResult {
   company: LegalRepresentativeLookupCompany;
   representante: LegalRepresentativeLookupContact;
@@ -994,7 +996,15 @@ export interface WizardStep {
   sectionType?: WizardSectionType;
   /** Todas las secciones del paso, en orden. Un paso puede tener más de una. */
   sectionTypes?: WizardSectionType[];
-  /** Capacidades del tipo que la sección necesita para pintarse (entryMode, actores, firma…). */
+  /**
+   * Capacidades del tipo que la sección necesita para pintarse (entryMode, actores, firma…).
+   *
+   * ADR-0051 — la sección `actor_form` trae `revealSellerForm?: boolean`: señal POR INSTANCIA (no
+   * de tipo) que excepciona `sellerCapturedViaForm:false` cuando el vendedor sincronizado quedó sin
+   * un dato que el backend necesita para poder enviarle la validación de identidad (persona jurídica
+   * sin representante legal resoluble, o persona natural sin correo). El backend ya calculó la
+   * excepción — el cliente solo la lee, no la recalcula.
+   */
   sectionConfig?: Record<string, unknown> | null;
 }
 
@@ -1017,6 +1027,15 @@ export interface WizardCapabilities {
   requiresSeller: boolean;
   /** Hay parte compradora o titular. */
   requiresBuyer: boolean;
+  /**
+   * ADR-0051 — hay parte vendedora (`requiresSeller`) pero esa parte NO se captura tecleando datos
+   * en el wizard: llega de otra fuente (sincronizada desde el RUNT, `TRASPASO_UNILATERAL`). Separa
+   * "hay vendedor" (`requiresSeller`, sin cambio) de "el vendedor llena un formulario" — antes una
+   * sola llave gobernaba ambas preguntas y por eso no podían responderse distinto para el mismo tipo.
+   *
+   * Ausente ⇒ `true` (todo tipo que hoy captura al vendedor por formulario sigue haciéndolo).
+   */
+  sellerCapturedViaForm?: boolean;
   /**
    * Interviene un arrendatario además del propietario (leasing). Parte declarativa: se identifica y
    * se le notifica, pero no valida identidad ni firma. Ausente ⇒ `false`.
@@ -1067,6 +1086,11 @@ export interface WizardCapabilities {
    * Ausente ⇒ se cae a `entryMode === 'VIN'`, que es como se decidía antes de esta llave.
    */
   requiresPlateRequest?: boolean;
+  /**
+   * Cómo se obtiene la impronta (`AUTO` | `MANUAL` | `OPERATOR_CHOICE`). Ausente ⇒ se puede generar
+   * (también si el documento es opcional). `MANUAL` ⇒ solo carga de archivo.
+   */
+  improntaSource?: string | null;
 }
 
 export interface WizardState {

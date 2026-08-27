@@ -29,7 +29,8 @@ internal sealed class DocumentTypeConfiguration : IEntityTypeConfiguration<Docum
         builder.Property(x => x.CreatedAt).IsRequired();
 
         // HU #11181 — documentos generados por el sistema (DDL 46-HU11181): la marca y su orden
-        // por defecto en el expediente. La marca NO excluye del checklist del gestor.
+        // por defecto en el expediente. La marca excluye el tipo del checklist de carga del gestor
+        // (sigue asociado para el consolidado y la prelación del OT).
         builder.Property(x => x.IsSystemGenerated)
             .HasColumnName("is_system_generated")
             .IsRequired()

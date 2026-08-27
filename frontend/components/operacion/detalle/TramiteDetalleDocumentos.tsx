@@ -8,6 +8,7 @@ import {
 } from '@/components/operacion/TramiteDocumentosModal';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { documentLabel } from '@/lib/tramites/document-labels';
+import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
 import { formatFecha } from '@/lib/format/date';
 import type {
@@ -91,7 +92,7 @@ function RequisitoRow({
     >
       <span className="min-w-0">
         <span className="block truncate text-xs font-medium text-[#162744] dark:text-white">
-          {item.label}
+          <DocumentCatalogCaption nombre={item.label} codigo={item.docTipo ?? item.key} />
         </span>
         {!item.obligatorio ? (
           <span className="block text-xs text-[#162744]/70 dark:text-white/70">Opcional</span>

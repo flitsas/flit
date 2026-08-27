@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Eye } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
@@ -8,7 +8,8 @@ import {
   openObjectUrlInWindow,
   showDocumentTabError,
 } from '@/lib/documents/open-document-tab';
-import { documentLabel } from '@/lib/tramites/document-labels';
+import { documentLabel, catalogDocumentTitle } from '@/lib/tramites/document-labels';
+import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
 import { WizardCardHeader } from './wizard-atoms';
@@ -41,24 +42,8 @@ interface Props {
   checklist?: ChecklistItemView[];
   modalidad?: WizardModalidad;
   status?: InstanceStatus;
-  /** Nombre del organismo de tránsito ya elegido — casilla «Confirmo la radicación ante…». */
-  organismoNombre?: string;
-  /**
-   * Trámites simultáneos declarados con el principal (propuesta, Step5: `subs`). Este módulo no
-   * tiene su propio concepto de sub-trámite; reutiliza las transformaciones de vehículo declaradas
-   * (`VehicleTransformationsCard`, ya rotuladas «Trámites Simultáneos» en el paso de Requisitos) en
-   * vez de inventar una lista nueva.
-   */
-  tramitesSimultaneos?: string[];
   onBeforeGenerateConsolidado?: () => Promise<void>;
   onAttachmentsChange?: () => void;
-  /**
-   * Confirmaciones del expediente consolidado SIN marcar (punto 6, rediseño Step5): se dispara con
-   * la lista de textos pendientes cada vez que cambia. Las casillas no gatean nada aquí —solo abren
-   * el PDF, que no exige confirmación—; quien reciba esto es responsable de sumarlo a los requisitos
-   * pendientes que bloquean el envío real del trámite.
-   */
-  onConfirmacionesPendientesChange?: (pendientes: string[]) => void;
 }
 
 const BLUE = '#557EFF';
@@ -166,11 +151,8 @@ export default function ExpedienteVisor({
   checklist = [],
   modalidad = 'matricula_inicial',
   status = 'borrador',
-  organismoNombre,
-  tramitesSimultaneos = [],
   onBeforeGenerateConsolidado,
   onAttachmentsChange,
-  onConfirmacionesPendientesChange,
 }: Props) {
   return (
     <section aria-label="Expediente digital" className="space-y-3">
@@ -180,11 +162,8 @@ export default function ExpedienteVisor({
         attachments={attachments}
         modalidad={modalidad}
         status={status}
-        organismoNombre={organismoNombre}
-        tramitesSimultaneos={tramitesSimultaneos}
         onBeforeGenerateConsolidado={onBeforeGenerateConsolidado}
         onAttachmentsChange={onAttachmentsChange}
-        onConfirmacionesPendientesChange={onConfirmacionesPendientesChange}
       />
     </section>
   );
@@ -248,20 +227,7 @@ function DocumentosCargadosCard({
         // Rejilla (propuesta, «Documentos cargados»): sigue siendo una lista semántica, la rejilla es
         // solo el `className` — `<ul>`/`<li>` no cambian.
         <ul
-          // PDF 20-agosto: 6 docs → 6 columnas en el visor del expediente (paso 5).
-          className={`grid gap-3 ${
-            checklist.length === 1
-              ? 'grid-cols-1'
-              : checklist.length === 2
-                ? 'grid-cols-1 sm:grid-cols-2'
-                : checklist.length <= 3
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                  : checklist.length === 4
-                    ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
-                    : checklist.length === 6
-                      ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
-                      : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
-          }`}
+          className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6"
           aria-label="Documentos del expediente (visor)"
         >
           {checklist.map((item) => (
@@ -282,32 +248,23 @@ function DocumentosCargadosCard({
 }
 
 /**
- * «Expediente consolidado» (rediseño, captura Step5): tarjeta propia, separada de los documentos.
- * Añade las casillas de confirmación del punto 6 — nacen desmarcadas. NO gatean esta tarjeta: ver el
- * PDF no es un acto que haya que confirmar. Lo que sí deben condicionar es radicar, y esa decisión
- * vive fuera de este componente — se reportan hacia arriba con `onConfirmacionesPendientesChange`
- * para que el wizard las sume a sus «Requisitos pendientes antes del envío».
+ * «Expediente consolidado»: tarjeta propia, separada de los documentos. Genera y abre el PDF;
+ * no pide confirmaciones al gestor ni bloquea la radicación.
  */
 function ExpedienteConsolidadoCard({
   instanceId,
   attachments,
   modalidad,
   status,
-  organismoNombre,
-  tramitesSimultaneos,
   onBeforeGenerateConsolidado,
   onAttachmentsChange,
-  onConfirmacionesPendientesChange,
 }: {
   instanceId: string | null;
   attachments: ProcedureAttachment[];
   modalidad: WizardModalidad;
   status: InstanceStatus;
-  organismoNombre?: string;
-  tramitesSimultaneos: string[];
   onBeforeGenerateConsolidado?: () => Promise<void>;
   onAttachmentsChange?: () => void;
-  onConfirmacionesPendientesChange?: (pendientes: string[]) => void;
 }) {
   const consolidado = findConsolidadoAttachment(attachments);
   const [generating, setGenerating] = useState(false);
@@ -423,33 +380,6 @@ function ExpedienteConsolidadoCard({
     }
   };
 
-  // Casillas de confirmación (punto 6, captura Step5). Nacen desmarcadas — una casilla de
-  // consentimiento premarcada («Confirmo que el comprador autorizó…») no sería una autorización
-  // real — pero NO gatean este botón: ver el PDF no es un acto que haya que confirmar. Lo que sí
-  // deben condicionar es radicar, fuera de este componente (ver `onConfirmacionesPendientesChange`).
-  // Memoizadas por contenido (no por referencia de `tramitesSimultaneos`, que el padre reconstruye
-  // en cada render) para no disparar el efecto de abajo sin que el texto realmente haya cambiado.
-  const tramitesSimultaneosKey = tramitesSimultaneos.join('|');
-  const confirmaciones = useMemo(
-    () => [
-      'Confirmo que los datos del vehículo coinciden con la factura de venta.',
-      'Confirmo que el comprador autorizó el tratamiento de sus datos personales.',
-      `Confirmo la radicación ante ${organismoNombre?.trim() || 'el organismo seleccionado'}.`,
-      ...(tramitesSimultaneosKey
-        ? [`Confirmo los trámites simultáneos: ${tramitesSimultaneosKey.split('|').join(', ')}.`]
-        : []),
-    ],
-    [organismoNombre, tramitesSimultaneosKey],
-  );
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const pendientes = useMemo(
-    () => (estadoFinal ? [] : confirmaciones.filter((c) => !checked[c])),
-    [estadoFinal, confirmaciones, checked],
-  );
-  useEffect(() => {
-    onConfirmacionesPendientesChange?.(pendientes);
-  }, [pendientes, onConfirmacionesPendientesChange]);
-
   return (
     <VisorCard
       title="Expediente consolidado"
@@ -471,27 +401,7 @@ function ExpedienteConsolidadoCard({
           El trámite ya está {status === 'aprobado' ? 'aprobado' : 'anulado'}: su documentación es
           definitiva. Puedes consultarla y descargarla.
         </p>
-      ) : (
-        // `role="group"`: un `aria-label` sobre un div sin rol lo ignoran los lectores de pantalla,
-        // así que las casillas quedaban sueltas sin decir de qué son.
-        <div
-          className="mb-4 space-y-2"
-          role="group"
-          aria-label="Confirmaciones del expediente consolidado"
-        >
-          {confirmaciones.map((c) => (
-            <label key={c} className="flex items-start gap-2 text-xs" style={{ color: '#162744' }}>
-              <input
-                type="checkbox"
-                checked={!!checked[c]}
-                onChange={(e) => setChecked((prev) => ({ ...prev, [c]: e.target.checked }))}
-                className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF]"
-              />
-              {c}
-            </label>
-          ))}
-        </div>
-      )}
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {!estadoFinal && consolidado ? (
@@ -539,7 +449,7 @@ function DocRow({
   const [busy, setBusy] = useState(false);
   // Rótulo del CHECKLIST (`item.label`, ya resuelto por backend) — no `documentLabel(tipo)`: es el
   // dato correcto para el requisito, y cubre también los que no tienen adjunto que traer un `tipo`.
-  const label = item.label;
+  const label = catalogDocumentTitle(item.docTipo ?? item.key, item.label);
   const validado = item.satisfied;
   // Truncado a 24 caracteres con elipsis (propuesta): la rejilla es un vistazo, no el detalle
   // forense. El hash completo sigue disponible en el `title` (tooltip nativo). Solo hay SHA cuando
@@ -571,7 +481,7 @@ function DocRow({
         {/* Nombre en navy, puede ocupar dos líneas (propuesta): sin icono de fichero, la captura no
             lo tiene. */}
         <p className="min-w-0 flex-1 text-xs font-semibold leading-tight" style={{ color: '#162744' }} title={label}>
-          {label}
+          <DocumentCatalogCaption nombre={item.label} codigo={item.docTipo ?? item.key} />
         </p>
         <StatusBadge
           label={validado ? 'Validado' : 'Pendiente'}

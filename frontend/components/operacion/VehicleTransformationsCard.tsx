@@ -1,19 +1,19 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowRight, Paperclip, X } from 'lucide-react';
+import { ArrowRight, Paperclip } from 'lucide-react';
 import type { FieldValue, ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
 import { cn } from '@/lib/utils';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   VEHICLE_FUEL_CATALOG,
 } from '@/lib/catalogs/vehicle-transformations';
-import { getBodyworksForVehicleClass, normalizeVehicleClass } from '@/lib/catalogs/bodywork-by-class';
 import { CatalogSearchSelect } from './CatalogSearchSelect';
 import { VehicleColorSearchSelect } from './VehicleColorSearchSelect';
-import { WizardCardHeader } from './wizard-atoms';
-import { WizardModal } from './WizardModal';
-import { WIZARD_INPUT, WIZARD_LABEL } from './wizard-field-styles';
+import { VehicleBodyworkSearchSelect } from './VehicleBodyworkSearchSelect';
+import { WizardCardHeader, WizardFieldToggle } from './wizard-atoms';
+import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
+import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 
 /** DocTipo de soporte por subtrámite (whitelist AttachmentRules + RF33 factura_carroceria). */
 const DOC_TIPO_BY_KEY: Record<SubtramiteKey, string> = {
@@ -28,24 +28,29 @@ const SOPORTE_HINT: Record<SubtramiteKey, string> = {
   carroceria: 'Factura de carrocería',
 };
 
+function soporteDoc(key: SubtramiteKey): { codigo: string; nombre: string; title: string } {
+  const codigo = DOC_TIPO_BY_KEY[key];
+  const nombre = SOPORTE_HINT[key];
+  return { codigo, nombre, title: catalogDocumentTitle(codigo, nombre) };
+}
+
 const SUBTITULO_SIMULTANEOS =
   'Declara un cambio de color, combustible o carrocería frente al RUNT.';
 
 /** Copy del modo tipo base: el cambio no se «declara además», es el trámite. */
 const subtituloTipoBase = (item: SubtramiteItem) =>
-  `${item.valueLabel} y su soporte: es el trámite que se está radicando.`;
+  `${item.valueLabel}: es el trámite que se está radicando. El soporte es opcional.`;
 
 /**
  * Tarjeta "Trámites Simultáneos — Transformaciones del Vehículo" (prototipo Lovable Traspaso).
  *
- * - Selector «Agregar trámite simultáneo» para activar color / combustible / carrocería.
- * - Por cada uno activo: card DocSlot (adjunto + * Obligatorio + quitar) **y** el select del
- *   valor nuevo (FLIT necesita el valor para el FUR — no son chips decorativos).
+ * - Tres checks independientes (color / combustible / carrocería).
+ * - Por cada uno activo: valor nuevo (obligatorio para el FUR) y adjunto de soporte opcional.
  *
  * Con {@link soloSubtramite} la tarjeta deja de ser un acumulador y pasa a ser la captura del
  * atributo que el trámite cambia por definición (familia OTROS): un único subtrámite, siempre
- * activo, sin selector de «agregar» y sin poder quitarlo. Es la misma captura —valor nuevo +
- * soporte— porque el FUR necesita exactamente lo mismo; lo que desaparece es la acumulación.
+ * activo, sin checks de las otras dos transformaciones. El valor nuevo sigue siendo obligatorio;
+ * el soporte es opcional.
  */
 export function VehicleTransformationsCard({
   fieldValues,
@@ -67,7 +72,7 @@ export function VehicleTransformationsCard({
   /** Con instancia: permite subir/borrar el documento soporte de cada subtrámite. */
   instanceId?: string | null;
   onDocumentsChanged?: () => void;
-  /** Notifica si todos los subtrámites activos tienen valor nuevo + adjunto (gate Continuar). */
+  /** Notifica si todos los subtrámites activos tienen valor nuevo (gate Continuar). El adjunto es opcional. */
   onCompletenessChange?: (complete: boolean) => void;
   /**
    * Modo tipo base (familia OTROS): captura SOLO este atributo, siempre activo y no removible.
@@ -76,7 +81,6 @@ export function VehicleTransformationsCard({
   soloSubtramite?: SubtramiteKey | null;
 }) {
   const headingId = useId();
-  const [pendienteQuitar, setPendienteQuitar] = useState<SubtramiteKey | null>(null);
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [uploadingKey, setUploadingKey] = useState<SubtramiteKey | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -96,11 +100,7 @@ export function VehicleTransformationsCard({
   const bodyworkRunt = byKey('vehicle_body_type_runt') || byKey('vehicle_body_type');
   const bodyworkEff = byKey('vehicle_body_type');
   const bodyworkActive = byKey('cambio_carroceria') === 'true' || isChanged(bodyworkRunt, bodyworkEff);
-  const vehicleClass = normalizeVehicleClass(byKey('vehicle_class'));
-  const bodyworkOptions = getBodyworksForVehicleClass(vehicleClass).map((o) => o.name);
-  const bodyworkEmptyMessage = vehicleClass
-    ? `No hay carrocerías disponibles para la clase ${vehicleClass}`
-    : 'Consulta el RUNT para obtener la clase';
+  const vehicleClassRaw = byKey('vehicle_class') || byKey('vehicle_class_runt');
 
   const hasVehicle = [
     byKey('plate'),
@@ -217,8 +217,8 @@ export function VehicleTransformationsCard({
       runtValue: bodyworkRunt,
       effectiveValue: bodyworkEff,
       active: bodyworkActive,
-      options: bodyworkOptions,
-      emptyMessage: bodyworkEmptyMessage,
+      bodyworkCatalog: true,
+      vehicleClass: vehicleClassRaw,
       onToggle: (on) => void setBodywork(on),
       onSelect: pickBodywork,
     },
@@ -229,11 +229,9 @@ export function VehicleTransformationsCard({
   const soloItem = soloSubtramite
     ? (subtramites.find((s) => s.key === soloSubtramite) ?? null)
     : null;
-  const seleccionados = soloSubtramite
+  const cardsVisibles = soloSubtramite
     ? (soloItem ? [soloItem] : [])
     : subtramites.filter((s) => s.active);
-  const disponibles = soloSubtramite ? [] : subtramites.filter((s) => !s.active);
-  const itemAQuitar = subtramites.find((s) => s.key === pendienteQuitar) ?? null;
 
   const attachmentFor = (key: SubtramiteKey) =>
     attachments.find((a) => a.tipo.toLowerCase() === DOC_TIPO_BY_KEY[key].toLowerCase());
@@ -273,16 +271,22 @@ export function VehicleTransformationsCard({
     }
   };
 
-  const handleAgregar = (key: string) => {
-    subtramites.find((s) => s.key === key)?.onToggle(true);
-  };
-
-  const confirmarQuitar = () => {
-    itemAQuitar?.onToggle(false);
-    setPendienteQuitar(null);
-  };
-
   const changes = summarizeDeclaredTransformations(fieldValues);
+
+  const renderCard = (s: SubtramiteItem) => (
+    <SubtramiteDocCard
+      key={s.key}
+      item={s}
+      disabled={disabled}
+      esTipoBase={!!soloSubtramite}
+      attachment={attachmentFor(s.key)}
+      canUpload={!!instanceId && !readOnly}
+      uploading={uploadingKey === s.key}
+      deleting={!!attachmentFor(s.key) && deletingId === attachmentFor(s.key)?.id}
+      onUpload={(file) => void handleUpload(s.key, file)}
+      onRemoveAttachment={(id) => void handleRemoveAttachment(id)}
+    />
+  );
 
   return (
     <section
@@ -303,70 +307,32 @@ export function VehicleTransformationsCard({
         </p>
       )}
 
-      {/* El selector de «agregar» es el acumulador del art. 5.1.8, y en el modo tipo base no hay
-          nada que acumular: el único cambio del trámite ya está abajo, activo y no removible. */}
+      {/* Checks independientes: cada transformación se activa o se apaga sin el selector de agregar. */}
       {!soloSubtramite && (
-        <div>
-          <label htmlFor="tramite-simultaneo-agregar" className={`${WIZARD_LABEL} mb-1.5`}>
-            Agregar trámite simultáneo
-          </label>
-          <select
-            id="tramite-simultaneo-agregar"
-            value=""
-            onChange={(e) => {
-              if (e.target.value) handleAgregar(e.target.value);
-            }}
-            disabled={disabled || disponibles.length === 0}
-            className={`${WIZARD_INPUT} disabled:opacity-60`}
-          >
-            <option value="">
-              {disponibles.length === 0
-                ? 'No hay más trámites simultáneos disponibles'
-                : 'Selecciona uno o varios trámites para agregar...'}
-            </option>
-            {disponibles.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.optionLabel}
-              </option>
-            ))}
-          </select>
+        <div className="space-y-4">
+          {subtramites.map((s) => (
+            <div key={s.key} className="space-y-3">
+              <WizardFieldToggle
+                id={`tramite-simultaneo-${s.key}`}
+                label={s.optionLabel}
+                checked={s.active}
+                onChange={(on) => s.onToggle(on)}
+                disabled={disabled}
+              />
+              {s.active && renderCard(s)}
+            </div>
+          ))}
         </div>
+      )}
+
+      {soloSubtramite && cardsVisibles.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:max-w-sm">{cardsVisibles.map(renderCard)}</div>
       )}
 
       {uploadError && (
         <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
           {uploadError}
         </p>
-      )}
-
-      {seleccionados.length > 0 && (
-        <div
-          className={cn(
-            'grid gap-4',
-            seleccionados.length === 1 && 'grid-cols-1 sm:max-w-sm',
-            seleccionados.length === 2 && 'grid-cols-1 sm:grid-cols-2',
-            seleccionados.length >= 3 && 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3',
-          )}
-        >
-          {seleccionados.map((s) => (
-            <SubtramiteDocCard
-              key={s.key}
-              item={s}
-              disabled={disabled}
-              // El subtrámite ES el trámite: no se puede quitar —quitarlo sería quedarse sin
-              // trámite; se cambia eligiendo otro tipo— y no repite su nombre, que ya lo pone el
-              // contenedor (la cabecera de la tarjeta o el acordeón del paso).
-              esTipoBase={!!soloSubtramite}
-              attachment={attachmentFor(s.key)}
-              canUpload={!!instanceId && !readOnly}
-              uploading={uploadingKey === s.key}
-              deleting={!!attachmentFor(s.key) && deletingId === attachmentFor(s.key)?.id}
-              onRequestRemove={() => setPendienteQuitar(s.key)}
-              onUpload={(file) => void handleUpload(s.key, file)}
-              onRemoveAttachment={(id) => void handleRemoveAttachment(id)}
-            />
-          ))}
-        </div>
       )}
 
       <p
@@ -381,35 +347,9 @@ export function VehicleTransformationsCard({
         {changes.length > 0
           ? `Se registrará en el FUR — ${changes.join(' · ')}`
           : soloItem
-            ? `Escoge el ${soloItem.valueLabel.toLowerCase()} y adjunta el soporte: es lo que el FUR declara.`
+            ? `Escoge el ${soloItem.valueLabel.toLowerCase()} para declararlo en el FUR.`
             : 'Sin transformaciones declaradas: se registrará el dato del RUNT.'}
       </p>
-
-      {itemAQuitar && (
-        <WizardModal title="Eliminar trámite simultáneo" onClose={() => setPendienteQuitar(null)}>
-          <p className="text-xs leading-relaxed opacity-80">
-            ¿Estás seguro de eliminar «{itemAQuitar.optionLabel}»? Se removerán los requisitos
-            asociados y se restaurará el dato del RUNT.
-          </p>
-          <div className="mt-6 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setPendienteQuitar(null)}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={confirmarQuitar}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
-              style={{ background: '#FF4E00' }}
-            >
-              Sí, eliminar
-            </button>
-          </div>
-        </WizardModal>
-      )}
     </section>
   );
 }
@@ -425,6 +365,8 @@ interface SubtramiteItem {
   active: boolean;
   options?: readonly string[];
   colorCatalog?: boolean;
+  bodyworkCatalog?: boolean;
+  vehicleClass?: string;
   emptyMessage?: string;
   onToggle: (on: boolean) => void;
   onSelect: (value: string) => void;
@@ -441,7 +383,6 @@ function SubtramiteDocCard({
   canUpload,
   uploading,
   deleting,
-  onRequestRemove,
   onUpload,
   onRemoveAttachment,
 }: {
@@ -449,29 +390,27 @@ function SubtramiteDocCard({
   disabled: boolean;
   /**
    * El subtrámite ES el trámite (familia OTROS): no se puede quitar, y no repite su nombre —lo
-   * pone el contenedor—. Con `false` es un simultáneo acumulado: nombre propio y botón de quitar.
+   * pone el contenedor—. Con `false` es un simultáneo: el check de arriba es el encendido/apagado.
    */
   esTipoBase?: boolean;
   attachment: ProcedureAttachment | undefined;
   canUpload: boolean;
   uploading: boolean;
   deleting: boolean;
-  onRequestRemove: () => void;
   onUpload: (file: File) => void;
   onRemoveAttachment: (id: string) => void;
 }) {
+  const soporte = soporteDoc(item.key);
   const inputRef = useRef<HTMLInputElement>(null);
   const selectId = `tramite-simultaneo-${item.key}-valor`;
-  // Solo se muestra valor si ya es un cambio real frente al RUNT (activo + vacío = pendiente).
   const changed = isChanged(item.runtValue, item.effectiveValue);
   const selectValue = changed ? item.effectiveValue : '';
   const valueMissing = !changed;
-  const fileMissing = !attachment;
   const selectOptions = excludeRunt(
     mergeOption(item.options ?? [], selectValue),
     item.runtValue,
   );
-  const done = changed && !!attachment;
+  const done = changed;
   const busy = uploading || deleting;
 
   return (
@@ -495,26 +434,23 @@ function SubtramiteDocCard({
             * Obligatorio
           </span>
         )}
-        {!disabled && !esTipoBase && (
-          <button
-            type="button"
-            onClick={onRequestRemove}
-            aria-label={`Quitar ${item.optionLabel}`}
-            className="grid h-6 w-6 place-items-center rounded-full border bg-white transition hover:bg-[#FEF2F2]"
-            style={{ borderColor: '#FECACA', color: '#B91C1C' }}
-          >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        )}
       </div>
 
       {/* Con el subtrámite como tipo base, el contenedor ya lo nombró: repetirlo dejaba dos rótulos
           seguidos diciendo lo mismo. Lo que sí falta ahí es qué soporte se pide, así que sube. */}
       <p className="pr-28 text-[13px] font-semibold leading-tight" style={{ color: '#162744' }}>
-        {esTipoBase ? SOPORTE_HINT[item.key] : item.optionLabel}
+        {esTipoBase ? (
+          <DocumentCatalogCaption nombre={soporte.nombre} codigo={soporte.codigo} />
+        ) : (
+          item.optionLabel
+        )}
       </p>
-      {!esTipoBase && <p className="mt-0.5 text-[11px] opacity-70">{SOPORTE_HINT[item.key]}</p>}
-      <p className="mt-1 text-[11px] opacity-70">PDF, JPG hasta 5MB</p>
+      {!esTipoBase && (
+        <p className="mt-0.5 text-[11px] font-normal leading-tight">
+          <DocumentCatalogCaption nombre={soporte.nombre} codigo={soporte.codigo} />
+        </p>
+      )}
+      <p className="mt-1 text-[11px] opacity-70">PDF, JPG hasta 5MB · Opcional</p>
       {attachment && (
         <p className="mt-1 truncate text-[11px] opacity-60">{attachment.filename}</p>
       )}
@@ -548,6 +484,18 @@ function SubtramiteDocCard({
             placeholder="Selecciona…"
             onChange={item.onSelect}
           />
+        ) : item.bodyworkCatalog ? (
+          <VehicleBodyworkSearchSelect
+            id={selectId}
+            label={`${item.valueLabel} *`}
+            value={selectValue}
+            vehicleClass={item.vehicleClass ?? ''}
+            excludeName={item.runtValue}
+            disabled={disabled}
+            invalid={valueMissing}
+            placeholder="Selecciona…"
+            onChange={item.onSelect}
+          />
         ) : (item.options ?? []).length === 0 && item.emptyMessage ? (
           <p className="text-xs opacity-70">{item.emptyMessage}</p>
         ) : (
@@ -567,11 +515,6 @@ function SubtramiteDocCard({
             Escoge un valor distinto al del RUNT.
           </p>
         )}
-        {fileMissing && (
-          <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }}>
-            Adjunta el soporte obligatorio.
-          </p>
-        )}
         {changed && (
           <p className="flex items-center gap-1.5 text-xs" style={{ color: '#557EFF' }}>
             <span className="opacity-70">{up(item.runtValue)}</span>
@@ -589,7 +532,7 @@ function SubtramiteDocCard({
               type="file"
               accept="application/pdf,image/jpeg,image/png,image/webp"
               className="hidden"
-              aria-label={`Adjuntar ${SOPORTE_HINT[item.key]}`}
+              aria-label={`Adjuntar ${soporte.title}`}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = '';
@@ -602,9 +545,9 @@ function SubtramiteDocCard({
               disabled={busy || disabled}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
               style={{
-                borderColor: fileMissing ? '#FF4E00' : '#557EFF',
-                color: fileMissing ? '#FF4E00' : '#557EFF',
-                borderWidth: fileMissing ? 2 : 1,
+                borderColor: '#557EFF',
+                color: '#557EFF',
+                borderWidth: 1,
               }}
             >
               <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
@@ -621,7 +564,7 @@ function SubtramiteDocCard({
                 disabled={busy || disabled}
                 className="text-xs font-semibold disabled:opacity-50"
                 style={{ color: '#FF4E00' }}
-                aria-label={`Borrar ${SOPORTE_HINT[item.key]}`}
+                aria-label={`Borrar ${soporte.title}`}
               >
                 {deleting ? 'Borrando…' : 'Borrar'}
               </button>
@@ -694,7 +637,8 @@ function excludeRunt(options: readonly string[], runt: string): string[] {
 }
 
 /**
- * Completo = sin subtrámites activos, o cada activo tiene valor distinto al RUNT + adjunto soporte.
+ * Completo = sin subtrámites activos, o cada activo tiene valor distinto al RUNT.
+ * El certificado de soporte es opcional y no bloquea Continuar.
  */
 export function areSimultaneousTramitesComplete(
   fieldValues: FieldValue[],
@@ -706,12 +650,12 @@ export function areSimultaneousTramitesComplete(
 
 /**
  * @param soloSubtramite Modo tipo base: ese subtrámite cuenta como ACTIVO aunque no tenga bandera ni
- * diff todavía — el trámite lo trae por definición, así que dejarlo sin valor o sin soporte es un
- * expediente incompleto, no «ninguna transformación declarada».
+ * diff todavía — el trámite lo trae por definición, así que dejarlo sin valor es un expediente
+ * incompleto, no «ninguna transformación declarada».
  */
 export function getSimultaneousIncompleteMessages(
   fieldValues: FieldValue[],
-  attachments: ProcedureAttachment[],
+  _attachments: ProcedureAttachment[],
   soloSubtramite: SubtramiteKey | null = null,
 ): string[] {
   const byKey = (key: string) =>
@@ -762,12 +706,6 @@ export function getSimultaneousIncompleteMessages(
     if (!active) continue;
     if (!isChanged(runt, eff)) {
       messages.push(`${s.label}: escoge el nuevo valor.`);
-    }
-    const hasDoc = attachments.some(
-      (a) => a.tipo.toLowerCase() === DOC_TIPO_BY_KEY[s.key].toLowerCase(),
-    );
-    if (!hasDoc) {
-      messages.push(`${s.label}: adjunta el soporte obligatorio.`);
     }
   }
   return messages;

@@ -29,8 +29,8 @@ public sealed class DocumentType
 
     /// <summary>
     /// HU #11181 — el documento lo produce FLIT (FUR, certificados, mandato, escrituras) en vez de
-    /// adjuntarlo el gestor. Entra en la lista ordenable del OT; <b>no</b> excluye del checklist
-    /// (<c>compraventa</c> e <c>impronta</c> son generados y a la vez documentos del checklist).
+    /// adjuntarlo el gestor. Entra en la lista ordenable del OT y en el consolidado. No se pide
+    /// ni se exige en el paso de Requisitos ni en los gates de radicación.
     /// </summary>
     public bool IsSystemGenerated { get; set; }
 
