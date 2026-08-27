@@ -347,15 +347,28 @@ Con ese documento, `SyncSellerActorFromRuntAsync` reutiliza el MISMO patrón de 
   (documento) y el resto en blanco — nunca bloquea el preflight (mismo "degradación, nunca error" que
   el resto del handler).
 
-**Riesgo abierto, no resuelto por este ADR**: `FinalizeDraftGate.ActoresCompletos`
-(`FinalizeDraftProcedureInstanceCommand.cs:50-64`) exige `FullName` no vacío para dar por completa una
+**Riesgo cerrado por el Líder Técnico (2026-08-27).** `FinalizeDraftGate.ActoresCompletos`
+(`FinalizeDraftProcedureInstanceCommand.cs:60-73`) exige `FullName` no vacío para dar por completa una
 parte. Si el lookup no resuelve nombre, un `TRASPASO_UNILATERAL` sincronizado queda con el mismo
-bloqueo `actores_incompletos` que hoy bloquea el 100% de los borradores — solo que ahora sin
-formulario con el que el gestor pueda corregirlo manualmente, salvo que se revele (Decisión 6). Este
-ADR dimensiona el problema y establece el punto de escritura; **el criterio de completitud aplicable a
-una parte SINCRONIZADA (¿basta el documento? ¿se exige nombre con degradación a "NO REGISTRA" en el
-FUR?) queda para que el Backend Agent lo resuelva con el Líder Técnico** antes de mergear, porque toca
-un gate de ciclo de vida y este ADR no tiene mandato para relajarlo unilateralmente (regla FLIT #6).
+bloqueo `actores_incompletos` que ya bloquea cualquier borrador sin ese dato. La pregunta que este ADR
+escaló —¿basta el documento, o se exige nombre?— **se resolvió por el criterio estricto: el gate NO se
+relaja**. Un vendedor sincronizado sin nombre sigue incompleto, a propósito: relajarlo dejaría radicar
+un FUR con la sección del propietario en blanco. El hueco se corrige por el otro extremo, revelando el
+formulario oculto (Decisión 6) para que el gestor lo complete a mano — degradación en la captura,
+nunca en la corrección. Fijado en
+`TraspasoUnilateralGateYOrigenTests.VendedorSincronizadoSinNombre_SigueBloqueandoLaFinalizacion`.
+
+**Habeas Data, cerrado por el Líder Técnico (2026-08-27).** Esta pieza persiste datos personales de un
+tercero (el propietario) sin que esa persona haya diligenciado un formulario en ESTE trámite. La
+decisión es **marcar el origen del dato**, no ampararse en el consentimiento del contrato de leasing:
+la fila sincronizada se persiste con `{"origen":"rues_sync"|"runt_sync"}` en `actor.metadata`
+(`ActorOrigenes`, `ActorMetadataReader.Serialize`), de modo que sea auditable qué dato se persistió sin
+captura consentida en este expediente y por qué vía. La marca de tiempo es el `CreatedAt` de la misma
+fila, no se duplica. Se eligió `metadata` (jsonb ya existente) sobre una columna nueva porque no exige
+migración y porque el comportamiento buscado es justamente que la marca **desaparezca** en cuanto el
+gestor guarde al actor desde el wizard: `PutActorsHandler` reserializa sin origen, y desde ese momento
+el dato sí proviene de una captura del trámite. El handler además nunca loguea nombre, documento ni
+correo del vendedor.
 
 ### 6 — Revelado del formulario oculto del propietario
 
@@ -483,6 +496,15 @@ sequenceDiagram
   `ResolveSignatureActors()`, `GeneratesSaleDocument`/`HasAppraisalBlock` (`bool?`) +
   `GeneratesSaleDocumentAllowed(familyCode)`/`HasAppraisalBlockAllowed(familyCode)`. Actualizar el
   comentario XML con el esquema (espeja el comentario DDL de `gate_profile`).
+- `src/Flit.Tramites.Application/UseCases/ProcedureInstances/PartesDeclaradas.cs` — **nuevo**.
+  Traductor ÚNICO de capacidades declaradas (`biometricActors`/`signatureActors`) a los `actor_type`
+  internos, con `DeCatalogo`/`Identidad`/`Firma`/`EnOrden`/`Incluye`. Absorbe las dos copias que
+  dejaron las fases anteriores (`FurCommand.ResolveCatalogRoles` y el par `RolesQueValidanIdentidad`
+  + `ActorTypeDeParteRol` de `BiometricaCommand`), que es la nota del §Notas para agentes.
+- `src/Flit.Tramites.Application/UseCases/ProcedureInstances/ActorMetadataReader.cs` — `Serialize`
+  gana el parámetro `origen` y aparece `GetOrigen`, más el catálogo `ActorOrigenes`
+  (`rues_sync`/`runt_sync`). Es la marca de Habeas Data de la Decisión 5. Deliberadamente NO se
+  preserva sola: el guardado manual del gestor reserializa sin origen y la marca desaparece.
 - `src/Flit.Tramites.Application/UseCases/ProcedureInstances/FurCommand.cs` — sustituir las 4
   apariciones del ternario `esTraspaso ? [comprador,vendedor] : [comprador]` (líneas 214, 264, 904,
   1598) por `profile.ResolveSignatureActors()`; `BiometriaGateOk` (643-645) lee `biometricActors`;
@@ -551,9 +573,17 @@ sequenceDiagram
 
 ### `contracts/openapi/core-api.v1.yaml`
 
-- Esquema de respuesta del wizard state (`WizardCapabilities` o equivalente): añadir
-  `sellerCapturedViaForm` (boolean, nullable/opcional) y, en el `sectionConfig` de la sección
-  `actor_form`, `revealSellerForm` (boolean, opcional). Sin cambio de código HTTP ni de rutas.
+- `ProcedureConformationProfileInput.gateProfile` (PUT del perfil de conformación del superadmin):
+  declarar `sellerCapturedViaForm` (boolean), `signatureActors` (array de `OWNER|BUYER|LESSEE`),
+  `generatesSaleDocument` y `hasAppraisalBlock` (boolean nullable, con la semántica de `null` = "lo
+  que diga la familia"). Nombrarlas también en la descripción del `gateProfile` del GET. Sin cambio de
+  código HTTP ni de rutas.
+- **Corrección sobre el alcance original de este ADR**: no hay dónde declarar `sellerCapturedViaForm`
+  ni `revealSellerForm` en la respuesta del wizard state, porque **el endpoint del wizard no está en el
+  contrato**: ni `GET /api/v1/tramites/instances/{id}/wizard` ni `GET /api/v1/tramites/wizard-preview`
+  aparecen en `core-api.v1.yaml`, y por tanto no existe un esquema `WizardCapabilities` que ampliar.
+  Documentar ese endpoint entero excede a este ADR y queda anotado como deuda: mientras siga fuera del
+  contrato, el frontend tipa esas dos llaves solo en `lib/api/types/procedure-runtime.ts`.
 
 ## Notas para agentes
 
@@ -566,11 +596,13 @@ sequenceDiagram
   `ProcedureInstanceActor` necesita alguna columna nueva para distinguir "capturado por formulario" de
   "sincronizado desde RUNT" (auditoría/trazabilidad de origen del dato) — este ADR no lo exige, pero
   puede ser necesario para la Decisión 5.
-- **Backend Agent**: seguir literalmente la tabla de llaves y la lista de archivos. Extraer/reutilizar
-  `ActorsCommand.RolesQueValidanIdentidad` en vez de escribir una cuarta traducción de
-  `biometricActors`. **Antes de implementar `FinalizeDraftGate` para la parte sincronizada, escalar al
-  Líder Técnico el criterio de completitud** (Decisión 5, riesgo abierto) — no relajar el gate por
-  cuenta propia. `SyncSellerActorFromRuntAsync` sigue el patrón "degradación, nunca error" de
+- **Backend Agent**: seguir literalmente la tabla de llaves y la lista de archivos. El traductor
+  catálogo→rol interno es UNO: `PartesDeclaradas` (`Flit.Tramites.Application/UseCases/
+  ProcedureInstances/PartesDeclaradas.cs`). No escribas una copia nueva ni recuperes las dos que
+  había (`FurCommand.ResolveCatalogRoles` y el par `RolesQueValidanIdentidad` + `ActorTypeDeParteRol`
+  de `BiometricaCommand`), ambas ya replegadas sobre él. El criterio de completitud del gate para la
+  parte sincronizada quedó **decidido y cerrado** (Decisión 5): es estricto y no se relaja.
+  `SyncSellerActorFromConsultationsAsync` sigue el patrón "degradación, nunca error" de
   `PreflightCommand`: un lookup fallido no debe romper el preflight.
 - **Frontend Agent**: `rolesDeActores()` es el único punto que decide qué roles pinta `ActorsForm`;
   no dupliques la lógica de revelado en `TramiteWizard.tsx` fuera del `sectionConfig.actor_form` que
@@ -583,13 +615,37 @@ sequenceDiagram
   preflight. TC de revelado: PJ sin RL, PN sin correo, y el caso normal (formulario oculto).
 - **Security Agent**: la sincronización automática del vendedor persiste datos personales de un
   tercero (el propietario/vendedor) sin que haya mediado una captura consentida por formulario en ESE
-  trámite — confirmar contra Habeas Data / Ley 1581 si el consentimiento ya obtenido en el contrato de
-  leasing (fuera del sistema) cubre esta persistencia, o si hace falta una nota de origen del dato
-  (`Source="runt_sync"` en el actor, análogo a `Source="consultation"` de `field_values`) para
-  trazabilidad. Esto no está resuelto por este ADR — es una pregunta para el Líder Técnico antes de
-  implementar la Decisión 5.
+  trámite. **Resuelto** (Decisión 5): la fila se marca con su origen (`ActorOrigenes.RuesSync` /
+  `RuntSync` en `actor.metadata`) para trazabilidad de Habeas Data / Ley 1581, y el handler no loguea
+  ningún dato personal del vendedor. Lo que queda por verificar en cada revisión es que ningún
+  consumidor nuevo copie esa fila a otro expediente sin arrastrar la marca.
 - **Infra Agent**: sin cambios de despliegue; la migración del seed corre en el flujo normal de
   `Database:AutoMigrate` (no es destructiva, es un `UPDATE` de un `jsonb`).
+
+## Estado de implementación
+
+Completo. Las cuatro fases están en la rama `feature/traspaso-unilateral-leasing-fundacion`; no queda
+ningún punto de la tabla del §Contexto decidiendo por código, familia o texto.
+
+| Fase | Alcance |
+|---|---|
+| 1 | `ProcedureTypeGateProfile` con las cuatro llaves + migración EF y `94-traspaso-unilateral-capacidades-declaradas.sql` (corrección del seed) |
+| 2 | Consumo en `FurCommand`, `FurFieldMapper`, `FurPreviewSample`, `IFurDocumentGenerator`, `PreviewFurCommand`, `CreateFromConsultaCommand` y la pieza nueva `SyncSellerActorFromConsultationsCommand` — que sincroniza por **RUES cuando el documento es NIT** (el propietario de un leasing casi siempre es persona jurídica) y por RUNT-conductor en cualquier otro caso |
+| 3 | `BiometricaCommand`, `ActorsCommand`, `FinalizeDraftProcedureInstanceCommand`, `GenerarImprontaAttachmentCommand`, `PreflightCommand`, `TramiteFirmaAplicador`, `WizardStateQuery` (`revealSellerForm`), y el frontend (`wizardCapabilities.ts`, `procedure-runtime.ts`, `TramiteWizard.tsx`) |
+| 4 | `PartesDeclaradas` (traductor único), `ListProcedureInstancesQuery`, `IdentityValidationCompletedConsumer`, `TramiteCambioEstadoEmailProjector`, marca de origen en `ActorMetadataReader`, contrato OpenAPI y la batería de pruebas |
+
+Dos correcciones sobre el ADR tal como se escribió, ambas por hallazgos al implementar:
+
+1. La sincronización del vendedor **no** es solo por RUNT (Decisión 5 la nombraba
+   `SyncSellerActorFromRuntAsync`): el propietario de un leasing es una compañía o una fundación, y su
+   NIT se resuelve contra RUES. La pieza real es `SyncSellerActorFromConsultationsHandler`, con las dos
+   vías.
+2. El contrato OpenAPI no tenía dónde declarar las llaves del wizard state — ver §`contracts/openapi`.
+
+Las cuatro preguntas que este ADR dejó abiertas están cerradas: el criterio de completitud del gate y
+la nota de origen del dato, ambas por el Líder Técnico (Decisión 5); la parte vendedora sincronizada y
+el revelado del formulario, en la Decisión 6. El único punto pendiente es de forma, no de decisión:
+documentar el endpoint del wizard en el contrato.
 
 ## Referencias externas
 

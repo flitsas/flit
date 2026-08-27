@@ -1,6 +1,7 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Infrastructure.Notifications.Tramites;
 
@@ -23,10 +24,13 @@ public static class TramiteCambioEstadoEmailProjector
         ArgumentNullException.ThrowIfNull(actors);
         ArgumentNullException.ThrowIfNull(fieldValues);
 
-        // ADR-0050 — la familia del tipo decide si hay parte vendedora, no la difunta modalidad.
-        var esTraspaso = instance.ProcedureType is not null
-                         && ProcedureFamilyCodes.FromCode(instance.ProcedureType.Family)
-                            == ProcedureFamily.Traspaso;
+        // ADR-0051 — «¿hay parte vendedora que nombrar en el correo?» lo declara el TIPO
+        // (`requiresSeller`), no su familia. La familia solo aproximaba la respuesta: acierta en todos
+        // los tipos sembrados hoy y seguiría acertando en `TRASPASO_UNILATERAL` por casualidad, pero
+        // el día que un tipo de otra familia declare parte vendedora el correo saldría sin nombrarla.
+        // El nombre del campo del modelo (`EsTraspaso`) es contrato con la plantilla y no cambia.
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        var esTraspaso = profile.RequiresSeller;
 
         var comprador = FindActor(actors, "comprador");
         var vendedor = FindActor(actors, "vendedor");

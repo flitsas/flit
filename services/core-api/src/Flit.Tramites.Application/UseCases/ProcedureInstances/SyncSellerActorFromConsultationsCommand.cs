@@ -42,21 +42,20 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// corresponda falla, no resuelve nombre, o el proveedor no está registrado
 /// (<c>RuesActorJuridicalLookup</c> devuelve <c>Error = "provider_not_found"</c> sin lanzar;
 /// <c>RuntPersonLookupHandler</c> puede no encontrar la persona), la fila se crea igual con lo que sí
-/// se conoce (documento) y <c>FullName</c> en blanco. El criterio de completitud de una parte
-/// SINCRONIZADA sin nombre (basta el documento, o degrada a "NO REGISTRA" en el FUR) es Fase 3
-/// (<c>FinalizeDraftProcedureInstanceCommand</c>, fuera de este alcance) — hoy esa combinación queda
-/// con el mismo <c>actores_incompletos</c> que ya bloquea cualquier borrador sin ese dato, sin
-/// formulario con el que el gestor lo corrija manualmente (riesgo documentado en el ADR, Decisión 5/6:
-/// el revelado del formulario oculto para ese caso es Fase 3).</para>
+/// se conoce (documento) y <c>FullName</c> en blanco. El criterio de completitud de esa parte quedó
+/// decidido por el Líder Técnico y NO se relaja: <c>FinalizeDraftGate</c> sigue exigiendo el nombre
+/// (<c>actores_incompletos</c>), y es precisamente ese hueco el que revela el formulario del
+/// propietario en el wizard (Decisión 6, <c>WizardStateQuery.ResolveRevealSellerFormAsync</c>) para que
+/// el gestor lo complete a mano. Un lookup fallido degrada la captura, nunca la corrección.</para>
 ///
-/// <para><b>Habeas Data (nota para el Security Agent, sin resolver aquí).</b> Esta pieza persiste datos
-/// personales de un tercero (el propietario) a partir de una consulta, sin que esa persona haya
-/// diligenciado un formulario en ESTE trámite. El ADR-0051 deja pendiente confirmar si el consentimiento
-/// ya obtenido en el contrato de leasing (fuera del sistema) cubre esta persistencia, o si hace falta
-/// una nota de origen del dato (por ejemplo <c>Source="runt_sync"</c>/<c>"rues_sync"</c>) para
-/// trazabilidad. Por eso este handler NUNCA loguea el nombre, documento ni correo del vendedor — solo
-/// el id del trámite y, cuando aplica, el tipo de documento consultado (NIT vs. natural), que no es
-/// dato personal per se.</para>
+/// <para><b>Habeas Data.</b> Esta pieza persiste datos personales de un tercero (el propietario) a
+/// partir de una consulta, sin que esa persona haya diligenciado un formulario en ESTE trámite. El
+/// Líder Técnico resolvió la pregunta que ADR-0051 dejaba abierta: la fila se marca con su origen
+/// (<see cref="ActorOrigenes.RuesSync"/>/<see cref="ActorOrigenes.RuntSync"/> en
+/// <c>actor.metadata</c>), de modo que sea auditable qué dato se persistió sin captura consentida en
+/// este expediente y por qué vía. Además, este handler NUNCA loguea el nombre, documento ni correo del
+/// vendedor — solo el id del trámite y, cuando aplica, el tipo de documento consultado (NIT vs.
+/// natural), que no es dato personal per se.</para>
 /// </summary>
 public sealed class SyncSellerActorFromConsultationsHandler(
     IProcedureInstanceRepository repo,
@@ -90,7 +89,7 @@ public sealed class SyncSellerActorFromConsultationsHandler(
         var documentType = ownerDocumentType?.Trim();
         var documentNumber = ownerDocumentNumber?.Trim();
         if (string.IsNullOrWhiteSpace(documentType) || string.IsNullOrWhiteSpace(documentNumber))
-            return; // Sin documento no hay a quien sincronizar; FinalizeDraftGate lo señalará (Fase 3).
+            return; // Sin documento no hay a quien sincronizar; FinalizeDraftGate lo señalará.
 
         var instance = await repo.GetByIdWithActorsAsync(instanceId, tenantId, ct);
         if (instance is null)
@@ -126,6 +125,14 @@ public sealed class SyncSellerActorFromConsultationsHandler(
             DocumentNumber = documentNumber,
             FullName = fullName?.Trim() ?? string.Empty,
             PersonType = esJuridica ? ActorPersonTypes.Juridical : ActorPersonTypes.Natural,
+            // ADR-0051 Decisión 5 (Habeas Data) — marca de origen del dato: esta fila NO salió de un
+            // formulario diligenciado en este trámite, sino de una consulta. Queda auditable qué dato
+            // personal se persistió sin captura consentida aquí y por qué vía. Al primer guardado
+            // manual del actor la marca desaparece (PutActorsHandler reserializa sin origen), porque
+            // desde ese momento el dato sí viene de una captura del trámite.
+            Metadata = ActorMetadataReader.Serialize(
+                null, null, null, null,
+                esJuridica ? ActorOrigenes.RuesSync : ActorOrigenes.RuntSync),
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.Actors.Add(actor);

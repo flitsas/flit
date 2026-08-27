@@ -168,7 +168,7 @@ public sealed class GenerarFurHandler(
         // [comprador,vendedor] : [comprador]` de este archivo (sellos, exclusividad baúl/sello, firmas
         // del baúl, respaldo del directorio de RL y certificados de identidad — "mismo patrón que los
         // sellos").
-        var signatureRoles = ResolveCatalogRoles(profile.ResolveSignatureActors(), profile.RequiresSeller);
+        var signatureRoles = PartesDeclaradas.Firma(profile);
 
         // HU #10463 — la validación de identidad ya NO bloquea la GENERACIÓN del FUR/consolidado.
         // Gating PER-PERSONA (HU #10350): se referencia la identidad vigente de la persona (documento del
@@ -181,7 +181,7 @@ public sealed class GenerarFurHandler(
         // el catálogo sembrado — ver ProcedureTypeValidator, que la exige cuando RequiresBiometrics es
         // true) cae al comportamiento previo: comprador+vendedor si el tipo exige vendedor, solo
         // comprador si no.
-        var biometricRoles = ResolveCatalogRoles(profile.BiometricActors, profile.RequiresSeller);
+        var biometricRoles = PartesDeclaradas.Identidad(profile);
         var identidadValidada = BiometriaGateOk(identidadAprobada, biometricRoles);
 
         // Dedup defensivo: `field_values` NO tiene índice único sobre (procedure_instance_id,
@@ -687,27 +687,6 @@ public sealed class GenerarFurHandler(
     private static bool BiometriaGateOk(
         IReadOnlySet<string> identidadAprobadaPartes, string[] biometricRoles) =>
         biometricRoles.Length == 0 || biometricRoles.All(identidadAprobadaPartes.Contains);
-
-    /// <summary>
-    /// ADR-0051 — traduce un conjunto de roles del vocabulario de catálogo (OWNER/BUYER/LESSEE) al
-    /// actor_type interno en español (vendedor/comprador/locatario), con el MISMO helper que ya usa
-    /// <c>biometricActors</c> en otros consumidores (<see cref="RuntConsultaExigida.ActorTypeDeEntidad"/>).
-    /// Un conjunto de catálogo vacío cae al comportamiento previo a ADR-0051: comprador+vendedor si el
-    /// tipo exige vendedor, solo comprador si no.
-    /// </summary>
-    private static string[] ResolveCatalogRoles(IReadOnlyList<string> catalogRoles, bool requiresSeller)
-    {
-        if (catalogRoles.Count == 0)
-            return requiresSeller
-                ? [BiometricRules.ParteVendedor, BiometricRules.ParteComprador]
-                : [BiometricRules.ParteComprador];
-
-        return catalogRoles
-            .Select(RuntConsultaExigida.ActorTypeDeEntidad)
-            .Where(r => r is not null)
-            .Select(r => r!)
-            .ToArray();
-    }
 
     /// <summary>
     /// HU #11641 — ¿el trámite incluye esta transformación? La bandera <c>cambio_*</c> es la

@@ -39,6 +39,24 @@ internal static class ProcedureTypeFixture
     public static ProcedureType Traspaso => TraspasoInstance;
 
     /// <summary>
+    /// ADR-0051 — traspaso unilateral de leasing: el locatario formaliza a su nombre y el
+    /// propietario NO comparece por formulario. El perfil espeja el seed de
+    /// <c>94-traspaso-unilateral-capacidades-declaradas.sql</c>: hay parte vendedora, pero solo ella
+    /// firma y valida identidad, no se captura tecleando datos, y no hay compraventa ni avalúo.
+    /// </summary>
+    public static ProcedureType TraspasoUnilateral => TraspasoUnilateralInstance;
+
+    private static readonly ProcedureType TraspasoUnilateralInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000aa"),
+        Code = "TRASPASO_UNILATERAL",
+        Name = "Traspaso unilateral (leasing)",
+        Family = "TRASPASO",
+        GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresSeller":true,"sellerCapturedViaForm":false,"signatureActors":["OWNER"],"requiresBiometrics":true,"biometricActors":["OWNER"],"generatesSaleDocument":false,"hasAppraisalBlock":false,"requiresSignature":true,"validateOtOperability":true,"simitMode":"INTERNAL"}""",
+        Steps = TraspasoSteps(),
+    };
+
+    /// <summary>
     /// Tipo equivalente a la modalidad que el test venía usando. Preserva la semántica de los
     /// fixtures previos a ADR-0050, incluidos los helpers que reciben la modalidad por parámetro.
     /// </summary>

@@ -365,17 +365,12 @@ public sealed class ListBiometriaHandler(
         // actual (su PartyRole de origen puede diferir, p.ej. matrícula→traspaso).
         //
         // ADR-0051 Decisión 3 — las partes que participan del listado (y de la prevalencia de abajo) las
-        // decide `biometricActors` del perfil, no `instance.Family == Traspaso`. Reutiliza el MISMO
-        // traductor que ya usa el disparador de identidad (`PutActorsHandler.RolesQueValidanIdentidad`),
-        // sin escribir una tercera copia de catálogo→rol interno.
-        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
-        var rolesQueValidan = PutActorsHandler.RolesQueValidanIdentidad(instance);
-        var rolesEfectivos = rolesQueValidan is { Count: > 0 } roles
-            ? OrdenPartesBiometricas.Where(roles.Contains)
-            : profile.RequiresSeller
-                ? [ParteRol.Comprador, ParteRol.Vendedor]
-                : (IEnumerable<ParteRol>)[ParteRol.Comprador];
-        var partes = rolesEfectivos.Select(ActorTypeDeParteRol).ToArray();
+        // decide `biometricActors` del perfil, no `instance.Family == Traspaso`. El traductor
+        // catálogo→rol interno es el ÚNICO del sistema (`PartesDeclaradas`), compartido con el FUR:
+        // este archivo tenía su propia copia vía `RolesQueValidanIdentidad` + `ActorTypeDeParteRol`.
+        // `EnOrden` conserva el orden de presentación de este listado (comprador, vendedor, locatario),
+        // que no tiene por qué coincidir con el orden en que el perfil declara los roles.
+        var partes = PartesDeclaradas.EnOrden(PartesDeclaradas.Identidad(instance));
         // Legacy (matrícula/OTROS): filas sin rol se atribuyen a "comprador" por documento
         // (BiometricListPrevalence.Pertenece). Cualquier otra combinación de partes — incluido
         // TRASPASO_UNILATERAL con solo "vendedor" — exige coincidencia exacta de rol, igual que traspaso.
@@ -550,17 +545,6 @@ public sealed class ListBiometriaHandler(
     /// arreglo previo a esta llave (<c>["comprador","vendedor"]</c>), con <c>locatario</c> al final por
     /// si algún día valida identidad (hoy ninguna llave lo declara).
     /// </summary>
-    private static readonly ParteRol[] OrdenPartesBiometricas =
-        [ParteRol.Comprador, ParteRol.Vendedor, ParteRol.Locatario];
-
-    /// <summary>Traduce el rol interno (dominio) al <c>actor_type</c> string que usa este listado.</summary>
-    private static string ActorTypeDeParteRol(ParteRol rol) => rol switch
-    {
-        ParteRol.Comprador => "comprador",
-        ParteRol.Vendedor => "vendedor",
-        ParteRol.Locatario => "locatario",
-        _ => rol.ToString().ToLowerInvariant(),
-    };
 }
 
 // ── Handler 2: info por token (público) ─────────────────────────────────────

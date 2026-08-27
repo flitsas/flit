@@ -221,6 +221,53 @@ describe('arrendatario (leasing)', () => {
   });
 });
 
+describe('vendedor que no se captura por formulario (ADR-0051)', () => {
+  // TRASPASO_UNILATERAL: el locatario formaliza a su nombre, el propietario existe en el FUR y es
+  // el único que firma y valida identidad, pero nunca pasa por el asistente.
+  const UNILATERAL: WizardCapabilities = {
+    ...TRASPASO,
+    sellerCapturedViaForm: false,
+    requiresCommercialValue: false,
+    biometricActors: ['OWNER'],
+  };
+
+  it('hay parte vendedora, pero el paso de actores no le pinta formulario', () => {
+    const caps = capacidadesEfectivas(UNILATERAL, 'TRASPASO');
+
+    expect(caps.pideVendedor).toBe(true);
+    expect(caps.vendedorCapturaPorFormulario).toBe(false);
+    expect(rolesDeActores(caps)).toEqual(['comprador']);
+  });
+
+  it('sigue validando la identidad del propietario, que es el único que interviene', () => {
+    expect(capacidadesEfectivas(UNILATERAL, 'TRASPASO').validaIdentidadDelVendedor).toBe(true);
+  });
+
+  it('sin la llave, todo tipo con vendedor lo sigue capturando por formulario', () => {
+    // La llave nueva no puede apagarle el formulario a un traspaso estándar por no declararla.
+    const caps = capacidadesEfectivas(TRASPASO, 'TRASPASO');
+
+    expect(caps.vendedorCapturaPorFormulario).toBe(true);
+    expect(rolesDeActores(caps)).toEqual(['vendedor', 'comprador']);
+  });
+
+  it('un tipo SIN parte vendedora no infla la captura por la mera ausencia de la llave', () => {
+    // Si `vendedorCapturaPorFormulario` cayera a `true` por defecto, `rolesDeActores()` —que ya no
+    // mira `pideVendedor`— le pintaría un formulario de vendedor a una matrícula.
+    expect(capacidadesEfectivas(MATRICULA, 'MATRICULAS').vendedorCapturaPorFormulario).toBe(false);
+    expect(rolesDeActores(capacidadesEfectivas(MATRICULA, 'MATRICULAS'))).toEqual(['comprador']);
+  });
+
+  it('el respaldo sin capacidades nunca tiene captura oculta', () => {
+    // Las dos modalidades heredadas son anteriores a TRASPASO_UNILATERAL: ahí la captura del
+    // vendedor siempre coincide con que exista parte vendedora.
+    const traspaso = capacidadesEfectivas(null, 'TRASPASO');
+    expect(traspaso.vendedorCapturaPorFormulario).toBe(true);
+    expect(rolesDeActores(traspaso)).toEqual(['vendedor', 'comprador']);
+    expect(capacidadesEfectivas(null, 'MATRICULAS').vendedorCapturaPorFormulario).toBe(false);
+  });
+});
+
 describe('esFamiliaTraspaso', () => {
   it('reconoce las dos escrituras del mismo dato', () => {
     expect(esFamiliaTraspaso('TRASPASO')).toBe(true);
