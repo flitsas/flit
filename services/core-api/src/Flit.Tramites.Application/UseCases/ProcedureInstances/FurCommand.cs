@@ -1149,8 +1149,24 @@ public sealed class GenerarFurHandler(
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
         if (!hasCustom)
         {
-            templateCode = MandatoTemplateResolver.ResolveEmissionCode(
-                assignmentMode, esJuridica, transitOfficeCode);
+            // Las reglas de EMISIÓN mandan cuando el caso las impone: formato abierto se emite en
+            // blanco (genérico) y persona jurídica / institucional lleva la redacción de Sabaneta.
+            // Fuera de esos casos vuelve a mandar la elección del OT: la nota de precedencia de
+            // MandatoSystemOfficeTemplates es explícita —«quien parametriza el OT manda», y `auto`
+            // es la forma de devolverle la decisión al builtin—. Al resolver siempre por
+            // ResolveEmissionCode, un OT con `template_code = municipio` emitía genérico, que es lo
+            // que reprodujo HU #11704 (el organismo se resuelve por id, pero la plantilla del OT se
+            // perdía igual).
+            var modo = MandatoAssignmentModeCodes.Resolve(assignmentMode);
+            var elModoImponeRedaccion =
+                modo == MandatoAssignmentModeCodes.Open
+                || modo == MandatoAssignmentModeCodes.Institutional
+                || esJuridica;
+
+            templateCode = !elModoImponeRedaccion && !MandatoTemplateResolver.IsAuto(config?.TemplateCode)
+                ? config!.TemplateCode!.Trim().ToLowerInvariant()
+                : MandatoTemplateResolver.ResolveEmissionCode(
+                    assignmentMode, esJuridica, transitOfficeCode);
         }
 
         MandatarioFirmante? mandatario = null;
