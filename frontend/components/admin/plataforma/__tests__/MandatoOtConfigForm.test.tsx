@@ -65,6 +65,7 @@ describe("MandatoOtConfigForm", () => {
     expect(screen.getByTestId("mandato-template-select")).toBeInTheDocument();
     expect(listCompanyOtMandateRules).toHaveBeenCalledWith(funza.officeId);
     expect(screen.queryByTestId("mandato-ot-register-signer")).not.toBeInTheDocument();
+    expect(screen.getByText(/el default cliente×ot prima sobre este/i)).toBeInTheDocument();
   });
 
   it("permite registrar el mandatario default del OT desde el panel", async () => {

@@ -27,7 +27,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// mandatario.</para>
 ///
 /// <para><b>Antes de la corrección este test FALLABA:</b> la pantalla sugería el default parametrizado
-/// (cascada completa: elegido → default del OT → único candidato), mientras el documento recibía
+/// (cascada: elegido → cliente×OT → OT → vacío), mientras el documento recibía
 /// <c>instance.MandateSignerId</c> CRUDO (null, sin cascada) y generaba el mandato SIN firmante
 /// (<c>Mandatario</c> null) — comprobado ejecutando este test contra el código previo a la corrección.</para>
 /// </summary>

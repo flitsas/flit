@@ -17,8 +17,9 @@ public static class MandateSignerDefaultResolver
         Resolve(candidateIds, explicitOrSavedSignerId, otDefaultSignerId: null, companyDefaultSignerId: defaultSignerId);
 
     /// <summary>
-    /// HU-L8 — elección del trámite → default del OT (aunque no esté en candidatos de la compañía) →
-    /// default de la compañía si está entre candidatos → vacío. Ya no se autoelige el único candidato.
+    /// Elección del trámite → default cliente×OT (si está entre candidatos de esa gestora) →
+    /// default del OT (aunque no esté en candidatos de la compañía) → vacío.
+    /// Ya no se autoelige el único candidato.
     /// </summary>
     public static Guid? Resolve(
         IReadOnlyCollection<Guid> candidateIds,
@@ -31,15 +32,15 @@ public static class MandateSignerDefaultResolver
         if (explicitOrSavedSignerId is { } chosen && chosen != Guid.Empty)
             return chosen;
 
-        if (otDefaultSignerId is { } ot && ot != Guid.Empty)
-            return ot;
-
         if (companyDefaultSignerId is { } company
             && company != Guid.Empty
             && candidateIds.Contains(company))
         {
             return company;
         }
+
+        if (otDefaultSignerId is { } ot && ot != Guid.Empty)
+            return ot;
 
         return null;
     }

@@ -244,13 +244,13 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
         var esJuridica = MandateSimulationPersonTypes.IsJuridica(personType);
 
-        // Mismo orden que el trámite: elección explícita → default OT → default compañía.
+        // Mismo orden que el trámite: elección explícita → default cliente×OT → default OT.
         MandatarioFirmante? mandatario = null;
         if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
             var signerId = mandateSignerId
-                ?? config?.OtDefaultMandateSignerId
-                ?? config?.DefaultMandateSignerId;
+                ?? config?.DefaultMandateSignerId
+                ?? config?.OtDefaultMandateSignerId;
             if (signerId is { } id && id != Guid.Empty)
             {
                 var signer = await _signerDirectory.GetByIdAsync(id, ct).ConfigureAwait(false);

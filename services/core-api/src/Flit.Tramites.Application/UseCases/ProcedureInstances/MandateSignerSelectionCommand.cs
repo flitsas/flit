@@ -109,7 +109,7 @@ public sealed class ListMandateSignerOptionsHandler(
                 c.FirmaFisica));
         }
 
-        // Prioridad: ya elegido en el trámite → default parametrizado (módulo Mandatos) → único candidato.
+        // Prioridad: ya elegido en el trámite → default cliente×OT → default OT → vacío.
         // Resolvedor COMPARTIDO (bug DEV: el radio se marcaba con una sugerencia que nunca se guardó, y
         // el documento resolvía el firmante con otro criterio): el mismo método lo usa la generación del
         // mandato y el gate de aprobación, para que la pantalla y el documento nunca diverjan.

@@ -5,15 +5,16 @@
 
 ## Objetivo
 
-Un organismo puede fijar un **mandatario global por defecto**. Ese default **manda aunque no esté vinculado a la compañía gestora**. El **modo** al nacer sigue `open` y sin firmante persona; la plantilla de redacción la fija HU-L10.
+Un organismo puede fijar un **mandatario global por defecto** (persona natural). Si la empresa que radica tiene otro default en ese OT, **ese gana**. El default del OT aplica cuando no hay default cliente×OT, **aunque no esté vinculado a la compañía gestora**. El **modo** al nacer sigue `open` y sin firmante persona; la plantilla de redacción la fija HU-L10.
 
 ## Cascada (sin elección en el trámite)
 
-| Default OT | Default compañía | Quién se pinta |
-|------------|------------------|----------------|
-| Sí | Sí | OT |
-| No | Sí | Compañía (si está entre candidatos de esa gestora×OT) |
-| Sí | No | OT |
+El mandatario es siempre una **persona natural**.
+
+| Default cliente×OT | Default OT | Quién se pinta |
+|--------------------|------------|----------------|
+| Sí (candidato de esa gestora×OT) | Sí o no | Cliente×OT |
+| No | Sí | OT (aunque no esté en candidatos de la gestora) |
 | No | No | Vacío (ya no se autoelige el único candidato) |
 
 La elección explícita del wizard (`MandateSignerId`) sigue ganando.

@@ -155,6 +155,37 @@ public sealed class MandateSignerSelectionTests
     }
 
     [Fact]
+    public async Task DefaultClienteOt_GanaAlDefaultOt_CuandoAmbosEstanDefinidos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instancia();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_code",
+            ValueText = "05001",
+            Source = "user",
+        });
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveAsync("05001", Tenant, Arg.Any<CancellationToken>())
+            .Returns(new MandateOtConfig(
+                Ot, "generico", RequiresForNaturalPerson: false, null, null,
+                AssignmentMode: "signer",
+                OtDefaultMandateSignerId: Carlos,
+                DefaultMandateSignerId: Ana));
+
+        var handler = new ListMandateSignerOptionsHandler(
+            _repo,
+            new Directorio(Candidato(Ana, "Ana Restrepo"), Candidato(Carlos, "Carlos Pérez")),
+            mandatePolicy: policy);
+
+        var (result, error) = await handler.HandleAsync(instance.Id, Tenant, ct);
+
+        error.Should().BeNull();
+        result!.ElegidoId.Should().Be(Ana);
+    }
+
+    [Fact]
     public async Task ConVarios_NoSePreseleccionaNinguno()
     {
         var ct = TestContext.Current.CancellationToken;

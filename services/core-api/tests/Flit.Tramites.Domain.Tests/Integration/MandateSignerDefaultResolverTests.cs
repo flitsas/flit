@@ -20,10 +20,34 @@ public sealed class MandateSignerDefaultResolverTests
     }
 
     [Fact]
-    public void DefaultOt_GanaAlDeCompania_AunqueNoEsteEnCandidatos()
+    public void DefaultClienteOt_GanaAlDefaultOt()
     {
         var resultado = MandateSignerDefaultResolver.Resolve(
             [Ana, Carlos],
+            explicitOrSavedSignerId: null,
+            otDefaultSignerId: OtGlobal,
+            companyDefaultSignerId: Carlos);
+
+        resultado.Should().Be(Carlos);
+    }
+
+    [Fact]
+    public void DefaultOt_SeUsaCuandoNoHayClienteOt()
+    {
+        var resultado = MandateSignerDefaultResolver.Resolve(
+            [Ana, Carlos],
+            explicitOrSavedSignerId: null,
+            otDefaultSignerId: OtGlobal,
+            companyDefaultSignerId: null);
+
+        resultado.Should().Be(OtGlobal);
+    }
+
+    [Fact]
+    public void DefaultClienteFueraDeCandidatos_CaeAlDefaultOt()
+    {
+        var resultado = MandateSignerDefaultResolver.Resolve(
+            [Ana],
             explicitOrSavedSignerId: null,
             otDefaultSignerId: OtGlobal,
             companyDefaultSignerId: Carlos);

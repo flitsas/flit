@@ -653,9 +653,9 @@ export function MandatoOtConfigForm({
                 ))}
               </select>
               <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                Si está definido, firma este mandatario aunque la compañía tenga otro default y aunque
-                no esté vinculada a esa empresa. Sin default de OT ni de compañía, el mandato sale
-                vacío de firmante persona.
+                Si la empresa no tiene mandatario propio en este OT, los trámites usan esta persona
+                (aunque no esté vinculada a esa empresa). El default cliente×OT prima sobre este. Sin
+                ninguno de los dos, el mandato sale vacío de firmante persona.
               </span>
               {onRegisterSigner ? (
                 <div className="flex flex-col gap-1.5 pt-1">

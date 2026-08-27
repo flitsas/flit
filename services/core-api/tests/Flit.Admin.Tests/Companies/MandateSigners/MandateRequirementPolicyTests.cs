@@ -192,7 +192,7 @@ public sealed class MandateRequirementPolicyTests
     }
 
     [Fact]
-    public async Task ResolveAsync_OtDefaultGanaAlDeCompania()
+    public async Task ResolveAsync_ExponeDefaultOtYDeCompania()
     {
         await using var ctx = NewContext();
         var otSigner = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");

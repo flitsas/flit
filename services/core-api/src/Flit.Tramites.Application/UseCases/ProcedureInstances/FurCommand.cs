@@ -1181,8 +1181,8 @@ public sealed class GenerarFurHandler(
                         mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
 
                         // Persistir lo resuelto SOLO cuando NO venía de una elección explícita ya
-                        // guardada (el gestor no había elegido nada: salió del default del OT o del
-                        // único candidato). El mandato es un documento legal — quién lo firma queda
+                        // guardada (el gestor no había elegido nada: salió del default cliente×OT,
+                        // del OT o quedó vacío). El mandato es un documento legal — quién lo firma queda
                         // registrado, no recalculado en cada regeneración. Así un cambio posterior en la
                         // parametrización del OT no reescribe en silencio quién firmó un expediente ya
                         // emitido, y la próxima regeneración es idempotente (ya hay elección explícita).
