@@ -118,7 +118,7 @@ export function AvaluoComercialCard({
                   role="status"
                   aria-live="polite"
                 >
-                  Aceptado
+                  Valor sugerido aceptado
                 </span>
               )}
 
