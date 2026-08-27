@@ -150,6 +150,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
 
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
 LECTURA DEL VIN Y EL NUMERO DE MOTOR:
 Leelos caracter por caracter, exactamente como aparecen. NO completes, NO corrijas, NO deduzcas.
 Presta maxima atencion a los caracteres que se confunden: 0 vs O vs D, 1 vs I vs l, 5 vs S, 8 vs B vs
@@ -276,6 +284,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
 
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
 JSON valido sin markdown:
 {"tipo_documento":"declaracion_importacion","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_documento":"","fecha":"","aduana":"","importador_nombre":"","importador_nit":"","importador_direccion":"","importador_ciudad":"","agente_aduana":"","agente_aduana_nit":"","pais_origen":"","pais_procedencia":"","puerto_entrada":"","subpartida_arancelaria":"","tipo_vehiculo":"automovil","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_vin":"","vehiculo_motor":"","vehiculo_chasis":"","vehiculo_cilindraje":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_combustible":"","vehiculo_pasajeros":"","vehiculo_peso_bruto":"","cantidad":1,"ampara_multiples_vehiculos":false,"valor_fob_usd":0,"valor_flete_usd":0,"valor_seguro_usd":0,"valor_cif_usd":0,"valor_cif_cop":0,"tasa_cambio":0,"arancel_porcentaje":0,"arancel_valor":0,"iva_porcentaje":0,"iva_valor":0,"total_tributos":0,"regimen":"","observaciones":""}
 """;
@@ -289,7 +305,12 @@ VALIDACIONES:
 2. NO es valido si es: una factura de venta, un FUR (Formulario Unico de Registro), una declaracion de importacion, una poliza SOAT, un certificado de revision tecnico-mecanica RTM (a menos que incluya seccion de improntas), un recibo de pago, un contrato
 3. DEBE contener al menos UNO de estos numeros de identificacion del vehiculo: numero de motor, numero de chasis, VIN, o numero de serie
 4. DEBE contener datos del vehiculo (marca, modelo como minimo)
-5. Para ser valido el documento debe tener origen en: CDA (Centro de Diagnostico Automotor), VUS (Ventanilla Unica de Servicios), organismo de transito, DIJIN, o entidad certificada
+5. Origen valido: CDA (Centro de Diagnostico Automotor), VUS (Ventanilla Unica de Servicios),
+organismo de transito, DIJIN o entidad certificada. TAMBIEN es valida la "hoja de improntas del
+cliente" que genera la propia plataforma de tramites: trae la foto de la placa VIN y los numeros de
+motor y chasis transcritos, con hash y sello de tiempo, y NO lleva sello de CDA. Es un documento de
+improntas legitimo: es_valido va en true. Que los calcos sean fotografias informales tomadas por el
+cliente NO lo invalida.
 
 TIPOS DE DOCUMENTOS DE IMPRONTAS COLOMBIANOS:
 - HOJA DE IMPRONTAS DIGITALES: Documento digital moderno conforme Resolucion 17145 de 2023. Tiene secciones coloreadas para cada impronta (rojo=motor, azul=chasis, verde=VIN/serie). Fondo grafito simulando calco fisico. Hash SHA-256 y codigo QR de verificacion. Radicado formato IMPR-XXXXX.
@@ -369,6 +390,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
 
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
 JSON valido sin markdown:
 {"tipo_documento":"certificado_improntas","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","fecha":"","entidad_emisora":"","entidad_nit":"","entidad_ciudad":"","inspector_nombre":"","inspector_documento":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_servicio":"","vehiculo_vin":"","vehiculo_vin_datos":"","vehiculo_motor":"","vehiculo_motor_datos":"","vehiculo_chasis":"","vehiculo_chasis_datos":"","vehiculo_serie":"","estado_motor":"no_verificado","estado_chasis":"no_verificado","estado_vin":"no_verificado","estado_serie":"no_verificado","tiene_qr":false,"tiene_hash":false,"hash_valor":"","resolucion_referencia":"","alertas":[],"observaciones":""}
 """;
@@ -388,6 +417,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1,2] o [3] o [1]). Base 1.
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
 
 EXTRAER:
 - tipo_documento: "soat" | "certificado_soat" | "otro"
@@ -434,6 +471,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
 
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
 EXTRAER:
 - tipo_documento: "rtm" | "certificado_rtm" | "otro"
 - es_valido: true/false
@@ -475,6 +520,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1,2] o [3] o [1]). Base 1.
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
 
 EXTRAER JSON (sin markdown):
 - paginas_documento: [paginas], total_paginas: numero
