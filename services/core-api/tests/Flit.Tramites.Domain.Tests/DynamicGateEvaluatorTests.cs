@@ -237,6 +237,75 @@ public sealed class DynamicGateEvaluatorTests
         state.CanSubmit.Should().BeFalse();
     }
 
+    /// <summary>
+    /// EL CASO REPORTADO (TRM-2026-000068): un cambio de color sobre un vehículo que SÍ tiene prenda
+    /// en el RUNT. El hecho es del vehículo, pero este trámite no puede resolverlo —la familia OTROS
+    /// no acumula gravamen (ADR-0050), el asistente no pinta la sección y `RegistrarPrendaHandler` la
+    /// rechaza con `prenda_no_admitida_en_tipo`—. El blocker global dejaba «Finalizar» deshabilitado
+    /// sin ninguna forma de satisfacerlo.
+    /// </summary>
+    [Fact]
+    public void PrendaDecision_OtrosNoPrendario_ConGravamenDelRunt_NoBloqueaLaRadicacion()
+    {
+        var ctx = ConGravamenDelRunt() with
+        {
+            TypeCode = "CAMBIO_COLOR",
+            FamilyCode = "OTROS",
+        };
+
+        var blockers = DynamicGateEvaluator.CanSubmitBlockers(PrendaProfile(), ctx);
+
+        blockers.Should().NotContain(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void PrendaDecision_OtrosPrendario_ConGravamenDelRunt_SigueBloqueando()
+    {
+        // El contrapeso: acotar el disparador no puede desarmar el gate justo donde la prenda ES el
+        // trámite. `LEVANTAMIENTO_PRENDA` vive en OTROS y entra por EsTipoPrendaBase.
+        var ctx = ConGravamenDelRunt() with
+        {
+            TypeCode = "LEVANTAMIENTO_PRENDA",
+            FamilyCode = "OTROS",
+        };
+
+        var blockers = DynamicGateEvaluator.CanSubmitBlockers(PrendaProfile(), ctx);
+
+        blockers.Should().Contain(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void PrendaDecision_TraspasoConGravamenDelRunt_SigueBloqueando()
+    {
+        // R10 intacto donde el expediente sí acumula el gravamen sobre el tipo base.
+        var ctx = ConGravamenDelRunt() with
+        {
+            TypeCode = "TRASPASO_STANDARD",
+            FamilyCode = "TRASPASO",
+        };
+
+        var blockers = DynamicGateEvaluator.CanSubmitBlockers(PrendaProfile(), ctx);
+
+        blockers.Should().Contain(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void PrendaDecision_OtrosNoPrendario_LaSeccionTampocoQuedaIncompleta()
+    {
+        // Si el tipo llegara con la sección `prenda_decision` parametrizada, tampoco debe pintarse en
+        // rojo: el paso no tiene nada que pedir.
+        var ctx = ConGravamenDelRunt() with
+        {
+            TypeCode = "CAMBIO_COLOR",
+            FamilyCode = "OTROS",
+        };
+
+        var state = DynamicGateEvaluator.Evaluate(PrendaProfile(), PrendaSteps(), ctx);
+
+        state.Steps[0].Status.Should().Be("complete");
+        state.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
     [Fact]
     public void PrendaDecision_SinNadaQueResolver_NoBloquea()
     {

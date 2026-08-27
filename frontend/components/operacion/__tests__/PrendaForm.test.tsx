@@ -414,9 +414,102 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
     });
   });
 
-  it('AC4 — sin decisión seleccionada, el wizard NO avanza y pide elegir una decisión', async () => {
+  // ── Default «Sin prenda» en matrícula inicial ─────────────────────────────────────
+  // El control arrancaba sin ninguna opción marcada cuando el RUNT no reportaba gravamen, y de ahí
+  // salía un `prenda_decision_requerida` al Preparar si el gestor nunca abría la sección.
+
+  it('matrícula sin gravamen reportado — preselecciona «Sin prenda» y el wizard avanza', async () => {
     const ref = createRef<PrendaFormHandle>();
     render(<PrendaForm ref={ref} instanceId="abc" embeddedInWizard />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Sin prenda' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    });
+
+    // La preselección se persiste sin que el gestor toque nada, al guardar el paso.
+    const ok = await ref.current!.save();
+    expect(ok).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledWith('abc', {
+      decision: 'sin_prenda',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: null,
+    });
+  });
+
+  it('matrícula CON gravamen reportado — el default no le gana a la sugerencia del RUNT', async () => {
+    render(<PrendaForm instanceId="abc" runtHasGravamen />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Registrar prenda' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    });
+    expect(screen.getByRole('button', { name: 'Sin prenda' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('matrícula con decisión ya guardada — el default no la pisa', async () => {
+    client.getPrenda.mockResolvedValueOnce({
+      id: '1',
+      decision: 'registrar',
+      estado: 'vigente',
+      acreedorNombre: 'Banco XYZ',
+      acreedorDocumento: '900111222',
+      levantamientoEntidad: null,
+      createdAt: '2026-07-07T00:00:00Z',
+    } as never);
+
+    render(<PrendaForm instanceId="abc" />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Registrar prenda' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    });
+  });
+
+  it('traspaso — NO preselecciona nada (queda como estaba)', async () => {
+    // Alcance deliberado: en traspaso el vehículo tiene historial, así que «el RUNT no reportó
+    // gravamen» puede significar que la consulta no lo trajo. Su lista tampoco ofrece `sin_prenda`.
+    render(
+      <PrendaForm
+        instanceId="abc"
+        modalidad="traspaso"
+        decisions={traspasoDecisions(false)}
+        embeddedInWizard
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    // En traspaso el control es un <select>: sin decisión se queda en la opción vacía.
+    const select = screen.getByLabelText('¿Al vehículo se le asociará una prenda?');
+    expect((select as HTMLSelectElement).value).toBe('');
+  });
+
+  it('AC4 — sin decisión seleccionada, el wizard NO avanza y pide elegir una decisión', async () => {
+    // El guard se ejercita en TRASPASO: desde el default de «Sin prenda», la matrícula ya no puede
+    // llegar a `save()` sin decisión (ver el bloque de abajo). El guard sigue vivo para el resto.
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        modalidad="traspaso"
+        decisions={traspasoDecisions(false)}
+        embeddedInWizard
+      />,
+    );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
     const ok = await ref.current!.save();

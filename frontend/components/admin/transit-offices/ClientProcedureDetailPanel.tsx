@@ -115,7 +115,7 @@ export interface ClientProcedureDetailPanelProps {
   onClose: () => void;
   scope?: OtApiScope;
   onVerDocumentos?: (row: OtClientProcedure) => void;
-  onVerConsolidado?: (row: OtClientProcedure) => void;
+  onVerConsolidado?: (row: OtClientProcedure, force?: boolean) => void;
   consolidadoActing?: boolean;
 }
 
@@ -249,6 +249,20 @@ export function ClientProcedureDetailPanel({
               onClick={() => onVerConsolidado?.(row)}
             >
               {consolidadoActing ? "Abriendo…" : "Ver consolidado"}
+            </button>
+          ) : null}
+          {/* Salida manual: reconstruye el PDF ignorando la marca de vigencia. El expediente se
+              invalida solo cuando cambia, pero si el operador duda de lo que ve no debe quedarse
+              sin forma de comprobarlo. */}
+          {canConsolidado ? (
+            <button
+              type="button"
+              disabled={consolidadoActing}
+              className="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50 text-muted-foreground"
+              title="Reconstruye el expediente consolidado con el contenido actual del trámite"
+              onClick={() => onVerConsolidado?.(row, true)}
+            >
+              Regenerar
             </button>
           ) : null}
         </div>

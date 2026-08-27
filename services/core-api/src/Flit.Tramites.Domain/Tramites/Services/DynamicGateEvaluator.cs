@@ -122,6 +122,18 @@ public sealed record DynamicWizardContext
     /// </summary>
     public string? TypeCode { get; init; }
 
+    /// <summary>
+    /// Familia del tipo (<c>MATRICULAS</c> / <c>TRASPASO</c> / <c>OTROS</c>). La necesita la regla de
+    /// prenda para saber si el expediente ACUMULA un gravamen sobre el tipo base: en OTROS el cambio
+    /// ES el trámite (ADR-0050), así que un gravamen que el RUNT reporte no es asunto suyo y exigir
+    /// una decisión dejaba el trámite sin salida.
+    ///
+    /// <para>Ausente (<c>null</c>) se trata como acumulable, el fail-safe de
+    /// <see cref="ProcedureTypeLayers.FamiliaAcumulaComplementarios"/>: preserva el comportamiento
+    /// previo en vez de apagar la prenda en silencio.</para>
+    /// </summary>
+    public string? FamilyCode { get; init; }
+
     /// <summary>Tipos de adjunto cargados; <see cref="PrendaGate"/> verifica contra ellos el
     /// documento que exige la decisión de prenda.</summary>
     public IReadOnlyCollection<string> AttachmentTipos { get; init; } = [];
@@ -325,8 +337,10 @@ public static class DynamicGateEvaluator
 
             case "prenda_decision":
                 // R10, disparado por lo que HAY que resolver —el tipo es de prenda, o el RUNT reportó
-                // un gravamen— y no por una marca del tipo. Ver ProcedureTypeLayers.ExigeDecisionDePrenda.
-                if (!ProcedureTypeLayers.ExigeDecisionDePrenda(ctx.TypeCode, ctx.RuntReportaGravamen))
+                // un gravamen sobre un expediente que puede acumularlo— y no por una marca del tipo.
+                // Ver ProcedureTypeLayers.ExigeDecisionDePrenda.
+                if (!ProcedureTypeLayers.ExigeDecisionDePrenda(
+                        profile, ctx.FamilyCode, ctx.TypeCode, ctx.RuntReportaGravamen))
                     return Complete();
                 var prendaError = PrendaGate.EvaluateDecision(ctx.PrendaVigente, ctx.AttachmentTipos);
                 return prendaError is null ? Complete() : Incomplete(reasons, prendaError);
@@ -407,7 +421,12 @@ public static class DynamicGateEvaluator
         }
         if (profile.RequiresBiometrics && !BiometricsOk(profile, ctx))
             blockers.Add(IdentidadNoAprobada);
-        if (ProcedureTypeLayers.ExigeDecisionDePrenda(ctx.TypeCode, ctx.RuntReportaGravamen))
+        // El blocker GLOBAL de prenda: es el que pinta la franja «Requisitos pendientes antes del
+        // envío» y deshabilita Finalizar. Un trámite sin dimensión de prenda no lo emite aunque el
+        // RUNT reporte un gravamen sobre el vehículo: el prevuelo lo señala, pero no hay nada que
+        // este expediente pueda decidir al respecto.
+        if (ProcedureTypeLayers.ExigeDecisionDePrenda(
+                profile, ctx.FamilyCode, ctx.TypeCode, ctx.RuntReportaGravamen))
         {
             var prendaError = PrendaGate.EvaluateDecision(ctx.PrendaVigente, ctx.AttachmentTipos);
             if (prendaError is not null)

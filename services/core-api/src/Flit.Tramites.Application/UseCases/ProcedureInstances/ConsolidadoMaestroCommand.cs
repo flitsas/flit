@@ -43,10 +43,17 @@ public sealed class GenerarConsolidadoMaestroHandler(
     /// (la capa Application no referencia Admin). Si es null/vacío, se cae al orden por modalidad
     /// (<see cref="ConsolidadoOrderingResolver"/>) como respaldo.
     /// </param>
+    /// <param name="force">
+    /// El organismo pide explícitamente reconstruir el PDF, saltándose el atajo de caché. Es el
+    /// equivalente para el OT del <c>force</c> que <c>ExpedienteVisor</c> ya usaba en el wizard: si
+    /// una vía de invalidación falla o el operador simplemente duda de lo que está viendo, tiene una
+    /// salida en la interfaz en vez de depender de que el servidor haya adivinado bien.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<string>? matrizPrecedencia = null,
+        bool force = false,
         CancellationToken ct = default)
     {
         // Graph con FieldValues (HU #10857): necesarios para los datos de la portada (placa, secretaría).
@@ -66,7 +73,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // compañía" regeneraría el maestro en CADA acceso, no una sola vez. Limitación asumida (AC4 del
         // Bug #11612): un trámite antiguo con el maestro vigente conserva el guión hasta que se
         // invalide por las vías normales.
-        if (instance.ConsolidadoMaestroVigente && vigente is not null)
+        if (!force && instance.ConsolidadoMaestroVigente && vigente is not null)
         {
             var vigenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);

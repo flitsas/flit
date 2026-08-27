@@ -317,4 +317,45 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlitDbContext).Assembly);
     }
+
+    // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────
+    // Cualquier cambio del expediente baja las marcas de vigencia para que la próxima generación
+    // regenere el PDF. Va aquí y no en un interceptor registrado en AddDbContext porque hay código
+    // (y tests) que construye el contexto a mano: así no se puede saltar. El PORQUÉ de cada decisión
+    // —qué cuenta como cambio, y por qué el UPDATE va en un segundo save— está en
+    // ConsolidadoVigenciaTracker.
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        var candidatas = ConsolidadoVigenciaTracker.Candidatas(ChangeTracker);
+        var afectadas = base.SaveChanges(acceptAllChangesOnSuccess);
+
+        if (ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, CancellationToken.None)
+                .GetAwaiter().GetResult())
+        {
+            base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        return afectadas;
+    }
+
+    public override async Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        var candidatas = ConsolidadoVigenciaTracker.Candidatas(ChangeTracker);
+        var afectadas = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (await ConsolidadoVigenciaTracker.InvalidarAsync(this, candidatas, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+        }
+
+        // El número de filas que se devuelve es el del save del LLAMADOR: las marcas de vigencia son
+        // contabilidad interna del consolidado y no deben alterar un conteo del que ya depende código
+        // ajeno (p. ej. SaveChangesWithConcurrencyGuardAsync).
+        return afectadas;
+    }
 }

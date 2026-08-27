@@ -135,17 +135,19 @@ export function OtDocumentosTab({
     }
   };
 
-  const handleConsolidado = async () => {
+  const handleConsolidado = async (force = false) => {
     // Botón único (Feature #10701): muestra el consolidado del expediente INLINE. Si el OT puede
     // generar, "asegura" el vigente — el backend regenera solo si la marca lo pide (nunca generado
-    // o invalidado por un cambio de estado / LT) y reutiliza si ya está vigente. En modo QX
-    // read-only no se puede generar: solo se muestra el consolidado existente.
+    // o invalidado por CUALQUIER cambio del expediente: adjuntar o borrar un documento, editar
+    // datos, la decisión del OT, una transición de estado…) y reutiliza si ya está vigente.
+    // `force` se salta ese atajo y reconstruye. En modo QX read-only no se puede generar: solo se
+    // muestra el consolidado existente.
     setConsolidadoActing(true);
     try {
       if (!readOnly) {
         // El consolidado maestro es el expediente completo: el 100% de los documentos cargados y
         // generados del trámite, ordenados por la matriz documental.
-        const res = await generarOtConsolidadoMaestro(procedureId, scope);
+        const res = await generarOtConsolidadoMaestro(procedureId, scope, force);
         if (res.regenerado) show("Consolidado generado.", "success");
         void load();
         await handlePreview({
@@ -201,6 +203,21 @@ export function OtDocumentosTab({
           >
             {consolidadoActing ? "Abriendo…" : "Ver consolidado"}
           </button>
+          {/* Salida manual: reconstruye el PDF ignorando la marca de vigencia. El expediente se
+              invalida solo cuando cambia, pero si el operador duda de lo que ve —o una vía de
+              invalidación falla— no debe quedarse sin forma de comprobarlo. */}
+          {!readOnly ? (
+            <button
+              type="button"
+              className="rounded-xl border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground disabled:opacity-50"
+              disabled={consolidadoActing}
+              aria-label="Regenerar el consolidado del expediente"
+              title="Reconstruye el expediente consolidado con el contenido actual del trámite"
+              onClick={() => void handleConsolidado(true)}
+            >
+              Regenerar
+            </button>
+          ) : null}
         </div>
 
         <UiStateBoundary

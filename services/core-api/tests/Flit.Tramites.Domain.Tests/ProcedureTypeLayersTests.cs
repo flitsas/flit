@@ -116,4 +116,82 @@ public sealed class ProcedureTypeGateProfileComplementosTests
         perfil.ComplementaryTransformationsAllowed("TRASPASO").Should().BeTrue();
         perfil.ComplementaryTransformationsAllowed("OTROS").Should().BeFalse();
     }
+
+    // ── ExigeDecisionDePrenda ────────────────────────────────────────────────────────
+    // «El RUNT reportó un gravamen» es un hecho del VEHÍCULO; resolverlo es responsabilidad del
+    // TRÁMITE. Confundirlos dejaba un cambio de color sobre un carro con prenda exigiendo una
+    // decisión que el asistente no pinta y que la API rechaza: bloqueo sin salida.
+
+    private static ProcedureTypeGateProfile PerfilPorDefecto() => ProcedureTypeGateProfile.FromJson("{}");
+
+    [Theory]
+    [InlineData("CAMBIO_COLOR")]
+    [InlineData("DUPLICADO_TARJETA")]
+    [InlineData("CAMBIO_CARROCERIA")]
+    [InlineData("BLINDAJE")]
+    public void ExigeDecisionDePrenda_OtrosNoPrendario_NoExigeAunqueElRuntReporteGravamen(string tipo)
+    {
+        ProcedureTypeLayers
+            .ExigeDecisionDePrenda(PerfilPorDefecto(), "OTROS", tipo, runtReportaGravamen: true)
+            .Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("PRENDA_INSCRIPCION")]
+    [InlineData("LEVANTAMIENTO_PRENDA")]
+    [InlineData("CAMBIO_ACREEDOR")]
+    [InlineData("LEVANTAR_INSCRIBIR_PRENDA")]
+    public void ExigeDecisionDePrenda_OtrosPrendario_ExigeAunqueElRuntNoReporteNada(string tipo)
+    {
+        // La prenda ES el trámite: entra por el primer disparador, que no depende del RUNT (una
+        // inscripción constituye un gravamen que todavía no existe).
+        ProcedureTypeLayers
+            .ExigeDecisionDePrenda(PerfilPorDefecto(), "OTROS", tipo, runtReportaGravamen: false)
+            .Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("TRASPASO", "TRASPASO_STANDARD")]
+    [InlineData("MATRICULAS", "MATRICULA_NUEVA")]
+    public void ExigeDecisionDePrenda_FamiliasQueAcumulan_SiguenExigiendoConGravamen(
+        string familia, string tipo)
+    {
+        // R10 intacto: donde el expediente acumula un gravamen sobre el tipo base, el hecho del
+        // vehículo sí es asunto del trámite.
+        ProcedureTypeLayers
+            .ExigeDecisionDePrenda(PerfilPorDefecto(), familia, tipo, runtReportaGravamen: true)
+            .Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("TRASPASO", "TRASPASO_STANDARD")]
+    [InlineData("MATRICULAS", "MATRICULA_NUEVA")]
+    public void ExigeDecisionDePrenda_SinGravamenNiTipoPrendario_NoExige(string familia, string tipo)
+    {
+        ProcedureTypeLayers
+            .ExigeDecisionDePrenda(PerfilPorDefecto(), familia, tipo, runtReportaGravamen: false)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void ExigeDecisionDePrenda_SinFamilia_ConservaElComportamientoPrevio()
+    {
+        // Fail-safe: un tipo sin clasificar se trata como acumulable, no se le apaga la prenda en
+        // silencio (mismo criterio que FamiliaAcumulaComplementarios).
+        ProcedureTypeLayers
+            .ExigeDecisionDePrenda(PerfilPorDefecto(), null, "LO_QUE_SEA", runtReportaGravamen: true)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void ExigeDecisionDePrenda_PerfilQueDeclaraElGravamenComplementario_GanaALaFamilia()
+    {
+        // Precedencia perfil → familia: un tipo de OTROS que declare el gravamen complementario
+        // vuelve a exigir la decisión, sin tocar código.
+        var perfil = ProcedureTypeGateProfile.FromJson("""{"allowsComplementaryPrenda":true}""");
+
+        ProcedureTypeLayers
+            .ExigeDecisionDePrenda(perfil, "OTROS", "CAMBIO_COLOR", runtReportaGravamen: true)
+            .Should().BeTrue();
+    }
 }

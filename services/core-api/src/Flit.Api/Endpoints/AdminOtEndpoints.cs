@@ -203,7 +203,7 @@ public static class AdminOtEndpoints
 
         group.MapPost("/client-procedures/{id:guid}/consolidado-maestro", GenerateClientProcedureConsolidadoMaestroAsync)
             .WithName("AdminOtGenerateClientProcedureConsolidadoMaestro")
-            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR)")
+            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR). ?force=true reconstruye saltándose la caché de vigencia")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -1262,6 +1262,10 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
         Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoMaestroHandler handler,
         [FromQuery] Guid? transitOfficeId,
+        // NULLABLE a propósito, por lo mismo que documenta ConsolidadoEndpoints (Bug #11139): un
+        // `bool` de query sin `?` es OBLIGATORIO en Minimal APIs y omitirlo devolvería 400. El camino
+        // normal del OT ("Ver consolidado") no lo manda; solo lo hace "Regenerar".
+        [FromQuery] bool? force,
         CancellationToken cancellationToken)
     {
         var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
@@ -1298,7 +1302,7 @@ public static class AdminOtEndpoints
                 }
 
                 return await handler
-                    .HandleAsync(id, access.ClientTenantId, precedencia, cancellationToken)
+                    .HandleAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
                     .ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);

@@ -604,6 +604,43 @@ public sealed class WizardStateHandlerTests
         result.CanSubmit.Should().BeFalse();
     }
 
+    /// <summary>
+    /// Familia OTROS sin dimensión de prenda (duplicado de tarjeta): el override del OT no puede
+    /// pedir una decisión que el asistente no pinta y que <c>RegistrarPrendaHandler</c> rechaza con
+    /// <c>prenda_no_admitida_en_tipo</c>. Hermano del test del gate de preparación en
+    /// <c>TramiteLifecycleServiceTests</c>: pantalla y gate leen el MISMO predicado.
+    /// </summary>
+    [Fact]
+    public async Task Get_OtrosSinDimensionDePrenda_PoliticaObligatoria_NoAgregaBlocker()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        // Pasos prestados del fixture de matrícula: sin pasos parametrizados `ComputeState` sale por
+        // `tipo_sin_parametrizar` y el test no llegaría a evaluar un solo blocker (sería vacuo).
+        instance.ProcedureType = new ProcedureType
+        {
+            Id = instance.ProcedureTypeId,
+            Code = "DUPLICADO_TARJETA",
+            Name = "Duplicado de tarjeta de propiedad",
+            Family = ProcedureFamilyCodes.Otros,
+            GateProfile = ProcedureTypeFixture.Matricula.GateProfile,
+            Steps = ProcedureTypeFixture.Matricula.Steps,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo,
+            prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true),
+            prendaRepo: new StubPrendaRepo(decision: null));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDecisionRequerida);
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+    }
+
     [Fact]
     public async Task Get_Matricula_PoliticaPrendaOpcional_SinDocumento_NoAgregaBlocker()
     {

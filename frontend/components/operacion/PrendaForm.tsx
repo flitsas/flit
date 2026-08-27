@@ -294,6 +294,27 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
    */
   const decisionFija = decisions.length === 1 ? decisions[0] : null;
 
+  /**
+   * Matrícula inicial: sin decisión guardada y sin gravamen reportado, se preselecciona
+   * «Sin prenda». Es la mitad simétrica de la regla que ya existía —«el RUNT trae gravamen ⇒
+   * sugerir registrar»— y cierra el hueco que dejaba el control sin ninguna opción marcada, del
+   * que salía un `prenda_decision_requerida` al Preparar si el gestor nunca abría la sección.
+   *
+   * <b>Por qué «no encontrado» basta aquí y no sería prudente en traspaso.</b> En matrícula el
+   * vehículo es NUEVO: no hay gravamen previo que consultar, y el que exista se CONSTITUYE con este
+   * mismo trámite —el razonamiento que ya documenta `PrendaGate.EvaluateMatriculaInicial`—. La
+   * ausencia de señal del RUNT no es entonces un dato que falte: es el estado normal. En traspaso el
+   * vehículo tiene historial y esa misma ausencia sí puede significar «la consulta no lo trajo», así
+   * que queda deliberadamente fuera: su lista ni siquiera ofrece `sin_prenda`, y usarla ahí
+   * satisfaría el override del OT sin certificado — justo lo que la HU #10881 evitó al retirarle
+   * `omitir`.
+   *
+   * En solo lectura no se preselecciona nada: un expediente cerrado sin decisión registrada no debe
+   * mostrar una que nadie tomó.
+   */
+  const defaultSinPrenda =
+    !readOnly && modalidad === 'matricula_inicial' && decisions.includes('sin_prenda');
+
   const applyRuntAcreedorIfEmpty = (
     summary: RuntPrendaSummary,
     currentNombre: string,
@@ -347,6 +368,11 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
           const filled = applyRuntAcreedorIfEmpty(summary, '', '');
           setAcreedorNombre(filled.nombre);
           setAcreedorDocumento(filled.documento);
+        } else if (defaultSinPrenda) {
+          // Consulta sin prenda: se afirma «Sin prenda». NO marca cambio pendiente —igual que la
+          // sugerencia de `registrar` de arriba—: es una preselección, no una captura del gestor.
+          // Se persiste cuando el paso se guarda al avanzar (TramiteWizard llama a `save`).
+          setDecision('sin_prenda');
         }
         // Tipo con una sola decisión: se afirma aquí, en la carga, no en un effect síncrono. Si la
         // carga ya trajo una decisión (persistida o sugerida por el RUNT), el updater la conserva.
@@ -370,7 +396,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       active = false;
     };
     // `pending` es estable (instancia única por montaje): no re-dispara la carga.
-  }, [instanceId, runtHasGravamen, offersRegistrar, pending, decisionFija]);
+  }, [instanceId, runtHasGravamen, offersRegistrar, pending, decisionFija, defaultSinPrenda]);
 
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */
