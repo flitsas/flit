@@ -175,7 +175,12 @@ public sealed record WizardCapabilitiesDto(
     /// Solo en ellos tiene sentido la preferencia de dígito de preasignación: en un radicado de
     /// cuenta o un levantamiento de prenda el vehículo ya tiene placa y no hay nada que asignar.
     /// </summary>
-    bool RequiresPlateRequest)
+    bool RequiresPlateRequest,
+    /// <summary>
+    /// Cómo se obtiene la impronta en este tipo (<c>AUTO</c>, <c>MANUAL</c>, <c>OPERATOR_CHOICE</c>).
+    /// Ausente ⇒ el asistente puede ofrecer generación automática aunque el documento sea opcional.
+    /// </summary>
+    string? ImprontaSource)
 {
     /// <param name="familyCode">
     /// Familia del expediente. Resuelve los dos flags de acumulación cuando el perfil no los declara
@@ -187,11 +192,18 @@ public sealed record WizardCapabilitiesDto(
     /// <c>HasPrendaGate</c>: el asistente recibe la RESPUESTA («hay prenda que gestionar»), no la
     /// marca del catálogo que antes había que acordarse de poner y que además se congelaba.
     /// </param>
+    /// <param name="liveGateProfileJson">
+    /// <c>gate_profile</c> vigente del tipo. La fuente de impronta la decide el configurador
+    /// (Capacidades) y debe verse al instante: el snapshot congelado al crear el trámite no trae
+    /// <c>improntaSource</c> en expedientes anteriores, y el gestor vería «Generar» con el tipo en
+    /// MANUAL. Los demás flags siguen saliendo del perfil congelado.
+    /// </param>
     internal static WizardCapabilitiesDto From(
         ProcedureTypeGateProfile profile,
         string? familyCode,
         string? typeCode = null,
-        bool runtReportaGravamen = false) =>
+        bool runtReportaGravamen = false,
+        string? liveGateProfileJson = null) =>
         new(
             profile.EntryMode,
             profile.RequiresSeller,
@@ -206,7 +218,20 @@ public sealed record WizardCapabilitiesDto(
             profile.ComplementaryPrendaAllowed(familyCode),
             profile.OperatorChoosesTransitOffice(),
             profile.RequiresDestinationTransitOffice,
-            profile.RequiresPlateRequest);
+            profile.RequiresPlateRequest,
+            ResolveImprontaSource(profile, liveGateProfileJson));
+
+    private static string? ResolveImprontaSource(ProcedureTypeGateProfile frozen, string? liveJson)
+    {
+        if (!string.IsNullOrWhiteSpace(liveJson))
+        {
+            var live = ProcedureTypeGateProfile.FromJson(liveJson);
+            if (!string.IsNullOrWhiteSpace(live.ImprontaSource))
+                return live.ImprontaSource;
+        }
+
+        return frozen.ImprontaSource;
+    }
 }
 
 /// <summary>
@@ -650,7 +675,8 @@ public sealed class GetWizardStateHandler(
             TypeName = instance.TypeName,
             Capabilities = WizardCapabilitiesDto.From(
                 conformation.GateProfile, instance.FamilyCode,
-                instance.ProcedureType?.Code, RuntReportaGravamen(instance)),
+                instance.ProcedureType?.Code, RuntReportaGravamen(instance),
+                instance.ProcedureType?.GateProfile),
         };
     }
 
@@ -699,7 +725,8 @@ public sealed class GetWizardStateHandler(
                 ct)
             .ConfigureAwait(false);
 
-        return [.. matriz.Select(d => new DocumentRequirementItem(d.Codigo, d.Obligatorio, d.EsDummy))];
+        return [.. matriz.Select(d => new DocumentRequirementItem(
+            d.Codigo, d.Obligatorio, d.EsDummy, d.EsGeneradoSistema))];
     }
 
     /// <summary>
@@ -959,7 +986,8 @@ public sealed class GetWizardStateHandler(
             TypeName = instance.TypeName,
             Capabilities = WizardCapabilitiesDto.From(
                 conformation.GateProfile, instance.FamilyCode,
-                instance.ProcedureType?.Code, RuntReportaGravamen(instance)),
+                instance.ProcedureType?.Code, RuntReportaGravamen(instance),
+                instance.ProcedureType?.GateProfile),
         };
     }
 
@@ -1338,7 +1366,8 @@ public sealed class GetWizardStateHandler(
             // Paso 1 sin expediente: todavía no hay consulta RUNT, así que la prenda solo la exige el
             // tipo que ES el gravamen. En cuanto el vehículo se consulte, el estado se recalcula.
             Capabilities = WizardCapabilitiesDto.From(
-                conformation.GateProfile, type.Family, type.Code, runtReportaGravamen: false),
+                conformation.GateProfile, type.Family, type.Code, runtReportaGravamen: false,
+                type.GateProfile),
         };
     }
 

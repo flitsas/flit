@@ -45,7 +45,8 @@ public sealed class CreateDocumentTypeHandler
         var created = await _repository
             .CreateAsync(
                 code, name, description, command.CreatedBy,
-                command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes, cancellationToken)
+                command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes,
+                command.Request.EsAutogenerado == true, cancellationToken)
             .ConfigureAwait(false);
 
         return CreateDocumentTypeResult.Success(DocumentTypeResponse.From(created));

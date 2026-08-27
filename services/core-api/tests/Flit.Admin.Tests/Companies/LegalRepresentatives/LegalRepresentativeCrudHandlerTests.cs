@@ -243,6 +243,14 @@ public sealed class LegalRepresentativeCrudHandlerTests
             new GetLegalRepresentativeByIdQuery { TenantId = Tenant, Id = id }, Ct);
         item!.IsActive.Should().BeFalse();
 
+        var listed = await h.List.HandleAsync(
+            new ListLegalRepresentativesQuery { TenantId = Tenant, Page = 1, PageSize = 20 }, Ct);
+        listed.Data.Should().NotContain(r => r.Id == id);
+
+        var lookup = await new DbLegalRepresentativeReader(ctx)
+            .FindActiveByCompanyNitAsync(Tenant, Nit, Ct);
+        lookup.Should().BeNull();
+
         var unknown = await h.Delete.HandleAsync(
             new DeleteLegalRepresentativeCommand { TenantId = Tenant, Id = Guid.NewGuid() }, Ct);
         unknown.Should().Be(DeleteLegalRepresentativeOutcome.NotFound);
@@ -336,6 +344,52 @@ public sealed class LegalRepresentativeCrudHandlerTests
 
         var item = await reader.GetByIdAsync(Tenant, first.Id!.Value, Ct);
         item!.Companies.Select(c => c.Nit).Should().BeEquivalentTo([nitA, nitB]);
+    }
+
+    [Fact]
+    public async Task Create_TwoRepresentativesSameNit_KeepIndependentNames()
+    {
+        await using var ctx = NewContext();
+        var create = new CreateLegalRepresentativeHandler(new LegalRepresentativeWriter(
+            new FakeProcedureTypeCatalog([]),
+            new FakeSignatureResolver(Resolution.None),
+            new FakeSignatureVaultReader(),
+            new LegalRepresentativeRepository(ctx),
+            new DbLegalRepresentativeReader(ctx),
+            new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero))));
+
+        var first = await create.HandleAsync(new CreateLegalRepresentativeCommand
+        {
+            TenantId = Tenant,
+            DocumentType = "CC",
+            DocumentNumber = "111111111",
+            FirstLastName = "Uno",
+            Name = "Ana",
+            Companies = [new LegalRepresentativeCompanyInput(Nit, "Nombre de Ana", null, null, null, null)],
+        }, Ct);
+        var second = await create.HandleAsync(new CreateLegalRepresentativeCommand
+        {
+            TenantId = Tenant,
+            DocumentType = "CC",
+            DocumentNumber = "222222222",
+            FirstLastName = "Dos",
+            Name = "Pedro",
+            Companies = [new LegalRepresentativeCompanyInput(Nit, "Nombre de Pedro", null, null, null, null)],
+        }, Ct);
+
+        first.IsValid.Should().BeTrue();
+        second.IsValid.Should().BeTrue();
+        first.Id!.Value.Should().NotBe(second.Id!.Value);
+
+        var reader = new DbLegalRepresentativeReader(ctx);
+        var ana = await reader.GetByIdAsync(Tenant, first.Id!.Value, Ct);
+        var pedro = await reader.GetByIdAsync(Tenant, second.Id!.Value, Ct);
+        ana!.Companies.Should().ContainSingle(c => c.Name == "Nombre de Ana");
+        pedro!.Companies.Should().ContainSingle(c => c.Name == "Nombre de Pedro");
+        ana.Companies[0].Id.Should().NotBe(pedro.Companies[0].Id);
+
+        var listed = await reader.ListActiveByCompanyNitAsync(Tenant, Nit, Ct);
+        listed.Should().HaveCount(2);
     }
 
     // ---------- Helpers ----------

@@ -199,6 +199,14 @@ export interface GateProfile {
   validatePazSalvoImpuesto?: boolean;
   hasPrendaGate?: boolean;
   simitMode?: string | null;
+  /**
+   * Cómo se obtiene la impronta en este tipo. Independiente de si el documento es obligatorio
+   * (eso vive en la matriz / pestaña Documentos).
+   *
+   * `AUTO` — se genera (Kyverum / paso FUR). `OPERATOR_CHOICE` — el gestor genera o carga.
+   * `MANUAL` — solo adjuntar PDF. Ausente — se puede generar (mismo default que AUTO/OPERATOR_CHOICE).
+   */
+  improntaSource?: 'AUTO' | 'MANUAL' | 'OPERATOR_CHOICE' | null;
 }
 
 /** Documento que el tipo exige (CFD-06). Se referencia por código del catálogo. */

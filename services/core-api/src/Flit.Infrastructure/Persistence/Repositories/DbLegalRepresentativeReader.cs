@@ -55,7 +55,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             {
                 var baseQuery = _context.CompanyLegalRepresentatives
                     .AsNoTracking()
-                    .Where(r => r.TenantId == tenantId);
+                    .Where(r => r.TenantId == tenantId && r.IsActive);
 
                 var totalCount = await baseQuery.LongCountAsync(cancellationToken).ConfigureAwait(false);
                 if (totalCount == 0)
@@ -230,7 +230,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
     {
         var companyIds = await _context.RepresentedCompanies
             .AsNoTracking()
-            .Where(c => c.TenantId == tenantId && c.DocumentNumber == nit)
+            .Where(c => c.TenantId == tenantId && c.DocumentNumber == nit && c.IsActive)
             .Select(c => c.Id)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -269,7 +269,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             {
                 var rows = await _context.RepresentedCompanies
                     .AsNoTracking()
-                    .Where(c => c.TenantId == tenantId)
+                    .Where(c => c.TenantId == tenantId && c.IsActive)
                     .OrderBy(c => c.Name)
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -292,10 +292,39 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             tenantId,
             async () =>
             {
+                var matches = await _context.RepresentedCompanies
+                    .AsNoTracking()
+                    .Where(c => c.TenantId == tenantId && c.DocumentNumber == nit && c.IsActive)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                return matches.Count == 1 ? ToCompanyItem(matches[0]) : null;
+            },
+            cancellationToken);
+    }
+
+    public Task<RepresentedCompanyItem?> FindActiveCompanyForRepresentativeAsync(
+        Guid tenantId,
+        Guid representativeId,
+        string documentNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
+        var nit = documentNumber.Trim();
+
+        return TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
                 var row = await _context.RepresentedCompanies
                     .AsNoTracking()
                     .FirstOrDefaultAsync(
-                        c => c.TenantId == tenantId && c.DocumentNumber == nit, cancellationToken)
+                        c => c.TenantId == tenantId
+                            && c.RepresentativeId == representativeId
+                            && c.DocumentNumber == nit
+                            && c.IsActive,
+                        cancellationToken)
                     .ConfigureAwait(false);
 
                 return row is null ? null : ToCompanyItem(row);
@@ -332,6 +361,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                         r.SecondLastName,
                         r.DocumentType,
                         r.DocumentNumber,
+                        r.IsActive,
                     })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -342,7 +372,8 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                         r.Id,
                         ComposeFullName(r.Name, r.FirstLastName, r.SecondLastName),
                         r.DocumentType,
-                        r.DocumentNumber));
+                        r.DocumentNumber,
+                        r.IsActive));
                 return map;
             },
             cancellationToken);
@@ -453,7 +484,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                 .. linkedEntries
                     .OrderBy(x => x.CompanyId == r.RepresentedCompanyId ? 0 : 1)
                     .ThenBy(x => x.CreatedAt)
-                    .Where(x => companies.ContainsKey(x.CompanyId))
+                    .Where(x => companies.TryGetValue(x.CompanyId, out var owned) && owned.IsActive)
                     .Select(x =>
                     {
                         var c = companies[x.CompanyId];
@@ -708,6 +739,8 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             Address = c.Address,
             City = c.City,
             Phone = c.Phone,
+            RepresentativeId = c.RepresentativeId,
+            IsActive = c.IsActive,
             CreatedAt = c.CreatedAt,
             UpdatedAt = c.UpdatedAt,
         };

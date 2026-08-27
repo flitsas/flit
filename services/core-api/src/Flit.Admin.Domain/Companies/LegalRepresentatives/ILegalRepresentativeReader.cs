@@ -70,9 +70,19 @@ public interface ILegalRepresentativeReader
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Compañía representada del tenant por NIT. <c>null</c> si no existe.</summary>
+    /// <summary>
+    /// Compañía activa del tenant por NIT. Si hay varias fichas (un NIT por RL), <c>null</c> —
+    /// hay que resolver por representante.
+    /// </summary>
     Task<RepresentedCompanyItem?> FindRepresentedCompanyByNitAsync(
         Guid tenantId,
+        string documentNumber,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Ficha activa de un NIT dueña de un representante concreto.</summary>
+    Task<RepresentedCompanyItem?> FindActiveCompanyForRepresentativeAsync(
+        Guid tenantId,
+        Guid representativeId,
         string documentNumber,
         CancellationToken cancellationToken = default);
 

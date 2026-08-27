@@ -2,6 +2,8 @@
 
 import { FileText, Trash2 } from "lucide-react";
 import type { ProcedureDocumentRequirement } from "@/lib/api/types-documents";
+import { catalogDocumentTitle } from "@/lib/tramites/document-labels";
+import { DocumentCatalogCaption } from "@/components/shared/DocumentCatalogCaption";
 
 // Lista de documentos asociados a un trámite (HU #10198; RF22). Define QUÉ documentos
 // exige el trámite y cuáles son obligatorios. El ORDEN ya no se configura aquí: tras RF22
@@ -23,7 +25,9 @@ export function DocumentAssociationList({
 }: DocumentAssociationListProps) {
   return (
     <ul className="flex flex-col gap-2" aria-label="Documentos asociados al trámite">
-      {items.map((item) => (
+      {items.map((item) => {
+        const label = catalogDocumentTitle(item.documento.codigo, item.documento.nombre);
+        return (
         <li
           key={item.id}
           className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
@@ -37,8 +41,12 @@ export function DocumentAssociationList({
           </span>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold">{item.documento.nombre}</p>
-            <p className="truncate font-mono text-[10px] opacity-60">{item.documento.codigo}</p>
+            <p className="truncate text-xs font-semibold">
+              <DocumentCatalogCaption
+                nombre={item.documento.nombre}
+                codigo={item.documento.codigo}
+              />
+            </p>
           </div>
 
           <label className="flex items-center gap-1.5 text-[10px] font-semibold">
@@ -47,7 +55,7 @@ export function DocumentAssociationList({
               checked={item.obligatorio}
               disabled={busy}
               onChange={() => onToggleObligatorio(item)}
-              aria-label={`Documento obligatorio: ${item.documento.nombre}`}
+              aria-label={`Documento obligatorio: ${label}`}
             />
             Obligatorio
           </label>
@@ -56,14 +64,15 @@ export function DocumentAssociationList({
             type="button"
             onClick={() => onRemove(item)}
             disabled={busy}
-            aria-label={`Remover ${item.documento.nombre}`}
+            aria-label={`Remover ${label}`}
             className="rounded-lg border p-1 disabled:opacity-40"
             style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

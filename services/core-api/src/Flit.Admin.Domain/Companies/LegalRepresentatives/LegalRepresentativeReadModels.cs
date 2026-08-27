@@ -15,6 +15,8 @@ public sealed class RepresentedCompanyItem
     public string? Address { get; init; }
     public string? City { get; init; }
     public string? Phone { get; init; }
+    public Guid? RepresentativeId { get; init; }
+    public bool IsActive { get; init; } = true;
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
 }
@@ -175,7 +177,8 @@ public sealed record LegalRepresentativeBrief(
     Guid Id,
     string FullName,
     string DocumentType,
-    string DocumentNumber);
+    string DocumentNumber,
+    bool IsActive = true);
 
 /// <summary>
 /// Read model de una escritura para el listado/detalle admin y el consumo del wizard — HU #10900.

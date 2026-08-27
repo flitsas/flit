@@ -108,7 +108,7 @@ function renderNuevo() {
 
 /** Deja el paso 1 con la consulta RUNT ya resuelta (la tarjeta de radicación aparece con ella). */
 async function consultarVehiculo(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText(/Ingrese el VIN o la placa/i), VIN_VALIDO);
+  await user.type(await screen.findByLabelText(/Número VIN/i), VIN_VALIDO);
   await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
   await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 }
@@ -156,12 +156,11 @@ beforeEach(() => {
 });
 
 /**
- * Trámite prioritario (HU #10536). No es un field_value: vive en `procedure_instances.prioritario`
- * y tiene endpoint propio, que necesita el id. Por eso la marca del paso 1 se recuerda y se aplica
- * justo después de crear el trámite, en vez de viajar con el patch del resto de lo capturado.
+ * El interruptor de trámite prioritario se oculta en el paso 1 del wizard.
+ * La marca sigue existiendo en `procedure_instances.prioritario` (listado OT y resumen FUR).
  */
 describe('Trámite prioritario — paso 1', () => {
-  it('marcarlo aplica la prioridad en cuanto el trámite existe', async () => {
+  it('no ofrece el interruptor en la consulta del vehículo', async () => {
     const user = userEvent.setup();
     renderNuevo();
 
@@ -169,19 +168,8 @@ describe('Trámite prioritario — paso 1', () => {
     await elegirSecretaria(user);
     await declararSinPreferenciaDigito(user);
 
-    const toggle = await screen.findByRole('button', { name: 'Trámite prioritario' });
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    // Sin trámite todavía: no se puede llamar al endpoint, que exige el id.
-    expect(mocks.setPriority).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole('button', { name: /Continuar/ }));
-
-    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(mocks.setPriority).toHaveBeenCalledWith('inst-1', true, 'tenant-1'),
-    );
+    expect(screen.queryByRole('button', { name: 'Trámite prioritario' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Trámite prioritario/ })).not.toBeInTheDocument();
   });
 
   it('sin marcarlo no se toca el endpoint (la columna ya nace en false)', async () => {
@@ -195,31 +183,6 @@ describe('Trámite prioritario — paso 1', () => {
 
     await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
     expect(mocks.setPriority).not.toHaveBeenCalled();
-  });
-
-  /** Es una preferencia de orden en la bandeja del OT, no un requisito: si falla, el trámite sigue. */
-  it('si la marca falla, el trámite ya creado no se pierde: se navega igual', async () => {
-    mocks.setPriority.mockRejectedValue(new Error('503'));
-    const onCreated = vi.fn();
-    const user = userEvent.setup();
-    mocks.getWizardPreview.mockResolvedValue(wizard());
-    render(
-      <TramiteWizard
-        procedureTypeCode="MATRICULA_NUEVA"
-        family="MATRICULAS"
-        title="Nuevo trámite"
-        onCreated={onCreated}
-        onExit={() => {}}
-      />,
-    );
-
-    await consultarVehiculo(user);
-    await elegirSecretaria(user);
-    await declararSinPreferenciaDigito(user);
-    await user.click(await screen.findByRole('button', { name: 'Trámite prioritario' }));
-    await user.click(screen.getByRole('button', { name: /Continuar/ }));
-
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'inst-1' })));
   });
 });
 
@@ -533,7 +496,7 @@ describe('Tarjeta de radicación sobre un trámite ya creado', () => {
     return render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
   }
 
-  it('muestra los tres datos ya guardados en vez de esconder la tarjeta', async () => {
+  it('muestra secretaría y dígito ya guardados en vez de esconder la tarjeta', async () => {
     renderExistente();
 
     // Secretaría: el combobox llega con el organismo elegido, no con el aviso de "aún no has…".
@@ -542,23 +505,16 @@ describe('Tarjeta de radicación sobre un trámite ya creado', () => {
     await waitFor(() => expect(combo).toHaveValue('Secretaría de Movilidad de Medellín'));
     expect(screen.queryByText(/Aún no has seleccionado la secretaría/)).toBeNull();
 
-    // Dígito y prioridad, releídos del expediente.
     await waitFor(() => expect(digito().value).toBe('7'));
-    expect(screen.getByRole('button', { name: /Trámite prioritario/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.queryByRole('button', { name: /Trámite prioritario/ })).not.toBeInTheDocument();
   });
 
-  it('cambiar la prioridad se guarda en el acto, sin esperar a "Continuar"', async () => {
-    const user = userEvent.setup();
+  it('no ofrece cambiar la prioridad desde el paso 1', async () => {
     renderExistente();
 
-    const toggle = await screen.findByRole('button', { name: /Trámite prioritario/ });
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
-    await user.click(toggle);
-
-    await waitFor(() => expect(mocks.setPriority).toHaveBeenCalledWith('inst-1', false));
+    expect(await screen.findByRole('combobox', { name: /secretaría de tránsito/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Trámite prioritario/ })).not.toBeInTheDocument();
+    expect(mocks.setPriority).not.toHaveBeenCalled();
   });
 
   it('cambiar de organismo lo persiste con su nombre, que es lo que leen el FUR y el listado', async () => {
@@ -593,7 +549,7 @@ describe('Tarjeta de radicación sobre un trámite ya creado', () => {
 describe('Velo de espera del paso 1', () => {
   it('no aparece al abrir el paso, aunque el pre-vuelo se esté recargando solo', async () => {
     renderNuevo();
-    await screen.findByLabelText(/Ingrese el VIN o la placa/i);
+    await screen.findByLabelText(/Número VIN/i);
     expect(screen.queryByText(/Consultando información en el RUNT/)).toBeNull();
   });
 
@@ -606,7 +562,7 @@ describe('Velo de espera del paso 1', () => {
 
     const user = userEvent.setup();
     renderNuevo();
-    await user.type(await screen.findByLabelText(/Ingrese el VIN o la placa/i), VIN_VALIDO);
+    await user.type(await screen.findByLabelText(/Número VIN/i), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     expect(await screen.findByText(/Consultando información en el RUNT/)).toBeInTheDocument();

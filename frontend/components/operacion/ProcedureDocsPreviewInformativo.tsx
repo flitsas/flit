@@ -5,6 +5,7 @@ import { FileText, Info } from 'lucide-react';
 import { WizardModal } from './WizardModal';
 import { ALLOWED_MIME } from './DocumentChecklist';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import type {
   DocumentoInformativoPreviewItem,
   WizardModalidad,
@@ -25,22 +26,22 @@ const FORMATOS_ADMITIDOS = ALLOWED_MIME.map((m) => m.split('/')[1].toUpperCase()
  * Tonos de los dos grupos, tomados de `color.badge` del token file — ya vienen con el contraste
  * comprobado, que es la razón para no usar los puros de marca aquí.
  *
- * El punto de viñeta es un elemento GRÁFICO (umbral 3:1): `#557EFF` sobre blanco lo cumple, pero el
- * ámbar puro `#F59E0B` se queda en ~2:1, así que el opcional usa su tono de texto `#B45309`. Se
- * ajusta la luminosidad conservando el matiz; no se sustituye por otro color.
+ * Paleta invertida a propósito: los obligatorios usan el ámbar (antes de opcionales) y los
+ * opcionales el azul (antes de obligatorios). El punto de viñeta ámbar usa `#B45309` y no el
+ * `#F59E0B` puro, que no llega a 3:1 sobre blanco.
  */
 const TONO_OBLIGATORIO = {
-  bg: 'rgba(85, 126, 255, 0.14)',
-  fg: '#3B4FD6',
-  border: 'rgba(85, 126, 255, 0.35)',
-  punto: '#557EFF',
-};
-
-const TONO_OPCIONAL = {
   bg: 'rgba(245, 158, 11, 0.15)',
   fg: '#B45309',
   border: 'rgba(245, 158, 11, 0.35)',
   punto: '#B45309',
+};
+
+const TONO_OPCIONAL = {
+  bg: 'rgba(85, 126, 255, 0.14)',
+  fg: '#3B4FD6',
+  border: 'rgba(85, 126, 255, 0.35)',
+  punto: '#557EFF',
 };
 
 /**
@@ -93,7 +94,7 @@ function GrupoDocumentos({
             />
             <div className="min-w-0">
               <p className="text-xs" style={{ color: '#162744' }}>
-                {doc.nombre}
+                <DocumentCatalogCaption nombre={doc.nombre} codigo={doc.codigo} />
               </p>
               {/* La descripción del catálogo no está en la maqueta porque su ejemplo no tenía
                   ninguna; se conserva porque es dato real y es lo que desambigua dos documentos de

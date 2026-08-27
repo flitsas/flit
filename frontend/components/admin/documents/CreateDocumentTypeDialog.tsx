@@ -60,6 +60,7 @@ export function CreateDocumentTypeDialog({
   // RF08/09 — límites por tipo. mimes vacío / MB vacío ⇒ se aplican los globales por defecto.
   const [mimes, setMimes] = useState<string[]>([]);
   const [maxSizeMb, setMaxSizeMb] = useState("");
+  const [esAutogenerado, setEsAutogenerado] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -73,6 +74,7 @@ export function CreateDocumentTypeDialog({
       setMimes(editing?.mimeTypesAllowed ?? []);
       const bytes = editing?.maxSizeBytes ?? 0;
       setMaxSizeMb(bytes > 0 ? String(Math.round((bytes / BYTES_PER_MB) * 100) / 100) : "");
+      setEsAutogenerado(editing?.esAutogenerado === true);
       setErrors({});
     }
   }, [open, editing]);
@@ -121,6 +123,7 @@ export function CreateDocumentTypeDialog({
         // Vacío ⇒ null ⇒ el backend aplica los límites globales por defecto.
         mimeTypesAllowed: mimes.length > 0 ? mimes : null,
         maxSizeBytes: Number.isFinite(mb) && mb > 0 ? Math.round(mb * BYTES_PER_MB) : null,
+        esAutogenerado,
       });
       onSaved(saved, mode);
     } catch (error) {
@@ -193,6 +196,44 @@ export function CreateDocumentTypeDialog({
               style={{ borderColor: errors.descripcion ? "#FF4E00" : "#DFE5ED" }}
             />
           </Field>
+
+          <fieldset>
+            <legend className="mb-1 block text-xs font-semibold">Origen del documento</legend>
+            <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="Origen del documento">
+              <label
+                className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                style={!esAutogenerado ? { borderColor: "#557EFF" } : undefined}
+              >
+                <input
+                  type="radio"
+                  name="dt-origen"
+                  value="cargue"
+                  checked={!esAutogenerado}
+                  onChange={() => setEsAutogenerado(false)}
+                  className="h-4 w-4 accent-[#557EFF]"
+                />
+                Cargue
+              </label>
+              <label
+                className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                style={esAutogenerado ? { borderColor: "#557EFF" } : undefined}
+              >
+                <input
+                  type="radio"
+                  name="dt-origen"
+                  value="autogenerado"
+                  checked={esAutogenerado}
+                  onChange={() => setEsAutogenerado(true)}
+                  className="h-4 w-4 accent-[#557EFF]"
+                />
+                Autogenerado
+              </label>
+            </div>
+            <p className="mt-1 text-xs opacity-60">
+              Cargue aparece en Requisitos y bloquea la radicación si falta. Autogenerado solo
+              entra al consolidado (mandato, SOAT, RTM, identidad, compraventa, trámite virtual).
+            </p>
+          </fieldset>
 
           <div>
             <label className="mb-1 block text-xs font-semibold">Formatos permitidos</label>

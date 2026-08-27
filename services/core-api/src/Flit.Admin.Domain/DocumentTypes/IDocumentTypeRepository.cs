@@ -20,6 +20,7 @@ public interface IDocumentTypeRepository
         Guid? createdBy,
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
+        bool isSystemGenerated = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>Listado paginado ordenado por nombre ascendente (AC2).</summary>
@@ -44,6 +45,7 @@ public interface IDocumentTypeRepository
         Guid? updatedBy,
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
+        bool? isSystemGenerated = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Soft-delete: marca <c>is_active = false</c>; devuelve false si no existe (AC4).</summary>

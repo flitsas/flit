@@ -8,7 +8,7 @@ import { RowActions } from "@/components/atom/RowActions";
 import { Pagination } from "@/components/atom/Pagination";
 
 // Tabla paginada del catálogo de tipos de documento (HU #10198, AC1). Columnas:
-// Código, Nombre, Estado, Fecha de creación + acciones Editar/Desactivar.
+// Código, Nombre, Origen (cargue/autogenerado), Estado, Fecha de creación + acciones.
 // Paginación server-side: la tabla solo emite el cambio de página.
 export interface DocumentTypeListTableProps {
   items: DocumentType[];
@@ -44,6 +44,9 @@ export function DocumentTypeListTable({
               Nombre
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              Origen
+            </th>
+            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
               Estado
             </th>
             <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
@@ -65,6 +68,12 @@ export function DocumentTypeListTable({
                 <td className="border-y px-4 py-3 font-semibold">
                   {d.nombre}
                   {d.descripcion && <p className="mt-0.5 text-[10px] font-normal opacity-60">{d.descripcion}</p>}
+                </td>
+                <td className="border-y px-4 py-3">
+                  <StatusBadge
+                    label={d.esAutogenerado ? "Autogenerado" : "Cargue"}
+                    tone={d.esAutogenerado ? "info" : "neutral"}
+                  />
                 </td>
                 <td className="border-y px-4 py-3">
                   <StatusBadge

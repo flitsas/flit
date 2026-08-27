@@ -32,4 +32,15 @@ internal sealed class DocumentTypeCatalog(FlitDbContext db) : IDocumentTypeCatal
             ? null
             : new DocumentTypeRule(row.Code, row.MimeTypesAllowed, row.MaxSizeBytes);
     }
+
+    public async Task<IReadOnlySet<string>> ListSystemGeneratedCodesAsync(CancellationToken ct = default)
+    {
+        var codes = await db.DocumentTypes
+            .AsNoTracking()
+            .Where(d => d.IsActive && d.IsSystemGenerated)
+            .Select(d => d.Code)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return new HashSet<string>(codes, StringComparer.OrdinalIgnoreCase);
+    }
 }

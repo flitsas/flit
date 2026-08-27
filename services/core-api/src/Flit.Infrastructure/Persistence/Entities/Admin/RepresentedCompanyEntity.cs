@@ -26,6 +26,11 @@ public sealed class RepresentedCompanyEntity
 
     public string? Phone { get; set; }
 
+    /// <summary>Dueño de la ficha (un RL). Null en filas huérfanas (p. ej. solo mandatario).</summary>
+    public Guid? RepresentativeId { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

@@ -39,7 +39,25 @@ internal static class RuesActorJuridicalLookup
 
         var ctx = new ConsultationContext(instanceId, tenantId, TemplateCode, fieldValues);
         var result = await provider.ConsultAsync(ctx, ct);
+        if (IsProviderFailure(result))
+            return (null, "provider_unavailable");
+
         return (result, null);
+    }
+
+    /// <summary>
+    /// Distingue "el proveedor no respondió" (check error) de "el NIT no existe" (check unknown).
+    /// Ambos llegan con cero campos hidratados; sin este filtro el operador ve "empresa no encontrada".
+    /// </summary>
+    internal static bool IsProviderFailure(ConsultationResult result)
+    {
+        foreach (var check in result.Checks)
+        {
+            if (string.Equals(check.Status, "error", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Busca <paramref name="fieldKey"/> en los campos hidratados por la consulta.</summary>

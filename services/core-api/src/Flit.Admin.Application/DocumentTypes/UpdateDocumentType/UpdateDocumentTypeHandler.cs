@@ -51,7 +51,8 @@ public sealed class UpdateDocumentTypeHandler
         var updated = await _repository
             .UpdateAsync(
                 command.Id, code, name, description, command.UpdatedBy,
-                command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes, cancellationToken)
+                command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes,
+                command.Request.EsAutogenerado, cancellationToken)
             .ConfigureAwait(false);
 
         // Carrera improbable: el registro fue borrado entre la lectura y el update.

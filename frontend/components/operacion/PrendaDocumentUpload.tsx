@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useProcedureDocuments } from '@/hooks/useProcedureDocuments';
+import { ocrResultForTipo, useProcedureDocuments } from '@/hooks/useProcedureDocuments';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { DocumentSlot } from './DocumentChecklist';
@@ -142,7 +142,7 @@ export function PrendaDocumentUpload({
           uploading={uploadingTipos.has(docTipo)}
           analyzing={analyzingTipos.has(docTipo)}
           deleting={!!attachment && deletingId === attachment.id}
-          ocr={ocrResults[docTipo]}
+          ocr={ocrResultForTipo(ocrResults, docTipo)}
           onUpload={(file) =>
             void upload(docTipo, file).then((ok) => {
               if (ok) onChanged?.();

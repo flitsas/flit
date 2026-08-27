@@ -51,13 +51,38 @@ public sealed class DocumentTypeHandlerTests
             created.Nombre.Should().Be("Registro Único Tributario");
             created.Estado.Should().Be(DocumentTypeResponse.EstadoActivo);
             created.FechaCreacion.Should().NotBe(default);
+            created.EsAutogenerado.Should().BeFalse();
         }
 
         await using var verify = NewContext(db);
         var row = await verify.DocumentTypes.SingleAsync(d => d.Id == created.Id, cancellationToken: TestContext.Current.CancellationToken);
         row.Code.Should().Be("RUT");
         row.IsActive.Should().BeTrue();
+        row.IsSystemGenerated.Should().BeFalse();
         row.CreatedBy.Should().Be(Actor);
+    }
+
+    [Fact]
+    public async Task AC1_Create_Autogenerado_PersistsIsSystemGenerated()
+    {
+        var db = NewDbName();
+
+        await using var act = NewContext(db);
+        var handler = new CreateDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(new CreateDocumentTypeCommand
+        {
+            CreatedBy = Actor,
+            Request = new CreateDocumentTypeRequest(
+                "MANDATO", "Mandato", null, null, EsAutogenerado: true),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeTrue();
+        result.Document!.EsAutogenerado.Should().BeTrue();
+
+        var row = await act.DocumentTypes.SingleAsync(
+            d => d.Id == result.Document.Id, cancellationToken: TestContext.Current.CancellationToken);
+        row.IsSystemGenerated.Should().BeTrue();
+        row.GeneratedSortOrder.Should().Be(99);
     }
 
     [Fact]
@@ -167,14 +192,43 @@ public sealed class DocumentTypeHandlerTests
 
             result.Outcome.Should().Be(UpdateDocumentTypeOutcome.Updated);
             result.Document!.Nombre.Should().Be("Nombre Nuevo");
+            result.Document.EsAutogenerado.Should().BeFalse();
         }
 
         await using var verify = NewContext(db);
         var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken);
         row.Name.Should().Be("Nombre Nuevo");
         row.Description.Should().Be("Desc nueva");
+        row.IsSystemGenerated.Should().BeFalse();
         row.UpdatedBy.Should().Be(Actor);
         row.UpdatedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AC3_Update_EsAutogenerado_PersistsFlag()
+    {
+        var db = NewDbName();
+        var id = Guid.NewGuid();
+        await SeedAsync(db, new DocumentType
+        {
+            Id = id, Code = "SOAT", Name = "SOAT", IsActive = true, CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await using var act = NewContext(db);
+        var handler = new UpdateDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(new UpdateDocumentTypeCommand
+        {
+            Id = id,
+            UpdatedBy = Actor,
+            Request = new UpdateDocumentTypeRequest("SOAT", "SOAT", null, EsAutogenerado: true),
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(UpdateDocumentTypeOutcome.Updated);
+        result.Document!.EsAutogenerado.Should().BeTrue();
+
+        var row = await act.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken);
+        row.IsSystemGenerated.Should().BeTrue();
+        row.GeneratedSortOrder.Should().Be(99);
     }
 
     [Fact]

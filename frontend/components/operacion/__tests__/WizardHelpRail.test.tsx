@@ -34,6 +34,7 @@ beforeEach(() => {
   mocks.fetchDocumentRequirementsPreview.mockResolvedValue([
     {
       documentTypeId: 'doc-1',
+      codigo: 'factura',
       nombre: 'Factura de venta',
       obligatorio: true,
       descripcion: 'Factura del concesionario.',
@@ -77,7 +78,8 @@ describe('WizardHelpRail — carril de consulta del paso 1', () => {
     await user.click(screen.getByRole('button', { name: 'Documentos a tener listos' }));
 
     const panel = await screen.findByRole('dialog', { name: 'Documentos a tener listos' });
-    expect(await within(panel).findByText('Factura de venta')).toBeInTheDocument();
+    expect(await within(panel).findByText(/Factura de venta/)).toBeInTheDocument();
+    expect(within(panel).getByText('(factura)')).toBeInTheDocument();
     expect(mocks.fetchDocumentRequirementsPreview).toHaveBeenCalledWith(
       'MATRICULA_NUEVA',
       'ot-1',

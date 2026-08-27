@@ -83,6 +83,19 @@ public sealed class ProcedureTypeGateProfileTests
     }
 
     [Theory]
+    [InlineData(null, true)]
+    [InlineData("AUTO", true)]
+    [InlineData("OPERATOR_CHOICE", true)]
+    [InlineData("operator_choice", true)]
+    [InlineData("MANUAL", false)]
+    [InlineData("manual", false)]
+    public void AllowsAutomaticImpronta_SoloManualLaApaga(string? source, bool esperado)
+    {
+        var json = source is null ? "{}" : $$"""{"improntaSource":"{{source}}"}""";
+        ProcedureTypeGateProfile.FromJson(json).AllowsAutomaticImpronta().Should().Be(esperado);
+    }
+
+    [Theory]
     [InlineData("PLATE", true)]
     [InlineData("VIN", true)]
     [InlineData("BOTH", true)]

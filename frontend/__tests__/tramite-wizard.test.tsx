@@ -326,20 +326,6 @@ function renderWizard() {
   );
 }
 
-/**
- * Las confirmaciones del expediente consolidado nacen desmarcadas y bloquean radicar (decisión de
- * producto: son afirmaciones del gestor, no adorno). Cualquier flujo que radique tiene que marcarlas
- * primero, igual que lo haría una persona.
- */
-async function confirmarExpediente(user: ReturnType<typeof userEvent.setup>) {
-  const grupo = await screen.findByRole('group', {
-    name: 'Confirmaciones del expediente consolidado',
-  });
-  for (const casilla of within(grupo).getAllByRole('checkbox')) {
-    if (!(casilla as HTMLInputElement).checked) await user.click(casilla);
-  }
-}
-
 function renderWizardStrict() {
   return render(
     <StrictMode>
@@ -721,10 +707,6 @@ describe('TramiteWizard — Finalizar y blockers', () => {
 
     // Reanuda en el paso de decisión (todo completo → frontera = último paso).
     const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
-    // El expediente informa sus confirmaciones en un efecto, así que el gateo entra un tick
-    // después de que aparezca el botón.
-    await waitFor(() => expect(radicar).toBeDisabled());
-    await confirmarExpediente(user);
     await waitFor(() => expect(radicar).toBeEnabled());
     await user.click(radicar);
     await screen.findByText('Confirmar radicación');
@@ -774,7 +756,6 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
 
-    await confirmarExpediente(user);
     await user.click(await screen.findByRole('button', { name: /Finalizar y enviar trámite/ }));
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
@@ -1483,7 +1464,7 @@ describe('TramiteWizard — datos comerciales dentro de Requisitos', () => {
       await screen.findByRole('form', { name: 'Datos comerciales del trámite' }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/Valor de venta/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Causal/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Causal/)).toBeNull();
   });
 
   it('embebido: no muestra el botón propio "Guardar datos comerciales"', async () => {
@@ -1560,7 +1541,6 @@ describe('TramiteWizard — datos comerciales dentro de Requisitos', () => {
     expect(continuar).toBeEnabled();
 
     await user.type(screen.getByLabelText(/Valor de venta/), '50000000');
-    await user.selectOptions(screen.getByLabelText(/Causal/), 'COMPRAVENTA');
     await user.click(continuar);
 
     await waitFor(() => expect(mocks.putCommercial).toHaveBeenCalledTimes(1));
@@ -1676,8 +1656,8 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
 
     // 1 · Declaraciones: tipo de servicio (casilla 18 del FUR).
     expect(await screen.findByLabelText('Tipo de servicio')).toBeInTheDocument();
-    // 2 · Trámites simultáneos (color/combustible/carrocería), tarjeta siempre visible.
-    expect(screen.getByLabelText('Agregar trámite simultáneo')).toBeInTheDocument();
+    // 2 · Trámites simultáneos (color/combustible/carrocería), checks independientes.
+    expect(screen.getByRole('switch', { name: 'Cambio de Color' })).toBeInTheDocument();
     // 3 · Observaciones que viajan al FUR.
     expect(screen.getByLabelText(/Observaciones del trámite/)).toBeInTheDocument();
     // 4 · Checklist de documentos.
@@ -1697,7 +1677,7 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
     expect(screen.getByRole('button', { name: 'Buscar empresa en RUES' })).toBeInTheDocument();
   });
 
-  it('traspaso: sin tipo de servicio (lo hidrata el RUNT), con transformaciones y leasing', async () => {
+  it('traspaso: sin tipo de servicio (lo hidrata el RUNT) ni leasing en requisitos', async () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     const user = userEvent.setup();
     renderWizard();
@@ -1705,10 +1685,8 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
 
     expect(await screen.findByRole('region', { name: 'Documentos del trámite' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Tipo de servicio')).toBeNull();
-
-    // El leasing ya no vive dentro de un acordeón: tiene su propia tarjeta con encabezado real,
-    // separada de los trámites simultáneos.
-    expect(await screen.findByText('Vehículo en leasing')).toBeInTheDocument();
+    expect(screen.queryByText('Vehículo en leasing')).toBeNull();
+    expect(screen.queryByText('Condiciones del Trámite')).toBeNull();
   });
 });
 

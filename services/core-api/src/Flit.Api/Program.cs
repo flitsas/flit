@@ -279,6 +279,7 @@ app.MapTramitesPreflightEndpoints();
 app.MapTramitesRnmcEndpoints();
 app.MapTramitesWizardEndpoints();
 app.MapTramitesVehicleColorsEndpoints();
+app.MapTramitesVehicleBodyworksEndpoints();
 app.MapTramitesVehicleServiceTypesEndpoints();
 app.MapTramitesStatusHistoryEndpoints();
 app.MapTramitesNotificationDispatchesEndpoints();

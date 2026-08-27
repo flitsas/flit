@@ -29,6 +29,9 @@ public sealed class ResolvedDocumentMatrixItem
     /// </summary>
     public bool EsDummy { get; init; }
 
+    /// <summary>Catálogo: el sistema lo genera o apalanca; no se pide carga al gestor.</summary>
+    public bool EsGeneradoSistema { get; init; }
+
     /// <summary>
     /// Nivel que determinó el orden: <see cref="DocumentOrderScope.Cliente"/>,
     /// <see cref="DocumentOrderScope.Ot"/> o <see cref="DocumentOrderScope.Default"/>.

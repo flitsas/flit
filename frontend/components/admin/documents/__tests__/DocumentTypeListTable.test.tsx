@@ -22,6 +22,7 @@ const items: DocumentType[] = [
     nombre: "SOAT",
     estado: "inactivo",
     fechaCreacion: "2026-02-20T10:00:00Z",
+    esAutogenerado: true,
   },
 ];
 
@@ -42,8 +43,11 @@ describe("DocumentTypeListTable (AC1)", () => {
 
     expect(screen.getByText("Código")).toBeInTheDocument();
     expect(screen.getByText("Nombre")).toBeInTheDocument();
+    expect(screen.getByText("Origen")).toBeInTheDocument();
     expect(screen.getByText("CEDULA")).toBeInTheDocument();
     expect(screen.getByText("Cédula de ciudadanía")).toBeInTheDocument();
+    expect(screen.getByText("Cargue")).toBeInTheDocument();
+    expect(screen.getByText("Autogenerado")).toBeInTheDocument();
     expect(screen.getByText("Activo")).toBeInTheDocument();
     expect(screen.getByText("Inactivo")).toBeInTheDocument();
   });

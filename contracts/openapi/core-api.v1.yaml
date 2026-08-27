@@ -6897,6 +6897,14 @@ components:
               description: >
                 HU-BE-05 / CFD-08. Si es true, el wizard incluye el paso `plate_request`
                 (activación condicional en HU-BE-06).
+            improntaSource:
+              type: string
+              enum: [AUTO, MANUAL, OPERATOR_CHOICE]
+              nullable: true
+              description: >
+                Cómo se obtiene la impronta en este tipo. Independiente de si el documento
+                es obligatorio en la matriz. Ausente o AUTO/OPERATOR_CHOICE: se puede generar.
+                MANUAL: solo carga de archivo.
         sources:
           type: array
           description: >
@@ -8254,7 +8262,12 @@ components:
           enum: [activo, inactivo]
           description: Estado derivado de is_active (soft-delete).
         fechaCreacion: { type: string, format: date-time }
-      required: [id, codigo, nombre, estado, fechaCreacion]
+        esAutogenerado:
+          type: boolean
+          description: >
+            True = documento autogenerado (consolidado / sistema). No se pide ni se exige
+            en Requisitos ni en radicación. False = cargue del gestor.
+      required: [id, codigo, nombre, estado, fechaCreacion, esAutogenerado]
 
     DocumentTypePagedResult:
       type: object
@@ -8295,6 +8308,11 @@ components:
           description: >
             Aceptado por el AC pero NO persistido en el catálogo; la obligatoriedad
             vive por trámite en procedure_document_requirements (HU #10195).
+        esAutogenerado:
+          type: boolean
+          nullable: true
+          description: >
+            True = autogenerado. False u omitido = cargue. Por defecto cargue.
       required: [codigo, nombre]
 
     UpdateDocumentTypeRequest:
@@ -8318,6 +8336,10 @@ components:
           maxLength: 500
           pattern: "^[^<>]*$"
           description: Opcional. No permite los caracteres < ni >.
+        esAutogenerado:
+          type: boolean
+          nullable: true
+          description: Null conserva el origen actual. True = autogenerado; false = cargue.
       required: [codigo, nombre]
 
     DocumentRef:

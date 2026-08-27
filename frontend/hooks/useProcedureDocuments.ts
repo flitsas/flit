@@ -33,7 +33,8 @@ export const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
 export const OCR_MAX_BYTES = 10 * 1024 * 1024;
 
 export function isOcrTipo(modalidad: WizardModalidad, tipo: string): boolean {
-  return OCR_TIPOS[modalidad].includes(tipo);
+  const t = tipo.toLowerCase();
+  return OCR_TIPOS[modalidad].some((x) => x.toLowerCase() === t);
 }
 
 /** Estado OCR por tipo que consume la UI del checklist. */
@@ -102,14 +103,22 @@ function motivoDeTipo(data: Record<string, unknown>): string {
 }
 
 /**
- * Aplica las validaciones del frontend sobre el JSON del OCR: validez de tipo
- * (`es_factura_valida` para factura, `es_valido` para el resto) y cruce del VIN del documento
- * (`vehiculo_vin` o `vehiculo_chasis`) con el VIN del trámite. Devuelve si el documento queda rechazado.
+ * Aplica las validaciones del frontend sobre el JSON del OCR: `ok` de la API (si viene en falso),
+ * validez de tipo (`es_factura_valida` / `es_valido`) y cruce del VIN del documento
+ * (`vehiculo_vin` o `vehiculo_chasis`) con el VIN del trámite.
  */
 export function evaluateOcr(
   data: Record<string, unknown> | null,
   instanceVin: string | null,
+  apiOk?: boolean,
 ): OcrEvaluation {
+  if (apiOk === false) {
+    if (data) {
+      const validez = data.es_factura_valida ?? data.es_valido;
+      if (validez === false) return { rechazado: true, motivo: motivoDeTipo(data) };
+    }
+    return { rechazado: true, motivo: 'El análisis no confirmó el documento.' };
+  }
   if (!data) {
     return { rechazado: true, motivo: 'No se pudieron leer los datos del documento.' };
   }
@@ -181,6 +190,27 @@ function withoutTipoInSet(set: ReadonlySet<string>, tipo: string): Set<string> {
   const next = new Set(set);
   next.delete(tipo);
   return next;
+}
+
+function withoutOcrForTipo(
+  ocrResults: Record<string, OcrUiResult>,
+  tipo: string,
+): Record<string, OcrUiResult> {
+  const needle = tipo.toLowerCase();
+  const next = { ...ocrResults };
+  for (const key of Object.keys(next)) {
+    if (key.toLowerCase() === needle) delete next[key];
+  }
+  return next;
+}
+
+export function ocrResultForTipo(
+  ocrResults: Record<string, OcrUiResult>,
+  tipo: string,
+): OcrUiResult | undefined {
+  if (ocrResults[tipo]) return ocrResults[tipo];
+  const needle = tipo.toLowerCase();
+  return Object.entries(ocrResults).find(([key]) => key.toLowerCase() === needle)?.[1];
 }
 
 export interface UseProcedureDocumentsOptions {
@@ -284,27 +314,25 @@ export function useProcedureDocuments(
     async (tipo: string, file: File) => {
       if (!instanceId) return false;
 
-      // Re-subir un tipo reinicia su OCR previo: se limpia hasta tener nuevo resultado.
-      setState((s) => {
-        const rest = { ...s.ocrResults };
-        delete rest[tipo];
-        return { ...s, error: null, ocrResults: rest };
-      });
-
       let fileToUpload = file;
       const usaOcr = isOcrTipo(modalidad, tipo);
+      const analizaAhora = usaOcr && file.size <= OCR_MAX_BYTES;
 
-      if (usaOcr && file.size <= OCR_MAX_BYTES) {
-        // 1) OCR antes de subir.
-        setState((s) => ({
-          ...s,
-          analyzingTipos: withTipoInSet(s.analyzingTipos, tipo),
-        }));
+      // Reemplazo: la marca es del archivo anterior. Se apaga al instante (no al terminar el OCR)
+      // para no dejar el rechazo viejo mientras se analiza el nuevo.
+      setState((s) => ({
+        ...s,
+        error: null,
+        ocrResults: withoutOcrForTipo(s.ocrResults, tipo),
+        analyzingTipos: analizaAhora ? withTipoInSet(s.analyzingTipos, tipo) : s.analyzingTipos,
+      }));
+
+      if (analizaAhora) {
         let ocr: DocumentOcrResult;
         try {
-          ocr = await tramitesClient.analyzeDocument(tipo, file, tenantId);
+          ocr = await tramitesClient.analyzeDocument(tipo.toLowerCase(), file, tenantId);
         } catch (err) {
-          // Fallo HTTP del OCR → NO se sube. El operador puede reintentar / adjuntar manualmente.
+          // Fallo HTTP del OCR → NO se sube. El círculo ya se apagó; el adjunto anterior queda.
           setState((s) => ({
             ...s,
             analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
@@ -314,7 +342,7 @@ export function useProcedureDocuments(
           return false;
         }
 
-        const evaluation = evaluateOcr(ocr.data, vinRef.current);
+        const evaluation = evaluateOcr(ocr.data, vinRef.current, ocr.ok);
         const ocrUi: OcrUiResult = {
           status: evaluation.rechazado ? 'rejected' : 'verified',
           motivo: evaluation.motivo,
@@ -340,9 +368,9 @@ export function useProcedureDocuments(
         // Best-effort deliberado: si esta llamada falla, el adjunto ya se sube igual — el documento
         // es el entregable y los field_values son un enriquecimiento del certificado, así que un
         // fallo aquí no puede costarle al operador el cargue que ya hizo.
-        if (!evaluation.rechazado && ocr.data && OCR_TIPOS_PERSISTIBLES.includes(tipo)) {
+        if (!evaluation.rechazado && ocr.data && OCR_TIPOS_PERSISTIBLES.some((x) => x.toLowerCase() === tipo.toLowerCase())) {
           try {
-            await tramitesClient.persistOcrFields(instanceId, tipo, ocr.data, tenantId);
+            await tramitesClient.persistOcrFields(instanceId, tipo.toLowerCase(), ocr.data, tenantId);
           } catch {
             // Silencio intencionado: ver comentario de arriba.
           }
@@ -391,7 +419,15 @@ export function useProcedureDocuments(
   const remove = useCallback(
     async (attachmentId: string) => {
       if (!instanceId) return false;
-      setState((s) => ({ ...s, deletingId: attachmentId, error: null }));
+      setState((s) => {
+        const att = s.attachments.find((a) => a.id === attachmentId);
+        return {
+          ...s,
+          deletingId: attachmentId,
+          error: null,
+          ocrResults: att ? withoutOcrForTipo(s.ocrResults, att.tipo) : s.ocrResults,
+        };
+      });
       try {
         await tramitesClient.deleteAttachment(
           instanceId,

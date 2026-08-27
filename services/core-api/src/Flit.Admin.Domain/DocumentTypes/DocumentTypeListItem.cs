@@ -36,4 +36,10 @@ public sealed class DocumentTypeListItem
     /// <c>0</c> ⇒ se aplica el tamaño máximo global por defecto al cargar.
     /// </summary>
     public long MaxSizeBytes { get; init; }
+
+    /// <summary>
+    /// <c>tramites.document_types.is_system_generated</c>: true = autogenerado (consolidado,
+    /// sin slot de carga ni gate de radicación); false = cargue en Requisitos.
+    /// </summary>
+    public bool IsSystemGenerated { get; init; }
 }

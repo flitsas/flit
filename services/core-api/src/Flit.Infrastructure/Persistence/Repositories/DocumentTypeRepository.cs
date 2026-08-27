@@ -28,6 +28,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         Guid? createdBy,
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
+        bool isSystemGenerated = false,
         CancellationToken cancellationToken = default)
     {
         var entity = new DocumentType
@@ -42,6 +43,8 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             // RF08/09: null ⇒ vacío/0 ⇒ el AttachmentValidator cae a los límites globales.
             MimeTypesAllowed = mimeTypesAllowed?.ToList() ?? [],
             MaxSizeBytes = maxSizeBytes ?? 0,
+            IsSystemGenerated = isSystemGenerated,
+            GeneratedSortOrder = isSystemGenerated ? (short)99 : null,
         };
 
         _context.DocumentTypes.Add(entity);
@@ -85,6 +88,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
                 CreatedAt = d.CreatedAt,
                 MimeTypesAllowed = d.MimeTypesAllowed,
                 MaxSizeBytes = d.MaxSizeBytes,
+                IsSystemGenerated = d.IsSystemGenerated,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -112,6 +116,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         Guid? updatedBy,
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
+        bool? isSystemGenerated = null,
         CancellationToken cancellationToken = default)
     {
         var entity = await _context.DocumentTypes
@@ -133,6 +138,12 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             entity.MimeTypesAllowed = mimeTypesAllowed.ToList();
         if (maxSizeBytes is not null)
             entity.MaxSizeBytes = maxSizeBytes.Value;
+        if (isSystemGenerated is not null)
+        {
+            entity.IsSystemGenerated = isSystemGenerated.Value;
+            if (isSystemGenerated.Value && entity.GeneratedSortOrder is null)
+                entity.GeneratedSortOrder = 99;
+        }
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -224,5 +235,6 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         CreatedAt = entity.CreatedAt,
         MimeTypesAllowed = entity.MimeTypesAllowed,
         MaxSizeBytes = entity.MaxSizeBytes,
+        IsSystemGenerated = entity.IsSystemGenerated,
     };
 }

@@ -8,10 +8,9 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// Construye los ítems base del checklist desde la matriz documental del gestor (HU #10522,
-/// RF17/RF22), preservando el <c>id</c>/<c>label</c>/<c>ayuda</c> del catálogo para los documentos
-/// conocidos (UX estable: las etiquetas no cambian) y usando el nombre del gestor para los que el
-/// catálogo no describe. El gestor manda <b>presencia, obligatoriedad y orden</b> (la matriz ya
-/// viene ordenada por el resolutor).
+/// RF17/RF22). El nombre visible es el del tipo en Documental (<c>document_types.name</c>);
+/// el id/ayuda del catálogo en código se conservan para reglas condicionales. El gestor manda
+/// <b>presencia, obligatoriedad y orden</b> (la matriz ya viene ordenada por el resolutor).
 /// </summary>
 public static class MatrixChecklistItems
 {
@@ -28,7 +27,7 @@ public static class MatrixChecklistItems
         foreach (var m in matriz)
         {
             items.Add(known.TryGetValue(m.Codigo, out var cat)
-                ? cat with { Obligatorio = m.Obligatorio }
+                ? cat with { Obligatorio = m.Obligatorio, Label = m.Nombre }
                 : new ChecklistItem(m.Codigo, m.Nombre, m.Obligatorio, m.Codigo));
         }
 
@@ -42,15 +41,16 @@ public static class MatrixChecklistItems
 /// (radicación <see cref="SubmitGate"/>, finalizar borrador <see cref="FinalizeDraftGate"/>,
 /// consolidado y estado del wizard) coincidan.
 /// <para>
-/// Devuelve <c>null</c> cuando <b>no aplica</b> (sin matriz configurada para el trámite, o el
-/// proveedor no está inyectado): el llamador cae entonces a su gate actual del catálogo (degradación
-/// natural, sin bandera). Con matriz presente, computa desde la matriz + reglas condicionales (RF30)
-/// + parámetros por gestora (RF31).
+/// Devuelve <c>null</c> cuando el proveedor no está inyectado (tests): el llamador usa el
+/// gate del catálogo. Matriz vacía = sin documentos en Documental ⇒ checklist vacío y
+/// completo (nada que cargar). Con matriz presente, computa desde la matriz + reglas
+/// condicionales (RF30) + parámetros por gestora (RF31).
 /// </para>
 /// </summary>
 public sealed class ChecklistMatrixCompleteness(
     IChecklistCompanyParamsProvider companyParams,
-    IResolvedChecklistMatrixProvider? matrixProvider = null)
+    IResolvedChecklistMatrixProvider? matrixProvider = null,
+    IDocumentTypeCatalog? documentTypes = null)
 {
     /// <summary>Resultado completo del checklist "gestor manda", o <c>null</c> si no aplica.</summary>
     public async Task<ChecklistResultado?> TryComputeAsync(
@@ -67,7 +67,17 @@ public sealed class ChecklistMatrixCompleteness(
             .GetForAsync(instance.ProcedureTypeId, instance.TransitOfficeId, ct)
             .ConfigureAwait(false);
         if (matriz.Count == 0)
-            return null;
+        {
+            // Documental no asoció documentos a este tipo: nada que cargar, nada que bloquear.
+            return ChecklistResultado.Vacio(instance.TypeCode);
+        }
+
+        var carga = matriz.Where(d => !d.EsGeneradoSistema).ToList();
+        if (carga.Count == 0 && matriz.All(d => d.EsGeneradoSistema))
+        {
+            // Solo hay documentos generados: el gestor no tiene nada que cargar ⇒ completo.
+            return ChecklistResultado.Vacio(instance.TypeCode);
+        }
 
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
@@ -75,9 +85,24 @@ public sealed class ChecklistMatrixCompleteness(
         var context = TramiteDocumentContextMapper.From(instance);
         var rules = ConditionalDocumentRules.For(codigo);
         var parametros = await companyParams.GetForTenantAsync(tenantId, ct).ConfigureAwait(false);
-        var baseItems = MatrixChecklistItems.Build(codigo, matriz);
+        var baseItems = MatrixChecklistItems.Build(codigo, carga);
 
-        return ChecklistEngine.ComputeFromMatrix(codigo, baseItems, manual, docTipos, context, rules, parametros);
+        var computed = ChecklistEngine.ComputeFromMatrix(
+            codigo, baseItems, manual, docTipos, context, rules, parametros);
+        if (documentTypes is not null)
+        {
+            var generated = await documentTypes.ListSystemGeneratedCodesAsync(ct).ConfigureAwait(false);
+            computed = ChecklistEngine.ExcludeFromGestorCarga(computed, generated);
+        }
+        else
+        {
+            var fromMatrix = new HashSet<string>(
+                matriz.Where(d => d.EsGeneradoSistema).Select(d => d.Codigo),
+                StringComparer.OrdinalIgnoreCase);
+            computed = ChecklistEngine.ExcludeFromGestorCarga(computed, fromMatrix);
+        }
+
+        return computed;
     }
 
     /// <summary>

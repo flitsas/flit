@@ -49,6 +49,7 @@ describe("CreateDocumentTypeDialog (AC1)", () => {
         descripcion: null,
         mimeTypesAllowed: null,
         maxSizeBytes: null,
+        esAutogenerado: false,
       }),
     );
     expect(onSaved).toHaveBeenCalledWith(saved, "create");
@@ -78,5 +79,23 @@ describe("CreateDocumentTypeDialog (AC1)", () => {
     expect(screen.getByLabelText(/código/i)).toHaveValue("RUNT");
     expect(screen.getByLabelText(/nombre/i)).toHaveValue("Consulta RUNT");
     expect(screen.getByRole("button", { name: /guardar cambios/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /cargue/i })).toBeChecked();
+  });
+
+  it("envía esAutogenerado true cuando se elige Autogenerado", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(saved);
+    render(<CreateDocumentTypeDialog open onClose={vi.fn()} onSubmit={onSubmit} onSaved={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/^código$/i), "RUNT");
+    await user.type(screen.getByLabelText(/^nombre$/i), "Consulta RUNT");
+    await user.click(screen.getByRole("radio", { name: /autogenerado/i }));
+    await user.click(screen.getByRole("button", { name: /crear documento/i }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ esAutogenerado: true }),
+      ),
+    );
   });
 });

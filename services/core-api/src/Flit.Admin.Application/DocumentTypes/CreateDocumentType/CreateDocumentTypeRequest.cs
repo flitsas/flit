@@ -19,4 +19,6 @@ public sealed record CreateDocumentTypeRequest(
     bool? Obligatorio,
     // RF08/09 — límites por tipo. Opcionales: null/omitido ⇒ se aplican los globales por defecto.
     IReadOnlyList<string>? MimeTypesAllowed = null,
-    long? MaxSizeBytes = null);
+    long? MaxSizeBytes = null,
+    // True = autogenerado (consolidado / sistema). False u omitido = cargue en Requisitos.
+    bool? EsAutogenerado = null);

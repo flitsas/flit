@@ -17,6 +17,11 @@ export interface DocumentType {
   mimeTypesAllowed?: string[];
   /** RF09 — tamaño máximo por tipo en bytes. 0/ausente ⇒ tamaño global por defecto. */
   maxSizeBytes?: number;
+  /**
+   * True = autogenerado (consolidado / sistema). No se pide ni se exige en Requisitos.
+   * False u omitido = cargue del gestor.
+   */
+  esAutogenerado?: boolean;
 }
 
 export interface DocumentTypePagedResult {
@@ -40,6 +45,8 @@ export interface CreateDocumentTypeRequest {
   /** RF08/09 — opcionales; omitidos ⇒ límites globales por defecto. */
   mimeTypesAllowed?: string[] | null;
   maxSizeBytes?: number | null;
+  /** True = autogenerado. False u omitido = cargue. */
+  esAutogenerado?: boolean;
 }
 
 /** Payload del PUT /api/v1/admin/document-types/{id} (edición de catálogo). */
@@ -50,6 +57,7 @@ export interface UpdateDocumentTypeRequest {
   /** RF08/09 — opcionales; omitidos ⇒ no se modifican. */
   mimeTypesAllowed?: string[] | null;
   maxSizeBytes?: number | null;
+  esAutogenerado?: boolean;
 }
 
 // ── Asociaciones trámite ↔ documento (#10195, AC2) ──────────────────────────

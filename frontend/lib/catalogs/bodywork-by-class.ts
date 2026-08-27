@@ -60,6 +60,7 @@ const NORMALIZED_VEHICLE_CLASS_INDEX: Record<string, string> = Object.keys(
  * ortográfico conocido.
  */
 function resolveVehicleClassKey(normalizedKey: string): string | null {
+  if (!normalizedKey) return null;
   if (NORMALIZED_VEHICLE_CLASS_INDEX[normalizedKey]) {
     return NORMALIZED_VEHICLE_CLASS_INDEX[normalizedKey];
   }
@@ -67,14 +68,22 @@ function resolveVehicleClassKey(normalizedKey: string): string | null {
   if (alias && NORMALIZED_VEHICLE_CLASS_INDEX[alias]) {
     return NORMALIZED_VEHICLE_CLASS_INDEX[alias];
   }
-  return null;
+  // RUNT a veces manda la clase con calificativo ("CAMION CISTERNA"). Empata la clave
+  // más larga del catálogo que coincida exacta o como prefijo de palabra; no "CAMION" dentro
+  // de "CAMIONETA".
+  const catalogKeys = Object.keys(NORMALIZED_VEHICLE_CLASS_INDEX).sort((a, b) => b.length - a.length);
+  const hit = catalogKeys.find((k) => normalizedKey === k || normalizedKey.startsWith(`${k} `));
+  return hit ? NORMALIZED_VEHICLE_CLASS_INDEX[hit] : null;
 }
+
+type BodyworkRow = BodyworkOption & { classes?: string[] };
+
+const ALL_BODYWORK_ROWS = catalog.allBodyworks as BodyworkRow[];
 
 /**
  * Carrocerías permitidas para la clase del vehículo consultado en RUNT.
- * Si no hay clase o no hay match, retorna lista vacía (no inventar opciones).
- * Cuando la clase no se resuelve, deja traza con el valor crudo recibido
- * (Bug #11629): antes fallaba en silencio y el defecto no era diagnosticable.
+ * Fuente canónica: `allBodyworks[].classes` (cada fila declara a qué clase pertenece).
+ * Si no hay clase o no hay match, retorna lista vacía (no inventar ni listar el catálogo completo).
  */
 export function getBodyworksForVehicleClass(
   vehicleClass: string | null | undefined,
@@ -89,7 +98,20 @@ export function getBodyworksForVehicleClass(
     });
     return [];
   }
-  return BODYWORK_BY_VEHICLE_CLASS[resolvedKey] ?? [];
+  const want = normalizeVehicleClass(resolvedKey);
+  const tagged = ALL_BODYWORK_ROWS.filter((row) =>
+    (row.classes ?? []).some((c) => normalizeVehicleClass(c) === want),
+  );
+  const source = tagged.length > 0 ? tagged : (BODYWORK_BY_VEHICLE_CLASS[resolvedKey] ?? []);
+  const seen = new Set<string>();
+  const unique: BodyworkOption[] = [];
+  for (const row of source) {
+    const nameKey = row.name.trim().toUpperCase();
+    if (!nameKey || seen.has(nameKey)) continue;
+    seen.add(nameKey);
+    unique.push({ code: row.code, name: row.name });
+  }
+  return unique;
 }
 
 export function findBodyworkName(

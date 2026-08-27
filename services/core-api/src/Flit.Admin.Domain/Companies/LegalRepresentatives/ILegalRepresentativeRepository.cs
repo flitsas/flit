@@ -9,8 +9,8 @@ namespace Flit.Admin.Domain.Companies.LegalRepresentatives;
 public interface ILegalRepresentativeRepository
 {
     /// <summary>
-    /// Upsert de la compañía representada por <c>(tenant, NIT)</c>: crea si no existe, o actualiza sus
-    /// datos mutables si ya existe. Devuelve el id de la dimensión.
+    /// Upsert de la ficha de compañía del representante por <c>(tenant, representative, NIT)</c>
+    /// entre las activas. Sin dueño (mandatario/legado) usa <c>(tenant, NIT)</c> huérfano.
     /// </summary>
     Task<Guid> UpsertRepresentedCompanyAsync(
         UpsertRepresentedCompanyData data,
@@ -39,7 +39,8 @@ public sealed record UpsertRepresentedCompanyData(
     string? Address,
     string? City,
     string? Phone,
-    Guid? ActorBy);
+    Guid? ActorBy,
+    Guid? RepresentativeId = null);
 
 /// <summary>
 /// Datos de alta/edición de un representante. <c>Id</c> nulo = alta. <c>SignatureVaultId</c> y
