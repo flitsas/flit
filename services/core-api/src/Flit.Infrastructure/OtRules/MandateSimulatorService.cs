@@ -249,11 +249,13 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
                 assignmentMode, esJuridica, office.Code);
         }
 
-        // Mismo orden que el trámite: elección explícita → default de la regla compañía×OT.
+        // Mismo orden que el trámite: elección explícita → default OT → default compañía.
         MandatarioFirmante? mandatario = null;
         if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
-            var signerId = mandateSignerId ?? config?.DefaultMandateSignerId;
+            var signerId = mandateSignerId
+                ?? config?.OtDefaultMandateSignerId
+                ?? config?.DefaultMandateSignerId;
             if (signerId is { } id && id != Guid.Empty)
             {
                 var signer = await _signerDirectory.GetByIdAsync(id, ct).ConfigureAwait(false);

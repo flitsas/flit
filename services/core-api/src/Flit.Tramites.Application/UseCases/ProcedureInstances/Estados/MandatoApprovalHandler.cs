@@ -94,21 +94,14 @@ public sealed class MandatoApprovalHandler(
                 transitOfficeId, instance.TenantId,
                 MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
+        candidates = await MandateSignerSelectionResolver
+            .WithOtDefaultAsync(candidates, mandateConfig?.OtDefaultMandateSignerId, directory, ct)
+            .ConfigureAwait(false);
 
-        // HU #11203 — la elección hecha al REGISTRAR el trámite manda sobre la resolución automática:
-        // el gestor ya dijo quién firma y el aprobador no tiene por qué volver a decidirlo. La elección
-        // explícita del aprobador sigue teniendo la última palabra (es quien está aprobando), y la
-        // resolución automática queda como respaldo para los trámites que no traen ninguna.
-        //
-        // Bug DEV (pantalla/documento con mandatarios distintos) — antes esta línea era el TERCER
-        // criterio de resolución (ninguno de los otros dos consumidores conocía el default del OT en este
-        // punto). Ahora pasa primero por el mismo resolvedor que usan el listado de pantalla y la
-        // generación del documento: si no hay elección explícita, aplica el default parametrizado (si
-        // sigue entre los candidatos habilitados) antes de caer al cotejo por usuario que aplica
-        // MandateSignerSelector.Resolve más abajo.
         var elegido = MandateSignerDefaultResolver.Resolve(
             candidates.Select(c => c.Id).ToList(),
             explicitSignerId ?? instance.MandateSignerId,
+            mandateConfig?.OtDefaultMandateSignerId,
             mandateConfig?.DefaultMandateSignerId);
 
         var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, elegido);

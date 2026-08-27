@@ -20,6 +20,8 @@ public sealed record MandateOtConfig(
     string? CustomTemplateBody = null,
     string? CustomTemplateStoragePath = null,
     string? CustomTemplateFileName = null,
+    /// <summary>Mandatario global del OT (HU-L8). Gana al de compañía aunque no esté vinculado a ella.</summary>
+    Guid? OtDefaultMandateSignerId = null,
     /// <summary>Mandatario persona preferido (regla compañía×OT, solo signer).</summary>
     Guid? DefaultMandateSignerId = null);
 

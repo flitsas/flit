@@ -85,6 +85,9 @@ public sealed class ListMandateSignerOptionsHandler(
         var candidatos = await directory
             .GetCandidatesAsync(officeId, tenantId, MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
+        candidatos = await MandateSignerSelectionResolver
+            .WithOtDefaultAsync(candidatos, mandateConfig?.OtDefaultMandateSignerId, directory, ct)
+            .ConfigureAwait(false);
 
         // La firma del baúl se resuelve por documento y contra el tenant de la gestora, igual que hace el
         // generador del mandato (HU #11030). Son un puñado de mandatarios por organismo, así que se
@@ -111,7 +114,10 @@ public sealed class ListMandateSignerOptionsHandler(
         // el documento resolvía el firmante con otro criterio): el mismo método lo usa la generación del
         // mandato y el gate de aprobación, para que la pantalla y el documento nunca diverjan.
         var elegido = MandateSignerDefaultResolver.Resolve(
-            opciones.ConvertAll(o => o.Id), instance.MandateSignerId, mandateConfig?.DefaultMandateSignerId);
+            opciones.ConvertAll(o => o.Id),
+            instance.MandateSignerId,
+            mandateConfig?.OtDefaultMandateSignerId,
+            mandateConfig?.DefaultMandateSignerId);
 
         return (new MandateSignerSelectionDto(opciones, elegido, editable), null);
     }
@@ -193,5 +199,26 @@ internal static class MandateSignerSelectionResolver
             string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
 
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
+    }
+
+    /// <summary>
+    /// HU-L8 — el default del OT entra al conjunto aunque no esté en mandate_signer_companies de la gestora.
+    /// </summary>
+    public static async Task<IReadOnlyList<MandateSignerCandidate>> WithOtDefaultAsync(
+        IReadOnlyList<MandateSignerCandidate> candidates,
+        Guid? otDefaultId,
+        IMandateSignerDirectory directory,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentNullException.ThrowIfNull(directory);
+
+        if (otDefaultId is not { } id || id == Guid.Empty)
+            return candidates;
+        if (candidates.Any(c => c.Id == id))
+            return candidates;
+
+        var extra = await directory.GetByIdAsync(id, ct).ConfigureAwait(false);
+        return extra is null ? candidates : [.. candidates, extra];
     }
 }

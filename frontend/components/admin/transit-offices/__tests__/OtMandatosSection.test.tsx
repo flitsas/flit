@@ -52,6 +52,7 @@ const office = {
   customTemplateFileName: null,
   customTemplateBody: null,
   hasCustomTemplate: false,
+  defaultMandateSignerId: null,
 };
 
 describe("OtMandatosSection", () => {

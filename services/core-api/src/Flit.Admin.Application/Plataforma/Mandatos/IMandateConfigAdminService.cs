@@ -29,7 +29,8 @@ public sealed record MandateOtConfigView(
     /// <para>Literal en vez de <c>MandatoTemplateResolver.Auto</c>: este proyecto no referencia el
     /// dominio de Trámites, donde vive la constante.</para>
     /// </summary>
-    string ConfiguredTemplateCode = "auto");
+    string ConfiguredTemplateCode = "auto",
+    Guid? DefaultMandateSignerId = null);
 
 public sealed record UpsertMandateOtConfigRequest(
     string TemplateCode,
@@ -40,7 +41,8 @@ public sealed record UpsertMandateOtConfigRequest(
     string? ChamberCity,
     string? MandatarySigla,
     long? RowVersion,
-    string AssignmentMode = "signer");
+    string AssignmentMode = "signer",
+    Guid? DefaultMandateSignerId = null);
 
 public sealed record SaveMandateEditorBodyRequest(
     string Body,

@@ -108,7 +108,7 @@ export function MandatoOtConfigForm({
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [otDefaultSignerId, setOtDefaultSignerId] = useState(office.defaultMandateSignerId ?? "");
 
   const hasCustom = view.hasCustomTemplate;
   // Redacción que se emite hoy: con "auto" elegido, la del sistema para este organismo.
@@ -197,6 +197,7 @@ export function MandatoOtConfigForm({
     setInstNit(next.institutionalMandataryNit ?? "");
     setChamberCity(next.chamberCity ?? "");
     setSigla(next.mandatarySigla ?? "");
+    setOtDefaultSignerId(next.defaultMandateSignerId ?? "");
     if (next.customTemplateBody) setEditorBody(next.customTemplateBody);
     setShowEditor(next.customTemplateKind === "editor");
   };
@@ -211,6 +212,7 @@ export function MandatoOtConfigForm({
     chamberCity: chamberCity || null,
     mandatarySigla: sigla || null,
     rowVersion,
+    defaultMandateSignerId: otDefaultSignerId || null,
   });
 
   const handleSaveMeta = async () => {
@@ -605,6 +607,33 @@ export function MandatoOtConfigForm({
               </select>
               <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
                 {mandatoTemplateOptions().find((o) => o.code === templateCode)?.summary ?? ""}
+              </span>
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                Mandatario por defecto de este OT
+              </span>
+              <select
+                value={otDefaultSignerId}
+                onChange={(e) => setOtDefaultSignerId(e.target.value)}
+                disabled={busy}
+                data-testid="mandato-ot-default-signer"
+                className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+              >
+                <option value="">
+                  {otSigners.length === 0 ? "Sin mandatarios" : "Sin default (vacío al nacer)"}
+                </option>
+                {otSigners.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}
+                  </option>
+                ))}
+              </select>
+              <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                Si está definido, firma este mandatario aunque la compañía tenga otro default y aunque
+                no esté vinculada a esa empresa. Sin default de OT ni de compañía, el mandato sale
+                vacío de firmante persona.
               </span>
             </label>
 

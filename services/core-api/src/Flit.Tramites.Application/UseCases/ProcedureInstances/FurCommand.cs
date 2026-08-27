@@ -297,8 +297,8 @@ public sealed class GenerarFurHandler(
         if (_solicitudVirtualGenerator is not null)
             generated.Add(_solicitudVirtualGenerator.GenerateSolicitudVirtual(data));
 
-        // ADR-0036 (HU #10915) — Contrato de mandato. El firmante persona puede venir ya elegido
-        // en el wizard (MandateSignerId); si no, el PDF lleva placeholders y la aprobación lo regenera.
+        // ADR-0036 (HU #10915) — Contrato de mandato. El firmante se resuelve YA en borrador (HU-L8/L9):
+        // default OT, default compañía o elección del wizard. Sin esos, el recuadro sale «Sin firmar».
         var mandato = await TryGenerateMandatoAsync(
             instance,
             data,
@@ -1138,11 +1138,9 @@ public sealed class GenerarFurHandler(
             .ConfigureAwait(false);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
-        // HU #10916, corregido por el bug DEV de la pantalla/documento divergentes — MISMO resolvedor
-        // que usa la pantalla (ListMandateSignerOptionsHandler) y la aprobación (MandatoApprovalHandler):
-        // elección explícita ya guardada → default del OT (si sigue habilitado) → único candidato. Sin
-        // eso, el PDF pintaba placeholders (o el firmante equivocado) hasta que alguien elegía a mano.
-        // Abierto / institucional: no se asigna firmante persona (aunque hubiera MandateSignerId).
+        // HU-L8 — elección del trámite → default OT (aunque no esté en la compañía) → default compañía.
+        // Sin esos, Mandatario queda null (cuerpo ___ / recuadro Sin firmar). Ya no se espera a aprobar
+        // para pintar nombre y cédula cuando hay default.
         var assignmentMode = config?.AssignmentMode;
         var esJuridica = data.Mandante?.EsJuridica ?? false;
         var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind);
@@ -1164,9 +1162,15 @@ public sealed class GenerarFurHandler(
                         officeId, data.TenantIdParaFirmas,
                         MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
                     .ConfigureAwait(false);
+                candidatos = await MandateSignerSelectionResolver
+                    .WithOtDefaultAsync(candidatos, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
+                    .ConfigureAwait(false);
 
                 resolvedSignerId = MandateSignerDefaultResolver.Resolve(
-                    candidatos.Select(c => c.Id).ToList(), instance.MandateSignerId, config?.DefaultMandateSignerId);
+                    candidatos.Select(c => c.Id).ToList(),
+                    instance.MandateSignerId,
+                    config?.OtDefaultMandateSignerId,
+                    config?.DefaultMandateSignerId);
 
                 if (resolvedSignerId is { } signerId)
                 {

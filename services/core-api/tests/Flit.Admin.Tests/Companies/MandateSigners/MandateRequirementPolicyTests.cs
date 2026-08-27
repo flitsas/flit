@@ -188,6 +188,46 @@ public sealed class MandateRequirementPolicyTests
 
         config!.AssignmentMode.Should().Be("signer");
         config.DefaultMandateSignerId.Should().Be(signerId);
+        config.OtDefaultMandateSignerId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_OtDefaultGanaAlDeCompania()
+    {
+        await using var ctx = NewContext();
+        var otSigner = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var companySigner = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = Sabaneta, Code = "5631000", Name = "SABANETA",
+            DepartmentCode = "05", CityCode = "05631", IsActive = true,
+        });
+        ctx.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(), TransitOfficeId = Sabaneta, TemplateCode = "generico",
+            RequiresForNaturalPerson = false,
+            MandataryFamily = "individuo",
+            AssignmentMode = "signer",
+            DefaultMandateSignerId = otSigner,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        ctx.CompanyOtMandateRules.Add(new CompanyOtMandateRuleEntity
+        {
+            Id = Guid.NewGuid(),
+            CompanyTenantId = CompanyA,
+            TransitOfficeId = Sabaneta,
+            AssignmentMode = "signer",
+            MandataryFamily = "individuo",
+            DefaultMandateSignerId = companySigner,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var policy = new MandateRequirementPolicy(ctx);
+        var config = await policy.ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.OtDefaultMandateSignerId.Should().Be(otSigner);
+        config.DefaultMandateSignerId.Should().Be(companySigner);
     }
 
     [Fact]

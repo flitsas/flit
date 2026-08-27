@@ -267,8 +267,17 @@ public sealed class TramiteLifecycleService(
                 transitOfficeId, instance.TenantId,
                 MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
+        candidates = await MandateSignerSelectionResolver
+            .WithOtDefaultAsync(candidates, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
+            .ConfigureAwait(false);
 
-        var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, command.MandateSignerId);
+        var elegido = MandateSignerDefaultResolver.Resolve(
+            candidates.Select(c => c.Id).ToList(),
+            command.MandateSignerId ?? instance.MandateSignerId,
+            config?.OtDefaultMandateSignerId,
+            config?.DefaultMandateSignerId);
+
+        var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, elegido);
 
         switch (resolution.Status)
         {

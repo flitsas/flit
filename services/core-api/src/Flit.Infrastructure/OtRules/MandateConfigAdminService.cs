@@ -134,6 +134,21 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         entity.InstitutionalMandataryNit = NullIfEmpty(request.InstitutionalMandataryNit);
         entity.ChamberCity = NullIfEmpty(request.ChamberCity);
         entity.MandatarySigla = NullIfEmpty(request.MandatarySigla);
+
+        Guid? otDefault = null;
+        if (assignmentMode == MandatoAssignmentModeCodes.Signer
+            && request.DefaultMandateSignerId is { } otCandidate
+            && otCandidate != Guid.Empty)
+        {
+            var ok = await ExecuteCrossTenantReadAsync(
+                () => IsValidOtDefaultSignerAsync(officeId, otCandidate, ct),
+                ct).ConfigureAwait(false);
+            if (!ok)
+                return (MandateConfigWriteStatus.InvalidDefaultSigner, null);
+            otDefault = otCandidate;
+        }
+
+        entity.DefaultMandateSignerId = otDefault;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.UpdatedBy = userId;
 
@@ -551,6 +566,32 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             entity.DefaultMandateSignerId));
     }
 
+    private async Task<bool> IsValidOtDefaultSignerAsync(
+        Guid officeId,
+        Guid mandateSignerId,
+        CancellationToken ct)
+    {
+        var signerOk = await _db.MandateSigners.AsNoTracking()
+            .AnyAsync(s => s.Id == mandateSignerId && s.IsActive, ct)
+            .ConfigureAwait(false);
+        if (!signerOk)
+            return false;
+
+        var primaryOffice = await _db.MandateSigners.AsNoTracking()
+            .AnyAsync(s => s.Id == mandateSignerId && s.TransitOfficeId == officeId, ct)
+            .ConfigureAwait(false);
+        if (primaryOffice)
+            return true;
+
+        return await _db.MandateSignerTransitOffices.AsNoTracking()
+            .AnyAsync(
+                l => l.MandateSignerId == mandateSignerId
+                    && l.TransitOfficeId == officeId
+                    && l.IsActive,
+                ct)
+            .ConfigureAwait(false);
+    }
+
     private async Task<bool> IsValidDefaultSignerAsync(
         Guid officeId,
         Guid companyTenantId,
@@ -680,6 +721,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 ChamberCity = null,
                 MandatarySigla = null,
                 CustomTemplateKind = MandatoCustomTemplateKindCodes.None,
+                DefaultMandateSignerId = null,
                 CreatedAt = now,
                 CreatedBy = userId,
             };
@@ -718,7 +760,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 null,
                 HasCustomTemplate: false,
                 // Sin fila no hay elección: el organismo sigue a su plantilla de sistema.
-                ConfiguredTemplateCode: MandatoTemplateResolver.Auto);
+                ConfiguredTemplateCode: MandatoTemplateResolver.Auto,
+                DefaultMandateSignerId: null);
         }
 
         var kind = MandatoCustomTemplateKindCodes.Resolve(cfg.CustomTemplateKind);
@@ -748,7 +791,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             hasCustom,
             ConfiguredTemplateCode: MandatoTemplateResolver.IsAuto(cfg.TemplateCode)
                 ? MandatoTemplateResolver.Auto
-                : cfg.TemplateCode.Trim().ToLowerInvariant());
+                : cfg.TemplateCode.Trim().ToLowerInvariant(),
+            DefaultMandateSignerId: cfg.DefaultMandateSignerId);
     }
 
     private static string? NullIfEmpty(string? value) =>

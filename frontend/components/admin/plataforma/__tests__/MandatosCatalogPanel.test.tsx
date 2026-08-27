@@ -66,6 +66,7 @@ const sampleRows = [
     customTemplateFileName: null,
     customTemplateBody: null,
     hasCustomTemplate: false,
+    defaultMandateSignerId: null,
   },
   {
     officeId: "o2",
@@ -85,6 +86,7 @@ const sampleRows = [
     customTemplateFileName: null,
     customTemplateBody: null,
     hasCustomTemplate: false,
+    defaultMandateSignerId: null,
   },
 ];
 

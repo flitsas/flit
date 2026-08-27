@@ -110,7 +110,7 @@ public sealed class MandateSignerSelectionTests
     // ── AC3 — uno solo queda por defecto ──────────────────────────────────────
 
     [Fact]
-    public async Task AC3_ConUnUnicoMandatarioHabilitado_QuedaElegidoPorDefecto()
+    public async Task AC3_SinDefaultParametrizado_UnUnicoCandidatoNoQuedaElegidoSolo()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Instancia();
@@ -118,7 +118,40 @@ public sealed class MandateSignerSelectionTests
 
         var (result, _) = await handler.HandleAsync(instance.Id, Tenant, ct);
 
-        result!.ElegidoId.Should().Be(Ana);
+        result!.ElegidoId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DefaultOt_FueraDeCandidatosDeLaCompania_SeOfreceYSePreselecciona()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instancia();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_code",
+            ValueText = "05001",
+            Source = "user",
+        });
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveAsync("05001", Tenant, Arg.Any<CancellationToken>())
+            .Returns(new MandateOtConfig(
+                Ot, "generico", RequiresForNaturalPerson: false, null, null,
+                AssignmentMode: "signer",
+                OtDefaultMandateSignerId: Carlos));
+
+        var dir = Substitute.For<IMandateSignerDirectory>();
+        dir.GetCandidatesAsync(Ot, Tenant, Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns([Candidato(Ana, "Ana Restrepo")]);
+        dir.GetByIdAsync(Carlos, Arg.Any<CancellationToken>())
+            .Returns(Candidato(Carlos, "Carlos Pérez"));
+
+        var handler = new ListMandateSignerOptionsHandler(_repo, dir, mandatePolicy: policy);
+        var (result, error) = await handler.HandleAsync(instance.Id, Tenant, ct);
+
+        error.Should().BeNull();
+        result!.Opciones.Select(o => o.Id).Should().BeEquivalentTo([Ana, Carlos]);
+        result.ElegidoId.Should().Be(Carlos);
     }
 
     [Fact]

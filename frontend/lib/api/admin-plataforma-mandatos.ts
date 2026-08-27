@@ -37,6 +37,8 @@ export interface MandateOtConfigView {
   customTemplateFileName: string | null;
   customTemplateBody: string | null;
   hasCustomTemplate: boolean;
+  /** Mandatario global del OT (gana al default de cada compañía). */
+  defaultMandateSignerId: string | null;
 }
 
 export interface UpsertMandateOtConfigBody {
@@ -49,6 +51,7 @@ export interface UpsertMandateOtConfigBody {
   chamberCity?: string | null;
   mandatarySigla?: string | null;
   rowVersion?: number | null;
+  defaultMandateSignerId?: string | null;
 }
 
 export interface MandateConfigExtractResult {
@@ -103,6 +106,10 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
       (raw.CustomTemplateBody as string | null | undefined) ??
       null,
     hasCustomTemplate: Boolean(raw.hasCustomTemplate ?? raw.HasCustomTemplate),
+    defaultMandateSignerId:
+      (raw.defaultMandateSignerId as string | null | undefined) ??
+      (raw.DefaultMandateSignerId as string | null | undefined) ??
+      null,
   };
 }
 

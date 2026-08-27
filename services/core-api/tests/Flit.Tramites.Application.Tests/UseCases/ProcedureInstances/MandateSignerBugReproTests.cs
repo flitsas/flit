@@ -3,6 +3,7 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -149,7 +150,7 @@ public sealed class MandateSignerBugReproTests
         InstitutionalMandataryName: null,
         InstitutionalMandataryNit: null,
         AssignmentMode: "signer",
-        DefaultMandateSignerId: Carlos);
+        OtDefaultMandateSignerId: Carlos);
 
     [Fact]
     public async Task Pantalla_y_Documento_ResuelvenElMismoMandatario_ConDefaultDelOtYSinEleccion()
@@ -303,7 +304,12 @@ public sealed class MandateSignerBugReproTests
         policy.ResolveAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns((MandateOtConfig?)null);
         policy.ResolveByOfficeIdAsync(Ot, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
-            .Returns(DefaultCarlosConfig() with { TemplateCode = "municipio" });
+            .Returns(DefaultCarlosConfig() with
+            {
+                TemplateCode = "municipio",
+                CustomTemplateKind = MandatoCustomTemplateKindCodes.Editor,
+                CustomTemplateBody = "cuerpo",
+            });
 
         var instance = NewInstance();
         _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
