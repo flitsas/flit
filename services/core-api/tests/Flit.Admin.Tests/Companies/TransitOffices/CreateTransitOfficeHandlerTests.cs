@@ -91,7 +91,7 @@ public sealed class CreateTransitOfficeHandlerTests
             c => c.TransitOfficeId == MedellinOfficeId,
             cancellationToken: TestContext.Current.CancellationToken);
         mandate.TemplateCode.Should().Be("municipio");
-        mandate.AssignmentMode.Should().Be("open");
+        mandate.AssignmentMode.Should().Be("signer");
         mandate.ChamberCity.Should().Be("Medellín");
         mandate.InstitutionalMandataryName.Should().BeNull();
         mandate.InstitutionalMandataryNit.Should().BeNull();
