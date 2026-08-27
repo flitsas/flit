@@ -752,14 +752,13 @@ export default function MatriculaResumen({
         </div>
       ) : null}
 
-      {/* Vehículo + Vendedor + Comprador en la MISMA `grid lg:grid-cols-2` (captura Step5), en ese
-          orden. Antes Vehículo iba a ancho completo y Vendedor/Comprador vivían en una segunda
-          rejilla aparte — no era la composición de la captura: en matrícula (sin vendedor) Vehículo
-          ocupa la primera celda y Comprador la segunda, sin `col-span`; en traspaso Vendedor
-          acompaña a Vehículo en la primera fila y Comprador cae debajo, en el flujo natural de la
-          rejilla — «misma rejilla, mismo orden, mismos sitios» en las dos modalidades. */}
+      {/* Vehículo + Vendedor + Comprador en la MISMA `grid lg:grid-cols-2`, en ese orden. El reparto
+          depende de cuántos actores hay: con dos (traspaso: vendedor y comprador) el vehículo se
+          lee solo, a fila completa, y debajo van vendedor y comprador uno al lado del otro; con un
+          solo actor (matrícula) vehículo y comprador comparten la primera fila, que es lo que cabe
+          sin dejar media rejilla vacía. */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch">
-        <ResumenCard title="Vehículo">
+        <ResumenCard title="Vehículo" className={vendedor ? 'lg:col-span-2' : ''}>
           {placa ? (
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
@@ -813,12 +812,11 @@ export default function MatriculaResumen({
           </ResumenCard>
         ) : null}
 
-        {/* Con vendedor son TRES tarjetas en una rejilla de dos columnas (Vehiculo, Vendedor,
-            Comprador): Comprador cae solo en la segunda fila y deja media fila vacia a su derecha,
-            y encima es la mas alta porque lleva embebida la validacion biometrica. En ese caso
-            ocupa la fila entera. En matricula son dos tarjetas, encajan, y no cambia nada. */}
+        {/* Con vendedor, Comprador es su pareja en la segunda fila (el vehículo ya se llevó la
+            primera entera). Sin vendedor acompaña al vehículo en la única fila. En ninguno de los
+            dos casos necesita `col-span`. */}
         {comprador || (!vendedor && partesTxt) ? (
-          <ResumenCard title="Comprador" className={vendedor ? 'lg:col-span-2' : ''}>
+          <ResumenCard title="Comprador">
             {comprador ? (
               <div className="space-y-4">
                 <ActorBlock
