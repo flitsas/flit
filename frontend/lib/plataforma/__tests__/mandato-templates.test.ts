@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignmentModeFromTemplateCode,
   resolveAssignmentMode,
   resolveTipoNegocio,
   suggestedFamilyForTipo,
@@ -27,6 +28,14 @@ describe("mandato-templates tipos de negocio", () => {
     expect(suggestedFamilyForTipo("persona_rl", "generico")).toBe("individuo");
     expect(suggestedFamilyForTipo("persona_rl", "bello")).toBe("organismo_transito");
     expect(suggestedFamilyForTipo("abierto", "sabaneta")).toBe("individuo");
+  });
+
+  it("el modo persistido sale de la plantilla: Sabaneta institucional, el resto Persona o RL", () => {
+    expect(assignmentModeFromTemplateCode("sabaneta")).toBe("institutional");
+    expect(assignmentModeFromTemplateCode("generico")).toBe("signer");
+    expect(assignmentModeFromTemplateCode("bello")).toBe("signer");
+    expect(assignmentModeFromTemplateCode("municipio")).toBe("signer");
+    expect(assignmentModeFromTemplateCode("auto")).toBe("signer");
   });
 
   it("expone labels de producto", () => {

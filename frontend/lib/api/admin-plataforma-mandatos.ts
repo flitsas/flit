@@ -37,8 +37,12 @@ export interface MandateOtConfigView {
   customTemplateFileName: string | null;
   customTemplateBody: string | null;
   hasCustomTemplate: boolean;
-  /** Mandatario global del OT (gana al default de cada compañía). */
+  /** Mandatario global del OT (aplica si la empresa no tiene default propio). */
   defaultMandateSignerId: string | null;
+  defaultMandateSignerName: string | null;
+  defaultMandateSignerDocumentType: string | null;
+  defaultMandateSignerDocumentNumber: string | null;
+  defaultMandateSignerIntegrityHash: string | null;
 }
 
 export interface UpsertMandateOtConfigBody {
@@ -110,6 +114,16 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
       (raw.defaultMandateSignerId as string | null | undefined) ??
       (raw.DefaultMandateSignerId as string | null | undefined) ??
       null,
+    defaultMandateSignerName:
+      (raw.defaultMandateSignerName as string | null | undefined) ??
+      (raw.DefaultMandateSignerName as string | null | undefined) ??
+      null,
+    defaultMandateSignerDocumentType:
+      optionalString(raw.defaultMandateSignerDocumentType ?? raw.DefaultMandateSignerDocumentType),
+    defaultMandateSignerDocumentNumber:
+      optionalString(raw.defaultMandateSignerDocumentNumber ?? raw.DefaultMandateSignerDocumentNumber),
+    defaultMandateSignerIntegrityHash:
+      optionalString(raw.defaultMandateSignerIntegrityHash ?? raw.DefaultMandateSignerIntegrityHash),
   };
 }
 
@@ -244,6 +258,12 @@ export interface CompanyOtMandateRuleView {
   hasExplicitRule: boolean;
   /** Mandatario persona preferido (solo Persona/RL). */
   defaultMandateSignerId: string | null;
+  companyTaxId: string | null;
+  companyCode: string | null;
+  defaultMandateSignerName: string | null;
+  defaultMandateSignerDocumentType: string | null;
+  defaultMandateSignerDocumentNumber: string | null;
+  defaultMandateSignerIntegrityHash: string | null;
 }
 
 export interface UpsertCompanyOtMandateRuleBody {
@@ -284,7 +304,27 @@ function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView 
       null,
     hasExplicitRule: Boolean(raw.hasExplicitRule ?? raw.HasExplicitRule),
     defaultMandateSignerId: defaultId ? String(defaultId) : null,
+    companyTaxId: optionalString(raw.companyTaxId ?? raw.CompanyTaxId),
+    companyCode: optionalString(raw.companyCode ?? raw.CompanyCode),
+    defaultMandateSignerName: optionalString(
+      raw.defaultMandateSignerName ?? raw.DefaultMandateSignerName,
+    ),
+    defaultMandateSignerDocumentType: optionalString(
+      raw.defaultMandateSignerDocumentType ?? raw.DefaultMandateSignerDocumentType,
+    ),
+    defaultMandateSignerDocumentNumber: optionalString(
+      raw.defaultMandateSignerDocumentNumber ?? raw.DefaultMandateSignerDocumentNumber,
+    ),
+    defaultMandateSignerIntegrityHash: optionalString(
+      raw.defaultMandateSignerIntegrityHash ?? raw.DefaultMandateSignerIntegrityHash,
+    ),
   };
+}
+
+function optionalString(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
 }
 
 export async function listCompanyOtMandateRules(

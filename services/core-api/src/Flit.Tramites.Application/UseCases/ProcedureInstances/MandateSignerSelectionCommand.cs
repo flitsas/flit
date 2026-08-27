@@ -109,13 +109,13 @@ public sealed class ListMandateSignerOptionsHandler(
                 c.FirmaFisica));
         }
 
-        // Prioridad: ya elegido en el trámite → default cliente×OT → default OT → vacío.
-        // Resolvedor COMPARTIDO (bug DEV: el radio se marcaba con una sugerencia que nunca se guardó, y
-        // el documento resolvía el firmante con otro criterio): el mismo método lo usa la generación del
-        // mandato y el gate de aprobación, para que la pantalla y el documento nunca diverjan.
+        // Prioridad: ya elegido en el trámite (solo fuera de borrador) → default cliente×OT →
+        // default OT → vacío. En borrador se ignora MandateSignerId auto-congelado para que un
+        // cambio en Mandatos se vea al reimprimir.
+        var eleccionCongelada = editable ? null : instance.MandateSignerId;
         var elegido = MandateSignerDefaultResolver.Resolve(
             opciones.ConvertAll(o => o.Id),
-            instance.MandateSignerId,
+            eleccionCongelada,
             mandateConfig?.OtDefaultMandateSignerId,
             mandateConfig?.DefaultMandateSignerId);
 
@@ -167,21 +167,17 @@ public sealed class SetMandateSignerHandler(
 internal static class MandateSignerSelectionResolver
 {
     /// <summary>
-    /// NIT de la empresa que OTORGA el mandato: el vendedor en traspaso —es su vehículo el que se
-    /// transfiere— y el radicador en matrícula inicial, donde no hay vendedor. Misma regla que
-    /// <c>FurDocumentData.Otorgante</c>, de la que depende a nombre de quién se emite el contrato.
-    ///
-    /// <para><c>null</c> si esa parte no está capturada todavía: entonces no hay contra qué acotar y se
-    /// ofrecen todos los mandatarios del organismo.</para>
+    /// NIT de la empresa que OTORGA el mandato en <b>traspaso</b>: el vendedor (su vehículo).
+    /// En matrícula inicial no hay vendedor: no se usa la cédula del comprador como NIT de empresa
+    /// representada, porque eso filtraba a los mandatarios de la gestora y dejaba firmando a uno
+    /// “aplica a todas” distinto del default de Mandatos.
     /// </summary>
     public static string? ResolveNitMandante(Flit.Tramites.Domain.Entities.ProcedureInstance instance)
     {
-        var otorgante = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, "vendedor", StringComparison.OrdinalIgnoreCase))
-            ?? instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, "comprador", StringComparison.OrdinalIgnoreCase));
+        var vendedor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, "vendedor", StringComparison.OrdinalIgnoreCase));
 
-        var nit = otorgante?.DocumentNumber?.Trim();
+        var nit = vendedor?.DocumentNumber?.Trim();
         return string.IsNullOrEmpty(nit) ? null : nit;
     }
 

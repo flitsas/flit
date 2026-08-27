@@ -39,6 +39,10 @@ const funza = {
   customTemplateKind: "none",
   hasCustomTemplate: false,
   defaultMandateSignerId: null,
+  defaultMandateSignerName: null,
+  defaultMandateSignerDocumentType: null,
+  defaultMandateSignerDocumentNumber: null,
+  defaultMandateSignerIntegrityHash: null,
   rowVersion: 1,
 } as MandateOtConfigView;
 

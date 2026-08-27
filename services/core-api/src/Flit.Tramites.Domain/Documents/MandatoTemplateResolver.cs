@@ -180,6 +180,15 @@ public static class MandatoTemplateResolver
             Municipio => MandatoVariante.Municipio,
             _ => MandatoVariante.Generico,
         };
+
+    /// <summary>
+    /// Modo de asignación que nace de la redacción: Sabaneta es institucional;
+    /// el resto (incluido genérico) es Persona o RL. El modo abierto ya no es default.
+    /// </summary>
+    public static string AssignmentModeForTemplate(string? templateCode) =>
+        Resolve(templateCode) == MandatoVariante.Sabaneta
+            ? MandatoAssignmentModeCodes.Institutional
+            : MandatoAssignmentModeCodes.Signer;
 }
 
 /// <summary>
@@ -323,14 +332,15 @@ public static class MandatoSystemOfficeTemplates
 }
 
 /// <summary>
-/// Valores con los que nace un OT al activarse: formato abierto, sin firmante persona.
+/// Valores con los que nace un OT al activarse: Persona o RL, salvo que la plantilla
+/// del organismo implique otro modo (hoy: Sabaneta → institucional).
 /// La plantilla es la del organismo si tiene builtin (Sabaneta, Bello, Envigado, Funza, Medellín);
 /// el resto nace en genérico.
 /// </summary>
 public static class MandatoOtBirthDefaults
 {
     public const string TemplateCode = MandatoTemplateResolver.Generico;
-    public const string AssignmentMode = MandatoAssignmentModeCodes.Open;
+    public const string AssignmentMode = MandatoAssignmentModeCodes.Signer;
     public const string MandataryFamily = MandatoFamiliaCodes.Individuo;
     public const bool RequiresForNaturalPerson = false;
 
@@ -352,7 +362,7 @@ public static class MandatoOtBirthDefaults
         {
             return new Snapshot(
                 TemplateCode,
-                AssignmentMode,
+                MandatoTemplateResolver.AssignmentModeForTemplate(TemplateCode),
                 MandataryFamily,
                 RequiresForNaturalPerson,
                 null,
@@ -363,7 +373,7 @@ public static class MandatoOtBirthDefaults
 
         return new Snapshot(
             builtin.TemplateCode,
-            AssignmentMode,
+            MandatoTemplateResolver.AssignmentModeForTemplate(builtin.TemplateCode),
             builtin.MandataryFamily,
             builtin.RequiresForNaturalPerson,
             NullIfEmpty(builtin.InstitutionalMandataryName),

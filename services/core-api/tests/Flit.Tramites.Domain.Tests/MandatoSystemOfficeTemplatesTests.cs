@@ -106,7 +106,10 @@ public sealed class MandatoSystemOfficeTemplatesTests
         var birth = MandatoOtBirthDefaults.ForOffice(office);
         birth.TemplateCode.Should().Be(template);
         birth.MandataryFamily.Should().Be(family);
-        birth.AssignmentMode.Should().Be(MandatoAssignmentModeCodes.Open);
+        birth.AssignmentMode.Should().Be(
+            template == MandatoTemplateResolver.Sabaneta
+                ? MandatoAssignmentModeCodes.Institutional
+                : MandatoAssignmentModeCodes.Signer);
         birth.ChamberCity.Should().Be(city);
     }
 
@@ -115,7 +118,7 @@ public sealed class MandatoSystemOfficeTemplatesTests
     {
         var birth = MandatoOtBirthDefaults.ForOffice("11001000");
         birth.TemplateCode.Should().Be(MandatoTemplateResolver.Generico);
-        birth.AssignmentMode.Should().Be(MandatoAssignmentModeCodes.Open);
+        birth.AssignmentMode.Should().Be(MandatoAssignmentModeCodes.Signer);
         birth.MandataryFamily.Should().Be(MandatoFamiliaCodes.Individuo);
         birth.InstitutionalMandataryName.Should().BeNull();
     }

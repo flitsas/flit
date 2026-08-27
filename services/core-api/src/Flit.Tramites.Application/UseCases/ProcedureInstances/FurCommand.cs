@@ -1160,9 +1160,17 @@ public sealed class GenerarFurHandler(
                     .WithOtDefaultAsync(candidatos, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
                     .ConfigureAwait(false);
 
+                // En borrador/subsanación el firmante se recalcula SIEMPRE contra la config vigente
+                // (cliente×OT → OT → vacío). Congelar instance.MandateSignerId en la primera generación
+                // dejaba el PDF con un Hugo/Carlos viejo después de cambiar el default en Mandatos.
+                // Fuera de borrador (expediente ya radicado) sí manda lo guardado: es documento legal.
+                var enBorrador = TramiteEstado.PermiteEdicionDatos(
+                    instance.Status, instance.SubsanacionActiva);
+                var eleccionCongelada = enBorrador ? null : instance.MandateSignerId;
+
                 resolvedSignerId = MandateSignerDefaultResolver.Resolve(
                     candidatos.Select(c => c.Id).ToList(),
-                    instance.MandateSignerId,
+                    eleccionCongelada,
                     config?.OtDefaultMandateSignerId,
                     config?.DefaultMandateSignerId);
 
@@ -1180,13 +1188,9 @@ public sealed class GenerarFurHandler(
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
                         mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
 
-                        // Persistir lo resuelto SOLO cuando NO venía de una elección explícita ya
-                        // guardada (el gestor no había elegido nada: salió del default cliente×OT,
-                        // del OT o quedó vacío). El mandato es un documento legal — quién lo firma queda
-                        // registrado, no recalculado en cada regeneración. Así un cambio posterior en la
-                        // parametrización del OT no reescribe en silencio quién firmó un expediente ya
-                        // emitido, y la próxima regeneración es idempotente (ya hay elección explícita).
-                        if (instance.MandateSignerId is null)
+                        if (enBorrador)
+                            instance.MandateSignerId = signerId;
+                        else if (instance.MandateSignerId is null)
                             instance.MandateSignerId = signerId;
                     }
                 }

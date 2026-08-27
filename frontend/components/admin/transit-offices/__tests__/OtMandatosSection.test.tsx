@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
 import { ToastProvider } from "@/components/admin/Toast";
+import type { CompanyOtMandateRuleView } from "@/lib/api/admin-plataforma-mandatos";
 
 const fetchMandateOtConfig = vi.fn();
 const listCompanyOtMandateRules = vi.fn();
@@ -53,7 +54,33 @@ const office = {
   customTemplateBody: null,
   hasCustomTemplate: false,
   defaultMandateSignerId: null,
+  defaultMandateSignerName: null,
+  defaultMandateSignerDocumentType: null,
+  defaultMandateSignerDocumentNumber: null,
+  defaultMandateSignerIntegrityHash: null,
 };
+
+function companyRow(overrides: Partial<CompanyOtMandateRuleView> = {}): CompanyOtMandateRuleView {
+  return {
+    companyTenantId: "cia-1",
+    companyName: "Gestora de Prueba S.A.S.",
+    assignmentMode: "open",
+    mandataryFamily: "individuo",
+    institutionalMandataryName: null,
+    institutionalMandataryNit: null,
+    chamberCity: null,
+    mandatarySigla: null,
+    hasExplicitRule: false,
+    defaultMandateSignerId: null,
+    companyTaxId: "900123456",
+    companyCode: "CIA-1",
+    defaultMandateSignerName: null,
+    defaultMandateSignerDocumentType: null,
+    defaultMandateSignerDocumentNumber: null,
+    defaultMandateSignerIntegrityHash: null,
+    ...overrides,
+  };
+}
 
 describe("OtMandatosSection", () => {
   beforeEach(() => {
@@ -66,93 +93,90 @@ describe("OtMandatosSection", () => {
     fetchRepresentedCompanies.mockResolvedValue([]);
   });
 
-  it("lista empresas habilitadas con CTA para registrar mandato", async () => {
+  it("lista empresas habilitadas y permite editar el mandatario", async () => {
     fetchMandateOtConfig.mockResolvedValue(office);
     listCompanyOtMandateRules.mockResolvedValue([
-      {
-        companyTenantId: "cia-1",
-        companyName: "Gestora de Prueba S.A.S.",
-        assignmentMode: "open",
-        mandataryFamily: "individuo",
-        institutionalMandataryName: null,
-        institutionalMandataryNit: null,
-        chamberCity: null,
-        mandatarySigla: null,
-        hasExplicitRule: false,
-        defaultMandateSignerId: null,
-      },
+      companyRow({
+        defaultMandateSignerName: "Carlos Pérez",
+        defaultMandateSignerDocumentType: "CC",
+        defaultMandateSignerDocumentNumber: "1020304050",
+        defaultMandateSignerIntegrityHash: "a".repeat(64),
+      }),
     ]);
     render(
       <ToastProvider>
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    expect(await screen.findByTestId("ot-mandatos-company-list")).toBeInTheDocument();
+    expect(await screen.findByTestId("ot-mandatos-company-table")).toBeInTheDocument();
     expect(screen.getByText("Gestora de Prueba S.A.S.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /registrar mandato/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /tipo por empresa que radica/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /registrar mandatario/i })).toBeInTheDocument();
+    expect(screen.getByText("900123456")).toBeInTheDocument();
+    expect(screen.queryByText("CIA-1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /^código$/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Carlos Pérez")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /editar mandatario de gestora de prueba/i })).toBeInTheDocument();
+  });
+
+  it("muestra Sin definir cuando el OT no tiene mandatario general", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    expect(await screen.findByTestId("ot-mandatos-general-signer")).toHaveTextContent("Sin definir");
   });
 
   it("ofrece registrar el mandatario default desde Configurar mandato del OT", async () => {
     fetchMandateOtConfig.mockResolvedValue(office);
-    listCompanyOtMandateRules.mockResolvedValue([
-      {
-        companyTenantId: "cia-1",
-        companyName: "Gestora de Prueba S.A.S.",
-        assignmentMode: "open",
-        mandataryFamily: "individuo",
-        institutionalMandataryName: null,
-        institutionalMandataryNit: null,
-        chamberCity: null,
-        mandatarySigla: null,
-        hasExplicitRule: false,
-        defaultMandateSignerId: null,
-      },
-    ]);
+    listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
     const user = userEvent.setup();
     render(
       <ToastProvider>
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    await user.click(await screen.findByRole("button", { name: /^configurar mandato$/i }));
+    await user.click(await screen.findByRole("button", { name: /editar mandatario general del organismo/i }));
     expect(await screen.findByTestId("mandato-ot-register-signer")).toBeInTheDocument();
     await user.click(screen.getByTestId("mandato-ot-register-signer"));
     expect(await screen.findByRole("dialog", { name: /registrar mandatario/i })).toBeInTheDocument();
   });
 
-  it("abre el formulario de mandatario desde la tarjeta de la empresa", async () => {
+  it("abre la configuración de mandatario de la empresa", async () => {
     fetchMandateOtConfig.mockResolvedValue(office);
-    listCompanyOtMandateRules.mockResolvedValue([
-      {
-        companyTenantId: "cia-1",
-        companyName: "Gestora de Prueba S.A.S.",
-        assignmentMode: "signer",
-        mandataryFamily: "individuo",
-        institutionalMandataryName: null,
-        institutionalMandataryNit: null,
-        chamberCity: null,
-        mandatarySigla: null,
-        hasExplicitRule: true,
-        defaultMandateSignerId: null,
-      },
-    ]);
+    listCompanyOtMandateRules.mockResolvedValue([companyRow({ assignmentMode: "signer", hasExplicitRule: true })]);
     const user = userEvent.setup();
     render(
       <ToastProvider>
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    await user.click(await screen.findByRole("button", { name: /registrar mandatario/i }));
-    expect(await screen.findByRole("dialog", { name: /registrar mandatario/i })).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: /registrar mandatario/i }).className).toMatch(
-      /z-\[80\]/,
+    await user.click(await screen.findByRole("button", { name: /editar mandatario de gestora de prueba/i }));
+    expect(await screen.findByTestId("mandato-ot-config-form")).toHaveAttribute("data-mode", "mandatario");
+  });
+
+  it("al cerrar el panel de empresa recarga la grilla", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockImplementation(() => {
+      const call = listCompanyOtMandateRules.mock.calls.length;
+      const name = call >= 3 ? "Ana López" : "Carlos Pérez";
+      return Promise.resolve([companyRow({ defaultMandateSignerName: name })]);
+    });
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
     );
-    expect(screen.getByLabelText(/nombre completo/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/tipo de documento/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/número de documento/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^correo$/i)).toBeInTheDocument();
+    expect(await screen.findByText("Carlos Pérez")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /editar mandatario de gestora de prueba/i }));
+    const closeButtons = await screen.findAllByRole("button", { name: /^cerrar$/i });
+    const footerClose = closeButtons.find((el) => el.textContent?.trim() === "Cerrar");
+    expect(footerClose).toBeDefined();
+    await user.click(footerClose!);
+    expect(await screen.findByText("Ana López")).toBeInTheDocument();
+    expect(listCompanyOtMandateRules.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 
   it("muestra vacío cuando no hay empresas con el OT habilitado", async () => {

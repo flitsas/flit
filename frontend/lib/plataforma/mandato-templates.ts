@@ -105,6 +105,16 @@ export function tipoNegocioLabel(tipo: MandatoTipoNegocio): string {
   return MANDATO_TIPOS.find((t) => t.value === tipo)?.label ?? tipo;
 }
 
+/** Modo persistido según la redacción: Sabaneta → institucional; el resto → Persona o RL. */
+export function assignmentModeFromTemplateCode(
+  templateCode: string | null | undefined,
+): MandateAssignmentMode {
+  const code = (templateCode ?? "generico").trim().toLowerCase();
+  if (code === "auto") return "signer";
+  const def = MANDATO_TEMPLATES.find((t) => t.code === code);
+  return resolveAssignmentMode(def?.tipoTipico ?? "persona_rl");
+}
+
 export interface MandatoTemplateOtBinding {
   /** Código RUNT del OT (catálogo). */
   officeCode: string;
@@ -138,7 +148,7 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
     code: "generico",
     label: "Genérico",
     summary:
-      "Plantilla por defecto del sistema. Aplica a cualquier organismo que no tenga una plantilla propia. Firman mandante y mandatario (o líneas en blanco si el tipo es Abierto).",
+      "Plantilla por defecto del sistema. Aplica a cualquier organismo que no tenga una plantilla propia. Firman mandante y mandatario (Persona o RL).",
     familia: "individuo",
     familiaLabel: "Individuo",
     tipoTipico: "persona_rl",

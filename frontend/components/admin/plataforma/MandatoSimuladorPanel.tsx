@@ -15,7 +15,6 @@ import { ApiError } from "@/lib/api/types";
 import type { FurPrendaKind } from "@/lib/api/admin-plataforma-fur";
 import type { ProcedureFamily, ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
-import { MANDATO_TIPOS, resolveAssignmentMode, type MandatoTipoNegocio } from "@/lib/plataforma/mandato-templates";
 import { useToast } from "@/components/admin/Toast";
 
 /**
@@ -91,7 +90,6 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
   const [cambioCombustible, setCambioCombustible] = useState(false);
   const [cambioCarroceria, setCambioCarroceria] = useState(false);
   const [blindaje, setBlindaje] = useState(false);
-  const [tipo, setTipo] = useState<MandatoTipoNegocio | "config">("config");
   const [signerId, setSignerId] = useState("");
   const [toEmail, setToEmail] = useState("");
 
@@ -194,7 +192,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
     officeId,
     personType,
     procedureTypeCode: procedureTypeCode || null,
-    assignmentMode: tipo === "config" ? null : resolveAssignmentMode(tipo),
+    assignmentMode: "signer",
     mandateSignerId: signerId || null,
     prenda,
     cambioColor,
@@ -242,7 +240,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
     }
   };
 
-  const soloMandante = tipo === "institucional" || tipo === "abierto";
+  const soloMandante = false;
 
   return (
     <section
@@ -430,25 +428,17 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
           </div>
         </fieldset>
 
-        <label className="block space-y-1.5">
+        <p className="block space-y-1.5">
           <span className="text-xs font-semibold text-[#162244] dark:text-white">
             Tipo de mandatario
           </span>
-          <select
-            value={tipo}
-            onChange={(e) => setTipo(e.target.value as MandatoTipoNegocio | "config")}
-            disabled={busy}
+          <span
+            className="block rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
             data-testid="simulador-tipo"
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
           >
-            <option value="config">El configurado para el organismo</option>
-            {MANDATO_TIPOS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            Persona o RL
+          </span>
+        </p>
 
         <label className="block space-y-1.5 sm:col-span-2">
           <span className="text-xs font-semibold text-[#162244] dark:text-white">

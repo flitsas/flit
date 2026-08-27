@@ -30,7 +30,11 @@ public sealed record MandateOtConfigView(
     /// dominio de Trámites, donde vive la constante.</para>
     /// </summary>
     string ConfiguredTemplateCode = "auto",
-    Guid? DefaultMandateSignerId = null);
+    Guid? DefaultMandateSignerId = null,
+    string? DefaultMandateSignerName = null,
+    string? DefaultMandateSignerDocumentType = null,
+    string? DefaultMandateSignerDocumentNumber = null,
+    string? DefaultMandateSignerIntegrityHash = null);
 
 public sealed record UpsertMandateOtConfigRequest(
     string TemplateCode,
@@ -84,7 +88,13 @@ public sealed record CompanyOtMandateRuleView(
     string? ChamberCity,
     string? MandatarySigla,
     bool HasExplicitRule,
-    Guid? DefaultMandateSignerId = null);
+    Guid? DefaultMandateSignerId = null,
+    string? CompanyTaxId = null,
+    string? CompanyCode = null,
+    string? DefaultMandateSignerName = null,
+    string? DefaultMandateSignerDocumentType = null,
+    string? DefaultMandateSignerDocumentNumber = null,
+    string? DefaultMandateSignerIntegrityHash = null);
 
 public sealed record UpsertCompanyOtMandateRuleRequest(
     string AssignmentMode,
