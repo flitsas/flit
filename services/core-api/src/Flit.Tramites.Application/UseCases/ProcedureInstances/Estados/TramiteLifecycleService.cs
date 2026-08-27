@@ -680,15 +680,27 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>
-    /// Gate de prenda: (1) política compañía+OT del certificado — cualquier modalidad (CF-06);
-    /// (2) R10 decisión de prenda — traspaso con gravámenes en warn, Y matrícula inicial de forma
-    /// INCONDICIONAL (HU #11592, bloqueo duro que invierte deliberadamente la HU #10596: la prenda de
-    /// matrícula dejó de ser una declaración meramente informativa).
+    /// Gate de prenda: (1) política compañía+OT del certificado — cualquier modalidad CON DIMENSIÓN DE
+    /// PRENDA (CF-06); (2) R10 decisión de prenda — traspaso con gravámenes en warn, Y matrícula inicial
+    /// de forma INCONDICIONAL (HU #11592, bloqueo duro que invierte deliberadamente la HU #10596: la
+    /// prenda de matrícula dejó de ser una declaración meramente informativa).
     /// </summary>
     private async Task<(string? Code, string? Detail)> EvaluarPrendaGateAsync(
         ProcedureInstance instance,
         CancellationToken ct)
     {
+        // Un trámite sin dimensión de prenda no tiene NADA que decidir sobre un gravamen: ni capa
+        // complementaria (familia OTROS no acumula, ADR-0050) ni prenda propia del tipo. Se sale antes
+        // que nada —incluido el override del OT, que hasta ahora se evaluaba primero y para toda
+        // modalidad— porque ahí el bloqueo era INSATISFACIBLE: `RegistrarPrendaHandler` rechaza la
+        // decisión de estos tipos con `prenda_no_admitida_en_tipo` y el asistente ni siquiera pinta el
+        // paso, así que un duplicado de tarjeta o un cambio de color se quedaban sin poder prepararse.
+        // Mismo predicado que usa ese handler para ACEPTAR: quien no puede registrar una prenda no
+        // puede quedar bloqueado por no tenerla.
+        var perfil = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (!perfil.AdmiteDimensionDePrenda(instance.ProcedureType?.Family, instance.ProcedureType?.Code))
+            return (null, null);
+
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
         // La decisión vigente se carga ANTES del override: desde 2026-08-12 el override la necesita
