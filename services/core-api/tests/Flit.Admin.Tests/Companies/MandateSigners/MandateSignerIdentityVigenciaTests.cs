@@ -228,4 +228,19 @@ public sealed class MandateSignerIdentityVigenciaTests
         item!.IdentityStatus.Should().Be(AdminIdentityVigencia.None,
             "el rótulo admin ya no debe leer la fila de la tabla abandonada");
     }
+
+    [Fact]
+    public async Task ListByOtAsync_ConStatusReaderReal_NoRevientaPorTransaccionAnidada()
+    {
+        // GET /mandate-signers: ListByOtAsync abre tx y LoadIdentityVigenciaAsync llama
+        // DbTransitOfficeOperationalStatusReader.GetByIdAsync. En PostgreSQL anidar BeginTransaction
+        // fallaba; el reader de estado reutiliza la tx. InMemory no abre tx, pero cubre el camino DI real.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        var reader = new DbMandateSignerReader(ctx, new DbTransitOfficeOperationalStatusReader(ctx));
+
+        var act = async () => await reader.ListByOtAsync(Ot, ct);
+
+        await act.Should().NotThrowAsync();
+    }
 }

@@ -46,6 +46,7 @@ describe("buildDockGroups", () => {
       entry(OT_ADM_DOCK.preasignacion, "Preasignación"),
       entry(OT_ADM_DOCK.usuarios, "Usuarios"),
       entry(OT_ADM_DOCK.reportes, "Reportes"),
+      entry(OT_ADM_DOCK.mandatos, "Mandatos"),
     ]);
     expect(groups.map((g) => g.label)).toEqual([
       "Trámites",
@@ -55,7 +56,7 @@ describe("buildDockGroups", () => {
       "Administración",
     ]);
     const admin = groups.find((g) => g.id === "administracion");
-    expect(admin?.items.map((i) => i.label)).toEqual(["Reglas", "Documentos", "Requisitos"]);
+    expect(admin?.items.map((i) => i.label)).toEqual(["Reglas", "Documentos", "Requisitos", "Mandatos"]);
   });
 
   it("SuperAdmin: Plataforma (con Mandatos y Notificaciones) vive anidada en Administradores", () => {

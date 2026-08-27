@@ -6,6 +6,7 @@ using Flit.Admin.Domain.Companies.TransitOffices.Create;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Tramites.Domain.Documents;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -115,6 +116,10 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
                 var office = await _context.TransitOffices
                     .AsNoTracking()
                     .FirstOrDefaultAsync(o => o.Id == newTransitOffice.TransitOfficeId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                await EnsureMandateBirthConfigAsync(
+                    newTransitOffice.TransitOfficeId, newTransitOffice.CreatedBy, now, cancellationToken)
                     .ConfigureAwait(false);
 
                 return Project(tenant, profile, office);
@@ -241,6 +246,39 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return SetTransitOfficeTenantStatusResult.Applied(tenantId, isActive, changed: true);
+    }
+
+    private async Task EnsureMandateBirthConfigAsync(
+        Guid transitOfficeId,
+        Guid? createdBy,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var exists = await _context.TransitOfficeMandateConfigs
+            .AnyAsync(c => c.TransitOfficeId == transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (exists)
+        {
+            return;
+        }
+
+        _context.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(),
+            TransitOfficeId = transitOfficeId,
+            TemplateCode = MandatoOtBirthDefaults.TemplateCode,
+            AssignmentMode = MandatoOtBirthDefaults.AssignmentMode,
+            MandataryFamily = MandatoOtBirthDefaults.MandataryFamily,
+            RequiresForNaturalPerson = MandatoOtBirthDefaults.RequiresForNaturalPerson,
+            InstitutionalMandataryName = null,
+            InstitutionalMandataryNit = null,
+            ChamberCity = null,
+            MandatarySigla = null,
+            CustomTemplateKind = MandatoCustomTemplateKindCodes.None,
+            CreatedAt = now,
+            CreatedBy = createdBy,
+        });
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static TransitOfficeTenantItem Project(

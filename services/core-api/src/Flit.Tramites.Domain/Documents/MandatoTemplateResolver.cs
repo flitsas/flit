@@ -58,6 +58,19 @@ public static class MandatoAssignmentModeCodes
         };
     }
 
+    /// <summary>
+    /// Modo efectivo al generar el mandato: regla compañía×OT, si existe; si no, el del OT;
+    /// si el OT aún no tiene fila (legado), <see cref="Signer"/>.
+    /// </summary>
+    public static string ResolveEffective(string? companyRuleMode, string? otConfigMode, bool otConfigExists)
+    {
+        if (!string.IsNullOrWhiteSpace(companyRuleMode))
+            return Resolve(companyRuleMode);
+        if (otConfigExists)
+            return Resolve(otConfigMode);
+        return Signer;
+    }
+
     /// <summary>True si el flujo no debe exigir ni fijar un firmante persona (institucional u abierto).</summary>
     public static bool SkipsPersonSigner(string? mode)
     {
@@ -167,6 +180,36 @@ public static class MandatoTemplateResolver
             Municipio => MandatoVariante.Municipio,
             _ => MandatoVariante.Generico,
         };
+
+    /// <summary>
+    /// Redacción que se EMITE en el trámite (no la fila cruda de Plataforma).
+    /// Formato abierto → genérico en blanco. Persona jurídica / institucional → Sabaneta
+    /// (misma redacción que Envigado). Persona natural / mandato cliente → genérico por defecto;
+    /// Bello conserva su plantilla; Funza y Medellín conservan la redacción municipal corta.
+    /// El código de OT es el canónico del trámite (destino), no el organismo “actual” del FUR.
+    /// </summary>
+    public static string ResolveEmissionCode(
+        string? assignmentMode,
+        bool mandanteEsJuridica,
+        string? officeCode)
+    {
+        var mode = MandatoAssignmentModeCodes.Resolve(assignmentMode);
+        if (mode == MandatoAssignmentModeCodes.Open)
+            return Generico;
+
+        if (mode == MandatoAssignmentModeCodes.Institutional || mandanteEsJuridica)
+            return Sabaneta;
+
+        var code = officeCode?.Trim();
+        if (string.Equals(code, MandatoSystemOfficeTemplates.BelloOfficeCode, StringComparison.OrdinalIgnoreCase))
+            return Bello;
+
+        if (string.Equals(code, MandatoSystemOfficeTemplates.FunzaOfficeCode, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(code, MandatoSystemOfficeTemplates.MedellinOfficeCode, StringComparison.OrdinalIgnoreCase))
+            return Municipio;
+
+        return Generico;
+    }
 }
 
 /// <summary>
@@ -221,6 +264,19 @@ public static class MandatoSystemOfficeTemplates
         "Medellín",
         null);
 
+    /// <summary>
+    /// Envigado usa la misma redacción de persona jurídica que Sabaneta; los datos de la UT salen
+    /// de la config del OT, no de SETSA.
+    /// </summary>
+    public static readonly Builtin Envigado = new(
+        MandatoTemplateResolver.Sabaneta,
+        MandatoFamiliaCodes.OrganismoTransito,
+        RequiresForNaturalPerson: true,
+        string.Empty,
+        string.Empty,
+        "Envigado",
+        null);
+
     /// <summary>Redacción corta compartida; la ciudad del cierre sale del OT del trámite.</summary>
     public static readonly Builtin Municipio = new(
         MandatoTemplateResolver.Municipio,
@@ -240,8 +296,9 @@ public static class MandatoSystemOfficeTemplates
             return Sabaneta;
         if (string.Equals(code, BelloOfficeCode, StringComparison.OrdinalIgnoreCase))
             return Bello;
-        if (string.Equals(code, EnvigadoOfficeCode, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(code, FunzaOfficeCode, StringComparison.OrdinalIgnoreCase)
+        if (string.Equals(code, EnvigadoOfficeCode, StringComparison.OrdinalIgnoreCase))
+            return Envigado;
+        if (string.Equals(code, FunzaOfficeCode, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, MedellinOfficeCode, StringComparison.OrdinalIgnoreCase))
             return Municipio;
         return null;
@@ -275,4 +332,15 @@ public static class MandatoSystemOfficeTemplates
 
         return MandatoTemplateResolver.Generico;
     }
+}
+
+/// <summary>
+/// Valores con los que nace un OT al activarse: formato abierto, plantilla genérica y mandatario vacío.
+/// </summary>
+public static class MandatoOtBirthDefaults
+{
+    public const string TemplateCode = MandatoTemplateResolver.Generico;
+    public const string AssignmentMode = MandatoAssignmentModeCodes.Open;
+    public const string MandataryFamily = MandatoFamiliaCodes.Individuo;
+    public const bool RequiresForNaturalPerson = false;
 }

@@ -205,9 +205,9 @@ export function MandatosCatalogPanel() {
             Plantillas del sistema ({MANDATO_TEMPLATES.length})
           </h2>
           <p className="text-xs text-[#59677D] dark:text-white/65">
-            Texto del contrato que FLIT genera por organismo. El Genérico es el respaldo; las demás
-            están ligadas a OTs concretos. El tipo de mandatario (Persona/RL, Institucional o Abierto)
-            se configura aparte por organismo.
+            Texto del contrato que FLIT genera por organismo. El Genérico es el respaldo y el
+            default al nacer un OT (formato abierto). Esta pantalla convive con el hub del
+            organismo → Mandatos: es la misma configuración.
           </p>
         </div>
         <ul className="grid gap-3 md:grid-cols-3">

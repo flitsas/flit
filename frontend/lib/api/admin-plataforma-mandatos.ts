@@ -114,12 +114,34 @@ export async function listMandateOtConfigs(signal?: AbortSignal): Promise<Mandat
   return rows.map((r) => mapView(r as unknown as Record<string, unknown>));
 }
 
+function isOtHubPath(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.pathname.includes("/admin/transit-offices/");
+}
+
+/** Rutas de un OT: hub usa API OtModule; Plataforma sigue en SuperAdmin. */
+function mandateOfficeRoot(officeId: string): string {
+  const id = encodeURIComponent(officeId);
+  if (isOtHubPath()) {
+    return `/api/v1/admin/ot/offices/${id}/mandatos`;
+  }
+  return `${base}/ot/${id}`;
+}
+
+export async function fetchMandateOtConfig(
+  officeId: string,
+  signal?: AbortSignal,
+): Promise<MandateOtConfigView> {
+  const data = await apiFetch<MandateOtConfigView>(mandateOfficeRoot(officeId), { signal });
+  return mapView(data as unknown as Record<string, unknown>);
+}
+
 export async function upsertMandateOtConfig(
   officeId: string,
   body: UpsertMandateOtConfigBody,
   signal?: AbortSignal,
 ): Promise<MandateOtConfigView> {
-  const data = await apiFetch<MandateOtConfigView>(`${base}/ot/${officeId}`, {
+  const data = await apiFetch<MandateOtConfigView>(mandateOfficeRoot(officeId), {
     method: "PUT",
     body,
     signal,
@@ -188,12 +210,19 @@ export async function deleteMandateOtCustomTemplate(
 export async function fetchMandatoTemplatePreview(
   templateCode: MandatoTemplateCode | string,
   signal?: AbortSignal,
+  officeId?: string,
 ): Promise<Blob> {
+  if (officeId && isOtHubPath()) {
+    return fetchPdf(
+      `${mandateOfficeRoot(officeId)}/templates/${encodeURIComponent(templateCode)}/preview`,
+      signal,
+    );
+  }
   return fetchPdf(`${base}/${encodeURIComponent(templateCode)}/preview`, signal);
 }
 
 export async function fetchMandateOtPreview(officeId: string, signal?: AbortSignal): Promise<Blob> {
-  return fetchPdf(`${base}/ot/${encodeURIComponent(officeId)}/preview`, signal);
+  return fetchPdf(`${mandateOfficeRoot(officeId)}/preview`, signal);
 }
 
 export interface CompanyOtMandateRuleView {
@@ -257,7 +286,7 @@ export async function listCompanyOtMandateRules(
 ): Promise<CompanyOtMandateRuleView[]> {
   const data = await apiFetch<
     CompanyOtMandateRuleView[] | { items: CompanyOtMandateRuleView[] }
-  >(`${base}/ot/${officeId}/company-rules`, { signal });
+  >(`${mandateOfficeRoot(officeId)}/company-rules`, { signal });
   const rows = Array.isArray(data) ? data : (data?.items ?? []);
   return rows.map((r) => mapCompanyRule(r as unknown as Record<string, unknown>));
 }
@@ -269,7 +298,7 @@ export async function upsertCompanyOtMandateRule(
   signal?: AbortSignal,
 ): Promise<CompanyOtMandateRuleView> {
   const data = await apiFetch<CompanyOtMandateRuleView>(
-    `${base}/ot/${officeId}/company-rules/${companyTenantId}`,
+    `${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}`,
     { method: "PUT", body, signal },
   );
   return mapCompanyRule(data as unknown as Record<string, unknown>);
@@ -280,7 +309,7 @@ export async function deleteCompanyOtMandateRule(
   companyTenantId: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  await apiFetch<void>(`${base}/ot/${officeId}/company-rules/${companyTenantId}`, {
+  await apiFetch<void>(`${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}`, {
     method: "DELETE",
     signal,
   });

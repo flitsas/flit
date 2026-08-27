@@ -8,7 +8,8 @@ export type OtHubTabId =
   | "requirements"
   | "plate-ranges"
   | "usuarios"
-  | "reportes";
+  | "reportes"
+  | "mandatos";
 
 export interface OtHubTab {
   id: OtHubTabId;
@@ -31,7 +32,7 @@ export const OT_HUB_TABS: OtHubTab[] = [
   { id: "plate-ranges", label: "Preasignación", segment: "plate-ranges" },
   { id: "usuarios", label: "Usuarios", segment: "usuarios" },
   { id: "reportes", label: "Reportes", segment: "reportes" },
-  // HU #11202 (AC4) — mandatarios salieron del perfil OT: los gestiona la compañía.
+  { id: "mandatos", label: "Mandatos", segment: "mandatos" },
 ];
 
 /** Keys del dock Admin OT (agrupación distinta a SuperAdmin). */
@@ -43,6 +44,7 @@ export const OT_ADM_DOCK = {
   preasignacion: "ot-adm-preasignacion",
   usuarios: "ot-adm-usuarios",
   reportes: "ot-adm-reportes",
+  mandatos: "ot-adm-mandatos",
 } as const;
 
 const OT_PROFILE_ID_KEY = "flit-ot-transit-office-id";
