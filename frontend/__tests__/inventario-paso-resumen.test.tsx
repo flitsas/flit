@@ -670,6 +670,8 @@ describe('FirmaFurStep — inventario: consulta RNMC de medidas correctivas', ()
  *    cuando el gestor ya sabe qué documentos quedaron adjuntos.
  *  · El envío a tránsito lo dispara el pie del asistente (Preparar / Radicar), no el paso: tenerlo
  *    en los dos sitios significaba dos botones capaces de radicar el mismo trámite.
+ *  · El cierre Asignado → Terminado (SOAT / impuesto) vive en el listado (`TramitesTable`), no
+ *    en el resumen del wizard.
  *
  * Se fija por escrito para que el rediseño no las «recupere» y acabemos con el dato duplicado en
  * dos pantallas o con dos caminos distintos para radicar.
@@ -685,17 +687,15 @@ describe('FirmaFurStep — inventario: acciones del cierre del trámite', () => 
     expect(mocks.submitInstance).not.toHaveBeenCalled();
   });
 
-  it('con la placa ya asignada por el OT conserva el cierre del gestor', async () => {
+  it('con la placa ya asignada por el OT no pinta el cierre del gestor en el resumen', async () => {
     mocks.getInstance.mockResolvedValue({ ...DETALLE, plateFlowStatus: 'asignado' });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    expect(
-      await screen.findByText('Procesar trámite (Asignado → Terminado)'),
-    ).toBeInTheDocument();
-    // Los dos checks opcionales del gestor y el avance que desbloquea al OT.
-    expect(screen.getByLabelText('SOAT pagado')).toBeInTheDocument();
-    expect(screen.getByLabelText('Impuesto departamental pagado')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Marcar como Terminado' })).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.queryByText('Procesar trámite (Asignado → Terminado)')).toBeNull();
+    expect(screen.queryByLabelText('SOAT pagado')).toBeNull();
+    expect(screen.queryByLabelText('Impuesto departamental pagado')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Marcar como Terminado' })).toBeNull();
   });
 
   it('sin ese sub-estado no ofrece el cierre del gestor', async () => {

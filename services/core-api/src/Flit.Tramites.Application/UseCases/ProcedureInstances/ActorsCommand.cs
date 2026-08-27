@@ -187,6 +187,12 @@ public sealed class PutActorsHandler(
             // HU #10688 (Fase 1): en persona jurídica el correo del representante legal es
             // obligatorio (es quien valida la identidad de la PJ y recibe el correo de validación).
             // Nombre/documento del RL siguen opcionales. No aplica a persona natural.
+            //
+            // El disparador sigue siendo lo DECLARADO, no el documento: exigirlo a todo NIT rompería
+            // el leasing, donde el arrendatario es una empresa que no firma y de la que nunca se
+            // captura representante legal (ver LocatarioPartePropiaTests). El correo del RL se pide
+            // porque el RL es el sujeto de identidad, no por tener NIT — son dos cosas distintas y
+            // la normalización de `person_type` de más abajo no debe arrastrar esta.
             if (ActorPersonTypes.IsJuridical(a.PersonType))
             {
                 var rlEmail = a.RepresentanteLegal?.Email;
@@ -279,7 +285,7 @@ public sealed class PutActorsHandler(
                 FullName = a.NombreCompleto.Trim(),
                 Email = a.Email.Trim(),
                 Phone = string.IsNullOrWhiteSpace(a.Telefono) ? null : a.Telefono.Trim(),
-                PersonType = ActorPersonTypes.Normalize(a.PersonType),
+                PersonType = ActorPersonTypes.ResolveForDocument(a.TipoDocumento, a.PersonType),
                 EsRepresentanteLegal = a.EsRepresentanteLegal,
                 Metadata = SerializeMetadata(a.Ciudad, a.Direccion, a.RepresentanteLegal, a.Mandante),
                 CreatedAt = now,

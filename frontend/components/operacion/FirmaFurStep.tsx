@@ -22,7 +22,6 @@ import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PRENDA_DECISION_LABELS } from './PrendaForm';
 import { prendaDocLabelFor, prendaDocTipoFor } from './prenda-document-tipos';
 import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
-import { InlineAlert } from '@/components/atom/InlineAlert';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
@@ -697,8 +696,6 @@ export function FirmaFurStep({
       ) : null}
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
-
-      <PlateFlowCompleteSection instanceId={instanceId} onRefresh={onRefresh} />
 
       {organismoModalOpen && instanceId && modalidad !== 'traspaso' && (
         <OrganismoModal
@@ -1480,122 +1477,4 @@ function todayIsoDate(): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-/**
- * Proceso del gestor en sub-estado Asignado: checks opcionales (SOAT / impuesto) y
- * avance a Terminado para desbloquear Aprobar/Rechazar del OT.
- */
-function PlateFlowCompleteSection({
-  instanceId,
-  onRefresh,
-}: {
-  instanceId: string | null;
-  onRefresh?: () => void;
-}) {
-  const [plateFlowStatus, setPlateFlowStatus] = useState<string | null>(null);
-  const [soatPagado, setSoatPagado] = useState(false);
-  const [impuestoPagado, setImpuestoPagado] = useState(false);
-  const [working, setWorking] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  /** Salvedad con la que el trámite avanzó (no bloquea, pero el gestor debe verla). */
-  const [warning, setWarning] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!instanceId) return;
-    let active = true;
-    tramitesClient
-      .getInstance(instanceId)
-      .then((d) => {
-        if (!active) return;
-        setPlateFlowStatus(d?.plateFlowStatus ?? null);
-        const fields = d?.fieldValues ?? [];
-        setSoatPagado(fields.some((f) => f.fieldKey === 'soat_pagado' && f.valueText === 'true'));
-        setImpuestoPagado(
-          fields.some(
-            (f) => f.fieldKey === 'impuesto_departamental_pagado' && f.valueText === 'true',
-          ),
-        );
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [instanceId]);
-
-  const completar = async () => {
-    if (!instanceId) return;
-    setWorking(true);
-    setError(null);
-    setMsg(null);
-    setWarning(null);
-    try {
-      const res = await tramitesClient.completePlateFlow(instanceId, {
-        soatPagado,
-        impuestoDepartamentalPagado: impuestoPagado,
-      });
-      setPlateFlowStatus('terminado');
-      setMsg('Trámite marcado como Terminado. El OT ya puede aprobar o rechazar.');
-      // El trámite pudo avanzar con salvedades (p. ej. sin SOAT vigente): hay que decirlo.
-      setWarning(res?.warningMessage ?? null);
-      onRefresh?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo completar el proceso de placa.');
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  if (plateFlowStatus !== 'asignado') return null;
-
-  return (
-    <div className={WIZARD_CARD}>
-      <WizardCardHeader
-        title="Procesar trámite (Asignado → Terminado)"
-        subtitle="Marca los checks opcionales si aplican y procesa el trámite. Sin pasar a Terminado el OT no puede aprobar ni rechazar."
-      />
-
-      <div className="space-y-3">
-        <label className="flex cursor-pointer items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-[#557EFF]"
-            checked={soatPagado}
-            onChange={(e) => setSoatPagado(e.target.checked)}
-            disabled={working}
-          />
-          SOAT pagado
-        </label>
-        <label className="flex cursor-pointer items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-[#557EFF]"
-            checked={impuestoPagado}
-            onChange={(e) => setImpuestoPagado(e.target.checked)}
-            disabled={working}
-          />
-          Impuesto departamental pagado
-        </label>
-
-        <button
-          type="button"
-          disabled={working}
-          onClick={() => void completar()}
-          className="rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: WIZARD_CTA_GRADIENT }}
-        >
-          {working ? 'Procesando…' : 'Marcar como Terminado'}
-        </button>
-
-        {msg ? <InlineAlert tone="success">{msg}</InlineAlert> : null}
-        {warning ? (
-          <InlineAlert tone="warning" title="Trámite enviado al OT con advertencia">
-            {warning}
-          </InlineAlert>
-        ) : null}
-        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
-      </div>
-    </div>
-  );
 }

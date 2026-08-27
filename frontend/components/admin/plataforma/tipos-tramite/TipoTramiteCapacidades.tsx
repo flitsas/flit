@@ -41,8 +41,15 @@ const ENTRADAS = [
   { valor: 'BOTH', etiqueta: 'Cualquiera de los dos' },
 ];
 
+/**
+ * Solo dos decisiones reales para el administrador: dejar que el gestor genere o cargue, o exigir
+ * carga manual. `AUTO` y «sin definir» se retiraron del desplegable porque no aportaban una tercera
+ * conducta —el backend solo apaga la generación con `MANUAL`, así que ambas se comportan igual que
+ * `OPERATOR_CHOICE`— y obligaban a elegir entre opciones indistinguibles. Los tipos guardados con
+ * `AUTO` o en nulo siguen funcionando igual; el selector los muestra en `OPERATOR_CHOICE`, que es
+ * lo que de hecho hacen.
+ */
 const IMPRONTAS: { valor: NonNullable<GateProfile['improntaSource']>; etiqueta: string }[] = [
-  { valor: 'AUTO', etiqueta: 'Automática — el sistema la genera (paso FUR / Kyverum)' },
   { valor: 'OPERATOR_CHOICE', etiqueta: 'El gestor elige — generar o cargar el archivo' },
   { valor: 'MANUAL', etiqueta: 'Solo carga manual — no se genera sola' },
 ];
@@ -127,14 +134,13 @@ export function TipoTramiteCapacidades({
         <select
           className="w-full rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
           aria-label="Generación de impronta"
-          value={borrador.improntaSource ?? ''}
+          value={borrador.improntaSource === 'MANUAL' ? 'MANUAL' : 'OPERATOR_CHOICE'}
           onChange={(e) =>
             cambiar({
-              improntaSource: (e.target.value || null) as GateProfile['improntaSource'],
+              improntaSource: e.target.value as GateProfile['improntaSource'],
             })
           }
         >
-          <option value="">Sin definir — se puede generar (también si es opcional)</option>
           {IMPRONTAS.map((opt) => (
             <option key={opt.valor} value={opt.valor}>
               {opt.etiqueta}

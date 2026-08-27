@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Calendar,
@@ -8,7 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Loader2,
+  PenLine,
   RefreshCw,
+  RotateCcw,
   Shield,
   Wrench,
 } from 'lucide-react';
@@ -342,7 +352,18 @@ const READ_ONLY_NOTICE_FALLBACK: ReadOnlyNoticeStyle = {
   bg: 'rgba(85,126,255,0.06)',
 };
 
-function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
+function ReadOnlyStateNotice({
+  estado,
+  action,
+}: {
+  estado: InstanceStatus | null;
+  /**
+   * Salida del propio bloqueo (hoy: "Subsanar" sobre `rechazado`). Vive DENTRO del aviso que
+   * explica por qué el trámite no se edita —mismo patrón que "Descartar lo capturado" dentro de
+   * su InlineAlert— para no abrir una superficie visual nueva ni una barra de acciones paralela.
+   */
+  action?: ReactNode;
+}) {
   const notice = (estado && READ_ONLY_NOTICE[estado]) || READ_ONLY_NOTICE_FALLBACK;
   const ink = notice.ink ?? notice.border;
   return (
@@ -353,12 +374,15 @@ function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
       aria-live="polite"
     >
       <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: ink }} aria-hidden="true" />
-      <span>
-        <span className="font-semibold" style={{ color: ink }}>
-          {notice.titulo}
-        </span>{' '}
-        {notice.detalle}
-      </span>
+      <div className="min-w-0 flex-1">
+        <span>
+          <span className="font-semibold" style={{ color: ink }}>
+            {notice.titulo}
+          </span>{' '}
+          {notice.detalle}
+        </span>
+        {action ? <div className="mt-2.5">{action}</div> : null}
+      </div>
     </div>
   );
 }
@@ -545,6 +569,10 @@ export function TramiteWizard(props: Props) {
     !!estadoTramite &&
     estadoTramite !== 'borrador' &&
     !inSubsanacion;
+  // Rechazado sin subsanación activa: el único estado con salida hacia la edición. La acción se
+  // ofrece en el aviso de solo lectura, que es donde se explica el bloqueo (`READ_ONLY_NOTICE`).
+  const puedeActivarSubsanacion =
+    !!instanceId && estadoTramite === 'rechazado' && !wizard?.subsanacionActiva;
   const draftFinalized = estadoTramite === 'borrador' && !!draftFinalizedAt;
   // Captura de datos deshabilitada en todos los modos no-editables (provider de solo lectura).
   const editLocked = fullReadOnly || draftFinalized;
@@ -646,6 +674,43 @@ export function TramiteWizard(props: Props) {
    * Habilita Re-radicar solo cuando además no hay dirty pendiente.
    */
   const [subsanacionSavedEdits, setSubsanacionSavedEdits] = useState(false);
+  /**
+   * Checklist del OT resuelto (o inexistente), reportado por `SubsanacionPanel`. El checklist es
+   * suyo, pero el botón que depende de él —Re-radicar— vive en el PIE, con el resto de acciones
+   * del asistente, así que la señal tiene que subir hasta aquí.
+   */
+  const [checklistResuelto, setChecklistResuelto] = useState(false);
+  const [reradicando, setReradicando] = useState(false);
+  const [cancelandoSubsanacion, setCancelandoSubsanacion] = useState(false);
+  /**
+   * Activación de la subsanación (POST /subsanar) desde el aviso de trámite rechazado. Es lo
+   * ÚNICO que reabre la edición de un rechazado; sin este control el estado no tiene salida.
+   */
+  const [activandoSubsanacion, setActivandoSubsanacion] = useState(false);
+  const [subsanarError, setSubsanarError] = useState<string | null>(null);
+  /**
+   * Enciende el flag de subsanación y RELEE el asistente. El `refresh()` no es opcional: el flag
+   * vive en GET /wizard (`subsanacionActiva`) y de él cuelgan `inSubsanacion` → `fullReadOnly`, así
+   * que sin releer el aviso seguiría en solo lectura y el panel de subsanación no aparecería.
+   * Activar el flag no cambia el status ni escribe historial, por eso el detalle (motivo y
+   * checklist del organismo, ya cargados al abrir) no necesita re-consultarse.
+   */
+  const activarSubsanacion = useCallback(async () => {
+    if (!instanceId || activandoSubsanacion) return;
+    setActivandoSubsanacion(true);
+    setSubsanarError(null);
+    try {
+      await tramitesClient.startSubsanacion(instanceId);
+      await refresh();
+      show('Subsanación activada: ya puedes corregir el trámite.', 'success');
+    } catch (err) {
+      setSubsanarError(
+        err instanceof Error ? err.message : 'No se pudo iniciar la subsanación.',
+      );
+    } finally {
+      setActivandoSubsanacion(false);
+    }
+  }, [instanceId, activandoSubsanacion, refresh, show]);
 
   /**
    * Cabecera compacta al hacer scroll: el título y su descripción se pliegan y el seguimiento de
@@ -685,6 +750,70 @@ export function TramiteWizard(props: Props) {
   // Reportes2 HU-A — telemetría de uso del wizard (fire-and-forget; emite
   // wizard_step_view al cambiar activeStep?.key y expone los demás eventos).
   const telemetry = useWizardTelemetry(instanceId, activeStep?.key);
+
+  /**
+   * Re-radicar (rechazado → entregado vía submit): acción TERMINAL de la subsanación. Vive junto a
+   * las demás acciones del pie —no dentro del panel informativo— porque es el cierre del asistente,
+   * igual que "Finalizar y enviar trámite" lo es del flujo normal. El fallo se reporta por
+   * `submitError`, el mismo canal que el resto de envíos.
+   */
+  const reradicar = useCallback(async () => {
+    if (!instanceId || reradicando) return;
+    setReradicando(true);
+    setSubmitError(null);
+    try {
+      await tramitesClient.submitInstance(instanceId);
+      telemetry.trackComplete();
+      show('Trámite re-radicado a tránsito correctamente.', 'success');
+      onExit();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'No se pudo re-radicar el trámite.');
+      setReradicando(false);
+    }
+  }, [instanceId, reradicando, telemetry, show, onExit]);
+
+  /**
+   * Cancelar la subsanación: apaga el flag y el trámite vuelve a `rechazado` no editable. Es la
+   * OTRA salida —la que renuncia a corregir— y por eso ocupa el enlace de salida de la cabecera,
+   * el mismo sitio donde en cualquier otro estado está «← Cancelar» / «← Volver al listado».
+   *
+   * Solo con el flag encendido: el estado legado `subsanacion` no tiene flag que apagar, así que
+   * ahí el enlace sigue siendo la salida de siempre.
+   */
+  const puedeCancelarSubsanacion =
+    estadoTramite === 'rechazado' && !!wizard?.subsanacionActiva && !!instanceId;
+
+  // Sin `useCallback`: solo la consume el onClick del enlace, y memoizarla obligaba a listar los
+  // setters de estado que el compilador infiere como dependencias.
+  const cancelarSubsanacion = async () => {
+    if (!instanceId || cancelandoSubsanacion) return;
+    setCancelandoSubsanacion(true);
+    setSubmitError(null);
+    try {
+      await tramitesClient.cancelSubsanacion(instanceId);
+      setHasUnsavedChanges(false);
+      setSubsanacionSavedEdits(false);
+      show('Subsanación cancelada. El trámite sigue rechazado.', 'success');
+      await refresh();
+      onExit();
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'No se pudo cancelar la subsanación.',
+      );
+      setCancelandoSubsanacion(false);
+    }
+  };
+
+  // Gate de Re-radicar (Feature #11066): checklist del OT resuelto + al menos una edición guardada
+  // y sin cambios sueltos. Los tres motivos se explican en el `title` del botón, no solo con el gris.
+  const reradicarHabilitado =
+    !!instanceId &&
+    inSubsanacion &&
+    checklistResuelto &&
+    subsanacionSavedEdits &&
+    !hasUnsavedChanges &&
+    !continuing &&
+    !reradicando;
 
   // Identidad aprobada (deriva del estado server-driven del paso): matrícula → paso 'identidad'
   // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
@@ -1453,17 +1582,43 @@ export function TramiteWizard(props: Props) {
               />
             )}
           </div>
+          {/* Enlace de salida. En subsanación NO es una salida cualquiera: cancela la subsanación
+              (apaga el flag) y devuelve el trámite a rechazado no editable. El rótulo lo dice —
+              «Cancelar» a secas escondería que el trámite deja de poder editarse— y el color pasa al
+              naranja de alerta, porque aquí sí hay consecuencia sobre el trámite. */}
           <button
             type="button"
             onClick={() => {
+              if (puedeCancelarSubsanacion) {
+                void cancelarSubsanacion();
+                return;
+              }
               if (!fullReadOnly) telemetry.trackAbandon();
               onExit();
             }}
-            className="mt-1 shrink-0 text-xs font-medium hover:opacity-100"
-            style={{ color: '#59677D' }}
-            aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
+            disabled={cancelandoSubsanacion}
+            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]"
+            style={{ color: puedeCancelarSubsanacion ? '#C2410C' : '#59677D' }}
+            aria-label={
+              puedeCancelarSubsanacion
+                ? 'Cancelar la subsanación y volver al listado'
+                : editLocked
+                  ? 'Volver al listado'
+                  : 'Cancelar y volver al selector'
+            }
+            title={
+              puedeCancelarSubsanacion
+                ? 'Sales de la subsanación sin re-radicar: el trámite vuelve a quedar rechazado y no editable'
+                : undefined
+            }
           >
-            {editLocked ? '← Volver al listado' : '← Cancelar'}
+            {puedeCancelarSubsanacion
+              ? cancelandoSubsanacion
+                ? 'Cancelando…'
+                : '← Cancelar subsanación'
+              : editLocked
+                ? '← Volver al listado'
+                : '← Cancelar'}
           </button>
         </div>
 
@@ -1506,7 +1661,40 @@ export function TramiteWizard(props: Props) {
 
       {fullReadOnly && (
         <div>
-          <ReadOnlyStateNotice estado={estadoTramite} />
+          <ReadOnlyStateNotice
+            estado={estadoTramite}
+            action={
+              puedeActivarSubsanacion ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void activarSubsanacion()}
+                    disabled={activandoSubsanacion}
+                    className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]"
+                    style={{ background: WIZARD_CTA_GRADIENT }}
+                    title="Reabre el trámite para corregir lo que observó el organismo de tránsito y volver a radicarlo"
+                  >
+                    {activandoSubsanacion ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        Activando subsanación…
+                      </>
+                    ) : (
+                      <>
+                        <PenLine className="h-3.5 w-3.5" aria-hidden="true" />
+                        Subsanar trámite
+                      </>
+                    )}
+                  </button>
+                  {subsanarError ? (
+                    <p role="alert" className="mt-2 text-xs" style={{ color: '#C2410C' }}>
+                      {subsanarError}
+                    </p>
+                  ) : null}
+                </>
+              ) : undefined
+            }
+          />
         </div>
       )}
 
@@ -1529,32 +1717,18 @@ export function TramiteWizard(props: Props) {
         </div>
       )}
 
-      {/* HU #10874 (AC1/AC2) — panel de subsanación: motivo + checklist de ítems a subsanar y la
-          acción "Re-radicar". El trámite sigue editable (campos/documentos) mientras se muestra. */}
+      {/* HU #10874 (AC1) — panel de subsanación: motivo + checklist de ítems a subsanar. El trámite
+          sigue editable (campos/documentos) mientras se muestra. Las DOS salidas están fuera:
+          "Re-radicar" (AC2) en el pie y "Cancelar subsanación" en el enlace de la cabecera. */}
       {inSubsanacion && (
         <div>
         <SubsanacionPanel
-          instanceId={instanceId}
           statusHistory={statusHistory}
           loading={instanceDetailLoading}
           error={instanceDetailError}
           hasUnsavedChanges={hasUnsavedChanges}
           canReradicar={subsanacionSavedEdits && !hasUnsavedChanges}
-          showCancel={estadoTramite === 'rechazado' && !!wizard?.subsanacionActiva}
-          onCancelSubsanacion={async () => {
-            if (!instanceId) return;
-            await tramitesClient.cancelSubsanacion(instanceId);
-            setHasUnsavedChanges(false);
-            setSubsanacionSavedEdits(false);
-            show('Subsanación cancelada. El trámite sigue rechazado.', 'success');
-            await refresh();
-            onExit();
-          }}
-          onReradicado={() => {
-            telemetry.trackComplete();
-            show('Trámite re-radicado a tránsito correctamente.', 'success');
-            onExit();
-          }}
+          onChecklistResueltoChange={setChecklistResuelto}
         />
         </div>
       )}
@@ -1721,41 +1895,69 @@ export function TramiteWizard(props: Props) {
                   de la validación de identidad.
                 · Pasos de datos: "Guardar y continuar". */}
             {fullReadOnly ? null : isDecisionStep ? (
-              // HU #10874 — en subsanación NO Preparar/Finalizar: re-radicar vive en SubsanacionPanel.
-              // En el último paso de subsanación: "Guardar y continuar" habilita Re-radicar.
+              // HU #10874 — en subsanación NO Preparar/Finalizar. El par del pie es "Guardar y
+              // continuar" (persiste el paso) + "Re-radicar" (cierre), en el mismo orden que
+              // "Anular trámite" + el avance de los pasos de datos: primero el paso, luego el cierre.
               inSubsanacion ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void (async () => {
-                      beginContinuing();
-                      try {
-                        if (stepFormRef.current?.save) {
-                          const ok = await stepFormRef.current.save();
-                          if (!ok) {
-                            setSubmitError('No se pudo guardar. Por favor, reintenta.');
-                            return;
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        beginContinuing();
+                        try {
+                          if (stepFormRef.current?.save) {
+                            const ok = await stepFormRef.current.save();
+                            if (!ok) {
+                              setSubmitError('No se pudo guardar. Por favor, reintenta.');
+                              return;
+                            }
+                            await refresh();
                           }
-                          await refresh();
+                          setHasUnsavedChanges(false);
+                          setSubsanacionSavedEdits(true);
+                          show(
+                            'Cambios guardados. Ya puedes re-radicar cuando termines.',
+                            'success',
+                          );
+                        } finally {
+                          endContinuing();
                         }
-                        setHasUnsavedChanges(false);
-                        setSubsanacionSavedEdits(true);
-                        show(
-                          'Cambios guardados. Ya puedes re-radicar cuando termines.',
-                          'success',
-                        );
-                      } finally {
-                        endContinuing();
-                      }
-                    })();
-                  }}
-                  disabled={continuing}
-                  className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
-                  style={{ background: WIZARD_CTA_GRADIENT }}
-                  title="Guarda los cambios de este paso y habilita Re-radicar"
-                >
-                  {continuing ? 'Guardando…' : 'Guardar y continuar'}
-                </button>
+                      })();
+                    }}
+                    disabled={continuing || reradicando}
+                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                    style={{ background: WIZARD_CTA_GRADIENT }}
+                    title="Guarda los cambios de este paso y habilita Re-radicar"
+                  >
+                    {continuing ? 'Guardando…' : 'Guardar y continuar'}
+                  </button>
+                  {/* Cierre de la subsanación: degradado cian→verde (`gradient.success`), el mismo
+                      que "Finalizar y enviar trámite". Re-radicar TAMBIÉN cierra el trámite
+                      (rechazado→entregado), así que comparte el tono de las acciones terminales y no
+                      el azul del avance, que queda para "Guardar y continuar". */}
+                  <button
+                    type="button"
+                    onClick={() => void reradicar()}
+                    disabled={!reradicarHabilitado}
+                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#00DBD5] disabled:opacity-50`}
+                    style={{
+                      background: reradicarHabilitado ? WIZARD_CTA_GRADIENT_DONE : '#94A3B8',
+                    }}
+                    title={
+                      hasUnsavedChanges
+                        ? 'Hay cambios sin guardar: usa Guardar y continuar antes de re-radicar'
+                        : !subsanacionSavedEdits
+                          ? 'Edita y guarda al menos un cambio con Guardar y continuar para habilitar Re-radicar'
+                          : !checklistResuelto
+                            ? 'Marca todos los ítems del checklist como corregidos para re-radicar'
+                            : 'Re-radica el trámite al organismo de tránsito'
+                    }
+                  >
+                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                    {reradicando ? 'Re-radicando…' : 'Re-radicar'}
+                  </button>
+                </>
               ) : canRadicar || draftFinalized ? null : (
                 <button
                   onClick={() => void handleFinalizeDraft()}
