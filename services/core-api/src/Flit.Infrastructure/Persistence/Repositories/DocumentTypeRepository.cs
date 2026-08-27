@@ -66,6 +66,23 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             query = query.Where(d => d.IsActive);
         }
 
+        if (filter.IsActive is { } isActive)
+        {
+            query = query.Where(d => d.IsActive == isActive);
+        }
+
+        if (filter.IsSystemGenerated is { } generated)
+        {
+            query = query.Where(d => d.IsSystemGenerated == generated);
+        }
+
+        if (!string.IsNullOrEmpty(filter.Search))
+        {
+            var term = filter.Search.ToUpperInvariant();
+            query = query.Where(d =>
+                d.Code.ToUpper().Contains(term) || d.Name.ToUpper().Contains(term));
+        }
+
         var totalCount = await query.LongCountAsync(cancellationToken).ConfigureAwait(false);
 
         if (totalCount == 0)
@@ -170,6 +187,46 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        return true;
+    }
+
+    public async Task<bool> PurgeAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.DocumentTypes
+            .FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return false;
+        }
+
+        var requirements = await _context.ProcedureDocumentRequirements
+            .Where(r => r.DocumentTypeId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var orderOverrides = await _context.DocumentOrderOverrides
+            .Where(r => r.DocumentTypeId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var requirementOverrides = await _context.DocumentRequirementOverrides
+            .Where(r => r.DocumentTypeId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var precedences = await _context.OtDocumentPrecedences
+            .Where(r => r.DocumentTypeId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        _context.OtDocumentPrecedences.RemoveRange(precedences);
+        _context.DocumentOrderOverrides.RemoveRange(orderOverrides);
+        _context.DocumentRequirementOverrides.RemoveRange(requirementOverrides);
+        _context.ProcedureDocumentRequirements.RemoveRange(requirements);
+        _context.DocumentTypes.Remove(entity);
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
 

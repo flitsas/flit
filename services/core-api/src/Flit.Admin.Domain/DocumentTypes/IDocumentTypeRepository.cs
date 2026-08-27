@@ -54,6 +54,13 @@ public interface IDocumentTypeRepository
         Guid? updatedBy,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Baja física: quita asociaciones (requisitos, overrides, precedencia OT) y borra el tipo.
+    /// </summary>
+    Task<bool> PurgeAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Reactivación: marca <c>is_active = true</c>; devuelve false si no existe.</summary>
     Task<bool> ReactivateAsync(
         Guid id,

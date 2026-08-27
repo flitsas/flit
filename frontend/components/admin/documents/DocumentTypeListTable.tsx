@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { DocumentType } from "@/lib/api/types-documents";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -19,6 +19,7 @@ export interface DocumentTypeListTableProps {
   onEdit: (documentType: DocumentType) => void;
   onDeactivate: (documentType: DocumentType) => void;
   onReactivate: (documentType: DocumentType) => void;
+  onDelete: (documentType: DocumentType) => void;
 }
 
 export function DocumentTypeListTable({
@@ -30,6 +31,7 @@ export function DocumentTypeListTable({
   onEdit,
   onDeactivate,
   onReactivate,
+  onDelete,
 }: DocumentTypeListTableProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -93,6 +95,12 @@ export function DocumentTypeListTable({
                           label: `Editar ${d.nombre}`,
                           onClick: () => onEdit(d),
                           tone: "primary",
+                        },
+                        {
+                          icon: Trash2,
+                          label: `Eliminar ${d.nombre}`,
+                          onClick: () => onDelete(d),
+                          tone: "danger",
                         },
                       ]}
                     />

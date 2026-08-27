@@ -2,9 +2,9 @@ namespace Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 
 /// <summary>
 /// Payload de alta de un tipo de documento (HU #10193, AC1):
-/// <c>{ codigo, nombre, descripcion, obligatorio }</c>.
+/// <c>{ nombre, descripcion, obligatorio }</c>. El código lo genera el sistema.
 /// </summary>
-/// <param name="Codigo">Código único del catálogo (columna <c>code</c>).</param>
+/// <param name="Codigo">Ignorado. El código se deriva del nombre.</param>
 /// <param name="Nombre">Nombre visible (columna <c>name</c>).</param>
 /// <param name="Descripcion">Descripción opcional (columna <c>description</c>).</param>
 /// <param name="Obligatorio">
