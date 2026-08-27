@@ -27,7 +27,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task NombreDestinatario_DistingueEmpresaDeRepresentanteLegal()
+    public async Task EmpresaYRepresentanteLegal_Reciben_CorreosPropios_ConSuSaludo()
     {
         var dbName = NewDbName();
         await SeedInstanceAsync(dbName);
@@ -38,9 +38,41 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
         await processor.ProcessPendingAsync(Ct);
 
-        sender.Messages.Should().ContainSingle();
-        sender.Messages[0].ToName.Should().Be("Empresa SAS");
-        sender.Messages[0].BccEmails.Should().Equal("rl@flit.test");
+        sender.Messages.Should().HaveCount(2);
+        var empresa = sender.Messages.Single(m => m.ToEmail == "empresa@flit.test");
+        var rl = sender.Messages.Single(m => m.ToEmail == "rl@flit.test");
+
+        // A la persona jurídica se le escribe como tal; a su representante, por su nombre.
+        empresa.HtmlBody.Should().Contain("Estimados señores").And.Contain("Empresa SAS");
+        empresa.HtmlBody.Should().NotContain("Rep Legal");
+        rl.HtmlBody.Should().Contain("Estimado/a Señor/a").And.Contain("Rep Legal");
+        empresa.BccEmails.Should().BeEmpty();
+        rl.BccEmails.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Traspaso_Comprador_y_Vendedor_Reciben_CorreoPropio_ConSuNombre()
+    {
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName, traspaso: true);
+        await SeedDispatchAsync(dbName, "persona", "Ana Compradora", "ana@flit.test", role: "comprador");
+        await SeedDispatchAsync(dbName, "persona", "Beto Vendedor", "beto@flit.test", role: "vendedor");
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+        await processor.ProcessPendingAsync(Ct);
+
+        sender.Messages.Should().HaveCount(2);
+        var comprador = sender.Messages.Single(m => m.ToEmail == "ana@flit.test");
+        var vendedor = sender.Messages.Single(m => m.ToEmail == "beto@flit.test");
+
+        // El reporte de QA: el vendedor recibía el correo dirigido al comprador.
+        comprador.HtmlBody.Should().Contain("Estimado/a Señor/a <strong style=\"color:#2F6FED\">Ana Compradora</strong>");
+        vendedor.HtmlBody.Should().Contain("Estimado/a Señor/a <strong style=\"color:#2F6FED\">Beto Vendedor</strong>");
+
+        // Nadie va en copia oculta de nadie: son envíos independientes.
+        comprador.BccEmails.Should().BeEmpty();
+        vendedor.BccEmails.Should().BeEmpty();
     }
 
     [Fact]
@@ -59,6 +91,54 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
 
         sender.Messages.Should().ContainSingle();
         sender.Messages[0].HtmlBody.Should().Contain("Vendedor:").And.Contain("Beto Vendedor");
+    }
+
+    [Fact]
+    public async Task Gestor_ViajaEnCopiaOcultaDelCompradorYNoRecibeCorreoPropio()
+    {
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName, traspaso: true);
+        await SeedDispatchAsync(dbName, "persona", "Ana Compradora", "ana@flit.test", role: "comprador");
+        await SeedDispatchAsync(dbName, "persona", "Beto Vendedor", "beto@flit.test", role: "vendedor");
+        await SeedDispatchAsync(dbName, "persona", "Dag Gestor", "dag@flit.test", role: "radicador");
+        await SeedDispatchAsync(
+            dbName, "persona", "avisos@empresa.test", "avisos@empresa.test",
+            role: "configuracion_empresa");
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+        await processor.ProcessPendingAsync(Ct);
+
+        // Un correo por parte; gestor y correo extra no son parte y no abren un envío propio.
+        sender.Messages.Should().HaveCount(2);
+        var comprador = sender.Messages.Single(m => m.ToEmail == "ana@flit.test");
+        var vendedor = sender.Messages.Single(m => m.ToEmail == "beto@flit.test");
+
+        comprador.BccEmails.Should().BeEquivalentTo(["dag@flit.test", "avisos@empresa.test"]);
+        vendedor.BccEmails.Should().BeEmpty();
+
+        // Las cuatro filas se cierran, aunque solo hubo dos envíos.
+        await using var verify = NewContext(dbName);
+        var rows = await verify.ProcedureStateChangeEmailDispatches.ToListAsync(Ct);
+        rows.Should().HaveCount(4);
+        rows.Should().OnlyContain(r => r.Status == "enviado");
+    }
+
+    [Fact]
+    public async Task SinPartesConCorreo_ElGestorRecibeUnUnicoCorreoSinPersonalizar()
+    {
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName);
+        await SeedDispatchAsync(dbName, "persona", "Dag Gestor", "dag@flit.test", role: "radicador");
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+        await processor.ProcessPendingAsync(Ct);
+
+        // Comportamiento previo a separar: sin parte a la que dirigirse, se conserva el comprador.
+        sender.Messages.Should().ContainSingle();
+        sender.Messages[0].ToEmail.Should().Be("dag@flit.test");
+        sender.Messages[0].HtmlBody.Should().Contain("Ana Compradora");
     }
 
     [Fact]
@@ -399,17 +479,17 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
 
     private static async Task SeedDispatchAsync(
         string dbName, string kind, string name, string email, int attempts = 0,
-        string templateKey = "tramites.aprobado")
+        string templateKey = "tramites.aprobado", string role = "comprador")
     {
         await using var db = NewContext(dbName);
         db.ProcedureStateChangeEmailDispatches.Add(
-            NewDispatch(kind, name, email, status: "pendiente", attempts, templateKey));
+            NewDispatch(kind, name, email, status: "pendiente", attempts, templateKey, role));
         await db.SaveChangesAsync(Ct);
     }
 
     private static ProcedureStateChangeEmailDispatch NewDispatch(
         string kind, string name, string? email, string status, int attempts = 0,
-        string templateKey = "tramites.aprobado") => new()
+        string templateKey = "tramites.aprobado", string role = "comprador") => new()
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
@@ -417,7 +497,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
             ProcedureInstanceId = InstanceId,
             Recipient = email,
             RecipientName = name,
-            RecipientRole = "comprador",
+            RecipientRole = role,
             RecipientKind = kind,
             TemplateKey = templateKey,
             Status = status,
