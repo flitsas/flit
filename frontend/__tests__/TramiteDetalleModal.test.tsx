@@ -9,6 +9,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getInstance: vi.fn(),
     getAttachments: vi.fn(),
     listBiometricExpediente: vi.fn(),
+    startSubsanacion: vi.fn(),
   },
 }));
 
@@ -112,5 +113,152 @@ describe('TramiteDetalleModal', () => {
     await user.click(within(tablist).getByRole('tab', { name: /Trámite y vehículo/i }));
     expect(screen.queryByText('Línea de tiempo del trámite')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Datos del vehículo')).toBeInTheDocument();
+  });
+});
+
+/**
+ * El modal de detalle es la vista de TODO trámite ya radicado, así que es donde el gestor se topa
+ * con un rechazo. Activar la subsanación es la única salida de ese estado y por eso vive aquí,
+ * dentro del aviso que explica el bloqueo; la edición sigue siendo del asistente de pasos.
+ */
+describe('TramiteDetalleModal — subsanación', () => {
+  const RECHAZADO = {
+    ...ITEM,
+    estado: 'rechazado',
+    ultimoRechazoMotivo: 'Rechazo de prueba: expediente completo.',
+  } satisfies InstanceSummary;
+
+  // Bloque autónomo: el `beforeEach` del describe de arriba no alcanza hasta aquí, y sin las
+  // cargas del detalle el modal reventaría antes de pintar el aviso.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+    } as never);
+    vi.mocked(tramitesClient.getAttachments).mockResolvedValue([]);
+    vi.mocked(tramitesClient.listBiometricExpediente).mockResolvedValue({
+      validations: [],
+      firmaBaulPartes: [],
+    });
+    vi.mocked(tramitesClient.startSubsanacion).mockResolvedValue({
+      id: 'inst-1',
+      status: 'rechazado',
+      subsanacionActiva: true,
+    } as never);
+  });
+
+  it('sobre un rechazado ofrece "Subsanar trámite" y salta al asistente tras activarlo', async () => {
+    const user = userEvent.setup();
+    const onAbrirAsistente = vi.fn();
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={RECHAZADO}
+        onClose={() => undefined}
+        onAbrirAsistente={onAbrirAsistente}
+      />,
+    );
+
+    const aviso = screen.getByText('Rechazado por el Organismo de Tránsito').closest('[role="alert"]');
+    expect(aviso).not.toBeNull();
+    await user.click(within(aviso as HTMLElement).getByRole('button', { name: /Subsanar trámite/i }));
+
+    expect(tramitesClient.startSubsanacion).toHaveBeenCalledWith('inst-1', undefined);
+    expect(onAbrirAsistente).toHaveBeenCalledWith(RECHAZADO);
+  });
+
+  it('con la subsanación ya activa retoma sin volver a llamar al POST', async () => {
+    const user = userEvent.setup();
+    const onAbrirAsistente = vi.fn();
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={{ ...RECHAZADO, subsanacionActiva: true }}
+        onClose={() => undefined}
+        onAbrirAsistente={onAbrirAsistente}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Subsanar trámite/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Continuar la subsanación/i }));
+
+    // Reactivar un flag ya encendido devuelve 409: la UI se lo salta y solo navega.
+    expect(tramitesClient.startSubsanacion).not.toHaveBeenCalled();
+    expect(onAbrirAsistente).toHaveBeenCalled();
+  });
+
+  it('lleva el tenant de la fila cuando el SuperAdmin abre un trámite de otra compañía', async () => {
+    const user = userEvent.setup();
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={RECHAZADO}
+        tenantId="22222222-2222-2222-2222-222222222222"
+        onClose={() => undefined}
+        onAbrirAsistente={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Subsanar trámite/i }));
+    expect(tramitesClient.startSubsanacion).toHaveBeenCalledWith(
+      'inst-1',
+      '22222222-2222-2222-2222-222222222222',
+    );
+  });
+
+  it('si el POST falla lo dice en el aviso y no navega', async () => {
+    const user = userEvent.setup();
+    const onAbrirAsistente = vi.fn();
+    vi.mocked(tramitesClient.startSubsanacion).mockRejectedValue(
+      new Error('Solo un trámite en estado rechazado puede iniciar subsanación.'),
+    );
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={RECHAZADO}
+        onClose={() => undefined}
+        onAbrirAsistente={onAbrirAsistente}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Subsanar trámite/i }));
+
+    expect(
+      await screen.findByText('Solo un trámite en estado rechazado puede iniciar subsanación.'),
+    ).toBeInTheDocument();
+    expect(onAbrirAsistente).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Subsanar trámite/i })).toBeEnabled();
+  });
+
+  it('un aprobado no ofrece subsanar (el backend solo lo permite sobre rechazado)', async () => {
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={{ ...ITEM, estado: 'aprobado' }}
+        onClose={() => undefined}
+        onAbrirAsistente={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Subsanar trámite/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Continuar la subsanación/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('sin `onAbrirAsistente` no ofrece la acción: activar sin poder editar deja peor', async () => {
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={RECHAZADO} onClose={() => undefined} />,
+    );
+
+    expect(screen.getByText('Rechazado por el Organismo de Tránsito')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Subsanar trámite/i })).not.toBeInTheDocument();
   });
 });
