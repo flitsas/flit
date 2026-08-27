@@ -29,6 +29,9 @@ export function CompanyMandatarioForm({
   offices,
   companies = [],
   editing,
+  initialOfficeIds,
+  restrictToOfficeIds,
+  overlayClassName = "z-50",
   onCancel,
   onSubmit,
 }: {
@@ -37,6 +40,15 @@ export function CompanyMandatarioForm({
   /** Empresas representadas de la compañía, para acotar para quién firma en cada organismo. */
   companies?: RepresentedCompanyOption[];
   editing: MandateSigner | null;
+  /** En alta desde el hub OT, premarca este organismo. */
+  initialOfficeIds?: string[];
+  /**
+   * Si se informa, el listado de organismos solo muestra esos ids. El panel de la compañía no lo
+   * pasa: ahí se siguen viendo todos los OT habilitados.
+   */
+  restrictToOfficeIds?: string[];
+  /** Overlay del modal. Por defecto `z-50`; desde un OtSidePanel hay que subir (p. ej. `z-[80]`). */
+  overlayClassName?: string;
   onCancel: () => void;
   onSubmit: (input: CompanyMandateSignerInput) => Promise<MandateSignerSaved>;
 }) {
@@ -44,7 +56,9 @@ export function CompanyMandatarioForm({
   const [documentType, setDocumentType] = useState(editing?.documentType ?? "CC");
   const [documentNumber, setDocumentNumber] = useState(editing?.documentNumber ?? "");
   const [email, setEmail] = useState(editing?.email ?? "");
-  const [selected, setSelected] = useState<string[]>(editing?.transitOfficeIds ?? []);
+  const [selected, setSelected] = useState<string[]>(
+    editing?.transitOfficeIds ?? initialOfficeIds ?? [],
+  );
   // Organismos donde esta persona firma A MANO. Va por organismo y no por persona porque la misma
   // puede firmar a mano ante uno y electrónicamente ante otro.
   const [fisicos, setFisicos] = useState<string[]>(editing?.physicalSignatureOfficeIds ?? []);
@@ -101,6 +115,11 @@ export function CompanyMandatarioForm({
     setFisicos((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
+  const visibleOffices =
+    restrictToOfficeIds && restrictToOfficeIds.length > 0
+      ? offices.filter((o) => restrictToOfficeIds.includes(o.transitOfficeId))
+      : offices;
+
   // HU #11716 — organismos en los que el mandatario quedaría sin poder firmar. La regla la impone el
   // backend; esto la explica antes de que el guardado falle, y ofrece los dos caminos para resolverla.
   const sinFirma = organismosSinMedioDeFirma(selected, fisicos, {
@@ -108,7 +127,7 @@ export function CompanyMandatarioForm({
     email,
     identityStatus: editing?.identityStatus,
   });
-  const nombresSinFirma = offices
+  const nombresSinFirma = visibleOffices
     .filter((o) => sinFirma.includes(o.transitOfficeId))
     .map((o) => o.name);
 
@@ -157,7 +176,7 @@ export function CompanyMandatarioForm({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-sm"
+      className={`fixed inset-0 ${overlayClassName} grid place-items-center bg-black/40 px-4 backdrop-blur-sm`}
       role="dialog"
       aria-modal="true"
       aria-label={editing ? "Editar mandatario" : "Registrar mandatario"}
@@ -263,7 +282,7 @@ export function CompanyMandatarioForm({
               Organismos donde aplica
             </legend>
             <div className="space-y-1.5 rounded-xl border p-3">
-              {offices.map((o) => (
+              {visibleOffices.map((o) => (
                 <div key={o.transitOfficeId}>
                   <label className="flex items-center gap-2 text-xs">
                     <input
@@ -279,7 +298,9 @@ export function CompanyMandatarioForm({
                   </label>
                   {/* Acotación por empresa, solo donde el mandatario aplica. Sin ninguna marcada
                       firma para TODAS las empresas de ese organismo. */}
-                  {selected.includes(o.transitOfficeId) && companies.length > 0 && (
+                  {selected.includes(o.transitOfficeId) &&
+                  companies.length > 0 &&
+                  !restrictToOfficeIds ? (
                     <div className="mt-1 ml-6">
                       <p className="text-[11px] opacity-70">
                         {(empresasPorOt[o.transitOfficeId]?.length ?? 0) === 0
@@ -306,7 +327,7 @@ export function CompanyMandatarioForm({
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Solo tiene sentido marcar la firma a mano donde el mandatario aplica. */}
                   {selected.includes(o.transitOfficeId) && (

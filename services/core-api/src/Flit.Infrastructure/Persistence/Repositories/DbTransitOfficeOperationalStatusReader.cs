@@ -169,6 +169,17 @@ internal sealed class DbTransitOfficeOperationalStatusReader : ITransitOfficeOpe
             return await action().ConfigureAwait(false);
         }
 
+        // HU #11765 — DbMandateSignerReader.LoadIdentityVigenciaAsync llama GetByIdAsync *dentro*
+        // de su propia transacción cross-tenant. Anidar BeginTransaction lanza
+        // "The connection is already in a transaction" (GET mandate-signers). Misma guarda que
+        // DbMandateSignerReader / OtPrendaDocumentPolicyRepository (HU #11000).
+        if (_context.Database.CurrentTransaction is not null)
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "SET LOCAL row_security = off", cancellationToken).ConfigureAwait(false);
+            return await action().ConfigureAwait(false);
+        }
+
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {

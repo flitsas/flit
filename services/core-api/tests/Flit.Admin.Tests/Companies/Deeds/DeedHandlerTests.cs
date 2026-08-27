@@ -72,6 +72,22 @@ public sealed class DeedHandlerTests
     }
 
     [Fact]
+    public async Task Create_SecondActiveDeedForSameCompany_Returns422()
+    {
+        await using var ctx = NewContext();
+        var (create, _, _, _, _) = Handlers(ctx, out _);
+
+        var first = await create.HandleAsync(
+            NewCreate(companies: [CompanyA], representativeId: Guid.Parse("33333333-0000-4000-8000-000000000003")), Ct);
+        first.IsValid.Should().BeTrue();
+
+        var second = await create.HandleAsync(
+            NewCreate(companies: [CompanyA], representativeId: Guid.Parse("33333333-0000-4000-8000-000000000003")), Ct);
+        second.IsValid.Should().BeFalse();
+        second.Errors.Should().Contain(e => e.Code == "escritura_unica");
+    }
+
+    [Fact]
     public async Task Create_VigenciaInvertida_Returns422()
     {
         await using var ctx = NewContext();
@@ -300,7 +316,7 @@ public sealed class DeedHandlerTests
         var repo = new DeedRepository(ctx);
         storage = new FakeDeedStorage();
         return (
-            new CreateDeedHandler(storage, repo),
+            new CreateDeedHandler(storage, repo, reader),
             new ListDeedsHandler(reader),
             new GetDeedByIdHandler(reader, storage),
             new UpdateDeedHandler(storage, repo),

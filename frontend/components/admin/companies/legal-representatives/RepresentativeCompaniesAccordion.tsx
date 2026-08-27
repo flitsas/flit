@@ -520,7 +520,7 @@ function DeedBlock({
           >
             Disponible al guardar
           </span>
-        ) : canEdit ? (
+        ) : canEdit && deeds.length === 0 ? (
           <button
             type="button"
             onClick={onAsociar}

@@ -283,4 +283,40 @@ public static class ChecklistEngine
             FaltanObligatorios: faltanObligatorios,
             Completo: faltanObligatorios.Count == 0);
     }
+
+    /// <summary>
+    /// Quita del checklist de carga los documentos que el sistema genera o apalanca. Siguen
+    /// asociados en Documental y salen en el consolidado; no se muestran ni bloquean Requisitos.
+    /// </summary>
+    public static ChecklistResultado ExcludeFromGestorCarga(
+        ChecklistResultado source,
+        IReadOnlySet<string> generatedDocTipos)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(generatedDocTipos);
+        if (generatedDocTipos.Count == 0 || source.Items.Count == 0)
+            return source;
+
+        var excluded = new HashSet<string>(generatedDocTipos, StringComparer.OrdinalIgnoreCase);
+        var remaining = source.Items
+            .Where(i =>
+                string.IsNullOrEmpty(i.Item.DocTipo)
+                || !excluded.Contains(i.Item.DocTipo!))
+            .ToList();
+        if (remaining.Count == source.Items.Count)
+            return source;
+
+        var obligatorios = remaining.Where(i => i.Item.Obligatorio).ToList();
+        var faltan = obligatorios.Where(i => !i.Satisfecho).Select(i => i.Item.Id).ToList();
+        return source with
+        {
+            Items = remaining,
+            Total = remaining.Count,
+            Satisfechos = remaining.Count(i => i.Satisfecho),
+            ObligatoriosTotal = obligatorios.Count,
+            ObligatoriosSatisfechos = obligatorios.Count - faltan.Count,
+            FaltanObligatorios = faltan,
+            Completo = faltan.Count == 0,
+        };
+    }
 }

@@ -5,9 +5,9 @@ namespace Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 /// <summary>
 /// Caso de uso de alta de un tipo de documento (HU #10193, AC1 / RF01).
 ///
-/// Flujo: (1) normaliza y valida formato (codigo/nombre/descripcion) → 422 si falla;
-/// (2) verifica unicidad global del código → 422 si ya existe; (3) crea con estado
-/// activo. El flag <c>obligatorio</c> del request se ignora (no pertenece al catálogo).
+/// Flujo: (1) valida nombre/descripcion → 422; (2) genera un código único a partir
+/// del nombre (ignora <c>codigo</c> del cliente); (3) crea con estado activo.
+/// El flag <c>obligatorio</c> del request se ignora (no pertenece al catálogo).
 /// </summary>
 public sealed class CreateDocumentTypeHandler
 {
@@ -24,28 +24,29 @@ public sealed class CreateDocumentTypeHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var code = command.Request.Codigo?.Trim() ?? string.Empty;
         var name = command.Request.Nombre?.Trim() ?? string.Empty;
         var description = string.IsNullOrWhiteSpace(command.Request.Descripcion)
             ? null
             : command.Request.Descripcion.Trim();
 
-        var error = DocumentTypeValidator.Validate(code, name, description);
+        var error = DocumentTypeValidator.ValidateNameAndDescription(name, description);
         if (error is not null)
         {
             return CreateDocumentTypeResult.Invalid(error);
         }
 
-        if (await _repository.CodeExistsAsync(code, null, cancellationToken).ConfigureAwait(false))
-        {
-            return CreateDocumentTypeResult.Invalid(
-                $"Ya existe un tipo de documento con el código '{code}'.");
-        }
+        var code = await DocumentTypeCodeFactory
+            .AllocateUniqueAsync(
+                name,
+                (candidate, ct) => _repository.CodeExistsAsync(candidate, null, ct),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         var created = await _repository
             .CreateAsync(
                 code, name, description, command.CreatedBy,
-                command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes, cancellationToken)
+                command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes,
+                command.Request.EsAutogenerado == true, cancellationToken)
             .ConfigureAwait(false);
 
         return CreateDocumentTypeResult.Success(DocumentTypeResponse.From(created));

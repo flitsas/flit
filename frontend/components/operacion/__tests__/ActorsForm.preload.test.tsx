@@ -105,12 +105,25 @@ const MATCH_MULTI: LegalRepresentativeLookupResult = {
   ],
 };
 
+const RUES_MATCH = {
+  found: true,
+  razonSocial: 'Razón social RUES SAS',
+  estado: 'ACTIVA',
+  documentNumber: '900555666',
+  matriculaMercantil: null,
+  camaraComercio: null,
+  documentType: 'NIT',
+  source: 'RUES',
+  mode: 'live',
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getInstance.mockResolvedValue({ fieldValues: [] });
   mocks.patchFieldValues.mockResolvedValue(undefined);
+  mocks.ruesPersonLookup.mockResolvedValue(RUES_MATCH);
 });
 
 /** Prepara un comprador jurídico (persona jurídica) con el NIT escrito, listo para consultar. */
@@ -123,29 +136,27 @@ async function renderJuridicalBuyerWithNit(nit: string) {
   return user;
 }
 
-describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10906)', () => {
-  it('con match del tenant: precarga y NO consulta RUES/RUNT', async () => {
+describe('ActorsForm — precarga RUES + directorio RL', () => {
+  it('siempre consulta RUES y usa su razón social; el directorio precarga RL y datos básicos', async () => {
     mocks.lookupLegalRepresentativeByNit.mockResolvedValue(MATCH);
 
     const user = await renderJuridicalBuyerWithNit('900555666');
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
 
-    // Se consultó el directorio del tenant por NIT…
     await waitFor(() =>
-      expect(mocks.lookupLegalRepresentativeByNit).toHaveBeenCalledWith('900555666'),
+      expect(mocks.ruesPersonLookup).toHaveBeenCalledWith(INSTANCE, {
+        documentNumber: '900555666',
+      }),
     );
-    // …y NO se disparó RUES ni RUNT (cortocircuito R3).
-    expect(mocks.ruesPersonLookup).not.toHaveBeenCalled();
+    expect(mocks.lookupLegalRepresentativeByNit).toHaveBeenCalledWith('900555666');
     expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
 
-    // Precarga visible: card del directorio + razón social autopoblada + representante.
-    expect(
-      await screen.findByText('Precargado desde el directorio de la compañía'),
-    ).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Comercializadora del Valle SAS')).toBeInTheDocument();
+    expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
+    expect(screen.getByText('Precargado desde el directorio de la compañía')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Razón social RUES SAS')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Comercializadora del Valle SAS')).toBeNull();
     expect(screen.getByDisplayValue('Carlos Ramírez Núñez')).toBeInTheDocument();
     expect(screen.getByDisplayValue('carlos@valle.co')).toBeInTheDocument();
-    // Badges de firma/identidad vigentes.
     expect(screen.getByText('Firma vigente')).toBeInTheDocument();
     expect(screen.getByText('Sin identidad vigente')).toBeInTheDocument();
   });
@@ -156,6 +167,7 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     const user = await renderJuridicalBuyerWithNit('900555666');
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
 
+    expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
     expect(
       await screen.findByText('Precargado desde el directorio de la compañía'),
     ).toBeInTheDocument();
@@ -198,6 +210,7 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     // Completa el correo del actor (obligatorio) — el input del actor se distingue por su id de los
     // demás campos "Correo electrónico" (el del representante legal ya viene precargado) — y guarda.
     const actorEmail = document.getElementById('comprador-email') as HTMLInputElement;
+    await user.clear(actorEmail);
     await user.type(actorEmail, 'contacto@valle.co');
     // HU #11595 — ciudad, dirección y teléfono del actor también son obligatorios. El teléfono se
     // distingue por id: el representante legal (precargado) también trae un input "Teléfono".
@@ -236,7 +249,7 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     await waitFor(() =>
       expect(mocks.lookupLegalRepresentativeByNit).toHaveBeenCalledWith('900999888'),
     );
-    // Sin match ⇒ SÍ consulta RUES (fallback) y no muestra la card de precarga.
+    // Sin match de RL ⇒ RUES sí, sin card de directorio. La razón social es la de RUES.
     await waitFor(() =>
       expect(mocks.ruesPersonLookup).toHaveBeenCalledWith(INSTANCE, {
         documentNumber: '900999888',

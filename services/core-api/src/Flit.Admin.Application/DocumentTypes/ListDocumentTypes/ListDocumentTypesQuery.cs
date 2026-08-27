@@ -14,4 +14,13 @@ public sealed class ListDocumentTypesQuery
 
     /// <summary>Incluir inactivos (soft-deleted). Por defecto solo activos.</summary>
     public bool? IncludeInactive { get; init; }
+
+    /// <summary>Filtro por código o nombre.</summary>
+    public string? Search { get; init; }
+
+    /// <summary><c>cargue</c> o <c>autogenerado</c>.</summary>
+    public string? Origen { get; init; }
+
+    /// <summary><c>activo</c> o <c>inactivo</c>.</summary>
+    public string? Estado { get; init; }
 }

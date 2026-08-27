@@ -257,7 +257,6 @@ describe('Bug #11614 — el stepper persiste el paso activo antes de navegar', (
     await screen.findByRole('heading', { level: 2, name: 'Requisitos' });
 
     await user.type(screen.getByLabelText(/Valor de venta/i), '15000000');
-    await user.selectOptions(screen.getByLabelText(/Causal/i), 'COMPRAVENTA');
     expect(mocks.putCommercial).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: /^Paso 1:/ }));

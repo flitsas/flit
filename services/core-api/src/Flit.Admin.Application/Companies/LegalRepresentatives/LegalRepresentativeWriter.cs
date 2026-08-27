@@ -88,9 +88,33 @@ public sealed class LegalRepresentativeWriter
             }
         }
 
-        // Upsert de CADA compañía del representante (HU #10932). La primera es la primaria.
-        // Lista vacía = persona sin NITs aún (represented_company_id null).
         var effectiveCompanies = EffectiveCompanies(input);
+        var primaryNit = effectiveCompanies.Count > 0 ? effectiveCompanies[0].Nit!.Trim() : string.Empty;
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+
+        LegalRepresentativeSignatureResolution resolution;
+        if (input.SignatureVaultId is { } explicitSignatureId)
+        {
+            resolution = LegalRepresentativeSignatureResolution.FromSignature(explicitSignatureId);
+        }
+        else
+        {
+            resolution = await _signatureResolver
+                .ResolveAsync(input.TenantId, primaryNit, documentType, documentNumber, today, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var distinctProcedureTypeIds = input.ProcedureTypeIds.Distinct().ToArray();
+
+        // La ficha de NIT es del representante: hay que persistir la persona antes del upsert.
+        if (editId is null)
+        {
+            editId = await _repository.SaveAsync(
+                BuildSave(
+                    input, null, null, documentType, documentNumber, resolution, distinctProcedureTypeIds, []),
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var companyIds = new List<Guid>();
         foreach (var company in effectiveCompanies)
         {
@@ -104,7 +128,8 @@ public sealed class LegalRepresentativeWriter
                         Normalize(company.Address),
                         Normalize(company.City),
                         Normalize(company.Phone),
-                        input.ActorBy),
+                        input.ActorBy,
+                        editId),
                     cancellationToken)
                 .ConfigureAwait(false);
             if (!companyIds.Contains(companyId))
@@ -113,7 +138,6 @@ public sealed class LegalRepresentativeWriter
             }
         }
 
-        // Create-once: no perder las compañías ya asociadas a la persona existente (unión).
         if (input.Id is null && samePerson is not null)
         {
             foreach (var existingCompanyId in samePerson.Companies.Select(c => c.Id))
@@ -126,45 +150,9 @@ public sealed class LegalRepresentativeWriter
         }
 
         var primaryCompanyId = companyIds.Count > 0 ? companyIds[0] : (Guid?)null;
-        var primaryNit = effectiveCompanies.Count > 0 ? effectiveCompanies[0].Nit!.Trim() : string.Empty;
-        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
-
-        // AC3/AC5 — Resolución de firma/identidad: explícita (SignatureVaultId) o automática.
-        LegalRepresentativeSignatureResolution resolution;
-        if (input.SignatureVaultId is { } explicitSignatureId)
-        {
-            // AC3: firma elegida explícitamente — ya fue validada en ValidateAsync (AC4).
-            resolution = LegalRepresentativeSignatureResolution.FromSignature(explicitSignatureId);
-        }
-        else
-        {
-            // AC5: resolutor automático por documento (NIT opcional / legado).
-            resolution = await _signatureResolver
-                .ResolveAsync(input.TenantId, primaryNit, documentType, documentNumber, today, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        var distinctProcedureTypeIds = input.ProcedureTypeIds.Distinct().ToArray();
-
         var id = await _repository.SaveAsync(
-            new SaveLegalRepresentativeData(
-                input.TenantId,
-                editId,
-                primaryCompanyId,
-                documentType,
-                documentNumber,
-                input.FirstLastName!.Trim(),
-                Normalize(input.SecondLastName),
-                input.Name!.Trim(),
-                Normalize(input.Email),
-                Normalize(input.Address),
-                Normalize(input.City),
-                Normalize(input.Phone),
-                resolution.SignatureVaultId,
-                resolution.IdentityValidationRef,
-                distinctProcedureTypeIds,
-                input.ActorBy,
-                companyIds),
+            BuildSave(
+                input, editId, primaryCompanyId, documentType, documentNumber, resolution, distinctProcedureTypeIds, companyIds),
             cancellationToken).ConfigureAwait(false);
 
         // Señal (no bloqueante) cuando no hubo firma ni identidad vigente al guardar.
@@ -324,4 +312,32 @@ public sealed class LegalRepresentativeWriter
 
         return [];
     }
+
+    private static SaveLegalRepresentativeData BuildSave(
+        LegalRepresentativeWriteInput input,
+        Guid? id,
+        Guid? primaryCompanyId,
+        string documentType,
+        string documentNumber,
+        LegalRepresentativeSignatureResolution resolution,
+        IReadOnlyList<Guid> procedureTypeIds,
+        IReadOnlyList<Guid> companyIds) =>
+        new(
+            input.TenantId,
+            id,
+            primaryCompanyId,
+            documentType,
+            documentNumber,
+            input.FirstLastName!.Trim(),
+            Normalize(input.SecondLastName),
+            input.Name!.Trim(),
+            Normalize(input.Email),
+            Normalize(input.Address),
+            Normalize(input.City),
+            Normalize(input.Phone),
+            resolution.SignatureVaultId,
+            resolution.IdentityValidationRef,
+            procedureTypeIds,
+            input.ActorBy,
+            companyIds);
 }

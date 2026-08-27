@@ -90,7 +90,63 @@ public sealed class MandatoDatosPorOrganismoTests
         natural.Should().Contain("en representación propia");
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    [Fact]
+    public void Bello_ElCierreUsaLaCiudadDelOrganismo_NoBelloQuemado()
+    {
+        var texto = Parrafos(
+            MandatoTemplateResolver.Bello,
+            officeCode: "11001000",
+            officeName: "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA",
+            city: "Bogotá",
+            otName: "Bogotá",
+            instName: null,
+            instNit: null,
+            esJuridica: false);
+
+        texto.Should().Contain("en la ciudad de Bogotá");
+        texto.Should().NotContain("municipio de Bello");
+        texto.Should().NotContain("MOVILIDAD AVANZADA DE BELLO");
+        texto.Should().Contain("Juan Pérez");
+    }
+
+    [Fact]
+    public void PartesVisibles_MandanteYMandatarioSePintan()
+    {
+        var parte = new DocumentParte("vendedor", "Juan Pérez", "123456", "juan@x.com", "CC");
+        var tramite = Tramite(parte, "11001000", "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA", "Bogotá");
+        var data = new MandatoData(
+            tramite,
+            MandatoTemplateResolver.Generico,
+            null,
+            null,
+            new MandatarioFirmante("Carlos Ruiz", "70111222"));
+
+        var parrafos = (List<IReadOnlyList<MandatoPdfGenerator.ParrafoSegmento>>)BuildParrafos.Invoke(
+            null,
+            [
+                data, parte, false, MandatoVariante.Generico,
+                "MATRÍCULA INICIAL", "ABC123", "Bogotá", "Bogotá", "1 de agosto de 2026",
+            ])!;
+        var texto = string.Join("\n", parrafos.Select(p => string.Concat(p.Select(s => s.Texto))));
+
+        texto.Should().Contain("Juan Pérez");
+        texto.Should().Contain("Carlos Ruiz");
+    }
+
+    private static FurDocumentData Tramite(
+        DocumentParte parte, string code, string name, string city) =>
+        new(
+            ProcedureInstanceId: Guid.NewGuid(),
+            ReferenceNumber: "REF-2026-1",
+            Modalidad: "matricula",
+            TipologiaCodigo: "MATRICULA_NUEVA",
+            Vehiculo: new VehiculoDatos(null, null, null, null, null, null, null, "VIN123", "ABC123"),
+            Organismo: new OrganismoTransito(code, name, city),
+            Partes: [parte],
+            ValorVenta: null,
+            Causal: null,
+            SellosFirma: []);
+
 
     /// <summary>Texto legal completo que produce el generador para esa configuración de OT.</summary>
     private static string Parrafos(
@@ -99,7 +155,11 @@ public sealed class MandatoDatosPorOrganismoTests
         string? sigla = null,
         string? instName = null,
         string? instNit = null,
-        bool esJuridica = true)
+        bool esJuridica = true,
+        string officeCode = "5631000",
+        string officeName = "STRIA MOVILIDAD SABANETA",
+        string city = "Sabaneta",
+        string otName = "Sabaneta")
     {
         var parte = esJuridica
             ? new DocumentParte(
@@ -116,7 +176,7 @@ public sealed class MandatoDatosPorOrganismoTests
             Modalidad: "matricula",
             TipologiaCodigo: "MATRICULA_NUEVA",
             Vehiculo: new VehiculoDatos(null, null, null, null, null, null, null, "VIN123", "ABC123"),
-            Organismo: new OrganismoTransito("5631000", "STRIA MOVILIDAD SABANETA", "Sabaneta"),
+            Organismo: new OrganismoTransito(officeCode, officeName, city),
             Partes: [parte],
             ValorVenta: null,
             Causal: null,
@@ -139,7 +199,7 @@ public sealed class MandatoDatosPorOrganismoTests
             null,
             [
                 data, parte, esJuridica, MandatoTemplateResolver.Resolve(template),
-                "MATRÍCULA INICIAL", "ABC123", "Sabaneta", "Sabaneta", "1 de agosto de 2026",
+                "MATRÍCULA INICIAL", "ABC123", otName, city, "1 de agosto de 2026",
             ])!;
 
         return string.Join("\n", parrafos.Select(p => string.Concat(p.Select(s => s.Texto))));

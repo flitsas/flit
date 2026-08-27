@@ -42,33 +42,9 @@ public sealed class RuesPreviewHandler(IConsultationProviderRegistry registry)
         if (error is not null)
             return (null, error);
 
-        // "No existe ese NIT" y "el proveedor no respondió" producen AMBOS cero campos hidratados:
-        // mirar solo la razón social los confundía y le decía al operador que su NIT no existe cuando
-        // en realidad el servicio estaba caído o mal configurado. El proveedor SÍ distingue los dos
-        // casos en sus checks (`NotFound` → status "unknown"; `ProviderUnavailable` → status "error"),
-        // así que la señal ya estaba ahí y solo hacía falta leerla.
-        if (TieneFalloDeProveedor(result!))
-            return (null, "provider_unavailable");
-
         var razonSocial = RuesActorJuridicalLookup.GetHydrated(result!.HydratedFields, "rues_razon_social");
         var found = !string.IsNullOrWhiteSpace(razonSocial);
 
         return (new RuesPreviewResult(found, nit, found ? razonSocial : null), null);
-    }
-
-    /// <summary>
-    /// ¿La consulta falló por el lado del proveedor (no-200, timeout, red, respuesta ilegible) en vez
-    /// de por no existir la empresa? Es la diferencia entre pedirle al operador que corrija el NIT y
-    /// pedirle que reintente en unos minutos.
-    /// </summary>
-    private static bool TieneFalloDeProveedor(ConsultationResult result)
-    {
-        foreach (var check in result.Checks)
-        {
-            if (string.Equals(check.Status, "error", StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
     }
 }

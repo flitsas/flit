@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { SearchableSelect } from "@/components/atom/SearchableSelect";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { OrderOverrideForm } from "@/components/admin/documents/panels/OrderOverrideForm";
@@ -49,6 +50,16 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
     Record<string, DocumentRequirementSelection>
   >({});
   const [reqBusy, setReqBusy] = useState(false);
+
+  const officeOptions = useMemo(
+    () =>
+      offices.map((o) => ({
+        value: o.id,
+        label: o.name,
+        hint: o.code,
+      })),
+    [offices],
+  );
 
   // Catálogos base (OT + documentos asociados al trámite) — una sola vez.
   useEffect(() => {
@@ -237,24 +248,15 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <label htmlFor="ot-override-select" className="mb-1 block text-xs font-semibold">
-          Organismo de Tránsito
-        </label>
-        <select
-          id="ot-override-select"
-          value={transitOfficeId}
-          onChange={(e) => setTransitOfficeId(e.target.value)}
-          className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-        >
-          <option value="">Selecciona un Organismo de Tránsito…</option>
-          {offices.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name} ({o.code})
-            </option>
-          ))}
-        </select>
-      </div>
+      <SearchableSelect
+        id="ot-override-select"
+        label="Organismo de Tránsito"
+        options={officeOptions}
+        value={transitOfficeId}
+        onChange={setTransitOfficeId}
+        defaultLabel="Selecciona un Organismo de Tránsito…"
+        placeholder="Buscar organismo por nombre o código…"
+      />
 
       {transitOfficeId ? (
         <>

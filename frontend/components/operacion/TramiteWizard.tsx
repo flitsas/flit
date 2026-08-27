@@ -597,11 +597,6 @@ export function TramiteWizard(props: Props) {
   const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
     'idle' | 'loading' | 'ready' | 'error'
   >('idle');
-  // Confirmaciones del expediente consolidado (propuesta, Step5): nacen desmarcadas y se suman a
-  // «Requisitos pendientes antes del envío». Gatean radicar —el acto que hay que confirmar—, no la
-  // vista del PDF. En la maqueta van premarcadas y no gatean nada; una casilla de consentimiento
-  // premarcada no constituye autorización, así que aquí nacen vacías.
-  const [confirmacionesExpediente, setConfirmacionesExpediente] = useState<string[]>([]);
   // HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
   // El backend no expone un flag "cubierto por baúl" por parte en el estado biométrico, así que la señal
   // se captura del outcome `firma_baul` que devuelve ensureIdentity al guardar la parte, y desde aquí se
@@ -1285,7 +1280,7 @@ export function TramiteWizard(props: Props) {
               // El save de los datos comerciales devuelve false por dato faltante, no por fallo de
               // red: "reintenta" mandaba a repetir un clic que iba a fallar igual. La tarjeta ya
               // marca los campos; el pie dice cuál es el bloqueo y dónde está.
-              ? 'Faltan datos comerciales: ingresa el valor de venta y la causal en esta misma pantalla.'
+              ? 'Faltan datos comerciales: ingresa el valor de venta en esta misma pantalla.'
               : 'No se pudo guardar. Por favor, reintenta.',
         );
         return;
@@ -1643,14 +1638,13 @@ export function TramiteWizard(props: Props) {
                 onDigitoPlacaGateChange={setDigitoPlacaGateOk}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
-                onConfirmacionesExpedienteChange={setConfirmacionesExpediente}
                 onMarkDirty={() => setHasUnsavedChanges(true)}
               />
             </div>
           )}
 
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
-          {isDecisionStep && (blockers.length > 0 || confirmacionesExpediente.length > 0) && (
+          {isDecisionStep && blockers.length > 0 && (
             <InlineAlert
               tone="error"
               title="Requisitos pendientes antes del envío"
@@ -1659,11 +1653,6 @@ export function TramiteWizard(props: Props) {
               <ul className="space-y-0.5" aria-label="Bloqueos de envío">
                 {blockers.map((b) => (
                   <li key={b}>• {blockerCopy(b)}</li>
-                ))}
-                {/* Las del servidor llegan como código y se traducen; estas ya son texto legible
-                    porque las redacta el propio expediente. */}
-                {confirmacionesExpediente.map((c) => (
-                  <li key={c}>• {c}</li>
                 ))}
               </ul>
             </InlineAlert>
@@ -1684,8 +1673,7 @@ export function TramiteWizard(props: Props) {
                   onClick={() => setConfirmRadicar(true)}
                   disabled={
                     submitting ||
-                    (!fullReadOnly && !canRadicar && draftFinalized) ||
-                    confirmacionesExpediente.length > 0
+                    (!fullReadOnly && !canRadicar && draftFinalized)
                   }
                   className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
                   style={{ background: WIZARD_CTA_GRADIENT_DONE }}
@@ -3258,6 +3246,9 @@ function ConsultaStep({
       .then(() => onRefresh())
       .catch(() => setPrioritarioInstancia(!value));
   };
+  // El interruptor del paso 1 está oculto; la prioridad sigue en listado OT y resumen FUR.
+  void handlePrioritario;
+  void prioritarioVigente;
 
   /**
    * HU #11628 — `uiValue` distingue tres estados en el selector: `''` (no decidido, placeholder no
@@ -3462,7 +3453,7 @@ function ConsultaStep({
           {/* Tres columnas en matrícula (secretaría · dígito · prioridad); una sola donde el trámite
               solo escoge organismo, para no dejar dos huecos con el campo estirado a un tercio. */}
           <div
-            className={`mt-4 grid grid-cols-1 gap-4 ${muestraDigitoPlaca ? 'lg:grid-cols-3' : ''}`}
+            className={`mt-4 grid grid-cols-1 gap-4 ${muestraDigitoPlaca ? 'lg:grid-cols-2' : ''}`}
           >
           <div className="min-w-0">
             <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>
@@ -3576,44 +3567,6 @@ function ConsultaStep({
                 </p>
               </>
             )}
-          </div>
-          )}
-
-          {/* Trámite prioritario — 3ª columna del grid MI (prototipo Lovable MI §411-468).
-              Vivía en un acordeón separado; el prototipo lo ubica aquí, como decisión de radicación
-              junto a la secretaría y el dígito, no como opción aislada posterior.
-              Solo en el grid de matrícula: donde la tarjeta se pinta por elegir organismo sin pedir
-              placa (radicado de cuenta) el interruptor sigue en su sitio de siempre —la tarjeta del
-              organismo actual, o el acordeón de respaldo— y ponerlo aquí lo duplicaba. */}
-          {muestraDigitoPlaca && (
-          <div className="min-w-0">
-            <span className={`mb-1 block ${WIZARD_LABEL}`}>Trámite prioritario</span>
-            <button
-              type="button"
-              onClick={() => handlePrioritario(!prioritarioVigente)}
-              disabled={readOnly}
-              aria-pressed={prioritarioVigente}
-              aria-label="Trámite prioritario"
-              aria-describedby="consulta-prioritario-nota-mi"
-              className="flex h-[42px] w-full items-center justify-between gap-3 rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#162744]"
-              style={prioritarioVigente ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
-            >
-              {prioritarioVigente ? 'Activado' : 'Desactivado'}
-              <span
-                aria-hidden="true"
-                className="relative inline-block h-5 w-9 rounded-full transition-colors"
-                style={{ background: prioritarioVigente ? '#557EFF' : '#DFE5ED' }}
-              >
-                <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
-                    prioritarioVigente ? 'left-[1.125rem]' : 'left-0.5'
-                  }`}
-                />
-              </span>
-            </button>
-            <p id="consulta-prioritario-nota-mi" className="mt-1 text-xs leading-tight opacity-70">
-              Prioriza la gestión de este expediente.
-            </p>
           </div>
           )}
 
@@ -3842,72 +3795,6 @@ function ConsultaStep({
             />
           </div>
         )}
-        {/* Traspaso — Propietario actual (prototipo Lovable): Nombres | Apellidos | Cédula,
-            cada uno con hint «Campo informativo · No editable» en caja canvas. */}
-        {!isVin && hasVehicleData && (() => {
-          const byKey = (k: string) =>
-            fieldValues.find((f) => f.fieldKey === k)?.valueText?.trim() ?? '';
-          const ownerDocNro = byKey('owner_document_number') || ownerDocNumber;
-          const ownerFullName = byKey('owner_full_name');
-          if (!ownerDocNro && !ownerFullName) return null;
-          const nameParts = (ownerFullName || '').split(/\s+/).filter(Boolean);
-          const ownerNombres =
-            nameParts.length >= 2
-              ? nameParts.slice(0, Math.ceil(nameParts.length / 2)).join(' ')
-              : ownerFullName || '—';
-          const ownerApellidos =
-            nameParts.length >= 2
-              ? nameParts.slice(Math.ceil(nameParts.length / 2)).join(' ')
-              : '—';
-          const infoHint = 'Campo informativo · No editable';
-          const roField = (id: string, label: string, value: string) => (
-            <div>
-              <label htmlFor={id} className={`${WIZARD_LABEL} mb-1.5`}>
-                {label}{' '}
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">
-                  *
-                </span>
-              </label>
-              <input
-                id={id}
-                type="text"
-                readOnly
-                value={value}
-                className={inputClass}
-                style={{ background: '#FFFFFF', borderColor: '#DFE5ED', color: '#162744' }}
-              />
-              <p className="mt-1 text-[11px] opacity-60">{infoHint}</p>
-            </div>
-          );
-          return (
-            <div
-              className="mt-4 rounded-xl border p-4"
-              style={{ borderColor: '#DFE5ED', background: '#F8FAFC' }}
-              aria-labelledby="propietario-actual-heading"
-            >
-              <p
-                id="propietario-actual-heading"
-                className="text-[13px] font-bold"
-                style={{ color: '#162744' }}
-              >
-                Propietario actual{' '}
-                <span style={{ color: '#FF4E00' }} aria-hidden="true">
-                  *
-                </span>
-              </p>
-              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {roField('propietario-nombres', 'Nombres', ownerNombres)}
-                {roField('propietario-apellidos', 'Apellidos', ownerApellidos)}
-                {roField('propietario-cedula', 'Cédula', ownerDocNro || '—')}
-              </div>
-              {!ownerFullName && (
-                <p className="mt-1.5 text-xs opacity-60">
-                  El nombre completo no viene en esta consulta RUNT; el documento sí queda fijado.
-                </p>
-              )}
-            </div>
-          );
-        })()}
       </WizardAccordion>
 
       {/* 3ª tarjeta: Organismo de Tránsito y Radicación (HU #11199 — solo matrícula y solo mientras
@@ -3932,97 +3819,24 @@ function ConsultaStep({
           <p className="text-[13px] leading-snug opacity-70">
             Se toma automáticamente de la matrícula registrada en RUNT.
           </p>
-          {/* Prototipo Traspaso: 2 cols alineadas — label / control h-42 / hint en ambas. */}
-          <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-            <div className="min-w-0">
-              <span className={`mb-1.5 block ${WIZARD_LABEL}`}>Secretaría de tránsito (RUNT)</span>
-              <div
-                className="flex h-[42px] items-center rounded-xl border px-3"
-                style={{ borderColor: '#DFE5ED', background: 'rgba(223,229,237,0.35)' }}
-                role="status"
-                aria-label={`Secretaría de tránsito: ${transitOfficeNombreTraspaso}`}
-              >
-                <span className="truncate text-xs font-semibold" style={{ color: '#162744' }}>
-                  {transitOfficeNombreTraspaso}
-                </span>
-              </div>
-              <p className="mt-1 text-xs leading-tight opacity-70">
-                Campo no editable · Convenio activo con FLIT
-              </p>
+          <div className="mt-4 min-w-0">
+            <span className={`mb-1.5 block ${WIZARD_LABEL}`}>Secretaría de tránsito (RUNT)</span>
+            <div
+              className="flex h-[42px] items-center rounded-xl border px-3"
+              style={{ borderColor: '#DFE5ED', background: 'rgba(223,229,237,0.35)' }}
+              role="status"
+              aria-label={`Secretaría de tránsito: ${transitOfficeNombreTraspaso}`}
+            >
+              <span className="truncate text-xs font-semibold" style={{ color: '#162744' }}>
+                {transitOfficeNombreTraspaso}
+              </span>
             </div>
-            <div className="min-w-0">
-              <span className={`mb-1.5 block ${WIZARD_LABEL}`}>Trámite prioritario</span>
-              <button
-                type="button"
-                onClick={() => handlePrioritario(!prioritarioVigente)}
-                disabled={readOnly}
-                aria-pressed={prioritarioVigente}
-                aria-label="Trámite prioritario"
-                aria-describedby="consulta-prioritario-nota-traspaso"
-                className="flex h-[42px] w-full items-center justify-between gap-3 rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#162744]"
-                style={prioritarioVigente ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
-              >
-                {prioritarioVigente ? 'Activado' : 'Desactivado'}
-                <span
-                  aria-hidden="true"
-                  className="relative inline-block h-5 w-9 rounded-full transition-colors"
-                  style={{ background: prioritarioVigente ? '#557EFF' : '#DFE5ED' }}
-                >
-                  <span
-                    className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
-                      prioritarioVigente ? 'left-[1.125rem]' : 'left-0.5'
-                    }`}
-                  />
-                </span>
-              </button>
-              <p id="consulta-prioritario-nota-traspaso" className="mt-1 text-xs leading-tight opacity-70">
-                Prioriza la gestión de este expediente.
-              </p>
-            </div>
+            <p className="mt-1 text-xs leading-tight opacity-70">
+              Campo no editable · Convenio activo con FLIT
+            </p>
           </div>
         </WizardAccordion>
         </div>
-      )}
-
-      {/* Trámite prioritario (HU #10536) — acordeón de respaldo: solo se renderiza en traspaso
-          cuando el RUNT no devolvió nombre de OT (sin tarjeta de OT donde embeberlo). En matrícula
-          el control está en la 3ª columna del grid de radicación; en traspaso con OT en la 2ª
-          columna del grid de OT. Ver §A y §B arriba. */}
-      {hasVehicleData && !isVin && !transitOfficeNombreTraspaso && (
-        <WizardAccordion title="Trámite prioritario" defaultOpen>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p id="consulta-prioritario-nota" className="text-xs leading-tight opacity-70">
-                Prioriza la gestión de este expediente: el organismo lo revisa con primacía.{' '}
-                {deferred
-                  ? 'Se aplica al crear el trámite y podrás cambiarlo después desde el listado.'
-                  : 'El cambio se guarda al instante; también puedes alternarlo desde el listado.'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => handlePrioritario(!prioritarioVigente)}
-              disabled={readOnly}
-              aria-pressed={prioritarioVigente}
-              aria-describedby="consulta-prioritario-nota"
-              className="flex h-[38px] shrink-0 items-center justify-between gap-3 rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#162744]"
-              style={prioritarioVigente ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
-            >
-              {prioritarioVigente ? 'Activado' : 'Desactivado'}
-              <span
-                aria-hidden="true"
-                className="relative inline-block h-5 w-9 rounded-full transition-colors"
-                style={{ background: prioritarioVigente ? '#557EFF' : '#DFE5ED' }}
-              >
-                <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
-                    prioritarioVigente ? 'left-[1.125rem]' : 'left-0.5'
-                  }`}
-                />
-              </span>
-            </button>
-          </div>
-        </WizardAccordion>
       )}
 
       {/* El aviso del paso 1 era un párrafo naranja suelto: sin superficie, sin icono y con #FF4E00
@@ -4196,7 +4010,6 @@ function StepBody({
   onDigitoPlacaGateChange,
   paqueteDocsStatus = 'idle',
   onPaqueteStatusChange,
-  onConfirmacionesExpedienteChange,
   onMarkDirty,
 }: {
   step: WizardStep;
@@ -4259,8 +4072,6 @@ function StepBody({
   /** Feature #11066 — estado de pre-generación del paquete al entrar al paso FUR. */
   paqueteDocsStatus?: 'idle' | 'loading' | 'ready' | 'error';
   onPaqueteStatusChange?: (status: 'idle' | 'loading' | 'ready' | 'error') => void;
-  /** Confirmaciones del expediente consolidado que siguen sin marcar (texto legible). */
-  onConfirmacionesExpedienteChange?: (pendientes: string[]) => void;
   /** Feature #11066 — marca dirty en el shell (p.ej. checklist de docs editado). */
   onMarkDirty?: () => void;
 }) {
@@ -4310,8 +4121,7 @@ function StepBody({
       );
 
     // Paso 2 de ambas modalidades = Datos y Documentos del Trámite.
-    // Traspaso: Comercial primero; Condiciones|Prenda en 2 cols si RUNT no reporta prenda,
-    // o apiladas a ancho completo cuando sí hay alerta de gravamen/prenda.
+    // Traspaso: Comercial primero; Prenda a ancho completo.
     // MI: Tipo de servicio solo, luego Prenda, luego Gestión de documentos.
     //
     // `prenda` cae aquí a propósito: la decisión de gravamen de los tipos prendarios dejó de tener
@@ -4346,27 +4156,7 @@ function StepBody({
                 const esPuerta = caps.prendaEsPuerta;
                 return (
                   <WizardAccordionRow defaultOpen>
-                    <div
-                      className={
-                        runtHasPrendaInfo
-                          ? 'grid grid-cols-1 gap-3 items-stretch'
-                          : 'grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch'
-                      }
-                    >
-                      <WizardAccordion title="Condiciones del Trámite" level="h3">
-                        <DeclaracionesTramite
-                          instanceId={instanceId}
-                          modalidad={modalidadUi}
-                          onChanged={() => {
-                            onMarkDirty?.();
-                            onRefresh?.();
-                          }}
-                          onTipoServicioGateChange={onTipoServicioGateChange}
-                          hideTransformaciones
-                          noCardWrapper
-                        />
-                      </WizardAccordion>
-
+                    <div className="grid grid-cols-1 gap-3 items-stretch">
                       <WizardAccordion
                         title="Asignación de Prenda / Limitación a la Propiedad"
                         level="h3"
@@ -4392,14 +4182,9 @@ function StepBody({
             </>
           ) : (
             <>
-              {/* Solo donde el vehículo se matricula por primera vez.
-                  `DeclaracionesTramite` decide su contenido con `modalidad !== 'traspaso'`, y
-                  `modalidadUi` vale 'traspaso' para TODO lo que entra por placa — incluida la
-                  familia OTROS. Efecto: en OTROS el selector de tipo de servicio no se pintaba (bien:
-                  en un vehículo ya inscrito el dato lo trae el RUNT y no es una elección del gestor)
-                  pero SÍ se colaba el toggle «Vehículo en leasing», que es una condición de la
-                  compraventa. Quedaba un acordeón titulado «Tipo de servicio del vehículo» que no
-                  mostraba el tipo de servicio y sí ofrecía declarar un leasing que no viene al caso. */}
+              {/* Solo donde el vehículo se matricula por primera vez (tipo de servicio, casilla 18).
+                  `modalidadUi` vale 'traspaso' para TODO lo que entra por placa — incluida la familia
+                  OTROS — así que sin este gate el selector no aplica y no debe montarse. */}
               {caps.entraPorVin && (
                 <WizardAccordion title="Tipo de servicio del vehículo" defaultOpen level="h3">
                   <DeclaracionesTramite
@@ -4520,6 +4305,7 @@ function StepBody({
               uploadMode={docUploadMode}
               onUploadModeChange={setDocUploadMode}
               modalidad={modalidadUi}
+              permiteGenerarImprontaAutomatica={caps.permiteGenerarImprontaAutomatica}
             />
           </WizardAccordion>
 
@@ -4532,6 +4318,7 @@ function StepBody({
             <WizardAccordion
               title="Trámites Simultáneos — Transformaciones del Vehículo"
               level="h3"
+              defaultOpen
             >
               <TramiteSimultaneosField
                 instanceId={instanceId}
@@ -4586,7 +4373,20 @@ function StepBody({
       // Todas las partes que el tipo declara se capturan JUNTAS: el catálogo las modela en un paso
       // cada una —así el motor las exige por separado— pero el gestor las compara en una pantalla.
       // Vale igual para vendedor+comprador del traspaso que para propietario+locatario del leasing.
-      const roles = rolesDeActores(caps);
+      //
+      // `rolesBase` es lo que el TIPO captura por formulario (ADR-0050/ADR-0051). Puede diferir de
+      // los roles que de verdad se pintan: `revealSellerForm` (ADR-0051 Decisión 6) es una excepción
+      // POR INSTANCIA —no una capacidad del tipo— que añade 'vendedor' aunque el tipo declare
+      // `vendedorCapturaPorFormulario:false` (TRASPASO_UNILATERAL), porque al vendedor sincronizado
+      // le falta un dato (representante legal o correo) para poder enviarle la validación de
+      // identidad. El backend ya calculó la excepción en `sectionConfig.actor_form`; el frontend NO
+      // la recalcula, solo la lee.
+      const rolesBase = rolesDeActores(caps);
+      const revealSellerForm = step.sectionConfig?.revealSellerForm === true;
+      const roles: ActorRol[] =
+        revealSellerForm && !rolesBase.includes('vendedor')
+          ? ['vendedor', ...rolesBase]
+          : rolesBase;
       const unificado = roles.length > 1;
       // El documento se siembra desde el propietario que devolvió el RUNT cuando el vehículo YA
       // tiene uno, que es justo lo que significa entrar por placa. En una matrícula inicial no hay
@@ -4596,13 +4396,30 @@ function StepBody({
       // solo cae en la que de verdad es el propietario inscrito. Al locatario no se le precarga el
       // documento de otra persona — y la guarda del servidor (locatario ≠ propietario) lo confirma.
       const hayPropietarioPrevio = !caps.entraPorVin;
-      // Qué rol RECIBE el documento del propietario del paso 1. En el traspaso es el vendedor —el
-      // propietario que sale—; donde no hay parte vendedora y el vehículo ya está inscrito, ese
-      // propietario ES el titular, y el titular se persiste como `comprador`. La siembra estaba
-      // clavada en 'vendedor', así que en la familia OTROS nunca caía: el gestor volvía a teclear un
-      // documento que la consulta ya había traído, y podía teclear OTRO —lo que convierte el trámite
-      // en un traspaso encubierto.
-      const rolDelPropietario: ActorRol = roles.includes('vendedor') ? 'vendedor' : 'comprador';
+      // Qué rol RECIBE el documento del propietario del paso 1 (y dispara la consulta automática al
+      // RUNT dentro de `ActorsForm`). Se deriva de `rolesBase` —lo que el TIPO captura por
+      // formulario— y NUNCA de `roles` (que ya incluye la excepción de revelado):
+      //   - `rolesBase` trae 'vendedor' (traspaso estándar / TRASPASO_TRANSFERENCIA_DE_DOMINIO): lo
+      //     recibe 'vendedor', el propietario que sale.
+      //   - `rolesBase` NO trae 'vendedor' y el tipo tampoco pide parte vendedora (`!caps.pideVendedor`,
+      //     familia OTROS): el titular ES el propietario inscrito y se persiste como 'comprador' → lo
+      //     recibe 'comprador'.
+      //   - `rolesBase` NO trae 'vendedor' pero el tipo SÍ pide parte vendedora (`caps.pideVendedor`,
+      //     TRASPASO_UNILATERAL): hay propietario, pero no se captura en ESTE paso —el backend ya lo
+      //     sincronizó aparte desde el RUNT—, así que NINGÚN rol en pantalla debe recibirlo.
+      //     `rolDelPropietario` queda `null`. Sin esta distinción, 'comprador' (aquí el LOCATARIO,
+      //     una persona distinta del propietario) heredaba el documento del propietario del RUNT en
+      //     solo lectura — el traspaso encubierto que este comentario ya advertía, pero al revés: en
+      //     vez de dejar teclear a otra persona, precargaba a la persona equivocada.
+      //   - Si además `revealSellerForm` añadió 'vendedor' a `roles`, ese actor sigue sin recibir la
+      //     siembra: ya lo sincronizó el backend por su cuenta (mismo documento, mismo origen); no
+      //     hay nada que sembrarle ni una consulta RUNT que `ActorsForm` deba disparar por él.
+      const rolDelPropietario: ActorRol | null = rolesBase.includes('vendedor')
+        ? 'vendedor'
+        : caps.pideVendedor
+          ? null
+          : 'comprador';
+      const siembraActiva = hayPropietarioPrevio && rolDelPropietario !== null;
       return (
         <ActorsForm
           key={unificado ? 'actores-unificados' : step.key}
@@ -4612,9 +4429,9 @@ function StepBody({
           roles={roles}
           onSaved={onRefresh}
           embeddedInWizard
-          seedDocumentoFromOwner={hayPropietarioPrevio}
+          seedDocumentoFromOwner={siembraActiva}
           rolDelPropietario={rolDelPropietario}
-          autoConsultRunt={hayPropietarioPrevio}
+          autoConsultRunt={siembraActiva}
           {...(unificado ? {} : { layout: 'split' as const })}
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
@@ -4710,7 +4527,6 @@ function StepBody({
             onRefresh={onRefresh}
             rnmcEnabled={rnmcEnabled}
             onPaqueteStatusChange={onPaqueteStatusChange}
-            onConfirmacionesExpedienteChange={onConfirmacionesExpedienteChange}
             vaultCoveredPartes={vaultCoveredPartes}
             biometricForceEditable={identityOperable}
           />

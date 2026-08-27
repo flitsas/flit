@@ -106,4 +106,57 @@ public sealed class WizardCapacidadesDelTipoTests
             .Should().NotContain(["ValidateOtOperability", "SimitMode", "ValidateDuplicateProcedure"]);
         state.Capabilities.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task ElAsistenteRecibeElOrigenDeLaImprontaDelPerfil()
+    {
+        var tipo = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "TRASPASO_STANDARD",
+            Name = "Traspaso",
+            Family = "TRASPASO",
+            GateProfile = """{"entryMode":"PLATE","requiresSeller":true,"requiresBuyer":true,"improntaSource":"MANUAL"}""",
+            Steps = ProcedureTypeFixture.Traspaso.Steps,
+        };
+
+        var state = await EstadoDe(tipo);
+
+        state.Capabilities!.ImprontaSource.Should().Be("MANUAL");
+    }
+
+    [Fact]
+    public async Task ElOrigenDeLaImprontaDelTipoVivoPisaElSnapshotSinLaLlave()
+    {
+        // El trámite se creó antes de Capacidades.improntaSource: el snapshot no la trae y el
+        // default del asistente era «se puede generar». Si el SuperAdmin pone MANUAL, el botón
+        // Generar tiene que desaparecer en el wizard abierto, no solo en trámites nuevos.
+        var tipo = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "TRASPASO_STANDARD",
+            Name = "Traspaso",
+            Family = "TRASPASO",
+            GateProfile = """{"entryMode":"PLATE","requiresSeller":true,"requiresBuyer":true,"improntaSource":"MANUAL"}""",
+            Steps = ProcedureTypeFixture.Traspaso.Steps,
+        };
+        var instance = Instancia(tipo);
+        var ct = TestContext.Current.CancellationToken;
+        _repo.GetByIdWithWizardGraphAsync(instance.Id, instance.TenantId, ct).Returns(instance);
+        _snapshots.GetByInstanceIdAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>())
+            .Returns(new ProcedureTypeSnapshotRecord(
+                Guid.NewGuid(),
+                instance.TenantId,
+                instance.Id,
+                tipo.Id,
+                1,
+                """{"gateProfile":{"entryMode":"PLATE","requiresSeller":true,"requiresBuyer":true},"stepSectionTypes":[{"stepCode":"consulta","sectionTypes":["vehicle_query"]},{"stepCode":"documentos","sectionTypes":["document_checklist"]}]}""",
+                null));
+
+        var handler = new GetWizardStateHandler(_repo, snapshotRepo: _snapshots);
+        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Capabilities!.ImprontaSource.Should().Be("MANUAL");
+    }
 }

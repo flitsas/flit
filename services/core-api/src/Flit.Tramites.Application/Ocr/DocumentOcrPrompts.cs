@@ -4,11 +4,21 @@ namespace Flit.Tramites.Application.Ocr;
 /// Biblioteca de prompts por tipo de documento para el OCR semántico de trámites. Cada prompt le indica
 /// al modelo de visión qué validar, qué rechazar y qué campos devolver en JSON. El bloque
 /// "IMPORTANTE — DOCUMENTO MULTIPAGINA" va inline en cada prompt para identificar el subconjunto de
-/// páginas del tipo solicitado en PDFs multi-documento. Prompts fijados en v1 (no reescribir).
+/// páginas del tipo solicitado en PDFs multi-documento. Los cambios son SIEMPRE aditivos: ningún campo
+/// ya existente se renombra ni se elimina, porque la persistencia de HU #10975 depende de sus nombres.
 /// <para><b>Versionado (Feature #10972):</b> el prompt de <c>soat</c> pasa a <b>v2</b> — HU #10976 le
 /// AÑADE <c>fecha_expedicion</c> (el certificado la pide en celda propia y v1 solo daba el inicio de
-/// vigencia). No se reescribió ningún campo previo: v2 es aditivo sobre v1. El prompt de <c>rtm</c> es
-/// nuevo en HU #10977. El resto sigue en v1 intacto.</para>
+/// vigencia). El prompt de <c>rtm</c> es nuevo en HU #10977.</para>
+/// <para><b>v3 — declaraciones de lote.</b> Medido sobre 22 expedientes reales, <c>aduana</c> perdía
+/// el 27 % de sus documentos y acertaba el VIN en 13 de 31. La causa: una Declaración de Importación
+/// ampara un lote de 30 a 50 vehículos y el prompt pedía el esquema de uno solo, así que el modelo
+/// improvisaba —concatenaba los 50 VIN, enumeraba campos <c>vehiculo_vin_N</c> hasta reventar
+/// <c>max_tokens</c>, o elegía el primero de la lista, que casi nunca es el del trámite—. Ahora el
+/// prompt reconoce el caso: <c>ampara_multiples_vehiculos</c> y los campos del vehículo VACÍOS, que
+/// es preferible a un VIN plausible y falso. Se añade además a <c>factura</c> y <c>aduana</c> la
+/// advertencia de confusión de caracteres que <c>impronta</c> ya tenía (esa acertó 35 de 35 VIN), y
+/// se sitúa el formato FTH-002 de MinTransporte fuera de <c>aduana</c> en los dos extremos del
+/// pipeline, que hasta ahora se contradecían sobre él.</para>
 /// </summary>
 public static class DocumentOcrPrompts
 {
@@ -63,11 +73,20 @@ Cómo reconocer cada tipo:
   compraventa del vehiculo. Lleva numero de factura, CUFE o resolucion DIAN, emisor con NIT, comprador,
   descripcion del vehiculo y valores (subtotal, IVA, total).
 - aduana: DECLARACION DE IMPORTACION (formulario DIAN/MUISCA), manifiesto de importacion, certificado de
-  homologacion o licencia de importacion. Lleva numero de declaracion, subpartida arancelaria (8703, 8704,
-  8711...), importador o agente de aduana, pais de origen y valores FOB/CIF. Tambien cuenta la certificacion
-  de nacionalizacion que expide el importador citando el numero de declaracion.
+  homologacion o licencia de importacion. Lleva numero de declaracion, subpartida arancelaria (8703,
+  8704, 8711...), importador o agente de aduana, pais de origen y valores FOB/CIF. Tambien cuenta la
+  certificacion de nacionalizacion que expide el importador citando el numero de declaracion —cada uno
+  la titula distinto: "Certificacion DIAN", "Certificado de empadronamiento", "Certificado de
+  importacion"—, y el
+  certificado individual de aduanas de un vehiculo ENSAMBLADO en Colombia bajo regimen de
+  transformacion (Sofasa y similares), que sustituye a la declaracion de importacion.
+  OJO: una misma declaracion suele amparar un LOTE de 30 a 50 vehiculos y ocupar VARIAS paginas
+  seguidas (2 a 5). Agrupalas TODAS en una sola entrada, no una entrada por pagina.
 - impronta: CERTIFICADO DE IMPRONTAS, hoja de improntas digitales, acta de improntas o fotoimpronta. Lleva
   los numeros fisicos del vehiculo (motor, chasis, VIN, serie), normalmente en recuadros o calcos.
+  OJO: suele ocupar DOS paginas seguidas — la primera con el encabezado y los datos del vehiculo, y la
+  siguiente con las fotos o calcos de los numeros. Agrupa AMBAS en una sola entrada: la pagina del
+  encabezado sola no permite verificar nada.
   Cuenta tanto el certificado de un CDA como la hoja de "improntas del cliente" que solo trae la foto
   de la placa VIN y los numeros transcritos: ambas son el documento de improntas.
 - soat: POLIZA SOAT o certificado de SOAT de una aseguradora colombiana. Lleva numero de poliza,
@@ -82,6 +101,9 @@ dentro de un tipo: reportalas como no reconocidas. Ejemplos frecuentes:
 - Solicitud de tramite de forma virtual
 - Carta de validacion de identidad, carta selfie, cedula o documento de identidad
 - Formulario del Ministerio de Transporte (FUR) y su hoja de instrucciones
+- Formato FTH-002 del Ministerio de Transporte ("Caracteristicas tecnico-mecanicas de vehiculos"): es
+  la ficha tecnica del vehiculo, NO un documento de aduana. Aunque hable de homologacion, va a
+  paginas no reconocidas
 - Licencia de transito
 - Contrato de compraventa
 - Formato o datos de prenda / garantia
@@ -128,6 +150,20 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
 
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
+LECTURA DEL VIN Y EL NUMERO DE MOTOR:
+Leelos caracter por caracter, exactamente como aparecen. NO completes, NO corrijas, NO deduzcas.
+Presta maxima atencion a los caracteres que se confunden: 0 vs O vs D, 1 vs I vs l, 5 vs S, 8 vs B vs
+6, 2 vs Z, 6 vs G. El VIN tiene EXACTAMENTE 17 caracteres y nunca contiene las letras I, O ni Q. Si
+lees mas o menos de 17, vuelve a mirar.
+
 EXTRAER:
 - tipo_documento: "factura_electronica" | "factura_venta" | "cuenta_cobro" | "documento_equivalente" | "no_es_factura"
 - es_factura_valida: true/false
@@ -151,6 +187,7 @@ Analiza este documento. Determina si contiene un MANIFIESTO DE IMPORTACION, DECL
 VALIDACIONES:
 1. DEBE ser uno de estos documentos aduaneros: Declaracion de Importacion (DI) DIAN, Manifiesto de Importacion, Certificado de Homologacion, Licencia de Transito de Importacion (LTI), o documento de aduana equivalente
 2. NO es valido si es: una factura de venta, un FUR (Formulario Unico de Registro), un certificado de improntas, una poliza SOAT, un recibo de pago, una cotizacion, un contrato de compraventa
+2b. TAMPOCO es valido el FORMATO FTH-002 del Ministerio de Transporte ("CARACTERISTICAS TECNICO-MECANICAS DE VEHICULOS", Direccion de Transporte y Transito). Es una ficha tecnica del vehiculo, no un documento de aduana: no lleva numero de declaracion, ni subpartida arancelaria, ni valores FOB/CIF, ni datos del importador. Si el documento es ese formato, es_valido va en false.
 3. DEBE contener datos del importador o agente de aduana (NIT, razon social)
 4. DEBE contener descripcion del vehiculo o motocicleta (marca, modelo, VIN o serial)
 5. DEBE contener datos de la operacion aduanera (numero declaracion, aduana, pais origen)
@@ -161,6 +198,31 @@ TIPOS DE DOCUMENTOS ADUANEROS COLOMBIANOS:
 - MANIFIESTO DE IMPORTACION: Documento que acompana la mercancia desde puerto hasta zona franca o bodega. Numero de manifiesto, datos del transportador, descripcion de carga.
 - CERTIFICADO DE HOMOLOGACION: Documento ICONTEC/NTC que certifica que el vehiculo cumple normas tecnicas colombianas. Codigo NTC, numero certificado.
 - LICENCIA DE IMPORTACION: Permiso del MinComercio para importar vehiculos (necesario para algunos tipos). Numero de licencia, vigencia.
+- CERTIFICACION DE NACIONALIZACION: la expide el IMPORTADOR (no la DIAN) citando la Resolucion 13292 de diciembre 4 de 2009, y declara que importo y nacionalizo el vehiculo, con su numero de declaracion y su VIN. Cada importador la titula distinto: "CERTIFICACION DIAN", "CERTIFICADO DE EMPADRONAMIENTO", "CERTIFICADO DE IMPORTACION", "CERTIFICACION DE NACIONALIZACION". Todas son el MISMO documento y TODAS son validas: el titulo no decide, lo decide el contenido (importador que certifica + numero de declaracion + vehiculo). Es ademas el documento aduanero que identifica a UN vehiculo concreto, asi que aqui SI se llenan los campos del vehiculo.
+- CERTIFICADO INDIVIDUAL DE ADUANAS: para vehiculos ENSAMBLADOS en Colombia bajo regimen de transformacion (Sofasa y similares). Sustituye a la declaracion de importacion y es valido.
+
+DECLARACIONES QUE AMPARAN VARIOS VEHICULOS — REGLA CRITICA:
+Una sola Declaracion de Importacion suele amparar UN LOTE de 30 a 50 vehiculos, cada uno con su propio
+VIN y su propio numero de motor. Este formulario pide los datos de UN vehiculo, y ese molde NO encaja
+con un documento de lote. Cuando la declaracion ampare mas de un vehiculo:
+1. Pon ampara_multiples_vehiculos en true y cantidad con el numero de vehiculos.
+2. Deja vehiculo_vin, vehiculo_motor y vehiculo_chasis VACIOS (""). NO elijas uno cualquiera de la
+   lista, NO uses el primero: no hay forma de saber cual de los 40 es el del tramite, y un VIN
+   plausible pero equivocado es peor que un campo vacio, porque se cruza contra el tramite y cuadra
+   por accidente.
+3. NO concatenes todos los VIN en un mismo campo, NO los separes por comas y NO inventes campos
+   numerados como vehiculo_vin_1 o vehiculo_motor_15. La respuesta debe tener EXACTAMENTE los campos
+   listados abajo, ni uno mas.
+4. Los datos que SI son del lote entero (numero de declaracion, aduana, importador, subpartida, pais
+   de origen, valores FOB/CIF, tributos) se extraen normalmente.
+Cuando la declaracion ampare un solo vehiculo, ampara_multiples_vehiculos va en false y los campos del
+vehiculo se llenan como siempre.
+
+LECTURA DE NUMEROS DE IDENTIFICACION:
+Lee el VIN y el numero de motor caracter por caracter, exactamente como aparecen. NO completes, NO
+corrijas, NO deduzcas. Presta maxima atencion a los caracteres que se confunden: 0 vs O vs D, 1 vs I
+vs l, 5 vs S, 8 vs B vs 6, 2 vs Z, 6 vs G. El VIN tiene EXACTAMENTE 17 caracteres y nunca contiene
+las letras I, O ni Q. Si lees mas o menos de 17, vuelve a mirar.
 
 SUBPARTIDAS ARANCELARIAS VEHICULOS COLOMBIA:
 - 8703: Automoviles y vehiculos para transporte de personas
@@ -170,7 +232,7 @@ SUBPARTIDAS ARANCELARIAS VEHICULOS COLOMBIA:
 - 8701: Tractores
 
 DATOS A EXTRAER:
-- tipo_documento: "declaracion_importacion" | "manifiesto_importacion" | "certificado_homologacion" | "licencia_importacion" | "otro"
+- tipo_documento: "declaracion_importacion" | "manifiesto_importacion" | "certificacion_nacionalizacion" | "certificado_individual_aduanas" | "certificado_homologacion" | "licencia_importacion" | "otro"
 - es_valido: true/false (false si NO es documento aduanero)
 - paginas_documento: [paginas donde esta el documento aduanero]
 - total_paginas: total paginas del PDF
@@ -200,7 +262,8 @@ DATOS A EXTRAER:
 - vehiculo_combustible: tipo de combustible (gasolina, diesel, electrico, hibrido)
 - vehiculo_pasajeros: capacidad de pasajeros
 - vehiculo_peso_bruto: peso bruto en kg
-- cantidad: cantidad de vehiculos en la declaracion (usualmente 1 para matricula)
+- cantidad: cantidad de vehiculos que ampara la declaracion
+- ampara_multiples_vehiculos: true si la declaracion ampara MAS DE UN vehiculo, false si ampara uno solo
 - valor_fob_usd: valor FOB en dolares (numerico)
 - valor_flete_usd: valor del flete en dolares (numerico)
 - valor_seguro_usd: valor del seguro en dolares (numerico)
@@ -221,8 +284,16 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
 
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
 JSON valido sin markdown:
-{"tipo_documento":"declaracion_importacion","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_documento":"","fecha":"","aduana":"","importador_nombre":"","importador_nit":"","importador_direccion":"","importador_ciudad":"","agente_aduana":"","agente_aduana_nit":"","pais_origen":"","pais_procedencia":"","puerto_entrada":"","subpartida_arancelaria":"","tipo_vehiculo":"automovil","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_vin":"","vehiculo_motor":"","vehiculo_chasis":"","vehiculo_cilindraje":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_combustible":"","vehiculo_pasajeros":"","vehiculo_peso_bruto":"","cantidad":1,"valor_fob_usd":0,"valor_flete_usd":0,"valor_seguro_usd":0,"valor_cif_usd":0,"valor_cif_cop":0,"tasa_cambio":0,"arancel_porcentaje":0,"arancel_valor":0,"iva_porcentaje":0,"iva_valor":0,"total_tributos":0,"regimen":"","observaciones":""}
+{"tipo_documento":"declaracion_importacion","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_documento":"","fecha":"","aduana":"","importador_nombre":"","importador_nit":"","importador_direccion":"","importador_ciudad":"","agente_aduana":"","agente_aduana_nit":"","pais_origen":"","pais_procedencia":"","puerto_entrada":"","subpartida_arancelaria":"","tipo_vehiculo":"automovil","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_vin":"","vehiculo_motor":"","vehiculo_chasis":"","vehiculo_cilindraje":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_combustible":"","vehiculo_pasajeros":"","vehiculo_peso_bruto":"","cantidad":1,"ampara_multiples_vehiculos":false,"valor_fob_usd":0,"valor_flete_usd":0,"valor_seguro_usd":0,"valor_cif_usd":0,"valor_cif_cop":0,"tasa_cambio":0,"arancel_porcentaje":0,"arancel_valor":0,"iva_porcentaje":0,"iva_valor":0,"total_tributos":0,"regimen":"","observaciones":""}
 """;
 
     private const string Impronta =
@@ -234,7 +305,12 @@ VALIDACIONES:
 2. NO es valido si es: una factura de venta, un FUR (Formulario Unico de Registro), una declaracion de importacion, una poliza SOAT, un certificado de revision tecnico-mecanica RTM (a menos que incluya seccion de improntas), un recibo de pago, un contrato
 3. DEBE contener al menos UNO de estos numeros de identificacion del vehiculo: numero de motor, numero de chasis, VIN, o numero de serie
 4. DEBE contener datos del vehiculo (marca, modelo como minimo)
-5. Para ser valido el documento debe tener origen en: CDA (Centro de Diagnostico Automotor), VUS (Ventanilla Unica de Servicios), organismo de transito, DIJIN, o entidad certificada
+5. Origen valido: CDA (Centro de Diagnostico Automotor), VUS (Ventanilla Unica de Servicios),
+organismo de transito, DIJIN o entidad certificada. TAMBIEN es valida la "hoja de improntas del
+cliente" que genera la propia plataforma de tramites: trae la foto de la placa VIN y los numeros de
+motor y chasis transcritos, con hash y sello de tiempo, y NO lleva sello de CDA. Es un documento de
+improntas legitimo: es_valido va en true. Que los calcos sean fotografias informales tomadas por el
+cliente NO lo invalida.
 
 TIPOS DE DOCUMENTOS DE IMPRONTAS COLOMBIANOS:
 - HOJA DE IMPRONTAS DIGITALES: Documento digital moderno conforme Resolucion 17145 de 2023. Tiene secciones coloreadas para cada impronta (rojo=motor, azul=chasis, verde=VIN/serie). Fondo grafito simulando calco fisico. Hash SHA-256 y codigo QR de verificacion. Radicado formato IMPR-XXXXX.
@@ -314,6 +390,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
 
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
 JSON valido sin markdown:
 {"tipo_documento":"certificado_improntas","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","fecha":"","entidad_emisora":"","entidad_nit":"","entidad_ciudad":"","inspector_nombre":"","inspector_documento":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_servicio":"","vehiculo_vin":"","vehiculo_vin_datos":"","vehiculo_motor":"","vehiculo_motor_datos":"","vehiculo_chasis":"","vehiculo_chasis_datos":"","vehiculo_serie":"","estado_motor":"no_verificado","estado_chasis":"no_verificado","estado_vin":"no_verificado","estado_serie":"no_verificado","tiene_qr":false,"tiene_hash":false,"hash_valor":"","resolucion_referencia":"","alertas":[],"observaciones":""}
 """;
@@ -333,6 +417,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1,2] o [3] o [1]). Base 1.
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
 
 EXTRAER:
 - tipo_documento: "soat" | "certificado_soat" | "otro"
@@ -379,6 +471,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
 
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
 EXTRAER:
 - tipo_documento: "rtm" | "certificado_rtm" | "otro"
 - es_valido: true/false
@@ -420,6 +520,14 @@ Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), iden
 - paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1,2] o [3] o [1]). Base 1.
 - total_paginas: total de paginas del PDF
 Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro (FUR, mandato,
+poder, licencia de transito, declaracion de importacion, factura, escrituras...), NO lo invalida y
+NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste
+en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del
+expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
+false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
 
 EXTRAER JSON (sin markdown):
 - paginas_documento: [paginas], total_paginas: numero

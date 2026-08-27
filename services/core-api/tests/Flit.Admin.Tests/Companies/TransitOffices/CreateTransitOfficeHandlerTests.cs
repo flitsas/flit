@@ -74,6 +74,14 @@ public sealed class CreateTransitOfficeHandlerTests
             p => p.TenantId == tenant.Id, cancellationToken: TestContext.Current.CancellationToken);
         profile.TransitOfficeId.Should().Be(MedellinOfficeId);
         profile.OperationMode.Should().Be("dashboard");
+
+        var mandate = await verify.TransitOfficeMandateConfigs.SingleAsync(
+            c => c.TransitOfficeId == MedellinOfficeId,
+            cancellationToken: TestContext.Current.CancellationToken);
+        mandate.TemplateCode.Should().Be("generico");
+        mandate.AssignmentMode.Should().Be("open");
+        mandate.InstitutionalMandataryName.Should().BeNull();
+        mandate.InstitutionalMandataryNit.Should().BeNull();
     }
 
     [Fact]

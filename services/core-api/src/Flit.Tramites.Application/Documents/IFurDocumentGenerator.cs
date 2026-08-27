@@ -283,7 +283,13 @@ public sealed record MandatoData(
     /// <summary>Cuerpo del editor (placeholders {{placa}}, {{mandante_nombre}}, …).</summary>
     string? CustomTemplateBody = null,
     /// <summary>Bytes del PDF blank propio (cargados por el caller antes de generar).</summary>
-    byte[]? CustomTemplatePdf = null);
+    byte[]? CustomTemplatePdf = null,
+    /// <summary>
+    /// Mandante (otorgante: comprador en matrícula, vendedor en traspaso) y mandatario se pintan
+    /// en cualquier estado. False solo en pruebas o plantillas que deban salir en blanco.
+    /// El modo abierto sigue sin firmante persona.
+    /// </summary>
+    bool PartesVisibles = true);
 
 /// <summary>
 /// Cómo aparece el MANDATARIO en el recuadro de firmas del contrato de mandato.

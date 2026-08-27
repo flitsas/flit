@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { Eye, Info } from 'lucide-react';
 import {
+  ocrResultForTipo,
   resumirVins,
   useProcedureDocuments,
   type OcrUiResult,
@@ -19,6 +20,8 @@ import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { isPrendaManagedChecklistTipo } from './prenda-document-tipos';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
+import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
+import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -26,6 +29,12 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 export type DocumentUploadMode = 'individual' | 'batch';
+
+/** Mensaje del POST generate-impronta del trámite (ProblemDetails.detail). */
+export function describeGenerarImprontaEnTramite(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return 'No se pudo generar la impronta. Verifica placa u organismo e intenta de nuevo.';
+}
 
 interface Props {
   instanceId: string | null;
@@ -50,6 +59,11 @@ interface Props {
   onUploadModeChange?: (mode: DocumentUploadMode) => void;
   /** Si true, no pinta el toggle interno (ya va en el badge del WizardAccordion). */
   hideModeToggle?: boolean;
+  /**
+   * Si el tipo admite generar la impronta (Kyverum / FUR). Independiente de si el ítem es
+   * obligatorio. Por defecto sí: solo `improntaSource === 'MANUAL'` la apaga.
+   */
+  permiteGenerarImprontaAutomatica?: boolean;
 }
 
 /**
@@ -481,8 +495,9 @@ export function DocumentSlot({
   ocr,
   onUpload,
   onRemove,
-  onDefer,
+  onGenerateImpronta,
   onPreview,
+  permiteGenerarImprontaAutomatica = true,
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
@@ -492,40 +507,43 @@ export function DocumentSlot({
   ocr: OcrUiResult | undefined;
   onUpload: (file: File) => void;
   onRemove: (attachmentId: string) => void;
-  /** Difiere (o revierte) la impronta al paso FUR. Solo se pasa para el slot de impronta. */
-  onDefer?: (diferida: boolean) => Promise<void>;
+  /** Genera la impronta (Kyverum) y la adjunta al trámite. */
+  onGenerateImpronta?: () => Promise<void>;
   /** Abre el modal de previsualización para este adjunto. */
   onPreview?: (attachment: ProcedureAttachment) => void;
+  /** Si false, no se ofrece generar (tipo parametrizado en MANUAL). */
+  permiteGenerarImprontaAutomatica?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [deferring, setDeferring] = useState(false);
-  // En solo lectura el checklist es visualización: sin subir/reemplazar/borrar.
+  const [generating, setGenerating] = useState(false);
   const readOnly = useWizardReadOnly();
 
   const tipo = item.docTipo ?? item.key;
+  const caption = catalogDocumentTitle(tipo, item.label);
   const done = item.satisfied || !!attachment;
-  const busy = uploading || analyzing || deleting;
+  const busy = uploading || analyzing || deleting || generating;
   const isAuto = AUTO_DOC_TIPOS.has(tipo);
+  const isImpronta = tipo.toLowerCase() === 'impronta';
+  const ocrRejected = ocr?.status === 'rejected';
+  const showValidado = done && !ocrRejected;
+  const canGenerate =
+    isImpronta &&
+    permiteGenerarImprontaAutomatica &&
+    !!onGenerateImpronta &&
+    !attachment &&
+    !readOnly;
 
-  // La impronta es un documento que se genera en el paso de firma (FUR), no se carga aquí. Cuando es
-  // obligatoria y aún no hay adjunto, el operador puede diferir su generación marcando este check
-  // (marca el ítem como satisfecho sin archivo). La radicación sigue exigiendo la impronta real.
-  const canDefer =
-    !!onDefer && item.docTipo === 'impronta' && item.obligatorio && !attachment && !readOnly;
-  // Satisfecho sin adjunto ⇒ viene del flag manual de diferido (para impronta es la única vía).
-  const deferred = item.satisfied && !attachment;
-
-  const handleDefer = async (checked: boolean) => {
-    if (!onDefer) return;
+  const handleGenerate = async () => {
+    if (!onGenerateImpronta) return;
     setLocalError(null);
-    setDeferring(true);
+    setGenerating(true);
     try {
-      await onDefer(checked);
-    } catch {
-      setLocalError('No se pudo actualizar la generación diferida de la impronta.');
+      await onGenerateImpronta();
+    } catch (err) {
+      setLocalError(describeGenerarImprontaEnTramite(err));
     } finally {
-      setDeferring(false);
+      setGenerating(false);
     }
   };
 
@@ -548,7 +566,7 @@ export function DocumentSlot({
     <li
       className={
         'relative flex h-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] ' +
-        (isAuto || done
+        (isAuto || (done && !ocrRejected)
           ? 'border'
           : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]')
       }
@@ -556,20 +574,15 @@ export function DocumentSlot({
     >
       {/* Badges esquina superior derecha (prototipo DocSlot). */}
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
-        {isAuto && done ? (
+        {showValidado ? (
           <span
             className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
             style={{ background: '#8CC63F' }}
           >
             Validado
           </span>
-        ) : done && !isAuto ? (
-          <span
-            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
-            style={{ background: '#8CC63F' }}
-          >
-            Validado
-          </span>
+        ) : ocrRejected ? (
+          <StatusBadge tone="danger" label="No coincide" />
         ) : item.obligatorio ? (
           <span className="whitespace-nowrap rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
             * Obligatorio
@@ -577,28 +590,13 @@ export function DocumentSlot({
         ) : (
           <span className="text-xs font-medium opacity-60">Opcional</span>
         )}
-        {ocr && done && (
-          <button
-            type="button"
-            onClick={() => attachment && onPreview?.(attachment)}
-            aria-label="Ver resultado OCR"
-            className="p-0.5"
-            disabled={!attachment || !onPreview}
-          >
-            <Info
-              className="h-4 w-4"
-              style={{ color: '#8CC63F' }}
-              aria-hidden="true"
-            />
-          </button>
-        )}
       </div>
 
       <p
         className="pr-28 text-[13px] font-semibold leading-tight"
         style={{ color: '#162744' }}
       >
-        {item.label}
+        <DocumentCatalogCaption nombre={item.label} codigo={tipo} />
       </p>
       {isAuto && (
         <p className="mt-0.5 text-[11px] opacity-70">Autogenerado por el sistema</p>
@@ -610,23 +608,23 @@ export function DocumentSlot({
         </p>
       )}
 
-      {(done || analyzing) && (
+            {(done || analyzing || generating) && (
         <div
           className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
           style={{ background: '#F1F5F9' }}
           aria-hidden="true"
         >
           <div
-            className={`h-full rounded-full ${analyzing ? 'animate-pulse' : ''}`}
-            style={{
-              width: analyzing ? '60%' : '100%',
-              background: analyzing ? '#557EFF' : '#8CC63F',
-            }}
+              className={`h-full rounded-full ${analyzing || generating ? 'animate-pulse' : ''}`}
+              style={{
+                width: analyzing || generating ? '60%' : '100%',
+                background: analyzing || generating ? '#557EFF' : ocrRejected ? 'var(--badge-danger-fg)' : '#8CC63F',
+              }}
           />
         </div>
       )}
 
-      {ocr ? (
+      {ocr && !analyzing ? (
         <div className="mt-2">
           <OcrStatusPanel tipo={tipo} ocr={ocr} />
         </div>
@@ -644,7 +642,7 @@ export function DocumentSlot({
               onClick={() => onPreview(attachment)}
               className="text-xs font-semibold"
               style={{ color: '#557EFF' }}
-              aria-label={`Previsualizar ${item.label}`}
+              aria-label={`Previsualizar ${caption}`}
             >
               Ver
             </button>
@@ -657,7 +655,7 @@ export function DocumentSlot({
                 onClick={() => onPreview(attachment)}
                 className="rounded-lg border p-1 disabled:opacity-60"
                 style={{ color: '#557EFF' }}
-                aria-label={`Previsualizar ${item.label}`}
+                aria-label={`Previsualizar ${caption}`}
               >
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -668,7 +666,7 @@ export function DocumentSlot({
               accept={ALLOWED_MIME.join(',')}
               onChange={handlePick}
               className="hidden"
-              aria-label={`Subir ${item.label}`}
+              aria-label={`Subir ${caption}`}
             />
             <button
               type="button"
@@ -685,6 +683,17 @@ export function DocumentSlot({
                     ? 'Reemplazar archivo'
                     : 'Adjuntar archivo'}
             </button>
+            {canGenerate && (
+              <button
+                type="button"
+                onClick={() => void handleGenerate()}
+                disabled={busy}
+                className="h-9 rounded-lg px-4 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: '#557EFF' }}
+              >
+                {generating ? 'Generando impronta…' : 'Generar impronta'}
+              </button>
+            )}
             {attachment && (
               <button
                 type="button"
@@ -692,7 +701,7 @@ export function DocumentSlot({
                 disabled={busy}
                 className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ color: '#FF4E00' }}
-                aria-label={`Borrar ${item.label}`}
+                aria-label={`Borrar ${caption}`}
               >
                 {deleting ? 'Borrando…' : 'Borrar'}
               </button>
@@ -700,26 +709,6 @@ export function DocumentSlot({
           </>
         )}
       </div>
-
-      {canDefer && (
-        <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={deferred}
-            disabled={deferring}
-            onChange={(e) => void handleDefer(e.target.checked)}
-            className="mt-0.5"
-          />
-          <span className="opacity-80">
-            La impronta se generará automáticamente en el paso de firma (FUR).
-            {deferred && (
-              <span className="block opacity-70">
-                Marcada como diferida — se generará más adelante; no necesitas cargarla aquí.
-              </span>
-            )}
-          </span>
-        </label>
-      )}
 
       {localError && (
         <p
@@ -749,6 +738,7 @@ export function DocumentChecklist({
   uploadMode: uploadModeProp,
   onUploadModeChange,
   hideModeToggle = false,
+  permiteGenerarImprontaAutomatica = true,
 }: Props) {
   const { state, refresh, upload, remove, clearError } = useProcedureDocuments(
     instanceId,
@@ -857,7 +847,18 @@ export function DocumentChecklist({
 
   return (
     <>
-    {analizandoLote && <CarLoaderModal mode="ocr" />}
+    {analizandoLote && (
+      <CarLoaderModal
+        mode="ocr"
+        label={
+          // El lote va archivo por archivo, así que la espera puede decir por dónde va. Con un solo
+          // archivo el contador sobra y se deja el mensaje de siempre.
+          batch.state.progreso && batch.state.progreso.total > 1
+            ? `Analizando expediente ${Math.min(batch.state.progreso.hechos + 1, batch.state.progreso.total)} de ${batch.state.progreso.total}…`
+            : undefined
+        }
+      />
+    )}
     <DocumentPreviewModal
       open={!!previewAttachment}
       onClose={closePreview}
@@ -892,9 +893,7 @@ export function DocumentChecklist({
         />
       )}
 
-      {/* Banda de completitud — solo fuera del acordeón del wizard (ahí el título ya basta). */}
-      {!hideHeader &&
-        checklist &&
+      {checklist &&
         (() => {
           const tono = INLINE_ALERT_TONES[checklist.completo ? 'success' : 'warning'];
           const Icono = tono.Icon;
@@ -1010,7 +1009,7 @@ export function DocumentChecklist({
         </p>
       ) : (
         <ul
-          className="mt-1 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          className="mt-1 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6"
           aria-label="Checklist de documentos"
         >
           {[...items]
@@ -1029,7 +1028,7 @@ export function DocumentChecklist({
                 uploading={uploadingTipos.has(tipo)}
                 analyzing={analyzingTipos.has(tipo)}
                 deleting={!!attachment && deletingId === attachment.id}
-                ocr={ocrResults[tipo]}
+                ocr={ocrResultForTipo(ocrResults, tipo)}
                 onUpload={(file) =>
                   void upload(tipo, file).then((ok) => {
                     if (ok) onChanged?.();
@@ -1040,18 +1039,16 @@ export function DocumentChecklist({
                     if (ok) onChanged?.();
                   })
                 }
-                onDefer={
-                  instanceId
-                    ? async (diferida) => {
-                        await tramitesClient.setImprontaDiferida(instanceId, diferida);
-                        // Refresca el checklist propio del componente (de él sale item.satisfied,
-                        // que controla el check); sin esto el estado queda obsoleto y el check no
-                        // se marca aunque el backend haya guardado. Igual que hacen upload/remove.
+                onGenerateImpronta={
+                  instanceId && permiteGenerarImprontaAutomatica
+                    ? async () => {
+                        await tramitesClient.generarImpronta(instanceId);
                         await refresh();
                         onChanged?.();
                       }
                     : undefined
                 }
+                permiteGenerarImprontaAutomatica={permiteGenerarImprontaAutomatica}
                 onPreview={instanceId ? (att) => void handlePreview(att) : undefined}
               />
             );

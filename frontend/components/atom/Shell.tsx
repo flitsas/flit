@@ -392,6 +392,13 @@ export function Shell({
         active: isOtHubSegmentActive(pathname, "reportes"),
         onClick: () => goOtHub("reportes"),
       },
+      {
+        key: OT_ADM_DOCK.mandatos,
+        label: "Mandatos",
+        icon: FileSignature,
+        active: isOtHubSegmentActive(pathname, "mandatos"),
+        onClick: () => goOtHub("mandatos"),
+      },
     );
   }
 

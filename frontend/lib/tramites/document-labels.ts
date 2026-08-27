@@ -31,3 +31,25 @@ export function documentLabel(tipo: string): string {
     .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
     .join(' ');
 }
+
+/**
+ * Nombre definido al crear el tipo en el módulo documental.
+ * Sin nombre de catálogo, se humaniza el código (listas de adjuntos sin `nombre`).
+ */
+export function catalogDocumentName(codigo: string, nombre?: string | null): string {
+  const fromCatalog = nombre?.trim();
+  if (fromCatalog) return fromCatalog;
+  return documentLabel(codigo.trim());
+}
+
+/** Nombre de catálogo más el código, para aria-label y `<option>`. */
+export function catalogDocumentTitle(codigo: string, nombre?: string | null): string {
+  const name = catalogDocumentName(codigo, nombre);
+  const code = codigo.trim();
+  return code ? `${name} (${code})` : name;
+}
+
+/** Alias: el gestor y el admin muestran el mismo nombre de catálogo. */
+export function gestorDocumentDisplayName(codigo: string, fallback?: string | null): string {
+  return catalogDocumentName(codigo, fallback);
+}

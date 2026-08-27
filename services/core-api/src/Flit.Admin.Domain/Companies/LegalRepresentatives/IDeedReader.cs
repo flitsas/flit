@@ -26,4 +26,10 @@ public interface IDeedReader
         Guid tenantId,
         DateOnly today,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Escritura activa ligada a la ficha de compañía; <c>null</c> si no hay.</summary>
+    Task<DeedItem?> FindActiveByCompanyAsync(
+        Guid tenantId,
+        Guid representedCompanyId,
+        CancellationToken cancellationToken = default);
 }

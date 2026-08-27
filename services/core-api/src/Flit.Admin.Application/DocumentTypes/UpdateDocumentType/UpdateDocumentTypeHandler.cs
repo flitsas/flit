@@ -5,9 +5,8 @@ namespace Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 /// <summary>
 /// Caso de uso de actualización de un tipo de documento (HU #10193, AC3 / RF03).
 ///
-/// Flujo: (1) valida formato → 422; (2) verifica existencia → 404; (3) unicidad del
-/// código excluyendo el propio id → 422; (4) actualiza code/name/description y sella
-/// <c>updated_by/updated_at</c>.
+/// Flujo: (1) valida nombre/descripcion → 422; (2) existencia → 404; (3) actualiza
+/// name/description conservando el código de sistema. <c>codigo</c> del request se ignora.
 /// </summary>
 public sealed class UpdateDocumentTypeHandler
 {
@@ -24,13 +23,12 @@ public sealed class UpdateDocumentTypeHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var code = command.Request.Codigo?.Trim() ?? string.Empty;
         var name = command.Request.Nombre?.Trim() ?? string.Empty;
         var description = string.IsNullOrWhiteSpace(command.Request.Descripcion)
             ? null
             : command.Request.Descripcion.Trim();
 
-        var error = DocumentTypeValidator.Validate(code, name, description);
+        var error = DocumentTypeValidator.ValidateNameAndDescription(name, description);
         if (error is not null)
         {
             return UpdateDocumentTypeResult.ValidationFailed(error);
@@ -42,16 +40,13 @@ public sealed class UpdateDocumentTypeHandler
             return UpdateDocumentTypeResult.NotFound();
         }
 
-        if (await _repository.CodeExistsAsync(code, command.Id, cancellationToken).ConfigureAwait(false))
-        {
-            return UpdateDocumentTypeResult.ValidationFailed(
-                $"Ya existe un tipo de documento con el código '{code}'.");
-        }
+        var code = existing.Code;
 
         var updated = await _repository
             .UpdateAsync(
                 command.Id, code, name, description, command.UpdatedBy,
-                command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes, cancellationToken)
+                command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes,
+                command.Request.EsAutogenerado, cancellationToken)
             .ConfigureAwait(false);
 
         // Carrera improbable: el registro fue borrado entre la lectura y el update.

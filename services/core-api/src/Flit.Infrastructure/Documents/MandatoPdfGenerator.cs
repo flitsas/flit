@@ -52,7 +52,64 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private static string Camara(MandatoData data) => Val(data.ChamberCity, CamaraPorDefecto);
 
     /// <summary>Sigla de la unión temporal para la cláusula de obligaciones (config del OT, HU #11204).</summary>
-    private static string Sigla(MandatoData data, string fallback) => Val(data.MandatarySigla, fallback);
+    private static string SiglaIndemnidad(MandatoData data)
+    {
+        if (!data.PartesVisibles)
+            return "___";
+        if (!string.IsNullOrWhiteSpace(data.MandatarySigla))
+            return data.MandatarySigla.Trim();
+        return EsOficina(data, MandatoSystemOfficeTemplates.SabanetaOfficeCode) ? SetsaSigla : "___";
+    }
+
+    private static string IndemneUtOMandatario(string inst) =>
+        inst == "___" ? "EL MANDATARIO" : $"la {inst}";
+
+    private static DocumentParte? ParteEnCuerpo(MandatoData data)
+    {
+        var parte = data.Tramite.Mandante;
+        if (data.PartesVisibles)
+            return parte;
+        if (parte is null)
+            return null;
+        return parte with
+        {
+            Nombre = null,
+            Documento = null,
+            Email = null,
+            Phone = null,
+            Address = null,
+            RepresentanteLegalNombre = null,
+            RepresentanteLegalTipoDoc = null,
+            RepresentanteLegalDocumento = null,
+        };
+    }
+
+    private static MandatarioFirmante? MandatarioEnCuerpo(MandatoData data) =>
+        data.PartesVisibles ? data.Mandatario : null;
+
+    private static bool EsOficina(MandatoData data, string officeCode) =>
+        string.Equals(
+            data.Tramite.Organismo.Codigo?.Trim(),
+            officeCode,
+            StringComparison.OrdinalIgnoreCase);
+
+    private static string InstNombre(MandatoData data, string fallback, string officeCodeForFallback)
+    {
+        if (!data.PartesVisibles)
+            return "___";
+        if (!string.IsNullOrWhiteSpace(data.InstitutionalMandataryName))
+            return data.InstitutionalMandataryName.Trim();
+        return EsOficina(data, officeCodeForFallback) ? fallback : "___";
+    }
+
+    private static string InstNit(MandatoData data, string fallback, string officeCodeForFallback)
+    {
+        if (!data.PartesVisibles)
+            return "___";
+        if (!string.IsNullOrWhiteSpace(data.InstitutionalMandataryNit))
+            return data.InstitutionalMandataryNit.Trim();
+        return EsOficina(data, officeCodeForFallback) ? fallback : "___";
+    }
 
     static MandatoPdfGenerator()
     {
@@ -83,8 +140,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
         // HU #11030 — el mandato lo otorga quien VENDE (en matrícula, el radicador).
-        var parte = tramite.Mandante;
-        var esJuridica = parte?.EsJuridica ?? false;
+        var parte = ParteEnCuerpo(data);
+        var esJuridica = tramite.Mandante?.EsJuridica ?? false;
         var variante = MandatoTemplateResolver.Resolve(data.TemplateCode);
 
         // Objeto {{tramite}}: tres capas (docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md).
@@ -135,8 +192,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private static GeneratedDocument GenerateFromEditor(MandatoData data)
     {
         var tramite = data.Tramite;
-        var parte = tramite.Mandante;
-        var esJuridica = parte?.EsJuridica ?? false;
+        var parte = ParteEnCuerpo(data);
+        var esJuridica = tramite.Mandante?.EsJuridica ?? false;
         // Fix negrita — el cuerpo del editor lo escribe el tenant en texto libre, pero los VALORES que
         // sustituimos ahí son siempre los mismos placeholders {{...}} conocidos (no texto libre): se
         // marcan en negrita en el momento de sustituirlos, igual que en la plantilla del sistema.
@@ -172,8 +229,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private static GeneratedDocument GenerateFromCustomPdf(MandatoData data)
     {
         var tramite = data.Tramite;
-        var parte = tramite.Mandante;
-        var esJuridica = parte?.EsJuridica ?? false;
+        var parte = ParteEnCuerpo(data);
+        var esJuridica = tramite.Mandante?.EsJuridica ?? false;
 
         var firmasPage = Document.Create(doc =>
         {
@@ -253,9 +310,9 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private static List<IReadOnlyList<ParrafoSegmento>> ApplyPlaceholdersSegmented(string body, MandatoData data)
     {
         var tramite = data.Tramite;
-        var parte = tramite.Mandante;
+        var parte = ParteEnCuerpo(data);
         var nombreTramite = ComponerObjeto(data);
-        var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
+        var (mandNombre, mandDoc) = MandatarioTexto(MandatarioEnCuerpo(data));
 
         var reemplazos = new (string Token, string Valor)[]
         {
@@ -268,8 +325,10 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             ("{{mandante_documento}}", Val(parte?.Documento, "___")),
             ("{{mandatario_nombre}}", mandNombre),
             ("{{mandatario_documento}}", mandDoc),
-            ("{{mandatario_institucional}}", Val(data.InstitutionalMandataryName, "___")),
-            ("{{mandatario_nit}}", Val(data.InstitutionalMandataryNit, "___")),
+            ("{{mandatario_institucional}}", Val(
+                data.PartesVisibles ? data.InstitutionalMandataryName : null, "___")),
+            ("{{mandatario_nit}}", Val(
+                data.PartesVisibles ? data.InstitutionalMandataryNit : null, "___")),
         };
 
         return body.Split('\n')
@@ -344,7 +403,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ot, string ciudad, string fecha)
     {
-        var mandatario = MandatarioTexto(data.Mandatario);
+        var mandatario = MandatarioTexto(MandatarioEnCuerpo(data));
         var intro = esJuridica
             ? Parrafo(
                 Frag($"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} No. {RlDoc(parte)}, "),
@@ -388,8 +447,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             return Generico(data, parte, esJuridica, nombreTramite, placa, ot, ciudad, fecha);
         }
 
-        var inst = Val(data.InstitutionalMandataryName, SetsaNombre);
-        var nit = Val(data.InstitutionalMandataryNit, SetsaNit);
+        var inst = InstNombre(data, SetsaNombre, MandatoSystemOfficeTemplates.SabanetaOfficeCode);
+        var nit = InstNit(data, SetsaNit, MandatoSystemOfficeTemplates.SabanetaOfficeCode);
         var intro = esJuridica
             ? Parrafo(
                 Frag($"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, "),
@@ -415,7 +474,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 Frag($"{"OBLIGACIONES DEL MANDANTE"}: {"EL MANDANTE"} declara que la información contenida en los documentos que se "),
                 Frag($"anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante las "),
                 Frag($"autoridades competentes de cualquier irregularidad que los mismos puedan contener; al igual dejando "),
-                Frag($"indemne a la {Plano(Sigla(data, SetsaSigla))} de cualquier responsabilidad en los que se ve comprometido la confidencialidad y "),
+                Frag($"indemne a la {Plano(SiglaIndemnidad(data))} de cualquier responsabilidad en los que se ve comprometido la confidencialidad y "),
                 Frag($"divulgación de la información legalmente protegida mediante los parámetros y disposiciones de la ley "),
                 Frag($"1581 del 2012 y demás normas que se dicten en la materia.")),
             CierreFirma(fecha, ciudad),
@@ -427,26 +486,24 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ot, string ciudad, string fecha)
     {
-        var inst = Val(data.InstitutionalMandataryName, MabNombre);
-        var nit = Val(data.InstitutionalMandataryNit, MabNit);
-        var mandatario = MandatarioTexto(data.Mandatario);
+        var inst = InstNombre(data, MabNombre, MandatoSystemOfficeTemplates.BelloOfficeCode);
+        var nit = InstNit(data, MabNit, MandatoSystemOfficeTemplates.BelloOfficeCode);
+        var mandatario = MandatarioTexto(MandatarioEnCuerpo(data));
+        var nombraUt = inst != "___";
+        var introMandatario = nombraUt
+            ? Frag($"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas.")
+            : Frag($"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas.");
         var intro = esJuridica
             ? Parrafo(
                 Frag($"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, "),
                 Frag($"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la "),
                 Frag($"escritura pública y/o el Certificado de Existencia y Representación expedido por la Cámara de "),
                 Frag($"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
-                Frag($"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
-                Frag($"Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se "),
-                Frag($"denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual "),
-                Frag($"el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas."))
+                introMandatario)
             : Parrafo(
                 Frag($"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, "),
                 Frag($"quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
-                Frag($"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
-                Frag($"Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se "),
-                Frag($"denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual "),
-                Frag($"el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas."));
+                introMandatario);
 
         return
         [
@@ -457,11 +514,11 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 Frag($"{"OBLIGACIONES DEL MANDANTE"}: {"EL MANDANTE"} declara que la información contenida en los documentos que se "),
                 Frag($"anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante las "),
                 Frag($"autoridades competentes de cualquier irregularidad que los mismos puedan contener; de igual modo, "),
-                Frag($"declara que deja indemne a la {inst} de cualquier responsabilidad civil o penal, asimismo, {"EL MANDANTE"} "),
+                Frag($"declara que deja indemne a {IndemneUtOMandatario(inst)} de cualquier responsabilidad civil o penal, asimismo, {"EL MANDANTE"} "),
                 Frag($"de forma expresa asevera que deja impoluto a {"EL MANDATARIO"} en todos los casos que se vea comprometido "),
                 Frag($"la confidencialidad y divulgación de la información legalmente protegida mediante los parámetros y "),
                 Frag($"disposiciones de la ley 1581 del 2012 y demás normas que se dicten en la materia.")),
-            Parrafo($"Dicho contrato se firmó entre las partes el {fecha} en el municipio de Bello, Antioquia."),
+            CierreFirma(fecha, ciudad),
         ];
     }
 
@@ -470,7 +527,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ciudad, string fecha)
     {
-        var mandatario = MandatarioTexto(data.Mandatario);
+        var mandatario = MandatarioTexto(MandatarioEnCuerpo(data));
         var intro = esJuridica
             ? Parrafo(
                 Frag($"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, "),
@@ -559,11 +616,11 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 // HU #11170 — la firma del baúl del mandatario también lleva su vigencia y su hash.
                 FlitFirmaBlock.Render(
                     sig,
-                    manual ? null : data.Mandatario?.FirmaImagen,
-                    manual ? null : data.Mandatario?.SelloIdentidad,
-                    MandatarioIdentificacion(data.Mandatario, data),
+                    manual ? null : MandatarioEnCuerpo(data)?.FirmaImagen,
+                    manual ? null : MandatarioEnCuerpo(data)?.SelloIdentidad,
+                    MandatarioIdentificacion(MandatarioEnCuerpo(data), data),
                     FlitFirmaLinea.Underscores,
-                    selloBaul: manual ? null : SelloBaulDe(data.Mandatario));
+                    selloBaul: manual ? null : SelloBaulDe(MandatarioEnCuerpo(data)));
             });
         });
     }

@@ -20,8 +20,8 @@ describe("OtRequirementsList (#3 — obligatoriedad por OT)", () => {
       />,
     );
 
-    const selectA = screen.getByLabelText("Obligatoriedad de Documento A") as HTMLSelectElement;
-    const selectB = screen.getByLabelText("Obligatoriedad de Documento B") as HTMLSelectElement;
+    const selectA = screen.getByLabelText(/Obligatoriedad de Documento A/) as HTMLSelectElement;
+    const selectB = screen.getByLabelText(/Obligatoriedad de Documento B/) as HTMLSelectElement;
     expect(selectA.value).toBe("DEFAULT");
     expect(selectB.value).toBe("NOT_APPLICABLE");
   });
@@ -32,7 +32,7 @@ describe("OtRequirementsList (#3 — obligatoriedad por OT)", () => {
       <OtRequirementsList documents={documents} selectionByDocId={{}} onChange={onChange} />,
     );
 
-    fireEvent.change(screen.getByLabelText("Obligatoriedad de Documento A"), {
+    fireEvent.change(screen.getByLabelText(/Obligatoriedad de Documento A/), {
       target: { value: "REQUIRED" },
     });
     expect(onChange).toHaveBeenCalledWith("doc-a", "REQUIRED");
@@ -42,8 +42,39 @@ describe("OtRequirementsList (#3 — obligatoriedad por OT)", () => {
     render(
       <OtRequirementsList documents={documents} selectionByDocId={{}} onChange={vi.fn()} />,
     );
-    const selectA = screen.getByLabelText("Obligatoriedad de Documento A");
+    const selectA = screen.getByLabelText(/Obligatoriedad de Documento A/);
     expect(selectA.querySelectorAll("option")).toHaveLength(4);
+  });
+
+  it("muestra el nombre del catálogo y filtra con el buscador", () => {
+    render(
+      <OtRequirementsList
+        documents={[
+          {
+            id: "paz",
+            codigo: "paz_salvo",
+            nombre: "Paz y Salvo de Impuestos",
+            estado: "activo",
+            fechaCreacion: "",
+          },
+          documents[0],
+        ]}
+        selectionByDocId={{}}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Paz y Salvo de Impuestos/)).toBeInTheDocument();
+    expect(screen.getByText("(paz_salvo)")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Buscar documento"), {
+      target: { value: "tradicion" },
+    });
+    expect(screen.getByText(/Ningún documento coincide/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Buscar documento"), {
+      target: { value: "Impuestos" },
+    });
+    expect(screen.getByText(/Paz y Salvo de Impuestos/)).toBeInTheDocument();
+    expect(screen.queryByText(/Documento A/)).not.toBeInTheDocument();
   });
 
   it("muestra una guía cuando el trámite no tiene documentos asociados", () => {

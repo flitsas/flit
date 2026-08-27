@@ -2,7 +2,7 @@ namespace Flit.Tramites.Domain.Integration;
 
 /// <summary>
 /// Configuración de mandato resuelta para el flujo de trámite: plantilla/custom del OT +
-/// <see cref="AssignmentMode"/> de la regla compañía×OT (default <c>signer</c>).
+/// <see cref="AssignmentMode"/> de la regla compañía×OT, o del OT si no hay regla.
 /// </summary>
 public sealed record MandateOtConfig(
     Guid TransitOfficeId,
@@ -13,7 +13,7 @@ public sealed record MandateOtConfig(
     string? MandataryFamily = null,
     string? ChamberCity = null,
     string? MandatarySigla = null,
-    /// <summary>signer | institutional | open. Ausente ⇒ signer.</summary>
+    /// <summary>signer | institutional | open. Sin regla de compañía usa el modo del OT.</summary>
     string? AssignmentMode = null,
     /// <summary>none | pdf | editor.</summary>
     string? CustomTemplateKind = null,
@@ -32,7 +32,7 @@ public interface IMandateRequirementPolicy
 {
     /// <summary>
     /// Configuración efectiva. Sin fila de OT ⇒ null (default genérico + solo PJ en consumidores legacy).
-    /// Sin regla compañía×OT ⇒ <c>AssignmentMode = signer</c>.
+    /// Sin regla compañía×OT ⇒ modo del OT; sin fila de OT (legado) ⇒ <c>signer</c>.
     /// </summary>
     Task<MandateOtConfig?> ResolveAsync(
         string transitOfficeCode,
