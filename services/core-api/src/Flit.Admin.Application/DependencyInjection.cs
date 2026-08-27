@@ -47,6 +47,7 @@ using Flit.Admin.Application.RejectionReasons;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
+using Flit.Admin.Application.DocumentTypes.PurgeDocumentType;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
@@ -246,6 +247,7 @@ public static class DependencyInjection
         services.AddScoped<ListDocumentTypesHandler>();
         services.AddScoped<UpdateDocumentTypeHandler>();
         services.AddScoped<DeleteDocumentTypeHandler>();
+        services.AddScoped<PurgeDocumentTypeHandler>();
         services.AddScoped<ReactivateDocumentTypeHandler>();
 
         // Causales de rechazo — catálogo global (CRUD SuperAdmin). Sustituye al motivo escrito a

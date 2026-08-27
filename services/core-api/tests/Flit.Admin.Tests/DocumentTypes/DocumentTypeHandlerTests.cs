@@ -2,6 +2,7 @@ using Flit.Admin.Application.DocumentTypes;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
+using Flit.Admin.Application.DocumentTypes.PurgeDocumentType;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Infrastructure.Persistence;
@@ -47,7 +48,7 @@ public sealed class DocumentTypeHandlerTests
             result.IsValid.Should().BeTrue();
             result.Document.Should().NotBeNull();
             created = result.Document!;
-            created.Codigo.Should().Be("RUT");
+            created.Codigo.Should().Be("REGISTRO-UNICO-TRIBUTARIO");
             created.Nombre.Should().Be("Registro Único Tributario");
             created.Estado.Should().Be(DocumentTypeResponse.EstadoActivo);
             created.FechaCreacion.Should().NotBe(default);
@@ -56,7 +57,7 @@ public sealed class DocumentTypeHandlerTests
 
         await using var verify = NewContext(db);
         var row = await verify.DocumentTypes.SingleAsync(d => d.Id == created.Id, cancellationToken: TestContext.Current.CancellationToken);
-        row.Code.Should().Be("RUT");
+        row.Code.Should().Be("REGISTRO-UNICO-TRIBUTARIO");
         row.IsActive.Should().BeTrue();
         row.IsSystemGenerated.Should().BeFalse();
         row.CreatedBy.Should().Be(Actor);
@@ -86,7 +87,41 @@ public sealed class DocumentTypeHandlerTests
     }
 
     [Fact]
-    public async Task AC1_Create_DuplicateCode_Returns422_WithoutPersisting()
+    public async Task AC1_Create_IgnoresClientCode_AndSlugsFromName()
+    {
+        await using var act = NewContext(NewDbName());
+        var handler = new CreateDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(new CreateDocumentTypeCommand
+        {
+            CreatedBy = Actor,
+            Request = new CreateDocumentTypeRequest("RUT", "Cédula de extranjería", null, null),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeTrue();
+        result.Document!.Codigo.Should().Be("CEDULA-DE-EXTRANJERIA");
+    }
+
+    [Fact]
+    public async Task AC1_Create_DuplicateName_AllocatesNumericSuffix()
+    {
+        var db = NewDbName();
+        await SeedAsync(db, new DocumentType { Id = Guid.NewGuid(), Code = "MANDATO", Name = "Mandato", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+
+        await using var ctx = NewContext(db);
+        var handler = new CreateDocumentTypeHandler(new DocumentTypeRepository(ctx));
+
+        var result = await handler.HandleAsync(new CreateDocumentTypeCommand
+        {
+            Request = new CreateDocumentTypeRequest(null, "Mandato", null, null),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeTrue();
+        result.Document!.Codigo.Should().Be("MANDATO-2");
+        (await ctx.DocumentTypes.CountAsync(d => d.Name == "Mandato", cancellationToken: TestContext.Current.CancellationToken)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task AC1_Create_ClientCodeCollision_DoesNotFail_WhenNameDiffers()
     {
         var db = NewDbName();
         await SeedAsync(db, new DocumentType { Id = Guid.NewGuid(), Code = "RUT", Name = "Existente", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
@@ -96,26 +131,23 @@ public sealed class DocumentTypeHandlerTests
 
         var result = await handler.HandleAsync(new CreateDocumentTypeCommand
         {
-            Request = new CreateDocumentTypeRequest("RUT", "Otro", null, null),
+            Request = new CreateDocumentTypeRequest("RUT", "Otro documento", null, null),
         }, TestContext.Current.CancellationToken);
 
-        result.IsValid.Should().BeFalse();
-        result.Error.Should().Contain("RUT");
-        (await ctx.DocumentTypes.CountAsync(d => d.Code == "RUT", cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
+        result.IsValid.Should().BeTrue();
+        result.Document!.Codigo.Should().Be("OTRO-DOCUMENTO");
+        (await ctx.DocumentTypes.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(2);
     }
 
-    [Theory]
-    [InlineData("", "Nombre válido")]          // código vacío
-    [InlineData("CON ESPACIO", "Nombre")]      // código con caracteres no permitidos
-    [InlineData("OK", "")]                       // nombre vacío
-    public async Task AC1_Create_InvalidPayload_Returns422(string codigo, string nombre)
+    [Fact]
+    public async Task AC1_Create_InvalidPayload_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
         var handler = new CreateDocumentTypeHandler(new DocumentTypeRepository(ctx));
 
         var result = await handler.HandleAsync(new CreateDocumentTypeCommand
         {
-            Request = new CreateDocumentTypeRequest(codigo, nombre, null, null),
+            Request = new CreateDocumentTypeRequest(null, "", null, null),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
@@ -171,6 +203,24 @@ public sealed class DocumentTypeHandlerTests
         page2.Data.Select(d => d.Nombre).Should().ContainInOrder("Doc 03", "Doc 04");
     }
 
+    [Fact]
+    public async Task AC2_List_Search_FiltersByNameOrCode()
+    {
+        var db = NewDbName();
+        await SeedAsync(db,
+            new DocumentType { Id = Guid.NewGuid(), Code = "SOAT", Name = "Seguro obligatorio", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
+            new DocumentType { Id = Guid.NewGuid(), Code = "RUT", Name = "Registro tributario", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+
+        await using var ctx = NewContext(db);
+        var handler = new ListDocumentTypesHandler(new DocumentTypeRepository(ctx));
+        var result = await handler.HandleAsync(
+            new ListDocumentTypesQuery { Search = "soat", IncludeInactive = true },
+            TestContext.Current.CancellationToken);
+
+        result.TotalCount.Should().Be(1);
+        result.Data.Single().Codigo.Should().Be("SOAT");
+    }
+
     // ---------- AC3: PUT actualiza ----------
 
     [Fact]
@@ -202,6 +252,28 @@ public sealed class DocumentTypeHandlerTests
         row.IsSystemGenerated.Should().BeFalse();
         row.UpdatedBy.Should().Be(Actor);
         row.UpdatedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AC3_Update_IgnoresClientCode_KeepsSystemCode()
+    {
+        var db = NewDbName();
+        var id = Guid.NewGuid();
+        await SeedAsync(db, new DocumentType { Id = id, Code = "RUT", Name = "Viejo", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+
+        await using var act = NewContext(db);
+        var handler = new UpdateDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(new UpdateDocumentTypeCommand
+        {
+            Id = id,
+            UpdatedBy = Actor,
+            Request = new UpdateDocumentTypeRequest("HACKED", "Nombre Nuevo", null),
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(UpdateDocumentTypeOutcome.Updated);
+        result.Document!.Codigo.Should().Be("RUT");
+        (await act.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken))
+            .Code.Should().Be("RUT");
     }
 
     [Fact]
@@ -311,6 +383,38 @@ public sealed class DocumentTypeHandlerTests
 
         await using var verify = NewContext(db);
         (await verify.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken)).IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Purge_RemovesRowAndRequirementAssociations()
+    {
+        var db = NewDbName();
+        var id = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            seed.DocumentTypes.Add(new DocumentType { Id = id, Code = "TMP", Name = "Temporal", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+            seed.ProcedureDocumentRequirements.Add(new ProcedureDocumentRequirement
+            {
+                Id = Guid.NewGuid(),
+                ProcedureTypeId = Guid.NewGuid(),
+                DocumentTypeId = id,
+                IsMandatory = true,
+                DefaultSortOrder = 0,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var act = NewContext(db);
+        var handler = new PurgeDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(
+            new PurgeDocumentTypeCommand { Id = id },
+            TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(PurgeDocumentTypeOutcome.Purged);
+        (await act.DocumentTypes.CountAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
+        (await act.ProcedureDocumentRequirements.CountAsync(r => r.DocumentTypeId == id, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]

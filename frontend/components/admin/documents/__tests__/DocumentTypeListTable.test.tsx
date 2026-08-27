@@ -38,6 +38,7 @@ describe("DocumentTypeListTable (AC1)", () => {
         onEdit={vi.fn()}
         onDeactivate={vi.fn()}
         onReactivate={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
 
@@ -65,6 +66,7 @@ describe("DocumentTypeListTable (AC1)", () => {
         onEdit={onEdit}
         onDeactivate={onDeactivate}
         onReactivate={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
 
@@ -73,6 +75,25 @@ describe("DocumentTypeListTable (AC1)", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: /desactivar cédula/i }));
     expect(onDeactivate).toHaveBeenCalledWith(items[0]);
+  });
+
+  it("dispara onDelete con el documento", () => {
+    const onDelete = vi.fn();
+    render(
+      <DocumentTypeListTable
+        items={items}
+        totalCount={40}
+        page={1}
+        pageSize={20}
+        onPageChange={vi.fn()}
+        onEdit={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onDelete={onDelete}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /eliminar cédula/i }));
+    expect(onDelete).toHaveBeenCalledWith(items[0]);
   });
 
   it("ofrece 'Activar' (no 'Desactivar') en documentos inactivos y dispara onReactivate", () => {
@@ -87,6 +108,7 @@ describe("DocumentTypeListTable (AC1)", () => {
         onEdit={vi.fn()}
         onDeactivate={vi.fn()}
         onReactivate={onReactivate}
+        onDelete={vi.fn()}
       />,
     );
 
@@ -108,6 +130,7 @@ describe("DocumentTypeListTable (AC1)", () => {
         onEdit={vi.fn()}
         onDeactivate={vi.fn()}
         onReactivate={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
     expect(screen.getByText("1 / 2")).toBeInTheDocument();

@@ -26,25 +26,22 @@ describe("CreateDocumentTypeDialog (AC1)", () => {
 
     await user.click(screen.getByRole("button", { name: /crear documento/i }));
 
-    expect(await screen.findByText(/el código es obligatorio/i)).toBeInTheDocument();
-    expect(screen.getByText(/el nombre es obligatorio/i)).toBeInTheDocument();
+    expect(await screen.findByText(/el nombre es obligatorio/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^código$/i)).not.toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("envía el payload y notifica onSaved en éxito", async () => {
+  it("envía el payload sin código y notifica onSaved en éxito", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(saved);
     const onSaved = vi.fn();
     render(<CreateDocumentTypeDialog open onClose={vi.fn()} onSubmit={onSubmit} onSaved={onSaved} />);
 
-    await user.type(screen.getByLabelText(/código/i), "RUNT");
     await user.type(screen.getByLabelText(/nombre/i), "Consulta RUNT");
     await user.click(screen.getByRole("button", { name: /crear documento/i }));
 
     await waitFor(() =>
-      // RF08/09 — sin formatos ni tamaño configurados ⇒ null (el backend aplica los globales).
       expect(onSubmit).toHaveBeenCalledWith({
-        codigo: "RUNT",
         nombre: "Consulta RUNT",
         descripcion: null,
         mimeTypesAllowed: null,
@@ -55,28 +52,32 @@ describe("CreateDocumentTypeDialog (AC1)", () => {
     expect(onSaved).toHaveBeenCalledWith(saved, "create");
   });
 
-  it("mapea el error 422 del backend al campo y no cierra el modal", async () => {
+  it("mapea el error 422 del backend y no cierra el modal", async () => {
     const user = userEvent.setup();
     const onSaved = vi.fn();
     const onSubmit = vi
       .fn()
-      .mockRejectedValue(new ApiValidationError([{ field: "codigo", message: "Ya existe un documento con ese código." }], 422));
+      .mockRejectedValue(new ApiValidationError([{ field: "nombre", message: "El nombre es obligatorio." }], 422));
 
     render(<CreateDocumentTypeDialog open onClose={vi.fn()} onSubmit={onSubmit} onSaved={onSaved} />);
 
-    await user.type(screen.getByLabelText(/código/i), "DUP");
     await user.type(screen.getByLabelText(/nombre/i), "Duplicado");
     await user.click(screen.getByRole("button", { name: /crear documento/i }));
 
-    expect(await screen.findByText(/ya existe un documento con ese código/i)).toBeInTheDocument();
+    expect(await screen.findByText(/el nombre es obligatorio/i)).toBeInTheDocument();
     expect(onSaved).not.toHaveBeenCalled();
   });
 
-  it("precarga los valores en modo edición", () => {
+  it("en edición muestra el código de sistema en solo lectura", async () => {
+    const user = userEvent.setup();
     render(
       <CreateDocumentTypeDialog open editing={saved} onClose={vi.fn()} onSubmit={vi.fn()} onSaved={vi.fn()} />,
     );
-    expect(screen.getByLabelText(/código/i)).toHaveValue("RUNT");
+    const code = screen.getByLabelText(/^código$/i);
+    expect(code).toHaveValue("RUNT");
+    expect(code).toHaveAttribute("readonly");
+    await user.type(code, "HACK");
+    expect(code).toHaveValue("RUNT");
     expect(screen.getByLabelText(/nombre/i)).toHaveValue("Consulta RUNT");
     expect(screen.getByRole("button", { name: /guardar cambios/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /cargue/i })).toBeChecked();
@@ -87,7 +88,6 @@ describe("CreateDocumentTypeDialog (AC1)", () => {
     const onSubmit = vi.fn().mockResolvedValue(saved);
     render(<CreateDocumentTypeDialog open onClose={vi.fn()} onSubmit={onSubmit} onSaved={vi.fn()} />);
 
-    await user.type(screen.getByLabelText(/^código$/i), "RUNT");
     await user.type(screen.getByLabelText(/^nombre$/i), "Consulta RUNT");
     await user.click(screen.getByRole("radio", { name: /autogenerado/i }));
     await user.click(screen.getByRole("button", { name: /crear documento/i }));
