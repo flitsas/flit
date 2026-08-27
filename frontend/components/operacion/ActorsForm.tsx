@@ -53,6 +53,7 @@ import {
   WIZARD_BTN_SOLID,
 } from './wizard-field-styles';
 import { WizardCardHeader } from './wizard-atoms';
+import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 
@@ -1674,10 +1675,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
    * Selector de tipo de documento: el único control de la identidad del actor. Elegir NIT es lo que
    * declara la persona jurídica (y desvía la consulta al RUES); `updateActor` deriva `personType`.
    */
-  const docTypeSelector = (index: number, idPrefix: string, locked = false) => {
+  const docTypeSelector = (
+    index: number,
+    idPrefix: string,
+    locked = false,
+    /* Suelto se acota el ancho para no estirar un desplegable de cuatro opciones a toda la fila;
+       dentro de una rejilla de identificación se pasa '' y manda la celda. */
+    wrapperClassName = 'sm:max-w-xs',
+  ) => {
     const id = `${idPrefix}-tipoDoc`;
     return (
-      <div className="sm:max-w-xs">
+      <div className={cn('min-w-0', wrapperClassName)}>
         <label htmlFor={id} className={`${WIZARD_LABEL} mb-1.5`}>
           Tipo de documento
         </label>
@@ -2552,6 +2560,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         <WizardAccordion
           title={esPropietarioInscrito ? 'Datos del propietario actual' : `Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
           defaultOpen
+          /* Misma insignia de lectura que las tarjetas del traspaso: dice a qué registro se está
+             consultando. Este layout no la tenía porque el interruptor PN/PJ ya lo decía por dentro;
+             al quitarlo se quedaba sin ninguna lectura explícita de la naturaleza declarada. */
+          badge={
+            <StatusBadge
+              tone={isJuridical(actor) ? 'info' : 'neutral'}
+              label={personTypeLabel(actor)}
+            />
+          }
         >
           <p className="text-xs opacity-70 mb-3">
             {esPropietarioInscrito
@@ -2563,12 +2580,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   : 'Registra la persona natural o jurídica que figurará como propietario del vehículo.'}
           </p>
           <div className="space-y-3">
-            {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0))}
-            {/* Grid de identificación: el tipo lo fija el selector de arriba (antes no existía en
-                este layout y se asumía CC). Rejilla: número (col-span-2) | Consultar | hint. */}
+            {/* Identificación en UNA fila: tipo | número | Consultar. El selector de tipo estuvo un
+                momento suelto en su propio renglón —era el hueco que dejó el interruptor PN/PJ al
+                salir— y ahí solo gastaba alto: es un campo más de la misma captura. */}
             {!isJuridical(actor) ? (
-              /* Natural: Número (col-span-2) | Consultar RUNT | hint col-span-3 */
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-end">
+              /* Natural: tipo | Número (col-span-2) | Consultar RUNT | hint col-span-4 */
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-end">
+                {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0), '')}
                 <div className="lg:col-span-2">
                   <label htmlFor="comprador-numeroDoc" className={`${WIZARD_LABEL} mb-1.5`}>
                     Número de documento
@@ -2649,7 +2667,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     {runtState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
                   </button>
                 )}
-                <p className="text-xs opacity-70 lg:col-span-3">
+                <p className="text-xs opacity-70 lg:col-span-4">
                   {esPropietarioInscrito
                     ? 'Los datos de identidad se toman de la consulta al RUNT del propietario actual.'
                     : actor.rol === 'comprador'
@@ -2658,8 +2676,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </p>
               </div>
             ) : (
-              /* Jurídica: NIT (col-span-2) | Consultar RUES | hint col-span-4 */
+              /* Jurídica: tipo | NIT (col-span-2) | Consultar RUES | hint col-span-4 */
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-end">
+                {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0), '')}
                 <div className="lg:col-span-2">
                   <label htmlFor="comprador-numeroDoc" className={`${WIZARD_LABEL} mb-1.5`}>
                     NIT
