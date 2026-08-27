@@ -8,6 +8,8 @@ import {
   FileCheck2,
   FileText,
   FolderCheck,
+  Loader2,
+  PenLine,
   Users,
   X,
 } from 'lucide-react';
@@ -22,6 +24,7 @@ import { detalleEstadoHeader } from './detalle/detalle-estado-header';
 import {
   DETALLE_BLUE,
   DETALLE_CARD,
+  DETALLE_CTA_GRADIENT,
   DETALLE_NAVY,
   DETALLE_BORDER,
 } from './detalle/detalle-visual';
@@ -94,12 +97,56 @@ function resolveTitle(item: InstanceSummary): string {
   return MODALIDAD_TITLE[item.modalidad];
 }
 
+/**
+ * CTA de la subsanación dentro de un aviso del modal (`InlineAlert action`). Es la ÚNICA acción de
+ * esta vista que cambia el trámite —el resto son conmutadores de vista y descargas—, así que va con
+ * el degradado primario y no con el blanco de los toggles del encabezado.
+ */
+function BotonSubsanacion({
+  label,
+  loading,
+  onClick,
+}: {
+  label: string;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]"
+      style={{ background: DETALLE_CTA_GRADIENT }}
+      title="Abre el trámite en el asistente de pasos para corregirlo y volver a radicarlo"
+    >
+      {loading ? (
+        <>
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          Abriendo el asistente…
+        </>
+      ) : (
+        <>
+          <PenLine className="h-3.5 w-3.5" aria-hidden="true" />
+          {label}
+        </>
+      )}
+    </button>
+  );
+}
+
 export interface TramiteDetalleModalProps {
   open: boolean;
   onClose: () => void;
   instanceId: string | null;
   tenantId?: string;
   item: InstanceSummary | null;
+  /**
+   * Lleva el trámite al asistente de pasos (`/tramites/{id}`), que es donde se edita. El modal no
+   * navega por su cuenta —la ruta con `?t=` del SuperAdmin la resuelve el listado— y sin esta prop
+   * simplemente no ofrece la acción de subsanar.
+   */
+  onAbrirAsistente?: (item: InstanceSummary) => void;
 }
 
 export function TramiteDetalleModal({
@@ -108,6 +155,7 @@ export function TramiteDetalleModal({
   instanceId,
   tenantId,
   item,
+  onAbrirAsistente,
 }: TramiteDetalleModalProps) {
   const [detail, setDetail] = useState<ProcedureInstanceDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -121,6 +169,10 @@ export function TramiteDetalleModal({
 
   const [panelTracking, setPanelTracking] = useState<PanelTracking>(null);
 
+  // Activación/retoma de la subsanación (POST /subsanar + salto al asistente).
+  const [abriendoSubsanacion, setAbriendoSubsanacion] = useState(false);
+  const [subsanarError, setSubsanarError] = useState<string | null>(null);
+
   const [validations, setValidations] = useState<BiometricValidation[]>([]);
   const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
   const [identidadLoading, setIdentidadLoading] = useState(false);
@@ -133,6 +185,10 @@ export function TramiteDetalleModal({
     setSeccionDe(instanceId);
     setSeccion('expediente');
     setPanelTracking(null);
+    // El modal se reutiliza entre trámites: sin esto un error de subsanación (o el "Abriendo…"
+    // que quedó al navegar) reaparecería sobre el siguiente trámite que se abra.
+    setAbriendoSubsanacion(false);
+    setSubsanarError(null);
   }
 
   const preview = useAttachmentPreview(instanceId, tenantId);
@@ -227,6 +283,34 @@ export function TramiteDetalleModal({
   const plateHint = item ? plateFlowHint(item.plateFlowStatus) : null;
   const systemAttachments = attachments.filter((a) => a.source === 'system');
 
+  // Subsanación: `rechazado` es el único estado con vuelta a la edición (el backend responde 409
+  // `not_rechazado` en cualquier otro). Con el flag ya encendido no se vuelve a activar: solo se
+  // retoma. Sin `onAbrirAsistente` no se ofrece nada, porque activar sin poder editar deja peor.
+  const subsanacionActiva = !!item?.subsanacionActiva;
+  const puedeSubsanar =
+    !!onAbrirAsistente && !!item && !!instanceId && item.estado === 'rechazado';
+  const ofreceActivar = puedeSubsanar && !subsanacionActiva;
+  const ofreceRetomar = puedeSubsanar && subsanacionActiva;
+
+  /**
+   * Enciende el flag si hace falta y salta al asistente. El POST es idempotente desde la UI: si la
+   * subsanación ya está activa se omite, para que "Continuar" no choque contra el 409 de reactivar.
+   */
+  const irASubsanar = async () => {
+    if (!item || !instanceId || abriendoSubsanacion) return;
+    setAbriendoSubsanacion(true);
+    setSubsanarError(null);
+    try {
+      if (!subsanacionActiva) await tramitesClient.startSubsanacion(instanceId, tenantId);
+      onAbrirAsistente?.(item);
+    } catch (err) {
+      setSubsanarError(
+        err instanceof Error ? err.message : 'No se pudo iniciar la subsanación.',
+      );
+      setAbriendoSubsanacion(false);
+    }
+  };
+
   const toggleTracking = (panel: Exclude<PanelTracking, null>) => {
     setPanelTracking((prev) => (prev === panel ? null : panel));
   };
@@ -318,14 +402,48 @@ export function TramiteDetalleModal({
           <p className="py-6 text-center text-xs opacity-70">No se encontró información del trámite.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            {item.ultimoRechazoMotivo?.trim() ? (
-              <InlineAlert tone="error" title="Rechazado por el Organismo de Tránsito">
-                {item.ultimoRechazoMotivo.trim()}
+            {/* El rechazo es el bloqueo, así que su aviso es también donde vive la salida: activar
+                la subsanación. Si el trámite está rechazado pero el OT no dejó motivo, el aviso se
+                pinta igual — sin él la acción no tendría dónde vivir. */}
+            {item.ultimoRechazoMotivo?.trim() || ofreceActivar ? (
+              <InlineAlert
+                tone="error"
+                title="Rechazado por el Organismo de Tránsito"
+                action={
+                  ofreceActivar ? (
+                    <BotonSubsanacion
+                      label="Subsanar trámite"
+                      loading={abriendoSubsanacion}
+                      onClick={() => void irASubsanar()}
+                    />
+                  ) : undefined
+                }
+              >
+                {item.ultimoRechazoMotivo?.trim() ??
+                  'El organismo devolvió el trámite sin registrar un motivo. Actívale la subsanación para corregirlo y volver a radicarlo.'}
+                {subsanarError ? (
+                  <span className="mt-1 block font-semibold">{subsanarError}</span>
+                ) : null}
               </InlineAlert>
             ) : null}
             {item.subsanacionActiva ? (
-              <InlineAlert tone="warning" title="En subsanación">
+              <InlineAlert
+                tone="warning"
+                title="En subsanación"
+                action={
+                  ofreceRetomar ? (
+                    <BotonSubsanacion
+                      label="Continuar la subsanación"
+                      loading={abriendoSubsanacion}
+                      onClick={() => void irASubsanar()}
+                    />
+                  ) : undefined
+                }
+              >
                 Este trámite tiene una subsanación activa: se está editando sin volver a borrador.
+                {subsanarError && !ofreceActivar ? (
+                  <span className="mt-1 block font-semibold">{subsanarError}</span>
+                ) : null}
               </InlineAlert>
             ) : null}
             {item.isPaused ? (
@@ -336,6 +454,9 @@ export function TramiteDetalleModal({
             {plateHint ? <InlineAlert tone="info">{plateHint}</InlineAlert> : null}
             {estadoHdr?.alert &&
             !item.ultimoRechazoMotivo?.trim() &&
+            // Rechazado sin motivo ya se anuncia arriba, en el aviso que trae "Subsanar trámite":
+            // sin esto saldrían dos avisos seguidos diciendo lo mismo.
+            !ofreceActivar &&
             !item.subsanacionActiva &&
             !item.isPaused ? (
               <div
