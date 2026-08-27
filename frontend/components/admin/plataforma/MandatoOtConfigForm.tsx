@@ -69,6 +69,10 @@ export interface MandatoOtConfigFormProps {
   lockToCompanyId?: string | null;
   /** Abre el alta de mandatario de esa empresa (hub OT). */
   onRegisterSigner?: (companyTenantId: string) => void;
+  /** Tras un alta, recarga el listado de mandatarios del OT sin cerrar el panel. */
+  signersRevision?: number;
+  /** Mandatario recién creado: se preselecciona como default del OT. */
+  lastCreatedSignerId?: string | null;
   onClose: () => void;
   onSaved: (view: MandateOtConfigView) => void;
 }
@@ -79,6 +83,8 @@ export function MandatoOtConfigForm({
   highlightCompanyId,
   lockToCompanyId,
   onRegisterSigner,
+  signersRevision = 0,
+  lastCreatedSignerId,
   onClose,
   onSaved,
 }: MandatoOtConfigFormProps) {
@@ -108,7 +114,9 @@ export function MandatoOtConfigForm({
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [otDefaultSignerId, setOtDefaultSignerId] = useState(office.defaultMandateSignerId ?? "");
+  const [hostCompanyId, setHostCompanyId] = useState("");
 
   const hasCustom = view.hasCustomTemplate;
   // Redacción que se emite hoy: con "auto" elegido, la del sistema para este organismo.
@@ -186,7 +194,21 @@ export function MandatoOtConfigForm({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
     void loadCompanyRules();
-  }, [loadCompanyRules]);
+  }, [loadCompanyRules, signersRevision]);
+
+  useEffect(() => {
+    if (!hostCompanyId && companyRules[0]) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- preselección al cargar empresas
+      setHostCompanyId(companyRules[0].companyTenantId);
+    }
+  }, [companyRules, hostCompanyId]);
+
+  useEffect(() => {
+    if (lastCreatedSignerId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- alta desde este panel
+      setOtDefaultSignerId(lastCreatedSignerId);
+    }
+  }, [lastCreatedSignerId]);
 
   const applyView = (next: MandateOtConfigView) => {
     setView(next);
@@ -635,6 +657,48 @@ export function MandatoOtConfigForm({
                 no esté vinculada a esa empresa. Sin default de OT ni de compañía, el mandato sale
                 vacío de firmante persona.
               </span>
+              {onRegisterSigner ? (
+                <div className="flex flex-col gap-1.5 pt-1">
+                  {companyRules.length > 1 ? (
+                    <label className="block space-y-1">
+                      <span className="text-[11px] font-semibold text-[#162244] dark:text-white">
+                        Empresa que registra a la persona
+                      </span>
+                      <select
+                        value={hostCompanyId}
+                        onChange={(e) => setHostCompanyId(e.target.value)}
+                        disabled={busy}
+                        data-testid="mandato-ot-register-host-company"
+                        className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                      >
+                        {companyRules.map((row) => (
+                          <option key={row.companyTenantId} value={row.companyTenantId}>
+                            {row.companyName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="w-fit text-left text-xs font-semibold text-[#557EFF] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+                    disabled={busy}
+                    data-testid="mandato-ot-register-signer"
+                    onClick={() => {
+                      const companyId = hostCompanyId || companyRules[0]?.companyTenantId;
+                      if (!companyId) {
+                        setError(
+                          "Para registrar el mandatario del OT hace falta al menos una empresa habilitada en este organismo.",
+                        );
+                        return;
+                      }
+                      onRegisterSigner(companyId);
+                    }}
+                  >
+                    Registrar mandatario
+                  </button>
+                </div>
+              ) : null}
             </label>
 
             {/* HU #11718 — la redacción elegida puede nombrar a un tercero ajeno al organismo:

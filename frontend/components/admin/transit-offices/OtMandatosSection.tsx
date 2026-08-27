@@ -38,6 +38,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     companyId: string | null;
   } | null>(null);
   const [signerEpoch, setSignerEpoch] = useState(0);
+  const [lastCreatedSignerId, setLastCreatedSignerId] = useState<string | null>(null);
   const [signerForm, setSignerForm] = useState<{
     companyId: string;
     offices: CompanyTransitOfficeOption[];
@@ -193,11 +194,13 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
 
       {panel && office ? (
         <MandatoOtConfigForm
-          key={`${panel.mode}-${panel.companyId ?? "ot"}-${signerEpoch}`}
+          key={`${panel.mode}-${panel.companyId ?? "ot"}`}
           office={office}
           mode={panel.mode}
           highlightCompanyId={panel.companyId}
-          lockToCompanyId={signerForm?.companyId ?? panel.companyId}
+          lockToCompanyId={panel.companyId}
+          signersRevision={signerEpoch}
+          lastCreatedSignerId={lastCreatedSignerId}
           onRegisterSigner={(companyId) => void openSignerForm(companyId)}
           onClose={() => setPanel(null)}
           onSaved={(view) => {
@@ -221,8 +224,14 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           onSubmit={async (input: CompanyMandateSignerInput) => {
             const saved = await createCompanyMandateSigner(signerForm.companyId, input);
             setSignerForm(null);
+            setLastCreatedSignerId(saved.id);
             setSignerEpoch((n) => n + 1);
-            show("Mandatario registrado. Ya puedes asociarlo como default en Persona o RL.", "success");
+            show(
+              panel?.mode === "mandato"
+                ? "Mandatario registrado. Quedó preseleccionado como default del OT; guarda la plantilla para fijarlo."
+                : "Mandatario registrado. Ya puedes asociarlo como default en Persona o RL.",
+              "success",
+            );
             void load();
             return saved;
           }}

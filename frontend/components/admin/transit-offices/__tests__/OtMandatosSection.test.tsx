@@ -94,6 +94,34 @@ describe("OtMandatosSection", () => {
     expect(screen.getByRole("button", { name: /registrar mandatario/i })).toBeInTheDocument();
   });
 
+  it("ofrece registrar el mandatario default desde Configurar mandato del OT", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockResolvedValue([
+      {
+        companyTenantId: "cia-1",
+        companyName: "Gestora de Prueba S.A.S.",
+        assignmentMode: "open",
+        mandataryFamily: "individuo",
+        institutionalMandataryName: null,
+        institutionalMandataryNit: null,
+        chamberCity: null,
+        mandatarySigla: null,
+        hasExplicitRule: false,
+        defaultMandateSignerId: null,
+      },
+    ]);
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    await user.click(await screen.findByRole("button", { name: /^configurar mandato$/i }));
+    expect(await screen.findByTestId("mandato-ot-register-signer")).toBeInTheDocument();
+    await user.click(screen.getByTestId("mandato-ot-register-signer"));
+    expect(await screen.findByRole("dialog", { name: /registrar mandatario/i })).toBeInTheDocument();
+  });
+
   it("abre el formulario de mandatario desde la tarjeta de la empresa", async () => {
     fetchMandateOtConfig.mockResolvedValue(office);
     listCompanyOtMandateRules.mockResolvedValue([

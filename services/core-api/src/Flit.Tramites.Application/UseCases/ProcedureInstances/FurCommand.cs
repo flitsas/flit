@@ -1142,14 +1142,8 @@ public sealed class GenerarFurHandler(
         // Sin esos, Mandatario queda null (cuerpo ___ / recuadro Sin firmar). Ya no se espera a aprobar
         // para pintar nombre y cédula cuando hay default.
         var assignmentMode = config?.AssignmentMode;
-        var esJuridica = data.Mandante?.EsJuridica ?? false;
-        var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind);
+        // Plantilla del OT (o genérica de mandato cliente). Ya no se reescribe por PN/PJ ni por modo.
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
-        if (!hasCustom)
-        {
-            templateCode = MandatoTemplateResolver.ResolveEmissionCode(
-                assignmentMode, esJuridica, transitOfficeCode);
-        }
 
         MandatarioFirmante? mandatario = null;
         Guid? resolvedSignerId = null;

@@ -243,11 +243,6 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
 
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
         var esJuridica = MandateSimulationPersonTypes.IsJuridica(personType);
-        if (!MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind))
-        {
-            templateCode = MandatoTemplateResolver.ResolveEmissionCode(
-                assignmentMode, esJuridica, office.Code);
-        }
 
         // Mismo orden que el trámite: elección explícita → default OT → default compañía.
         MandatarioFirmante? mandatario = null;

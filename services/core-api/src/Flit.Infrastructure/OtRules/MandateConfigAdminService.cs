@@ -708,18 +708,24 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         var now = DateTimeOffset.UtcNow;
         if (entity is null)
         {
+            var officeCode = await _db.TransitOffices.AsNoTracking()
+                .Where(o => o.Id == officeId)
+                .Select(o => o.Code)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            var birth = MandatoOtBirthDefaults.ForOffice(officeCode);
             entity = new TransitOfficeMandateConfigEntity
             {
                 Id = Guid.NewGuid(),
                 TransitOfficeId = officeId,
-                TemplateCode = MandatoOtBirthDefaults.TemplateCode,
-                RequiresForNaturalPerson = MandatoOtBirthDefaults.RequiresForNaturalPerson,
-                MandataryFamily = MandatoOtBirthDefaults.MandataryFamily,
-                AssignmentMode = MandatoOtBirthDefaults.AssignmentMode,
-                InstitutionalMandataryName = null,
-                InstitutionalMandataryNit = null,
-                ChamberCity = null,
-                MandatarySigla = null,
+                TemplateCode = birth.TemplateCode,
+                RequiresForNaturalPerson = birth.RequiresForNaturalPerson,
+                MandataryFamily = birth.MandataryFamily,
+                AssignmentMode = birth.AssignmentMode,
+                InstitutionalMandataryName = birth.InstitutionalMandataryName,
+                InstitutionalMandataryNit = birth.InstitutionalMandataryNit,
+                ChamberCity = birth.ChamberCity,
+                MandatarySigla = birth.MandatarySigla,
                 CustomTemplateKind = MandatoCustomTemplateKindCodes.None,
                 DefaultMandateSignerId = null,
                 CreatedAt = now,

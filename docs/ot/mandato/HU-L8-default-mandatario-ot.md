@@ -5,7 +5,7 @@
 
 ## Objetivo
 
-Un organismo puede fijar un **mandatario global por defecto**. Ese default **manda aunque no esté vinculado a la compañía gestora**. El mandato con el que **nace** el OT no cambia (`open`, plantilla genérica, sin firmante persona).
+Un organismo puede fijar un **mandatario global por defecto**. Ese default **manda aunque no esté vinculado a la compañía gestora**. El **modo** al nacer sigue `open` y sin firmante persona; la plantilla de redacción la fija HU-L10.
 
 ## Cascada (sin elección en el trámite)
 
@@ -21,5 +21,5 @@ La elección explícita del wizard (`MandateSignerId`) sigue ganando.
 ## Datos
 
 - Columna `admin.transit_office_mandate_config.default_mandate_signer_id` (nullable, FK a `mandate_signers`, `ON DELETE SET NULL`).
-- Nacimiento: `NULL`.
+- Nacimiento: `NULL`. El **modo** al nacer sigue `open`; la **plantilla** pasa a HU-L10 (municipal si el OT es conocido).
 - Validación al guardar: firmante activo del mismo organismo (oficina primaria o vínculo `mandate_signer_transit_offices`).
