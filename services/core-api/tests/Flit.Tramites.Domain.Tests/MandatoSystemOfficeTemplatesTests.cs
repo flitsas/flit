@@ -9,7 +9,7 @@ public sealed class MandatoSystemOfficeTemplatesTests
     [Theory]
     [InlineData("5631000", MandatoTemplateResolver.Sabaneta)]
     [InlineData("5088000", MandatoTemplateResolver.Bello)]
-    [InlineData("5266000", MandatoTemplateResolver.Sabaneta)]
+    [InlineData("5266000", MandatoTemplateResolver.Municipio)]
     [InlineData("25286000", MandatoTemplateResolver.Municipio)]
     [InlineData("5001000", MandatoTemplateResolver.Municipio)]
     [InlineData("9999999", MandatoTemplateResolver.Generico)]
@@ -93,5 +93,33 @@ public sealed class MandatoSystemOfficeTemplatesTests
         // "auto" nunca debería llegar al generador; si llega, no puede reventar.
         MandatoTemplateResolver.Resolve(MandatoTemplateResolver.Auto)
             .Should().Be(MandatoVariante.Generico);
+    }
+
+    [Theory]
+    [InlineData("5631000", MandatoTemplateResolver.Sabaneta, MandatoFamiliaCodes.OrganismoTransito, "Medellín")]
+    [InlineData("5088000", MandatoTemplateResolver.Bello, MandatoFamiliaCodes.OrganismoTransito, "Medellín")]
+    [InlineData("5266000", MandatoTemplateResolver.Municipio, MandatoFamiliaCodes.Individuo, "Envigado")]
+    [InlineData("25286000", MandatoTemplateResolver.Municipio, MandatoFamiliaCodes.Individuo, "Funza")]
+    [InlineData("5001000", MandatoTemplateResolver.Municipio, MandatoFamiliaCodes.Individuo, "Medellín")]
+    public void Birth_OtConocido_UsaSuPlantilla(string office, string template, string family, string city)
+    {
+        var birth = MandatoOtBirthDefaults.ForOffice(office);
+        birth.TemplateCode.Should().Be(template);
+        birth.MandataryFamily.Should().Be(family);
+        birth.AssignmentMode.Should().Be(
+            template == MandatoTemplateResolver.Sabaneta
+                ? MandatoAssignmentModeCodes.Institutional
+                : MandatoAssignmentModeCodes.Signer);
+        birth.ChamberCity.Should().Be(city);
+    }
+
+    [Fact]
+    public void Birth_OtDesconocido_UsaGenerico()
+    {
+        var birth = MandatoOtBirthDefaults.ForOffice("11001000");
+        birth.TemplateCode.Should().Be(MandatoTemplateResolver.Generico);
+        birth.AssignmentMode.Should().Be(MandatoAssignmentModeCodes.Signer);
+        birth.MandataryFamily.Should().Be(MandatoFamiliaCodes.Individuo);
+        birth.InstitutionalMandataryName.Should().BeNull();
     }
 }

@@ -119,7 +119,11 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
                     .ConfigureAwait(false);
 
                 await EnsureMandateBirthConfigAsync(
-                    newTransitOffice.TransitOfficeId, newTransitOffice.CreatedBy, now, cancellationToken)
+                    newTransitOffice.TransitOfficeId,
+                    office?.Code,
+                    newTransitOffice.CreatedBy,
+                    now,
+                    cancellationToken)
                     .ConfigureAwait(false);
 
                 return Project(tenant, profile, office);
@@ -250,6 +254,7 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
 
     private async Task EnsureMandateBirthConfigAsync(
         Guid transitOfficeId,
+        string? officeCode,
         Guid? createdBy,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -262,18 +267,19 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
             return;
         }
 
+        var birth = MandatoOtBirthDefaults.ForOffice(officeCode);
         _context.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
         {
             Id = Guid.NewGuid(),
             TransitOfficeId = transitOfficeId,
-            TemplateCode = MandatoOtBirthDefaults.TemplateCode,
-            AssignmentMode = MandatoOtBirthDefaults.AssignmentMode,
-            MandataryFamily = MandatoOtBirthDefaults.MandataryFamily,
-            RequiresForNaturalPerson = MandatoOtBirthDefaults.RequiresForNaturalPerson,
-            InstitutionalMandataryName = null,
-            InstitutionalMandataryNit = null,
-            ChamberCity = null,
-            MandatarySigla = null,
+            TemplateCode = birth.TemplateCode,
+            AssignmentMode = birth.AssignmentMode,
+            MandataryFamily = birth.MandataryFamily,
+            RequiresForNaturalPerson = birth.RequiresForNaturalPerson,
+            InstitutionalMandataryName = birth.InstitutionalMandataryName,
+            InstitutionalMandataryNit = birth.InstitutionalMandataryNit,
+            ChamberCity = birth.ChamberCity,
+            MandatarySigla = birth.MandatarySigla,
             CustomTemplateKind = MandatoCustomTemplateKindCodes.None,
             CreatedAt = now,
             CreatedBy = createdBy,

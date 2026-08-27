@@ -1,15 +1,25 @@
 "use client";
 
-import { X } from "lucide-react";
+import { BookOpen, X } from "lucide-react";
 import { useEffect, useRef, type RefObject } from "react";
-import type { DrFlitChatState } from "./dr-flit-conversation";
-import type { DrFlitClientBranch, DrFlitIntentId } from "./dr-flit-intents";
+import {
+  isComposerEnabled,
+  type DrFlitChatState,
+} from "./dr-flit-conversation";
+import {
+  DR_FLIT_MANUAL_HOME_HREF,
+  type DrFlitClientBranch,
+  type DrFlitHelpOptionId,
+  type DrFlitIntentId,
+} from "./dr-flit-intents";
 import { DR_FLIT_ASSETS } from "./dr-flit-assets";
 import { DrFlitBackToSearch } from "./DrFlitBackToSearch";
 import { DrFlitClientBranchChoices } from "./DrFlitClientBranch";
 import { DrFlitComposer } from "./DrFlitComposer";
+import { DrFlitHelpResults } from "./DrFlitHelpResults";
 import { DrFlitMessageBubble } from "./DrFlitMessageBubble";
-import { DrFlitSuggestions } from "./DrFlitSuggestions";
+import { DrFlitSessionMenu } from "./DrFlitSessionMenu";
+import { DrFlitSupportPanel } from "./DrFlitSupportPanel";
 import { DrFlitTramiteResults } from "./DrFlitTramiteResults";
 import { DrFlitValidacionResults } from "./DrFlitValidacionResults";
 import { DrFlitValidacionesLink } from "./DrFlitValidacionesLink";
@@ -20,6 +30,7 @@ export function DrFlitChatPanel({
   state,
   onClose,
   onSelectIntent,
+  onSelectHelpOption,
   onSelectClientBranch,
   onBackToSearch,
   onSend,
@@ -33,6 +44,7 @@ export function DrFlitChatPanel({
   state: DrFlitChatState;
   onClose: () => void;
   onSelectIntent: (id: DrFlitIntentId) => void;
+  onSelectHelpOption: (id: DrFlitHelpOptionId) => void;
   onSelectClientBranch: (branch: DrFlitClientBranch) => void;
   onBackToSearch: () => void;
   onSend: (text: string) => void;
@@ -51,19 +63,22 @@ export function DrFlitChatPanel({
   }, [
     open,
     state.messages,
-    state.showSuggestions,
+    state.session,
+    state.showSessionMenu,
+    state.showSupportInfo,
     state.showClientBranch,
     state.tramiteResults,
     state.validacionResults,
     state.validacionesHref,
+    state.helpResults,
+    state.manualHomeHref,
     state.showBackToSearch,
     state.isTyping,
   ]);
 
   if (!open) return null;
 
-  const composerEnabled =
-    state.phase === "awaiting_value" || state.phase === "idle";
+  const composerEnabled = isComposerEnabled(state);
 
   return (
     <div className="dr-flit fixed inset-0 z-50" role="presentation">
@@ -173,10 +188,57 @@ export function DrFlitChatPanel({
             />
           )}
 
-          {state.showSuggestions && !state.isTyping && (
-            <div className="pt-1">
-              <DrFlitSuggestions onSelect={onSelectIntent} />
-            </div>
+          {state.helpResults && state.helpResults.length > 0 && !state.isTyping && (
+            <DrFlitHelpResults results={state.helpResults} onOpen={onNavigate} />
+          )}
+
+          {state.manualHomeHref && !state.isTyping && (
+            <button
+              type="button"
+              onClick={() => onNavigate(state.manualHomeHref ?? DR_FLIT_MANUAL_HOME_HREF)}
+              className="flex w-full items-center gap-3 rounded-[var(--dr-flit-radius-card)] border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
+              style={{
+                borderColor: "var(--dr-flit-border)",
+                background: "var(--dr-flit-card-bg)",
+                boxShadow: "var(--dr-flit-shadow-card)",
+              }}
+            >
+              <span
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full"
+                style={{ background: "var(--dr-flit-icon-tint)" }}
+                aria-hidden="true"
+              >
+                <BookOpen
+                  className="h-5 w-5"
+                  style={{ color: "var(--dr-flit-brand-blue)" }}
+                />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span
+                  className="block text-sm font-semibold"
+                  style={{ color: "var(--dr-flit-brand-title)" }}
+                >
+                  Abrir Centro de Ayuda
+                </span>
+                <span
+                  className="mt-0.5 block text-xs"
+                  style={{ color: "var(--dr-flit-text-secondary)" }}
+                >
+                  Explora el manual completo
+                </span>
+              </span>
+            </button>
+          )}
+
+          {state.showSupportInfo && !state.isTyping && (
+            <DrFlitSupportPanel onOpenCase={onNavigate} />
+          )}
+
+          {state.showSessionMenu && !state.isTyping && (
+            <DrFlitSessionMenu
+              onSelectIntent={onSelectIntent}
+              onSelectHelpOption={onSelectHelpOption}
+            />
           )}
 
           {state.showBackToSearch && !state.isTyping && (

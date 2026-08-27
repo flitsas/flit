@@ -297,8 +297,8 @@ public sealed class GenerarFurHandler(
         if (_solicitudVirtualGenerator is not null)
             generated.Add(_solicitudVirtualGenerator.GenerateSolicitudVirtual(data));
 
-        // ADR-0036 (HU #10915) — Contrato de mandato. El firmante persona puede venir ya elegido
-        // en el wizard (MandateSignerId); si no, el PDF lleva placeholders y la aprobación lo regenera.
+        // ADR-0036 (HU #10915) — Contrato de mandato. El firmante se resuelve YA en borrador (HU-L8/L9):
+        // default OT, default compañía o elección del wizard. Sin esos, el recuadro sale «Sin firmar».
         var mandato = await TryGenerateMandatoAsync(
             instance,
             data,
@@ -1138,36 +1138,12 @@ public sealed class GenerarFurHandler(
             .ConfigureAwait(false);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
-        // HU #10916, corregido por el bug DEV de la pantalla/documento divergentes — MISMO resolvedor
-        // que usa la pantalla (ListMandateSignerOptionsHandler) y la aprobación (MandatoApprovalHandler):
-        // elección explícita ya guardada → default del OT (si sigue habilitado) → único candidato. Sin
-        // eso, el PDF pintaba placeholders (o el firmante equivocado) hasta que alguien elegía a mano.
-        // Abierto / institucional: no se asigna firmante persona (aunque hubiera MandateSignerId).
+        // HU-L8 — elección del trámite → default OT (aunque no esté en la compañía) → default compañía.
+        // Sin esos, Mandatario queda null (cuerpo ___ / recuadro Sin firmar). Ya no se espera a aprobar
+        // para pintar nombre y cédula cuando hay default.
         var assignmentMode = config?.AssignmentMode;
-        var esJuridica = data.Mandante?.EsJuridica ?? false;
-        var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind);
+        // Plantilla del OT (o genérica de mandato cliente). Ya no se reescribe por PN/PJ ni por modo.
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
-        if (!hasCustom)
-        {
-            // Las reglas de EMISIÓN mandan cuando el caso las impone: formato abierto se emite en
-            // blanco (genérico) y persona jurídica / institucional lleva la redacción de Sabaneta.
-            // Fuera de esos casos vuelve a mandar la elección del OT: la nota de precedencia de
-            // MandatoSystemOfficeTemplates es explícita —«quien parametriza el OT manda», y `auto`
-            // es la forma de devolverle la decisión al builtin—. Al resolver siempre por
-            // ResolveEmissionCode, un OT con `template_code = municipio` emitía genérico, que es lo
-            // que reprodujo HU #11704 (el organismo se resuelve por id, pero la plantilla del OT se
-            // perdía igual).
-            var modo = MandatoAssignmentModeCodes.Resolve(assignmentMode);
-            var elModoImponeRedaccion =
-                modo == MandatoAssignmentModeCodes.Open
-                || modo == MandatoAssignmentModeCodes.Institutional
-                || esJuridica;
-
-            templateCode = !elModoImponeRedaccion && !MandatoTemplateResolver.IsAuto(config?.TemplateCode)
-                ? config!.TemplateCode!.Trim().ToLowerInvariant()
-                : MandatoTemplateResolver.ResolveEmissionCode(
-                    assignmentMode, esJuridica, transitOfficeCode);
-        }
 
         MandatarioFirmante? mandatario = null;
         Guid? resolvedSignerId = null;
@@ -1180,9 +1156,23 @@ public sealed class GenerarFurHandler(
                         officeId, data.TenantIdParaFirmas,
                         MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
                     .ConfigureAwait(false);
+                candidatos = await MandateSignerSelectionResolver
+                    .WithOtDefaultAsync(candidatos, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
+                    .ConfigureAwait(false);
+
+                // En borrador/subsanación el firmante se recalcula SIEMPRE contra la config vigente
+                // (cliente×OT → OT → vacío). Congelar instance.MandateSignerId en la primera generación
+                // dejaba el PDF con un Hugo/Carlos viejo después de cambiar el default en Mandatos.
+                // Fuera de borrador (expediente ya radicado) sí manda lo guardado: es documento legal.
+                var enBorrador = TramiteEstado.PermiteEdicionDatos(
+                    instance.Status, instance.SubsanacionActiva);
+                var eleccionCongelada = enBorrador ? null : instance.MandateSignerId;
 
                 resolvedSignerId = MandateSignerDefaultResolver.Resolve(
-                    candidatos.Select(c => c.Id).ToList(), instance.MandateSignerId, config?.DefaultMandateSignerId);
+                    candidatos.Select(c => c.Id).ToList(),
+                    eleccionCongelada,
+                    config?.OtDefaultMandateSignerId,
+                    config?.DefaultMandateSignerId);
 
                 if (resolvedSignerId is { } signerId)
                 {
@@ -1198,13 +1188,9 @@ public sealed class GenerarFurHandler(
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
                         mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
 
-                        // Persistir lo resuelto SOLO cuando NO venía de una elección explícita ya
-                        // guardada (el gestor no había elegido nada: salió del default del OT o del
-                        // único candidato). El mandato es un documento legal — quién lo firma queda
-                        // registrado, no recalculado en cada regeneración. Así un cambio posterior en la
-                        // parametrización del OT no reescribe en silencio quién firmó un expediente ya
-                        // emitido, y la próxima regeneración es idempotente (ya hay elección explícita).
-                        if (instance.MandateSignerId is null)
+                        if (enBorrador)
+                            instance.MandateSignerId = signerId;
+                        else if (instance.MandateSignerId is null)
                             instance.MandateSignerId = signerId;
                     }
                 }

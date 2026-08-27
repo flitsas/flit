@@ -3,6 +3,7 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -26,7 +27,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// mandatario.</para>
 ///
 /// <para><b>Antes de la corrección este test FALLABA:</b> la pantalla sugería el default parametrizado
-/// (cascada completa: elegido → default del OT → único candidato), mientras el documento recibía
+/// (cascada: elegido → cliente×OT → OT → vacío), mientras el documento recibía
 /// <c>instance.MandateSignerId</c> CRUDO (null, sin cascada) y generaba el mandato SIN firmante
 /// (<c>Mandatario</c> null) — comprobado ejecutando este test contra el código previo a la corrección.</para>
 /// </summary>
@@ -149,7 +150,7 @@ public sealed class MandateSignerBugReproTests
         InstitutionalMandataryName: null,
         InstitutionalMandataryNit: null,
         AssignmentMode: "signer",
-        DefaultMandateSignerId: Carlos);
+        OtDefaultMandateSignerId: Carlos);
 
     [Fact]
     public async Task Pantalla_y_Documento_ResuelvenElMismoMandatario_ConDefaultDelOtYSinEleccion()
@@ -303,7 +304,12 @@ public sealed class MandateSignerBugReproTests
         policy.ResolveAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns((MandateOtConfig?)null);
         policy.ResolveByOfficeIdAsync(Ot, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
-            .Returns(DefaultCarlosConfig() with { TemplateCode = "municipio" });
+            .Returns(DefaultCarlosConfig() with
+            {
+                TemplateCode = "municipio",
+                CustomTemplateKind = MandatoCustomTemplateKindCodes.Editor,
+                CustomTemplateBody = "cuerpo",
+            });
 
         var instance = NewInstance();
         _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
@@ -349,6 +355,36 @@ public sealed class MandateSignerBugReproTests
     }
 
     [Fact]
+    public async Task BorradorConFirmanteViejoGuardado_AlRegenerarUsaElDefaultActualDelOt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var directorio = new Directorio(
+            new MandateSignerCandidate(Ana, "Ana Restrepo", "111000111", null),
+            new MandateSignerCandidate(Carlos, "Carlos Pérez Demo", "222000222", null));
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveAsync("11001000", Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(DefaultCarlosConfig());
+        policy.ResolveByOfficeIdAsync(Ot, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(DefaultCarlosConfig());
+
+        var instance = NewInstance();
+        instance.MandateSignerId = Ana;
+        _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var mandatoGenerator = new CapturingMandatoGenerator();
+        var handler = NewFurHandler(directorio, policy, mandatoGenerator);
+
+        var (_, error) = await handler.HandleAsync(InstanceId, TenantId, ct);
+
+        error.Should().BeNull();
+        mandatoGenerator.Captured!.Mandatario!.Documento.Should().Be(
+            "222000222",
+            "en borrador un firmante auto-congelado no debe ganar al default vigente de Mandatos");
+        instance.MandateSignerId.Should().Be(Carlos);
+    }
+
+    [Fact]
     public async Task EleccionExplicitaYaGuardada_MandaSobreElDefaultDelOt_EnElDocumento()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -361,7 +397,8 @@ public sealed class MandateSignerBugReproTests
             .Returns(DefaultCarlosConfig()); // default = Carlos
 
         var instance = NewInstance();
-        instance.MandateSignerId = Ana; // elección explícita del gestor, distinta del default
+        instance.Status = TramiteEstado.Preparado;
+        instance.MandateSignerId = Ana; // expediente ya no es borrador: la elección queda congelada
         _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         var mandatoGenerator = new CapturingMandatoGenerator();
@@ -430,8 +467,7 @@ public sealed class MandateSignerBugReproTests
         var (_, error2) = await handler.HandleAsync(InstanceId, TenantId, ct);
         error2.Should().BeNull();
 
-        // Segunda regeneración: ya hay elección "guardada" (Carlos), así que el resolvedor la toma como
-        // explícita y no la recalcula ni la cambia.
+        // Segunda regeneración: en borrador se vuelve a resolver contra el default vigente (sigue Carlos).
         instance.MandateSignerId.Should().Be(Carlos);
         mandatoGenerator.Captured!.Mandatario!.Documento.Should().Be("222000222");
     }

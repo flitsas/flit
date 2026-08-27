@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight } from "lucide-react";
-import { DR_FLIT_INTENTS, type DrFlitIntentId } from "./dr-flit-intents";
+import { DR_FLIT_GESTION_INTENTS, type DrFlitIntentId } from "./dr-flit-intents";
 
 export function DrFlitSuggestions({
   onSelect,
@@ -11,15 +11,15 @@ export function DrFlitSuggestions({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-2" aria-label="Sugerencias">
+    <div className="flex flex-col gap-2" aria-label="Gestión">
       <p
         className="text-[11px] font-semibold uppercase tracking-[0.14em]"
         style={{ color: "var(--dr-flit-text-muted)" }}
       >
-        Sugerencias
+        Gestión
       </p>
       <ul className="flex flex-col gap-2 list-none m-0 p-0">
-        {DR_FLIT_INTENTS.map((intent) => (
+        {DR_FLIT_GESTION_INTENTS.map((intent) => (
           <li key={intent.id}>
             <button
               type="button"

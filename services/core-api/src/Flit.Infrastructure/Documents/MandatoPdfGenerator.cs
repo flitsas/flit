@@ -620,7 +620,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                     manual ? null : MandatarioEnCuerpo(data)?.SelloIdentidad,
                     MandatarioIdentificacion(MandatarioEnCuerpo(data), data),
                     FlitFirmaLinea.Underscores,
-                    selloBaul: manual ? null : SelloBaulDe(MandatarioEnCuerpo(data)));
+                    selloBaul: manual ? null : SelloBaulDe(MandatarioEnCuerpo(data)),
+                    etiquetaSinEstampa: "Sin firmar");
             });
         });
     }
@@ -682,8 +683,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             SelloIdentidadDe(tramite, parte?.Rol),
             MandanteIdentificacion(parte, esJuridica),
             FlitFirmaLinea.Underscores,
-            // HU #11170 — vigencia y hash de la firma custodiada, como en el FUR.
-            selloBaul: FlitFirmaBaulSello.Resolve(tramite.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false));
+            selloBaul: FlitFirmaBaulSello.Resolve(tramite.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false),
+            etiquetaSinEstampa: "Sin firmar");
     }
 
     /// <summary>
