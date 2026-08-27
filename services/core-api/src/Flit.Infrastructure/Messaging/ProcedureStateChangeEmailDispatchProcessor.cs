@@ -202,6 +202,10 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                 .AsNoTracking()
                 .Include(i => i.Actors)
                 .Include(i => i.FieldValues)
+                // ADR-0050 dejó que la familia decidiera si hay parte vendedora, y esta consulta
+                // ad-hoc —la única del código que no pasa por ProcedureInstanceRepository— se quedó
+                // sin la navegación: llegaba null y todo traspaso se componía como si no lo fuera.
+                .Include(i => i.ProcedureType)
                 .FirstOrDefaultAsync(
                     i => i.Id == seed.ProcedureInstanceId && i.TenantId == seed.TenantId,
                     ct)

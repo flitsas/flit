@@ -44,6 +44,24 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
     }
 
     [Fact]
+    public async Task Traspaso_CargaElTipo_YMuestraLaLineaDelVendedor()
+    {
+        // Regresión: ADR-0050 pasó a derivar la familia de la navegación ProcedureType, que esta
+        // consulta del worker no cargaba. Llegaba null, todo traspaso se componía como si no lo
+        // fuera y la línea «Vendedor:» desaparecía del bloque de detalles.
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName, traspaso: true);
+        await SeedDispatchAsync(dbName, "persona", "Ana Compradora", "ana@flit.test");
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+        await processor.ProcessPendingAsync(Ct);
+
+        sender.Messages.Should().ContainSingle();
+        sender.Messages[0].HtmlBody.Should().Contain("Vendedor:").And.Contain("Beto Vendedor");
+    }
+
+    [Fact]
     public async Task VarianteCuerpo_SigueCanalDelTenant()
     {
         var dbName = NewDbName();
@@ -290,7 +308,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
             NullLogger<ProcedureStateChangeEmailDispatchProcessor>.Instance);
     }
 
-    private static async Task SeedInstanceAsync(string dbName)
+    private static async Task SeedInstanceAsync(string dbName, bool traspaso = false)
     {
         await using var db = NewContext(dbName);
         db.ProcedureStateChangeOutbox.Add(new ProcedureStateChangeOutbox
@@ -305,7 +323,9 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         });
         db.ProcedureInstances.Add(new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
+            ProcedureType = traspaso
+                ? ProcedureTypeFixture.Traspaso
+                : ProcedureTypeFixture.Matricula,
             Id = InstanceId,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -354,6 +374,26 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
                 },
             },
         });
+
+        if (traspaso)
+        {
+            db.ProcedureInstanceActors.Add(new ProcedureInstanceActor
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                ProcedureInstanceId = InstanceId,
+                ProcedureEntityId = Guid.NewGuid(),
+                ActorType = "vendedor",
+                DocumentType = "CC",
+                DocumentNumber = "2",
+                FullName = "Beto Vendedor",
+                Email = "beto@flit.test",
+                PersonType = "natural",
+                Metadata = "{}",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
         await db.SaveChangesAsync(Ct);
     }
 
