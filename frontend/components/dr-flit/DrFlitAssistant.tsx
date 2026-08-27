@@ -31,6 +31,7 @@ export function DrFlitAssistant({
         state={chat.state}
         onClose={chat.closePanel}
         onSelectIntent={chat.selectIntent}
+        onSelectHelpOption={chat.selectHelpOption}
         onSelectClientBranch={chat.selectClientBranch}
         onBackToSearch={chat.backToSearch}
         onSend={chat.sendText}
