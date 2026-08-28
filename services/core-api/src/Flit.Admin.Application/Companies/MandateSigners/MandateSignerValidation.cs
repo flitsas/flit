@@ -4,9 +4,11 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 namespace Flit.Admin.Application.Companies.MandateSigners;
 
 /// <summary>
-/// Validaciones compartidas de alta/edición de mandatarios (ADR-0023): operabilidad del OT y RF33
-/// (compañías activas/no bloqueadas). Hay a lo sumo un mandatario activo por llave cliente×OT.
-/// Devuelve una lista de errores 422; vacía = válido. Ningún mensaje expone el número de documento (PII).
+/// Validaciones compartidas de alta/edición de mandatarios (ADR-0023, ampliado por ADR-0036):
+/// operabilidad del OT y regla de uso RF33 (compañía activa y no bloqueada en el OT). La
+/// exclusividad estricta compañía↔mandatario fue DEROGADA por ADR-0036 (multiplicidad): una compañía
+/// puede tener varios mandatarios activos. Devuelve una lista de errores 422; vacía = válido. Ningún
+/// mensaje expone el número de documento (PII).
 /// </summary>
 internal static class MandateSignerValidation
 {
@@ -22,9 +24,6 @@ internal static class MandateSignerValidation
 
     public const string SinCompaniasMessage =
         "Debe asignar al menos una compañía al mandatario.";
-
-    public const string ExclusividadClienteOtMessage =
-        "Ya existe un mandatario para esta empresa en este organismo.";
 
     /// <summary>
     /// Valida datos básicos + OT operable. Devuelve el tenant del OT si es operable, junto a
@@ -70,7 +69,9 @@ internal static class MandateSignerValidation
     }
 
     /// <summary>
-    /// RF33 (compañía activa y no bloqueada) y un solo mandatario activo por llave cliente×OT.
+    /// RF33 (compañía activa y no bloqueada). <paramref name="activeResolutions"/> y
+    /// <paramref name="currentSignerId"/> se conservan por compatibilidad de firma pero YA NO se usan
+    /// para exclusividad: ADR-0036 permite varios mandatarios activos por compañía.
     /// </summary>
     public static void ValidateCompanies(
         List<MandateSignerValidationError> errors,
@@ -92,16 +93,7 @@ internal static class MandateSignerValidation
                     companyId.ToString()));
             }
 
-            var taken = activeResolutions.FirstOrDefault(r =>
-                r.CompanyTenantId == companyId
-                && r.MandateSignerId != currentSignerId);
-            if (taken is not null)
-            {
-                errors.Add(new MandateSignerValidationError(
-                    "companyTenantIds",
-                    ExclusividadClienteOtMessage,
-                    companyId.ToString()));
-            }
+            // ADR-0036: sin exclusividad. La compañía puede tener varios mandatarios activos.
         }
     }
 
