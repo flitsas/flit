@@ -270,6 +270,31 @@ public sealed class ConsolidadoMaestroHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_ConsolidadoVigenteConForce_RegeneraDeTodosModos()
+    {
+        // El OT pide reconstruir explicitamente ("Regenerar"): el atajo de cache se salta aunque la
+        // marca diga vigente. Es la salida manual que el wizard ya tenia y al organismo le faltaba,
+        // para no depender de que el servidor haya acertado con la invalidacion.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = InstanceWithAttachments(id, tenantId,
+            ("factura", "factura.pdf"),
+            ("consolidado_maestro", "maestro_vigente.pdf"));
+        instance.ConsolidadoMaestroVigente = true;
+        var previo = instance.Attachments.Single(a => a.Tipo == "consolidado_maestro");
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, force: true, ct: ct);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
+        result.Document.AttachmentId.Should().NotBe(previo.Id);
+        _storage.Saved.Should().NotBeEmpty();
+        _repo.Received().RemoveAttachment(previo);
+    }
+
+    [Fact]
     public async Task HandleAsync_AlGenerar_MarcaConsolidadoMaestroVigente()
     {
         // Feature #10701: una generación real deja la marca de vigencia en true y Regenerado en true.
@@ -306,7 +331,7 @@ public sealed class ConsolidadoMaestroHandlerTests
         // Matriz OT: SOAT antes que factura. "aduana" no está en la matriz → va al final (Anexos).
         var precedencia = new[] { "soat", "factura" };
 
-        var (result, error) = await _handler.HandleAsync(id, tenantId, precedencia, ct);
+        var (result, error) = await _handler.HandleAsync(id, tenantId, precedencia, ct: ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -349,7 +374,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             _repo, _merger, _storage, new FakeOtOrderProvider("soat", "fur", "factura"));
 
         // La matriz del checklist llega igual que hoy; la configuración del OT tiene prioridad.
-        var (result, error) = await handler.HandleAsync(id, tenantId, ["factura", "soat"], ct);
+        var (result, error) = await handler.HandleAsync(id, tenantId, ["factura", "soat"], ct: ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -377,7 +402,7 @@ public sealed class ConsolidadoMaestroHandlerTests
         var handler = new GenerarConsolidadoMaestroHandler(
             _repo, _merger, _storage, new FakeOtOrderProvider());
 
-        var (_, error) = await handler.HandleAsync(id, tenantId, ["soat", "factura"], ct);
+        var (_, error) = await handler.HandleAsync(id, tenantId, ["soat", "factura"], ct: ct);
 
         error.Should().BeNull();
         var payload = instance.Events

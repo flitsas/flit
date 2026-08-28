@@ -783,6 +783,85 @@ public sealed class TramiteLifecycleServiceTests
         i.Status.Should().Be(TramiteEstado.Preparado);
     }
 
+    // ── El override del OT solo alcanza a los trámites CON dimensión de prenda ──────────────
+    // CF-06 se redactó como «cualquier modalidad con OT» cuando solo existían matrícula y traspaso.
+    // Con la familia OTROS de ADR-0050 eso producía un bloqueo SIN SALIDA: el gate exigía una decisión
+    // de prenda que `RegistrarPrendaHandler` rechaza (`prenda_no_admitida_en_tipo`) y que el asistente
+    // ni siquiera pinta. Ahora los tres comparten predicado (`AdmiteDimensionDePrenda`).
+
+    /// <summary>
+    /// Trámite de familia OTROS cuyo objeto NO es un gravamen (duplicado de tarjeta). Mismo cableado
+    /// que <see cref="WireTraspaso"/> —que ya deja pasar el resto de gates— salvo el tipo.
+    /// </summary>
+    private ProcedureInstance WireOtrosNoPrendario(Guid transitOfficeId)
+    {
+        var i = WireTraspaso(TramiteEstado.Borrador, transitOfficeId, DateTimeOffset.UtcNow);
+        i.ProcedureType = new ProcedureType
+        {
+            Id = i.ProcedureTypeId,
+            Code = "DUPLICADO_TARJETA",
+            Name = "Duplicado de tarjeta de propiedad",
+            Family = ProcedureFamilyCodes.Otros,
+            PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        _typeRepo.GetByIdAsync(i.ProcedureTypeId, Arg.Any<CancellationToken>()).Returns(i.ProcedureType);
+        return i;
+    }
+
+    [Fact]
+    public async Task OverrideOtActivo_EnTramiteSinDimensionDePrenda_NoBloquea()
+    {
+        // EL CASO REPORTADO: un duplicado de tarjeta con el override del OT activo —que es el DEFAULT
+        // de la política: sin fila de opt-out, `IsRequiredAsync` devuelve true— y sin decisión de
+        // prenda, porque no puede tenerla, se quedaba atascado en Preparar.
+        var otId = Guid.NewGuid();
+        var i = WireOtrosNoPrendario(otId);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision: null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.PrendaDecisionRequerida);
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    [Fact]
+    public async Task OverrideOtActivo_EnTipoPrendarioDeOtros_SigueBloqueando()
+    {
+        // El contrapeso: acotar el override no puede desarmar el gate justo en los trámites cuyo
+        // objeto ES el gravamen. `LEVANTAMIENTO_PRENDA` vive en OTROS y entra por EsTipoPrendaBase.
+        var otId = Guid.NewGuid();
+        var i = WireOtrosNoPrendario(otId);
+        i.ProcedureType!.Code = "LEVANTAMIENTO_PRENDA";
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision: null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+    }
+
     // ── HU #11592 — bloqueo duro de prenda en matrícula inicial ────────────────────────────────
     // Invierte deliberadamente la HU #10596 (prenda declarativa/informativa en matrícula, sin gate).
 

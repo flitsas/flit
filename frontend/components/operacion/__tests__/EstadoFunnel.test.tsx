@@ -1,6 +1,6 @@
-// Tira de KPIs por estado del listado de trámites: conteo por estado (solo lectura).
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { EstadoFunnel } from '../EstadoFunnel';
 
 const counts = {
@@ -39,8 +39,23 @@ describe('EstadoFunnel', () => {
     expect(screen.getByLabelText('Rechazado: 1 trámite')).toBeInTheDocument();
   });
 
-  it('no expone botones clicables (filtro de estado vive en + Filtro)', () => {
-    render(<EstadoFunnel counts={counts} />);
-    expect(screen.queryByRole('button')).toBeNull();
+  it('filtra al clic y quita el filtro al repetir el mismo estado', async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <EstadoFunnel counts={counts} selected="" onSelect={onSelect} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Borrador: 5 trámites' }));
+    expect(onSelect).toHaveBeenCalledWith('borrador');
+
+    rerender(<EstadoFunnel counts={counts} selected="borrador" onSelect={onSelect} />);
+    expect(screen.getByRole('button', { name: 'Borrador: 5 trámites' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Borrador: 5 trámites' }));
+    expect(onSelect).toHaveBeenCalledWith('');
   });
 });

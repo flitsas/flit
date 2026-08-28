@@ -259,7 +259,11 @@ describe("ClientProceduresSection — HU #10220", () => {
     expect(screen.queryByRole("button", { name: /Generar consolidado/i })).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: /Ver consolidado/i }));
     // Asegura el consolidado (idempotente) y luego lo previsualiza inline con el id devuelto.
-    await waitFor(() => expect(generarOtConsolidadoMaestro).toHaveBeenCalledWith("proc-1", undefined));
+    // Tercer argumento `force`: en false por el camino normal —el backend decide si regenera por la
+    // marca de vigencia. El "Regenerar" del detalle es el que lo manda en true.
+    await waitFor(() =>
+      expect(generarOtConsolidadoMaestro).toHaveBeenCalledWith("proc-1", undefined, false),
+    );
     await waitFor(() =>
       expect(fetchOtAttachmentPreviewUrl).toHaveBeenCalledWith("proc-1", "att-1", undefined),
     );

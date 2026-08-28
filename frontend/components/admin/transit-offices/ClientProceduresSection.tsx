@@ -459,11 +459,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     });
   };
 
-  const handleConsolidado = async (row: OtClientProcedure) => {
+  const handleConsolidado = async (row: OtClientProcedure, force = false) => {
     // Botón único (Feature #10701): abre el consolidado del expediente INLINE. Si el OT puede
     // generar, "asegura" el vigente — el backend regenera solo si la marca lo pide (nunca generado
-    // o invalidado por un cambio de estado / LT) y reutiliza si ya está vigente. En modo QX
-    // read-only no se puede generar: solo se muestra el consolidado existente.
+    // o invalidado por CUALQUIER cambio del expediente: adjuntar o borrar un documento, editar
+    // datos, la decisión del OT, una transición de estado…) y reutiliza si ya está vigente.
+    // `force` se salta ese atajo y reconstruye: la salida manual del operador. En modo QX read-only
+    // no se puede generar: solo se muestra el consolidado existente.
     setConsolidadoActingId(row.id);
     setPreview((p) => {
       if (p.url) URL.revokeObjectURL(p.url);
@@ -482,7 +484,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       let filename: string;
       let mimetype = "application/pdf";
       if (!isReadOnly) {
-        const res = await generarOtConsolidadoMaestro(row.id, scope);
+        const res = await generarOtConsolidadoMaestro(row.id, scope, force);
         attId = res.document.attachmentId;
         filename = res.document.filename;
         if (res.regenerado) show("Consolidado generado.", "success");
