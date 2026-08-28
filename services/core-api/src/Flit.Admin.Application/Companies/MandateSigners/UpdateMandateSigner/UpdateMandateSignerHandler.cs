@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.TransitOffices;
 
@@ -59,14 +60,16 @@ public sealed class UpdateMandateSignerHandler
 
         if (otTenantId is not null && companyIds.Count > 0)
         {
-            var otCompanies = await _reader
-                .ListOtCompaniesAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
-            var resolutions = await _reader
-                .ListActiveCompanyResolutionsAsync(command.TransitOfficeId, cancellationToken)
+            await CreateMandateSignerHandler.AddExclusiveSlotErrorsAsync(
+                    _reader,
+                    errors,
+                    command.TransitOfficeId,
+                    companyIds,
+                    command.TransitOfficeIds,
+                    command.OfficeCompanies,
+                    command.MandateSignerId,
+                    cancellationToken)
                 .ConfigureAwait(false);
-
-            MandateSignerValidation.ValidateCompanies(
-                errors, companyIds, otCompanies, resolutions, command.MandateSignerId);
         }
 
         if (errors.Count > 0)

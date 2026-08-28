@@ -26,11 +26,11 @@ public static class AdminOtMandatosEndpoints
             .WithTags("Admin · OT · Mandatos");
 
         group.MapGet("", GetAsync).WithName("AdminOtMandatosGet");
-        group.MapPut("", UpsertAsync).WithName("AdminOtMandatosUpsert");
+        group.MapPatch("/default-signer", SetDefaultSignerAsync).WithName("AdminOtMandatosSetDefaultSigner");
         group.MapGet("/preview", PreviewOtAsync).WithName("AdminOtMandatosPreview");
         group.MapGet("/company-rules", ListCompanyRulesAsync).WithName("AdminOtMandatosListCompanyRules");
-        group.MapPut("/company-rules/{companyTenantId:guid}", UpsertCompanyRuleAsync)
-            .WithName("AdminOtMandatosUpsertCompanyRule");
+        group.MapPatch("/company-rules/{companyTenantId:guid}/default-signer", SetCompanyDefaultSignerAsync)
+            .WithName("AdminOtMandatosSetCompanyDefaultSigner");
         group.MapDelete("/company-rules/{companyTenantId:guid}", DeleteCompanyRuleAsync)
             .WithName("AdminOtMandatosDeleteCompanyRule");
         group.MapGet("/templates/{templateCode}/preview", PreviewTemplateAsync)
@@ -55,9 +55,9 @@ public static class AdminOtMandatosEndpoints
         return view is null ? Results.NotFound() : Results.Ok(view);
     }
 
-    private static async Task<IResult> UpsertAsync(
+    private static async Task<IResult> SetDefaultSignerAsync(
         Guid officeId,
-        [FromBody] UpsertMandateOtConfigRequest request,
+        [FromBody] SetOtDefaultSignerRequest request,
         ClaimsPrincipal user,
         IOtProfileRepository profiles,
         IMandateConfigAdminService service,
@@ -69,7 +69,7 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var (status, view) = await service
-            .UpsertAsync(officeId, request, ResolveUserId(user), ct)
+            .SetOtDefaultSignerAsync(officeId, request, ResolveUserId(user), ct)
             .ConfigureAwait(false);
         return MapWrite(status, view);
     }
@@ -119,10 +119,10 @@ public static class AdminOtMandatosEndpoints
         return Results.Ok(new { items });
     }
 
-    private static async Task<IResult> UpsertCompanyRuleAsync(
+    private static async Task<IResult> SetCompanyDefaultSignerAsync(
         Guid officeId,
         Guid companyTenantId,
-        [FromBody] UpsertCompanyOtMandateRuleRequest request,
+        [FromBody] SetCompanyDefaultSignerRequest request,
         ClaimsPrincipal user,
         IOtProfileRepository profiles,
         IMandateConfigAdminService service,
@@ -134,19 +134,13 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var (status, view) = await service
-            .UpsertCompanyRuleAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
+            .SetCompanyDefaultSignerAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
             .ConfigureAwait(false);
         return status switch
         {
             MandateConfigWriteStatus.Ok => Results.Ok(view),
             MandateConfigWriteStatus.OfficeNotFound or MandateConfigWriteStatus.CompanyNotFound =>
                 Results.NotFound(),
-            MandateConfigWriteStatus.InvalidAssignmentMode =>
-                Results.BadRequest(new { error = "assignment_mode_invalido" }),
-            MandateConfigWriteStatus.InvalidFamily =>
-                Results.BadRequest(new { error = "mandatary_family_invalida" }),
-            MandateConfigWriteStatus.InstitutionalRequired =>
-                Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
             _ => Results.BadRequest(),

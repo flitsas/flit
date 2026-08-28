@@ -536,12 +536,11 @@ export function FirmaFurStep({
           // Si falla el listado, intentamos generar de todas formas.
         }
 
-        const hasFurDoc = atts.some((a) => a.tipo === 'fur');
         const hasImpronta = atts.some((a) => a.tipo === 'impronta');
 
-        if (!hasFurDoc) {
-          await tramitesClient.generarFur(instanceId);
-        }
+        // Siempre regenerar el paquete (FUR + mandato): si la placa ya está, hay que pintarla;
+        // si aún no (matrícula), las casillas quedan vacías. Un FUR previo sin placa no se conserva.
+        await tramitesClient.generarFur(instanceId);
 
         if (!hasImpronta) {
           try {
@@ -805,6 +804,7 @@ export function PlacaPreasignadaSection({
       await tramitesClient.patchFieldValues(instanceId, [
         { formFieldId: null, fieldKey: 'plate', valueText: plate },
       ]);
+      await tramitesClient.generarFur(instanceId);
       setChanging(false);
       onRefresh?.();
     } catch {
@@ -824,6 +824,7 @@ export function PlacaPreasignadaSection({
       await tramitesClient.patchFieldValues(instanceId, [
         { formFieldId: null, fieldKey: 'plate', valueText: '' },
       ]);
+      await tramitesClient.generarFur(instanceId);
       setChanging(true);
       onRefresh?.();
     } catch {

@@ -30,25 +30,43 @@ internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
     }
 
-    public async Task<SignatureVaultMatch?> ResolveAsync(
+    public Task<SignatureVaultMatch?> ResolveAsync(
         Guid tenantId,
         string documentType,
         string documentNumber,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ResolveCoreAsync(tenantId, documentType, documentNumber, requireCompanyVaultEnabled: true, cancellationToken);
+
+    public Task<SignatureVaultMatch?> ResolveMandatarioAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default) =>
+        ResolveCoreAsync(tenantId, documentType, documentNumber, requireCompanyVaultEnabled: false, cancellationToken);
+
+    private async Task<SignatureVaultMatch?> ResolveCoreAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        bool requireCompanyVaultEnabled,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(documentType) || string.IsNullOrWhiteSpace(documentNumber))
         {
             return null;
         }
 
-        // Baúl deshabilitado (o sin fila de config) → default seguro: no hay firma de baúl.
-        var settings = await _settings.GetAsync(tenantId, cancellationToken).ConfigureAwait(false);
-        if (settings is not { SignatureVaultEnabled: true })
+        if (requireCompanyVaultEnabled)
         {
-            return null;
+            // Baúl deshabilitado (o sin fila de config) → las PARTES del trámite no consumen firma.
+            var settings = await _settings.GetAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            if (settings is not { SignatureVaultEnabled: true })
+            {
+                return null;
+            }
         }
 
-        // Firma de la PERSONA (representante legal seleccionado del actor) por documento — HU #10930/#10937.
+        // Firma de la PERSONA por documento — HU #10930/#10937.
         var vault = await _reader
             .FindActiveByDocumentAsync(tenantId, documentType.Trim(), documentNumber.Trim(), cancellationToken)
             .ConfigureAwait(false);
@@ -57,7 +75,6 @@ internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
             return null;
         }
 
-        // Enforce de vigencia en fecha calendario Colombia (mismo criterio que la identidad).
         var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaUtcOffset).Date);
         if (!vault.EstaVigente(today))
         {

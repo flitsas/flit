@@ -49,7 +49,7 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
         var ciudad = data.Organismo.Ciudad?.Trim();
         var fecha = FormatFechaEs(data.FechaTramite ?? DateTime.UtcNow.AddHours(-5));
         var ot = Val(data.Organismo.Nombre, "___");
-        var placa = Val(data.Placa, "___");
+        var placa = Val(data.Placa, string.Empty);
 
         var bytes = Document.Create(doc =>
         {

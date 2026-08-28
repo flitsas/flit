@@ -12,9 +12,9 @@ namespace Flit.Admin.Application.Companies.MandateSigners;
 /// contrato salía con la línea de guiones bajos sin que nadie lo advirtiera.</para>
 ///
 /// <para><b>Excepción: la firma física.</b> Un organismo marcado en
-/// <c>PhysicalSignatureOfficeIds</c> se firma A MANO por decisión del gestor:
-/// <c>FurCommand</c> resuelve <c>MandatarioFirmaModo.Manual</c> a propósito y la línea en blanco es el
-/// resultado correcto. Exigirle firma ahí rompería un caso de uso que hoy funciona.</para>
+/// <c>PhysicalSignatureOfficeIds</c> no exige baúl ni identidad al parametrizar (se puede dejar
+/// línea en blanco). Si el mandatario ya tiene imagen o sello, el contrato las estampa igual:
+/// el modelo a mano no las oculta.</para>
 ///
 /// <para><b>La identidad recién enviada cuenta.</b> Un mandatario nuevo no tiene identidad vigente
 /// —se le envía al registrarlo, con su correo—, así que exigir <c>valid</c> haría imposible dar de

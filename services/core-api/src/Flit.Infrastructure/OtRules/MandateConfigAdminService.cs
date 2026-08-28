@@ -134,19 +134,47 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         entity.InstitutionalMandataryNit = NullIfEmpty(request.InstitutionalMandataryNit);
         entity.ChamberCity = NullIfEmpty(request.ChamberCity);
         entity.MandatarySigla = NullIfEmpty(request.MandatarySigla);
+        // La plantilla y el firmante son escrituras distintas: guardar redacción no pisa el mandatario general.
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedBy = userId;
+
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return (MandateConfigWriteStatus.Conflict, null);
+        }
+
+        // El trigger trg_row_version incrementa en BD; hay que refrescar o el cliente reenvía un token viejo → 409.
+        await _db.Entry(entity).ReloadAsync(ct).ConfigureAwait(false);
+        return (MandateConfigWriteStatus.Ok, await AttachOtDefaultSignerNameAsync(ToView(office, entity), ct).ConfigureAwait(false));
+    }
+
+    public async Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> SetOtDefaultSignerAsync(
+        Guid officeId,
+        SetOtDefaultSignerRequest request,
+        Guid? userId,
+        CancellationToken ct = default)
+    {
+        var office = _catalog.GetById(officeId);
+        if (office is null) return (MandateConfigWriteStatus.OfficeNotFound, null);
 
         Guid? otDefault = null;
-        if (assignmentMode == MandatoAssignmentModeCodes.Signer
-            && request.DefaultMandateSignerId is { } otCandidate
-            && otCandidate != Guid.Empty)
+        if (request.DefaultMandateSignerId is { } candidate && candidate != Guid.Empty)
         {
             var ok = await ExecuteCrossTenantReadAsync(
-                () => IsValidOtDefaultSignerAsync(officeId, otCandidate, ct),
+                () => IsValidOtDefaultSignerAsync(officeId, candidate, ct),
                 ct).ConfigureAwait(false);
             if (!ok)
                 return (MandateConfigWriteStatus.InvalidDefaultSigner, null);
-            otDefault = otCandidate;
+            otDefault = candidate;
         }
+
+        var (entity, conflict) = await GetOrCreateForSignerAsync(officeId, request.RowVersion, userId, ct)
+            .ConfigureAwait(false);
+        if (conflict) return (MandateConfigWriteStatus.Conflict, null);
 
         entity.DefaultMandateSignerId = otDefault;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
@@ -161,7 +189,6 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             return (MandateConfigWriteStatus.Conflict, null);
         }
 
-        // El trigger trg_row_version incrementa en BD; hay que refrescar o el cliente reenvía un token viejo → 409.
         await _db.Entry(entity).ReloadAsync(ct).ConfigureAwait(false);
         return (MandateConfigWriteStatus.Ok, await AttachOtDefaultSignerNameAsync(ToView(office, entity), ct).ConfigureAwait(false));
     }
@@ -596,6 +623,143 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             snapshot));
     }
 
+    public async Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> SetCompanyDefaultSignerAsync(
+        Guid officeId,
+        Guid companyTenantId,
+        SetCompanyDefaultSignerRequest request,
+        Guid? userId,
+        CancellationToken ct = default)
+    {
+        if (_catalog.GetById(officeId) is null)
+            return (MandateConfigWriteStatus.OfficeNotFound, null);
+
+        var hasGrant = await ExecuteCrossTenantReadAsync(
+            () => _db.TenantTransitOfficeGrants.AsNoTracking()
+                .AnyAsync(
+                    g => g.TransitOfficeId == officeId
+                        && g.TenantId == companyTenantId
+                        && g.IsEnabled,
+                    ct),
+            ct).ConfigureAwait(false);
+
+        if (!hasGrant)
+            return (MandateConfigWriteStatus.CompanyNotFound, null);
+
+        var company = await ExecuteCrossTenantReadAsync(
+            async () => await _db.Tenants.AsNoTracking()
+                .Where(t => t.Id == companyTenantId)
+                .Select(t => new { t.LegalName, t.TaxId, t.Code })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false),
+            ct).ConfigureAwait(false);
+
+        if (company is null || string.IsNullOrWhiteSpace(company.LegalName))
+            return (MandateConfigWriteStatus.CompanyNotFound, null);
+
+        Guid? defaultSignerId = null;
+        if (request.DefaultMandateSignerId is { } candidate && candidate != Guid.Empty)
+        {
+            var ok = await ExecuteCrossTenantReadAsync(
+                () => IsValidDefaultSignerAsync(officeId, companyTenantId, candidate, ct),
+                ct).ConfigureAwait(false);
+            if (!ok)
+                return (MandateConfigWriteStatus.InvalidDefaultSigner, null);
+            defaultSignerId = candidate;
+        }
+
+        var entity = await _db.CompanyOtMandateRules
+            .FirstOrDefaultAsync(
+                r => r.TransitOfficeId == officeId && r.CompanyTenantId == companyTenantId,
+                ct)
+            .ConfigureAwait(false);
+
+        if (defaultSignerId is null)
+        {
+            if (entity is not null)
+            {
+                _db.CompanyOtMandateRules.Remove(entity);
+                await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
+
+            var otCfg = await _db.TransitOfficeMandateConfigs.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.TransitOfficeId == officeId, ct)
+                .ConfigureAwait(false);
+            var inheritedMode = MandatoAssignmentModeCodes.ResolveEffective(
+                    companyRuleMode: null,
+                    otConfigMode: otCfg?.AssignmentMode,
+                    otConfigExists: otCfg is not null);
+            return (MandateConfigWriteStatus.Ok, MapCompanyRule(
+                companyTenantId,
+                company.LegalName,
+                company.TaxId,
+                company.Code,
+                inheritedMode,
+                MandatoFamiliaCodes.Individuo,
+                null, null, null, null,
+                hasExplicitRule: false,
+                defaultSignerId: null,
+                snapshot: null));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (entity is null)
+        {
+            var otCfg = await _db.TransitOfficeMandateConfigs.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.TransitOfficeId == officeId, ct)
+                .ConfigureAwait(false);
+            var inheritedMode = MandatoAssignmentModeCodes.ResolveEffective(
+                    companyRuleMode: null,
+                    otConfigMode: otCfg?.AssignmentMode,
+                    otConfigExists: otCfg is not null);
+            entity = new CompanyOtMandateRuleEntity
+            {
+                Id = Guid.NewGuid(),
+                CompanyTenantId = companyTenantId,
+                TransitOfficeId = officeId,
+                AssignmentMode = inheritedMode,
+                MandataryFamily = string.IsNullOrWhiteSpace(otCfg?.MandataryFamily)
+                    ? MandatoFamiliaCodes.Individuo
+                    : otCfg.MandataryFamily,
+                ChamberCity = otCfg?.ChamberCity,
+                MandatarySigla = otCfg?.MandatarySigla,
+                CreatedAt = now,
+                CreatedBy = userId,
+            };
+            _db.CompanyOtMandateRules.Add(entity);
+        }
+        else
+        {
+            entity.UpdatedAt = now;
+            entity.UpdatedBy = userId;
+        }
+
+        entity.DefaultMandateSignerId = defaultSignerId;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        MandateSignerSnapshot? snapshot = await ExecuteCrossTenantReadAsync(
+            () => _db.MandateSigners.AsNoTracking()
+                .Where(s => s.Id == defaultSignerId)
+                .Select(s => new MandateSignerSnapshot(
+                    s.Id, s.FullName, s.DocumentType, s.DocumentNumber, s.IntegrityHash))
+                .FirstOrDefaultAsync(ct),
+            ct).ConfigureAwait(false);
+
+        return (MandateConfigWriteStatus.Ok, MapCompanyRule(
+            companyTenantId,
+            company.LegalName,
+            company.TaxId,
+            company.Code,
+            entity.AssignmentMode,
+            entity.MandataryFamily,
+            entity.InstitutionalMandataryName,
+            entity.InstitutionalMandataryNit,
+            entity.ChamberCity,
+            entity.MandatarySigla,
+            hasExplicitRule: true,
+            entity.DefaultMandateSignerId,
+            snapshot));
+    }
+
     private async Task<bool> IsValidOtDefaultSignerAsync(
         Guid officeId,
         Guid mandateSignerId,
@@ -723,6 +887,42 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
             return result;
         }).ConfigureAwait(false);
+    }
+
+    private async Task<(TransitOfficeMandateConfigEntity Entity, bool Conflict)> GetOrCreateForSignerAsync(
+        Guid officeId,
+        long? expectedRowVersion,
+        Guid? userId,
+        CancellationToken ct)
+    {
+        var entity = await _db.TransitOfficeMandateConfigs
+            .FirstOrDefaultAsync(c => c.TransitOfficeId == officeId, ct)
+            .ConfigureAwait(false);
+
+        var now = DateTimeOffset.UtcNow;
+        if (entity is null)
+        {
+            entity = new TransitOfficeMandateConfigEntity
+            {
+                Id = Guid.NewGuid(),
+                TransitOfficeId = officeId,
+                TemplateCode = MandatoTemplateResolver.Auto,
+                RequiresForNaturalPerson = true,
+                MandataryFamily = MandatoFamiliaCodes.Individuo,
+                AssignmentMode = MandatoAssignmentModeCodes.Signer,
+                CustomTemplateKind = MandatoCustomTemplateKindCodes.None,
+                DefaultMandateSignerId = null,
+                CreatedAt = now,
+                CreatedBy = userId,
+            };
+            _db.TransitOfficeMandateConfigs.Add(entity);
+            return (entity, false);
+        }
+
+        if (expectedRowVersion is { } expected && entity.RowVersion != expected)
+            return (entity, true);
+
+        return (entity, false);
     }
 
     private async Task<(TransitOfficeMandateConfigEntity Entity, bool Conflict)> GetOrCreateEntityAsync(

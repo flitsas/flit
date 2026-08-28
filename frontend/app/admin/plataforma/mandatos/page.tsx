@@ -29,7 +29,7 @@ export default function AdminMandatosPage() {
 
         <ModuleTitle
           title="Mandatos"
-          subtitle="Plantillas de Contrato Privado de Mandato aplicadas por organismo de tránsito. Solo SuperAdmin · lectura."
+          subtitle="Plantillas de Contrato Privado de Mandato por organismo. Solo SuperAdmin asocia la redacción; los mandatarios se asignan aparte."
         />
 
         <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60">

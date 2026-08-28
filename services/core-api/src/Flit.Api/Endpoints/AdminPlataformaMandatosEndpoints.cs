@@ -51,6 +51,13 @@ public static class AdminPlataformaMandatosEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        group.MapPatch("/ot/{officeId:guid}/default-signer", SetDefaultSignerAsync)
+            .WithName("AdminPlataformaMandatosSetDefaultSigner")
+            .Produces<MandateOtConfigView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         group.MapDelete("/ot/{officeId:guid}", DeleteAsync)
             .WithName("AdminPlataformaMandatosDelete")
             .Produces(StatusCodes.Status204NoContent)
@@ -121,6 +128,12 @@ public static class AdminPlataformaMandatosEndpoints
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapPatch("/ot/{officeId:guid}/company-rules/{companyTenantId:guid}/default-signer", SetCompanyDefaultSignerAsync)
+            .WithName("AdminPlataformaMandatosSetCompanyDefaultSigner")
+            .Produces<CompanyOtMandateRuleView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapDelete("/ot/{officeId:guid}/company-rules/{companyTenantId:guid}", DeleteCompanyRuleAsync)
             .WithName("AdminPlataformaMandatosDeleteCompanyRule")
             .Produces(StatusCodes.Status204NoContent)
@@ -155,6 +168,20 @@ public static class AdminPlataformaMandatosEndpoints
     {
         var (status, view) = await service
             .UpsertAsync(officeId, request, ResolveUserId(user), ct)
+            .ConfigureAwait(false);
+
+        return MapWrite(status, view);
+    }
+
+    private static async Task<IResult> SetDefaultSignerAsync(
+        Guid officeId,
+        [FromBody] SetOtDefaultSignerRequest request,
+        ClaimsPrincipal user,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        var (status, view) = await service
+            .SetOtDefaultSignerAsync(officeId, request, ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
         return MapWrite(status, view);
@@ -416,6 +443,29 @@ public static class AdminPlataformaMandatosEndpoints
                 Results.BadRequest(new { error = "mandatary_family_invalida" }),
             MandateConfigWriteStatus.InstitutionalRequired =>
                 Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
+            MandateConfigWriteStatus.InvalidDefaultSigner =>
+                Results.BadRequest(new { error = "mandatario_default_invalido" }),
+            _ => Results.BadRequest(),
+        };
+    }
+
+    private static async Task<IResult> SetCompanyDefaultSignerAsync(
+        Guid officeId,
+        Guid companyTenantId,
+        [FromBody] SetCompanyDefaultSignerRequest request,
+        ClaimsPrincipal user,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        var (status, view) = await service
+            .SetCompanyDefaultSignerAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
+            .ConfigureAwait(false);
+
+        return status switch
+        {
+            MandateConfigWriteStatus.Ok => Results.Ok(view),
+            MandateConfigWriteStatus.OfficeNotFound or MandateConfigWriteStatus.CompanyNotFound =>
+                Results.NotFound(),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
             _ => Results.BadRequest(),

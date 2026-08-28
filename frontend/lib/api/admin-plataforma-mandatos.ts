@@ -351,6 +351,35 @@ export async function upsertCompanyOtMandateRule(
   return mapCompanyRule(data as unknown as Record<string, unknown>);
 }
 
+export async function setOtDefaultSigner(
+  officeId: string,
+  body: {
+    defaultMandateSignerId?: string | null;
+    rowVersion?: number | null;
+  },
+  signal?: AbortSignal,
+): Promise<MandateOtConfigView> {
+  const data = await apiFetch<MandateOtConfigView>(`${mandateOfficeRoot(officeId)}/default-signer`, {
+    method: "PATCH",
+    body,
+    signal,
+  });
+  return mapView(data as unknown as Record<string, unknown>);
+}
+
+export async function setCompanyDefaultSigner(
+  officeId: string,
+  companyTenantId: string,
+  defaultMandateSignerId: string | null,
+  signal?: AbortSignal,
+): Promise<CompanyOtMandateRuleView> {
+  const data = await apiFetch<CompanyOtMandateRuleView>(
+    `${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}/default-signer`,
+    { method: "PATCH", body: { defaultMandateSignerId }, signal },
+  );
+  return mapCompanyRule(data as unknown as Record<string, unknown>);
+}
+
 export async function deleteCompanyOtMandateRule(
   officeId: string,
   companyTenantId: string,

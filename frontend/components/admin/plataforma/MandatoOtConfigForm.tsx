@@ -5,14 +5,14 @@ import { Eye, FileText, Search, Trash2, Upload } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import {
-  deleteCompanyOtMandateRule,
   deleteMandateOtCustomTemplate,
   fetchMandateOtPreview,
   fetchMandatoTemplatePreview,
   listCompanyOtMandateRules,
   saveMandateOtEditorBody,
+  setCompanyDefaultSigner,
+  setOtDefaultSigner,
   uploadMandateOtPdfTemplate,
-  upsertCompanyOtMandateRule,
   upsertMandateOtConfig,
   type CompanyOtMandateRuleView,
   type MandateOtConfigView,
@@ -24,7 +24,6 @@ import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import {
   assignmentModeFromTemplateCode,
   mandatoTemplateOptions,
-  suggestedFamilyForTipo,
   systemTemplateLabel,
   terceroAjenoEnPlantilla,
 } from "@/lib/plataforma/mandato-templates";
@@ -230,7 +229,6 @@ export function MandatoOtConfigForm({
     chamberCity: chamberCity || null,
     mandatarySigla: sigla || null,
     rowVersion,
-    defaultMandateSignerId: otDefaultSignerId || null,
   });
 
   const handleSaveMeta = async () => {
@@ -291,6 +289,24 @@ export function MandatoOtConfigForm({
     }
   };
 
+  const handleSaveOtDefaultSigner = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      const saved = await setOtDefaultSigner(office.officeId, {
+        defaultMandateSignerId: otDefaultSignerId || null,
+        rowVersion,
+      });
+      applyView(saved);
+      onSaved(saved);
+      onClose();
+    } catch (err) {
+      setError(messageFromSaveError(err, "No se pudo guardar el mandatario general del OT."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleRemoveCustom = async () => {
     setError(null);
     setSaving(true);
@@ -313,23 +329,9 @@ export function MandatoOtConfigForm({
     setSavingCompanyId(row.companyTenantId);
     try {
       const signerId = nextSignerId.trim() || null;
-      // Sin default y sin otros motivos de regla ⇒ volver al implícito.
-      if (!signerId && row.hasExplicitRule) {
-        await deleteCompanyOtMandateRule(office.officeId, row.companyTenantId);
-        await loadCompanyRules();
-        return;
-      }
       if (!signerId && !row.hasExplicitRule) return;
 
-      await upsertCompanyOtMandateRule(office.officeId, row.companyTenantId, {
-        assignmentMode: "signer",
-        mandataryFamily: suggestedFamilyForTipo("persona_rl", templateCode),
-        institutionalMandataryName: null,
-        institutionalMandataryNit: null,
-        chamberCity: row.chamberCity || chamberCity || null,
-        mandatarySigla: row.mandatarySigla || sigla || null,
-        defaultMandateSignerId: signerId,
-      });
+      await setCompanyDefaultSigner(office.officeId, row.companyTenantId, signerId);
       await loadCompanyRules();
     } catch {
       setError("No se pudo guardar el mandatario por defecto. Verifica que esté activo en este OT.");
@@ -440,7 +442,7 @@ export function MandatoOtConfigForm({
     ],
     // Handlers son estables por cierre de render; deps cubren estado que cambia las celdas.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers del mismo render
-    [busy, savingCompanyId, otSigners, office.officeId, templateCode, onRegisterSigner],
+    [busy, savingCompanyId, otSigners, office.officeId, onRegisterSigner],
   );
 
   return (
@@ -489,15 +491,28 @@ export function MandatoOtConfigForm({
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onClose}
-              className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
-            >
-              Cerrar
-            </button>
+            <>
+              {!lockToCompanyId ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleSaveOtDefaultSigner()}
+                  className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+                >
+                  {saving ? "Guardando…" : "Guardar mandatario general"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onClose}
+                className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
+              >
+                Cerrar
+              </button>
+            </>
           )}
         </div>
       }
@@ -507,8 +522,9 @@ export function MandatoOtConfigForm({
           {office.name} · <span className="font-mono">{office.code}</span>
         </p>
         <p className="text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-          Convive con Plataforma → Mandatos (mismos datos). El modelo de cada empresa que radica
-          aplica a todas las familias. Mandato cliente = Persona o RL + plantilla genérica.
+          {mode === "mandato"
+            ? "La plantilla de este organismo solo se asocia aquí (SuperAdmin). Elegir un mandatario no cambia esta redacción."
+            : "Un mandatario general por OT y, como máximo, uno por empresa en este organismo. Esto no modifica la plantilla."}
         </p>
 
         {error ? (
@@ -550,75 +566,6 @@ export function MandatoOtConfigForm({
               <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
                 {mandatoTemplateOptions().find((o) => o.code === templateCode)?.summary ?? ""}
               </span>
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-[#162244] dark:text-white">
-                Mandatario por defecto de este OT
-              </span>
-              <select
-                value={otDefaultSignerId}
-                onChange={(e) => setOtDefaultSignerId(e.target.value)}
-                disabled={busy}
-                data-testid="mandato-ot-default-signer"
-                className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
-              >
-                <option value="">
-                  {otSigners.length === 0 ? "Sin mandatarios" : "Sin default (vacío al nacer)"}
-                </option>
-                {otSigners.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName}
-                  </option>
-                ))}
-              </select>
-              <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                Si la empresa no tiene mandatario propio en este OT, los trámites usan esta persona
-                (aunque no esté vinculada a esa empresa). El default cliente×OT prima sobre este. Sin
-                ninguno de los dos, el mandato sale vacío de firmante persona.
-              </span>
-              {onRegisterSigner ? (
-                <div className="flex flex-col gap-1.5 pt-1">
-                  {companyRules.length > 1 ? (
-                    <label className="block space-y-1">
-                      <span className="text-[11px] font-semibold text-[#162244] dark:text-white">
-                        Empresa que registra a la persona
-                      </span>
-                      <select
-                        value={hostCompanyId}
-                        onChange={(e) => setHostCompanyId(e.target.value)}
-                        disabled={busy}
-                        data-testid="mandato-ot-register-host-company"
-                        className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
-                      >
-                        {companyRules.map((row) => (
-                          <option key={row.companyTenantId} value={row.companyTenantId}>
-                            {row.companyName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="w-fit text-left text-xs font-semibold text-[#557EFF] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
-                    disabled={busy}
-                    data-testid="mandato-ot-register-signer"
-                    onClick={() => {
-                      const companyId = hostCompanyId || companyRules[0]?.companyTenantId;
-                      if (!companyId) {
-                        setError(
-                          "Para registrar el mandatario del OT hace falta al menos una empresa habilitada en este organismo.",
-                        );
-                        return;
-                      }
-                      onRegisterSigner(companyId);
-                    }}
-                  >
-                    Registrar mandatario
-                  </button>
-                </div>
-              ) : null}
             </label>
 
             {/* HU #11718 — la redacción elegida puede nombrar a un tercero ajeno al organismo:
@@ -818,6 +765,77 @@ export function MandatoOtConfigForm({
           ) : null}
           </>
         ) : (
+          <div className="space-y-4">
+            {!lockToCompanyId ? (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                  Mandatario general de este OT
+                </span>
+                <select
+                  value={otDefaultSignerId}
+                  onChange={(e) => setOtDefaultSignerId(e.target.value)}
+                  disabled={busy}
+                  data-testid="mandato-ot-default-signer"
+                  className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                >
+                  <option value="">
+                    {otSigners.length === 0 ? "Sin mandatarios" : "Sin default (vacío al nacer)"}
+                  </option>
+                  {otSigners.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.fullName}
+                    </option>
+                  ))}
+                </select>
+                <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                  Una sola persona a nivel general. Si la empresa no tiene mandatario propio, se usa
+                  esta. El default cliente×OT prima. Sin ninguno, el mandato sale en blanco.
+                </span>
+                {onRegisterSigner ? (
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    {companyRules.length > 1 ? (
+                      <label className="block space-y-1">
+                        <span className="text-[11px] font-semibold text-[#162244] dark:text-white">
+                          Empresa que registra a la persona
+                        </span>
+                        <select
+                          value={hostCompanyId}
+                          onChange={(e) => setHostCompanyId(e.target.value)}
+                          disabled={busy}
+                          data-testid="mandato-ot-register-host-company"
+                          className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                        >
+                          {companyRules.map((row) => (
+                            <option key={row.companyTenantId} value={row.companyTenantId}>
+                              {row.companyName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="w-fit text-left text-xs font-semibold text-[#557EFF] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+                      disabled={busy}
+                      data-testid="mandato-ot-register-signer"
+                      onClick={() => {
+                        const companyId = hostCompanyId || companyRules[0]?.companyTenantId;
+                        if (!companyId) {
+                          setError(
+                            "Para registrar el mandatario del OT hace falta al menos una empresa habilitada en este organismo.",
+                          );
+                          return;
+                        }
+                        onRegisterSigner(companyId);
+                      }}
+                    >
+                      Registrar mandatario
+                    </button>
+                  </div>
+                ) : null}
+              </label>
+            ) : null}
+
           <section className="space-y-2" aria-labelledby="mandato-company-rules-heading">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div className="min-w-0">
@@ -910,6 +928,7 @@ export function MandatoOtConfigForm({
               </div>
             ) : null}
           </section>
+          </div>
         )}
       </div>
     </OtSidePanel>

@@ -29,4 +29,25 @@ public static class ProcedureFieldValues
                       .First().ValueText,
                 StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Placa para documentos: <c>field_values.plate</c>, luego <c>placa</c>, luego la columna
+    /// denormalizada. Vacío o solo espacios → no se inventa texto (matrícula aún sin placa).
+    /// </summary>
+    public static void EnsurePlaca(Dictionary<string, string?> fv, ProcedureInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(fv);
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var placa = Get(fv, "plate")
+            ?? Get(fv, "placa")
+            ?? (string.IsNullOrWhiteSpace(instance.Plate) ? null : instance.Plate.Trim());
+        if (placa is null)
+            return;
+
+        fv["plate"] = placa;
+    }
+
+    public static string? Get(IReadOnlyDictionary<string, string?> fv, string key) =>
+        fv.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v.Trim() : null;
 }

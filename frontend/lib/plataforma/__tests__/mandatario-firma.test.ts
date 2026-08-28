@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  etiquetaTipoFirma,
   motivoSinFirma,
   organismosSinMedioDeFirma,
   puedeFirmarElectronicamente,
+  tipoDeFirmaMandatario,
 } from "@/lib/plataforma/mandatario-firma";
 
 const FUNZA = "eeacc872-a522-56bb-9150-70776b094009";
@@ -40,5 +42,14 @@ describe("mandatario-firma (HU #11716/#11717)", () => {
 
   it("un correo en blanco no cuenta como medio de firma", () => {
     expect(organismosSinMedioDeFirma([FUNZA], [], { email: "   " })).toEqual([FUNZA]);
+  });
+
+  it("clasifica el tipo de firma con precedencia baúl > identidad > a mano", () => {
+    expect(tipoDeFirmaMandatario({ signatureVaultId: "v1", identityStatus: "valid" }, FUNZA)).toBe("baul");
+    expect(tipoDeFirmaMandatario({ identityStatus: "valid" }, FUNZA)).toBe("identidad");
+    expect(
+      tipoDeFirmaMandatario({ physicalSignatureOfficeIds: [FUNZA] }, FUNZA),
+    ).toBe("a_mano");
+    expect(etiquetaTipoFirma("baul")).toBe("Firma del baúl");
   });
 });

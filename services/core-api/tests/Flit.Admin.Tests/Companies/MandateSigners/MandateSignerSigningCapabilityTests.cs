@@ -80,8 +80,8 @@ public sealed class MandateSignerSigningCapabilityTests
     [Fact]
     public void FirmaFisica_QuedaExenta()
     {
-        // La excepción que apareció al implementar: el gestor eligió firmar a mano ante ese organismo
-        // y FurCommand resuelve MandatarioFirmaModo.Manual a propósito. La línea en blanco es correcta.
+        // Firma a mano no exige baúl al parametrizar. Si más adelante hay imagen o sello, el contrato
+        // sí la estampa: el modelo a mano ya no oculta una firma que el mandatario tiene.
         MandateSignerSigningCapability.Validate([Funza], [Funza], null, null).Should().BeNull();
     }
 
