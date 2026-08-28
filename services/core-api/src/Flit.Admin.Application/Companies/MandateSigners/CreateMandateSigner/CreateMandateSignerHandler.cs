@@ -46,13 +46,16 @@ public sealed class CreateMandateSignerHandler
 
         if (otTenantId is not null && companyIds.Count > 0)
         {
-            var otCompanies = await _reader
-                .ListOtCompaniesAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
-            var resolutions = await _reader
-                .ListActiveCompanyResolutionsAsync(command.TransitOfficeId, cancellationToken)
+            await AddExclusiveSlotErrorsAsync(
+                    _reader,
+                    errors,
+                    command.TransitOfficeId,
+                    companyIds,
+                    command.TransitOfficeIds,
+                    command.OfficeCompanies,
+                    currentSignerId: null,
+                    cancellationToken)
                 .ConfigureAwait(false);
-
-            MandateSignerValidation.ValidateCompanies(errors, companyIds, otCompanies, resolutions, null);
         }
 
         if (errors.Count > 0)
@@ -93,5 +96,36 @@ public sealed class CreateMandateSignerHandler
         // el disparo. El desenlace siempre es `NotAttempted` — se conserva el campo en la respuesta por
         // compatibilidad con el cliente, que ya lo tipa como uno de los cuatro valores del enum.
         return CreateMandateSignerResult.Success(signerId, integrityHash);
+    }
+
+    internal static async Task AddExclusiveSlotErrorsAsync(
+        IMandateSignerReader reader,
+        List<MandateSignerValidationError> errors,
+        Guid primaryOfficeId,
+        IReadOnlyList<Guid> companyIds,
+        IReadOnlyList<Guid>? transitOfficeIds,
+        IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies,
+        Guid? currentSignerId,
+        CancellationToken cancellationToken)
+    {
+        var offices = new HashSet<Guid> { primaryOfficeId };
+        if (transitOfficeIds is { Count: > 0 })
+        {
+            foreach (var id in transitOfficeIds)
+                offices.Add(id);
+        }
+
+        foreach (var officeId in offices)
+        {
+            var otCompanies = await reader
+                .ListOtCompaniesAsync(officeId, cancellationToken).ConfigureAwait(false);
+            var resolutions = await reader
+                .ListActiveCompanyResolutionsAsync(officeId, cancellationToken)
+                .ConfigureAwait(false);
+            var companiesForOffice = MandateSignerValidation.CompaniesForOffice(
+                officeCompanies, officeId, companyIds);
+            MandateSignerValidation.ValidateCompanies(
+                errors, companiesForOffice, otCompanies, resolutions, currentSignerId);
+        }
     }
 }

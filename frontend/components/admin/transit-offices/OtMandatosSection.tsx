@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
 import { MandatoOtConfigForm, type MandatoOtConfigPanelMode } from "@/components/admin/plataforma/MandatoOtConfigForm";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions } from "@/components/atom/RowActions";
+import { MandatarioFirmaPreviewDialog } from "@/components/admin/transit-offices/MandatarioFirmaPreviewDialog";
 import {
   fetchMandateOtConfig,
   listCompanyOtMandateRules,
@@ -17,12 +18,18 @@ import {
 import {
   createCompanyMandateSigner,
   fetchCompanyTransitOffices,
+  fetchMandateSigners,
   fetchRepresentedCompanies,
   type CompanyMandateSignerInput,
   type CompanyTransitOfficeOption,
+  type MandateSigner,
   type RepresentedCompanyOption,
 } from "@/lib/api/admin-mandate-signers";
 import { ApiError } from "@/lib/api/types";
+import {
+  etiquetaTipoFirma,
+  tipoDeFirmaMandatario,
+} from "@/lib/plataforma/mandatario-firma";
 
 const COMPANY_PAGE_SIZE = 10;
 
@@ -32,6 +39,8 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
   const [error, setError] = useState<string | null>(null);
   const [office, setOffice] = useState<MandateOtConfigView | null>(null);
   const [companies, setCompanies] = useState<CompanyOtMandateRuleView[]>([]);
+  const [signers, setSigners] = useState<MandateSigner[]>([]);
+  const [previewSigner, setPreviewSigner] = useState<MandateSigner | null>(null);
   const [search, setSearch] = useState("");
   const [companyPage, setCompanyPage] = useState(1);
   const [panel, setPanel] = useState<{
@@ -52,16 +61,19 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       setError(null);
     }
     try {
-      const [view, rules] = await Promise.all([
+      const [view, rules, signerList] = await Promise.all([
         fetchMandateOtConfig(transitOfficeId),
         listCompanyOtMandateRules(transitOfficeId),
+        fetchMandateSigners(transitOfficeId),
       ]);
       setOffice(view);
       setCompanies(rules);
+      setSigners(signerList);
       setStatus("ready");
     } catch (err) {
       setOffice(null);
       setCompanies([]);
+      setSigners([]);
       setStatus("error");
       setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración de mandatos.");
     }
@@ -255,7 +267,49 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
               icon: Pencil,
               label: "Editar mandatario general del organismo",
               tone: "primary",
-              onClick: () => setPanel({ mode: "mandato", companyId: null }),
+              onClick: () => setPanel({ mode: "mandatario", companyId: null }),
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+
+  const signerColumns: DataTableColumn<MandateSigner>[] = [
+    {
+      key: "name",
+      header: "Nombre",
+      cellClassName: "font-semibold",
+      render: (row) => row.fullName,
+    },
+    {
+      key: "docType",
+      header: "Tipo documento",
+      render: (row) => dash(row.documentType),
+    },
+    {
+      key: "docNumber",
+      header: "Documento",
+      cellClassName: "font-mono",
+      render: (row) => dash(row.documentNumber),
+    },
+    {
+      key: "firma",
+      header: "Tipo de firma",
+      render: (row) => etiquetaTipoFirma(tipoDeFirmaMandatario(row, transitOfficeId)),
+    },
+    {
+      key: "actions",
+      header: "Acción",
+      align: "right",
+      render: (row) => (
+        <RowActions
+          actions={[
+            {
+              icon: Eye,
+              label: `Ver firma de ${row.fullName}`,
+              tone: "primary",
+              onClick: () => setPreviewSigner(row),
             },
           ]}
         />
@@ -323,6 +377,23 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
         </div>
       </div>
 
+      <div className="flex flex-col gap-3" data-testid="ot-mandatos-signers-card">
+        <div>
+          <h3 className="text-sm font-semibold text-[#162244] dark:text-white">Mandatarios</h3>
+          <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
+            Personas registradas en este organismo, se usen o no como general o por empresa.
+          </p>
+        </div>
+        <DataTable
+          columns={signerColumns}
+          rows={signers}
+          getRowKey={(row) => row.id}
+          ariaLabel="Mandatarios del organismo"
+          minWidth={720}
+          emptyMessage="No hay mandatarios creados en este organismo."
+        />
+      </div>
+
       {panel && office ? (
         <MandatoOtConfigForm
           key={`${panel.mode}-${panel.companyId ?? "ot"}`}
@@ -361,14 +432,22 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
             setLastCreatedSignerId(saved.id);
             setSignerEpoch((n) => n + 1);
             show(
-              panel?.mode === "mandato"
-                ? "Mandatario registrado. Quedó preseleccionado como default del OT; guarda la plantilla para fijarlo."
-                : "Mandatario registrado. Ya puedes asociarlo como default en Persona o RL.",
+              panel?.mode === "mandatario" && !panel.companyId
+                ? "Mandatario registrado. Quedó preseleccionado como general del OT; guarda el firmante para fijarlo."
+                : "Mandatario registrado. Ya puedes asociarlo como default de la empresa.",
               "success",
             );
             void load();
             return saved;
           }}
+        />
+      ) : null}
+
+      {previewSigner ? (
+        <MandatarioFirmaPreviewDialog
+          signer={previewSigner}
+          officeId={transitOfficeId}
+          onClose={() => setPreviewSigner(null)}
         />
       ) : null}
     </div>

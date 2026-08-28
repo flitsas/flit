@@ -171,6 +171,10 @@ public sealed class GenerarFurHandler(
         // trámite SIN poder generar documentos nunca más. Con el agrupado, gana la fila con valor no
         // vacío más reciente y la generación sigue.
         var fv = ProcedureFieldValues.ToDictionary(instance);
+        // Misma idea que el organismo: si la placa vive en la columna denormalizada (o en `placa`)
+        // y no en `plate`, los documentos la pintan. Si no hay ninguna, las casillas salen vacías
+        // (matrícula antes de preasignar); no se escribe "___".
+        ProcedureFieldValues.EnsurePlaca(fv, instance);
 
         // Gating organismo de tránsito: requiere transit_office_code no vacío en field_values.
         //
@@ -1216,15 +1220,11 @@ public sealed class GenerarFurHandler(
         }
 
         // Institucional / convenio: sin bloque MANDATARIO.
-        // Abierto: bloque con líneas (Manual) y mandatario null ⇒ ___ en cuerpo y pie.
-        // Persona/RL: estampa o manual según firma física.
-        MandatarioFirmaModo modoFirmaMandatario;
-        if (MandatoAssignmentModeCodes.IsInstitutional(assignmentMode) || modoFirma.TieneConvenio)
-            modoFirmaMandatario = MandatarioFirmaModo.SinBloque;
-        else if (MandatoAssignmentModeCodes.IsOpen(assignmentMode) || modoFirma.FirmaFisica)
-            modoFirmaMandatario = MandatarioFirmaModo.Manual;
-        else
-            modoFirmaMandatario = MandatarioFirmaModo.Estampada;
+        // Abierto o sin estampa: líneas. Si hay baúl o sello, se estampa aunque el modelo sea a mano.
+        var modoFirmaMandatario = MandatoFirmaModoResolver.Resolve(
+            assignmentMode,
+            modoFirma.TieneConvenio,
+            MandatoFirmaModoResolver.TieneEstampa(mandatario));
 
         var mandatoData = new MandatoData(
             data,

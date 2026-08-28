@@ -248,8 +248,7 @@ public sealed class MandateSignerBugReproTests
             .Returns(DefaultCarlosConfig());
 
         var vault = Substitute.For<ISignatureVaultPolicy>();
-        vault.ResolveAsync(TenantId, "CC", "222000222", Arg.Any<CancellationToken>())
-            .Returns(new SignatureVaultMatch(
+        var carlosVault = new SignatureVaultMatch(
                 SignatureVaultId: Guid.NewGuid(),
                 FullName: "Carlos Pérez Demo",
                 SignatureHash: "sig-hash",
@@ -258,7 +257,9 @@ public sealed class MandateSignerBugReproTests
                 VigenciaDesde: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1)),
                 VigenciaHasta: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
                 DocumentNumber: "222000222",
-                CodigoHash: "ABC123"));
+                CodigoHash: "ABC123");
+        vault.ResolveAsync(TenantId, "CC", "222000222", Arg.Any<CancellationToken>()).Returns(carlosVault);
+        vault.ResolveMandatarioAsync(TenantId, "CC", "222000222", Arg.Any<CancellationToken>()).Returns(carlosVault);
 
         var instance = NewInstance();
         _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
@@ -286,6 +287,66 @@ public sealed class MandateSignerBugReproTests
         mandatario!.FirmaImagen.Should().NotBeNullOrEmpty("el mandato debe salir con la firma del mandatario estampada");
         mandatario.FirmaBaulMetadatos.Should().NotBeNull("la firma estampada viaja con su trazabilidad (HU #11170)");
         mandatoGenerator.Captured.ModoFirmaMandatario.Should().Be(MandatarioFirmaModo.Estampada);
+    }
+
+    [Fact]
+    public async Task ElMandatoEstampaLaFirma_AunqueElMandatarioEsteMarcadoComoFirmaAMano()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var directorio = new Directorio(
+            new MandateSignerCandidate(
+                Carlos, "Carlos Pérez Demo", "222000222", null,
+                IdentityVigente: true, TipoDocumento: "CC", FirmaFisica: true));
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveByOfficeIdAsync(Ot, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(DefaultCarlosConfig());
+
+        var vault = Substitute.For<ISignatureVaultPolicy>();
+        var carlosVault = new SignatureVaultMatch(
+                SignatureVaultId: Guid.NewGuid(),
+                FullName: "Carlos Pérez Demo",
+                SignatureHash: "sig-hash",
+                StoragePath: "firmas/carlos.png",
+                StorageSha256: "sha-firma",
+                VigenciaDesde: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1)),
+                VigenciaHasta: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+                DocumentNumber: "222000222",
+                CodigoHash: "ABC123");
+        vault.ResolveAsync(TenantId, "CC", "222000222", Arg.Any<CancellationToken>()).Returns(carlosVault);
+        vault.ResolveMandatarioAsync(TenantId, "CC", "222000222", Arg.Any<CancellationToken>()).Returns(carlosVault);
+
+        var firmaPolicy = Substitute.For<IMandatoFirmaPolicy>();
+        firmaPolicy.ResolveAsync(TenantId, Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new MandatoFirmaContexto(false, true, FirmaFisica: true));
+
+        var instance = NewInstance();
+        _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var mandatoGenerator = new CapturingMandatoGenerator();
+        var handler = new GenerarFurHandler(
+            _repo,
+            new MockFurDocumentGenerator(),
+            Substitute.For<IKyverumCertificateClient>(),
+            Substitute.For<IRuesCertificateGenerator>(),
+            Substitute.For<IRnmcCertificateGenerator>(),
+            Substitute.For<IProcedureInstancePrendaRepository>(),
+            new StorageConFirma(),
+            NullLogger<GenerarFurHandler>.Instance,
+            vaultPolicy: vault,
+            mandatoGenerator: mandatoGenerator,
+            mandatePolicy: policy,
+            mandatoFirmaPolicy: firmaPolicy,
+            mandateDirectory: directorio);
+
+        var (_, error) = await handler.HandleAsync(InstanceId, TenantId, ct);
+
+        error.Should().BeNull();
+        mandatoGenerator.Captured!.Mandatario!.FirmaImagen.Should().NotBeNullOrEmpty();
+        mandatoGenerator.Captured.ModoFirmaMandatario.Should().Be(
+            MandatarioFirmaModo.Estampada,
+            "si hay imagen o sello, el contrato la pinta aunque el modelo sea firma a mano");
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
 import { ToastProvider } from "@/components/admin/Toast";
 import type { CompanyOtMandateRuleView } from "@/lib/api/admin-plataforma-mandatos";
@@ -10,6 +10,8 @@ const listCompanyOtMandateRules = vi.fn();
 const fetchCompanyTransitOffices = vi.fn();
 const fetchRepresentedCompanies = vi.fn();
 const createCompanyMandateSigner = vi.fn();
+const fetchMandateSigners = vi.fn();
+const fetchMandateSignerSignatureImage = vi.fn();
 
 vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   fetchMandateOtConfig: (...a: unknown[]) => fetchMandateOtConfig(...a),
@@ -23,7 +25,8 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
 }));
 
 vi.mock("@/lib/api/admin-mandate-signers", () => ({
-  fetchMandateSigners: vi.fn().mockResolvedValue([]),
+  fetchMandateSigners: (...a: unknown[]) => fetchMandateSigners(...a),
+  fetchMandateSignerSignatureImage: (...a: unknown[]) => fetchMandateSignerSignatureImage(...a),
   fetchCompanyTransitOffices: (...a: unknown[]) => fetchCompanyTransitOffices(...a),
   fetchRepresentedCompanies: (...a: unknown[]) => fetchRepresentedCompanies(...a),
   createCompanyMandateSigner: (...a: unknown[]) => createCompanyMandateSigner(...a),
@@ -86,11 +89,21 @@ describe("OtMandatosSection", () => {
   beforeEach(() => {
     fetchMandateOtConfig.mockReset();
     listCompanyOtMandateRules.mockReset();
+    fetchMandateSigners.mockReset();
+    fetchMandateSignerSignatureImage.mockReset();
     listCompanyOtMandateRules.mockResolvedValue([]);
+    fetchMandateSigners.mockResolvedValue([]);
+    fetchMandateSignerSignatureImage.mockResolvedValue(new Blob(["png"], { type: "image/png" }));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:firma-mock");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     fetchCompanyTransitOffices.mockResolvedValue([
       { transitOfficeId: "ot-1", code: "11001000", name: "OT Bogotá" },
     ]);
     fetchRepresentedCompanies.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("lista empresas habilitadas y permite editar el mandatario", async () => {
@@ -186,8 +199,48 @@ describe("OtMandatosSection", () => {
         <OtMandatosSection transitOfficeId="ot-1" />
       </ToastProvider>,
     );
-    expect(await screen.findByTestId("ui-empty")).toBeInTheDocument();
-    expect(screen.getByText(/no hay empresas con este organismo habilitado/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/no hay empresas con este organismo habilitado/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/no hay mandatarios creados en este organismo/i)).toBeInTheDocument();
+  });
+
+  it("lista mandatarios creados con tipo de firma y permite verla", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    fetchMandateSigners.mockResolvedValue([
+      {
+        id: "ms-1",
+        transitOfficeId: "ot-1",
+        fullName: "Hugo Mandatario",
+        documentType: "CC",
+        documentNumber: "52123456",
+        integrityHash: "h".repeat(64),
+        email: "hugo@ot.test",
+        userId: null,
+        identityValidationRef: null,
+        identityStatus: "none",
+        signatureVaultId: "vault-1",
+        registeredAt: "2026-01-01T00:00:00Z",
+        isActive: true,
+        companyTenantIds: [],
+        physicalSignatureOfficeIds: [],
+      },
+    ]);
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    expect(await screen.findByRole("table", { name: "Mandatarios del organismo" })).toBeInTheDocument();
+    expect(screen.getByText("Hugo Mandatario")).toBeInTheDocument();
+    expect(screen.getByText("CC")).toBeInTheDocument();
+    expect(screen.getByText("52123456")).toBeInTheDocument();
+    expect(screen.getByText("Firma del baúl")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /ver firma de hugo mandatario/i }));
+    expect(await screen.findByRole("dialog", { name: /firma de hugo mandatario/i })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /firma de hugo mandatario/i })).toBeInTheDocument();
+    expect(fetchMandateSignerSignatureImage).toHaveBeenCalledWith("ot-1", "ms-1");
   });
 
   it("muestra error con reintentar", async () => {

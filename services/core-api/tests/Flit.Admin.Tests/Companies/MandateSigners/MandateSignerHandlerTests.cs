@@ -15,12 +15,10 @@ using Xunit;
 namespace Flit.Admin.Tests.Companies.MandateSigners;
 
 /// <summary>
-/// Tests del CRUD de mandatarios (ADR-0023, ampliado por ADR-0036) ejercitando los handlers reales
+/// Tests del CRUD de mandatarios (ADR-0023) ejercitando los handlers reales
 /// sobre <see cref="DbMandateSignerReader"/> + <see cref="MandateSignerRepository"/>
 /// + <see cref="DbTransitOfficeOperationalStatusReader"/> con proveedor InMemory. Cubren alta,
-/// multiplicidad (varios mandatarios por compañía, ADR-0036), soft-delete que libera compañías y
-/// regeneración de huella al editar. El seed y las constantes se comparten con
-/// <see cref="MandateSignerUsageAndViewTests"/> (HU10614, RF33/RF34).
+/// unicidad cliente×OT, soft-delete que libera compañías y regeneración de huella al editar.
 /// </summary>
 public sealed class MandateSignerHandlerTests
 {
@@ -50,21 +48,32 @@ public sealed class MandateSignerHandlerTests
     }
 
     [Fact]
-    public async Task Create_AllowsMultipleSignersPerCompany_Multiplicity()
+    public async Task Create_RejectsSecondSignerOnSameCompanyOt()
     {
-        // ADR-0036 (supersede ADR-0023): una compañía puede tener VARIOS mandatarios activos.
         await using var ctx = NewSeededContext();
-        var (create, _, _, _, list) = CrudHandlers(ctx);
+        var (create, _, _, _, _) = CrudHandlers(ctx);
 
         var firstCreate = await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct);
         firstCreate.IsValid.Should().BeTrue();
 
-        // Daniel SÍ puede tomar A aunque ya sea de Samuel (sin exclusividad).
         var second = await create.HandleAsync(NewCreate("Daniel", "222", [CompanyA, CompanyB]), Ct);
 
-        second.IsValid.Should().BeTrue();
-        second.MandateSignerId.Should().NotBeNull();
+        second.IsValid.Should().BeFalse();
+        second.Errors.Should().Contain(e =>
+            e.Field == "companyTenantIds"
+            && e.Message.Contains("Ya existe un mandatario", StringComparison.Ordinal));
+    }
 
+    [Fact]
+    public async Task Create_AllowsSecondSignerOnDifferentCompany()
+    {
+        await using var ctx = NewSeededContext();
+        var (create, _, _, _, list) = CrudHandlers(ctx);
+
+        (await create.HandleAsync(NewCreate("Samuel", "111", [CompanyA]), Ct)).IsValid.Should().BeTrue();
+        var second = await create.HandleAsync(NewCreate("Daniel", "222", [CompanyB]), Ct);
+
+        second.IsValid.Should().BeTrue();
         var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct);
         signers.Should().HaveCount(2);
     }

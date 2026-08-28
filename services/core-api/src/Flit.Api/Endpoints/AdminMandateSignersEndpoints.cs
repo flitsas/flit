@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureImage;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
@@ -75,6 +76,14 @@ public static class AdminMandateSignersEndpoints
             .WithName("AdminMandateSignersReactivate")
             .WithSummary("Reactiva un mandatario inactivado (se reasignan sus compañías)")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{mandateSignerId:guid}/signature-image", GetSignatureImageAsync)
+            .WithName("AdminMandateSignerSignatureImage")
+            .WithSummary("Devuelve el PNG de la firma del baúl del mandatario")
+            .Produces(StatusCodes.Status200OK, contentType: "image/png")
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
@@ -219,6 +228,26 @@ public static class AdminMandateSignersEndpoints
         return outcome == ReactivateMandateSignerOutcome.Reactivated
             ? Results.NoContent()
             : Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." });
+    }
+
+    private static async Task<IResult> GetSignatureImageAsync(
+        Guid transitOfficeId,
+        Guid mandateSignerId,
+        [FromServices] GetMandateSignerSignatureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(transitOfficeId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            GetMandateSignerSignatureImageOutcome.Ok =>
+                Results.File(result.Content!, "image/png"),
+            GetMandateSignerSignatureImageOutcome.NotFound =>
+                Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." }),
+            _ => Results.NotFound(new { error = "Este mandatario no tiene imagen de firma en el baúl." }),
+        };
     }
 
     /// <summary>422 con el sobre estándar de errores; nunca incluye PII.</summary>

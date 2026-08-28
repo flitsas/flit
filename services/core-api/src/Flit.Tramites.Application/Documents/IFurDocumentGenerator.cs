@@ -299,9 +299,9 @@ public enum MandatarioFirmaModo
     Estampada,
 
     /// <summary>
-    /// Bloque con línea de guiones bajos y sus datos debajo, sin estampa: firma a mano. Lo activan la
-    /// marca de firma física del mandatario en ese organismo y los organismos cuyo mandatario es el
-    /// propio organismo (familia <c>organismo_transito</c>).
+    /// Bloque con línea y datos debajo, sin estampa. Aplica al modo abierto, a la firma a mano
+    /// cuando no hay baúl ni sello, y a la familia organismo. Si el mandatario tiene estampa, manda
+    /// <see cref="Estampada"/> aunque también firme a mano.
     /// </summary>
     Manual,
 

@@ -227,6 +227,67 @@ public sealed class MandateConfigAdminServiceListTests
         view.DefaultMandateSignerIntegrityHash.Should().HaveLength(64);
     }
 
+    [Fact]
+    public async Task UpsertTemplate_DoesNotClearOtDefaultSigner()
+    {
+        await using var db = NewDb();
+        var signerId = Guid.Parse("aaaaaaaa-1111-4000-8000-000000000001");
+        db.MandateSigners.Add(new MandateSigner
+        {
+            Id = signerId,
+            TransitOfficeId = ActiveId,
+            FullName = "Juan Copete",
+            DocumentType = "CC",
+            DocumentNumber = "222",
+            IntegrityHash = new string('c', 64),
+            RegisteredAt = DateTimeOffset.UtcNow,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(),
+            TransitOfficeId = ActiveId,
+            TemplateCode = "generico",
+            AssignmentMode = "signer",
+            MandataryFamily = "individuo",
+            DefaultMandateSignerId = signerId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(Ct);
+
+        var catalog = Substitute.For<ITransitOfficeCatalog>();
+        catalog.GetById(ActiveId).Returns(new TransitOfficeEntry(ActiveId, "11001000", "Bogotá", "11", "11001"));
+
+        var service = new MandateConfigAdminService(
+            db,
+            catalog,
+            new StubTransitOfficeOperationalStatusReader().Set(ActiveId, hasTenant: true, estadoActivo: true),
+            Substitute.For<IDocumentOcrAnalyzer>(),
+            Substitute.For<IMandateTemplateStorage>());
+
+        var (status, view) = await service.UpsertAsync(
+            ActiveId,
+            new UpsertMandateOtConfigRequest(
+                TemplateCode: "municipio",
+                RequiresForNaturalPerson: true,
+                MandataryFamily: "individuo",
+                InstitutionalMandataryName: null,
+                InstitutionalMandataryNit: null,
+                ChamberCity: null,
+                MandatarySigla: null,
+                RowVersion: null,
+                AssignmentMode: "signer",
+                DefaultMandateSignerId: null),
+            userId: null,
+            Ct);
+
+        status.Should().Be(MandateConfigWriteStatus.Ok);
+        view!.TemplateCode.Should().Be("municipio");
+        view.DefaultMandateSignerId.Should().Be(signerId);
+        view.DefaultMandateSignerName.Should().Be("Juan Copete");
+    }
+
     private static FlitDbContext NewDb() =>
         new(new DbContextOptionsBuilder<FlitDbContext>()
             .UseInMemoryDatabase($"mandate-list-{Guid.NewGuid()}")

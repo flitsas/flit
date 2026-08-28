@@ -303,13 +303,12 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
             Familia = MandatoFamiliaCodes.Resolve(config?.MandataryFamily),
             ChamberCity = config?.ChamberCity ?? sample.ChamberCity,
             MandatarySigla = config?.MandatarySigla ?? sample.MandatarySigla,
-            // Abierto: sin firmante, bloque con líneas. Institucional: sin bloque de mandatario.
             Mandatario = MandatoAssignmentModeCodes.IsOpen(assignmentMode) ? null : mandatario,
-            ModoFirmaMandatario = MandatoAssignmentModeCodes.IsInstitutional(assignmentMode)
-                ? MandatarioFirmaModo.SinBloque
-                : MandatoAssignmentModeCodes.IsOpen(assignmentMode)
-                    ? MandatarioFirmaModo.Manual
-                    : MandatarioFirmaModo.Estampada,
+            ModoFirmaMandatario = MandatoFirmaModoResolver.Resolve(
+                assignmentMode,
+                tieneConvenio: false,
+                MandatoFirmaModoResolver.TieneEstampa(
+                    MandatoAssignmentModeCodes.IsOpen(assignmentMode) ? null : mandatario)),
             CustomTemplateKind = MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind),
             CustomTemplateBody = config?.CustomTemplateBody,
             CustomTemplatePdf = customPdf,

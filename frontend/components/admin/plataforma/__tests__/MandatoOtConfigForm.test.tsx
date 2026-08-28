@@ -19,6 +19,8 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", async (importOriginal) => {
     deleteMandateOtCustomTemplate: vi.fn(),
     upsertCompanyOtMandateRule: vi.fn(),
     deleteCompanyOtMandateRule: vi.fn(),
+    setOtDefaultSigner: vi.fn(),
+    setCompanyDefaultSigner: vi.fn(),
   };
 });
 
@@ -69,7 +71,7 @@ describe("MandatoOtConfigForm", () => {
     expect(screen.getByTestId("mandato-template-select")).toBeInTheDocument();
     expect(listCompanyOtMandateRules).toHaveBeenCalledWith(funza.officeId);
     expect(screen.queryByTestId("mandato-ot-register-signer")).not.toBeInTheDocument();
-    expect(screen.getByText(/el default cliente×ot prima sobre este/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("mandato-ot-default-signer")).not.toBeInTheDocument();
   });
 
   it("permite registrar el mandatario default del OT desde el panel", async () => {
@@ -87,7 +89,7 @@ describe("MandatoOtConfigForm", () => {
     render(
       <MandatoOtConfigForm
         office={funza}
-        mode="mandato"
+        mode="mandatario"
         onRegisterSigner={onRegisterSigner}
         onClose={() => undefined}
         onSaved={() => undefined}

@@ -48,6 +48,14 @@ public sealed record UpsertMandateOtConfigRequest(
     string AssignmentMode = "signer",
     Guid? DefaultMandateSignerId = null);
 
+/// <summary>Solo el firmante por defecto del OT. No toca plantilla ni modo de negocio.</summary>
+public sealed record SetOtDefaultSignerRequest(
+    Guid? DefaultMandateSignerId,
+    long? RowVersion = null);
+
+/// <summary>Solo el firmante por defecto de la llave cliente×OT. No toca plantilla del OT.</summary>
+public sealed record SetCompanyDefaultSignerRequest(Guid? DefaultMandateSignerId);
+
 public sealed record SaveMandateEditorBodyRequest(
     string Body,
     long? RowVersion);
@@ -121,6 +129,15 @@ public interface IMandateConfigAdminService
         Guid? userId,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Fija o limpia el mandatario general del OT. No cambia <c>template_code</c> ni el resto de la plantilla.
+    /// </summary>
+    Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> SetOtDefaultSignerAsync(
+        Guid officeId,
+        SetOtDefaultSignerRequest request,
+        Guid? userId,
+        CancellationToken ct = default);
+
     Task<MandateConfigWriteStatus> DeleteAsync(Guid officeId, CancellationToken ct = default);
 
     Task<MandateConfigExtractResult> ExtractAsync(
@@ -157,6 +174,17 @@ public interface IMandateConfigAdminService
         Guid officeId,
         Guid companyTenantId,
         UpsertCompanyOtMandateRuleRequest request,
+        Guid? userId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Fija o limpia el mandatario de la llave cliente×OT. No reescribe modo ni familia de la regla
+    /// existente; una regla nueva hereda el modo del OT.
+    /// </summary>
+    Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> SetCompanyDefaultSignerAsync(
+        Guid officeId,
+        Guid companyTenantId,
+        SetCompanyDefaultSignerRequest request,
         Guid? userId,
         CancellationToken ct = default);
 

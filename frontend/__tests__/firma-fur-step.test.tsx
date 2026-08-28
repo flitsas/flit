@@ -353,7 +353,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true));
   });
 
-  it('lista el FUR en Documentos del expediente y no vuelve a generarFur', async () => {
+  it('lista el FUR en Documentos del expediente y regenera para pintar la placa', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
     mocks.getChecklist.mockResolvedValue({
       items: [{ key: 'fur', label: 'FUR', obligatorio: true, docTipo: 'fur', satisfied: true }],
@@ -366,7 +366,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     expect(within(docs).getByText('FUR')).toBeInTheDocument();
     expect(within(docs).getByText(/SHA-256 abc123/)).toBeInTheDocument();
     await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalled());
-    expect(mocks.generarFur).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.generarFur).toHaveBeenCalledWith(INSTANCE));
   });
 
   it('muestra Fecha del trámite al inicio del resumen como hoy y no editable', async () => {
@@ -929,8 +929,8 @@ describe('FirmaFurStep — estado del paquete de documentos (Bug #11145)', () =>
 
     await waitFor(() => expect(estados).toContain('ready'));
     expect(estados).not.toContain('loading');
-    // Y no se regenera lo que ya existe.
-    expect(mocks.generarFur).not.toHaveBeenCalled();
+    // Regenera en silencio (aviso listo porque el FUR ya está) para pintar placa si existe.
+    await waitFor(() => expect(mocks.generarFur).toHaveBeenCalledWith(INSTANCE));
   });
 
   it('con la generación aún en vuelo, el aviso se retira en cuanto el FUR aparece', async () => {

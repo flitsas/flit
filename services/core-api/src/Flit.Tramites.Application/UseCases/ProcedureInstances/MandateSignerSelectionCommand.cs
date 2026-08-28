@@ -89,10 +89,9 @@ public sealed class ListMandateSignerOptionsHandler(
             .WithOtDefaultAsync(candidatos, mandateConfig?.OtDefaultMandateSignerId, directory, ct)
             .ConfigureAwait(false);
 
-        // La firma del baúl se resuelve por documento y contra el tenant de la gestora, igual que hace el
-        // generador del mandato (HU #11030). Son un puñado de mandatarios por organismo, así que se
-        // resuelven uno a uno en vez de montar una consulta en lote que duplicaría la política del baúl
-        // (incluido el flag signature_vault_enabled del tenant).
+        // La firma del baúl del mandatario se resuelve por documento contra el tenant de la gestora,
+        // igual que el generador del mandato. El flag signature_vault_enabled de la compañía NO aplica:
+        // gobierna a las partes del trámite, no a quien firma el contrato de mandato.
         var opciones = new List<MandateSignerOptionDto>(candidatos.Count);
         foreach (var c in candidatos)
         {
@@ -101,7 +100,7 @@ public sealed class ListMandateSignerOptionsHandler(
             var conBaul = !c.FirmaFisica
                 && !string.IsNullOrWhiteSpace(c.Documento)
                 && await _vaultPolicy
-                    .ResolveAsync(tenantId, tipoDoc, c.Documento.Trim(), ct)
+                    .ResolveMandatarioAsync(tenantId, tipoDoc, c.Documento.Trim(), ct)
                     .ConfigureAwait(false) is not null;
 
             opciones.Add(new MandateSignerOptionDto(

@@ -303,6 +303,19 @@ public sealed class FurOverlayDocumentGeneratorTests
         values["plate_number"].Text.Should().Be("123");
     }
 
+    [Fact]
+    public void FurFieldMapper_SinPlaca_CasillasDeLetrasYNumerosVacias()
+    {
+        var data = TraspasoData() with
+        {
+            Vehiculo = TraspasoData().Vehiculo with { Placa = null },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["plate_letter"].Text.Should().BeEmpty();
+        values["plate_number"].Text.Should().BeEmpty();
+    }
+
     // ── HU #10463 — sello "NO FIRMADO" cuando no hay validación de identidad ──
 
     [Fact]

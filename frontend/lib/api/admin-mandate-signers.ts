@@ -1,7 +1,8 @@
 // Cliente tipado de mandatarios (firmantes de mandato) por OT (ADR-0023, ampliado por ADR-0036).
 // Módulo Admin OT (SuperAdmin u ot_admin). Endpoints acotados por transitOfficeId en la ruta.
 // El número de documento y el correo son PII (Ley 1581): se reciben solo para precargar el formulario.
-import { apiFetch } from "./client";
+import { apiFetch, API_BASE_URL, getToken, friendlyErrorMessage } from "./client";
+import { ApiError } from "./types";
 
 /** Un mandatario asignado a una compañía (ADR-0036: multiplicidad ⇒ una compañía puede tener varios). */
 export interface AssignedSigner {
@@ -146,6 +147,39 @@ export function reactivateMandateSigner(
   return apiFetch<void>(`${base(transitOfficeId)}/${mandateSignerId}/reactivate`, {
     method: "POST",
   });
+}
+
+/** GET PNG de la firma del baúl del mandatario (preview del ojo). 404 si no hay imagen. */
+export async function fetchMandateSignerSignatureImage(
+  transitOfficeId: string,
+  mandateSignerId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const baseUrl =
+    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(`${base(transitOfficeId)}/${mandateSignerId}/signature-image`, baseUrl);
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(url.toString(), { method: "GET", headers, signal });
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      const text = await response.text();
+      detail = text ? JSON.parse(text) : null;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(
+      response.status,
+      friendlyErrorMessage(detail as Record<string, unknown> | null),
+      detail,
+    );
+  }
+
+  const blob = await response.blob();
+  return blob.type.startsWith("image/") ? blob : new Blob([blob], { type: "image/png" });
 }
 
 // HU #11759 (ADR-0050, DA-5) — se retiran `sendMandateSignerIdentity`, `resendMandateSignerIdentity`,
