@@ -22,48 +22,6 @@ export function MandatarioFirmaPreviewDialog({
   onClose: () => void;
 }) {
   const tipo = tipoDeFirmaMandatario(signer, officeId);
-  const aMano = signer.physicalSignatureOfficeIds?.includes(officeId) ?? false;
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageStatus, setImageStatus] = useState<"idle" | "loading" | "ready" | "empty" | "error">(
-    signer.signatureVaultId ? "loading" : "idle",
-  );
-  const [imageError, setImageError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!signer.signatureVaultId) {
-      setImageStatus("idle");
-      setImageUrl(null);
-      return;
-    }
-
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    setImageStatus("loading");
-    setImageError(null);
-    setImageUrl(null);
-
-    void fetchMandateSignerSignatureImage(officeId, signer.id)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setImageUrl(objectUrl);
-        setImageStatus("ready");
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof ApiError && err.status === 404) {
-          setImageStatus("empty");
-          return;
-        }
-        setImageError(err instanceof ApiError ? err.message : "No se pudo cargar la imagen de la firma.");
-        setImageStatus("error");
-      });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [officeId, signer.id, signer.signatureVaultId]);
 
   return (
     <Modal
@@ -87,28 +45,18 @@ export function MandatarioFirmaPreviewDialog({
       </dl>
 
       <div className="mt-4" data-testid="ot-mandatos-firma-preview-image">
-        {imageStatus === "loading" ? (
-          <p className="text-xs text-[#59677D] dark:text-white/65">Cargando imagen de la firma…</p>
-        ) : null}
-        {imageStatus === "error" ? (
-          <p className="text-xs text-[#C81E1E]">{imageError}</p>
-        ) : null}
-        {imageStatus === "empty" ? (
-          <p className="text-xs text-[#59677D] dark:text-white/65">No hay imagen custodiada para este mandatario.</p>
-        ) : null}
-        {imageStatus === "ready" && imageUrl ? (
-          // PNG del baúl: no es HTML de usuario.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
-            alt={`Firma de ${signer.fullName}`}
-            className="max-h-40 w-auto max-w-full rounded-lg border border-[#DFE5ED] bg-white p-3 dark:border-white/10"
+        {signer.signatureVaultId ? (
+          <MandatarioFirmaPreviewImage
+            key={`${signer.id}-${signer.signatureVaultId}`}
+            officeId={officeId}
+            signerId={signer.id}
+            signerName={signer.fullName}
           />
         ) : null}
       </div>
 
       <p className="mt-4 text-xs leading-relaxed text-[#59677D] dark:text-white/65" data-testid="ot-mandatos-firma-preview-body">
-        {textoPreview(tipo, aMano)}
+        {textoPreview(tipo)}
       </p>
       <div className="mt-5 flex justify-end">
         <button
@@ -123,7 +71,7 @@ export function MandatarioFirmaPreviewDialog({
   );
 }
 
-function textoPreview(tipo: TipoFirmaMandatario, aManoEnEsteOt: boolean): string {
+function textoPreview(tipo: TipoFirmaMandatario): string {
   switch (tipo) {
     case "baul":
       return "El contrato estampa la imagen de la firma custodiada en el baúl.";
@@ -136,6 +84,71 @@ function textoPreview(tipo: TipoFirmaMandatario, aManoEnEsteOt: boolean): string
     default:
       return "No hay medio de firma. El recuadro del mandatario queda en blanco (Sin firmar).";
   }
+}
+
+function MandatarioFirmaPreviewImage({
+  officeId,
+  signerId,
+  signerName,
+}: {
+  officeId: string;
+  signerId: string;
+  signerName: string;
+}) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageStatus, setImageStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    void fetchMandateSignerSignatureImage(officeId, signerId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setImageUrl(objectUrl);
+        setImageStatus("ready");
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setImageStatus("empty");
+          return;
+        }
+        setImageError(err instanceof ApiError ? err.message : "No se pudo cargar la imagen de la firma.");
+        setImageStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [officeId, signerId]);
+
+  if (imageStatus === "loading") {
+    return <p className="text-xs text-[#59677D] dark:text-white/65">Cargando imagen de la firma…</p>;
+  }
+  if (imageStatus === "error") {
+    return <p className="text-xs text-[#C81E1E]">{imageError}</p>;
+  }
+  if (imageStatus === "empty") {
+    return (
+      <p className="text-xs text-[#59677D] dark:text-white/65">No hay imagen custodiada para este mandatario.</p>
+    );
+  }
+  if (imageStatus === "ready" && imageUrl) {
+    return (
+      // PNG del baúl: no es HTML de usuario.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl}
+        alt={`Firma de ${signerName}`}
+        className="max-h-40 w-auto max-w-full rounded-lg border border-[#DFE5ED] bg-white p-3 dark:border-white/10"
+      />
+    );
+  }
+  return null;
 }
 
 function Field({ label, value }: { label: string; value: string }) {
