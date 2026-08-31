@@ -14,6 +14,8 @@ import { VehicleBodyworkSearchSelect } from './VehicleBodyworkSearchSelect';
 import { WizardCardHeader, WizardFieldToggle } from './wizard-atoms';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
+// Misma regla de «hay transformación» que aplica el detalle del OT al revisarla (HU #11931).
+import { valorCambiado as isChanged } from '@/lib/tramites/transformaciones-vehiculo';
 
 /** DocTipo de soporte por subtrámite (whitelist AttachmentRules + RF33 factura_carroceria). */
 const DOC_TIPO_BY_KEY: Record<SubtramiteKey, string> = {
@@ -580,13 +582,6 @@ function SubtramiteDocCard({
   );
 }
 
-function isChanged(a: string, b: string): boolean {
-  return (
-    a.trim() !== '' &&
-    b.trim() !== '' &&
-    a.trim().toUpperCase() !== b.trim().toUpperCase()
-  );
-}
 
 function up(value: string): string {
   return value.trim().toUpperCase();

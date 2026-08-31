@@ -9,6 +9,11 @@ import {
 } from "@/components/operacion/detalle/primitivos";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { plateFlowChipStyle, plateFlowLabel } from "@/lib/tramites/estados";
+import type { TransformacionTipo } from "@/lib/tramites/transformaciones-vehiculo";
+import {
+  OtDetalleTransformaciones,
+  transformacionesDelTramite,
+} from "./OtDetalleTransformaciones";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "../ot-utils";
 
 /** Etiqueta legible del estado del SOAT en el RUNT. */
@@ -20,16 +25,25 @@ function soatEstadoLabel(value: string | null | undefined): string {
   return value;
 }
 
-/** Especificaciones técnicas del vehículo, en el mismo orden que el detalle del gestor. */
-function especificaciones(procedure: OtClientProcedure): { campo: string; valor: string }[] {
+/**
+ * Especificaciones técnicas del vehículo, en el mismo orden que el detalle del gestor.
+ *
+ * Un atributo que el trámite transforma se OMITE aquí: su sitio es el bloque de transformaciones,
+ * donde se ve junto al valor del RUNT. Mostrarlo además como valor suelto lo haría pasar por el
+ * dato oficial del vehículo, que es justo la confusión que se está corrigiendo (HU #11931).
+ */
+function especificaciones(
+  procedure: OtClientProcedure,
+  transformados: Set<TransformacionTipo>,
+): { campo: string; valor: string }[] {
   const cilindraje = procedure.cilindraje?.trim() ?? "";
 
   return [
     { campo: "Clase", valor: procedure.clase },
     { campo: "Servicio", valor: procedure.servicio },
-    { campo: "Color", valor: procedure.color },
-    { campo: "Combustible", valor: procedure.combustible },
-    { campo: "Carrocería", valor: procedure.carroceria },
+    { campo: "Color", valor: transformados.has("color") ? "" : procedure.color },
+    { campo: "Combustible", valor: transformados.has("combustible") ? "" : procedure.combustible },
+    { campo: "Carrocería", valor: transformados.has("carroceria") ? "" : procedure.carroceria },
     {
       campo: "Cilindraje",
       valor: cilindraje && !cilindraje.includes("cc") ? `${cilindraje} cc` : cilindraje,
@@ -75,15 +89,13 @@ function pendientes(procedure: OtClientProcedure, totalDocumentos: number): stri
 export function OtDetalleTramiteVehiculo({
   procedure,
   totalDocumentos,
-  transformacionesSlot = null,
 }: {
   procedure: OtClientProcedure;
   /** Documentos del expediente ya cargados por el modal; alimenta el pendiente «sin documentos». */
   totalDocumentos: number;
-  /** Transformaciones declaradas frente al RUNT (HU #11931); se inyecta para no acoplar la ficha. */
-  transformacionesSlot?: React.ReactNode;
 }) {
-  const specs = especificaciones(procedure);
+  const transformados = new Set(transformacionesDelTramite(procedure).map((t) => t.tipo));
+  const specs = especificaciones(procedure, transformados);
   const avisos = pendientes(procedure, totalDocumentos);
   const plateChip = plateFlowChipStyle(procedure.plateFlowStatus);
 
@@ -159,7 +171,7 @@ export function OtDetalleTramiteVehiculo({
       </TarjetaDetalle>
 
       <TarjetaDetalle titulo="Especificaciones del vehículo">
-        {specs.length === 0 && !transformacionesSlot ? (
+        {specs.length === 0 && transformados.size === 0 ? (
           <SeccionVacia mensaje="Este trámite no tiene especificaciones técnicas del vehículo registradas todavía." />
         ) : (
           <>
@@ -170,7 +182,7 @@ export function OtDetalleTramiteVehiculo({
                 ))}
               </ListaCampos>
             ) : null}
-            {transformacionesSlot}
+            <OtDetalleTransformaciones procedure={procedure} />
           </>
         )}
       </TarjetaDetalle>
