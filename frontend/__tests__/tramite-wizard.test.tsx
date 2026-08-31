@@ -563,7 +563,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     // Navega al último paso (FUR, índice 5).
     await user.click(screen.getByRole('button', { name: /^Paso 6: Resumen/ }));
     expect(screen.getByRole('button', { name: /Finalizar/ })).toBeDisabled();
-    expect(screen.getByText(/Hay bloqueos críticos en el pre-vuelo/)).toBeInTheDocument();
+    expect(screen.getByText(/Hay bloqueos críticos en la verificación del vehículo/)).toBeInTheDocument();
   });
 
   it('N 03 dos pasos — con identidad aprobada el botón es "Finalizar y enviar trámite" (borrador→preparado) y sale al listado (Feature #11211)', async () => {

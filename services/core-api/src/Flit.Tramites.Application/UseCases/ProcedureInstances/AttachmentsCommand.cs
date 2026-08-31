@@ -55,6 +55,15 @@ public static class AttachmentRules
         // HU #10604 (R19) / #10697 — paz y salvo RNMC. RNMC ya NO bloquea el envío al OT (la medida
         // correctiva es informativa): este adjunto queda como OPCIONAL informativo, no como requisito.
         "paz_salvo_rnmc",
+        // Escritura del representante legal CARGADA por el gestor, cuando el representante capturado
+        // no está en el módulo de representantes de la compañía y por tanto no tiene escritura que el
+        // sistema pueda apalancar del directorio. Un código por rol (misma convención que
+        // 'certificado_identidad{_rol}') para que las dos partes de un traspaso puedan cargar cada una
+        // la suya. NO se reutiliza 'escritura'/'escritura_comprador': esos son documentos de sistema
+        // (is_system_generated) y la limpieza de huérfanos del expediente los retira sin mirar el
+        // `source`, así que una carga manual bajo ese código no sobreviviría a la siguiente regeneración.
+        "escritura_representante", "escritura_representante_vendedor",
+        "escritura_representante_locatario",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

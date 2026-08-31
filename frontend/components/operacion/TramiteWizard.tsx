@@ -658,6 +658,14 @@ export function TramiteWizard(props: Props) {
    */
   const [actorsConsultationReady, setActorsConsultationReady] = useState(false);
   /**
+   * Escritura del representante legal: Continuar solo si toda parte jurídica cuyo representante NO
+   * está en el módulo de representantes de la compañía ya adjuntó la escritura que lo acredita.
+   *
+   * Arranca en `true` (gate abierto) como el resto: mientras el paso de actores no se monta no hay
+   * nada que exigir, y `ActorsForm` lo corrige en cuanto resuelve el directorio.
+   */
+  const [escrituraRlGateOk, setEscrituraRlGateOk] = useState(true);
+  /**
    * Certificado de prenda: Continuar solo si no falta un adjunto obligatorio
    * (política compañía+OT + decisión que exige documento).
    */
@@ -1255,6 +1263,10 @@ export function TramiteWizard(props: Props) {
     continuing ||
     // Sin consulta RUNT/RUES exitosa no se avanza en pasos de actores.
     (isActorStep && !actorsConsultationReady) ||
+    // Representante legal fuera del módulo de representantes y sin la escritura que lo acredita: no
+    // se pasa a Requisitos. El documento se carga en el propio paso, junto a los datos del
+    // representante, y `ActorsForm` es quien decide si aplica.
+    (isActorStep && !escrituraRlGateOk) ||
     // Certificado de prenda obligatorio sin adjuntar: no Continuar.
     (isPrendaStep && !prendaDocGateOk) ||
     // HU #11628 — dígito de preferencia de placa sin declarar (ni dígito ni "sin preferencia") con
@@ -1792,6 +1804,7 @@ export function TramiteWizard(props: Props) {
                 stepFormRef={stepFormRef}
                 prendaFormRef={prendaFormRef}
                 onActorsConsultationGateChange={setActorsConsultationReady}
+                onEscrituraRepresentanteGateChange={setEscrituraRlGateOk}
                 onIrAActores={irAPasoActor}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
@@ -3882,11 +3895,19 @@ function ConsultaStep({
           {!readOnly && consultButton}
         </div>
         ) : (
-          /* Traspaso — prototipo Lovable: Placa | Nº documento | Consultar RUNT (3 cols).
-             Tipo de documento del propietario se oculta con Kyverum (hideOwnerDocType); solo
-             aparece si hace falta corregir (maquinaria/remolque). */
-          <div className="mt-4 grid grid-cols-1 items-end gap-4 lg:grid-cols-3">
-            <div className="min-w-0">
+          /* Traspaso — prototipo Lovable: Placa | Nº documento | Consultar RUNT. El tipo de documento
+             del propietario se oculta con Kyverum (`hideOwnerDocType`) y solo aparece cuando hace
+             falta corregirlo (maquinaria/remolque, HU #10478).
+
+             La rejilla es de DOCE columnas, no de tres, porque el número de campos cambia. Con tres,
+             el selector tenía que declararse `col-span-3` para no descuadrar la fila —es decir, se
+             llevaba una fila entera para él solo, encogido a `max-w-xs`— y empujaba el número y el
+             botón a una tercera. El resultado eran tres filas desparejas con un control huérfano en
+             medio. Con doce, cada campo declara su porción y los dos escenarios caben en UNA fila:
+                sin selector →      4 + 5 + 3 = 12
+                con selector →  3 + 2 + 4 + 3 = 12 */
+          <div className="mt-4 grid grid-cols-1 items-end gap-4 lg:grid-cols-12">
+            <div className={`min-w-0 ${hideOwnerDocType ? 'lg:col-span-4' : 'lg:col-span-3'}`}>
               <label htmlFor="consulta-plate" className={WIZARD_LABEL}>
                 Placa del vehículo
               </label>
@@ -3904,7 +3925,10 @@ function ConsultaStep({
               />
             </div>
             {!hideOwnerDocType && (
-              <div className="min-w-0 lg:col-span-3 lg:max-w-xs">
+              // Dos de doce: lo justo para «CC»/«NIT» y su flecha. Antes se declaraba a fila
+              // completa y luego se recortaba con `max-w-xs`, que es lo que dejaba el hueco a su
+              // derecha y lo hacía leer como un campo suelto.
+              <div className="min-w-0 lg:col-span-2">
                 <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
                   Tipo documento propietario
                 </label>
@@ -3928,7 +3952,7 @@ function ConsultaStep({
                 </select>
               </div>
             )}
-            <div className="min-w-0">
+            <div className={`min-w-0 ${hideOwnerDocType ? 'lg:col-span-5' : 'lg:col-span-4'}`}>
               <label htmlFor="consulta-owner-doc-number" className={WIZARD_LABEL}>
                 Número documento del propietario
               </label>
@@ -3950,7 +3974,7 @@ function ConsultaStep({
               />
             </div>
             {!readOnly && (
-              <div className="min-w-0 [&_button]:w-full">{consultButton}</div>
+              <div className="min-w-0 lg:col-span-3 [&_button]:w-full">{consultButton}</div>
             )}
           </div>
         )}
@@ -4192,6 +4216,7 @@ function StepBody({
   stepFormRef,
   prendaFormRef,
   onActorsConsultationGateChange,
+  onEscrituraRepresentanteGateChange,
   onIrAActores,
   identityOperable = false,
   identityApproved = false,
@@ -4247,6 +4272,8 @@ function StepBody({
   prendaFormRef: RefObject<WizardStepFormHandle | null>;
   /** Gate Continuar en pasos de actores (consulta RUNT/RUES exitosa). */
   onActorsConsultationGateChange?: (ready: boolean) => void;
+  /** Gate Continuar: escritura del representante legal fuera del directorio ya adjunta (o no aplica). */
+  onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
   /** HU #11666 — navega al paso de actores de una parte (acción correctiva de los motivos de no envío). */
   onIrAActores?: (parte: BiometricParte) => void;
   /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
@@ -4483,7 +4510,7 @@ function StepBody({
             badge={
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {docUploadMode === 'batch' && (
-                  <StatusBadge label="Clasificación automática por OCR" tone="info" />
+                  <StatusBadge label="Clasificación automática" tone="info" />
                 )}
                 <DocumentUploadModeToggle
                   value={docUploadMode}
@@ -4637,6 +4664,7 @@ function StepBody({
           {...(unificado ? {} : { layout: 'split' as const })}
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
+          onEscrituraRepresentanteGateChange={onEscrituraRepresentanteGateChange}
         />
       );
     }

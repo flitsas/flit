@@ -20,7 +20,10 @@ export type CarLoaderMode = 'runt' | 'ocr' | 'radicacion';
 
 const MENSAJES: Record<CarLoaderMode, string> = {
   runt: 'Consultando información en el RUNT…',
-  ocr: 'Analizando y validando documentos con IA…',
+  // Sin «IA» ni «OCR»: las dos son jerga de cómo está hecho el sistema, no de lo que el gestor está
+  // esperando. Lo que ocurre es que se están LEYENDO los documentos que acaba de cargar, y eso es lo
+  // que anticipa la pantalla que viene después (el reparto por casillas, que él revisa).
+  ocr: 'Leyendo los documentos que cargaste…',
   radicacion: 'Radicando expediente ante el organismo de tránsito…',
 };
 
@@ -89,11 +92,11 @@ export function CarLoader({ mode = 'runt', label }: { mode?: CarLoaderMode; labe
       </div>
       {/* eslint-enable @next/next/no-img-element */}
 
+      {/* El mensaje ES el título. Antes iba «Cargando…» en negrita y el mensaje debajo, en pequeño y
+          atenuado: el rótulo genérico se llevaba toda la jerarquía sin decir nada, y lo único que
+          informa —ante quién se espera— quedaba de subtítulo de una palabra vacía. */}
       <div className="text-center">
-        <p className="text-sm font-semibold">Cargando…</p>
-        {/* opacity-70 es el piso del sistema sobre texto: este mensaje es la única explicación de
-            la espera y no puede quedar por debajo de AA. */}
-        <p className="mt-1 text-xs opacity-70">{mensaje}</p>
+        <p className="max-w-xs text-sm font-semibold">{mensaje}</p>
       </div>
     </div>
   );

@@ -53,9 +53,9 @@ test.describe('HU10201 — consulta real multi-proveedor', () => {
     });
 
     await test.step('Panel semáforo visible', async () => {
-      await expect(page.getByText('Pre-vuelo de requisitos')).toBeVisible();
+      await expect(page.getByText('Verificación de requisitos')).toBeVisible();
       await expect(
-        page.getByText(/Pre-vuelo en verde|Pre-vuelo con advertencias|Pre-vuelo con bloqueos/i),
+        page.getByText(/Sin novedades|Con advertencias|Con bloqueos/i),
       ).toBeVisible();
     });
   });

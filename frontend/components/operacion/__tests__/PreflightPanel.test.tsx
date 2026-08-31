@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PreflightPanel, checkRoleSuffix } from '../PreflightPanel';
+import { PreflightPanel, checkPillLabel, checkRoleSuffix } from '../PreflightPanel';
 import type {
   PreflightCheck,
   PreflightSnapshot,
@@ -26,6 +26,58 @@ const baseProps = {
   riesgoAceptado: false,
   onToggleRiesgo: vi.fn(),
 };
+
+describe('checkPillLabel — la pastilla es el semáforo, no el detalle', () => {
+  // El defecto: en `fail` la pastilla se tragaba el mensaje entero (hasta 42 caracteres). En una
+  // tarjeta de un cuarto de fila, «FALLA - VEHÍCULO NO ENCONTRADO EN RUNT» no cabe, y como no
+  // encoge ni parte, empujaba el título fuera de la caja y las letras quedaban encimadas.
+  // Que el mensaje ya no quepa en la pastilla lo garantiza el TIPO: `checkPillLabel` dejó de
+  // aceptar `message`. Lo que se comprueba aquí es la forma del rótulo; que el mensaje acabe bajo
+  // el título y no dentro de la pastilla se ejercita abajo, contra el componente.
+  it('en fail el rótulo es el estado y la fuente', () => {
+    expect(checkPillLabel({ status: 'fail', source: 'kyverum_runt' })).toBe('FALLA - RUNT');
+  });
+
+  it('todos los estados con fuente tienen la misma forma', () => {
+    expect(checkPillLabel({ status: 'ok', source: 'verifik' })).toBe('OK - RUNT');
+    expect(checkPillLabel({ status: 'warn', source: 'kyverum_fines' })).toBe('ADVERTENCIA - SIMIT');
+    expect(checkPillLabel({ status: 'error', source: 'verifik' })).toBe('ERROR - RUNT');
+  });
+
+  // `unknown` no es «no existe» (eso es `fail`): es «no se pudo averiguar», así que no hay fuente
+  // que atribuirle ni motivo para mandar al gestor a corregir un dato que está bien.
+  it('unknown va sola y se rotula SIN DATO', () => {
+    expect(checkPillLabel({ status: 'unknown', source: 'system' })).toBe('SIN DATO');
+  });
+});
+
+describe('PreflightPanel — vehículo no encontrado (tarjeta que se rompía)', () => {
+  it('el mensaje va bajo el título y NO dentro de la pastilla', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'red',
+          createdAt: '2026-07-07T00:00:00Z',
+          checks: [
+            {
+              key: 'vehiculo',
+              label: 'Vehículo RUNT',
+              status: 'fail',
+              source: 'kyverum_runt',
+              message: 'Vehículo no encontrado en RUNT',
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+
+    // La pastilla: estado y fuente, sin el mensaje dentro.
+    expect(screen.getByText('FALLA - RUNT')).toBeInTheDocument();
+    // Y el mensaje, una sola vez, en su línea.
+    expect(screen.getAllByText('Vehículo no encontrado en RUNT')).toHaveLength(1);
+  });
+});
 
 describe('checkRoleSuffix', () => {
   it('distingue comprador y vendedor por la clave RNMC', () => {
@@ -168,8 +220,8 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
     expect(
       screen.getByText('El organismo de tránsito no exige esta consulta.'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/NO ENCONTRADO/)).toBeInTheDocument();
-    // Prototipo: en unknown la pastilla es solo «NO ENCONTRADO»; el detalle queda debajo.
+    expect(screen.getByText(/SIN DATO/)).toBeInTheDocument();
+    // En unknown la pastilla es solo «SIN DATO»; el detalle queda debajo, nunca dentro.
   });
 });
 
@@ -197,7 +249,7 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
 
   it('lista los hallazgos warn y aclara que se puede continuar', () => {
     render(<PreflightPanel snapshot={warnSnap} {...baseProps} />);
-    const franja = screen.getByText('Advertencias del pre-vuelo').closest('div')!;
+    const franja = screen.getByText('Advertencias de la verificación').closest('div')!;
     expect(franja).toHaveAttribute('role', 'status');
     expect(franja).toHaveTextContent('Comparendos');
     expect(franja).toHaveTextContent('2 comparendos pendientes de pago.');
@@ -207,7 +259,7 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
   });
 
   // Corazón de la HU: en amarillo no hay bloqueo que levantar, así que no se pide asumir riesgo.
-  it('NO ofrece asumir el riesgo cuando el pre-vuelo está en amarillo', () => {
+  it('NO ofrece asumir el riesgo cuando la verificación está en amarillo', () => {
     render(<PreflightPanel snapshot={warnSnap} {...baseProps} />);
     expect(screen.queryByText(/Asumo el riesgo/)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
@@ -264,9 +316,9 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
     ).toBeInTheDocument();
   });
 
-  it('no muestra la franja de advertencias cuando el pre-vuelo está en verde', () => {
+  it('no muestra la franja de advertencias cuando la verificación está en verde', () => {
     render(<PreflightPanel snapshot={snap([])} {...baseProps} />);
-    expect(screen.queryByText('Advertencias del pre-vuelo')).not.toBeInTheDocument();
+    expect(screen.queryByText('Advertencias de la verificación')).not.toBeInTheDocument();
   });
 
   it('lista el detalle de cada comparendo bajo la advertencia de multas', () => {
