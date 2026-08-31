@@ -7,12 +7,18 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { OtOperationalPanel, OtReport, OtReportSeriesPoint } from "@/lib/api/ot-metrics";
+import type {
+  OtOperationalPanel,
+  OtReport,
+  OtReportSeriesPoint,
+  OtReviewer,
+} from "@/lib/api/ot-metrics";
 import { OtDashboard } from "../OtDashboard";
 
 const fetchOtProfile = vi.fn();
 const fetchOtOperationalPanel = vi.fn();
 const fetchOtReport = vi.fn();
+const fetchOtPerformance = vi.fn();
 const fetchTransitOffices = vi.fn();
 
 vi.mock("@/lib/api/admin-ot", () => ({
@@ -27,6 +33,7 @@ vi.mock("@/lib/api/ot-metrics", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/ot-metrics")>()),
   fetchOtOperationalPanel: (...args: unknown[]) => fetchOtOperationalPanel(...args),
   fetchOtReport: (...args: unknown[]) => fetchOtReport(...args),
+  fetchOtPerformance: (...args: unknown[]) => fetchOtPerformance(...args),
 }));
 
 // `ResponsiveContainer` mide el contenedor, y en jsdom todo mide 0: sin ancho no renderiza ni un
@@ -55,10 +62,7 @@ const PANEL: OtOperationalPanel = {
   },
 };
 
-function informe(
-  serie: OtReportSeriesPoint[],
-  composicion: Partial<OtReport["resumen"]> = {},
-): OtReport {
+function informe(serie: OtReportSeriesPoint[]): OtReport {
   return {
     resumen: {
       total: 0,
@@ -70,7 +74,6 @@ function informe(
       rechazados: 0,
       anulados: 0,
       otros: 0,
-      ...composicion,
       decididos: 0,
       devoluciones: 0,
       devolucionesPromedio: 0,
@@ -94,6 +97,43 @@ const CON_MOVIMIENTO: OtReportSeriesPoint[] = [
   { bucket: "2026-08-31", label: "31 ago", desde: "2026-08-31", hasta: "2026-08-31", radicados: 1, aprobados: 0, rechazados: 0 },
 ];
 
+/** Dos que decidieron y una que no: la tercera no debe ocupar un color del anillo. */
+const REVISORES: OtReviewer[] = [
+  {
+    userId: "u-2",
+    displayName: "Beto Sáenz",
+    decididos: 2,
+    aprobados: 2,
+    aprobacionPct: 100,
+    rechazados: 0,
+    rechazoPct: 0,
+    tiempoMedianoHoras: 4,
+    vuelvenARechazarsePct: 0,
+  },
+  {
+    userId: "u-1",
+    displayName: "Ana Ruiz",
+    decididos: 6,
+    aprobados: 5,
+    aprobacionPct: 83.3,
+    rechazados: 1,
+    rechazoPct: 16.7,
+    tiempoMedianoHoras: 3,
+    vuelvenARechazarsePct: 0,
+  },
+  {
+    userId: "u-3",
+    displayName: "Caro Díaz",
+    decididos: 0,
+    aprobados: 0,
+    aprobacionPct: 0,
+    rechazados: 0,
+    rechazoPct: 0,
+    tiempoMedianoHoras: null,
+    vuelvenARechazarsePct: 0,
+  },
+];
+
 const SIN_MOVIMIENTO: OtReportSeriesPoint[] = [
   { bucket: "2026-08-30", label: "30 ago", desde: "2026-08-30", hasta: "2026-08-30", radicados: 0, aprobados: 0, rechazados: 0 },
 ];
@@ -105,6 +145,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     fetchOtProfile.mockResolvedValue({ transitOfficeId: OT_ID });
     fetchOtOperationalPanel.mockResolvedValue(PANEL);
     fetchOtReport.mockResolvedValue(informe(CON_MOVIMIENTO));
+    fetchOtPerformance.mockResolvedValue({ revisores: REVISORES, empresas: [] });
     fetchTransitOffices.mockResolvedValue([
       { id: OT_ID, name: "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA", code: "11001000" },
     ]);
@@ -123,45 +164,55 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(screen.getByText("Actividad de los últimos 14 días")).toBeInTheDocument();
   });
 
-  it("AC1 — la composición del periodo sale de la MISMA llamada, sin pedir el informe dos veces", async () => {
-    fetchOtReport.mockResolvedValue(
-      informe(CON_MOVIMIENTO, { enRevision: 3, aprobados: 5, rechazados: 2 }),
-    );
+  it("AC2 — el reparto entre evaluadores sale de su propia llamada al desempeño", async () => {
     render(<OtDashboard />);
 
-    expect(await screen.findByTestId("ot-inicio-composicion")).toBeInTheDocument();
-    expect(screen.getByTestId("ot-inicio-actividad")).toBeInTheDocument();
-    // Dos tarjetas, una sola petición: la serie y el resumen vienen juntos en el informe.
-    expect(fetchOtReport).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(fetchOtPerformance).toHaveBeenCalledWith(
+        expect.objectContaining({ transitOfficeId: OT_ID }),
+      ),
+    );
+    expect(await screen.findByTestId("ot-inicio-evaluadores")).toBeInTheDocument();
+    expect(screen.getByText("Quién decidió en los últimos 14 días")).toBeInTheDocument();
   });
 
-  it("AC1 — la composición usa el vocabulario del organismo y cierra contra el total", async () => {
-    fetchOtReport.mockResolvedValue(
-      informe(CON_MOVIMIENTO, { enRevision: 3, aprobados: 5, rechazados: 2 }),
-    );
+  it("AC2 — reparte por decisiones, ordenado de mayor a menor, y no repite la cola por estado", async () => {
     render(<OtDashboard />);
 
-    const tarjeta = await screen.findByTestId("ot-inicio-composicion");
-    // Estados del ORGANISMO, no los crudos del trámite.
-    expect(tarjeta).toHaveTextContent("En revisión");
-    expect(tarjeta).toHaveTextContent("Aprobado");
-    expect(tarjeta).toHaveTextContent("Rechazado");
-    // 5 de 10 aprobados: la cifra del centro y el porcentaje de la fila coinciden.
-    expect(tarjeta).toHaveTextContent("50.0 %");
-    expect(tarjeta).toHaveTextContent("10 recibidos en total");
-    // Los estados sin trámites no ensucian la leyenda.
-    expect(tarjeta).not.toHaveTextContent("Anulado");
-    expect(tarjeta).not.toHaveTextContent("Esperando al cliente");
+    const tarjeta = await screen.findByTestId("ot-inicio-evaluadores");
+    expect(tarjeta).toHaveTextContent("Ana Ruiz");
+    expect(tarjeta).toHaveTextContent("Beto Sáenz");
+    // 6 + 2 decisiones: el centro suma y cada fila lleva su porcentaje.
+    expect(tarjeta).toHaveTextContent("Decisiones");
+    expect(tarjeta).toHaveTextContent("75.0 %");
+    expect(tarjeta).toHaveTextContent("25.0 %");
+    expect(tarjeta).toHaveTextContent("2 evaluadores con decisiones");
+    // Quien no decidió nada no ocupa un color del anillo.
+    expect(tarjeta).not.toHaveTextContent("Caro Díaz");
+    // Y no se vuelve a contar la cola por estado, que ya está arriba tres veces.
+    expect(tarjeta).not.toHaveTextContent("Esperando placa");
+    expect(tarjeta).not.toHaveTextContent("En revisión");
   });
 
-  it("AC2 — sin nada recibido, la composición lo dice en vez de dibujar un anillo vacío", async () => {
-    fetchOtReport.mockResolvedValue(informe(CON_MOVIMIENTO));
+  it("AC3 — sin decisiones en el periodo lo dice, en vez de dibujar un anillo vacío", async () => {
+    fetchOtPerformance.mockResolvedValue({ revisores: [], empresas: [] });
     render(<OtDashboard />);
 
     expect(
-      await screen.findByText("No se recibió ningún trámite en los últimos 14 días."),
+      await screen.findByText("Nadie decidió trámites en los últimos 14 días."),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("ot-inicio-composicion")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ot-inicio-evaluadores")).not.toBeInTheDocument();
+  });
+
+  it("AC5 — si falla el desempeño, la actividad y la cola siguen en pie", async () => {
+    fetchOtPerformance.mockRejectedValue(new Error("500"));
+    render(<OtDashboard />);
+
+    expect(
+      await screen.findByText("No se pudo cargar el reparto entre evaluadores."),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("ot-inicio-actividad")).toBeInTheDocument();
+    expect(screen.getByText("Pendientes en total")).toBeInTheDocument();
   });
 
   it("AC2 — sin movimiento lo dice con palabras, no con un gráfico en blanco", async () => {
@@ -238,7 +289,6 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     render(<OtDashboard />);
 
     expect(await screen.findByText("No se pudo cargar la actividad reciente.")).toBeInTheDocument();
-    expect(screen.getByText("No se pudo cargar la composición del periodo.")).toBeInTheDocument();
     // La cola sigue en pie: es a lo que se entra a esta pantalla.
     expect(screen.getByText("Pendientes en total")).toBeInTheDocument();
     expect(screen.getByText("Por revisar")).toBeInTheDocument();

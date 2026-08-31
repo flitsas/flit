@@ -45,14 +45,15 @@ import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import {
   fetchOtDrilldown,
   fetchOtOperationalPanel,
+  fetchOtPerformance,
   fetchOtReport,
   OT_DRILLDOWN_BUCKETS,
-  OT_REPORT_ESTADOS,
   type OtDrilldownBucket,
   type OtMetricsParams,
   type OtOperationalPanel,
   type OtReportSeriesPoint,
   type OtReportSummary,
+  type OtReviewer,
 } from "@/lib/api/ot-metrics";
 import { resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import {
@@ -60,11 +61,7 @@ import {
   type DrilldownState,
 } from "@/components/admin/transit-offices/_reportes/DrilldownPanel";
 import { defaultRange, lastDaysRange } from "@/components/admin/transit-offices/_reportes/filters";
-import {
-  ESTADO_ORDER,
-  estadoMeta,
-  formatHours,
-} from "@/components/admin/transit-offices/_reportes/report-columns";
+import { formatHours } from "@/components/admin/transit-offices/_reportes/report-columns";
 
 /**
  * Ventana de la mediana de decisión. Fija y declarada en la propia tarjeta: el usuario no la eligió,
@@ -311,57 +308,76 @@ function Bienvenida({
 }
 
 /**
- * Lo reciente: el ritmo del periodo y en qué estado quedó lo que entró.
+ * Carga de un recurso del organismo, con los tres estados que esta pantalla distingue.
  *
- * Las dos tarjetas salen de UNA sola llamada al informe —la serie y el resumen vienen juntos—, así
- * que la composición no cuesta una petición extra. Y se piden aparte de la cola a propósito: si el
- * informe falla, la cola, que es a lo que se entra a esta pantalla, se sigue viendo.
+ * `cargar` tiene que ser una función estable (de módulo): así entra en las dependencias del efecto
+ * sin necesidad de refs, y cada tarjeta conserva su propio ciclo de vida.
  */
-function PeriodoReciente({ transitOfficeId }: { transitOfficeId: string | undefined }) {
-  const [resumen, setResumen] = useState<OtReportSummary | null>(null);
+function useRecursoOt<T>(
+  transitOfficeId: string | undefined,
+  cargar: (transitOfficeId: string, signal: AbortSignal) => Promise<T>,
+) {
+  const [dato, setDato] = useState<T | null>(null);
   const [estado, setEstado] = useState<Estado>("cargando");
 
   useEffect(() => {
     if (!transitOfficeId) return;
     const controller = new AbortController();
-
-    async function cargar() {
-      setEstado("cargando");
-      try {
-        const informe = await fetchOtReport(
-          {
-            ...lastDaysRange(ACTIVIDAD_DIAS),
-            transitOfficeId,
-            // El informe pagina filas que aquí no se usan: solo interesa `resumen`. Se pide la
-            // página mínima para no arrastrar un listado entero por dos gráficas.
-            page: 1,
-            pageSize: 1,
-          },
-          controller.signal,
-        );
+    // No se marca «cargando» aquí: el estado ya nace así, y hacerlo dentro del efecto es
+    // exactamente lo que prohíbe `react-hooks/set-state-in-effect`. El id del organismo se resuelve
+    // una vez por sesión, así que no hay una segunda carga que anunciar.
+    cargar(transitOfficeId, controller.signal)
+      .then((resultado) => {
         if (controller.signal.aborted) return;
-        setResumen(informe.resumen);
+        setDato(resultado);
         setEstado("listo");
-      } catch (err) {
+      })
+      .catch((err: unknown) => {
         if (controller.signal.aborted || (err as Error)?.name === "AbortError") return;
         setEstado("error");
-      }
-    }
-
-    void cargar();
+      });
     return () => controller.abort();
-  }, [transitOfficeId]);
+  }, [transitOfficeId, cargar]);
 
+  return { dato, estado };
+}
+
+/** El informe pagina filas que aquí no se usan: solo interesa `resumen`, así que se pide la mínima. */
+function cargarResumenDelPeriodo(transitOfficeId: string, signal: AbortSignal) {
+  return fetchOtReport(
+    { ...lastDaysRange(ACTIVIDAD_DIAS), transitOfficeId, page: 1, pageSize: 1 },
+    signal,
+  ).then((informe) => informe.resumen);
+}
+
+function cargarRevisoresDelPeriodo(transitOfficeId: string) {
+  return fetchOtPerformance({ ...lastDaysRange(ACTIVIDAD_DIAS), transitOfficeId }).then(
+    (desempeno) => desempeno.revisores,
+  );
+}
+
+/**
+ * Lo reciente: el ritmo del periodo y quién lo sacó adelante.
+ *
+ * Cada tarjeta pide lo suyo y falla por separado, y las dos van aparte de la cola: si el informe se
+ * cae, la cola —que es a lo que se entra a esta pantalla— se sigue viendo.
+ */
+function PeriodoReciente({ transitOfficeId }: { transitOfficeId: string | undefined }) {
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-      <Actividad estado={estado} serie={resumen?.serie ?? null} />
-      <Composicion estado={estado} resumen={resumen} />
+      <Actividad transitOfficeId={transitOfficeId} />
+      <Evaluadores transitOfficeId={transitOfficeId} />
     </div>
   );
 }
 
 /** Ritmo del periodo: qué entró y qué se decidió cada día. */
-function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoint[] | null }) {
+function Actividad({ transitOfficeId }: { transitOfficeId: string | undefined }) {
+  const { dato: resumen, estado } = useRecursoOt<OtReportSummary>(
+    transitOfficeId,
+    cargarResumenDelPeriodo,
+  );
+  const serie: OtReportSeriesPoint[] | null = resumen?.serie ?? null;
   const hayMovimiento = (serie ?? []).some(
     (p) => p.radicados > 0 || p.aprobados > 0 || p.rechazados > 0,
   );
@@ -400,67 +416,60 @@ function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoi
 }
 
 /**
- * Traduce el resumen del informe al vocabulario de estados del ORGANISMO.
+ * Colores del reparto entre evaluadores.
  *
- * No son los estados crudos del trámite y esa es justo la gracia: `esperando_placa` y
- * `en_subsanacion` doblan dentro el sub-flujo de placa y la subsanación activa, que el estado crudo
- * esconde —un trámite se queda en «entregado» durante todo el trámite de placa—. Etiquetas, colores
- * y orden salen de `ESTADO_META` / `ESTADO_ORDER`, los mismos de la consola de Reportes: dos
- * paletas para el mismo estado acaban enseñando dos productos distintos.
+ * Aquí el color solo separa una persona de otra —no codifica nada, como sí lo hace la paleta de
+ * estados—, así que se recorre en orden y se repite si hiciera falta.
  */
-function composicionDelPeriodo(resumen: OtReportSummary) {
-  const porEstado: Record<string, number> = {
-    [OT_REPORT_ESTADOS.enRevision]: resumen.enRevision,
-    [OT_REPORT_ESTADOS.esperandoPlaca]: resumen.esperandoPlaca,
-    [OT_REPORT_ESTADOS.esperandoCliente]: resumen.esperandoCliente,
-    [OT_REPORT_ESTADOS.enSubsanacion]: resumen.enSubsanacion,
-    [OT_REPORT_ESTADOS.aprobado]: resumen.aprobados,
-    [OT_REPORT_ESTADOS.rechazado]: resumen.rechazados,
-    [OT_REPORT_ESTADOS.anulado]: resumen.anulados,
-    [OT_REPORT_ESTADOS.otro]: resumen.otros,
-  };
-
-  return ESTADO_ORDER.filter((estado) => (porEstado[estado] ?? 0) > 0).map((estado) => {
-    const meta = estadoMeta(estado);
-    return {
-      estado,
-      name: meta.label,
-      hint: meta.hint,
-      color: meta.color,
-      value: porEstado[estado] ?? 0,
-    };
-  });
-}
+const COLORES_EVALUADOR = ["#557EFF", "#00DBD5", "#8CC63F", "#F9AC00", "#8A5CF6", "#0EA5E9"];
 
 /**
- * En qué estado quedó lo que entró en el periodo.
+ * Quién sacó adelante el trabajo del periodo.
  *
- * El universo son los trámites RECIBIDOS en la ventana, no los decididos: es lo que hace que el
- * desglose cierre contra el total y que el porcentaje del centro signifique algo.
+ * Esta tarjeta existe en lugar de un desglose por estado: la cola por estado ya la cuentan los
+ * indicadores y las barras de arriba, y repetirla en un anillo era decir tres veces lo mismo. El
+ * reparto entre evaluadores es lo único de la operación que la pantalla no dice en ningún otro
+ * sitio.
+ *
+ * Se mide por DECISIONES tomadas (aprobar o rechazar), no por trámites tocados: es lo que de verdad
+ * mueve la cola. El desglose de aprobados y rechazados de cada uno vive en la pestaña Revisores de
+ * Reportes; aquí solo se responde quién y cuánto.
  */
-function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSummary | null }) {
-  const partes = resumen ? composicionDelPeriodo(resumen) : [];
+function Evaluadores({ transitOfficeId }: { transitOfficeId: string | undefined }) {
+  const { dato: revisores, estado } = useRecursoOt<OtReviewer[]>(
+    transitOfficeId,
+    cargarRevisoresDelPeriodo,
+  );
+
+  const partes = (revisores ?? [])
+    .filter((r) => r.decididos > 0)
+    .sort((a, b) => b.decididos - a.decididos)
+    .map((r, i) => ({
+      userId: r.userId,
+      name: r.displayName,
+      value: r.decididos,
+      color: COLORES_EVALUADOR[i % COLORES_EVALUADOR.length],
+      hint: `${r.aprobados} aprobados · ${r.rechazados} rechazados`,
+    }));
   const total = partes.reduce((suma, p) => suma + p.value, 0);
-  const aprobados = resumen?.aprobados ?? 0;
-  const pctAprobados = total === 0 ? 0 : (aprobados / total) * 100;
 
   return (
-    <Tarjeta titulo={`En qué estado quedó lo recibido en ${ACTIVIDAD_DIAS} días`}>
+    <Tarjeta titulo={`Quién decidió en los últimos ${ACTIVIDAD_DIAS} días`}>
       {estado === "cargando" && <Esqueleto filas={1} />}
       {estado === "error" && (
         <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-          No se pudo cargar la composición del periodo.
+          No se pudo cargar el reparto entre evaluadores.
         </p>
       )}
       {estado === "listo" && total === 0 && (
         <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-          No se recibió ningún trámite en los últimos {ACTIVIDAD_DIAS} días.
+          Nadie decidió trámites en los últimos {ACTIVIDAD_DIAS} días.
         </p>
       )}
       {estado === "listo" && total > 0 && (
         <div
           className="flex flex-col items-center gap-4 sm:flex-row"
-          data-testid="ot-inicio-composicion"
+          data-testid="ot-inicio-evaluadores"
         >
           <div className="relative h-40 w-40 shrink-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -476,7 +485,7 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
                   isAnimationActive={false}
                 >
                   {partes.map((p) => (
-                    <Cell key={p.estado} fill={p.color} />
+                    <Cell key={p.userId} fill={p.color} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -486,9 +495,9 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
                 componerla con dos tamaños sin pelear con el posicionamiento de recharts. */}
             <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
               <div>
-                <p className="text-xl font-bold tabular-nums">{formatPct(pctAprobados)}</p>
+                <p className="text-2xl font-bold tabular-nums">{total}</p>
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-[#9AA5B4]">
-                  Aprobados
+                  Decisiones
                 </p>
               </div>
             </div>
@@ -497,7 +506,7 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
           <ul className="flex w-full min-w-0 flex-1 flex-col gap-1.5">
             {partes.map((p) => (
               <li
-                key={p.estado}
+                key={p.userId}
                 title={p.hint}
                 className="flex items-center justify-between gap-3 text-xs"
               >
@@ -518,7 +527,7 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
               </li>
             ))}
             <li className="mt-1 border-t border-[#EEF1F5] pt-1.5 text-[11px] text-[#9AA5B4] dark:border-white/10 dark:text-white/40">
-              {total} recibidos en total
+              {partes.length} {partes.length === 1 ? "evaluador" : "evaluadores"} con decisiones
             </li>
           </ul>
         </div>
