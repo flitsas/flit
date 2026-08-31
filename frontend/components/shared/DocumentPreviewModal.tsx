@@ -60,7 +60,11 @@ export function DocumentPreviewModal({
       title={title}
       icon={FileText}
       size="lg"
-      zClassName="z-[110]"
+      // La previsualización SIEMPRE va encima de lo que la abrió, y hoy la abren superficies que
+      // ya están muy arriba en la pila: el shell del detalle de trámite (z-1100) y el modal del
+      // asistente (z-1150). Con el z-110 anterior el visor se montaba DETRÁS de ellas y el usuario
+      // pulsaba el ojo sin que pasara nada visible.
+      zClassName="z-[1200]"
     >
       <div
         className="min-h-[50vh] flex flex-col"
