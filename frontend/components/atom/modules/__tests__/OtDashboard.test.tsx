@@ -98,6 +98,26 @@ describe("OtDashboard — vista inicial del organismo", () => {
     expect(screen.getByText("Tiempo mediano de decisión").parentElement).toHaveTextContent("6 h");
   });
 
+  it("AC2 — sin decisiones en la ventana, la mediana lo dice en vez de pintar un guion enorme", async () => {
+    await renderReady(
+      panel({
+        movimiento: {
+          entregadosHoy: 2,
+          decididosHoy: 0,
+          pendientesTotal: 5,
+          tiempoMedianoDecisionHoras: null,
+        },
+      }),
+    );
+
+    const tarjeta = (await screen.findByText("Tiempo mediano de decisión")).parentElement;
+    expect(tarjeta).toHaveTextContent("Sin decisiones aún");
+    expect(tarjeta).toHaveTextContent("Ninguna decisión en los últimos 30 días");
+    // El «—» a 30 px y en color de acento se leía como una barra de color, no como una cifra que
+    // falta: ese era el defecto.
+    expect(tarjeta).not.toHaveTextContent("—");
+  });
+
   it("AC3 — desglosa la cola separando lo que espera al organismo", async () => {
     await renderReady();
 

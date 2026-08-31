@@ -18,7 +18,7 @@
 // De ahí sale la ausencia de filtro de fechas: la cola describe el AHORA, y un rango no movería un
 // solo número. Es la misma conclusión —y por el mismo motivo— que ya documenta `OtNowTab`.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -28,7 +28,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, CheckCircle2, Clock, Inbox, Timer } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Inbox,
+  Timer,
+} from "lucide-react";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import {
@@ -150,7 +158,10 @@ export function OtDashboard() {
       className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-[#162744] dark:text-white"
       data-testid="ot-inicio"
     >
-      <Bienvenida organismo={organismo} />
+      <Bienvenida
+        organismo={organismo}
+        porRevisar={estado === "listo" ? (panel?.cola.porRevisar ?? null) : null}
+      />
 
       {estado === "error" ? (
         <ErrorPanel message={mensajeError} onRetry={reintentar} />
@@ -169,28 +180,123 @@ export function OtDashboard() {
   );
 }
 
+/** Cada cuánto rota el banner. Mismo ritmo que el del gestor, para que la plataforma se sienta una. */
+const ROTACION_MS = 6000;
+
 /**
- * Bienvenida del organismo.
+ * Mensajes del banner del organismo.
  *
- * Sustituye al carrusel del gestor, que anunciaba «validación de identidad con IA ya integrada en
- * TUS trámites»: un organismo no radica trámites ni valida biometrías, así que ese anuncio no
- * describía nada suyo. Se cambió por una sola banda en vez de un carrusel porque las otras dos
- * diapositivas tampoco tenían equivalente honesto aquí —inventar novedades para llenarlas habría
- * sido el mismo defecto— y porque un bloque de 220 px rotando empujaba la cola bajo el pliegue.
+ * El carrusel del gestor no servía tal cual: anunciaba «validación de identidad con IA ya integrada
+ * en TUS trámites» a quien no radica trámites ni valida biometrías. Lo que se conserva es el
+ * mecanismo —el sitio donde se pasan mensajes—; lo que cambia es que aquí los mensajes hablan del
+ * organismo. Añadir uno nuevo es añadir una entrada a esta lista.
  */
-function Bienvenida({ organismo }: { organismo: string | null }) {
+function mensajesDelOrganismo(organismo: string | null, porRevisar: number | null) {
+  const cola =
+    porRevisar === null
+      ? "Aquí ves el estado de tu cola en este momento y el movimiento del día."
+      : porRevisar === 0
+        ? "No tienes trámites esperando decisión en este momento."
+        : `Tienes ${porRevisar} ${porRevisar === 1 ? "trámite" : "trámites"} esperando tu decisión.`;
+
+  return [
+    {
+      id: "bienvenida",
+      title: "Tu cola de trabajo",
+      body: `${cola} Los datos son del día calendario de Bogotá.`,
+      bg: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)",
+    },
+    {
+      id: "antiguedad",
+      title: "Lo que se envejece, primero",
+      body: "La antigüedad de lo pendiente avisa antes de que un trámite se convierta en un reclamo. El tramo de más de 7 días solo se enciende cuando tiene algo.",
+      bg: "linear-gradient(120deg,#557eff 0%,#8a5cf6 100%)",
+    },
+    {
+      id: "reportes",
+      title: "Reportes del organismo",
+      body: "Consulta el desempeño por revisor, la calidad de cada empresa que radica y los motivos de rechazo más frecuentes.",
+      bg: "linear-gradient(120deg,#0ea5e9 0%,#00dbd5 100%)",
+    },
+  ];
+}
+
+/**
+ * Banner del organismo: el nombre siempre visible y los mensajes rotando encima.
+ *
+ * El nombre NO entra en la rotación a propósito: identifica el organismo y desaparecería dos de cada
+ * tres veces.
+ */
+function Bienvenida({
+  organismo,
+  porRevisar,
+}: {
+  organismo: string | null;
+  porRevisar: number | null;
+}) {
+  const mensajes = useMemo(
+    () => mensajesDelOrganismo(organismo, porRevisar),
+    [organismo, porRevisar],
+  );
+  const [actual, setActual] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setActual((i) => (i + 1) % mensajes.length), ROTACION_MS);
+    return () => clearInterval(id);
+  }, [mensajes.length]);
+
+  const mensaje = mensajes[actual];
+
   return (
     <header
-      className="rounded-2xl px-6 py-5 text-white"
-      style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+      className="relative flex flex-col justify-between overflow-hidden rounded-2xl px-6 py-5 text-white"
+      style={{ background: mensaje.bg, minHeight: "168px" }}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
-        {organismo ?? "Organismo de tránsito"}
-      </p>
-      <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">Tu cola de trabajo</h1>
-      <p className="mt-1 text-sm opacity-90">
-        Estado de este momento y movimiento del día calendario de Bogotá.
-      </p>
+      <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white opacity-15" />
+      <div className="relative max-w-[85%]">
+        <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+          {organismo ?? "Organismo de tránsito"}
+        </p>
+        <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">{mensaje.title}</h1>
+        <p className="mt-1.5 text-sm leading-snug opacity-90">{mensaje.body}</p>
+      </div>
+
+      <div className="relative mt-4 flex items-center justify-between">
+        <div className="flex gap-1">
+          {mensajes.map((m, i) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setActual(i)}
+              aria-label={`Mensaje ${i + 1} de ${mensajes.length}: ${m.title}`}
+              aria-current={i === actual}
+              className="h-1.5 rounded-full transition-all"
+              style={{
+                width: i === actual ? 16 : 5,
+                background: i === actual ? "#ffffff" : "rgba(255,255,255,0.5)",
+              }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
+            aria-label="Mensaje anterior"
+            className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+          >
+            <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setActual((i) => (i + 1) % mensajes.length)}
+            aria-label="Mensaje siguiente"
+            className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+          >
+            <ChevronRight className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
     </header>
   );
 }
@@ -315,6 +421,7 @@ function PanelOperativo({
   const antiguedad = panel?.antiguedad;
   const pendientes = movimiento?.pendientesTotal ?? 0;
   const sinPendientes = !cargando && pendientes === 0;
+  const sinMediana = !cargando && (movimiento?.tiempoMedianoDecisionHoras ?? null) === null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -346,13 +453,28 @@ function PanelOperativo({
         />
         <Kpi
           label="Tiempo mediano de decisión"
-          // Se formatea en vez de interpolar el número crudo: una mediana de dos minutos salía como
-          // «0.03 h», con punto decimal inglés y en una unidad donde el dato no significa nada.
-          value={cargando ? undefined : formatHours(movimiento?.tiempoMedianoDecisionHoras)}
+          // Sin decisiones en la ventana no hay mediana que calcular. Antes esto pintaba un «—» del
+          // tamaño de un titular y en color de acento: se leía como una barra de algún color, no
+          // como una cifra ausente. Ahora se dice con palabras por qué está vacío.
+          value={
+            cargando
+              ? undefined
+              : sinMediana
+                ? "Sin decisiones aún"
+                : // Se formatea en vez de interpolar el número crudo: una mediana de dos minutos
+                  // salía como «0.03 h», con punto decimal inglés y en una unidad donde el dato no
+                  // significa nada.
+                  formatHours(movimiento?.tiempoMedianoDecisionHoras)
+          }
           cargando={cargando}
           color="#00DBD5"
+          sinDato={sinMediana}
           icon={Timer}
-          hint={`Últimos ${VENTANA_MEDIANA_DIAS} días`}
+          hint={
+            sinMediana
+              ? `Ninguna decisión en los últimos ${VENTANA_MEDIANA_DIAS} días`
+              : `Últimos ${VENTANA_MEDIANA_DIAS} días`
+          }
           // Una mediana no es un conjunto de trámites: no hay lista que abrir detrás.
         />
       </div>
@@ -493,6 +615,7 @@ function Kpi({
   color,
   icon: Icon,
   hint,
+  sinDato,
   onAbrir,
 }: {
   label: string;
@@ -501,9 +624,15 @@ function Kpi({
   color: string;
   icon: typeof Inbox;
   hint?: string;
+  /** No hay cifra que mostrar. Se apaga el color de acento: una cifra ausente no es un resultado. */
+  sinDato?: boolean;
   onAbrir?: () => void;
 }) {
   const numero = typeof value === "number" ? value : null;
+  // Una cifra corta manda con el tamaño de titular; una frase a 30 px se sale de la tarjeta.
+  const tamano = numero === null && typeof value === "string" && value.length > 6
+    ? "text-lg"
+    : "text-3xl";
   return (
     <Navegable
       navegable={!cargando && numero !== null && numero > 0}
@@ -513,7 +642,10 @@ function Kpi({
     >
       <div className="min-w-0">
         <p className="text-[11px] font-medium opacity-70">{label}</p>
-        <p className="mt-1 text-3xl font-bold tabular-nums" style={{ color }}>
+        <p
+          className={`mt-1 font-bold tabular-nums ${tamano} ${sinDato ? "text-[#9AA5B4] dark:text-white/40" : ""}`}
+          style={sinDato ? undefined : { color }}
+        >
           {cargando ? "—" : (value ?? 0)}
         </p>
         {hint && <p className="mt-0.5 text-[10px] text-[#9AA5B4] dark:text-white/35">{hint}</p>}

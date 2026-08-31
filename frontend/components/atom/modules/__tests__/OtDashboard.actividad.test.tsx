@@ -6,6 +6,7 @@
 // organismo, y la bienvenida lo nombra.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { OtOperationalPanel, OtReport, OtReportSeriesPoint } from "@/lib/api/ot-metrics";
 import { OtDashboard } from "../OtDashboard";
 
@@ -137,6 +138,46 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(screen.getByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
     expect(screen.queryByText(/Inteligencia Artificial/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Nueva integración/i)).not.toBeInTheDocument();
+  });
+
+  it("AC3 — el banner conserva el mecanismo de pasar mensajes, con contenido del organismo", async () => {
+    render(<OtDashboard />);
+
+    expect(await screen.findByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
+    // El primer mensaje cuenta el estado real de la cola, no un texto fijo.
+    expect(screen.getByText(/Tienes 3 trámites esperando tu decisión/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Mensaje siguiente" }));
+    expect(
+      screen.getByRole("heading", { name: "Lo que se envejece, primero" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Mensaje siguiente" }));
+    expect(screen.getByRole("heading", { name: "Reportes del organismo" })).toBeInTheDocument();
+
+    // El nombre del organismo NO rota: identifica de quién es la pantalla.
+    expect(
+      screen.getByText(/SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA \(11001000\)/),
+    ).toBeInTheDocument();
+
+    // Y se puede saltar directo a uno con su selector.
+    await userEvent.click(
+      screen.getByRole("button", { name: /Mensaje 1 de 3: Tu cola de trabajo/ }),
+    );
+    expect(screen.getByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
+  });
+
+  it("AC3 — con la cola vacía el banner no promete trabajo que no existe", async () => {
+    fetchOtOperationalPanel.mockResolvedValue({
+      ...PANEL,
+      movimiento: { ...PANEL.movimiento, pendientesTotal: 0 },
+      cola: { porRevisar: 0, esperandoAsignarPlaca: 0, enEsperaDelCliente: 0 },
+    });
+    render(<OtDashboard />);
+
+    expect(
+      await screen.findByText(/No tienes trámites esperando decisión en este momento/),
+    ).toBeInTheDocument();
   });
 
   it("AC3 — si el catálogo no responde, la bienvenida degrada sin romper la pantalla", async () => {
