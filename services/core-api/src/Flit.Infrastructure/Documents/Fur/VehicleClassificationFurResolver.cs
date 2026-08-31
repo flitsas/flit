@@ -42,6 +42,35 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
         return format;
     }
 
+    public async Task<IReadOnlyList<FurClassificationCatalogItem>> ListCatalogAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+            var rows = await db.Database
+                .SqlQueryRaw<VehicleClassificationFurRow>(
+                    "SELECT classification, template_format, field_to_fill "
+                    + "FROM tramites.vehicle_classification_fur WHERE deleted_at IS NULL")
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            return rows
+                .Where(r => !string.IsNullOrWhiteSpace(r.Classification))
+                .OrderBy(r => r.TemplateFormat, StringComparer.Ordinal)
+                .ThenBy(r => r.Classification, StringComparer.Ordinal)
+                .Select(r => new FurClassificationCatalogItem(
+                    r.Classification.Trim(),
+                    r.TemplateFormat.Trim(),
+                    string.IsNullOrWhiteSpace(r.FieldToFill) ? null : r.FieldToFill.Trim()))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            LogCatalogoNoDisponible(ex);
+            return [];
+        }
+    }
+
     private async Task<IReadOnlyDictionary<string, FurTemplateFormat>> GetMapAsync(CancellationToken ct)
     {
         var cached = _cache;
@@ -58,7 +87,7 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
             // 'template_format' y no lo hallara → InvalidOperationException → catch → catálogo vacío →
             // TODO caía a AUTOMOTOR (maquinaria/remolques incluidos). Sin alias, EF materializa las 96 filas.
             var rows = await db.Database
-                .SqlQueryRaw<VehicleClassificationFurRow>(
+                .SqlQueryRaw<VehicleClassificationFurMapRow>(
                     "SELECT classification, template_format "
                     + "FROM tramites.vehicle_classification_fur WHERE deleted_at IS NULL")
                 .ToListAsync(ct)
@@ -97,5 +126,10 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
         Message = "FUR: no se pudo leer el catálogo de clasificación; se usará AUTOMOTOR por defecto")]
     private partial void LogCatalogoNoDisponible(Exception ex);
 
-    private sealed record VehicleClassificationFurRow(string Classification, string TemplateFormat);
+    private sealed record VehicleClassificationFurMapRow(string Classification, string TemplateFormat);
+
+    private sealed record VehicleClassificationFurRow(
+        string Classification,
+        string TemplateFormat,
+        string? FieldToFill);
 }

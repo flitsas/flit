@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.RegularExpressions;
 using Flit.Tramites.Application.Documents;
 using Microsoft.Extensions.Logging;
@@ -68,6 +69,25 @@ public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
         var pdf = FurOverlayRenderer.MergePages(p1, p2Template);
 
         return new GeneratedDocument("fur", $"fur_{SafeRef(data.ReferenceNumber)}.pdf", "application/pdf", pdf);
+    }
+
+    public GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor)
+    {
+        var assets = _byFormat.TryGetValue(format, out var a)
+            ? a
+            : _byFormat.TryGetValue(FurTemplateFormat.Automotor, out var fallback)
+                ? fallback
+                : _byFormat.Values.First();
+
+        assets.Templates.EnsureExists();
+        var values = FurFillAllOverlay.FromManifest(assets.Manifest);
+        var p1Template = File.ReadAllBytes(assets.Templates.FormularioP1);
+        var p2Template = File.ReadAllBytes(assets.Templates.InstruccionesP2);
+
+        var p1 = FurOverlayRenderer.RenderPage1(p1Template, assets.Manifest, values, _logger, "FILLALL");
+        var pdf = FurOverlayRenderer.MergePages(p1, p2Template);
+
+        return new GeneratedDocument("fur", $"fur_FILLALL_{format.ToString().ToUpperInvariant()}.pdf", "application/pdf", pdf);
     }
 
     public GeneratedDocument GenerateCompraventa(FurDocumentData data)

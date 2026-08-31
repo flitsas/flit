@@ -203,6 +203,12 @@ public interface IFurDocumentGenerator
     /// <summary>Genera el FUR (Formulario Único de Registro) con los datos del trámite.</summary>
     GeneratedDocument GenerateFur(FurDocumentData data);
 
+    /// <summary>
+    /// Preview de calibración: pinta todos los campos del manifiesto del formato indicado (por defecto
+    /// automotor). No usa tipología. Solo SuperAdmin preview.
+    /// </summary>
+    GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor);
+
     /// <summary>Genera el contrato de compraventa (solo traspaso) con los datos del trámite.</summary>
     GeneratedDocument GenerateCompraventa(FurDocumentData data);
 }

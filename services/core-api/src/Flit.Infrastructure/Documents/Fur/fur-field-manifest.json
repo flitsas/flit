@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-21-numeral-20-alertas-prenda-recalibrado",
+  "version": "2026-08-31-margen-firmas-obs",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -9,36 +9,36 @@
       "id": "traffic_secretary_name",
       "page": 1,
       "type": "text",
-      "x": 525.0,
+      "x": 512.0,
       "y": 64.0,
-      "w": 175.0,
+      "w": 188.0,
       "h": 11.9,
-      "fontSize": 6.5,
-      "bold": true,
+      "fontSize": 5.5,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "traffic_secretary_city",
       "page": 1,
       "type": "text",
-      "x": 500.0,
+      "x": 488.0,
       "y": 89.0,
-      "w": 50.0,
+      "w": 58.0,
       "h": 11.9,
-      "fontSize": 6.5,
-      "bold": true,
+      "fontSize": 5.5,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "traffic_secretary_code",
       "page": 1,
       "type": "text",
-      "x": 551.0,
+      "x": 540.0,
       "y": 89.0,
-      "w": 48.0,
+      "w": 55.0,
       "h": 11.8,
-      "fontSize": 6.5,
-      "bold": true,
+      "fontSize": 5.5,
+      "bold": false,
       "align": "left"
     },
     {
@@ -46,11 +46,11 @@
       "page": 1,
       "type": "text",
       "x": 593.4,
-      "y": 91.0,
+      "y": 90.2,
       "w": 25.7,
-      "h": 11.8,
+      "h": 12.4,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "center"
     },
     {
@@ -58,11 +58,11 @@
       "page": 1,
       "type": "text",
       "x": 619.4,
-      "y": 89.8,
+      "y": 90.2,
       "w": 27.3,
-      "h": 12.2,
-      "fontSize": 7.8,
-      "bold": true,
+      "h": 12.4,
+      "fontSize": 7.7,
+      "bold": false,
       "align": "center"
     },
     {
@@ -70,11 +70,11 @@
       "page": 1,
       "type": "text",
       "x": 649.3,
-      "y": 91.1,
+      "y": 90.2,
       "w": 30.4,
-      "h": 11.9,
+      "h": 12.4,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "center"
     },
     {
@@ -82,11 +82,11 @@
       "page": 1,
       "type": "text",
       "x": 704.7,
-      "y": 75.9,
+      "y": 85.5,
       "w": 26.2,
-      "h": 11.6,
+      "h": 14.0,
       "fontSize": 9.7,
-      "bold": true,
+      "bold": false,
       "align": "center"
     },
     {
@@ -94,11 +94,11 @@
       "page": 1,
       "type": "text",
       "x": 734.1,
-      "y": 76.0,
+      "y": 85.5,
       "w": 23.7,
-      "h": 11.8,
+      "h": 14.0,
       "fontSize": 9.7,
-      "bold": true,
+      "bold": false,
       "align": "center"
     },
     {
@@ -225,25 +225,28 @@
       "id": "vehicle_class_1",
       "page": 1,
       "type": "checkbox",
-      "x": 53.6,
+      "x": 56.5,
       "y": 222.4,
-      "size": 9.9
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_class_5",
       "page": 1,
       "type": "checkbox",
-      "x": 231.5,
+      "x": 234.5,
       "y": 221.5,
-      "size": 10.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_class_9",
       "page": 1,
       "type": "checkbox",
-      "x": 101.7,
-      "y": 232.7,
-      "size": 10.0
+      "x": 111.5,
+      "y": 226.0,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_brand",
@@ -254,7 +257,7 @@
       "w": 70.2,
       "h": 13.3,
       "fontSize": 7.8,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -266,7 +269,7 @@
       "w": 70.0,
       "h": 13.0,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -278,7 +281,7 @@
       "w": 229.0,
       "h": 13.7,
       "fontSize": 7.5,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -290,7 +293,7 @@
       "w": 49.9,
       "h": 14.2,
       "fontSize": 7.6,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -302,20 +305,20 @@
       "w": 65.0,
       "h": 14.0,
       "fontSize": 7.6,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_capacity",
       "page": 1,
       "type": "text",
-      "x": 371.5,
+      "x": 378.0,
       "y": 178.5,
-      "w": 70.4,
+      "w": 70.0,
       "h": 14.0,
       "fontSize": 7.6,
-      "bold": true,
-      "align": "center"
+      "bold": false,
+      "align": "left"
     },
     {
       "id": "vehicle_fuel_type_1",
@@ -323,7 +326,8 @@
       "type": "checkbox",
       "x": 551.8,
       "y": 130.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_fuel_type_2",
@@ -331,7 +335,8 @@
       "type": "checkbox",
       "x": 580.5,
       "y": 130.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_fuel_type_3",
@@ -339,7 +344,8 @@
       "type": "checkbox",
       "x": 607.4,
       "y": 130.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_fuel_type_4",
@@ -347,7 +353,8 @@
       "type": "checkbox",
       "x": 634.2,
       "y": 130.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_fuel_type_5",
@@ -355,7 +362,8 @@
       "type": "checkbox",
       "x": 661.0,
       "y": 130.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_fuel_type_6",
@@ -363,7 +371,8 @@
       "type": "checkbox",
       "x": 689.8,
       "y": 130.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_fuel_type_7",
@@ -371,7 +380,8 @@
       "type": "checkbox",
       "x": 716.6,
       "y": 130.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_fuel_type_8",
@@ -379,23 +389,26 @@
       "type": "checkbox",
       "x": 743.4,
       "y": 130.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "is_armored_vehicle_yes",
       "page": 1,
       "type": "checkbox",
-      "x": 504.0,
-      "y": 168.0,
-      "size": 8.0
+      "x": 515.7,
+      "y": 170.3,
+      "size": 5.0,
+      "fontSize": 3.5
     },
     {
       "id": "is_armored_vehicle_no",
       "page": 1,
       "type": "checkbox",
-      "x": 536.0,
-      "y": 168.0,
-      "size": 8.0
+      "x": 538.0,
+      "y": 170.3,
+      "size": 5.0,
+      "fontSize": 3.5
     },
     {
       "id": "is_dismantling_armor_no",
@@ -403,7 +416,8 @@
       "type": "checkbox",
       "x": 670.0,
       "y": 168.0,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_bodywork_type",
@@ -414,7 +428,7 @@
       "w": 176.7,
       "h": 16.7,
       "fontSize": 7.8,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -426,7 +440,7 @@
       "w": 134.4,
       "h": 13.2,
       "fontSize": 7.8,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -438,7 +452,7 @@
       "w": 134.7,
       "h": 16.8,
       "fontSize": 7.8,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -539,7 +553,7 @@
       "h": 27.0,
       "fontSize": 7.6,
       "minFontSize": 6.0,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -551,7 +565,7 @@
       "w": 48.0,
       "h": 14.0,
       "fontSize": 7.6,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -563,7 +577,7 @@
       "w": 124.7,
       "h": 14.5,
       "fontSize": 7.8,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -575,7 +589,7 @@
       "w": 124.5,
       "h": 14.5,
       "fontSize": 7.8,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -584,7 +598,8 @@
       "type": "checkbox",
       "x": 380.8,
       "y": 411.5,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "alert_data_code_2",
@@ -592,7 +607,8 @@
       "type": "checkbox",
       "x": 419.7,
       "y": 411.5,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "alert_data_code_3",
@@ -600,7 +616,8 @@
       "type": "checkbox",
       "x": 460.2,
       "y": 411.5,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "alert_data_code_4",
@@ -608,7 +625,8 @@
       "type": "checkbox",
       "x": 489.5,
       "y": 411.5,
-      "size": 8.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "alert_data_code_5",
@@ -621,7 +639,7 @@
       "fontSize": 4.2,
       "minFontSize": 3.4,
       "autoFit": true,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -633,40 +651,42 @@
       "w": 128.4,
       "h": 14.3,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_owner_second_last_name",
       "page": 1,
       "type": "text",
-      "x": 158.9,
+      "x": 140.0,
       "y": 304.3,
-      "w": 113.6,
+      "w": 114.0,
       "h": 14.4,
       "fontSize": 7.8,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_owner_name",
       "page": 1,
       "type": "text",
-      "x": 276.4,
-      "y": 303.6,
-      "w": 93.5,
-      "h": 14.4,
-      "fontSize": 7.7,
-      "bold": true,
+      "x": 258.0,
+      "y": 301.0,
+      "w": 108.0,
+      "h": 20.0,
+      "fontSize": 7.0,
+      "minFontSize": 5.5,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_owner_document_type_c",
       "page": 1,
       "type": "checkbox",
-      "x": 34.7,
-      "y": 336.9,
-      "size": 9.9
+      "x": 40.7,
+      "y": 338.2,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_owner_document_type_nit",
@@ -674,55 +694,62 @@
       "type": "checkbox",
       "x": 63.0,
       "y": 338.2,
-      "size": 10.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_owner_document_type_nn",
       "page": 1,
       "type": "checkbox",
-      "x": 90.0,
-      "y": 337.6,
-      "size": 9.9
+      "x": 96.0,
+      "y": 338.2,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_owner_document_type_p",
       "page": 1,
       "type": "checkbox",
-      "x": 117.6,
+      "x": 125.6,
       "y": 338.2,
-      "size": 10.0
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_owner_document_type_ce",
       "page": 1,
       "type": "checkbox",
-      "x": 153.4,
-      "y": 337.1,
-      "size": 10.0
+      "x": 161.4,
+      "y": 338.2,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_owner_document_type_ti",
       "page": 1,
       "type": "checkbox",
-      "x": 192.1,
-      "y": 336.0,
-      "size": 10.0
+      "x": 200.1,
+      "y": 338.2,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_owner_document_type_nuip",
       "page": 1,
       "type": "checkbox",
-      "x": 236.0,
-      "y": 338.1,
-      "size": 10.0
+      "x": 244.0,
+      "y": 338.2,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_owner_document_type_cd",
       "page": 1,
       "type": "checkbox",
-      "x": 278.9,
-      "y": 336.8,
-      "size": 9.9
+      "x": 286.9,
+      "y": 338.2,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_owner_document_number",
@@ -733,31 +760,31 @@
       "w": 43.0,
       "h": 14.3,
       "fontSize": 7.8,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_owner_address",
       "page": 1,
       "type": "text",
-      "x": 56.6,
+      "x": 36.0,
       "y": 364.6,
-      "w": 154.7,
+      "w": 152.0,
       "h": 14.0,
       "fontSize": 7.6,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_owner_city",
       "page": 1,
       "type": "text",
-      "x": 218.8,
+      "x": 196.0,
       "y": 363.8,
-      "w": 37.0,
+      "w": 50.0,
       "h": 14.0,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -769,17 +796,17 @@
       "w": 44.9,
       "h": 14.2,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_owner_signature",
       "page": 1,
       "type": "multiline",
-      "x": 34.4,
-      "y": 385.6,
-      "w": 331.1,
-      "h": 35.2,
+      "x": 102.0,
+      "y": 378.0,
+      "w": 262.0,
+      "h": 32.0,
       "fontSize": 6.5,
       "bold": false,
       "align": "left"
@@ -793,40 +820,42 @@
       "w": 127.3,
       "h": 14.0,
       "fontSize": 7.6,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_buyer_second_last_name",
       "page": 1,
       "type": "text",
-      "x": 159.5,
+      "x": 141.0,
       "y": 451.2,
-      "w": 112.7,
+      "w": 114.0,
       "h": 14.1,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_buyer_name",
       "page": 1,
       "type": "text",
-      "x": 274.7,
-      "y": 451.4,
-      "w": 93.7,
-      "h": 14.1,
-      "fontSize": 7.7,
-      "bold": true,
+      "x": 258.0,
+      "y": 449.0,
+      "w": 108.0,
+      "h": 20.0,
+      "fontSize": 7.0,
+      "minFontSize": 5.5,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_buyer_document_type_c",
       "page": 1,
       "type": "checkbox",
-      "x": 33.2,
-      "y": 486.5,
-      "size": 9.9
+      "x": 41.2,
+      "y": 481.4,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_buyer_document_type_nit",
@@ -834,55 +863,62 @@
       "type": "checkbox",
       "x": 64.7,
       "y": 481.4,
-      "size": 9.9
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_buyer_document_type_nn",
       "page": 1,
       "type": "checkbox",
-      "x": 91.6,
-      "y": 486.4,
-      "size": 9.9
+      "x": 99.6,
+      "y": 481.4,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_buyer_document_type_p",
       "page": 1,
       "type": "checkbox",
-      "x": 121.2,
-      "y": 486.5,
-      "size": 9.9
+      "x": 129.2,
+      "y": 481.4,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_buyer_document_type_ce",
       "page": 1,
       "type": "checkbox",
-      "x": 154.2,
-      "y": 486.4,
-      "size": 9.9
+      "x": 162.2,
+      "y": 481.4,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_buyer_document_type_ti",
       "page": 1,
       "type": "checkbox",
-      "x": 190.1,
-      "y": 486.3,
-      "size": 9.9
+      "x": 198.1,
+      "y": 481.4,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_buyer_document_type_nuip",
       "page": 1,
       "type": "checkbox",
-      "x": 231.5,
-      "y": 486.5,
-      "size": 9.9
+      "x": 239.5,
+      "y": 481.4,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_buyer_document_type_cd",
       "page": 1,
       "type": "checkbox",
-      "x": 276.6,
-      "y": 486.7,
-      "size": 9.9
+      "x": 284.6,
+      "y": 481.4,
+      "size": 8.0,
+      "fontSize": 5.0
     },
     {
       "id": "vehicle_buyer_document_number",
@@ -893,31 +929,31 @@
       "w": 42.9,
       "h": 14.1,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_buyer_address",
       "page": 1,
       "type": "text",
-      "x": 52.5,
+      "x": 36.0,
       "y": 508.7,
-      "w": 158.1,
+      "w": 152.0,
       "h": 14.1,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_buyer_city",
       "page": 1,
       "type": "text",
-      "x": 215.9,
+      "x": 196.0,
       "y": 508.7,
-      "w": 36.8,
+      "w": 50.0,
       "h": 14.1,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
@@ -929,17 +965,17 @@
       "w": 44.9,
       "h": 14.1,
       "fontSize": 7.7,
-      "bold": true,
+      "bold": false,
       "align": "left"
     },
     {
       "id": "vehicle_buyer_signature",
       "page": 1,
       "type": "multiline",
-      "x": 33.2,
-      "y": 529.7,
-      "w": 341.6,
-      "h": 35.3,
+      "x": 102.0,
+      "y": 522.0,
+      "w": 262.0,
+      "h": 32.0,
       "fontSize": 8.0,
       "bold": false,
       "align": "left"
@@ -948,12 +984,13 @@
       "id": "observations",
       "page": 1,
       "type": "multiline",
-      "x": 379.9,
-      "y": 472.6,
-      "w": 392.0,
-      "h": 33.0,
+      "x": 382.0,
+      "y": 470.0,
+      "w": 365.0,
+      "h": 46.0,
       "fontSize": 6.5,
-      "bold": true,
+      "minFontSize": 5.0,
+      "bold": false,
       "align": "left",
       "autoFit": true
     }

@@ -5,20 +5,27 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import {
   fetchFurPreview,
+  listFurClassifications,
+  type FurClassificationItem,
   type FurPersonKind,
   type FurPrendaKind,
-  type FurVehicleKind,
+  type FurTemplateFormatCode,
 } from "@/lib/api/admin-plataforma-fur";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import { buildFurGuide } from "@/lib/fur/fur-guide";
 import type { ProcedureFamily, ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 
-const VEHICLES: { value: FurVehicleKind; label: string }[] = [
-  { value: "carro", label: "Carro" },
-  { value: "moto", label: "Moto" },
-  { value: "remolque", label: "Remolque" },
-  { value: "maquinaria", label: "Maquinaria" },
+const FORMAT_GROUPS: { format: FurTemplateFormatCode; label: string }[] = [
+  { format: "AUTOMOTOR", label: "FUR automotor" },
+  { format: "MAQUINARIA", label: "FUR maquinaria" },
+  { format: "REMOLQUES", label: "FUR remolques" },
+];
+
+const FILL_ALL_BUTTONS: { format: FurTemplateFormatCode; label: string; testId: string }[] = [
+  { format: "AUTOMOTOR", label: "Simular llenado completo — Automotor", testId: "fur-fill-all-automotor" },
+  { format: "MAQUINARIA", label: "Simular llenado completo — Maquinaria", testId: "fur-fill-all-maquinaria" },
+  { format: "REMOLQUES", label: "Simular llenado completo — Remolques", testId: "fur-fill-all-remolques" },
 ];
 
 const PERSONS: { value: FurPersonKind; label: string }[] = [
@@ -218,7 +225,8 @@ export function FurSimulatorPanel() {
   const [typeId, setTypeId] = useState("");
   const [sellerKind, setSellerKind] = useState<FurPersonKind>("natural");
   const [buyerKind, setBuyerKind] = useState<FurPersonKind>("natural");
-  const [vehicleKind, setVehicleKind] = useState<FurVehicleKind | "">("");
+  const [vehicleClass, setVehicleClass] = useState("");
+  const [classifications, setClassifications] = useState<FurClassificationItem[]>([]);
   const [cambioColor, setCambioColor] = useState(false);
   const [cambioCombustible, setCambioCombustible] = useState(false);
   const [cambioCarroceria, setCambioCarroceria] = useState(false);
@@ -229,9 +237,13 @@ export function FurSimulatorPanel() {
   const load = useCallback(async () => {
     setStatus("loading");
     try {
-      const items = await superadminClient.listProcedureTypes();
+      const [items, catalog] = await Promise.all([
+        superadminClient.listProcedureTypes(),
+        listFurClassifications(),
+      ]);
       const active = items.filter((t) => t.isActive);
       setTypes(active);
+      setClassifications(catalog.filter((c) => c.classification.length > 0));
       setStatus(active.length === 0 ? "empty" : "ready");
     } catch {
       setStatus("error");
@@ -254,10 +266,24 @@ export function FurSimulatorPanel() {
     [types, family],
   );
 
+  const classificationsByFormat = useMemo(() => {
+    const map = new Map<string, FurClassificationItem[]>();
+    for (const group of FORMAT_GROUPS) map.set(group.format, []);
+    for (const row of classifications) {
+      const key = FORMAT_GROUPS.some((g) => g.format === row.templateFormat)
+        ? row.templateFormat
+        : "AUTOMOTOR";
+      const list = map.get(key) ?? [];
+      list.push(row);
+      map.set(key, list);
+    }
+    return map;
+  }, [classifications]);
+
   const selectedType = types.find((t) => t.id === typeId);
   const inferredLocks = inferFromType(selectedType);
   const canChooseSeller = sellerApplies(selectedType);
-  const canSimulate = Boolean(family && typeId && vehicleKind);
+  const canSimulate = Boolean(family && typeId && vehicleClass);
 
   const applyTypeDefaults = (id: string) => {
     setTypeId(id);
@@ -271,7 +297,7 @@ export function FurSimulatorPanel() {
   };
 
   const simulate = async () => {
-    if (!canSimulate || !typeId || !vehicleKind) return;
+    if (!canSimulate || !typeId || !vehicleClass) return;
     setPreviewLoading(true);
     try {
       await openPdfBlobInNewTab(
@@ -280,7 +306,7 @@ export function FurSimulatorPanel() {
             procedureTypeId: typeId,
             sellerPersonKind: canChooseSeller ? sellerKind : "natural",
             buyerPersonKind: buyerKind,
-            vehicleKind,
+            vehicleClass,
             cambioColor,
             cambioCombustible,
             cambioCarroceria,
@@ -292,6 +318,27 @@ export function FurSimulatorPanel() {
     } catch {
       showToast(
         "No se pudo generar el FUR de simulación. Verifica la sesión SuperAdmin e inténtalo de nuevo.",
+        "error",
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const simulateFillAll = async (format: FurTemplateFormatCode) => {
+    setPreviewLoading(true);
+    try {
+      await openPdfBlobInNewTab(
+        () =>
+          fetchFurPreview({
+            fillAll: true,
+            templateFormat: format,
+          }),
+        { maximize: true },
+      );
+    } catch {
+      showToast(
+        "No se pudo generar el FUR de calibración. Verifica la sesión SuperAdmin e inténtalo de nuevo.",
         "error",
       );
     } finally {
@@ -397,19 +444,29 @@ export function FurSimulatorPanel() {
             ))}
           </SelectField>
 
-          <SelectField
-            id="fur-vehicle"
-            label="Tipo de vehículo"
-            value={vehicleKind}
-            onChange={(v) => setVehicleKind(v as FurVehicleKind)}
-          >
-            <option value="">Selecciona un vehículo</option>
-            {VEHICLES.map((v) => (
-              <option key={v.value} value={v.value}>
-                {v.label}
-              </option>
-            ))}
-          </SelectField>
+          <div className="flex flex-col gap-1.5">
+            <SelectField
+              id="fur-vehicle"
+              label="Tipo de clase del vehículo"
+              value={vehicleClass}
+              onChange={setVehicleClass}
+            >
+              <option value="">Selecciona una clase</option>
+              {FORMAT_GROUPS.map((group) => (
+                <optgroup key={group.format} label={group.label}>
+                  {(classificationsByFormat.get(group.format) ?? []).map((v) => (
+                    <option key={v.classification} value={v.classification}>
+                      {v.classification}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </SelectField>
+            <p className="text-xs text-[#59677D] dark:text-white/55" data-testid="fur-vehicle-hint">
+              Clases tomadas de tramites.vehicle_classification_fur. El grupo define la plantilla
+              (automotor, maquinaria o remolques).
+            </p>
+          </div>
 
           <SelectField
             id="fur-prenda"
@@ -464,7 +521,7 @@ export function FurSimulatorPanel() {
           <div className="md:col-span-2 flex items-end">
             <button
               type="submit"
-              disabled={!canSimulate}
+              disabled={!canSimulate || previewLoading}
               aria-busy={previewLoading}
               className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
@@ -474,6 +531,28 @@ export function FurSimulatorPanel() {
           </div>
         </form>
       </UiStateBoundary>
+
+      <div className="flex flex-col gap-2">
+        <div className="grid gap-2 sm:grid-cols-3">
+          {FILL_ALL_BUTTONS.map((btn) => (
+            <button
+              key={btn.format}
+              type="button"
+              data-testid={btn.testId}
+              disabled={previewLoading}
+              aria-busy={previewLoading}
+              onClick={() => void simulateFillAll(btn.format)}
+              className="w-full rounded-xl border border-[#557EFF] bg-white px-4 py-2.5 text-sm font-semibold text-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#00DBD5] dark:bg-transparent dark:text-[#00DBD5]"
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-[#5B6475] dark:text-white/60">
+          Cada botón pinta todos los campos del manifiesto de esa plantilla (automotor, maquinaria o
+          remolques). Omite familia, tipo de trámite y clase.
+        </p>
+      </div>
     </div>
   );
 }

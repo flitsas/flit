@@ -33,6 +33,7 @@ public static class FurPreviewSample
 
     public const string VehicleCarro = "carro";
     public const string VehicleMoto = "moto";
+    public const string VehicleCamioneta = "camioneta";
     public const string VehicleRemolque = "remolque";
     public const string VehicleMaquinaria = "maquinaria";
 
@@ -56,7 +57,7 @@ public static class FurPreviewSample
     {
         kind = VehicleCarro;
         var n = (raw ?? string.Empty).Trim().ToLowerInvariant();
-        if (n is VehicleCarro or VehicleMoto or VehicleRemolque or VehicleMaquinaria)
+        if (n is VehicleCarro or VehicleMoto or VehicleCamioneta or VehicleRemolque or VehicleMaquinaria)
         {
             kind = n;
             return true;
@@ -121,8 +122,50 @@ public static class FurPreviewSample
             throw new ArgumentOutOfRangeException(nameof(vehicleKind), "Parámetros de simulación inválidos.");
         }
 
-        var esTraspaso = IsTraspaso(family, procedureCode);
         var (template, clase, placa) = VehicleAssets(vehicle);
+        return FinishBuild(procedureCode, family, sellerKind, buyerKind, template, clase, placa, flags);
+    }
+
+    public static FurDocumentData BuildFromClassification(
+        string procedureCode,
+        string family,
+        string sellerPersonKind,
+        string buyerPersonKind,
+        string vehicleClass,
+        FurTemplateFormat format,
+        FurPreviewFlags? flags = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(procedureCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(vehicleClass);
+
+        if (!TryParsePersonKind(sellerPersonKind, out var sellerKind)
+            || !TryParsePersonKind(buyerPersonKind, out var buyerKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sellerPersonKind), "Parámetros de simulación inválidos.");
+        }
+
+        var clase = vehicleClass.Trim();
+        var placa = IsMotoClase(clase) ? "ABC12A" : PhPlaca;
+        return FinishBuild(procedureCode, family, sellerKind, buyerKind, format, clase, placa, flags);
+    }
+
+    private static bool IsMotoClase(string clase)
+    {
+        var n = FurClassificationNormalizer.Normalize(clase);
+        return n.Contains("MOTO", StringComparison.Ordinal);
+    }
+
+    private static FurDocumentData FinishBuild(
+        string procedureCode,
+        string family,
+        string sellerKind,
+        string buyerKind,
+        FurTemplateFormat template,
+        string clase,
+        string placa,
+        FurPreviewFlags? flags)
+    {
+        var esTraspaso = IsTraspaso(family, procedureCode);
         var partes = new List<DocumentParte>();
         if (esTraspaso)
             partes.Add(BuildParte("vendedor", sellerKind, esVendedor: true));
@@ -219,10 +262,14 @@ public static class FurPreviewSample
     private static DocumentParte BuildLocatario() =>
         new("locatario", PhLocatario, PhLocatarioDoc, null, PhLocatarioTipoDoc, null, "[DIRECCIÓN SINTÉTICA]", "Medellín");
 
+    public static FurTemplateFormat TemplateFormatFor(string vehicleKind) =>
+        VehicleAssets(vehicleKind).Format;
+
     private static (FurTemplateFormat Format, string Clase, string Placa) VehicleAssets(string kind) =>
         kind switch
         {
             VehicleMoto => (FurTemplateFormat.Automotor, "MOTOCICLETA", "ABC12A"),
+            VehicleCamioneta => (FurTemplateFormat.Automotor, "CAMIONETA", PhPlaca),
             VehicleRemolque => (FurTemplateFormat.Remolques, "REMOLQUE", PhPlaca),
             VehicleMaquinaria => (FurTemplateFormat.Maquinaria, "EXCAVADORA", PhPlaca),
             _ => (FurTemplateFormat.Automotor, "AUTOMOVIL", PhPlaca),

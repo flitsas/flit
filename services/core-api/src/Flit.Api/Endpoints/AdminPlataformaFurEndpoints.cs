@@ -24,7 +24,19 @@ public static class AdminPlataformaFurEndpoints
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/classifications", ListClassificationsAsync)
+            .WithName("AdminPlataformaFurClassifications")
+            .Produces(StatusCodes.Status200OK);
+
         return app;
+    }
+
+    private static async Task<IResult> ListClassificationsAsync(
+        [FromServices] ListFurClassificationsHandler handler,
+        CancellationToken ct)
+    {
+        var items = await handler.HandleAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { items });
     }
 
     private static async Task<IResult> PreviewAsync(

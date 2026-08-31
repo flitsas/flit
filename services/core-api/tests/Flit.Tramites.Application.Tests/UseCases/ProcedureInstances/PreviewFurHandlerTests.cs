@@ -13,11 +13,14 @@ public sealed class PreviewFurHandlerTests
 {
     private readonly IProcedureTypeRepository _types = Substitute.For<IProcedureTypeRepository>();
     private readonly IFurDocumentGenerator _generator = new MockFurDocumentGenerator();
+    private readonly IFurTemplateResolver _resolver = Substitute.For<IFurTemplateResolver>();
     private readonly PreviewFurHandler _handler;
 
     public PreviewFurHandlerTests()
     {
-        _handler = new PreviewFurHandler(_types, _generator);
+        _resolver.ResolveAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(FurTemplateFormat.Automotor);
+        _handler = new PreviewFurHandler(_types, _generator, _resolver);
     }
 
     [Fact]
@@ -81,5 +84,59 @@ public sealed class PreviewFurHandlerTests
             TestContext.Current.CancellationToken);
         result.Status.Should().Be(PreviewFurStatus.BadRequest);
         result.Error.Should().Be("prenda_invalida");
+    }
+
+    [Fact]
+    public async Task FillAll_OmitsProcedureTypeAndReturnsDocument()
+    {
+        var result = await _handler.HandleAsync(
+            new PreviewFurRequest(null, null, null, null, FillAll: true),
+            TestContext.Current.CancellationToken);
+        result.Status.Should().Be(PreviewFurStatus.Ok);
+        result.Document.Should().NotBeNull();
+        result.Document!.Filename.Should().Contain("FILLALL");
+        await _types.DidNotReceive().GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FillAll_WithTemplateFormatMaquinaria_ReturnsDocument()
+    {
+        var result = await _handler.HandleAsync(
+            new PreviewFurRequest(null, null, null, null, FillAll: true, TemplateFormat: "MAQUINARIA"),
+            TestContext.Current.CancellationToken);
+        result.Status.Should().Be(PreviewFurStatus.Ok);
+        result.Document.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task FillAll_InvalidTemplateFormat_ReturnsBadRequest()
+    {
+        var result = await _handler.HandleAsync(
+            new PreviewFurRequest(null, null, null, null, FillAll: true, TemplateFormat: "AUTOMOTRIZ"),
+            TestContext.Current.CancellationToken);
+        result.Status.Should().Be(PreviewFurStatus.BadRequest);
+        result.Error.Should().Be("template_format_invalido");
+    }
+
+    [Fact]
+    public async Task VehicleClass_UsesCatalogClassification()
+    {
+        var id = Guid.NewGuid();
+        _types.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new ProcedureType
+        {
+            Id = id,
+            Code = "MATRICULA_NUEVA",
+            Family = "MATRICULAS",
+            Name = "Matrícula inicial",
+        });
+        _resolver.ResolveAsync("EXCAVADORA", Arg.Any<CancellationToken>())
+            .Returns(FurTemplateFormat.Maquinaria);
+
+        var result = await _handler.HandleAsync(
+            new PreviewFurRequest(id, "natural", "natural", null, VehicleClass: "EXCAVADORA"),
+            TestContext.Current.CancellationToken);
+        result.Status.Should().Be(PreviewFurStatus.Ok);
+        result.Document.Should().NotBeNull();
+        await _resolver.Received(1).ResolveAsync("EXCAVADORA", Arg.Any<CancellationToken>());
     }
 }

@@ -10,16 +10,16 @@ namespace Flit.Infrastructure.Documents.Fur;
 public static partial class FurOverlayRenderer
 {
     /// <summary>Ancho máximo de la imagen de firma del baúl dentro del campo (el resto es metadatos).</summary>
-    private const double SignatureImageMaxWidth = 115;
+    private const double SignatureImageMaxWidth = 145;
 
     /// <summary>
     /// HU #11016 — fracción del ALTO del campo que puede ocupar la firma. El resto es aire: una firma
     /// que llena el campo de borde a borde termina tocando (o pisando) las líneas vecinas del FUR.
     /// </summary>
-    private const double SignatureImageMaxHeightRatio = 0.8;
+    private const double SignatureImageMaxHeightRatio = 0.88;
 
     /// <summary>Separación entre imagen de firma y bloque de metadatos.</summary>
-    private const double SignatureSidecarGap = 6;
+    private const double SignatureSidecarGap = 8;
 
     /// <summary>Tamaño de fuente del bloque de metadatos junto a la firma.</summary>
     private const double SignatureSidecarFontSize = 3;
@@ -207,7 +207,7 @@ public static partial class FurOverlayRenderer
     {
         var fieldH = field.H > 0 ? field.H : 36;
         var fieldW = field.W > 0 ? field.W : 120;
-        var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.38);
+        var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.50);
 
         // HU #11016 — la firma se dibujaba con el ALTO COMPLETO del campo y sin respetar la relación de
         // aspecto: un PNG apaisado se estiraba verticalmente y se salía del espacio de firma, pisando lo
@@ -298,6 +298,7 @@ public static partial class FurOverlayRenderer
     {
         using var ms = new MemoryStream(imageBytes);
         using var img = XImage.FromStream(() => ms);
+        img.Interpolate = true;
         gfx.DrawImage(img, x, y, w, h);
     }
 

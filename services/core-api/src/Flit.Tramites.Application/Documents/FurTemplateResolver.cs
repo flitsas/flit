@@ -20,9 +20,16 @@ public enum FurTemplateFormat
 /// catálogo <c>tramites.vehicle_classification_fur</c> (HU #10919). El backend es la fuente de verdad (D1);
 /// una clasificación sin match en el catálogo cae a <see cref="FurTemplateFormat.Automotor"/> (D2).
 /// </summary>
+public sealed record FurClassificationCatalogItem(
+    string Classification,
+    string TemplateFormat,
+    string? FieldToFill);
+
 public interface IFurTemplateResolver
 {
     Task<FurTemplateFormat> ResolveAsync(string? vehicleClass, CancellationToken ct = default);
+
+    Task<IReadOnlyList<FurClassificationCatalogItem>> ListCatalogAsync(CancellationToken ct = default);
 }
 
 /// <summary>

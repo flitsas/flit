@@ -14,6 +14,7 @@ public sealed class FurPreviewSampleTests
     [Theory]
     [InlineData(FurPreviewSample.VehicleCarro, FurTemplateFormat.Automotor)]
     [InlineData(FurPreviewSample.VehicleMoto, FurTemplateFormat.Automotor)]
+    [InlineData(FurPreviewSample.VehicleCamioneta, FurTemplateFormat.Automotor)]
     [InlineData(FurPreviewSample.VehicleRemolque, FurTemplateFormat.Remolques)]
     [InlineData(FurPreviewSample.VehicleMaquinaria, FurTemplateFormat.Maquinaria)]
     public void Build_GenerateFur_ProducesTwoPagePdf(string vehicleKind, FurTemplateFormat expectedFormat)

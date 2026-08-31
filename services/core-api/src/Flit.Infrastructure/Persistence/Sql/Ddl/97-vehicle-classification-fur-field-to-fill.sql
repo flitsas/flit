@@ -1,31 +1,19 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- HU #10919 (Feature #10918) — Catálogo de equivalencia clasificación → plantilla FUR.
+-- Catálogo tramites.vehicle_classification_fur — field_to_fill + reseeding.
 --
--- Tabla de decisión que determina qué plantilla de FUR (AUTOMOTOR / MAQUINARIA /
--- REMOLQUES) aplica según la clasificación del vehículo (vehicle_class del proveedor).
--- Catálogo GLOBAL (sin tenant). Idempotente: ON CONFLICT (classification) DO UPDATE.
--- El resolver (FurTemplateResolver) normaliza (mayúsculas/sin tildes/trim) al buscar;
--- aquí la clasificación se guarda literal como en la fuente (vehicle_classification_fur.csv).
+-- Fuente: Excel PINTAR FUR (CLASSIFICATION / TEMPLATE_FORMAT / field_to_fill).
+-- AUTOMOTRIZ del Excel se persiste como AUTOMOTOR (CHECK + FurTemplateResolver).
+-- Quita el seed previo (HU #10919) y carga las 96 filas con field_to_fill.
+-- IDEMPOTENTE: ADD COLUMN IF NOT EXISTS + TRUNCATE + INSERT.
 -- ─────────────────────────────────────────────────────────────────────────────
 
-CREATE TABLE IF NOT EXISTS tramites.vehicle_classification_fur (
-    id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    classification  text NOT NULL,
-    template_format text NOT NULL,
-    field_to_fill   text NULL,
-    created_at      timestamptz NOT NULL DEFAULT now(),
-    updated_at      timestamptz NOT NULL DEFAULT now(),
-    deleted_at      timestamptz NULL,
-    CONSTRAINT uq_vehicle_classification_fur_classification UNIQUE (classification),
-    CONSTRAINT ck_vehicle_classification_fur_format
-        CHECK (template_format IN ('AUTOMOTOR', 'MAQUINARIA', 'REMOLQUES'))
-);
-
-COMMENT ON TABLE tramites.vehicle_classification_fur IS
-    'HU #10919 — Equivalencia clasificación de vehículo → plantilla de FUR (AUTOMOTOR/MAQUINARIA/REMOLQUES). Catálogo global.';
+ALTER TABLE tramites.vehicle_classification_fur
+    ADD COLUMN IF NOT EXISTS field_to_fill text NULL;
 
 COMMENT ON COLUMN tramites.vehicle_classification_fur.field_to_fill IS
     'Identificador del campo del overlay FUR a diligenciar o marcar para esta clasificación (casilla numeral 4 u homóloga).';
+
+TRUNCATE TABLE tramites.vehicle_classification_fur RESTART IDENTITY;
 
 INSERT INTO tramites.vehicle_classification_fur (classification, template_format, field_to_fill)
 VALUES
@@ -124,8 +112,4 @@ VALUES
     ('MAQ. CONSTRUCCION O MINERA', 'REMOLQUES', 'SIMILAR'),
     ('REMOLQUE', 'REMOLQUES', 'REMOLQUE'),
     ('REMOLQUE Y SEMIRREMOLQUE', 'REMOLQUES', 'MULTIMODULAR'),
-    ('SEMIREMOLQUE', 'REMOLQUES', 'SEMIREMOLQUE')
-ON CONFLICT (classification) DO UPDATE SET
-    template_format = EXCLUDED.template_format,
-    field_to_fill = EXCLUDED.field_to_fill,
-    updated_at = now();
+    ('SEMIREMOLQUE', 'REMOLQUES', 'SEMIREMOLQUE');

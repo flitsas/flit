@@ -1,22 +1,48 @@
-import { API_BASE_URL, friendlyErrorMessage, getToken } from "./client";
+import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
 import { ApiError } from "./types";
 
 const base = "/api/v1/admin/plataforma/fur";
 
 export type FurPersonKind = "natural" | "juridica";
-export type FurVehicleKind = "carro" | "moto" | "remolque" | "maquinaria";
+export type FurVehicleKind = "carro" | "moto" | "camioneta" | "remolque" | "maquinaria";
 export type FurPrendaKind = "ninguna" | "inscripcion" | "levantamiento" | "ambas";
+export type FurTemplateFormatCode = "AUTOMOTOR" | "MAQUINARIA" | "REMOLQUES";
 
 export interface FurPreviewRequest {
-  procedureTypeId: string;
-  sellerPersonKind: FurPersonKind;
-  buyerPersonKind: FurPersonKind;
-  vehicleKind: FurVehicleKind;
-  cambioColor: boolean;
-  cambioCombustible: boolean;
-  cambioCarroceria: boolean;
-  blindaje: boolean;
-  prenda: FurPrendaKind;
+  procedureTypeId?: string;
+  sellerPersonKind?: FurPersonKind;
+  buyerPersonKind?: FurPersonKind;
+  vehicleKind?: FurVehicleKind;
+  vehicleClass?: string;
+  templateFormat?: FurTemplateFormatCode;
+  cambioColor?: boolean;
+  cambioCombustible?: boolean;
+  cambioCarroceria?: boolean;
+  blindaje?: boolean;
+  prenda?: FurPrendaKind;
+  fillAll?: boolean;
+}
+
+export interface FurClassificationItem {
+  classification: string;
+  templateFormat: FurTemplateFormatCode | string;
+  fieldToFill: string | null;
+}
+
+export async function listFurClassifications(signal?: AbortSignal): Promise<FurClassificationItem[]> {
+  const data = await apiFetch<{ items: FurClassificationItem[] } | FurClassificationItem[]>(
+    `${base}/classifications`,
+    { signal },
+  );
+  const rows = Array.isArray(data) ? data : (data?.items ?? []);
+  return rows.map((r) => {
+    const raw = r as unknown as Record<string, unknown>;
+    return {
+      classification: String(raw.classification ?? raw.Classification ?? ""),
+      templateFormat: String(raw.templateFormat ?? raw.TemplateFormat ?? "").toUpperCase(),
+      fieldToFill: (raw.fieldToFill ?? raw.FieldToFill ?? null) as string | null,
+    };
+  });
 }
 
 export async function fetchFurPreview(body: FurPreviewRequest, signal?: AbortSignal): Promise<Blob> {
