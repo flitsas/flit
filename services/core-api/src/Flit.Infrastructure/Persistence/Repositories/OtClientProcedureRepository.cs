@@ -6,6 +6,8 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Flit.Tramites.Domain.Documents;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -719,87 +721,33 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         return await ExecuteCrossTenantReadAsync(
             async () =>
             {
+                // Solo las columnas que viven en la propia instancia. Los datos que están en
+                // field_values se resuelven después con UNA lectura de la tabla: una subconsulta
+                // correlacionada por atributo escalaba a más de veinte para el detalle completo.
                 var mapped = await BuildAccessibleQuery(transitOfficeId, clientTenantIds)
                     .Where(p => p.Id == procedureInstanceId)
-                    .Select(p => new OtClientProcedure
-                    {
-                        Id = p.Id,
-                        ClientTenantId = p.TenantId,
-                        ProcedureTypeId = p.ProcedureTypeId,
-                        ReferenceNumber = p.ReferenceNumber,
-                        Status = p.Status,
+                    .Select(p => new ProcedureInstanceRow(
+                        p.Id,
+                        p.TenantId,
+                        p.ProcedureTypeId,
+                        p.ReferenceNumber,
+                        p.Status,
                         // La modalidad gobierna qué causales de rechazo aplican: sin ella, el guard
                         // del rechazo descartaría causales válidas por creerlas de otro proceso.
-                        Familia = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
-                        PlateFlowStatus = p.PlateFlowStatus,
-                        // HU #10804 — soat_estado también en el detalle (mismo criterio de visibilidad).
-                        SoatEstado = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id
-                                && f.FieldKey == Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey)
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                        // HU #10805 — dígito de preferencia también en el detalle.
-                        PlatePreferredLastDigit = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id
-                                && f.FieldKey == PlatePreferredLastDigitFieldKey)
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                        SoatPagado = _context.ProcedureInstanceFieldValues
-                            .Any(f => f.ProcedureInstanceId == p.Id
-                                && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.SoatPagado
-                                && f.ValueText == "true"),
-                        ImpuestoDepartamentalPagado = _context.ProcedureInstanceFieldValues
-                            .Any(f => f.ProcedureInstanceId == p.Id
-                                && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.ImpuestoDepartamentalPagado
-                                && f.ValueText == "true"),
-                        TransitOfficeId = p.TransitOfficeId,
-                        CreatedAt = p.CreatedAt,
-                        SubmittedAt = p.SubmittedAt,
-                        Prioritario = p.Prioritario,
-                        Placa = p.Plate,
-                        Vin = p.Vin,
-                        VendedorNombre = p.VendedorNombre,
-                        CompradorNombre = p.CompradorNombre,
-                        GestorNombre = _context.Users
+                        p.ProcedureType != null ? p.ProcedureType.Family : "",
+                        p.PlateFlowStatus,
+                        p.TransitOfficeId,
+                        p.CreatedAt,
+                        p.SubmittedAt,
+                        p.Prioritario,
+                        p.Plate,
+                        p.Vin,
+                        p.VendedorNombre,
+                        p.CompradorNombre,
+                        _context.Users
                             .Where(u => u.Id == p.CreatedByUserId)
                             .Select(u => u.DisplayName)
-                            .FirstOrDefault(),
-                        Marca = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id && f.FieldKey == "vehicle_brand")
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                        Linea = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id && f.FieldKey == "vehicle_line")
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                        // Bug #11584 — VerifikResultMapper persiste el año bajo "vehicle_year"
-                        // (Flit.Tramites.Application/UseCases/Consultations/VerifikResultMapper.cs:182);
-                        // "vehicle_model" nunca se escribe en runtime, solo existe como alias legado
-                        // documentado en las herramientas de migración (TransferFieldMap/RegistrationFieldMap).
-                        // Se conserva como fallback por si hay datos históricos migrados con esa llave.
-                        Modelo = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id
-                                && (f.FieldKey == "vehicle_year" || f.FieldKey == "vehicle_model"))
-                            .OrderBy(f => f.FieldKey == "vehicle_year" ? 0 : 1)
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                        Color = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id && f.FieldKey == "vehicle_color")
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                        Clase = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id && f.FieldKey == "vehicle_class")
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                        Servicio = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id && f.FieldKey == "vehicle_service")
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                        Combustible = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id && f.FieldKey == "vehicle_fuel")
-                            .Select(f => f.ValueText)
-                            .FirstOrDefault(),
-                    })
+                            .FirstOrDefault()))
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
 
@@ -807,6 +755,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 {
                     return null;
                 }
+
+                var fields = await LoadFieldValuesAsync(mapped.Id, cancellationToken)
+                    .ConfigureAwait(false);
 
                 var actors = await _context.ProcedureInstanceActors
                     .AsNoTracking()
@@ -826,21 +777,51 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
-                var withActors = new OtClientProcedure
+                var comercial = await _context.ProcedureInstanceCommercials
+                    .AsNoTracking()
+                    .Where(c => c.ProcedureInstanceId == mapped.Id)
+                    .Select(c => new OtClientProcedureCommercial
+                    {
+                        ValorVenta = c.ValorVenta,
+                        Causal = c.Causal,
+                        TasaImpuesto = c.TasaImpuesto,
+                        Derechos = c.Derechos,
+                        MetodoPago = c.MetodoPago,
+                    })
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var prenda = await _context.ProcedureInstancePrendas
+                    .AsNoTracking()
+                    .Where(x => x.ProcedureInstanceId == mapped.Id)
+                    .Select(x => new OtClientProcedurePrenda
+                    {
+                        Decision = x.Decision,
+                        Estado = x.Estado,
+                        AcreedorNombre = x.AcreedorNombre,
+                        AcreedorDocumento = x.AcreedorDocumento,
+                        LevantamientoEntidad = x.LevantamientoEntidad,
+                    })
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var procedure = new OtClientProcedure
                 {
                     Id = mapped.Id,
                     ClientTenantId = mapped.ClientTenantId,
                     ProcedureTypeId = mapped.ProcedureTypeId,
-                    ProcedureTypeName = mapped.ProcedureTypeName,
-                    ClientTenantName = mapped.ClientTenantName,
                     ReferenceNumber = mapped.ReferenceNumber,
                     Status = mapped.Status,
                     Familia = mapped.Familia,
                     PlateFlowStatus = mapped.PlateFlowStatus,
-                    SoatEstado = mapped.SoatEstado,
-                    PlatePreferredLastDigit = mapped.PlatePreferredLastDigit,
-                    SoatPagado = mapped.SoatPagado,
-                    ImpuestoDepartamentalPagado = mapped.ImpuestoDepartamentalPagado,
+                    // HU #10804 — soat_estado también en el detalle (mismo criterio de visibilidad).
+                    SoatEstado = Field(fields, Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey),
+                    // HU #10805 — dígito de preferencia también en el detalle.
+                    PlatePreferredLastDigit = Field(fields, PlatePreferredLastDigitFieldKey),
+                    SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.SoatPagado),
+                    ImpuestoDepartamentalPagado = IsTrue(
+                        fields,
+                        Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.ImpuestoDepartamentalPagado),
                     TransitOfficeId = mapped.TransitOfficeId,
                     CreatedAt = mapped.CreatedAt,
                     SubmittedAt = mapped.SubmittedAt,
@@ -851,22 +832,116 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     VendedorNombre = mapped.VendedorNombre,
                     CompradorNombre = mapped.CompradorNombre,
                     GestorNombre = mapped.GestorNombre,
-                    Marca = mapped.Marca,
-                    Linea = mapped.Linea,
-                    Modelo = mapped.Modelo,
-                    Color = mapped.Color,
-                    Clase = mapped.Clase,
-                    Servicio = mapped.Servicio,
-                    Combustible = mapped.Combustible,
+                    Marca = Field(fields, VehicleFieldKeys.Brand),
+                    Linea = Field(fields, VehicleFieldKeys.Line),
+                    // Bug #11584 — el runtime persiste el año bajo "vehicle_year"; "vehicle_model" solo
+                    // aparece en datos históricos migrados, así que sirve de respaldo, no de fuente.
+                    Modelo = Field(fields, VehicleFieldKeys.Year) ?? Field(fields, VehicleFieldKeys.LegacyModel),
+                    Color = Field(fields, VehicleFieldKeys.Color),
+                    Clase = Field(fields, VehicleFieldKeys.Class),
+                    Servicio = Field(fields, VehicleFieldKeys.Service),
+                    Combustible = Field(fields, VehicleFieldKeys.Fuel),
+                    Carroceria = Field(fields, VehicleFieldKeys.BodyType),
+                    Cilindraje = Field(fields, VehicleFieldKeys.EngineDisplacement),
+                    Capacidad = Field(fields, VehicleFieldKeys.Passengers),
+                    Ejes = Field(fields, VehicleFieldKeys.Axles),
+                    EstadoVehiculo = Field(fields, VehicleFieldKeys.State),
+                    NumeroMotor = Field(fields, VehicleFieldKeys.EngineNumber),
+                    NumeroChasis = Field(fields, VehicleFieldKeys.Chassis),
+                    NumeroSerie = Field(fields, VehicleFieldKeys.Series),
+                    RuntSnapshot = BuildRuntSnapshot(fields),
+                    TransformacionesDeclaradas = new OtClientProcedureTransformationFlags
+                    {
+                        Color = IsTrue(fields, MandatoObjetoComposer.CambioColor),
+                        Combustible = IsTrue(fields, MandatoObjetoComposer.CambioCombustible),
+                        Carroceria = IsTrue(fields, MandatoObjetoComposer.CambioCarroceria),
+                    },
+                    Comercial = comercial,
+                    Prenda = prenda,
                 };
 
-                var enriched = await EnrichDisplayNamesAsync([withActors], cancellationToken)
+                var enriched = await EnrichDisplayNamesAsync([procedure], cancellationToken)
                     .ConfigureAwait(false);
                 return enriched[0];
             },
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Columnas del detalle que viven en <c>procedure_instances</c> (o en un join directo).</summary>
+    private sealed record ProcedureInstanceRow(
+        Guid Id,
+        Guid ClientTenantId,
+        Guid ProcedureTypeId,
+        string ReferenceNumber,
+        string Status,
+        string Familia,
+        string? PlateFlowStatus,
+        Guid? TransitOfficeId,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset? SubmittedAt,
+        bool Prioritario,
+        string? Placa,
+        string? Vin,
+        string? VendedorNombre,
+        string? CompradorNombre,
+        string? GestorNombre);
+
+    /// <summary>
+    /// Todos los <c>field_values</c> de la instancia en una sola lectura. La última repetición de una
+    /// clave gana, que es el criterio que ya aplicaban las subconsultas con <c>FirstOrDefault</c>
+    /// sobre una tabla sin orden garantizado; en la práctica la clave es única por instancia.
+    /// </summary>
+    private async Task<Dictionary<string, string?>> LoadFieldValuesAsync(
+        Guid procedureInstanceId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _context.ProcedureInstanceFieldValues
+            .AsNoTracking()
+            .Where(f => f.ProcedureInstanceId == procedureInstanceId)
+            .Select(f => new { f.FieldKey, f.ValueText })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var fields = new Dictionary<string, string?>(rows.Count, StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            fields[row.FieldKey] = row.ValueText;
+        }
+
+        return fields;
+    }
+
+    /// <summary>Valor de una clave, o <c>null</c> si el trámite no la tiene. Nunca cae en otra clave.</summary>
+    private static string? Field(Dictionary<string, string?> fields, string key) =>
+        fields.TryGetValue(key, out var value) ? value : null;
+
+    /// <summary>Bandera booleana persistida como texto. Mismo criterio que las consultas previas.</summary>
+    private static bool IsTrue(Dictionary<string, string?> fields, string key) =>
+        string.Equals(Field(fields, key), "true", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Snapshot RUNT de los atributos transformables, o <c>null</c> si el trámite no capturó ninguno
+    /// (borradores anteriores a la feature). Devolver un snapshot con las tres caras vacías haría
+    /// creer al consumidor que el RUNT no tiene color, y no es lo mismo que no haberlo consultado.
+    /// </summary>
+    private static OtClientProcedureVehicleSnapshot? BuildRuntSnapshot(Dictionary<string, string?> fields)
+    {
+        var color = Field(fields, VehicleFieldKeys.ColorRunt);
+        var combustible = Field(fields, VehicleFieldKeys.FuelRunt);
+        var carroceria = Field(fields, VehicleFieldKeys.BodyTypeRunt);
+
+        if (color is null && combustible is null && carroceria is null)
+        {
+            return null;
+        }
+
+        return new OtClientProcedureVehicleSnapshot
+        {
+            Color = color,
+            Combustible = combustible,
+            Carroceria = carroceria,
+        };
+    }
     private IQueryable<ProcedureInstance> BuildAccessibleQuery(
         Guid transitOfficeId,
         IReadOnlyList<Guid> clientTenantIds) =>
@@ -1205,39 +1280,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             .ToDictionaryAsync(t => t.Id, t => t.LegalName, cancellationToken)
             .ConfigureAwait(false);
 
+        // `with` en vez de un clon a mano: la copia campo a campo descartaba en silencio cualquier
+        // propiedad nueva del detalle (así se perdieron las especificaciones del vehículo al añadirlas),
+        // y el único cambio real aquí son los dos nombres visibles.
         return items
-            .Select(item => new OtClientProcedure
+            .Select(item => item with
             {
-                Id = item.Id,
-                ClientTenantId = item.ClientTenantId,
-                ClientTenantName = tenantNames.GetValueOrDefault(item.ClientTenantId, "—"),
-                ProcedureTypeId = item.ProcedureTypeId,
-                ProcedureTypeName = typeNames.GetValueOrDefault(item.ProcedureTypeId, "—"),
-                ReferenceNumber = item.ReferenceNumber,
-                Status = item.Status,
-                Familia = item.Familia,
-                PlateFlowStatus = item.PlateFlowStatus,
-                SoatEstado = item.SoatEstado,
-                PlatePreferredLastDigit = item.PlatePreferredLastDigit,
-                SoatPagado = item.SoatPagado,
-                ImpuestoDepartamentalPagado = item.ImpuestoDepartamentalPagado,
-                TransitOfficeId = item.TransitOfficeId,
-                CreatedAt = item.CreatedAt,
-                SubmittedAt = item.SubmittedAt,
-                Prioritario = item.Prioritario,
-                Actors = item.Actors,
-                Placa = item.Placa,
-                Vin = item.Vin,
-                VendedorNombre = item.VendedorNombre,
-                CompradorNombre = item.CompradorNombre,
-                GestorNombre = item.GestorNombre,
-                Marca = item.Marca,
-                Linea = item.Linea,
-                Modelo = item.Modelo,
-                Color = item.Color,
-                Clase = item.Clase,
-                Servicio = item.Servicio,
-                Combustible = item.Combustible,
+                ClientTenantName = tenantNames.GetValueOrDefault(item.ClientTenantId, "\u2014"),
+                ProcedureTypeName = typeNames.GetValueOrDefault(item.ProcedureTypeId, "\u2014"),
             })
             .ToList();
     }

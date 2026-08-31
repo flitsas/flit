@@ -84,10 +84,60 @@ export interface OtClientProcedure {
   marca?: string | null;
   linea?: string | null;
   modelo?: string | null;
+  /** Color EFECTIVO: el nuevo si el trámite declara un cambio de color. */
   color?: string | null;
   clase?: string | null;
   servicio?: string | null;
+  /** Combustible EFECTIVO. Ver {@link OtClientProcedure.color}. */
   combustible?: string | null;
+  /** Carrocería EFECTIVA. Ver {@link OtClientProcedure.color}. */
+  carroceria?: string | null;
+  cilindraje?: string | null;
+  capacidad?: string | null;
+  ejes?: string | null;
+  estadoVehiculo?: string | null;
+  numeroMotor?: string | null;
+  numeroChasis?: string | null;
+  numeroSerie?: string | null;
+  /**
+   * Valores con los que el vehículo figura en el RUNT para los tres atributos transformables.
+   * Ausente si el trámite nunca consultó el RUNT: eso NO es lo mismo que un RUNT sin datos.
+   */
+  runtSnapshot?: OtClientProcedureVehicleSnapshot | null;
+  /** Banderas `cambio_*` con las que el trámite declara la transformación. */
+  transformacionesDeclaradas?: OtClientProcedureTransformationFlags;
+  /** Datos comerciales del trámite; ausente si no se capturaron. */
+  comercial?: OtClientProcedureCommercial | null;
+  /** Decisión de prenda del trámite; ausente si no hay decisión registrada. */
+  prenda?: OtClientProcedurePrenda | null;
+}
+
+export interface OtClientProcedureVehicleSnapshot {
+  color?: string | null;
+  combustible?: string | null;
+  carroceria?: string | null;
+}
+
+export interface OtClientProcedureTransformationFlags {
+  color?: boolean;
+  combustible?: boolean;
+  carroceria?: boolean;
+}
+
+export interface OtClientProcedureCommercial {
+  valorVenta?: number | null;
+  causal?: string | null;
+  tasaImpuesto?: number | null;
+  derechos?: number | null;
+  metodoPago?: string | null;
+}
+
+export interface OtClientProcedurePrenda {
+  decision: string;
+  estado: string;
+  acreedorNombre?: string | null;
+  acreedorDocumento?: string | null;
+  levantamientoEntidad?: string | null;
 }
 
 export interface OtClientProcedureActor {

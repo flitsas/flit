@@ -366,6 +366,191 @@ public sealed class OtClientProcedureHandlerTests
         result.Procedure!.Modelo.Should().Be("2026");
     }
 
+    /// <summary>Alta de un field_value del trámite; azúcar para los tests del detalle (HU #11929).</summary>
+    private static void SeedField(FlitDbContext ctx, Guid procedureId, string key, string value) =>
+        ctx.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            ProcedureInstanceId = procedureId,
+            TenantId = ClientTenant,
+            FieldKey = key,
+            ValueText = value,
+        });
+
+    [Fact] // HU #11929 AC1 — el detalle del OT trae las especificaciones técnicas del vehículo.
+    public async Task Hu11929_GetById_ProyectaEspecificacionesTecnicasDelVehiculo()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Traspaso");
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            SeedField(seed, procedureId, VehicleFieldKeys.EngineDisplacement, "1600");
+            SeedField(seed, procedureId, VehicleFieldKeys.BodyType, "SEDAN");
+            SeedField(seed, procedureId, VehicleFieldKeys.Passengers, "5");
+            SeedField(seed, procedureId, VehicleFieldKeys.Axles, "2");
+            SeedField(seed, procedureId, VehicleFieldKeys.State, "ACTIVO");
+            SeedField(seed, procedureId, VehicleFieldKeys.EngineNumber, "MOT-123");
+            SeedField(seed, procedureId, VehicleFieldKeys.Chassis, "CHA-456");
+            SeedField(seed, procedureId, VehicleFieldKeys.Series, "SER-789");
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await GetDetailAsync(ctx, procedureId);
+
+        result.Status.Should().Be(GetOtClientProcedureStatus.Found);
+        var procedure = result.Procedure!;
+        procedure.Cilindraje.Should().Be("1600");
+        procedure.Carroceria.Should().Be("SEDAN");
+        procedure.Capacidad.Should().Be("5");
+        procedure.Ejes.Should().Be("2");
+        procedure.EstadoVehiculo.Should().Be("ACTIVO");
+        procedure.NumeroMotor.Should().Be("MOT-123");
+        procedure.NumeroChasis.Should().Be("CHA-456");
+        procedure.NumeroSerie.Should().Be("SER-789");
+    }
+
+    [Fact] // HU #11929 AC2 — el OT ve el valor del RUNT junto al efectivo, no solo el efectivo.
+    public async Task Hu11929_GetById_ProyectaSnapshotRuntYBanderasDeTransformacion()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Traspaso");
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            // El gestor declaró un cambio de color: el efectivo ya es el NUEVO y el RUNT conserva el original.
+            SeedField(seed, procedureId, VehicleFieldKeys.Color, "ROJO");
+            SeedField(seed, procedureId, VehicleFieldKeys.ColorRunt, "PLATA");
+            SeedField(seed, procedureId, "cambio_color", "true");
+            // Combustible y carrocería sin transformar: efectivo y RUNT coinciden.
+            SeedField(seed, procedureId, VehicleFieldKeys.Fuel, "GASOLINA");
+            SeedField(seed, procedureId, VehicleFieldKeys.FuelRunt, "GASOLINA");
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await GetDetailAsync(ctx, procedureId);
+
+        var procedure = result.Procedure!;
+        procedure.Color.Should().Be("ROJO");
+        procedure.RuntSnapshot.Should().NotBeNull();
+        procedure.RuntSnapshot!.Color.Should().Be("PLATA");
+        procedure.RuntSnapshot.Combustible.Should().Be("GASOLINA");
+        procedure.RuntSnapshot.Carroceria.Should().BeNull();
+        procedure.TransformacionesDeclaradas.Color.Should().BeTrue();
+        procedure.TransformacionesDeclaradas.Combustible.Should().BeFalse();
+        procedure.TransformacionesDeclaradas.Carroceria.Should().BeFalse();
+    }
+
+    [Fact] // HU #11929 AC3 — datos comerciales y decisión de prenda en el detalle del OT.
+    public async Task Hu11929_GetById_ProyectaComercialYPrenda()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Traspaso");
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            seed.ProcedureInstanceCommercials.Add(new ProcedureInstanceCommercial
+            {
+                Id = Guid.NewGuid(),
+                TenantId = ClientTenant,
+                ProcedureInstanceId = procedureId,
+                ValorVenta = 45_000_000m,
+                Causal = "COMPRAVENTA",
+                TasaImpuesto = 1.5m,
+                Derechos = 120_000m,
+                MetodoPago = "TRANSFERENCIA",
+            });
+            seed.ProcedureInstancePrendas.Add(new ProcedureInstancePrenda
+            {
+                Id = Guid.NewGuid(),
+                TenantId = ClientTenant,
+                ProcedureInstanceId = procedureId,
+                Decision = "levantar",
+                Estado = "vigente",
+                AcreedorNombre = "Banco Ejemplo",
+                AcreedorDocumento = "900123456",
+                LevantamientoEntidad = "Banco Ejemplo",
+            });
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await GetDetailAsync(ctx, procedureId);
+
+        var procedure = result.Procedure!;
+        procedure.Comercial.Should().NotBeNull();
+        procedure.Comercial!.ValorVenta.Should().Be(45_000_000m);
+        procedure.Comercial.Causal.Should().Be("COMPRAVENTA");
+        procedure.Comercial.TasaImpuesto.Should().Be(1.5m);
+        procedure.Comercial.Derechos.Should().Be(120_000m);
+        procedure.Comercial.MetodoPago.Should().Be("TRANSFERENCIA");
+        procedure.Prenda.Should().NotBeNull();
+        procedure.Prenda!.Decision.Should().Be("levantar");
+        procedure.Prenda.Estado.Should().Be("vigente");
+        procedure.Prenda.AcreedorNombre.Should().Be("Banco Ejemplo");
+        procedure.Prenda.AcreedorDocumento.Should().Be("900123456");
+        procedure.Prenda.LevantamientoEntidad.Should().Be("Banco Ejemplo");
+    }
+
+    [Fact] // HU #11929 AC4 — lo ausente se devuelve vacío y ningún valor se sustituye por otro.
+    public async Task Hu11929_GetById_SinDatos_DejaAtributosVaciosYNoSustituyeValores()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Traspaso");
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            // Solo el color efectivo: sin consulta al RUNT no hay snapshot que mostrar.
+            SeedField(seed, procedureId, VehicleFieldKeys.Color, "ROJO");
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await GetDetailAsync(ctx, procedureId);
+
+        var procedure = result.Procedure!;
+        procedure.Color.Should().Be("ROJO");
+        // Sin ninguna clave *_runt el snapshot es nulo: "el RUNT no se consultó" no es lo mismo que
+        // "el RUNT no tiene color", y el efectivo NUNCA se copia al snapshot para rellenarlo.
+        procedure.RuntSnapshot.Should().BeNull();
+        procedure.Cilindraje.Should().BeNull();
+        procedure.Carroceria.Should().BeNull();
+        procedure.NumeroMotor.Should().BeNull();
+        procedure.Comercial.Should().BeNull();
+        procedure.Prenda.Should().BeNull();
+        procedure.TransformacionesDeclaradas.Color.Should().BeFalse();
+    }
+
+    private static Task<GetOtClientProcedureResult> GetDetailAsync(FlitDbContext ctx, Guid procedureId)
+    {
+        var handler = new GetOtClientProcedureHandler(
+            new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
+
+        return handler.HandleAsync(new GetOtClientProcedureQuery
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+        }, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task AC4_GetById_ReturnsNotFoundForUnlinkedClient()
     {
