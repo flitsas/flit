@@ -41,15 +41,15 @@ public sealed class MandatoApprovalFirmaBaulTests
     }
 
     [Fact]
-    public async Task SinNingunaDeLasDos_SeSigueExigiendoQueConsigaConQueFirmar()
+    public async Task SinNingunaDeLasDos_ElOrganismoPuedeAprobarConMandatoEnBlanco()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Seed(identidadVigente: false);
 
         var decision = await Handler().CheckAsync(id, Tenant, null, null, ct);
 
-        decision.Outcome.Should().Be(MandatoApprovalOutcome.IdentidadRequerida);
-        decision.MandateSignerId.Should().BeNull();
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
+        decision.MandateSignerId.Should().Be(SignerId);
     }
 
     [Fact]
@@ -94,7 +94,8 @@ public sealed class MandatoApprovalFirmaBaulTests
 
         await Handler().CheckAsync(id, Tenant, null, null, ct);
 
-        await _vault.Received(1).ResolveAsync(Tenant, "CC", "70111222", Arg.Any<CancellationToken>());
+        await _vault.DidNotReceive().ResolveAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

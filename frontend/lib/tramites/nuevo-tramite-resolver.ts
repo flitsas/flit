@@ -140,15 +140,6 @@ export function resolveNuevoTramiteCode(
   return { ok: true, procedureTypeCode: code };
 }
 
-/** Chips de transformaciones del mockup (UI); no cambian el code principal. */
-export const TRANSFORMACIONES_MOCKUP = [
-  { id: 'PRENDA_INSCRIPCION', label: 'Inscribir Prenda' },
-  { id: 'CAMBIO_COLOR', label: 'Cambio de Color' },
-  { id: 'BLINDAJE', label: 'Blindaje' },
-  { id: 'CAMBIO_CARROCERIA', label: 'Cambio de Carrocería' },
-  { id: 'CONVERSION_COMBUSTIBLE', label: 'Conversiones de Combustible' },
-] as const;
-
 export const TIPOS_UI_MOCKUP: {
   id: NuevoTramiteTipoUi;
   title: string;

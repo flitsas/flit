@@ -243,17 +243,14 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
 
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
         var esJuridica = MandateSimulationPersonTypes.IsJuridica(personType);
-        if (!MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind))
-        {
-            templateCode = MandatoTemplateResolver.ResolveEmissionCode(
-                assignmentMode, esJuridica, office.Code);
-        }
 
-        // Mismo orden que el trámite: elección explícita → default de la regla compañía×OT.
+        // Mismo orden que el trámite: elección explícita → default cliente×OT → default OT.
         MandatarioFirmante? mandatario = null;
         if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
-            var signerId = mandateSignerId ?? config?.DefaultMandateSignerId;
+            var signerId = mandateSignerId
+                ?? config?.DefaultMandateSignerId
+                ?? config?.OtDefaultMandateSignerId;
             if (signerId is { } id && id != Guid.Empty)
             {
                 var signer = await _signerDirectory.GetByIdAsync(id, ct).ConfigureAwait(false);
@@ -306,13 +303,12 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
             Familia = MandatoFamiliaCodes.Resolve(config?.MandataryFamily),
             ChamberCity = config?.ChamberCity ?? sample.ChamberCity,
             MandatarySigla = config?.MandatarySigla ?? sample.MandatarySigla,
-            // Abierto: sin firmante, bloque con líneas. Institucional: sin bloque de mandatario.
             Mandatario = MandatoAssignmentModeCodes.IsOpen(assignmentMode) ? null : mandatario,
-            ModoFirmaMandatario = MandatoAssignmentModeCodes.IsInstitutional(assignmentMode)
-                ? MandatarioFirmaModo.SinBloque
-                : MandatoAssignmentModeCodes.IsOpen(assignmentMode)
-                    ? MandatarioFirmaModo.Manual
-                    : MandatarioFirmaModo.Estampada,
+            ModoFirmaMandatario = MandatoFirmaModoResolver.Resolve(
+                assignmentMode,
+                tieneConvenio: false,
+                MandatoFirmaModoResolver.TieneEstampa(
+                    MandatoAssignmentModeCodes.IsOpen(assignmentMode) ? null : mandatario)),
             CustomTemplateKind = MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind),
             CustomTemplateBody = config?.CustomTemplateBody,
             CustomTemplatePdf = customPdf,

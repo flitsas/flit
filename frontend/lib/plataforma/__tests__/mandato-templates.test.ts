@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignmentModeFromTemplateCode,
   resolveAssignmentMode,
   resolveTipoNegocio,
   suggestedFamilyForTipo,
@@ -29,6 +30,14 @@ describe("mandato-templates tipos de negocio", () => {
     expect(suggestedFamilyForTipo("abierto", "sabaneta")).toBe("individuo");
   });
 
+  it("el modo persistido sale de la plantilla: Sabaneta institucional, el resto Persona o RL", () => {
+    expect(assignmentModeFromTemplateCode("sabaneta")).toBe("institutional");
+    expect(assignmentModeFromTemplateCode("generico")).toBe("signer");
+    expect(assignmentModeFromTemplateCode("bello")).toBe("signer");
+    expect(assignmentModeFromTemplateCode("municipio")).toBe("signer");
+    expect(assignmentModeFromTemplateCode("auto")).toBe("signer");
+  });
+
   it("expone labels de producto", () => {
     expect(tipoNegocioLabel("persona_rl")).toMatch(/persona/i);
     expect(tipoNegocioLabel("institucional")).toMatch(/institucional/i);
@@ -39,7 +48,7 @@ describe("mandato-templates tipos de negocio", () => {
     expect(systemTemplateLabel("generico")).toBe("Genérico");
     expect(systemTemplateLabel("sabaneta")).toBe("Sabaneta");
     expect(systemTemplateLabel("bello")).toBe("Bello");
-    expect(systemTemplateLabel("municipio")).toMatch(/Funza.*Medellín/i);
+    expect(systemTemplateLabel("municipio")).toMatch(/Envigado.*Funza.*Medellín/i);
     expect(systemTemplateLabel(null)).toBe("Genérico");
   });
 });
@@ -56,7 +65,7 @@ describe("terceroAjenoEnPlantilla (HU #11718)", () => {
 
   it("la redacción propia del organismo no advierte", () => {
     expect(terceroAjenoEnPlantilla("sabaneta", "5631000")).toBeNull();
-    expect(terceroAjenoEnPlantilla("sabaneta", "5266000")).toBeNull();
+    expect(terceroAjenoEnPlantilla("municipio", "5266000")).toBeNull();
     expect(terceroAjenoEnPlantilla("municipio", "25286000")).toBeNull();
   });
 
@@ -68,5 +77,6 @@ describe("terceroAjenoEnPlantilla (HU #11718)", () => {
 
   it("municipio advierte fuera de Funza y Medellín", () => {
     expect(terceroAjenoEnPlantilla("municipio", "11001000")).not.toBeNull();
+    expect(terceroAjenoEnPlantilla("sabaneta", "5266000")).toContain("SABANETA");
   });
 });

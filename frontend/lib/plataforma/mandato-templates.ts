@@ -54,7 +54,7 @@ export const MANDATO_TIPOS: readonly {
     value: "persona_rl",
     label: "Persona o RL",
     summary:
-      "Una persona natural (mandatario de la empresa que radica) firma como mandatario. Si elige este tipo, el PDF usa la plantilla genérica.",
+      "Una persona natural (mandatario de la empresa que radica) firma como mandatario. Mandato cliente: plantilla genérica. Si el OT configura firmante persona sin regla de cliente, se conserva la plantilla del organismo.",
   },
   {
     value: "institucional",
@@ -66,7 +66,7 @@ export const MANDATO_TIPOS: readonly {
     value: "abierto",
     label: "Abierto (sin asumir)",
     summary:
-      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Es el default al nacer un OT.",
+      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Conserva la plantilla del organismo. Es el default de modo al nacer un OT.",
   },
 ] as const;
 
@@ -105,6 +105,16 @@ export function tipoNegocioLabel(tipo: MandatoTipoNegocio): string {
   return MANDATO_TIPOS.find((t) => t.value === tipo)?.label ?? tipo;
 }
 
+/** Modo persistido según la redacción: Sabaneta → institucional; el resto → Persona o RL. */
+export function assignmentModeFromTemplateCode(
+  templateCode: string | null | undefined,
+): MandateAssignmentMode {
+  const code = (templateCode ?? "generico").trim().toLowerCase();
+  if (code === "auto") return "signer";
+  const def = MANDATO_TEMPLATES.find((t) => t.code === code);
+  return resolveAssignmentMode(def?.tipoTipico ?? "persona_rl");
+}
+
 export interface MandatoTemplateOtBinding {
   /** Código RUNT del OT (catálogo). */
   officeCode: string;
@@ -138,7 +148,7 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
     code: "generico",
     label: "Genérico",
     summary:
-      "Plantilla por defecto del sistema. Aplica a cualquier organismo que no tenga una plantilla propia. Firman mandante y mandatario (o líneas en blanco si el tipo es Abierto).",
+      "Plantilla por defecto del sistema. Aplica a cualquier organismo que no tenga una plantilla propia. Firman mandante y mandatario (Persona o RL).",
     familia: "individuo",
     familiaLabel: "Individuo",
     tipoTipico: "persona_rl",
@@ -156,7 +166,7 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
     code: "sabaneta",
     label: "Sabaneta",
     summary:
-      "Plantilla del sistema para Sabaneta y Envigado (persona jurídica / institucional). Mandatario institucional; solo firma el mandante. En Sabaneta los datos de la UT-SETSA salen de la config del OT.",
+      "Plantilla del sistema para Sabaneta (UT-SETSA). Mandatario institucional; solo firma el mandante. Los datos de la UT salen de la config del OT.",
     familia: "organismo_transito",
     familiaLabel: "Organismo de tránsito",
     tipoTipico: "institucional",
@@ -172,12 +182,6 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
         institutionalMandataryNit: "900273813-7",
         mandatarySigla: "UT-SETSA",
         chamberCity: "Medellín",
-      },
-      {
-        officeCode: "5266000",
-        officeName: "Envigado",
-        hasExplicitConfig: true,
-        chamberCity: "Envigado",
       },
     ],
   },
@@ -204,15 +208,21 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
   },
   {
     code: "municipio",
-    label: "Funza y Medellín",
+    label: "Envigado, Funza y Medellín",
     summary:
-      "Plantilla corta de persona natural para Funza y Medellín. Firman mandante y mandatario. La ciudad del cierre cambia según el OT del trámite. Envigado persona jurídica usa la misma redacción que Sabaneta; persona natural usa el genérico (mandato cliente).",
+      "Plantilla corta municipal para Envigado, Funza y Medellín. Firman mandante y mandatario. La ciudad del cierre cambia según el OT del trámite.",
     familia: "individuo",
     familiaLabel: "Individuo",
     tipoTipico: "persona_rl",
     requiresForNaturalPerson: true,
     mandatarioFirma: "Mandante y mandatario",
     bindings: [
+      {
+        officeCode: "5266000",
+        officeName: "Envigado",
+        hasExplicitConfig: true,
+        chamberCity: "Envigado",
+      },
       {
         officeCode: "25286000",
         officeName: "Funza",
@@ -247,8 +257,8 @@ export interface MandatoOtApplicationRow {
  * HU #11718 — qué tercero ajeno quedaría citado en el contrato si se aplica `templateCode` al
  * organismo `officeCode`, o `null` si la combinación es coherente.
  *
- * <p>Al emitir el trámite, el generador ya no aplica Bello ni SETSA por el organismo “actual”
- * del FUR: usa el OT canónico y <c>ResolveEmissionCode</c>. Esta alerta sigue sirviendo en
+ * <p>Al emitir el trámite, el generador usa la plantilla resuelta del OT (o la genérica de
+ * mandato cliente). Esta alerta sigue sirviendo en
  * Plataforma si alguien asigna a mano una redacción de otro organismo.</p>
  *
  * <p><b>Advierte, no bloquea</b> (decisión de producto del 2026-08-21): restringir contradiría la

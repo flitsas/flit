@@ -109,7 +109,7 @@ beforeEach(() => {
 async function renderPreloaded() {
   const user = userEvent.setup({ delay: null });
   render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-  await user.click(await screen.findByRole('button', { name: 'Persona Jurídica' }));
+  await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'NIT');
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
   await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
   await screen.findByText('Empresa encontrada en RUES');

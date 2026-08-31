@@ -105,6 +105,187 @@ public sealed class MandateConfigAdminServiceListTests
         items[0].CompanyTenantId.Should().Be(CompanyId);
         items[0].HasExplicitRule.Should().BeFalse();
         items[0].AssignmentMode.Should().Be("open");
+        items[0].CompanyTaxId.Should().Be("900123456");
+        items[0].CompanyCode.Should().Be("CIA-1");
+        items[0].DefaultMandateSignerName.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ListCompanyRules_WithDefaultSigner_IncludesPersonSnapshot()
+    {
+        await using var db = NewDb();
+        var signerId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        db.Tenants.Add(new Tenant
+        {
+            Id = CompanyId,
+            Code = "CIA-1",
+            LegalName = "Gestora de Prueba S.A.S.",
+            TaxId = "900123456",
+            TenantType = "company",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
+        {
+            Id = Guid.NewGuid(),
+            TenantId = CompanyId,
+            TransitOfficeId = ActiveId,
+            IsEnabled = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.MandateSigners.Add(new MandateSigner
+        {
+            Id = signerId,
+            TransitOfficeId = ActiveId,
+            FullName = "Carlos Pérez",
+            DocumentType = "CC",
+            DocumentNumber = "1020304050",
+            IntegrityHash = new string('a', 64),
+            RegisteredAt = DateTimeOffset.UtcNow,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.CompanyOtMandateRules.Add(new CompanyOtMandateRuleEntity
+        {
+            Id = Guid.NewGuid(),
+            CompanyTenantId = CompanyId,
+            TransitOfficeId = ActiveId,
+            AssignmentMode = "signer",
+            MandataryFamily = "individuo",
+            DefaultMandateSignerId = signerId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(Ct);
+
+        var catalog = Substitute.For<ITransitOfficeCatalog>();
+        catalog.GetById(ActiveId).Returns(new TransitOfficeEntry(ActiveId, "11001000", "Bogotá", "11", "11001"));
+
+        var service = new MandateConfigAdminService(
+            db,
+            catalog,
+            new StubTransitOfficeOperationalStatusReader().Set(ActiveId, hasTenant: true, estadoActivo: true),
+            Substitute.For<IDocumentOcrAnalyzer>(),
+            Substitute.For<IMandateTemplateStorage>());
+
+        var items = await service.ListCompanyRulesAsync(ActiveId, Ct);
+
+        items.Should().ContainSingle();
+        items[0].DefaultMandateSignerId.Should().Be(signerId);
+        items[0].DefaultMandateSignerName.Should().Be("Carlos Pérez");
+        items[0].DefaultMandateSignerDocumentType.Should().Be("CC");
+        items[0].DefaultMandateSignerDocumentNumber.Should().Be("1020304050");
+        items[0].DefaultMandateSignerIntegrityHash.Should().HaveLength(64);
+        items[0].CompanyTaxId.Should().Be("900123456");
+        items[0].CompanyCode.Should().Be("CIA-1");
+    }
+
+    [Fact]
+    public async Task GetAsync_IncludesDefaultSignerName()
+    {
+        await using var db = NewDb();
+        var signerId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+        db.MandateSigners.Add(new MandateSigner
+        {
+            Id = signerId,
+            TransitOfficeId = ActiveId,
+            FullName = "Ana Restrepo",
+            DocumentType = "CC",
+            DocumentNumber = "111",
+            IntegrityHash = new string('b', 64),
+            RegisteredAt = DateTimeOffset.UtcNow,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(),
+            TransitOfficeId = ActiveId,
+            TemplateCode = "generico",
+            AssignmentMode = "signer",
+            MandataryFamily = "individuo",
+            DefaultMandateSignerId = signerId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(Ct);
+
+        var catalog = Substitute.For<ITransitOfficeCatalog>();
+        catalog.GetById(ActiveId).Returns(new TransitOfficeEntry(ActiveId, "11001000", "Bogotá", "11", "11001"));
+
+        var service = new MandateConfigAdminService(
+            db,
+            catalog,
+            new StubTransitOfficeOperationalStatusReader().Set(ActiveId, hasTenant: true, estadoActivo: true),
+            Substitute.For<IDocumentOcrAnalyzer>(),
+            Substitute.For<IMandateTemplateStorage>());
+
+        var view = await service.GetAsync(ActiveId, Ct);
+
+        view!.DefaultMandateSignerId.Should().Be(signerId);
+        view.DefaultMandateSignerName.Should().Be("Ana Restrepo");
+        view.DefaultMandateSignerDocumentType.Should().Be("CC");
+        view.DefaultMandateSignerDocumentNumber.Should().Be("111");
+        view.DefaultMandateSignerIntegrityHash.Should().HaveLength(64);
+    }
+
+    [Fact]
+    public async Task UpsertTemplate_DoesNotClearOtDefaultSigner()
+    {
+        await using var db = NewDb();
+        var signerId = Guid.Parse("aaaaaaaa-1111-4000-8000-000000000001");
+        db.MandateSigners.Add(new MandateSigner
+        {
+            Id = signerId,
+            TransitOfficeId = ActiveId,
+            FullName = "Juan Copete",
+            DocumentType = "CC",
+            DocumentNumber = "222",
+            IntegrityHash = new string('c', 64),
+            RegisteredAt = DateTimeOffset.UtcNow,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(),
+            TransitOfficeId = ActiveId,
+            TemplateCode = "generico",
+            AssignmentMode = "signer",
+            MandataryFamily = "individuo",
+            DefaultMandateSignerId = signerId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(Ct);
+
+        var catalog = Substitute.For<ITransitOfficeCatalog>();
+        catalog.GetById(ActiveId).Returns(new TransitOfficeEntry(ActiveId, "11001000", "Bogotá", "11", "11001"));
+
+        var service = new MandateConfigAdminService(
+            db,
+            catalog,
+            new StubTransitOfficeOperationalStatusReader().Set(ActiveId, hasTenant: true, estadoActivo: true),
+            Substitute.For<IDocumentOcrAnalyzer>(),
+            Substitute.For<IMandateTemplateStorage>());
+
+        var (status, view) = await service.UpsertAsync(
+            ActiveId,
+            new UpsertMandateOtConfigRequest(
+                TemplateCode: "municipio",
+                RequiresForNaturalPerson: true,
+                MandataryFamily: "individuo",
+                InstitutionalMandataryName: null,
+                InstitutionalMandataryNit: null,
+                ChamberCity: null,
+                MandatarySigla: null,
+                RowVersion: null,
+                AssignmentMode: "signer",
+                DefaultMandateSignerId: null),
+            userId: null,
+            Ct);
+
+        status.Should().Be(MandateConfigWriteStatus.Ok);
+        view!.TemplateCode.Should().Be("municipio");
+        view.DefaultMandateSignerId.Should().Be(signerId);
+        view.DefaultMandateSignerName.Should().Be("Juan Copete");
     }
 
     private static FlitDbContext NewDb() =>

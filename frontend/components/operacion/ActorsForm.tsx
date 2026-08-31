@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -52,7 +53,9 @@ import {
   WIZARD_CTA_GRADIENT,
   WIZARD_BTN_SOLID,
 } from './wizard-field-styles';
-import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
+import { EscrituraRepresentanteUpload } from './EscrituraRepresentanteUpload';
+import { WizardCardHeader } from './wizard-atoms';
+import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 
@@ -124,6 +127,17 @@ interface Props {
    * identidad exitosa (RUNT / RUES / directorio). Sin consulta OK, Continuar permanece deshabilitado.
    */
   onConsultationGateChange?: (ready: boolean) => void;
+  /**
+   * Gate de avance del paso: `false` mientras alguna parte jurídica tenga un representante legal que
+   * NO está en el módulo de representantes de la compañía y todavía no haya cargado la escritura que
+   * lo acredita. Sin esa escritura no se pasa a Requisitos.
+   *
+   * <p>Es un gate propio y no una variante de {@link onConsultationGateChange}: aquel responde si la
+   * identidad de la parte se pudo CONSULTAR, y este si el representante capturado está ACREDITADO.
+   * Un representante fuera del directorio puede consultarse en el RUNT sin problema —de hecho es el
+   * camino normal para capturarlo— y aun así seguir sin escritura que lo faculte.</p>
+   */
+  onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
 }
 
 /** ¿La consulta de identidad resolvió datos? Gate duro de avance/guardado. */
@@ -133,12 +147,23 @@ export function isIdentityConsultationReady(
   return status === 'found';
 }
 
+/**
+ * Documentos que puede declarar un actor. Es el ÚNICO control de la naturaleza de la persona:
+ * NIT ⇒ jurídica (se consulta el RUES), cualquier otro ⇒ natural (se consulta el RUNT).
+ *
+ * <p>La tarjeta de identidad NO está: ninguno de los dos proveedores de conductor la consulta.
+ * Verifik solo admite <c>CC · CE · PA · PPT</c> en <c>/v2/co/runt/conductor</c> (no existe un valor
+ * para TI), y aunque Kyverum sí tiene el código <c>T</c>, nunca lo recibe porque el orquestador le
+ * entrega el documento ya traducido al dialecto de Verifik — donde TI viaja como <c>PPT</c> y su
+ * normalizador lo vuelve <c>P</c>, pasaporte. Ofrecerla solo servía para trabar el paso: la consulta
+ * no encuentra a nadie y el gate de avance exige consulta exitosa. Si el negocio la pide, primero
+ * hay que decidir qué se le manda a cada proveedor.</p>
+ */
 const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
   { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
   { value: 'CE', label: 'Cédula de extranjería (CE)' },
   { value: 'NIT', label: 'NIT' },
   { value: 'PAS', label: 'Pasaporte (PAS)' },
-  { value: 'TI', label: 'Tarjeta de identidad (TI)' },
 ];
 
 const ROL_LABEL: Record<ActorRol, string> = {
@@ -154,10 +179,19 @@ function rolesFor(modalidad: ActorsModalidad): ActorRol[] {
     : ['vendedor', 'comprador'];
 }
 
-const PERSON_TYPE_OPTIONS: { value: ActorPersonType; label: string }[] = [
-  { value: 'natural', label: 'Persona Natural' },
-  { value: 'juridical', label: 'Persona Jurídica' },
-];
+/**
+ * Naturaleza de la persona DERIVADA del documento. Ya no se teclea: el gestor elige el tipo de
+ * documento y esto se deduce, que es lo que el backend cree desde siempre — cinco de las reglas que
+ * leen `person_type` caen a «NIT ⇒ jurídica» cuando la columna viene vacía.
+ */
+function personTypeForDoc(tipoDocumento: ActorDocumentType): ActorPersonType {
+  return tipoDocumento === 'NIT' ? 'juridical' : 'natural';
+}
+
+/** Rótulo de lectura de la naturaleza de la persona (insignia de la tarjeta). */
+function personTypeLabel(actor: ProcedureActor): string {
+  return isJuridical(actor) ? 'Persona Jurídica' : 'Persona Natural';
+}
 
 function emptyActor(rol: ActorRol): ProcedureActor {
   return {
@@ -350,6 +384,15 @@ type RlBaselineDoc = {
   numeroDocumento?: string;
   mecanismoFirma?: MecanismoFirma;
 };
+
+/**
+ * Situación del representante legal capturado frente al módulo de representantes de la compañía.
+ *
+ * <p>`sin_directorio` es la compañía que no está en el módulo, y `desconocido` el dato que todavía
+ * no se puede responder (aún no hay representante escrito, o la lectura del directorio falló).
+ * Ninguno de los dos exige escritura: son ausencia de respuesta, no una respuesta negativa.</p>
+ */
+type RlDirectorioEstado = 'desconocido' | 'registrado' | 'no_registrado' | 'sin_directorio';
 
 type ActorConsultationCacheEntry = {
   rol: ActorRol;
@@ -642,6 +685,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     autoConsultRunt = false,
     rnmcEnabled = false,
     onConsultationGateChange,
+    onEscrituraRepresentanteGateChange,
   },
   ref,
 ) {
@@ -778,6 +822,151 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [selectedRepIdx, setSelectedRepIdx] = useState<Record<number, number>>({});
   /** Tras consultar un RL que NO está en el directorio, la precarga de firma deja de usarse. */
   const [directoryAbandoned, setDirectoryAbandoned] = useState<Record<number, boolean>>({});
+
+  /**
+   * ¿El representante legal capturado está registrado en el módulo de representantes de la compañía?
+   *
+   * <p>De esta pregunta cuelga si hay que exigir la escritura: un representante del directorio ya
+   * tiene la suya allí y el sistema la apalanca sola; uno que no está no tiene ninguna, y sin ella
+   * el trámite se radicaría sin el documento que faculta a quien firma.</p>
+   *
+   * <p><b>Por qué no se deriva de `needsRlRunt`.</b> Ese predicado —como todo el bloque de precarga—
+   * cuelga de `runt[index]`, que es el resultado de una consulta viva rehidratada desde
+   * `sessionStorage`. Sirve para pintar avisos, pero no para un gate: basta abrir el trámite en otra
+   * pestaña para que el estado nazca vacío y el gate se abriera solo. Aquí la pregunta se responde
+   * contra el DIRECTORIO, releyéndolo si hace falta, así que sobrevive a recargar y a cambiar de
+   * pestaña.</p>
+   *
+   * <p><b>`sin_directorio` no exige nada, a propósito.</b> Es la compañía que no está en el módulo:
+   * entonces nunca hubo precarga que cambiar, la captura del representante fue manual desde el
+   * principio y este gate no aplica (comportamiento de siempre). `desconocido` cubre lo mismo por la
+   * vía del dato ausente o de una lectura que falló: el gate no bloquea con una respuesta que no
+   * tiene — dejar encerrado al gestor porque el directorio no respondió sería peor que la fuga que
+   * este gate evita.</p>
+   */
+  const [rlDirectorio, setRlDirectorio] = useState<Record<number, RlDirectorioEstado>>({});
+  /** Directorios ya leídos en este montaje, por NIT: la respuesta no cambia entre actores. */
+  const directorioPorNitRef = useRef<Map<string, LegalRepresentativeLookupResult | null>>(new Map());
+
+  /**
+   * Firma estable de lo ÚNICO que cambia la respuesta: por actor jurídico, su NIT y el documento del
+   * representante. Sin ella el efecto se dispararía en cada render —`actors` es un arreglo nuevo
+   * siempre— y con él la lectura del directorio.
+   */
+  const rlDirectorioFirma = actors
+    .map((a, i) =>
+      isJuridical(a)
+        ? [
+            i,
+            normalizeNitKey(a.numeroDocumento),
+            a.representanteLegal?.tipoDocumento ?? '',
+            (a.representanteLegal?.numeroDocumento ?? '').trim(),
+          ].join(':')
+        : `${i}:-`,
+    )
+    .join('|');
+
+  /**
+   * Primera evaluación hecha. Gobierna la espera de abajo: la primera va sin ella (el borrador ya
+   * trae el representante escrito y el gate debe nacer cerrado si corresponde), y las siguientes
+   * con ella (el gestor está tecleando).
+   */
+  const rlDirectorioEvaluadoRef = useRef(false);
+
+  useEffect(() => {
+    const juridicos = actors
+      .map((a, i) => ({ a, i }))
+      .filter(({ a }) => isJuridical(a));
+    if (juridicos.length === 0) {
+      setRlDirectorio((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+
+    let active = true;
+
+    const evaluar = async () => {
+      const next: Record<number, RlDirectorioEstado> = {};
+      for (const { a, i } of juridicos) {
+        const nit = a.numeroDocumento.trim();
+        const rlTipo = a.representanteLegal?.tipoDocumento ?? 'CC';
+        const rlNumero = (a.representanteLegal?.numeroDocumento ?? '').trim();
+        // Sin representante capturado todavía no hay a quién acreditar (ni qué exigir).
+        if (!nit || !rlNumero) {
+          next[i] = 'desconocido';
+          continue;
+        }
+
+        // La consulta viva, si está, evita la lectura; si no, se lee el directorio.
+        let directory = directoryFromLookup(runtRef.current[i]);
+        if (!directory) {
+          const key = normalizeNitKey(nit);
+          if (directorioPorNitRef.current.has(key)) {
+            directory = directorioPorNitRef.current.get(key) ?? null;
+          } else {
+            try {
+              directory = await tramitesClient.lookupLegalRepresentativeByNit(nit);
+              directorioPorNitRef.current.set(key, directory);
+            } catch {
+              // Fallo de lectura: no se cachea (para reintentar) y no se bloquea.
+              next[i] = 'desconocido';
+              continue;
+            }
+          }
+        }
+        if (!active) return;
+
+        next[i] =
+          !directory || repsOf(directory).length === 0
+            ? 'sin_directorio'
+            : findDirectoryRep(directory, rlTipo, rlNumero)
+              ? 'registrado'
+              : 'no_registrado';
+      }
+      if (!active) return;
+      rlDirectorioEvaluadoRef.current = true;
+      setRlDirectorio(next);
+    };
+
+    // Cédula A MEDIO ESCRIBIR: cada tecla deja un documento que no está en el directorio, así que sin
+    // esta espera el bloque de la escritura aparece y desaparece mientras el gestor teclea —y con él
+    // el "Continuar" del pie, parpadeando entre habilitado y no—. Solo se evalúa lo que el gestor
+    // terminó de escribir. La PRIMERA evaluación no espera: al abrir un borrador el representante ya
+    // está escrito, y retrasarla dejaría el gate abierto durante ese tiempo.
+    if (!rlDirectorioEvaluadoRef.current) {
+      void evaluar();
+      return () => {
+        active = false;
+      };
+    }
+
+    const espera = setTimeout(() => void evaluar(), 400);
+    return () => {
+      active = false;
+      clearTimeout(espera);
+    };
+    // `actors` entra por `rlDirectorioFirma`, que es su proyección estable (ver arriba).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rlDirectorioFirma]);
+
+  /** El representante de esta parte hay que acreditarlo con escritura (no está en el directorio). */
+  const exigeEscrituraRl = (index: number): boolean => rlDirectorio[index] === 'no_registrado';
+
+  /** Escritura del representante ya adjunta, por índice de actor. */
+  const [escrituraRlAdjunta, setEscrituraRlAdjunta] = useState<Record<number, boolean>>({});
+  const marcarEscrituraRl = useCallback((index: number, satisfied: boolean) => {
+    // Se compara antes de escribir: el hijo reporta en cada render y sin esto el ciclo no cerraría.
+    setEscrituraRlAdjunta((prev) =>
+      prev[index] === satisfied ? prev : { ...prev, [index]: satisfied },
+    );
+  }, []);
+
+  /** Gate del paso: ninguna parte que deba acreditar a su representante se quedó sin escritura. */
+  const escrituraRlGateOk = actors.every(
+    (_, i) => !exigeEscrituraRl(i) || escrituraRlAdjunta[i] === true,
+  );
+  useEffect(() => {
+    onEscrituraRepresentanteGateChange?.(escrituraRlGateOk);
+  }, [escrituraRlGateOk, onEscrituraRepresentanteGateChange]);
   const [rlSwitchConfirm, setRlSwitchConfirm] = useState<{ variant: 'runt' | 'preload' } | null>(
     null,
   );
@@ -1054,6 +1243,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         // especiales. Se re-sanea el documento al cambiar de tipo (p.ej. PAS→CC).
         if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined)
           next.numeroDocumento = sanitizeDocNumber(next.numeroDocumento, next.tipoDocumento);
+        // El documento manda sobre la naturaleza de la persona: el selector de tipo de documento es
+        // el único control, y todo lo demás (RUES/RUNT autopoblando, siembra del propietario del
+        // paso 1) pasa por aquí, así que la coherencia NIT ⇔ jurídica no depende de quién escriba.
+        if (patch.tipoDocumento !== undefined)
+          next.personType = personTypeForDoc(next.tipoDocumento);
         if (patch.telefono !== undefined)
           next.telefono = digitsOnly(next.telefono ?? '');
         if (patch.nombreCompleto !== undefined)
@@ -1169,8 +1363,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
    */
   const [consultasManuales, setConsultasManuales] = useState(0);
 
-  /** Envuelve una consulta para que levante el velo de espera; solo la usan los botones. */
-  const conVelo = (consulta: Promise<unknown>) => {
+  /**
+   * Envuelve una consulta para que levante el velo de espera; solo la usan los botones.
+   *
+   * Genérico, no `Promise<unknown>`: con `unknown` el resultado se estrechaba a `{}` en el
+   * `if` de quien lo llamaba, y guardar eso en el estado de la ficha no compilaba (`{}` no es
+   * un `LookupState`). El velo no mira lo que devuelve la consulta, así que el tipo pasa de largo.
+   */
+  const conVelo = <T,>(consulta: Promise<T>): Promise<T> => {
     setConsultasManuales((n) => n + 1);
     return consulta.finally(() => setConsultasManuales((n) => Math.max(0, n - 1)));
   };
@@ -1350,7 +1550,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         tramitesClient.lookupLegalRepresentativeByNit(companyNit).catch(() => null),
       );
       if (fresh) {
-        directory = fresh as LegalRepresentativeLookupResult;
+        directory = fresh;
         setRunt((prev) => {
           const cur = prev[index];
           if (cur?.status !== 'found' || cur.kind !== 'rues') return prev;
@@ -1632,25 +1832,43 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const isRuntFound = (index: number) => runt[index]?.status === 'found';
   const isNameLockedByRunt = (index: number, actor: ProcedureActor) =>
     isRuntFound(index) && !isJuridical(actor);
-  const isPersonTypeLockedByRunt = (index: number) => autoConsultRunt && isRuntFound(index);
+  /**
+   * Bloqueo de la identidad traída del registro: con el vendedor fijado desde el RUNT por la placa,
+   * el documento NO se cambia a mano — cambiarlo dejaría al trámite a nombre de otro. Antes bloqueaba
+   * el interruptor de tipo de persona; ahora bloquea el selector de documento, que es su reemplazo.
+   */
+  const isDocTypeLockedByRunt = (index: number) => autoConsultRunt && isRuntFound(index);
 
-  const personTypeSelector = (index: number, locked = false) => {
-    const current = actors[index].personType ?? 'natural';
+  /**
+   * Selector de tipo de documento: el único control de la identidad del actor. Elegir NIT es lo que
+   * declara la persona jurídica (y desvía la consulta al RUES); `updateActor` deriva `personType`.
+   */
+  const docTypeSelector = (
+    index: number,
+    idPrefix: string,
+    locked = false,
+    /* Suelto se acota el ancho para no estirar un desplegable de cuatro opciones a toda la fila;
+       dentro de una rejilla de identificación se pasa '' y manda la celda. */
+    wrapperClassName = 'sm:max-w-xs',
+  ) => {
+    const id = `${idPrefix}-tipoDoc`;
     return (
-      <WizardSegmented
-        ariaLabel="Tipo de persona"
-        value={current}
-        options={PERSON_TYPE_OPTIONS}
-        disabled={readOnly || locked}
-        onChange={(value) => {
-          if (locked) return;
-          // Jurídica ⇒ documento NIT (RUES). Volver a natural desde NIT ⇒ CC por defecto.
-          const patch: Partial<ProcedureActor> = { personType: value };
-          if (value === 'juridical') patch.tipoDocumento = 'NIT';
-          else if (actors[index].tipoDocumento === 'NIT') patch.tipoDocumento = 'CC';
-          updateActor(index, patch);
-        }}
-      />
+      <div className={cn('min-w-0', wrapperClassName)}>
+        <label htmlFor={id} className={`${WIZARD_LABEL} mb-1.5`}>
+          Tipo de documento
+        </label>
+        <select
+          id={id}
+          value={actors[index].tipoDocumento}
+          disabled={readOnly || locked}
+          onChange={(e) => updateActor(index, { tipoDocumento: e.target.value as ActorDocumentType })}
+          className={WIZARD_SELECT}
+        >
+          {DOC_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
     );
   };
 
@@ -2383,6 +2601,19 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               className={`${INPUT_BASE} mt-1.5`}
             />
           </div>
+          {/* La escritura del representante que NO está en el directorio de la compañía. Va aquí,
+              pegada a sus datos, porque es lo que acredita a la persona que se acaba de capturar:
+              mandarla a Requisitos obligaría al gestor a recordar dos pasos más allá por qué se la
+              piden. Sin ella el pie del asistente no deja pasar al siguiente paso. */}
+          {exigeEscrituraRl(index) && (
+            <div className="lg:col-span-4">
+              <EscrituraRepresentanteUpload
+                instanceId={instanceId}
+                rol={actor.rol}
+                onSatisfiedChange={(satisfied) => marcarEscrituraRl(index, satisfied)}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -2510,6 +2741,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         <WizardAccordion
           title={esPropietarioInscrito ? 'Datos del propietario actual' : `Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
           defaultOpen
+          /* Misma insignia de lectura que las tarjetas del traspaso: dice a qué registro se está
+             consultando. Este layout no la tenía porque el interruptor PN/PJ ya lo decía por dentro;
+             al quitarlo se quedaba sin ninguna lectura explícita de la naturaleza declarada. */
+          badge={
+            <StatusBadge
+              tone={isJuridical(actor) ? 'info' : 'neutral'}
+              label={personTypeLabel(actor)}
+            />
+          }
         >
           <p className="text-xs opacity-70 mb-3">
             {esPropietarioInscrito
@@ -2521,12 +2761,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   : 'Registra la persona natural o jurídica que figurará como propietario del vehículo.'}
           </p>
           <div className="space-y-3">
-            {personTypeSelector(0, isPersonTypeLockedByRunt(0))}
-            {/* Grid de identificación: sin selector de tipo — CC por defecto (RUNT puede corregirlo).
-                Rejilla: número (col-span-2) | Consultar RUNT | hint a lo ancho. */}
+            {/* Identificación en UNA fila: tipo | número | Consultar. El selector de tipo estuvo un
+                momento suelto en su propio renglón —era el hueco que dejó el interruptor PN/PJ al
+                salir— y ahí solo gastaba alto: es un campo más de la misma captura. */}
             {!isJuridical(actor) ? (
-              /* Natural: Número (col-span-2) | Consultar RUNT | hint col-span-3 */
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-end">
+              /* Natural: tipo | Número (col-span-2) | Consultar RUNT | hint col-span-4 */
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-end">
+                {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0), '')}
                 <div className="lg:col-span-2">
                   <label htmlFor="comprador-numeroDoc" className={`${WIZARD_LABEL} mb-1.5`}>
                     Número de documento
@@ -2607,7 +2848,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     {runtState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
                   </button>
                 )}
-                <p className="text-xs opacity-70 lg:col-span-3">
+                <p className="text-xs opacity-70 lg:col-span-4">
                   {esPropietarioInscrito
                     ? 'Los datos de identidad se toman de la consulta al RUNT del propietario actual.'
                     : actor.rol === 'comprador'
@@ -2616,8 +2857,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </p>
               </div>
             ) : (
-              /* Jurídica: NIT (col-span-2) | Consultar RUES | hint col-span-4 */
+              /* Jurídica: tipo | NIT (col-span-2) | Consultar RUES | hint col-span-4 */
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-end">
+                {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0), '')}
                 <div className="lg:col-span-2">
                   <label htmlFor="comprador-numeroDoc" className={`${WIZARD_LABEL} mb-1.5`}>
                     NIT
@@ -2999,34 +3241,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     ? 'Los datos de identidad se toman automáticamente de la consulta en RUNT.'
                     : undefined
               }
+              /* La naturaleza de la persona pasa a ser SIEMPRE lectura: la declara el selector de
+                 documento de adentro, y aquí se acusa recibo de lo que quedó declarado. La única
+                 excepción es el propietario del registro mientras el RUNT no ha respondido: ahí
+                 todavía no hay nada que acusar y manda el estado de la consulta. */
               badge={
-                vendedorSincronizado ? (
+                esPropietarioDelRegistro && !vendedorSincronizado && !(autoConsultRunt && isRuntFound(index)) ? (
+                  <StatusBadge label={statusPill.text} tone={statusPill.tone} />
+                ) : (
                   <StatusBadge
                     tone={isJuridical(actor) ? 'info' : 'neutral'}
-                    label={isJuridical(actor) ? 'Persona Jurídica' : 'Persona Natural'}
-                  />
-                ) : esPropietarioDelRegistro ? (
-                  autoConsultRunt && isRuntFound(index) ? (
-                    <StatusBadge
-                      tone={isJuridical(actor) ? 'info' : 'neutral'}
-                      label={isJuridical(actor) ? 'Persona Jurídica' : 'Persona Natural'}
-                    />
-                  ) : (
-                    <StatusBadge label={statusPill.text} tone={statusPill.tone} />
-                  )
-                ) : (
-                  <WizardSegmented
-                    ariaLabel="Tipo de persona"
-                    value={actors[index].personType ?? 'natural'}
-                    options={PERSON_TYPE_OPTIONS}
-                    disabled={readOnly || isPersonTypeLockedByRunt(index)}
-                    onChange={(value) => {
-                      if (isPersonTypeLockedByRunt(index)) return;
-                      const patch: Partial<ProcedureActor> = { personType: value };
-                      if (value === 'juridical') patch.tipoDocumento = 'NIT';
-                      else if (actors[index].tipoDocumento === 'NIT') patch.tipoDocumento = 'CC';
-                      updateActor(index, patch);
-                    }}
+                    label={personTypeLabel(actor)}
                   />
                 )
               }
@@ -3085,9 +3310,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   </div>
                 )}
 
-                {/* Vendedor sin RUNT fijo: puede elegir PN/PJ. Con RUNT OK el badge va en cabecera. */}
+                {/* Vendedor sin RUNT fijo: elige documento. Con RUNT OK la identidad ya vino del
+                    registro y solo se lee en el badge de la cabecera. */}
                 {!vendedorSincronizado && esPropietarioDelRegistro && !(autoConsultRunt && isRuntFound(index)) && (
-                  personTypeSelector(index, isPersonTypeLockedByRunt(index))
+                  docTypeSelector(index, prefix, isDocTypeLockedByRunt(index))
                 )}
 
                 {/* ── Identificación ── */}
@@ -3098,17 +3324,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       <label htmlFor={`${prefix}-tipoDoc`} className={`${WIZARD_LABEL} mb-1.5`}>
                         Tipo de documento
                       </label>
+                      {/* Sin filtrar ni deshabilitar: este selector ES el control de la naturaleza
+                          de la persona. Antes obedecía al interruptor PN/PJ —se apagaba en jurídica
+                          y escondía el NIT en natural— y ahora es al revés. */}
                       <select
                         id={`${prefix}-tipoDoc`}
                         value={actor.tipoDocumento}
-                        disabled={readOnly || isJuridical(actor)}
+                        disabled={readOnly}
                         onChange={(e) => updateActor(index, { tipoDocumento: e.target.value as ActorDocumentType })}
                         className={`${WIZARD_SELECT} mt-1.5`}
                       >
-                        {(isJuridical(actor)
-                          ? DOC_OPTIONS
-                          : DOC_OPTIONS.filter((o) => o.value !== 'NIT')
-                        ).map((o) => (
+                        {DOC_OPTIONS.map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                       </select>

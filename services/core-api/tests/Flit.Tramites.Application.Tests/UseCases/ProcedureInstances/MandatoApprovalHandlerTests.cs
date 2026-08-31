@@ -119,9 +119,9 @@ public sealed class MandatoApprovalHandlerTests
         var decision = await Handler().CheckAsync(
             instance.Id, Tenant, Guid.NewGuid(), null, TestContext.Current.CancellationToken);
 
-        // HU #10911/#10916 — el mandatario debe validar identidad (vigente) antes de firmar.
-        decision.Outcome.Should().Be(MandatoApprovalOutcome.IdentidadRequerida);
-        decision.MandateSignerId.Should().BeNull();
+        // HU #10911/#10916 — sin medio de firma el OT igual acepta (mandato en blanco).
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
+        decision.MandateSignerId.Should().NotBeNull();
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public sealed class MandatoApprovalHandlerTests
         var decision = await Handler().CheckAsync(
             instance.Id, Tenant, null, chosen.Id, TestContext.Current.CancellationToken);
 
-        decision.Outcome.Should().Be(MandatoApprovalOutcome.IdentidadRequerida);
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
     }
 
     [Fact]

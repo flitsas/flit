@@ -243,7 +243,9 @@ describe('CommercialForm — inventario: valor de venta en Requisitos', () => {
 
     expect(screen.getByRole('heading', { name: 'Datos Comerciales' })).toBeInTheDocument();
     expect(screen.getByLabelText(/^Valor de venta/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Condiciones Comerciales' })).toBeInTheDocument();
+    // El título propio de la columna se retiró al comprimir el card a una sola línea: el grupo
+    // conserva el nombre accesible en su `legend`.
+    expect(screen.getByRole('group', { name: 'Condiciones Comerciales' })).toBeInTheDocument();
 
     expect(screen.queryByLabelText(/^Causal/)).toBeNull();
     expect(screen.queryByLabelText(/^Tasa de Impuesto/)).toBeNull();
@@ -367,8 +369,9 @@ describe('CommercialForm — inventario: tarjeta de avalúo comercial sugerido',
   it('conserva el valor sugerido, su fuente y las tres fuentes consultadas', async () => {
     await renderForm();
 
+    // El bloque ya no lleva título ni subtítulo propios (los repetía la cabecera «Datos
+    // Comerciales»): se identifica por su nombre accesible.
     const avaluo = await screen.findByRole('region', { name: 'Avalúo comercial sugerido' });
-    expect(within(avaluo).getByRole('heading', { name: 'Avalúo Comercial' })).toBeInTheDocument();
 
     // Valor sugerido y de qué fuente sale (caja «Sugerido Fasecolda» del prototipo).
     expect(within(avaluo).getAllByText(/Sugerido/i).length).toBeGreaterThan(0);

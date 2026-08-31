@@ -76,7 +76,7 @@ const REASON_COPY: Record<string, string> = {
   vin_pendiente: 'Consulta el VIN del vehículo',
   impuesto_pendiente: 'Confirma el paz y salvo de impuesto vehicular',
   // preflight / semáforo legal
-  preflight_pendiente: 'Falta correr el pre-vuelo',
+  preflight_pendiente: 'Falta consultar el vehículo',
   preflight_red: 'Hay bloqueos críticos',
   preflight_provider_error: 'No se pudo verificar la consulta; vuelve a intentarla',
   // Sin `preflight_yellow`: el amarillo NO bloquea y este canal es el de "Antes de enviar,
@@ -92,7 +92,7 @@ const REASON_COPY: Record<string, string> = {
   // Comparendos del comprador (traspaso). Sin estas entradas el código crudo se "humanizaba"
   // a "Simit Pendiente", que no le dice al operador ni qué falta ni dónde resolverlo.
   simit_pendiente:
-    'Falta la consulta de comparendos del comprador: vuelve al paso 1 y ejecuta "Consultar RUNT" para generar el pre-vuelo',
+    'Falta la consulta de comparendos del comprador: vuelve al paso 1 y ejecuta "Consultar RUNT" para generar la verificación',
   simit_doc:
     'La consulta de comparendos no corresponde al documento del comprador: vuelve al paso 1 y repite la consulta',
   simit_multas: 'El comprador tiene comparendos pendientes en el SIMIT',
@@ -127,7 +127,7 @@ const REASON_COPY: Record<string, string> = {
 
 /** Bloqueos que impiden enviar/finalizar el trámite. */
 const BLOCKER_COPY: Record<string, string> = {
-  preflight_red: 'Hay bloqueos críticos en el pre-vuelo',
+  preflight_red: 'Hay bloqueos críticos en la verificación del vehículo',
   preflight_provider_error: 'No se pudo verificar la consulta (RUNT/SIMIT/RNMC); vuelve a intentarla antes de continuar',
   documentos_incompletos: 'Faltan documentos obligatorios',
   // N 03 (RF03) — gate Borrador→Preparado: identidad del comprador aprobada y vigente.

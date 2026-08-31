@@ -13,6 +13,13 @@ export const DETALLE_META = '#5E6A7B';
 export const DETALLE_BORDER = '#DFE5ED';
 export const DETALLE_CANVAS = '#EEF5FF';
 
+/**
+ * CTA primario del detalle — token FLIT `gradient.primary`. Existe para que las acciones que
+ * cambian el estado del trámite desde este modal (hoy: activar/continuar la subsanación) no
+ * repitan el degradado como literal suelto, que es como se coló en otras pantallas.
+ */
+export const DETALLE_CTA_GRADIENT = 'linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)';
+
 /** Card interior: radius 12px, sombra mockup, dark #0B0F14 */
 export const DETALLE_CARD =
   'rounded-xl border border-[#DFE5ED] bg-white p-4 shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:border-white/5 dark:bg-[#0B0F14]';

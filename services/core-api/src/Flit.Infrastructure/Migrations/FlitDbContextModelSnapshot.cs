@@ -2743,6 +2743,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("custom_template_storage_path");
 
+                    b.Property<Guid?>("DefaultMandateSignerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("default_mandate_signer_id");
+
                     b.Property<string>("InstitutionalMandataryName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")

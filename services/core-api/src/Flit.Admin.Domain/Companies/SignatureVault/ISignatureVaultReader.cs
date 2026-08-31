@@ -75,4 +75,13 @@ public interface ISignatureVaultReader
         Guid tenantId,
         Guid id,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Una firma por id, cualquier tenant. Lectura de administración OT (ver la imagen del mandatario)
+    /// con el mismo bypass de RLS que <c>IMandateSignerReader</c>. <c>null</c> si no existe.
+    /// </summary>
+    Task<SignatureVaultItem?> GetByIdAnyTenantAsync(
+        Guid id,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<SignatureVaultItem?>(null);
 }

@@ -74,8 +74,7 @@ public sealed class RegistrarPrendaHandler(
         // trámites, y el organismo devuelve el FUR que los mezcla. Matrícula y traspaso conservan la
         // prenda complementaria del art. 5.1.8 y no pasan por aquí.
         var perfil = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
-        if (!perfil.ComplementaryPrendaAllowed(instance.ProcedureType?.Family)
-            && !ProcedureTypeLayers.EsTipoPrendaBase(instance.ProcedureType?.Code))
+        if (!perfil.AdmiteDimensionDePrenda(instance.ProcedureType?.Family, instance.ProcedureType?.Code))
         {
             return (null, PrendaNoAdmitidaError);
         }

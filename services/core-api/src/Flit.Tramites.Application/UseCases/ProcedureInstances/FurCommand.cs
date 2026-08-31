@@ -190,6 +190,10 @@ public sealed class GenerarFurHandler(
         // trámite SIN poder generar documentos nunca más. Con el agrupado, gana la fila con valor no
         // vacío más reciente y la generación sigue.
         var fv = ProcedureFieldValues.ToDictionary(instance);
+        // Misma idea que el organismo: si la placa vive en la columna denormalizada (o en `placa`)
+        // y no en `plate`, los documentos la pintan. Si no hay ninguna, las casillas salen vacías
+        // (matrícula antes de preasignar); no se escribe "___".
+        ProcedureFieldValues.EnsurePlaca(fv, instance);
 
         // Gating organismo de tránsito: requiere transit_office_code no vacío en field_values.
         //
@@ -321,8 +325,8 @@ public sealed class GenerarFurHandler(
         if (_solicitudVirtualGenerator is not null)
             generated.Add(_solicitudVirtualGenerator.GenerateSolicitudVirtual(data));
 
-        // ADR-0036 (HU #10915) — Contrato de mandato. El firmante persona puede venir ya elegido
-        // en el wizard (MandateSignerId); si no, el PDF lleva placeholders y la aprobación lo regenera.
+        // ADR-0036 (HU #10915) — Contrato de mandato. El firmante se resuelve YA en borrador (HU-L8/L9):
+        // default OT, default compañía o elección del wizard. Sin esos, el recuadro sale «Sin firmar».
         var mandato = await TryGenerateMandatoAsync(
             instance,
             data,
@@ -1178,20 +1182,12 @@ public sealed class GenerarFurHandler(
             .ConfigureAwait(false);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
-        // HU #10916, corregido por el bug DEV de la pantalla/documento divergentes — MISMO resolvedor
-        // que usa la pantalla (ListMandateSignerOptionsHandler) y la aprobación (MandatoApprovalHandler):
-        // elección explícita ya guardada → default del OT (si sigue habilitado) → único candidato. Sin
-        // eso, el PDF pintaba placeholders (o el firmante equivocado) hasta que alguien elegía a mano.
-        // Abierto / institucional: no se asigna firmante persona (aunque hubiera MandateSignerId).
+        // HU-L8 — elección del trámite → default OT (aunque no esté en la compañía) → default compañía.
+        // Sin esos, Mandatario queda null (cuerpo ___ / recuadro Sin firmar). Ya no se espera a aprobar
+        // para pintar nombre y cédula cuando hay default.
         var assignmentMode = config?.AssignmentMode;
-        var esJuridica = data.Mandante?.EsJuridica ?? false;
-        var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(config?.CustomTemplateKind);
+        // Plantilla del OT (o genérica de mandato cliente). Ya no se reescribe por PN/PJ ni por modo.
         var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
-        if (!hasCustom)
-        {
-            templateCode = MandatoTemplateResolver.ResolveEmissionCode(
-                assignmentMode, esJuridica, transitOfficeCode);
-        }
 
         MandatarioFirmante? mandatario = null;
         Guid? resolvedSignerId = null;
@@ -1204,9 +1200,23 @@ public sealed class GenerarFurHandler(
                         officeId, data.TenantIdParaFirmas,
                         MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
                     .ConfigureAwait(false);
+                candidatos = await MandateSignerSelectionResolver
+                    .WithOtDefaultAsync(candidatos, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
+                    .ConfigureAwait(false);
+
+                // En borrador/subsanación el firmante se recalcula SIEMPRE contra la config vigente
+                // (cliente×OT → OT → vacío). Congelar instance.MandateSignerId en la primera generación
+                // dejaba el PDF con un Hugo/Carlos viejo después de cambiar el default en Mandatos.
+                // Fuera de borrador (expediente ya radicado) sí manda lo guardado: es documento legal.
+                var enBorrador = TramiteEstado.PermiteEdicionDatos(
+                    instance.Status, instance.SubsanacionActiva);
+                var eleccionCongelada = enBorrador ? null : instance.MandateSignerId;
 
                 resolvedSignerId = MandateSignerDefaultResolver.Resolve(
-                    candidatos.Select(c => c.Id).ToList(), instance.MandateSignerId, config?.DefaultMandateSignerId);
+                    candidatos.Select(c => c.Id).ToList(),
+                    eleccionCongelada,
+                    config?.OtDefaultMandateSignerId,
+                    config?.DefaultMandateSignerId);
 
                 if (resolvedSignerId is { } signerId)
                 {
@@ -1222,13 +1232,9 @@ public sealed class GenerarFurHandler(
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
                         mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
 
-                        // Persistir lo resuelto SOLO cuando NO venía de una elección explícita ya
-                        // guardada (el gestor no había elegido nada: salió del default del OT o del
-                        // único candidato). El mandato es un documento legal — quién lo firma queda
-                        // registrado, no recalculado en cada regeneración. Así un cambio posterior en la
-                        // parametrización del OT no reescribe en silencio quién firmó un expediente ya
-                        // emitido, y la próxima regeneración es idempotente (ya hay elección explícita).
-                        if (instance.MandateSignerId is null)
+                        if (enBorrador)
+                            instance.MandateSignerId = signerId;
+                        else if (instance.MandateSignerId is null)
                             instance.MandateSignerId = signerId;
                     }
                 }
@@ -1254,15 +1260,11 @@ public sealed class GenerarFurHandler(
         }
 
         // Institucional / convenio: sin bloque MANDATARIO.
-        // Abierto: bloque con líneas (Manual) y mandatario null ⇒ ___ en cuerpo y pie.
-        // Persona/RL: estampa o manual según firma física.
-        MandatarioFirmaModo modoFirmaMandatario;
-        if (MandatoAssignmentModeCodes.IsInstitutional(assignmentMode) || modoFirma.TieneConvenio)
-            modoFirmaMandatario = MandatarioFirmaModo.SinBloque;
-        else if (MandatoAssignmentModeCodes.IsOpen(assignmentMode) || modoFirma.FirmaFisica)
-            modoFirmaMandatario = MandatarioFirmaModo.Manual;
-        else
-            modoFirmaMandatario = MandatarioFirmaModo.Estampada;
+        // Abierto o sin estampa: líneas. Si hay baúl o sello, se estampa aunque el modelo sea a mano.
+        var modoFirmaMandatario = MandatoFirmaModoResolver.Resolve(
+            assignmentMode,
+            modoFirma.TieneConvenio,
+            MandatoFirmaModoResolver.TieneEstampa(mandatario));
 
         var mandatoData = new MandatoData(
             data,

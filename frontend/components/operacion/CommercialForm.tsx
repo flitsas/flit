@@ -182,10 +182,14 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         </InlineAlert>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-        {/* Izquierda — Avalúo (prototipo). En solo lectura no se ofrece captura por sugerencia. */}
+      {/* Los tres datos del paso —sugerido, fuentes y valor de venta— caben en una sola línea:
+          el avalúo ocupa dos columnas (aporta sugerido + fuentes) y el valor de venta la tercera.
+          Antes cada mitad apilaba título, subtítulo y cajas, y el card crecía sin necesidad. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        {/* Avalúo (prototipo). En solo lectura no se ofrece captura por sugerencia. */}
         {!readOnly ? (
           <AvaluoComercialCard
+            className="lg:col-span-2"
             instanceId={instanceId}
             disabled={readOnly}
             accepted={data.valueOrigin === 'suggestion'}
@@ -200,15 +204,12 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             }
           />
         ) : (
-          <div aria-hidden="true" />
+          <div className="lg:col-span-2" aria-hidden="true" />
         )}
 
-        {/* Derecha — Condiciones Comerciales */}
-        <fieldset disabled={readOnly} className="h-full min-w-0 border-0 p-0">
+        {/* Tercera columna — Condiciones Comerciales */}
+        <fieldset disabled={readOnly} className="min-w-0 border-0 p-0">
           <legend className="sr-only">Condiciones Comerciales</legend>
-          <h4 className="mb-3 text-[13px] font-bold text-[#162744] dark:text-white">
-            Condiciones Comerciales
-          </h4>
           <div className="grid grid-cols-1 gap-4">
             <div>
               <label htmlFor="comercial-valor" className={REQUIRED_LABEL}>
@@ -238,7 +239,9 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
                     }));
                   }}
                   placeholder="Ej: 82.300.000"
-                  className={`${INPUT_BASE} pl-7 font-mono`}
+                  /* `h-9`: misma altura que las cajas del avalúo, para que los tres datos de la
+                     línea queden a la misma cota. */
+                  className={`${INPUT_BASE} h-9 pl-7 font-mono`}
                 />
               </div>
             </div>

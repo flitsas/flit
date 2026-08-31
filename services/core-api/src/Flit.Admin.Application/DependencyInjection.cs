@@ -8,6 +8,7 @@ using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureImage;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
@@ -167,6 +168,7 @@ public static class DependencyInjection
         services.AddScoped<InactivateMandateSignerHandler>();
         services.AddScoped<ReactivateMandateSignerHandler>();
         services.AddScoped<ListMandateSignersHandler>();
+        services.AddScoped<GetMandateSignerSignatureImageHandler>();
         services.AddScoped<ListOtCompaniesHandler>();
 
         // HU #11202 — vista inversa: la COMPAÑÍA registra sus mandatarios y elige en qué organismos

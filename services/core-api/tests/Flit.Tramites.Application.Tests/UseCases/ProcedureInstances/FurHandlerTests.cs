@@ -669,6 +669,49 @@ public sealed class FurHandlerTests
         });
 
     [Fact]
+    public async Task Generar_PlacaEnColumna_SinFieldValue_LaPintaEnElFur()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.Plate = "ABC123";
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Vehiculo.Placa.Should().Be("ABC123");
+    }
+
+    [Fact]
+    public async Task Generar_MatriculaSinPlaca_DejaPlacaVacia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Vehiculo.Placa.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Generar_ConTransformacion_FurUsaRuntEnCamposYNuevoEnObservaciones()
     {
         // A4/B4 (HU #10673, ADR-0029): el FUR imprime el color/combustible ORIGINAL del RUNT en los CAMPOS

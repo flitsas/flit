@@ -16,8 +16,8 @@ import {
 } from '@/lib/tramites/estados';
 /**
  * Tira de KPIs por estado de la pantalla principal de trámites: una tarjeta única
- * dividida en columnas, con icono, etiqueta y conteo por estado (solo lectura).
- * El filtro por estado vive en el popover "+ Filtro" (`flit-tramites-chrome`).
+ * dividida en columnas, con icono, etiqueta y conteo. Clic en una columna filtra
+ * el listado; segundo clic en la misma columna quita el filtro.
  * Labels/colores desde `lib/tramites/estados.ts`.
  */
 
@@ -48,10 +48,13 @@ const ESTADO_ICON: Record<EstadoTramite, typeof FileText> = {
 export interface EstadoFunnelProps {
   /** Conteo por estado (calculado sobre el total de trámites). */
   counts: Record<EstadoTramite, number>;
+  /** Estado actualmente filtrado; vacío = todos. */
+  selected?: EstadoTramite | '';
+  onSelect?: (estado: EstadoTramite | '') => void;
 }
 
-/** Tira de KPIs display-only (`flit-tramites-chrome`): el filtro por estado vive en "+ Filtro". */
-export function EstadoFunnel({ counts }: EstadoFunnelProps) {
+/** Tira de KPIs clicable: el filtro por estado vive aquí, no en "+ Filtro". */
+export function EstadoFunnel({ counts, selected = '', onSelect }: EstadoFunnelProps) {
   return (
     <div
       role="group"
@@ -63,11 +66,16 @@ export function EstadoFunnel({ counts }: EstadoFunnelProps) {
         const Icon = ESTADO_ICON[estado];
         const label = ESTADO_LABELS[estado];
         const count = counts[estado] ?? 0;
+        const activo = selected === estado;
         return (
-          <div
+          <button
             key={estado}
+            type="button"
             aria-label={`${label}: ${count} trámite${count === 1 ? '' : 's'}`}
-            className="flex flex-col items-center gap-1 px-2 py-2"
+            aria-pressed={activo}
+            onClick={() => onSelect?.(activo ? '' : estado)}
+            className="flex flex-col items-center gap-1 px-2 py-2 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+            style={activo ? { background: style.bg } : undefined}
           >
             <span
               className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
@@ -75,7 +83,7 @@ export function EstadoFunnel({ counts }: EstadoFunnelProps) {
             >
               <Icon className="h-3.5 w-3.5" style={{ color: style.accent }} aria-hidden="true" />
             </span>
-            <span className="max-w-full truncate text-[10px] font-medium opacity-70 text-[#162744] dark:text-white/70">
+            <span className="max-w-full truncate text-xs font-medium opacity-70 text-[#162744] dark:text-white/70">
               {label}
             </span>
             <span
@@ -84,7 +92,12 @@ export function EstadoFunnel({ counts }: EstadoFunnelProps) {
             >
               {count}
             </span>
-          </div>
+            <span
+              className="h-0.5 w-6 rounded-full"
+              style={{ background: activo ? style.color : 'transparent' }}
+              aria-hidden="true"
+            />
+          </button>
         );
       })}
     </div>

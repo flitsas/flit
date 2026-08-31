@@ -147,7 +147,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         // Objeto {{tramite}}: tres capas (docs/ot/mandato/REGLAS-OBJETO-TRES-CAPAS.md).
         var nombreTramite = ComponerObjeto(data);
 
-        var placa = Val(tramite.Placa, "___");
+        var placa = Val(tramite.Placa, string.Empty);
         var ot = Val(tramite.Organismo.Nombre, "___");
         // HU #11016 — la ciudad puede no venir (el field_value trae el código DIVIPOLA, que se descarta):
         // en ese caso la cláusula de cierre no menciona ciudad en vez de imprimir un código o «___».
@@ -316,7 +316,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
 
         var reemplazos = new (string Token, string Valor)[]
         {
-            ("{{placa}}", Val(tramite.Placa, "___")),
+            ("{{placa}}", Val(tramite.Placa, string.Empty)),
             ("{{tramite}}", nombreTramite),
             ("{{organismo}}", Val(tramite.Organismo.Nombre, "___")),
             ("{{ciudad}}", tramite.Organismo.Ciudad?.Trim() ?? string.Empty),
@@ -620,7 +620,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                     manual ? null : MandatarioEnCuerpo(data)?.SelloIdentidad,
                     MandatarioIdentificacion(MandatarioEnCuerpo(data), data),
                     FlitFirmaLinea.Underscores,
-                    selloBaul: manual ? null : SelloBaulDe(MandatarioEnCuerpo(data)));
+                    selloBaul: manual ? null : SelloBaulDe(MandatarioEnCuerpo(data)),
+                    etiquetaSinEstampa: "Sin firmar");
             });
         });
     }
@@ -630,7 +631,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     /// <list type="number">
     ///   <item><b>Modo resuelto por el caller</b> (<see cref="MandatoData.ModoFirmaMandatario"/>):
     ///   institucional/convenio → <c>SinBloque</c>; abierto / firma física → <c>Manual</c> (líneas);
-    ///   persona/RL → <c>Estampada</c>. El caller gana para no pisar el tipo Abierto.</item>
+    ///   persona/RL → <c>Estampada</c>. El caller gana para no pisar el tipo Abierto.
+    ///   Si hay estampa (baúl o sello), el caller pide <c>Estampada</c> aunque el modelo sea a mano.</item>
     ///   <item><b>Sabaneta sin modo explícito Manual/Estampada:</b> sin bloque — su mandatario es la UT,
     ///   no una persona. Si el caller pidió <c>Manual</c> (p. ej. tipo Abierto sobre plantilla sabaneta),
     ///   se respeta el bloque con líneas.</item>
@@ -682,8 +684,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             SelloIdentidadDe(tramite, parte?.Rol),
             MandanteIdentificacion(parte, esJuridica),
             FlitFirmaLinea.Underscores,
-            // HU #11170 — vigencia y hash de la firma custodiada, como en el FUR.
-            selloBaul: FlitFirmaBaulSello.Resolve(tramite.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false));
+            selloBaul: FlitFirmaBaulSello.Resolve(tramite.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false),
+            etiquetaSinEstampa: "Sin firmar");
     }
 
     /// <summary>

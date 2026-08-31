@@ -69,7 +69,18 @@ const STATUS_PILL_TONE: Record<PreflightCheckStatus, StatusTone> = {
   error: 'danger',
 };
 
-/** Palabra visible en la pastilla (UNKNOWN → NO ENCONTRADO). */
+/**
+ * Palabra visible en la pastilla.
+ *
+ * <p><c>unknown</c> se rotula «SIN DATO» y no «NO ENCONTRADO». Son cosas distintas y la etiqueta
+ * anterior decía la que no era: <c>fail</c> es «la fuente respondió y esto no existe» (el vehículo
+ * no está en el RUNT), mientras <c>unknown</c> es «no se pudo averiguar» — la consulta no se corrió
+ * porque el organismo no la exige, o faltaba el documento del actor. Decirle al gestor «no
+ * encontrado» de algo que nadie llegó a buscar lo manda a corregir un dato que está bien.</p>
+ *
+ * <p>De paso es cinco caracteres más corta, que en una pastilla que no encoge dentro de una tarjeta
+ * de un cuarto de fila no es un detalle cosmético.</p>
+ */
 export function statusPillWord(status: PreflightCheckStatus): string {
   switch (status) {
     case 'ok':
@@ -81,29 +92,32 @@ export function statusPillWord(status: PreflightCheckStatus): string {
     case 'error':
       return 'ERROR';
     case 'unknown':
-      return 'NO ENCONTRADO';
+      return 'SIN DATO';
   }
 }
 
 /**
- * Texto de la pastilla — formato del prototipo Lovable / PDF:
- * `OK - RUNT` · `ADVERTENCIA - RUNT` · `NO ENCONTRADO` (detalle debajo del título).
+ * Texto de la pastilla: `OK - RUNT` · `ADVERTENCIA - RUNT` · `FALLA - RUNT` · `SIN DATO`.
+ *
+ * <p><b>El mensaje ya no entra en la pastilla.</b> En los estados de fallo se metía el mensaje
+ * completo con un tope de 42 caracteres, y eso rompía la tarjeta: «FALLA - VEHÍCULO NO ENCONTRADO EN
+ * RUNT» son treinta y ocho caracteres en versalitas que, con `whitespace-nowrap` y `shrink-0`,
+ * reclaman más ancho del que tiene una tarjeta de un cuarto de fila. El título quedaba debajo de la
+ * pastilla, con las letras montadas.</p>
+ *
+ * <p>Y además lo decía dos veces: el mismo mensaje se pinta bajo el título, que es su sitio. La
+ * pastilla es el semáforo —estado y fuente—, no el detalle; ahora todos los estados tienen la misma
+ * forma y ninguno puede volver a crecer sin control.</p>
  */
 export function checkPillLabel(check: {
   status: PreflightCheckStatus;
   source?: string | null;
-  message?: string | null;
 }): string {
   const word = statusPillWord(check.status);
   const src = sourceLabel(check.source);
-  const msg = check.message?.trim() ?? '';
-  // Prototipo: OK / ADVERTENCIA llevan la fuente con guion; el detalle no va en la pastilla.
-  if (check.status === 'ok') return src ? `${word} - ${src}` : word;
-  if (check.status === 'warn') return src ? `${word} - ${src}` : word;
+  // `unknown` va sola: no se llegó a consultar, así que no hay fuente que atribuirle.
   if (check.status === 'unknown') return word;
-  if (msg && msg.length <= 42) return `${word} - ${msg}`;
-  if (src) return `${word} - ${src}`;
-  return word;
+  return src ? `${word} - ${src}` : word;
 }
 
 function checkPillTone(check: { status: PreflightCheckStatus; message?: string | null }): StatusTone {
@@ -137,11 +151,25 @@ export function preflightOverall(overall: string | null | undefined) {
   return overall ? (OVERALL[overall] ?? null) : null;
 }
 
-/** Chip semántico del semáforo global (HU consolidación de chips — `StatusBadge`). */
+/**
+ * Chip semántico del semáforo global (HU consolidación de chips — `StatusBadge`).
+ *
+ * <p><b>El chip ya no nombra la sección.</b> Decía «Pre-vuelo en verde» dentro de un panel titulado
+ * «Diagnóstico de Requisitos Previos»: dos nombres para lo mismo en la misma pantalla, y el que se
+ * leía era el peor. «Pre-vuelo» es <i>preflight</i> traducido literal —la metáfora del checklist de
+ * aviación, jerga de programación— y a un gestor de trámites no le dice nada; no hay ningún avión.</p>
+ *
+ * <p>Repetir el nombre de la sección en su propio chip tampoco aportaba: lo que el gestor busca ahí
+ * es el ESTADO. Así que el chip dice solo el estado, y de paso mide la mitad — que en la cabecera de
+ * un acordeón, donde este mismo chip se pinta junto al título, es lo que evita que lo desplace.</p>
+ *
+ * <p>«Sin novedades» y no «sin bloqueos»: el amarillo tampoco tiene bloqueos, así que ese rótulo no
+ * distinguiría el verde del ámbar.</p>
+ */
 const OVERALL: Record<string, { label: string; tone: StatusTone }> = {
-  green: { label: 'Pre-vuelo en verde', tone: 'success' },
-  yellow: { label: 'Pre-vuelo con advertencias', tone: 'warning' },
-  red: { label: 'Pre-vuelo con bloqueos', tone: 'danger' },
+  green: { label: 'Sin novedades', tone: 'success' },
+  yellow: { label: 'Con advertencias', tone: 'warning' },
+  red: { label: 'Con bloqueos', tone: 'danger' },
 };
 
 /**
@@ -358,7 +386,10 @@ export function PreflightPanel({
 
       {hasResult && (
         <ul
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          // Cuatro columnas dejaban ~240px por tarjeta en un portátil, y ahí no caben un título de
+          // dos palabras y su pastilla en la misma línea. La cuarta se reserva para `xl`, que es
+          // donde hay ancho de verdad.
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           aria-label="Diagnóstico de requisitos previos"
         >
           {visibleChecks.map((c) => {
@@ -373,9 +404,15 @@ export function PreflightPanel({
                 className="flex flex-col gap-2 rounded-xl border bg-white p-4 shadow-sm dark:bg-[#162744]"
                 style={{ borderColor: '#E2E8F0' }}
               >
-                <div className="flex items-start justify-between gap-2">
+                {/* `flex-wrap`: la pastilla no encoge ni parte (`whitespace-nowrap` + `shrink-0`),
+                    así que cuando no cabe junto al título tiene que poder bajar a su propia línea.
+                    Sin esto empujaba al título fuera de la tarjeta. */}
+                <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                   <span
-                    className="min-w-0 text-[13px] font-semibold leading-tight"
+                    // `break-words`: un título largo («Medidas correctivas (Policía) (comprador)»)
+                    // debe partirse, no desbordar. `min-w-0` solo le permite encoger; sin una regla
+                    // de quiebre encogía la caja y dejaba el texto por fuera, encima de la pastilla.
+                    className="min-w-0 break-words text-[13px] font-semibold leading-tight"
                     style={{ color: '#162744' }}
                   >
                     {c.label}
@@ -457,7 +494,7 @@ export function PreflightPanel({
           aria-live="polite"
         >
           <p className="text-xs font-bold" style={{ color: 'var(--badge-warning-fg)' }}>
-            Advertencias del pre-vuelo
+            Advertencias de la verificación
           </p>
           <ul className="mt-1.5 space-y-2">
             {warnChecks.map((c) => (

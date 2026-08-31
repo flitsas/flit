@@ -7,10 +7,13 @@ import { useDrFlitChat } from "./useDrFlitChat";
 
 export function DrFlitAssistant({
   displayName,
+  routeScope,
 }: {
   displayName?: string | null;
+  /** Identificador de módulo/ruta; al cambiar se cierra el panel (sin limpiar chat). */
+  routeScope?: string;
 }) {
-  const chat = useDrFlitChat(displayName);
+  const chat = useDrFlitChat(displayName, routeScope);
 
   return (
     <>
@@ -30,7 +33,9 @@ export function DrFlitAssistant({
         panelId={chat.panelId}
         state={chat.state}
         onClose={chat.closePanel}
+        onEndChat={chat.endChat}
         onSelectIntent={chat.selectIntent}
+        onSelectHelpOption={chat.selectHelpOption}
         onSelectClientBranch={chat.selectClientBranch}
         onBackToSearch={chat.backToSearch}
         onSend={chat.sendText}

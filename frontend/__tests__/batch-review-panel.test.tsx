@@ -116,7 +116,10 @@ describe('BatchReviewPanel', () => {
     expect(screen.getByRole('button', { name: /Adjuntar 0 documentos/ })).toBeDisabled();
   });
 
-  it('lista las páginas sin clasificar con la salida concreta', () => {
+  // El backend manda los NÚMEROS de página y la pantalla solo mostraba cuántas eran: con eso el
+  // gestor tenía que abrir el archivo entero para dar con ellas. Ahora se listan, comprimidas en
+  // rangos (8 y 9 van seguidas, así que se enumeran; un tramo de tres o más se abrevia).
+  it('nombra las páginas que quedan fuera, no solo cuántas son', () => {
     renderPanel(
       estado({
         items: buildReviewItems([pieza()], [], null),
@@ -124,8 +127,37 @@ describe('BatchReviewPanel', () => {
       }),
     );
 
-    expect(screen.getByText(/3 de 16 páginas sin clasificar/)).toBeInTheDocument();
-    expect(screen.getByText(/cárgalo directamente en su casilla/)).toBeInTheDocument();
+    expect(screen.getByText(/páginas 1 y 8, 9 \(3 de 16\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Carga cada documento en su casilla/)).toBeInTheDocument();
+  });
+
+  it('comprime en rangos los tramos largos', () => {
+    renderPanel(
+      estado({
+        items: buildReviewItems([pieza()], [], null),
+        noReconocidos: [
+          { sourceFilename: 'expediente.pdf', paginas: [4, 7, 12, 13, 14, 15, 20], totalPaginas: 30 },
+        ],
+      }),
+    );
+
+    expect(screen.getByText(/páginas 4, 7, 12–15 y 20 \(7 de 30\)/)).toBeInTheDocument();
+  });
+
+  // Que sobren 3 de 16 y que sobren 16 de 16 no son la misma situación: en la segunda el archivo
+  // entero queda fuera y no hay nada que revisar.
+  it('cuando el archivo entero queda fuera lo dice como tal', () => {
+    renderPanel(
+      estado({
+        noReconocidos: [
+          { sourceFilename: 'Fur_Borrador.pdf', paginas: [1, 2, 3], totalPaginas: 3 },
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText(/ninguna de sus 3 páginas corresponde a un requisito de este trámite/),
+    ).toBeInTheDocument();
   });
 
   it('lista los archivos que no se pudieron procesar con su motivo', () => {
@@ -142,8 +174,21 @@ describe('BatchReviewPanel', () => {
   it('cuando no se identificó nada lo dice sin pintar una lista vacía', () => {
     renderPanel(estado());
 
-    expect(screen.getByText(/No pudimos identificar documentos/)).toBeInTheDocument();
+    expect(screen.getByText('No reconocimos ningún documento')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Ninguna de las páginas que cargaste corresponde a un requisito/),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  // «Adjuntar 0 documentos» apagado se lee como una acción que el gestor debería poder completar.
+  // Sin nada reconocido no hay nada que adjuntar: queda una sola salida.
+  it('sin nada reconocido no se ofrece adjuntar', () => {
+    renderPanel(estado());
+
+    expect(screen.queryByRole('button', { name: /Adjuntar/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Descartar' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Entendido' })).toBeInTheDocument();
   });
 
   it('durante la subida se bloquean las acciones', () => {

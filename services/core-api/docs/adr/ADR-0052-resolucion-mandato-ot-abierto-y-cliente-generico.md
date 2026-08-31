@@ -15,7 +15,7 @@ La generación del mandato resolvía plantilla por OT y `assignment_mode` solo p
 
 ## Decisión
 
-Honrar `assignment_mode` del OT cuando no hay regla de compañía. Al crear el tenant OT sembrar `admin.transit_office_mandate_config` con `generico` + `open` y campos institucionales nulos. Si la regla de la empresa que radica es `signer`, la redacción efectiva es `generico` (salvo PDF/editor propio, ADR-0042). OTs legado sin fila conservan fallback `signer`. No hay tablas por familia de trámite.
+Honrar `assignment_mode` del OT cuando no hay regla de compañía. Al crear el tenant OT sembrar `admin.transit_office_mandate_config` con `open` y **plantilla del organismo** si es uno de los cinco conocidos (Sabaneta, Bello, Envigado, Funza, Medellín); el resto nace en `generico`. Si la regla de la empresa que radica es `signer` (mandato cliente), la redacción efectiva es `generico` (salvo PDF/editor propio, ADR-0042). OTs legado sin fila conservan fallback `signer`. No hay tablas por familia de trámite. La emisión **no** reescribe la plantilla por PN/PJ ni por modo (se retiró `ResolveEmissionCode`).
 
 ## Alternativas consideradas
 
@@ -47,7 +47,7 @@ Se elige la Opción 2 porque el modelo de datos ya expresa los tres modos y la r
 ## Consecuencias
 
 ### Lo que se gana
-- OT nuevo = abierto + genérico + mandatario vacío.
+- OT nuevo = abierto + plantilla del organismo (o genérica) + mandatario vacío.
 - Empresa que radica: un modo para todas las familias; cliente = genérica.
 - Hub OT y Plataforma editan la misma persistencia.
 

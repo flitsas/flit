@@ -93,7 +93,8 @@ internal static class FlitFirmaBlock
         FlitFirmaLinea linea,
         float selloFontSize = 6.5f,
         bool datosBold = false,
-        string? selloBaul = null)
+        string? selloBaul = null,
+        string? etiquetaSinEstampa = null)
     {
         ArgumentNullException.ThrowIfNull(col);
         ArgumentNullException.ThrowIfNull(datos);
@@ -114,7 +115,15 @@ internal static class FlitFirmaBlock
                 break;
 
             default:
-                col.Item().Height(ImagenAlto);
+                if (!string.IsNullOrWhiteSpace(etiquetaSinEstampa))
+                {
+                    col.Item().Height(ImagenAlto).AlignMiddle().Text(t =>
+                        t.Span(etiquetaSinEstampa.Trim()).FontSize(9).FontColor(Colors.Grey.Darken2));
+                }
+                else
+                {
+                    col.Item().Height(ImagenAlto);
+                }
                 break;
         }
 

@@ -1,25 +1,31 @@
 import { describe, expect, it, beforeEach } from "vitest";
+
 import {
   applyBackToSearch,
   applyClientBranch,
+  applySelectHelpOption,
   applySelectIntent,
   applyTramitesSuccess,
   applyUserText,
   applyValidacionesSuccess,
   createInitialState,
+  hasActiveConversation,
   resetMessageIdSeq,
 } from "../dr-flit-conversation";
+
 import {
   buildGreeting,
+  buildHelpValuePrompt,
   buildValuePrompt,
   DR_FLIT_FREE_TEXT_HINT,
-  DR_FLIT_INTENTS,
+  DR_FLIT_GESTION_INTENTS,
+  DR_FLIT_SUPPORT_CASE_URL,
   getIntentById,
 } from "../dr-flit-intents";
 
 describe("dr-flit-intents", () => {
-  it("expone 4 sugerencias", () => {
-    expect(DR_FLIT_INTENTS.map((i) => i.id)).toEqual([
+  it("expone 4 intents de gestión", () => {
+    expect(DR_FLIT_GESTION_INTENTS.map((i) => i.id)).toEqual([
       "placa",
       "vin",
       "tramite",
@@ -37,10 +43,11 @@ describe("dr-flit-conversation", () => {
     resetMessageIdSeq();
   });
 
-  it("inicia idle con sugerencias", () => {
+  it("inicia con menú de sesiones Gestión y Ayuda", () => {
     const state = createInitialState("Ana");
     expect(state.messages[0].text).toBe(buildGreeting("Ana"));
     expect(state.phase).toBe("idle");
+    expect(state.showSessionMenu).toBe(true);
   });
 
   it("al elegir intent pide valor", () => {
@@ -49,6 +56,7 @@ describe("dr-flit-conversation", () => {
     expect(next.messages.at(-1)?.text).toBe(
       buildValuePrompt(getIntentById("placa")!),
     );
+    expect(next.showSessionMenu).toBe(false);
   });
 
   it("placa/VIN/trámite pasan a loading al enviar valor", () => {
@@ -116,17 +124,66 @@ describe("dr-flit-conversation", () => {
     expect(next.validacionResults).toHaveLength(1);
   });
 
-  it("regresar restaura sugerencias", () => {
+  it("regresar restaura menú completo de sesiones", () => {
     const awaiting = applySelectIntent(createInitialState(), "placa")!.next;
     const loading = applyUserText(awaiting, "ABC123");
     const shown = applyTramitesSuccess(loading, "placa", []);
     const next = applyBackToSearch(shown);
     expect(next.phase).toBe("idle");
-    expect(next.showSuggestions).toBe(true);
+    expect(next.showSessionMenu).toBe(true);
   });
 
-  it("texto libre sin intent", () => {
+  it("texto libre sin intent muestra hint unificado", () => {
     const next = applyUserText(createInitialState(), "hola");
     expect(next.messages.at(-1)?.text).toBe(DR_FLIT_FREE_TEXT_HINT);
+    expect(next.showSessionMenu).toBe(true);
+  });
+
+  it("Necesito ayuda muestra artículos del manual", () => {
+    const awaiting = applySelectHelpOption(createInitialState(), "necesito-ayuda")!;
+    expect(awaiting.phase).toBe("awaiting_help_query");
+    expect(awaiting.messages.at(-1)?.text).toBe(buildHelpValuePrompt());
+    const next = applyUserText(awaiting, "como creo un tramite");
+    expect(next.phase).toBe("showing_help");
+    expect(next.helpResults?.length).toBeGreaterThan(0);
+    expect(next.helpResults?.[0]?.href).toMatch(/^\/manual\//);
+    expect(next.showBackToSearch).toBe(true);
+  });
+
+  it("Necesito ayuda sin match ofrece home del manual", () => {
+    const awaiting = applySelectHelpOption(createInitialState(), "necesito-ayuda")!;
+    const next = applyUserText(awaiting, "xyzzy-no-existe-12345");
+    expect(next.phase).toBe("showing_help");
+    expect(next.helpResults).toEqual([]);
+    expect(next.manualHomeHref).toBe("/manual");
+  });
+
+  it("Soporte muestra panel de canales", () => {
+    const next = applySelectHelpOption(createInitialState(), "soporte")!;
+    expect(next.phase).toBe("showing_support");
+    expect(next.showSupportInfo).toBe(true);
+    expect(next.showBackToSearch).toBe(true);
+  });
+
+  it("regresar desde soporte restaura menú completo", () => {
+    const support = applySelectHelpOption(createInitialState(), "soporte")!;
+    const next = applyBackToSearch(support);
+    expect(next.showSessionMenu).toBe(true);
+    expect(next.showSupportInfo).toBe(false);
+  });
+
+  it("hasActiveConversation distingue menú inicial de consulta en curso", () => {
+    const idle = createInitialState("Juan");
+    expect(hasActiveConversation(idle)).toBe(false);
+    const awaiting = applySelectIntent(idle, "placa")!.next;
+    expect(hasActiveConversation(awaiting)).toBe(true);
+    const back = applyBackToSearch(awaiting);
+    expect(hasActiveConversation(back)).toBe(false);
+  });
+});
+
+describe("dr-flit-support", () => {
+  it("URL de caso de soporte oficial", () => {
+    expect(DR_FLIT_SUPPORT_CASE_URL).toBe("https://flitsas.com.co/SOPORTE/");
   });
 });

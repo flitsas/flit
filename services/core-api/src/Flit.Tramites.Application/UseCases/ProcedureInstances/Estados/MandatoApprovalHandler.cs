@@ -42,10 +42,6 @@ public sealed class MandatoApprovalHandler(
     ISignatureVaultPolicy? vaultPolicy = null,
     IMandateRequirementPolicy? mandatePolicy = null)
 {
-    // El mandatario firma igual que cualquier otra parte: con la firma del baúl si la tiene, y si no con
-    // el sello de su validación de identidad (misma precedencia que aplica el generador del mandato).
-    // Default inerte ⇒ sin baúl configurado el gate se comporta como antes.
-    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
 
     public async Task<MandatoApprovalDecision> CheckAsync(
@@ -55,6 +51,7 @@ public sealed class MandatoApprovalHandler(
         Guid? explicitSignerId,
         CancellationToken ct = default)
     {
+        _ = vaultPolicy;
         var instance = await repo.GetByIdWithFurGraphAsync(instanceId, clientTenantId, ct).ConfigureAwait(false);
         if (instance is null)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
@@ -94,65 +91,27 @@ public sealed class MandatoApprovalHandler(
                 transitOfficeId, instance.TenantId,
                 MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
+        candidates = await MandateSignerSelectionResolver
+            .WithOtDefaultAsync(candidates, mandateConfig?.OtDefaultMandateSignerId, directory, ct)
+            .ConfigureAwait(false);
 
-        // HU #11203 — la elección hecha al REGISTRAR el trámite manda sobre la resolución automática:
-        // el gestor ya dijo quién firma y el aprobador no tiene por qué volver a decidirlo. La elección
-        // explícita del aprobador sigue teniendo la última palabra (es quien está aprobando), y la
-        // resolución automática queda como respaldo para los trámites que no traen ninguna.
-        //
-        // Bug DEV (pantalla/documento con mandatarios distintos) — antes esta línea era el TERCER
-        // criterio de resolución (ninguno de los otros dos consumidores conocía el default del OT en este
-        // punto). Ahora pasa primero por el mismo resolvedor que usan el listado de pantalla y la
-        // generación del documento: si no hay elección explícita, aplica el default parametrizado (si
-        // sigue entre los candidatos habilitados) antes de caer al cotejo por usuario que aplica
-        // MandateSignerSelector.Resolve más abajo.
         var elegido = MandateSignerDefaultResolver.Resolve(
             candidates.Select(c => c.Id).ToList(),
             explicitSignerId ?? instance.MandateSignerId,
+            mandateConfig?.OtDefaultMandateSignerId,
             mandateConfig?.DefaultMandateSignerId);
 
         var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, elegido);
 
-        // El gate miraba SOLO la identidad, así que bloqueaba con "mandatario_identidad_requerida" a un
-        // mandatario que tenía su firma del baúl vigente y podía firmar perfectamente. Son alternativas,
-        // no requisitos acumulativos: basta cualquiera de las tres.
-        //
-        // Y quien firma A MANO ante ese organismo no necesita ninguna: el documento le deja la línea y
-        // él la suscribe en papel. Exigirle firma del baúl o identidad bloquearía un mandato que se
-        // firma justamente porque no las tiene.
-        var puedeFirmar = resolution.Status == MandateSignerResolutionStatus.Resolved
-            && (resolution.Signer!.FirmaFisica
-                || resolution.Signer.IdentityVigente
-                || await TieneFirmaDelBaulAsync(instance.TenantId, resolution.Signer, ct).ConfigureAwait(false));
-
+        // El OT puede emitir el mandato en blanco (sin identidad, baúl ni firma a mano).
+        // Quién firma sigue resolviéndose; cómo firma no bloquea la aceptación.
         return resolution.Status switch
         {
-            MandateSignerResolutionStatus.Resolved when puedeFirmar =>
-                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer!.Id),
             MandateSignerResolutionStatus.Resolved =>
-                new MandatoApprovalDecision(MandatoApprovalOutcome.IdentidadRequerida, null),
-            // Varios sin match: el aprobador debe elegir (409).
+                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer!.Id),
             MandateSignerResolutionStatus.RequiereSeleccion =>
                 new MandatoApprovalDecision(MandatoApprovalOutcome.RequiereSeleccion, null),
-            // Sin mandatarios configurados (p. ej. Sabaneta institucional): aprobar sin firmante persona.
             _ => new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null),
         };
-    }
-
-    /// <summary>
-    /// ¿El mandatario tiene firma del baúl activa y vigente? Se resuelve por su DOCUMENTO y contra el
-    /// tenant de la compañía gestora, igual que hace el generador del mandato (HU #11030):
-    /// <c>mandate_signers.signature_vault_id</c> no se escribe nunca, así que esa FK no sirve para saberlo.
-    /// </summary>
-    private async Task<bool> TieneFirmaDelBaulAsync(
-        Guid clientTenantId, MandateSignerCandidate signer, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(signer.Documento))
-            return false;
-
-        var tipoDoc = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento.Trim();
-        return await _vaultPolicy
-            .ResolveAsync(clientTenantId, tipoDoc, signer.Documento.Trim(), ct)
-            .ConfigureAwait(false) is not null;
     }
 }

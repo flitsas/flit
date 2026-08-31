@@ -182,34 +182,13 @@ public static class MandatoTemplateResolver
         };
 
     /// <summary>
-    /// Redacción que se EMITE en el trámite (no la fila cruda de Plataforma).
-    /// Formato abierto → genérico en blanco. Persona jurídica / institucional → Sabaneta
-    /// (misma redacción que Envigado). Persona natural / mandato cliente → genérico por defecto;
-    /// Bello conserva su plantilla; Funza y Medellín conservan la redacción municipal corta.
-    /// El código de OT es el canónico del trámite (destino), no el organismo “actual” del FUR.
+    /// Modo de asignación que nace de la redacción: Sabaneta es institucional;
+    /// el resto (incluido genérico) es Persona o RL. El modo abierto ya no es default.
     /// </summary>
-    public static string ResolveEmissionCode(
-        string? assignmentMode,
-        bool mandanteEsJuridica,
-        string? officeCode)
-    {
-        var mode = MandatoAssignmentModeCodes.Resolve(assignmentMode);
-        if (mode == MandatoAssignmentModeCodes.Open)
-            return Generico;
-
-        if (mode == MandatoAssignmentModeCodes.Institutional || mandanteEsJuridica)
-            return Sabaneta;
-
-        var code = officeCode?.Trim();
-        if (string.Equals(code, MandatoSystemOfficeTemplates.BelloOfficeCode, StringComparison.OrdinalIgnoreCase))
-            return Bello;
-
-        if (string.Equals(code, MandatoSystemOfficeTemplates.FunzaOfficeCode, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(code, MandatoSystemOfficeTemplates.MedellinOfficeCode, StringComparison.OrdinalIgnoreCase))
-            return Municipio;
-
-        return Generico;
-    }
+    public static string AssignmentModeForTemplate(string? templateCode) =>
+        Resolve(templateCode) == MandatoVariante.Sabaneta
+            ? MandatoAssignmentModeCodes.Institutional
+            : MandatoAssignmentModeCodes.Signer;
 }
 
 /// <summary>
@@ -265,12 +244,11 @@ public static class MandatoSystemOfficeTemplates
         null);
 
     /// <summary>
-    /// Envigado usa la misma redacción de persona jurídica que Sabaneta; los datos de la UT salen
-    /// de la config del OT, no de SETSA.
+    /// Envigado usa la redacción municipal corta (misma familia que Funza y Medellín).
     /// </summary>
     public static readonly Builtin Envigado = new(
-        MandatoTemplateResolver.Sabaneta,
-        MandatoFamiliaCodes.OrganismoTransito,
+        MandatoTemplateResolver.Municipio,
+        MandatoFamiliaCodes.Individuo,
         RequiresForNaturalPerson: true,
         string.Empty,
         string.Empty,
@@ -287,6 +265,24 @@ public static class MandatoSystemOfficeTemplates
         null,
         null);
 
+    public static readonly Builtin Funza = new(
+        MandatoTemplateResolver.Municipio,
+        MandatoFamiliaCodes.Individuo,
+        RequiresForNaturalPerson: true,
+        string.Empty,
+        string.Empty,
+        "Funza",
+        null);
+
+    public static readonly Builtin Medellin = new(
+        MandatoTemplateResolver.Municipio,
+        MandatoFamiliaCodes.Individuo,
+        RequiresForNaturalPerson: true,
+        string.Empty,
+        string.Empty,
+        "Medellín",
+        null);
+
     public static Builtin? TryGetByOfficeCode(string? officeCode)
     {
         var code = officeCode?.Trim();
@@ -298,9 +294,10 @@ public static class MandatoSystemOfficeTemplates
             return Bello;
         if (string.Equals(code, EnvigadoOfficeCode, StringComparison.OrdinalIgnoreCase))
             return Envigado;
-        if (string.Equals(code, FunzaOfficeCode, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(code, MedellinOfficeCode, StringComparison.OrdinalIgnoreCase))
-            return Municipio;
+        if (string.Equals(code, FunzaOfficeCode, StringComparison.OrdinalIgnoreCase))
+            return Funza;
+        if (string.Equals(code, MedellinOfficeCode, StringComparison.OrdinalIgnoreCase))
+            return Medellin;
         return null;
     }
 
@@ -335,12 +332,56 @@ public static class MandatoSystemOfficeTemplates
 }
 
 /// <summary>
-/// Valores con los que nace un OT al activarse: formato abierto, plantilla genérica y mandatario vacío.
+/// Valores con los que nace un OT al activarse: Persona o RL, salvo que la plantilla
+/// del organismo implique otro modo (hoy: Sabaneta → institucional).
+/// La plantilla es la del organismo si tiene builtin (Sabaneta, Bello, Envigado, Funza, Medellín);
+/// el resto nace en genérico.
 /// </summary>
 public static class MandatoOtBirthDefaults
 {
     public const string TemplateCode = MandatoTemplateResolver.Generico;
-    public const string AssignmentMode = MandatoAssignmentModeCodes.Open;
+    public const string AssignmentMode = MandatoAssignmentModeCodes.Signer;
     public const string MandataryFamily = MandatoFamiliaCodes.Individuo;
     public const bool RequiresForNaturalPerson = false;
+
+    public sealed record Snapshot(
+        string TemplateCode,
+        string AssignmentMode,
+        string MandataryFamily,
+        bool RequiresForNaturalPerson,
+        string? InstitutionalMandataryName,
+        string? InstitutionalMandataryNit,
+        string? ChamberCity,
+        string? MandatarySigla);
+
+    /// <summary>Plantilla y datos institucionales de nacimiento según el código RUNT del OT.</summary>
+    public static Snapshot ForOffice(string? officeCode)
+    {
+        var builtin = MandatoSystemOfficeTemplates.TryGetByOfficeCode(officeCode);
+        if (builtin is null)
+        {
+            return new Snapshot(
+                TemplateCode,
+                MandatoTemplateResolver.AssignmentModeForTemplate(TemplateCode),
+                MandataryFamily,
+                RequiresForNaturalPerson,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        return new Snapshot(
+            builtin.TemplateCode,
+            MandatoTemplateResolver.AssignmentModeForTemplate(builtin.TemplateCode),
+            builtin.MandataryFamily,
+            builtin.RequiresForNaturalPerson,
+            NullIfEmpty(builtin.InstitutionalMandataryName),
+            NullIfEmpty(builtin.InstitutionalMandataryNit),
+            NullIfEmpty(builtin.ChamberCity),
+            NullIfEmpty(builtin.MandatarySigla));
+    }
+
+    private static string? NullIfEmpty(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

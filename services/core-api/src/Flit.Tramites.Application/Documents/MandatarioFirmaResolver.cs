@@ -39,7 +39,7 @@ public static class MandatarioFirmaResolver
         try
         {
             var match = await vaultPolicy
-                .ResolveAsync(tenantId, tipoDoc, signer.Documento.Trim(), cancellationToken)
+                .ResolveMandatarioAsync(tenantId, tipoDoc, signer.Documento.Trim(), cancellationToken)
                 .ConfigureAwait(false);
 
             if (match is not null && !string.IsNullOrWhiteSpace(match.StoragePath))

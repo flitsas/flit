@@ -4,6 +4,7 @@ using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Tramites.Application.Notifications;
 using Flit.Tramites.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -186,12 +187,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         if (withEmail.Count == 0)
             return;
 
-        var to = PickPrimary(withEmail);
-        var bcc = withEmail
-            .Where(r => r.Id != to.Id)
-            .Select(r => r.Recipient!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var groups = BuildGroups(withEmail);
 
         foreach (var row in withEmail)
             row.Attempts += 1;
@@ -202,6 +198,10 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                 .AsNoTracking()
                 .Include(i => i.Actors)
                 .Include(i => i.FieldValues)
+                // ADR-0050 dejó que la familia decidiera si hay parte vendedora, y esta consulta
+                // ad-hoc —la única del código que no pasa por ProcedureInstanceRepository— se quedó
+                // sin la navegación: llegaba null y todo traspaso se componía como si no lo fuera.
+                .Include(i => i.ProcedureType)
                 .FirstOrDefaultAsync(
                     i => i.Id == seed.ProcedureInstanceId && i.TenantId == seed.TenantId,
                     ct)
@@ -240,7 +240,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false);
 
-            var model = TramiteCambioEstadoEmailProjector.Project(
+            var baseModel = TramiteCambioEstadoEmailProjector.Project(
                 instance,
                 instance.Actors.ToList(),
                 fieldValues,
@@ -251,54 +251,76 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
 
             var channel = await channelResolver.ResolveAsync(seed.TenantId, ct).ConfigureAwait(false);
             var assetsBaseUrl = assets.BaseUrl;
-            var (subject, html) = channel == NotificationChannel.TenantApi
-                ? TramiteCambioEstadoEmailComposer.ComposeRenting(model, assetsBaseUrl)
-                : TramiteCambioEstadoEmailComposer.ComposeFlit(model, assetsBaseUrl);
+            string? lastOutcome = null;
 
-            var message = new EmailMessage(
-                seed.TenantId,
-                seed.TemplateKey,
-                to.Recipient!,
-                to.RecipientName ?? string.Empty,
-                subject,
-                html)
+            foreach (var group in groups)
             {
-                BccEmails = bcc,
-            };
+                var carrier = group.To;
+                var model = group.Personalize
+                    ? baseModel with
+                    {
+                        DestinatarioNombre = carrier.RecipientName ?? string.Empty,
+                        DestinatarioEsEmpresa = string.Equals(
+                            carrier.RecipientKind, "empresa", StringComparison.OrdinalIgnoreCase),
+                    }
+                    : baseModel;
 
-            var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);
-            if (result.Success)
-            {
-                var now = DateTimeOffset.UtcNow;
-                foreach (var row in withEmail)
+                var (subject, html) = channel == NotificationChannel.TenantApi
+                    ? TramiteCambioEstadoEmailComposer.ComposeRenting(model, assetsBaseUrl)
+                    : TramiteCambioEstadoEmailComposer.ComposeFlit(model, assetsBaseUrl);
+
+                var message = new EmailMessage(
+                    seed.TenantId,
+                    seed.TemplateKey,
+                    carrier.Recipient!,
+                    carrier.RecipientName ?? string.Empty,
+                    subject,
+                    html)
                 {
-                    row.Status = StatusEnviado;
-                    row.FailureReason = null;
-                    row.ProcessedAt = now;
+                    BccEmails = group.Bcc,
+                };
+
+                var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);
+                if (result.Success)
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    foreach (var row in group.Rows)
+                    {
+                        row.Status = StatusEnviado;
+                        row.FailureReason = null;
+                        row.ProcessedAt = now;
+                    }
+
+                    EmailDispatchLog.Sent(logger, seed.ProcedureInstanceId, carrier.RecipientKind);
+                    continue;
                 }
 
-                EmailDispatchLog.Sent(logger, seed.ProcedureInstanceId, to.RecipientKind);
+                lastOutcome = result.Outcome.ToString();
+                foreach (var row in group.Rows)
+                {
+                    row.FailureReason = Truncate(result.Message, 1000);
+                    if (row.Attempts >= MaxAttempts)
+                    {
+                        row.Status = StatusFallido;
+                        row.ProcessedAt = DateTimeOffset.UtcNow;
+                    }
+                }
+            }
+
+            // Cada grupo es un envío independiente: lo que salió queda enviado y no se reintenta,
+            // y el próximo poll recarga solo las filas que siguen pendientes.
+            var noEnviadas = withEmail.Where(r => r.Status != StatusEnviado).ToList();
+            if (noEnviadas.Count == 0)
                 return;
-            }
 
-            foreach (var row in withEmail)
-            {
-                row.FailureReason = Truncate(result.Message, 1000);
-                if (row.Attempts >= MaxAttempts)
-                {
-                    row.Status = StatusFallido;
-                    row.ProcessedAt = DateTimeOffset.UtcNow;
-                }
-            }
-
-            if (withEmail[0].Attempts >= MaxAttempts)
-                EmailDispatchLog.DeadLettered(logger, seed.ProcedureInstanceId, withEmail[0].Attempts);
+            if (noEnviadas[0].Attempts >= MaxAttempts)
+                EmailDispatchLog.DeadLettered(logger, seed.ProcedureInstanceId, noEnviadas[0].Attempts);
             else
-                EmailDispatchLog.SendFailed(logger, seed.ProcedureInstanceId, result.Outcome.ToString());
+                EmailDispatchLog.SendFailed(logger, seed.ProcedureInstanceId, lastOutcome ?? "desconocido");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            foreach (var row in withEmail)
+            foreach (var row in withEmail.Where(r => r.Status != StatusEnviado))
             {
                 row.FailureReason = Truncate(ex.Message, 1000);
                 if (row.Attempts >= MaxAttempts)
@@ -314,6 +336,74 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                 EmailDispatchLog.SendError(logger, seed.ProcedureInstanceId, ex);
         }
     }
+
+    /// <summary>
+    /// Un envío por parte del trámite —comprador, locatario, vendedor—, cada una saludada con su
+    /// propio nombre: el vendedor dejó de recibir el correo dirigido al comprador.
+    ///
+    /// <para>El gestor que radicó y el correo extra de «Destinatarios de avisos de estado» no son
+    /// parte del trámite y no tienen un nombre propio que sostenga un saludo (el correo extra
+    /// guarda la dirección misma como nombre), así que siguen viajando en copia oculta del envío
+    /// de la parte principal, igual que antes de separar.</para>
+    ///
+    /// <para>Si no hay ninguna parte con correo —política que solo notifica al gestor, o partes sin
+    /// dirección registrada— sale un único correo sin personalizar, que es exactamente el
+    /// comportamiento anterior.</para>
+    /// </summary>
+    internal static List<EmailGroup> BuildGroups(
+        IReadOnlyList<ProcedureStateChangeEmailDispatch> withEmail)
+    {
+        var partes = withEmail.Where(r => IsParte(r.RecipientRole)).ToList();
+        var copias = withEmail.Where(r => !IsParte(r.RecipientRole)).ToList();
+
+        if (partes.Count == 0)
+        {
+            if (copias.Count == 0)
+                return [];
+            var unico = PickPrimary(copias);
+            return [new EmailGroup(unico, BccEmails(copias, unico), copias, Personalize: false)];
+        }
+
+        var portador = PickPrimary(partes);
+        var groups = new List<EmailGroup>(partes.Count);
+        foreach (var parte in partes
+                     .OrderBy(r => RoleRank(r.RecipientRole))
+                     .ThenBy(r => KindRank(r.RecipientKind)))
+        {
+            var esPortador = parte.Id == portador.Id;
+            var rows = new List<ProcedureStateChangeEmailDispatch> { parte };
+            if (esPortador)
+                rows.AddRange(copias);
+
+            groups.Add(new EmailGroup(
+                parte,
+                esPortador ? BccEmails(copias, parte) : [],
+                rows,
+                Personalize: true));
+        }
+
+        return groups;
+    }
+
+    private static bool IsParte(string? role) =>
+        string.Equals(role, TramiteNotificationRecipientResolver.RoleComprador, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, TramiteNotificationRecipientResolver.RoleLocatario, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(role, TramiteNotificationRecipientResolver.RoleVendedor, StringComparison.OrdinalIgnoreCase);
+
+    private static List<string> BccEmails(
+        IEnumerable<ProcedureStateChangeEmailDispatch> rows,
+        ProcedureStateChangeEmailDispatch destinatario) =>
+        rows.Where(r => r.Id != destinatario.Id)
+            .Select(r => r.Recipient!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>Un correo del lote: a quién se dirige, quién va en copia oculta y qué filas cierra.</summary>
+    internal sealed record EmailGroup(
+        ProcedureStateChangeEmailDispatch To,
+        List<string> Bcc,
+        List<ProcedureStateChangeEmailDispatch> Rows,
+        bool Personalize);
 
     internal static ProcedureStateChangeEmailDispatch PickPrimary(
         IReadOnlyList<ProcedureStateChangeEmailDispatch> withEmail)

@@ -88,6 +88,7 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
                 cfg.ChamberCity,
                 cfg.MandatarySigla,
                 cfg.AssignmentMode,
+                cfg.DefaultMandateSignerId,
                 cfg.CustomTemplateKind,
                 cfg.CustomTemplateBody,
                 cfg.CustomTemplateStoragePath,
@@ -119,6 +120,7 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
                 builtin?.ChamberCity,
                 builtin?.MandatarySigla,
                 assignmentMode,
+                OtDefaultMandateSignerId: OtDefaultOrNull(assignmentMode, null),
                 DefaultMandateSignerId: SignerDefaultOrNull(rule));
         }
 
@@ -158,6 +160,7 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
             hasCustom ? otRow.CustomTemplateBody : null,
             hasCustom ? otRow.CustomTemplateStoragePath : null,
             hasCustom ? otRow.CustomTemplateFileName : null,
+            OtDefaultOrNull(assignmentMode, otRow.DefaultMandateSignerId),
             SignerDefaultOrNull(rule));
     }
 
@@ -183,6 +186,13 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
         if (MandatoAssignmentModeCodes.SkipsPersonSigner(rule.AssignmentMode))
             return null;
         return rule.DefaultMandateSignerId;
+    }
+
+    private static Guid? OtDefaultOrNull(string assignmentMode, Guid? otDefault)
+    {
+        if (MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
+            return null;
+        return otDefault is { } id && id != Guid.Empty ? id : null;
     }
 
     private static string? OpenOrValue(string assignmentMode, string? value) =>

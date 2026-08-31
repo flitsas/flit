@@ -213,7 +213,7 @@ public sealed record WizardCapabilitiesDto(
             profile.RequiresCommercialValue,
             profile.RequiresBiometrics,
             profile.BiometricActors,
-            ProcedureTypeLayers.ExigeDecisionDePrenda(typeCode, runtReportaGravamen),
+            ProcedureTypeLayers.ExigeDecisionDePrenda(profile, familyCode, typeCode, runtReportaGravamen),
             profile.ComplementaryTransformationsAllowed(familyCode),
             profile.ComplementaryPrendaAllowed(familyCode),
             profile.OperatorChoosesTransitOffice(),
@@ -694,6 +694,7 @@ public sealed class GetWizardStateHandler(
             PrendaVigente = prendaVigente,
             RuntReportaGravamen = RuntReportaGravamen(fv),
             TypeCode = instance.ProcedureType?.Code,
+            FamilyCode = instance.ProcedureType?.Family,
             AttachmentTipos = instance.Attachments.Select(a => a.Tipo).ToList(),
             CompradorConComparendos = (simitComprador?.TotalComparendos ?? 0) > 0,
             ComparendosBloquean = comparendosBloquean,
@@ -930,9 +931,19 @@ public sealed class GetWizardStateHandler(
     /// (<c>prenda_documento_requerido_ot</c>) o la decisión que aún nadie tomó
     /// (<c>prenda_decision_requerida</c>), y el wizard tiene que decir cuál de las dos para que el
     /// banner coincida con lo que devuelve el gate de preparación.</para>
+    ///
+    /// <para><b>Solo donde hay dimensión de prenda.</b> «Cualquier modalidad» se escribió cuando solo
+    /// existían matrícula y traspaso; con la familia OTROS de ADR-0050 el banner acusaba una decisión
+    /// de prenda que el asistente no ofrece tomar y que la API rechaza
+    /// (<c>prenda_no_admitida_en_tipo</c>). Se acota con el MISMO predicado que el gate de preparación
+    /// y que el camino de escritura, para que los tres no puedan discrepar.</para>
     /// </summary>
     private async Task<string?> PrendaOtBlockerAsync(ProcedureInstance instance, CancellationToken ct)
     {
+        var perfil = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (!perfil.AdmiteDimensionDePrenda(instance.ProcedureType?.Family, instance.ProcedureType?.Code))
+            return null;
+
         var otRequiere = await _prendaDocumentRequirementPolicy
             .IsRequiredAsync(
                 instance.TenantId,

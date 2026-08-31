@@ -1,43 +1,47 @@
 namespace Flit.Tramites.Domain.Integration;
 
 /// <summary>
-/// Regla PURA que resuelve el mandatario SUGERIDO cuando el trámite todavía no trae una elección
-/// explícita (bug reportado en DEV: el resumen mostraba a "Carlos Pérez Demo" marcado como mandatario,
-/// pero el mandato salía firmado por otra persona).
-///
-/// <para>Antes de este resolvedor había TRES criterios distintos para la misma pregunta ("¿quién es el
-/// mandatario?"): <c>ListMandateSignerOptionsHandler</c> (lo que pinta la pantalla) aplicaba la cascada
-/// completa; <c>FurCommand.TryGenerateMandatoAsync</c> (lo que firma el documento) usaba
-/// <c>instance.MandateSignerId</c> crudo, sin cascada; y <c>MandatoApprovalHandler</c> delegaba en
-/// <see cref="MandateSignerSelector"/>, que resuelve por cotejo de usuario, no por default del OT. El
-/// radio quedaba marcado por una SUGERENCIA que nunca se persistió, y el documento salía sin firmante o
-/// con uno distinto. Ahora los tres consumidores llaman a este único método.</para>
-///
-/// <list type="bullet">
-///   <item>Elección explícita (ya guardada en el trámite, o la del aprobador) manda siempre.</item>
-///   <item>Sin elección: el default parametrizado del OT (módulo Mandatos), SI está entre los candidatos
-///   habilitados para ese organismo/compañía — un default que ya no aplica no se impone.</item>
-///   <item>Sin elección ni default válido: el único candidato, si solo hay uno.</item>
-///   <item>Varios candidatos sin default válido: sin sugerencia (<c>null</c>) — el llamador decide qué
-///   hacer (pantalla: no preseleccionar nada; aprobación: cae al cotejo por usuario de
-///   <see cref="MandateSignerSelector"/> y, si tampoco hay match único, exige elegir).</item>
-/// </list>
+/// Resuelve el mandatario SUGERIDO cuando el trámite no trae elección explícita.
+/// Lo usan la pantalla, la generación del PDF y el gate de aprobación.
 /// </summary>
 public static class MandateSignerDefaultResolver
 {
+    /// <summary>
+    /// Compatibilidad: el <paramref name="defaultSignerId"/> es el default de <b>compañía</b>
+    /// (solo si está entre candidatos). Sin default de OT.
+    /// </summary>
     public static Guid? Resolve(
         IReadOnlyCollection<Guid> candidateIds,
         Guid? explicitOrSavedSignerId,
-        Guid? defaultSignerId)
+        Guid? defaultSignerId) =>
+        Resolve(candidateIds, explicitOrSavedSignerId, otDefaultSignerId: null, companyDefaultSignerId: defaultSignerId);
+
+    /// <summary>
+    /// Elección del trámite → default cliente×OT (si está entre candidatos de esa gestora) →
+    /// default del OT (aunque no esté en candidatos de la compañía) → vacío.
+    /// Ya no se autoelige el único candidato.
+    /// </summary>
+    public static Guid? Resolve(
+        IReadOnlyCollection<Guid> candidateIds,
+        Guid? explicitOrSavedSignerId,
+        Guid? otDefaultSignerId,
+        Guid? companyDefaultSignerId)
     {
         ArgumentNullException.ThrowIfNull(candidateIds);
 
         if (explicitOrSavedSignerId is { } chosen && chosen != Guid.Empty)
             return chosen;
 
-        if (defaultSignerId is { } def && def != Guid.Empty && candidateIds.Contains(def))
-            return def;
+        if (companyDefaultSignerId is { } company
+            && company != Guid.Empty
+            && candidateIds.Contains(company))
+        {
+            return company;
+        }
 
-        return candidateIds.Count == 1 ? candidateIds.Single() : null;
+        if (otDefaultSignerId is { } ot && ot != Guid.Empty)
+            return ot;
+
+        return null;
     }
 }

@@ -37,6 +37,12 @@ export interface MandateOtConfigView {
   customTemplateFileName: string | null;
   customTemplateBody: string | null;
   hasCustomTemplate: boolean;
+  /** Mandatario global del OT (aplica si la empresa no tiene default propio). */
+  defaultMandateSignerId: string | null;
+  defaultMandateSignerName: string | null;
+  defaultMandateSignerDocumentType: string | null;
+  defaultMandateSignerDocumentNumber: string | null;
+  defaultMandateSignerIntegrityHash: string | null;
 }
 
 export interface UpsertMandateOtConfigBody {
@@ -49,6 +55,7 @@ export interface UpsertMandateOtConfigBody {
   chamberCity?: string | null;
   mandatarySigla?: string | null;
   rowVersion?: number | null;
+  defaultMandateSignerId?: string | null;
 }
 
 export interface MandateConfigExtractResult {
@@ -103,6 +110,20 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
       (raw.CustomTemplateBody as string | null | undefined) ??
       null,
     hasCustomTemplate: Boolean(raw.hasCustomTemplate ?? raw.HasCustomTemplate),
+    defaultMandateSignerId:
+      (raw.defaultMandateSignerId as string | null | undefined) ??
+      (raw.DefaultMandateSignerId as string | null | undefined) ??
+      null,
+    defaultMandateSignerName:
+      (raw.defaultMandateSignerName as string | null | undefined) ??
+      (raw.DefaultMandateSignerName as string | null | undefined) ??
+      null,
+    defaultMandateSignerDocumentType:
+      optionalString(raw.defaultMandateSignerDocumentType ?? raw.DefaultMandateSignerDocumentType),
+    defaultMandateSignerDocumentNumber:
+      optionalString(raw.defaultMandateSignerDocumentNumber ?? raw.DefaultMandateSignerDocumentNumber),
+    defaultMandateSignerIntegrityHash:
+      optionalString(raw.defaultMandateSignerIntegrityHash ?? raw.DefaultMandateSignerIntegrityHash),
   };
 }
 
@@ -237,6 +258,12 @@ export interface CompanyOtMandateRuleView {
   hasExplicitRule: boolean;
   /** Mandatario persona preferido (solo Persona/RL). */
   defaultMandateSignerId: string | null;
+  companyTaxId: string | null;
+  companyCode: string | null;
+  defaultMandateSignerName: string | null;
+  defaultMandateSignerDocumentType: string | null;
+  defaultMandateSignerDocumentNumber: string | null;
+  defaultMandateSignerIntegrityHash: string | null;
 }
 
 export interface UpsertCompanyOtMandateRuleBody {
@@ -277,7 +304,27 @@ function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView 
       null,
     hasExplicitRule: Boolean(raw.hasExplicitRule ?? raw.HasExplicitRule),
     defaultMandateSignerId: defaultId ? String(defaultId) : null,
+    companyTaxId: optionalString(raw.companyTaxId ?? raw.CompanyTaxId),
+    companyCode: optionalString(raw.companyCode ?? raw.CompanyCode),
+    defaultMandateSignerName: optionalString(
+      raw.defaultMandateSignerName ?? raw.DefaultMandateSignerName,
+    ),
+    defaultMandateSignerDocumentType: optionalString(
+      raw.defaultMandateSignerDocumentType ?? raw.DefaultMandateSignerDocumentType,
+    ),
+    defaultMandateSignerDocumentNumber: optionalString(
+      raw.defaultMandateSignerDocumentNumber ?? raw.DefaultMandateSignerDocumentNumber,
+    ),
+    defaultMandateSignerIntegrityHash: optionalString(
+      raw.defaultMandateSignerIntegrityHash ?? raw.DefaultMandateSignerIntegrityHash,
+    ),
   };
+}
+
+function optionalString(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
 }
 
 export async function listCompanyOtMandateRules(
@@ -300,6 +347,35 @@ export async function upsertCompanyOtMandateRule(
   const data = await apiFetch<CompanyOtMandateRuleView>(
     `${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}`,
     { method: "PUT", body, signal },
+  );
+  return mapCompanyRule(data as unknown as Record<string, unknown>);
+}
+
+export async function setOtDefaultSigner(
+  officeId: string,
+  body: {
+    defaultMandateSignerId?: string | null;
+    rowVersion?: number | null;
+  },
+  signal?: AbortSignal,
+): Promise<MandateOtConfigView> {
+  const data = await apiFetch<MandateOtConfigView>(`${mandateOfficeRoot(officeId)}/default-signer`, {
+    method: "PATCH",
+    body,
+    signal,
+  });
+  return mapView(data as unknown as Record<string, unknown>);
+}
+
+export async function setCompanyDefaultSigner(
+  officeId: string,
+  companyTenantId: string,
+  defaultMandateSignerId: string | null,
+  signal?: AbortSignal,
+): Promise<CompanyOtMandateRuleView> {
+  const data = await apiFetch<CompanyOtMandateRuleView>(
+    `${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}/default-signer`,
+    { method: "PATCH", body: { defaultMandateSignerId }, signal },
   );
   return mapCompanyRule(data as unknown as Record<string, unknown>);
 }

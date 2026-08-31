@@ -576,7 +576,7 @@ public sealed class OtMetricsAndRejectionFlowTests
             ProcedureInstanceId = instanceId,
             FromStatus = TramiteEstado.Entregado,
             ToStatus = toStatus,
-            ChangedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            ChangedAt = DateTimeOffset.UtcNow,
             ChangedBy = Reviewer,
         });
 

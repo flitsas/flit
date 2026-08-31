@@ -61,3 +61,37 @@ export function motivoSinFirma(medio: MedioDeFirma): string {
     ? "Su validación de identidad está vencida y no tiene firma en el baúl."
     : "No tiene firma en el baúl ni validación de identidad.";
 }
+
+/** Cómo se presenta el medio de firma del mandatario en listados del OT. */
+export type TipoFirmaMandatario =
+  | "baul"
+  | "identidad"
+  | "identidad_pendiente"
+  | "a_mano"
+  | "sin_medio";
+
+export function tipoDeFirmaMandatario(
+  medio: MedioDeFirma & { physicalSignatureOfficeIds?: string[] | null },
+  officeId: string,
+): TipoFirmaMandatario {
+  if (medio.signatureVaultId) return "baul";
+  if (medio.identityStatus === "valid") return "identidad";
+  if (medio.identityStatus === "pending" || (medio.email?.trim() ?? "") !== "") return "identidad_pendiente";
+  if (medio.physicalSignatureOfficeIds?.includes(officeId)) return "a_mano";
+  return "sin_medio";
+}
+
+export function etiquetaTipoFirma(tipo: TipoFirmaMandatario): string {
+  switch (tipo) {
+    case "baul":
+      return "Firma del baúl";
+    case "identidad":
+      return "Validación de identidad";
+    case "identidad_pendiente":
+      return "Identidad en curso";
+    case "a_mano":
+      return "Firma a mano";
+    default:
+      return "Sin medio de firma";
+  }
+}

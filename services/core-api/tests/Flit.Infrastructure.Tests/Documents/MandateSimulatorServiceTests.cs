@@ -271,6 +271,10 @@ public sealed class MandateSimulatorServiceTests
             Guid officeId, UpsertMandateOtConfigRequest request, Guid? userId, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> SetOtDefaultSignerAsync(
+            Guid officeId, SetOtDefaultSignerRequest request, Guid? userId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<MandateConfigWriteStatus> DeleteAsync(Guid officeId, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
@@ -299,6 +303,11 @@ public sealed class MandateSimulatorServiceTests
 
         public Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> UpsertCompanyRuleAsync(
             Guid officeId, Guid companyTenantId, UpsertCompanyOtMandateRuleRequest request,
+            Guid? userId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> SetCompanyDefaultSignerAsync(
+            Guid officeId, Guid companyTenantId, SetCompanyDefaultSignerRequest request,
             Guid? userId, CancellationToken ct = default) =>
             throw new NotSupportedException();
 

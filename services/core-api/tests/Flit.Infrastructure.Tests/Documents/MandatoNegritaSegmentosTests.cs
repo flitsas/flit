@@ -131,4 +131,16 @@ public sealed class MandatoNegritaSegmentosTests
 
         segmentos.Should().ContainSingle(s => s.Texto == "___" && !s.Negrita);
     }
+
+    [Fact]
+    public void SplitPlaceholders_PlacaVacia_NoEscribeMarcador()
+    {
+        var reemplazos = new (string Token, string Valor)[] { ("{{placa}}", string.Empty) };
+        var segmentos = MandatoPdfGenerator.SplitPlaceholders(
+            "Identificado con placas {{placa}}.", reemplazos);
+
+        segmentos.Should().NotContain(s => s.Texto == "___");
+        segmentos.Should().NotContain(s => s.Texto == "ABC123");
+        string.Concat(segmentos.Select(s => s.Texto)).Should().Be("Identificado con placas .");
+    }
 }

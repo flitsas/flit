@@ -225,6 +225,33 @@ public sealed record ProcedureTypeGateProfile
         ProcedureFamilyCodes.FromCode(familyCode) == ProcedureFamily.Traspaso;
 
     /// <summary>
+    /// ¿Este expediente tiene dimensión de prenda EN ABSOLUTO? Une los dos únicos caminos por los que
+    /// un trámite puede llegar a tener una decisión de prenda: que la admita como capa complementaria
+    /// (<see cref="ComplementaryPrendaAllowed"/>, matrícula y traspaso) o que la prenda SEA el trámite
+    /// (<see cref="ProcedureTypeLayers.EsTipoPrendaBase"/>).
+    ///
+    /// <para><b>Por qué existe.</b> Es literalmente la condición que <c>RegistrarPrendaHandler</c> exige
+    /// para aceptar una decisión de prenda. Estaba escrita a mano solo ahí, mientras el override del OT
+    /// (CF-06, HU #10881) bloqueaba «cualquier modalidad con OT» — redactado cuando solo existían
+    /// matrícula y traspaso, antes de que ADR-0050 introdujera la familia OTROS. El resultado era un
+    /// bloqueo INSATISFACIBLE: un duplicado de tarjeta o un cambio de color exigían
+    /// <c>prenda_decision_requerida</c> al preparar, el asistente no pintaba el paso de prenda
+    /// (<c>ComplementaryPrendaAllowed("OTROS")</c> es false) y la API rechazaba la decisión con
+    /// <c>prenda_no_admitida_en_tipo</c>. El gate pedía lo que el sistema se negaba a aceptar.</para>
+    ///
+    /// <para>Compartirlo —gate de preparación, blocker del asistente y camino de escritura— es lo que
+    /// impide que vuelvan a divergir: quien no puede REGISTRAR una prenda tampoco puede quedar bloqueado
+    /// por no tenerla. No relaja ninguna regla vigente: matrícula inicial (HU #11592), traspaso con
+    /// gravamen (R10) y los tipos prendarios conservan su gate intacto.</para>
+    /// </summary>
+    /// <param name="familyCode">Familia del tipo; ausente ⇒ se trata como acumulable (mismo fail-safe
+    /// que <see cref="ProcedureTypeLayers.FamiliaAcumulaComplementarios"/>: no apaga en silencio la
+    /// prenda de un expediente cuyo tipo llegue sin clasificar).</param>
+    /// <param name="typeCode">Código del tipo, para reconocer aquellos cuya prenda ES el trámite.</param>
+    public bool AdmiteDimensionDePrenda(string? familyCode, string? typeCode) =>
+        ComplementaryPrendaAllowed(familyCode) || ProcedureTypeLayers.EsTipoPrendaBase(typeCode);
+
+    /// <summary>
     /// ¿El organismo de tránsito lo elige el operador? Lo declarado manda; sin declaración decide el
     /// modo de entrada (VIN ⇒ el vehículo aún no tiene organismo, lo elige el operador), que es el
     /// comportamiento previo a esta llave.

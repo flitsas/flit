@@ -444,6 +444,19 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
   // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
   const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
+  /**
+   * Ruta al asistente de pasos. Vive aquí y no en cada llamador porque el `?t=` del SuperAdmin
+   * (trámite de OTRA compañía) tiene que viajar igual desde la fila y desde el modal de detalle.
+   */
+  const abrirAsistente = useCallback(
+    (id: string, tenantIdFila?: string) =>
+      router.push(
+        isAdmin && tenantIdFila
+          ? `/tramites/${id}?t=${encodeURIComponent(tenantIdFila)}`
+          : `/tramites/${id}`,
+      ),
+    [router, isAdmin],
+  );
   /** Click en badge Estado → modal de línea de tiempo del trámite (todas las modalidades). */
   const [trackingTramite, setTrackingTramite] = useState<InstanceSummary | null>(null);
   /** Click en línea Firmas → modal de tracking de identidad de esa parte. */
@@ -974,8 +987,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               rangoPropioHasta={rangoPropioHasta}
               onRangoPropioDesdeChange={setRangoPropioDesde}
               onRangoPropioHastaChange={setRangoPropioHasta}
-              estado={estado}
-              onEstadoChange={handleEstadoChange}
               filtrosEspecificos={filtrosEspecificos}
               onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
               placa={placaFilter}
@@ -1010,11 +1021,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           }
         />
 
-        {/* KPIs por estado (solo lectura) + CTA Nuevo trámite */}
+        {/* KPIs por estado (filtro) + CTA Nuevo trámite */}
         <div className="flex items-stretch gap-4">
           {!loading && !error ? (
             <div className="min-w-0 flex-1">
-              <EstadoFunnel counts={estadoCounts} />
+              <EstadoFunnel
+                counts={estadoCounts}
+                selected={estado}
+                onSelect={handleEstadoChange}
+              />
             </div>
           ) : null}
           <button
@@ -1109,13 +1124,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onProcesar={openProcesar}
-          onOpen={(id, tenantId) =>
-            router.push(
-              isAdmin && tenantId
-                ? `/tramites/${id}?t=${encodeURIComponent(tenantId)}`
-                : `/tramites/${id}`,
-            )
-          }
+          onOpen={abrirAsistente}
           onVerDocumentos={setDocsTramite}
           onVerConsolidado={setConsolidadoTramite}
           onOpenDetalle={setDetalleTramite}
@@ -1151,6 +1160,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         instanceId={detalleTramite?.id ?? null}
         tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
         item={detalleTramite}
+        // Subsanar desde el detalle: el modal enciende el flag y delega el salto al asistente aquí,
+        // que es donde vive la ruta con el `?t=` del SuperAdmin.
+        onAbrirAsistente={(it) => {
+          setDetalleTramite(null);
+          abrirAsistente(it.id, it.tenantId);
+        }}
       />
 
       <TramiteTrackingModal
@@ -1699,8 +1714,13 @@ function TramiteRow({
   // (radicado, entregado…) no habla de acreditación y no debe crecerle un tooltip.
   const ayudaIdentidad = async?.ayuda ?? null;
   const isDraft = item.estado === 'borrador';
-  const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
-  const actionIcon = async?.ready ? FileCheck : isDraft ? Play : Eye;
+  // Abre el ASISTENTE (editable) en vez del detalle de solo lectura. Además del borrador, cubre la
+  // subsanación: el estado sigue siendo `rechazado`, pero el trámite se está corrigiendo, y tanto
+  // "Re-radicar" como "Cancelar la subsanación" solo existen dentro del asistente.
+  const abreAsistente =
+    isDraft || !!item.subsanacionActiva || item.estado === 'subsanacion';
+  const actionLabel = async?.ready ? 'Radicar' : abreAsistente ? 'Continuar' : 'Ver';
+  const actionIcon = async?.ready ? FileCheck : abreAsistente ? Play : Eye;
   const plateHint = plateFlowHint(item.plateFlowStatus);
   const puedeProcesar =
     item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
@@ -1768,8 +1788,11 @@ function TramiteRow({
   // Frente C, etapa 1 (Tramites.tsx:222 de la propuesta) — borrador → asistente; radicado → modal
   // de detalle, sin navegar. `isPaused` solo aplica a borradores ICT, así que el chequeo de pausa
   // queda intacto dentro de esa rama.
+  //
+  // La subsanación entra por `abreAsistente`: mandarla al detalle dejaba al gestor sin forma de
+  // terminar ni de cancelar lo que él mismo activó.
   const handleOpen = () => {
-    if (item.estado !== 'borrador') {
+    if (!abreAsistente) {
       onOpenDetalle(item);
       return;
     }

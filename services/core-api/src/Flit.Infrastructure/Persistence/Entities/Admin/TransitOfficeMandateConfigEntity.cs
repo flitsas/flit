@@ -43,6 +43,12 @@ public sealed class TransitOfficeMandateConfigEntity
     /// </summary>
     public string AssignmentMode { get; set; } = "open";
 
+    /// <summary>
+    /// HU-L8 — mandatario persona por defecto de este OT. Gana al default de la compañía aunque no
+    /// esté vinculado a esa gestora. Nulo al nacer el OT.
+    /// </summary>
+    public Guid? DefaultMandateSignerId { get; set; }
+
     /// <summary><c>none</c> | <c>pdf</c> | <c>editor</c>. Sin propia ⇒ se usa <see cref="TemplateCode"/>.</summary>
     public string CustomTemplateKind { get; set; } = "none";
 

@@ -100,16 +100,21 @@ public static class AdminOtEndpoints
             .WithName("AdminOtGetRequirements")
             .WithSummary("Obtiene los requisitos configurables del OT (RNMC, ruta de placa, identidad)")
             .Produces(StatusCodes.Status200OK)
+            // SuperAdmin debe indicar transitOfficeId (400) y ese organismo debe tener tenant OT (404).
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         group.MapPut("/requirements", UpdateRequirementsAsync)
             .AddEndpointFilter(new ConfigAuditFailureFilter("ot_requirements", "update"))
             .WithName("AdminOtUpdateRequirements")
             .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPost("/webhooks", CreateWebhookAsync)
@@ -203,7 +208,7 @@ public static class AdminOtEndpoints
 
         group.MapPost("/client-procedures/{id:guid}/consolidado-maestro", GenerateClientProcedureConsolidadoMaestroAsync)
             .WithName("AdminOtGenerateClientProcedureConsolidadoMaestro")
-            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR)")
+            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR). ?force=true reconstruye saltándose la caché de vigencia")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -515,32 +520,27 @@ public static class AdminOtEndpoints
     private static async Task<IResult> GetRequirementsAsync(
         HttpContext httpContext,
         GetOtRequirementsHandler handler,
-        ITransitOfficeCatalog transitOfficeCatalog,
+        FlitDbContext db,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        // El scope se resuelve con el MISMO helper que el resto del hub (usuarios, bandeja…):
+        // para ot_admin es su propio tenant; para SuperAdmin, el tenant OT DUEÑO del organismo
+        // pedido. Antes se usaba el tenant del token y el transitOfficeId se perdía en el handler,
+        // de modo que el SuperAdmin leía SIEMPRE el OT de su propio tenant (en QA, Barranquilla)
+        // con el titulo de otro organismo.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
-        }
-
-        if (!TryResolveScopedTransitOfficeId(
-                httpContext.User,
-                transitOfficeId,
-                transitOfficeCatalog,
-                out var scopedOfficeId,
-                out var officeError))
-        {
-            return officeError!;
+            return scopeError;
         }
 
         var response = await handler.HandleAsync(
             new GetOtRequirementsQuery
             {
                 TenantId = tenantId,
-                TransitOfficeId = scopedOfficeId,
+                TransitOfficeId = transitOfficeId,
             },
             cancellationToken).ConfigureAwait(false);
 
@@ -551,13 +551,20 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtRequirementsRequest request,
         UpdateOtRequirementsHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        // El frontend ya mandaba ?transitOfficeId= en el PUT (admin-ot.ts), pero este método NO lo
+        // declaraba: ASP.NET lo descartaba y se escribía contra el tenant del token. Resultado: el
+        // SuperAdmin pisaba los requisitos de SU OT (en QA, Barranquilla) creyendo configurar otro.
+        // Se resuelve el tenant OT dueño y se escribe con él, que además es el único que satisface
+        // la política RLS ot_requirements_write y el UNIQUE de tenant_id.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         try
@@ -1262,6 +1269,10 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
         Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoMaestroHandler handler,
         [FromQuery] Guid? transitOfficeId,
+        // NULLABLE a propósito, por lo mismo que documenta ConsolidadoEndpoints (Bug #11139): un
+        // `bool` de query sin `?` es OBLIGATORIO en Minimal APIs y omitirlo devolvería 400. El camino
+        // normal del OT ("Ver consolidado") no lo manda; solo lo hace "Regenerar".
+        [FromQuery] bool? force,
         CancellationToken cancellationToken)
     {
         var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
@@ -1298,7 +1309,7 @@ public static class AdminOtEndpoints
                 }
 
                 return await handler
-                    .HandleAsync(id, access.ClientTenantId, precedencia, cancellationToken)
+                    .HandleAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
                     .ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);

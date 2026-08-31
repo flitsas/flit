@@ -183,6 +183,44 @@ internal sealed class DbSignatureVaultReader : ISignatureVaultReader
             },
             cancellationToken);
 
+    public Task<SignatureVaultItem?> GetByIdAnyTenantAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_context.Database.IsRelational())
+        {
+            return GetByIdAnyTenantCoreAsync(id, cancellationToken);
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return strategy.ExecuteAsync(async () =>
+        {
+            var transaction = await _context.Database
+                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (transaction.ConfigureAwait(false))
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "SET LOCAL row_security = off", cancellationToken).ConfigureAwait(false);
+
+                var item = await GetByIdAnyTenantCoreAsync(id, cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return item;
+            }
+        });
+    }
+
+    private async Task<SignatureVaultItem?> GetByIdAnyTenantCoreAsync(
+        Guid id, CancellationToken cancellationToken)
+    {
+        var entity = await _context.SignatureVault
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+
+        return entity is null ? null : SignatureVaultEstadoMapping.ToItem(entity);
+    }
+
     private async Task<T> ExecuteInTenantScopeAsync<T>(
         Guid tenantId,
         Func<Task<T>> read,
