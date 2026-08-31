@@ -23,6 +23,9 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -44,10 +47,12 @@ import {
   fetchOtOperationalPanel,
   fetchOtReport,
   OT_DRILLDOWN_BUCKETS,
+  OT_REPORT_ESTADOS,
   type OtDrilldownBucket,
   type OtMetricsParams,
   type OtOperationalPanel,
   type OtReportSeriesPoint,
+  type OtReportSummary,
 } from "@/lib/api/ot-metrics";
 import { resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import {
@@ -55,7 +60,11 @@ import {
   type DrilldownState,
 } from "@/components/admin/transit-offices/_reportes/DrilldownPanel";
 import { defaultRange, lastDaysRange } from "@/components/admin/transit-offices/_reportes/filters";
-import { formatHours } from "@/components/admin/transit-offices/_reportes/report-columns";
+import {
+  ESTADO_ORDER,
+  estadoMeta,
+  formatHours,
+} from "@/components/admin/transit-offices/_reportes/report-columns";
 
 /**
  * Ventana de la mediana de decisión. Fija y declarada en la propia tarjeta: el usuario no la eligió,
@@ -169,7 +178,7 @@ export function OtDashboard() {
         <PanelOperativo panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
       )}
 
-      <Actividad transitOfficeId={params?.transitOfficeId} />
+      <PeriodoReciente transitOfficeId={params?.transitOfficeId} />
 
       <DrilldownPanel
         state={drilldown}
@@ -302,14 +311,14 @@ function Bienvenida({
 }
 
 /**
- * Franja de actividad reciente: el ritmo, no la historia.
+ * Lo reciente: el ritmo del periodo y en qué estado quedó lo que entró.
  *
- * Va en su propia llamada y con su propio ciclo de carga a propósito. Si el informe falla, la cola
- * —que es a lo que se entra a esta pantalla— se sigue viendo; acoplarlas habría convertido un fallo
- * secundario en una pantalla en blanco.
+ * Las dos tarjetas salen de UNA sola llamada al informe —la serie y el resumen vienen juntos—, así
+ * que la composición no cuesta una petición extra. Y se piden aparte de la cola a propósito: si el
+ * informe falla, la cola, que es a lo que se entra a esta pantalla, se sigue viendo.
  */
-function Actividad({ transitOfficeId }: { transitOfficeId: string | undefined }) {
-  const [serie, setSerie] = useState<OtReportSeriesPoint[] | null>(null);
+function PeriodoReciente({ transitOfficeId }: { transitOfficeId: string | undefined }) {
+  const [resumen, setResumen] = useState<OtReportSummary | null>(null);
   const [estado, setEstado] = useState<Estado>("cargando");
 
   useEffect(() => {
@@ -323,15 +332,15 @@ function Actividad({ transitOfficeId }: { transitOfficeId: string | undefined })
           {
             ...lastDaysRange(ACTIVIDAD_DIAS),
             transitOfficeId,
-            // El informe pagina filas que aquí no se usan: solo interesa `resumen.serie`. Se pide la
-            // página mínima para no arrastrar un listado entero por una gráfica.
+            // El informe pagina filas que aquí no se usan: solo interesa `resumen`. Se pide la
+            // página mínima para no arrastrar un listado entero por dos gráficas.
             page: 1,
             pageSize: 1,
           },
           controller.signal,
         );
         if (controller.signal.aborted) return;
-        setSerie(informe.resumen.serie);
+        setResumen(informe.resumen);
         setEstado("listo");
       } catch (err) {
         if (controller.signal.aborted || (err as Error)?.name === "AbortError") return;
@@ -343,6 +352,16 @@ function Actividad({ transitOfficeId }: { transitOfficeId: string | undefined })
     return () => controller.abort();
   }, [transitOfficeId]);
 
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <Actividad estado={estado} serie={resumen?.serie ?? null} />
+      <Composicion estado={estado} resumen={resumen} />
+    </div>
+  );
+}
+
+/** Ritmo del periodo: qué entró y qué se decidió cada día. */
+function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoint[] | null }) {
   const hayMovimiento = (serie ?? []).some(
     (p) => p.radicados > 0 || p.aprobados > 0 || p.rechazados > 0,
   );
@@ -378,6 +397,139 @@ function Actividad({ transitOfficeId }: { transitOfficeId: string | undefined })
       )}
     </Tarjeta>
   );
+}
+
+/**
+ * Traduce el resumen del informe al vocabulario de estados del ORGANISMO.
+ *
+ * No son los estados crudos del trámite y esa es justo la gracia: `esperando_placa` y
+ * `en_subsanacion` doblan dentro el sub-flujo de placa y la subsanación activa, que el estado crudo
+ * esconde —un trámite se queda en «entregado» durante todo el trámite de placa—. Etiquetas, colores
+ * y orden salen de `ESTADO_META` / `ESTADO_ORDER`, los mismos de la consola de Reportes: dos
+ * paletas para el mismo estado acaban enseñando dos productos distintos.
+ */
+function composicionDelPeriodo(resumen: OtReportSummary) {
+  const porEstado: Record<string, number> = {
+    [OT_REPORT_ESTADOS.enRevision]: resumen.enRevision,
+    [OT_REPORT_ESTADOS.esperandoPlaca]: resumen.esperandoPlaca,
+    [OT_REPORT_ESTADOS.esperandoCliente]: resumen.esperandoCliente,
+    [OT_REPORT_ESTADOS.enSubsanacion]: resumen.enSubsanacion,
+    [OT_REPORT_ESTADOS.aprobado]: resumen.aprobados,
+    [OT_REPORT_ESTADOS.rechazado]: resumen.rechazados,
+    [OT_REPORT_ESTADOS.anulado]: resumen.anulados,
+    [OT_REPORT_ESTADOS.otro]: resumen.otros,
+  };
+
+  return ESTADO_ORDER.filter((estado) => (porEstado[estado] ?? 0) > 0).map((estado) => {
+    const meta = estadoMeta(estado);
+    return {
+      estado,
+      name: meta.label,
+      hint: meta.hint,
+      color: meta.color,
+      value: porEstado[estado] ?? 0,
+    };
+  });
+}
+
+/**
+ * En qué estado quedó lo que entró en el periodo.
+ *
+ * El universo son los trámites RECIBIDOS en la ventana, no los decididos: es lo que hace que el
+ * desglose cierre contra el total y que el porcentaje del centro signifique algo.
+ */
+function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSummary | null }) {
+  const partes = resumen ? composicionDelPeriodo(resumen) : [];
+  const total = partes.reduce((suma, p) => suma + p.value, 0);
+  const aprobados = resumen?.aprobados ?? 0;
+  const pctAprobados = total === 0 ? 0 : (aprobados / total) * 100;
+
+  return (
+    <Tarjeta titulo={`En qué estado quedó lo recibido en ${ACTIVIDAD_DIAS} días`}>
+      {estado === "cargando" && <Esqueleto filas={1} />}
+      {estado === "error" && (
+        <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+          No se pudo cargar la composición del periodo.
+        </p>
+      )}
+      {estado === "listo" && total === 0 && (
+        <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+          No se recibió ningún trámite en los últimos {ACTIVIDAD_DIAS} días.
+        </p>
+      )}
+      {estado === "listo" && total > 0 && (
+        <div
+          className="flex flex-col items-center gap-4 sm:flex-row"
+          data-testid="ot-inicio-composicion"
+        >
+          <div className="relative h-40 w-40 shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={partes}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius="62%"
+                  outerRadius="92%"
+                  paddingAngle={1}
+                  stroke="none"
+                  isAnimationActive={false}
+                >
+                  {partes.map((p) => (
+                    <Cell key={p.estado} fill={p.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            {/* La cifra del centro es la que resume la tarjeta; va fuera del SVG para poder
+                componerla con dos tamaños sin pelear con el posicionamiento de recharts. */}
+            <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+              <div>
+                <p className="text-xl font-bold tabular-nums">{formatPct(pctAprobados)}</p>
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-[#9AA5B4]">
+                  Aprobados
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <ul className="flex w-full min-w-0 flex-1 flex-col gap-1.5">
+            {partes.map((p) => (
+              <li
+                key={p.estado}
+                title={p.hint}
+                className="flex items-center justify-between gap-3 text-xs"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: p.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{p.name}</span>
+                </span>
+                <span className="shrink-0 tabular-nums">
+                  <b className="font-semibold">{p.value}</b>{" "}
+                  <span className="text-[#9AA5B4] dark:text-white/40">
+                    ({formatPct((p.value / total) * 100)})
+                  </span>
+                </span>
+              </li>
+            ))}
+            <li className="mt-1 border-t border-[#EEF1F5] pt-1.5 text-[11px] text-[#9AA5B4] dark:border-white/10 dark:text-white/40">
+              {total} recibidos en total
+            </li>
+          </ul>
+        </div>
+      )}
+    </Tarjeta>
+  );
+}
+
+/** Un decimal, como en el resto de porcentajes del producto. */
+function formatPct(valor: number): string {
+  return `${valor.toFixed(1)} %`;
 }
 
 /**

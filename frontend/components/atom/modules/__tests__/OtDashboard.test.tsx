@@ -13,6 +13,8 @@ import { OtDashboard } from "../OtDashboard";
 
 const fetchOtProfile = vi.fn();
 const fetchOtOperationalPanel = vi.fn();
+const fetchOtReport = vi.fn();
+const fetchTransitOffices = vi.fn();
 const fetchAnalyticsOverview = vi.fn();
 const fetchMonthlyTrend = vi.fn();
 
@@ -20,11 +22,18 @@ vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtProfile: (...args: unknown[]) => fetchOtProfile(...args),
 }));
 
+// El bloque del periodo reciente tiene su propia cobertura; aquí se dobla solo para que sus estados
+// no metan ruido en las aserciones de la cola.
+vi.mock("@/lib/api/admin-companies", () => ({
+  fetchTransitOffices: (...args: unknown[]) => fetchTransitOffices(...args),
+}));
+
 // Mock parcial: `report-columns` —de donde sale `formatHours`— también importa constantes de este
 // módulo, y un mock total las borraría.
 vi.mock("@/lib/api/ot-metrics", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/ot-metrics")>()),
   fetchOtOperationalPanel: (...args: unknown[]) => fetchOtOperationalPanel(...args),
+  fetchOtReport: (...args: unknown[]) => fetchOtReport(...args),
 }));
 
 // Las métricas del gestor se doblan para poder AFIRMAR que no se piden, que es el AC1.
@@ -70,6 +79,35 @@ describe("OtDashboard — vista inicial del organismo", () => {
     // nunca pediría el perfil y la aserción de AC1 quedaría midiendo la caché.
     window.sessionStorage.clear();
     fetchOtProfile.mockResolvedValue({ transitOfficeId: OT_ID });
+    fetchTransitOffices.mockResolvedValue([]);
+    // Periodo sin nada: sus dos tarjetas quedan en estado vacío, que no emite `alert`.
+    fetchOtReport.mockResolvedValue({
+      resumen: {
+        total: 0,
+        enRevision: 0,
+        esperandoPlaca: 0,
+        esperandoCliente: 0,
+        aprobados: 0,
+        enSubsanacion: 0,
+        rechazados: 0,
+        anulados: 0,
+        otros: 0,
+        decididos: 0,
+        devoluciones: 0,
+        devolucionesPromedio: 0,
+        tiempoMedianoHoras: null,
+        tiempoPromedioHoras: null,
+        tiempoP90Horas: null,
+        tiempoMedianoAprobacionHoras: null,
+        distribucionTiempos: [],
+        granularidad: "dia",
+        serie: [],
+      },
+      total: 0,
+      page: 1,
+      pageSize: 1,
+      filas: [],
+    });
   });
 
   it("AC1 — se alimenta de las métricas del organismo y no de las del gestor", async () => {

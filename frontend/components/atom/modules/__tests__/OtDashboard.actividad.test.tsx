@@ -55,7 +55,10 @@ const PANEL: OtOperationalPanel = {
   },
 };
 
-function informe(serie: OtReportSeriesPoint[]): OtReport {
+function informe(
+  serie: OtReportSeriesPoint[],
+  composicion: Partial<OtReport["resumen"]> = {},
+): OtReport {
   return {
     resumen: {
       total: 0,
@@ -67,6 +70,7 @@ function informe(serie: OtReportSeriesPoint[]): OtReport {
       rechazados: 0,
       anulados: 0,
       otros: 0,
+      ...composicion,
       decididos: 0,
       devoluciones: 0,
       devolucionesPromedio: 0,
@@ -117,6 +121,47 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     );
     expect(await screen.findByTestId("ot-inicio-actividad")).toBeInTheDocument();
     expect(screen.getByText("Actividad de los últimos 14 días")).toBeInTheDocument();
+  });
+
+  it("AC1 — la composición del periodo sale de la MISMA llamada, sin pedir el informe dos veces", async () => {
+    fetchOtReport.mockResolvedValue(
+      informe(CON_MOVIMIENTO, { enRevision: 3, aprobados: 5, rechazados: 2 }),
+    );
+    render(<OtDashboard />);
+
+    expect(await screen.findByTestId("ot-inicio-composicion")).toBeInTheDocument();
+    expect(screen.getByTestId("ot-inicio-actividad")).toBeInTheDocument();
+    // Dos tarjetas, una sola petición: la serie y el resumen vienen juntos en el informe.
+    expect(fetchOtReport).toHaveBeenCalledTimes(1);
+  });
+
+  it("AC1 — la composición usa el vocabulario del organismo y cierra contra el total", async () => {
+    fetchOtReport.mockResolvedValue(
+      informe(CON_MOVIMIENTO, { enRevision: 3, aprobados: 5, rechazados: 2 }),
+    );
+    render(<OtDashboard />);
+
+    const tarjeta = await screen.findByTestId("ot-inicio-composicion");
+    // Estados del ORGANISMO, no los crudos del trámite.
+    expect(tarjeta).toHaveTextContent("En revisión");
+    expect(tarjeta).toHaveTextContent("Aprobado");
+    expect(tarjeta).toHaveTextContent("Rechazado");
+    // 5 de 10 aprobados: la cifra del centro y el porcentaje de la fila coinciden.
+    expect(tarjeta).toHaveTextContent("50.0 %");
+    expect(tarjeta).toHaveTextContent("10 recibidos en total");
+    // Los estados sin trámites no ensucian la leyenda.
+    expect(tarjeta).not.toHaveTextContent("Anulado");
+    expect(tarjeta).not.toHaveTextContent("Esperando al cliente");
+  });
+
+  it("AC2 — sin nada recibido, la composición lo dice en vez de dibujar un anillo vacío", async () => {
+    fetchOtReport.mockResolvedValue(informe(CON_MOVIMIENTO));
+    render(<OtDashboard />);
+
+    expect(
+      await screen.findByText("No se recibió ningún trámite en los últimos 14 días."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("ot-inicio-composicion")).not.toBeInTheDocument();
   });
 
   it("AC2 — sin movimiento lo dice con palabras, no con un gráfico en blanco", async () => {
@@ -193,6 +238,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     render(<OtDashboard />);
 
     expect(await screen.findByText("No se pudo cargar la actividad reciente.")).toBeInTheDocument();
+    expect(screen.getByText("No se pudo cargar la composición del periodo.")).toBeInTheDocument();
     // La cola sigue en pie: es a lo que se entra a esta pantalla.
     expect(screen.getByText("Pendientes en total")).toBeInTheDocument();
     expect(screen.getByText("Por revisar")).toBeInTheDocument();
