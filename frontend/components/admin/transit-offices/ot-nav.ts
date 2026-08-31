@@ -84,6 +84,21 @@ function readCachedOtTransitOfficeId(): string | null {
 }
 
 /**
+ * Id del organismo de la sesión, con la misma caché de sesión que usa el dock: el perfil solo se
+ * pide una vez por pestaña. Lo consumen tanto la navegación del hub como la vista de inicio del
+ * Admin OT (HU #11940), que necesita el id sin querer navegar a ningún lado.
+ */
+export async function resolveOtTransitOfficeId(
+  fetchProfileId: () => Promise<string>,
+): Promise<string> {
+  const cached = readCachedOtTransitOfficeId();
+  if (cached) return cached;
+  const id = await fetchProfileId();
+  rememberOtTransitOfficeId(id);
+  return id;
+}
+
+/**
  * Resuelve la URL de un módulo del hub OT.
  * - Si la ruta ya tiene `{id}`, navega ahí.
  * - Admin OT: usa perfil (con caché de sesión).
@@ -102,11 +117,7 @@ export async function resolveOtHubHref(
   }
 
   if (mode === "ot_admin") {
-    const cached = readCachedOtTransitOfficeId();
-    if (cached) return otHubModulePath(cached, tab);
-    const id = await fetchProfileId();
-    rememberOtTransitOfficeId(id);
-    return otHubModulePath(id, tab);
+    return otHubModulePath(await resolveOtTransitOfficeId(fetchProfileId), tab);
   }
 
   return otHubListPath();
