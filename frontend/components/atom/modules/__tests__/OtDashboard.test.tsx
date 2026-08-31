@@ -112,7 +112,9 @@ describe("OtDashboard — vista inicial del organismo", () => {
   it("AC4 — el tramo de más de 7 días solo se resalta cuando tiene trámites", async () => {
     await renderReady();
 
-    const enCero = (await screen.findByText("Más de 7 días")).closest("div");
+    // El tramo puede ser un <div> (en cero, no navegable) o un <button> (con contenido); la clase
+    // de alarma se busca en el contenedor del tramo sea cual sea.
+    const enCero = (await screen.findByText("Más de 7 días")).closest("[class*='rounded-xl']");
     expect(enCero?.className).not.toContain("FF4E00");
 
     fetchOtOperationalPanel.mockResolvedValue(
@@ -129,7 +131,7 @@ describe("OtDashboard — vista inicial del organismo", () => {
     render(<OtDashboard />);
 
     await waitFor(() => expect(screen.getAllByText("Más de 7 días")).toHaveLength(2));
-    const conAtraso = screen.getAllByText("Más de 7 días")[1].closest("div");
+    const conAtraso = screen.getAllByText("Más de 7 días")[1].closest("[class*='rounded-xl']");
     expect(conAtraso?.className).toContain("FF4E00");
   });
 

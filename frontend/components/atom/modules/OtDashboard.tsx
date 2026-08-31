@@ -1,6 +1,6 @@
 "use client";
 
-// Vista inicial de una sesión de organismo de tránsito (Feature #11939 / HU #11940).
+// Vista inicial de una sesión de organismo de tránsito (Feature #11939 / HU #11940, #11941).
 //
 // Existe porque `Dashboard` —el inicio del gestor— le pregunta a `/analytics/*` y a
 // `/tramites/biometric-validations`, y las tres llamadas filtran por el tenant de quien llama. Un
@@ -21,8 +21,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock, Inbox, Timer } from "lucide-react";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
-import { fetchOtOperationalPanel, type OtOperationalPanel } from "@/lib/api/ot-metrics";
+import {
+  fetchOtDrilldown,
+  fetchOtOperationalPanel,
+  OT_DRILLDOWN_BUCKETS,
+  type OtDrilldownBucket,
+  type OtMetricsParams,
+  type OtOperationalPanel,
+} from "@/lib/api/ot-metrics";
 import { resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
+import {
+  DrilldownPanel,
+  type DrilldownState,
+} from "@/components/admin/transit-offices/_reportes/DrilldownPanel";
 import { defaultRange } from "@/components/admin/transit-offices/_reportes/filters";
 import { formatHours } from "@/components/admin/transit-offices/_reportes/report-columns";
 
@@ -34,11 +45,16 @@ const VENTANA_MEDIANA_DIAS = 30;
 
 type Estado = "cargando" | "listo" | "error";
 
+/** Abre el detalle de un bloque del panel. `null` en los indicadores que no son navegables. */
+type AbrirBloque = (bucket: OtDrilldownBucket, label: string) => void;
+
 export function OtDashboard() {
   const [panel, setPanel] = useState<OtOperationalPanel | null>(null);
+  const [params, setParams] = useState<OtMetricsParams | null>(null);
   const [estado, setEstado] = useState<Estado>("cargando");
   const [mensajeError, setMensajeError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
+  const [drilldown, setDrilldown] = useState<DrilldownState | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,9 +68,10 @@ export function OtDashboard() {
           return perfil.transitOfficeId;
         });
         // El rango solo gobierna la mediana; la cola y la antigüedad describen este momento.
-        const rango = defaultRange();
-        const datos = await fetchOtOperationalPanel({ ...rango, transitOfficeId });
+        const consulta: OtMetricsParams = { ...defaultRange(), transitOfficeId };
+        const datos = await fetchOtOperationalPanel(consulta);
         if (controller.signal.aborted) return;
+        setParams(consulta);
         setPanel(datos);
         setEstado("listo");
       } catch (err) {
@@ -74,6 +91,27 @@ export function OtDashboard() {
 
   const reintentar = useCallback(() => setIntento((n) => n + 1), []);
 
+  // El detalle se pide con los MISMOS parámetros del panel, para que la lista nunca contradiga a la
+  // tarjeta que la abrió: es el backend quien recalcula el bloque con idénticos predicados.
+  const abrirBloque = useCallback<AbrirBloque>(
+    (bucket, label) => {
+      if (!params) return;
+      setDrilldown({ bucket, label, loading: true, error: null, data: null });
+      fetchOtDrilldown(params, bucket)
+        .then((data) => setDrilldown({ bucket, label, loading: false, error: null, data }))
+        .catch((e: unknown) =>
+          setDrilldown({
+            bucket,
+            label,
+            loading: false,
+            error: e instanceof Error ? e.message : "No se pudo cargar el detalle.",
+            data: null,
+          }),
+        );
+    },
+    [params],
+  );
+
   return (
     <div
       className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-[#162744] dark:text-white"
@@ -89,8 +127,14 @@ export function OtDashboard() {
       {estado === "error" ? (
         <ErrorPanel message={mensajeError} onRetry={reintentar} />
       ) : (
-        <PanelOperativo panel={estado === "listo" ? panel : null} />
+        <PanelOperativo panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
       )}
+
+      <DrilldownPanel
+        state={drilldown}
+        transitOfficeId={params?.transitOfficeId ?? ""}
+        onClose={() => setDrilldown(null)}
+      />
     </div>
   );
 }
@@ -123,7 +167,13 @@ function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () 
   );
 }
 
-function PanelOperativo({ panel }: { panel: OtOperationalPanel | null }) {
+function PanelOperativo({
+  panel,
+  onAbrir,
+}: {
+  panel: OtOperationalPanel | null;
+  onAbrir: AbrirBloque;
+}) {
   const cargando = panel === null;
   const movimiento = panel?.movimiento;
   const cola = panel?.cola;
@@ -140,6 +190,7 @@ function PanelOperativo({ panel }: { panel: OtOperationalPanel | null }) {
           cargando={cargando}
           color="#557EFF"
           icon={Inbox}
+          onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, "Esperan mi decisión")}
         />
         <Kpi
           label="Pendientes en total"
@@ -148,6 +199,7 @@ function PanelOperativo({ panel }: { panel: OtOperationalPanel | null }) {
           color="#F9AC00"
           icon={Clock}
           hint="Incluye lo que espera a un tercero"
+          onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
         />
         <Kpi
           label="Entregados hoy"
@@ -155,6 +207,7 @@ function PanelOperativo({ panel }: { panel: OtOperationalPanel | null }) {
           cargando={cargando}
           color="#8CC63F"
           icon={CheckCircle2}
+          onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, "Entregados hoy")}
         />
         <Kpi
           label="Tiempo mediano de decisión"
@@ -165,6 +218,7 @@ function PanelOperativo({ panel }: { panel: OtOperationalPanel | null }) {
           color="#00DBD5"
           icon={Timer}
           hint={`Últimos ${VENTANA_MEDIANA_DIAS} días`}
+          // Una mediana no es un conjunto de trámites: no hay lista que abrir detrás.
         />
       </div>
 
@@ -186,16 +240,23 @@ function PanelOperativo({ panel }: { panel: OtOperationalPanel | null }) {
                   value={cola?.porRevisar ?? 0}
                   total={pendientes}
                   miTurno
+                  onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, "Por revisar")}
                 />
                 <Espera
                   label="Esperando asignar placa"
                   value={cola?.esperandoAsignarPlaca ?? 0}
                   total={pendientes}
+                  onAbrir={() =>
+                    onAbrir(OT_DRILLDOWN_BUCKETS.esperandoPlaca, "Esperando asignar placa")
+                  }
                 />
                 <Espera
                   label="En espera del cliente"
                   value={cola?.enEsperaDelCliente ?? 0}
                   total={pendientes}
+                  onAbrir={() =>
+                    onAbrir(OT_DRILLDOWN_BUCKETS.enEsperaDelCliente, "En espera del cliente")
+                  }
                 />
                 <p className="text-[11px] text-[#9AA5B4] dark:text-white/40">
                   Solo «Por revisar» espera una acción del organismo.
@@ -209,10 +270,29 @@ function PanelOperativo({ panel }: { panel: OtOperationalPanel | null }) {
               <Esqueleto filas={1} />
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Tramo label="0–1 día" value={antiguedad?.hasta1Dia ?? 0} />
-                <Tramo label="2–3 días" value={antiguedad?.entre2y3Dias ?? 0} />
-                <Tramo label="4–7 días" value={antiguedad?.entre4y7Dias ?? 0} />
-                <Tramo label="Más de 7 días" value={antiguedad?.masDe7Dias ?? 0} alarma />
+                <Tramo
+                  label="0–1 día"
+                  value={antiguedad?.hasta1Dia ?? 0}
+                  onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.hasta1Dia, "Pendientes de 0–1 día")}
+                />
+                <Tramo
+                  label="2–3 días"
+                  value={antiguedad?.entre2y3Dias ?? 0}
+                  onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entre2y3Dias, "Pendientes de 2–3 días")}
+                />
+                <Tramo
+                  label="4–7 días"
+                  value={antiguedad?.entre4y7Dias ?? 0}
+                  onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entre4y7Dias, "Pendientes de 4–7 días")}
+                />
+                <Tramo
+                  label="Más de 7 días"
+                  value={antiguedad?.masDe7Dias ?? 0}
+                  alarma
+                  onAbrir={() =>
+                    onAbrir(OT_DRILLDOWN_BUCKETS.masDe7Dias, "Pendientes de más de 7 días")
+                  }
+                />
               </div>
             )}
           </Tarjeta>
@@ -237,6 +317,40 @@ function Tarjeta({ titulo, children }: { titulo?: string; children: React.ReactN
   );
 }
 
+/**
+ * Envoltorio de un indicador navegable. Un bloque en cero NO se ofrece como enlace: llevaría a una
+ * lista vacía, que es una promesa incumplida, y enseña a desconfiar del resto de los números.
+ */
+function Navegable({
+  navegable,
+  etiqueta,
+  className,
+  onAbrir,
+  children,
+}: {
+  navegable: boolean;
+  etiqueta: string;
+  className: string;
+  onAbrir?: () => void;
+  children: React.ReactNode;
+}) {
+  if (!navegable || !onAbrir) {
+    return <div className={className}>{children}</div>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      // El nombre accesible dice a dónde lleva: el texto visible es una etiqueta y un número, que
+      // por sí solos no anuncian que haya una lista detrás.
+      aria-label={etiqueta}
+      className={`${className} text-left transition hover:border-[#557EFF] hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Kpi({
   label,
   value,
@@ -244,6 +358,7 @@ function Kpi({
   color,
   icon: Icon,
   hint,
+  onAbrir,
 }: {
   label: string;
   value: number | string | undefined;
@@ -251,9 +366,16 @@ function Kpi({
   color: string;
   icon: typeof Inbox;
   hint?: string;
+  onAbrir?: () => void;
 }) {
+  const numero = typeof value === "number" ? value : null;
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]">
+    <Navegable
+      navegable={!cargando && numero !== null && numero > 0}
+      etiqueta={`Ver los ${numero} trámites: ${label.toLowerCase()}`}
+      onAbrir={onAbrir}
+      className="flex w-full items-center justify-between rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
+    >
       <div className="min-w-0">
         <p className="text-[11px] font-medium opacity-70">{label}</p>
         <p className="mt-1 text-3xl font-bold tabular-nums" style={{ color }}>
@@ -267,7 +389,7 @@ function Kpi({
       >
         <Icon className="h-5 w-5" style={{ color }} aria-hidden="true" />
       </div>
-    </div>
+    </Navegable>
   );
 }
 
@@ -280,15 +402,22 @@ function Espera({
   value,
   total,
   miTurno,
+  onAbrir,
 }: {
   label: string;
   value: number;
   total: number;
   miTurno?: boolean;
+  onAbrir?: () => void;
 }) {
   const pct = total === 0 ? 0 : Math.min(100, Math.round((value / total) * 100));
   return (
-    <div className="grid grid-cols-[minmax(7rem,11rem)_1fr_auto] items-center gap-3 text-xs">
+    <Navegable
+      navegable={value > 0}
+      etiqueta={`Ver los ${value} trámites: ${label.toLowerCase()}`}
+      onAbrir={onAbrir}
+      className="grid grid-cols-[minmax(7rem,11rem)_1fr_auto] items-center gap-3 rounded-lg text-xs"
+    >
       <span className="truncate" title={label}>
         {label}
         {miTurno && <span className="sr-only"> (espera una acción del organismo)</span>}
@@ -303,7 +432,7 @@ function Espera({
         />
       </span>
       <span className="font-semibold tabular-nums">{value}</span>
-    </div>
+    </Navegable>
   );
 }
 
@@ -311,23 +440,34 @@ function Espera({
  * Tramo de antigüedad. La alarma se enciende solo con contenido: un bloque resaltado siempre en cero
  * enseña a ignorar el resaltado justo cuando sí importa.
  */
-function Tramo({ label, value, alarma }: { label: string; value: number; alarma?: boolean }) {
+function Tramo({
+  label,
+  value,
+  alarma,
+  onAbrir,
+}: {
+  label: string;
+  value: number;
+  alarma?: boolean;
+  onAbrir?: () => void;
+}) {
   const encendida = Boolean(alarma) && value > 0;
   return (
-    <div
-      className={`rounded-xl border px-3 py-3 text-center ${
+    <Navegable
+      navegable={value > 0}
+      etiqueta={`Ver los ${value} trámites pendientes de ${label.toLowerCase()}`}
+      onAbrir={onAbrir}
+      className={`w-full rounded-xl border px-3 py-3 text-center ${
         encendida
           ? "border-[#FF4E00]/45 bg-[#FF4E00]/[0.06]"
           : "border-[#DFE5ED] dark:border-white/10"
       }`}
     >
-      <p
-        className={`text-2xl font-bold tabular-nums ${encendida ? "text-[#FF4E00]" : ""}`}
-      >
+      <p className={`text-2xl font-bold tabular-nums ${encendida ? "text-[#FF4E00]" : ""}`}>
         {value}
       </p>
       <p className="mt-0.5 text-[10px] text-[#6B7280] dark:text-white/50">{label}</p>
-    </div>
+    </Navegable>
   );
 }
 
