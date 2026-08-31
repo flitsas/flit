@@ -139,7 +139,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
         if (active) {
           setPreflight({
             loading: false,
-            error: err instanceof Error ? err.message : 'No se pudo cargar el pre-vuelo de requisitos.',
+            error: err instanceof Error ? err.message : 'No se pudo cargar la verificación de requisitos.',
             data: null,
           });
         }
@@ -177,22 +177,22 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
       </TarjetaDetalle>
 
       <TarjetaDetalle
-        titulo="Pre-vuelo de requisitos"
+        titulo="Verificación de requisitos"
         accion={overall ? <StatusBadge label={overall.label} tone={overall.tone} /> : null}
       >
         {preflight.loading ? (
-          <SeccionCargando etiqueta="Cargando pre-vuelo de requisitos" filas={4} />
+          <SeccionCargando etiqueta="Cargando verificación de requisitos" filas={4} />
         ) : preflight.error ? (
           <SeccionError
             mensaje={preflight.error}
             onReintentar={() => setPreflightIntento((n) => n + 1)}
           />
         ) : !preflight.data ? (
-          <SeccionVacia mensaje="Este trámite no tiene un pre-vuelo de requisitos ejecutado (RUNT/SIMIT/RNMC). Se ejecuta desde el asistente, no desde este detalle." />
+          <SeccionVacia mensaje="Este trámite no tiene una verificación de requisitos ejecutada (RUNT/SIMIT/RNMC). Se ejecuta desde el asistente, no desde este detalle." />
         ) : checks.length === 0 ? (
-          <SeccionVacia mensaje="El pre-vuelo no registró resultados individuales por requisito." />
+          <SeccionVacia mensaje="La verificación no registró resultados individuales por requisito." />
         ) : (
-          <ul className="flex flex-col gap-2" aria-label="Resultados del pre-vuelo">
+          <ul className="flex flex-col gap-2" aria-label="Resultados de la verificación">
             {checks.map((check) => {
               const tone = CHECK_STATUS_TONE[check.status];
               const word = statusPillWord(check.status);

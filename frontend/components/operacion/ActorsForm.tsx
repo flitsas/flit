@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -52,6 +53,7 @@ import {
   WIZARD_CTA_GRADIENT,
   WIZARD_BTN_SOLID,
 } from './wizard-field-styles';
+import { EscrituraRepresentanteUpload } from './EscrituraRepresentanteUpload';
 import { WizardCardHeader } from './wizard-atoms';
 import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
@@ -125,6 +127,17 @@ interface Props {
    * identidad exitosa (RUNT / RUES / directorio). Sin consulta OK, Continuar permanece deshabilitado.
    */
   onConsultationGateChange?: (ready: boolean) => void;
+  /**
+   * Gate de avance del paso: `false` mientras alguna parte jurídica tenga un representante legal que
+   * NO está en el módulo de representantes de la compañía y todavía no haya cargado la escritura que
+   * lo acredita. Sin esa escritura no se pasa a Requisitos.
+   *
+   * <p>Es un gate propio y no una variante de {@link onConsultationGateChange}: aquel responde si la
+   * identidad de la parte se pudo CONSULTAR, y este si el representante capturado está ACREDITADO.
+   * Un representante fuera del directorio puede consultarse en el RUNT sin problema —de hecho es el
+   * camino normal para capturarlo— y aun así seguir sin escritura que lo faculte.</p>
+   */
+  onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
 }
 
 /** ¿La consulta de identidad resolvió datos? Gate duro de avance/guardado. */
@@ -371,6 +384,15 @@ type RlBaselineDoc = {
   numeroDocumento?: string;
   mecanismoFirma?: MecanismoFirma;
 };
+
+/**
+ * Situación del representante legal capturado frente al módulo de representantes de la compañía.
+ *
+ * <p>`sin_directorio` es la compañía que no está en el módulo, y `desconocido` el dato que todavía
+ * no se puede responder (aún no hay representante escrito, o la lectura del directorio falló).
+ * Ninguno de los dos exige escritura: son ausencia de respuesta, no una respuesta negativa.</p>
+ */
+type RlDirectorioEstado = 'desconocido' | 'registrado' | 'no_registrado' | 'sin_directorio';
 
 type ActorConsultationCacheEntry = {
   rol: ActorRol;
@@ -663,6 +685,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     autoConsultRunt = false,
     rnmcEnabled = false,
     onConsultationGateChange,
+    onEscrituraRepresentanteGateChange,
   },
   ref,
 ) {
@@ -799,6 +822,151 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [selectedRepIdx, setSelectedRepIdx] = useState<Record<number, number>>({});
   /** Tras consultar un RL que NO está en el directorio, la precarga de firma deja de usarse. */
   const [directoryAbandoned, setDirectoryAbandoned] = useState<Record<number, boolean>>({});
+
+  /**
+   * ¿El representante legal capturado está registrado en el módulo de representantes de la compañía?
+   *
+   * <p>De esta pregunta cuelga si hay que exigir la escritura: un representante del directorio ya
+   * tiene la suya allí y el sistema la apalanca sola; uno que no está no tiene ninguna, y sin ella
+   * el trámite se radicaría sin el documento que faculta a quien firma.</p>
+   *
+   * <p><b>Por qué no se deriva de `needsRlRunt`.</b> Ese predicado —como todo el bloque de precarga—
+   * cuelga de `runt[index]`, que es el resultado de una consulta viva rehidratada desde
+   * `sessionStorage`. Sirve para pintar avisos, pero no para un gate: basta abrir el trámite en otra
+   * pestaña para que el estado nazca vacío y el gate se abriera solo. Aquí la pregunta se responde
+   * contra el DIRECTORIO, releyéndolo si hace falta, así que sobrevive a recargar y a cambiar de
+   * pestaña.</p>
+   *
+   * <p><b>`sin_directorio` no exige nada, a propósito.</b> Es la compañía que no está en el módulo:
+   * entonces nunca hubo precarga que cambiar, la captura del representante fue manual desde el
+   * principio y este gate no aplica (comportamiento de siempre). `desconocido` cubre lo mismo por la
+   * vía del dato ausente o de una lectura que falló: el gate no bloquea con una respuesta que no
+   * tiene — dejar encerrado al gestor porque el directorio no respondió sería peor que la fuga que
+   * este gate evita.</p>
+   */
+  const [rlDirectorio, setRlDirectorio] = useState<Record<number, RlDirectorioEstado>>({});
+  /** Directorios ya leídos en este montaje, por NIT: la respuesta no cambia entre actores. */
+  const directorioPorNitRef = useRef<Map<string, LegalRepresentativeLookupResult | null>>(new Map());
+
+  /**
+   * Firma estable de lo ÚNICO que cambia la respuesta: por actor jurídico, su NIT y el documento del
+   * representante. Sin ella el efecto se dispararía en cada render —`actors` es un arreglo nuevo
+   * siempre— y con él la lectura del directorio.
+   */
+  const rlDirectorioFirma = actors
+    .map((a, i) =>
+      isJuridical(a)
+        ? [
+            i,
+            normalizeNitKey(a.numeroDocumento),
+            a.representanteLegal?.tipoDocumento ?? '',
+            (a.representanteLegal?.numeroDocumento ?? '').trim(),
+          ].join(':')
+        : `${i}:-`,
+    )
+    .join('|');
+
+  /**
+   * Primera evaluación hecha. Gobierna la espera de abajo: la primera va sin ella (el borrador ya
+   * trae el representante escrito y el gate debe nacer cerrado si corresponde), y las siguientes
+   * con ella (el gestor está tecleando).
+   */
+  const rlDirectorioEvaluadoRef = useRef(false);
+
+  useEffect(() => {
+    const juridicos = actors
+      .map((a, i) => ({ a, i }))
+      .filter(({ a }) => isJuridical(a));
+    if (juridicos.length === 0) {
+      setRlDirectorio((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+
+    let active = true;
+
+    const evaluar = async () => {
+      const next: Record<number, RlDirectorioEstado> = {};
+      for (const { a, i } of juridicos) {
+        const nit = a.numeroDocumento.trim();
+        const rlTipo = a.representanteLegal?.tipoDocumento ?? 'CC';
+        const rlNumero = (a.representanteLegal?.numeroDocumento ?? '').trim();
+        // Sin representante capturado todavía no hay a quién acreditar (ni qué exigir).
+        if (!nit || !rlNumero) {
+          next[i] = 'desconocido';
+          continue;
+        }
+
+        // La consulta viva, si está, evita la lectura; si no, se lee el directorio.
+        let directory = directoryFromLookup(runtRef.current[i]);
+        if (!directory) {
+          const key = normalizeNitKey(nit);
+          if (directorioPorNitRef.current.has(key)) {
+            directory = directorioPorNitRef.current.get(key) ?? null;
+          } else {
+            try {
+              directory = await tramitesClient.lookupLegalRepresentativeByNit(nit);
+              directorioPorNitRef.current.set(key, directory);
+            } catch {
+              // Fallo de lectura: no se cachea (para reintentar) y no se bloquea.
+              next[i] = 'desconocido';
+              continue;
+            }
+          }
+        }
+        if (!active) return;
+
+        next[i] =
+          !directory || repsOf(directory).length === 0
+            ? 'sin_directorio'
+            : findDirectoryRep(directory, rlTipo, rlNumero)
+              ? 'registrado'
+              : 'no_registrado';
+      }
+      if (!active) return;
+      rlDirectorioEvaluadoRef.current = true;
+      setRlDirectorio(next);
+    };
+
+    // Cédula A MEDIO ESCRIBIR: cada tecla deja un documento que no está en el directorio, así que sin
+    // esta espera el bloque de la escritura aparece y desaparece mientras el gestor teclea —y con él
+    // el "Continuar" del pie, parpadeando entre habilitado y no—. Solo se evalúa lo que el gestor
+    // terminó de escribir. La PRIMERA evaluación no espera: al abrir un borrador el representante ya
+    // está escrito, y retrasarla dejaría el gate abierto durante ese tiempo.
+    if (!rlDirectorioEvaluadoRef.current) {
+      void evaluar();
+      return () => {
+        active = false;
+      };
+    }
+
+    const espera = setTimeout(() => void evaluar(), 400);
+    return () => {
+      active = false;
+      clearTimeout(espera);
+    };
+    // `actors` entra por `rlDirectorioFirma`, que es su proyección estable (ver arriba).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rlDirectorioFirma]);
+
+  /** El representante de esta parte hay que acreditarlo con escritura (no está en el directorio). */
+  const exigeEscrituraRl = (index: number): boolean => rlDirectorio[index] === 'no_registrado';
+
+  /** Escritura del representante ya adjunta, por índice de actor. */
+  const [escrituraRlAdjunta, setEscrituraRlAdjunta] = useState<Record<number, boolean>>({});
+  const marcarEscrituraRl = useCallback((index: number, satisfied: boolean) => {
+    // Se compara antes de escribir: el hijo reporta en cada render y sin esto el ciclo no cerraría.
+    setEscrituraRlAdjunta((prev) =>
+      prev[index] === satisfied ? prev : { ...prev, [index]: satisfied },
+    );
+  }, []);
+
+  /** Gate del paso: ninguna parte que deba acreditar a su representante se quedó sin escritura. */
+  const escrituraRlGateOk = actors.every(
+    (_, i) => !exigeEscrituraRl(i) || escrituraRlAdjunta[i] === true,
+  );
+  useEffect(() => {
+    onEscrituraRepresentanteGateChange?.(escrituraRlGateOk);
+  }, [escrituraRlGateOk, onEscrituraRepresentanteGateChange]);
   const [rlSwitchConfirm, setRlSwitchConfirm] = useState<{ variant: 'runt' | 'preload' } | null>(
     null,
   );
@@ -2433,6 +2601,19 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               className={`${INPUT_BASE} mt-1.5`}
             />
           </div>
+          {/* La escritura del representante que NO está en el directorio de la compañía. Va aquí,
+              pegada a sus datos, porque es lo que acredita a la persona que se acaba de capturar:
+              mandarla a Requisitos obligaría al gestor a recordar dos pasos más allá por qué se la
+              piden. Sin ella el pie del asistente no deja pasar al siguiente paso. */}
+          {exigeEscrituraRl(index) && (
+            <div className="lg:col-span-4">
+              <EscrituraRepresentanteUpload
+                instanceId={instanceId}
+                rol={actor.rol}
+                onSatisfiedChange={(satisfied) => marcarEscrituraRl(index, satisfied)}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
