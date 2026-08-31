@@ -19,22 +19,34 @@
 // solo número. Es la misma conclusión —y por el mismo motivo— que ya documenta `OtNowTab`.
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { AlertTriangle, CheckCircle2, Clock, Inbox, Timer } from "lucide-react";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
+import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import {
   fetchOtDrilldown,
   fetchOtOperationalPanel,
+  fetchOtReport,
   OT_DRILLDOWN_BUCKETS,
   type OtDrilldownBucket,
   type OtMetricsParams,
   type OtOperationalPanel,
+  type OtReportSeriesPoint,
 } from "@/lib/api/ot-metrics";
 import { resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import {
   DrilldownPanel,
   type DrilldownState,
 } from "@/components/admin/transit-offices/_reportes/DrilldownPanel";
-import { defaultRange } from "@/components/admin/transit-offices/_reportes/filters";
+import { defaultRange, lastDaysRange } from "@/components/admin/transit-offices/_reportes/filters";
 import { formatHours } from "@/components/admin/transit-offices/_reportes/report-columns";
 
 /**
@@ -42,6 +54,9 @@ import { formatHours } from "@/components/admin/transit-offices/_reportes/report
  * así que no puede deducirla. Coincide con el rango que se manda al endpoint (`defaultRange`).
  */
 const VENTANA_MEDIANA_DIAS = 30;
+
+/** Ventana de la franja de actividad. Corta a propósito: aquí se mira el ritmo, no la historia. */
+const ACTIVIDAD_DIAS = 14;
 
 type Estado = "cargando" | "listo" | "error";
 
@@ -55,6 +70,7 @@ export function OtDashboard() {
   const [mensajeError, setMensajeError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
   const [drilldown, setDrilldown] = useState<DrilldownState | null>(null);
+  const [organismo, setOrganismo] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -89,6 +105,23 @@ export function OtDashboard() {
     return () => controller.abort();
   }, [intento]);
 
+  // Nombre del organismo para la bienvenida. Va por su cuenta y falla en silencio: si el catálogo no
+  // responde, la cabecera se queda sin nombre pero la cola —que es a lo que se viene— se sigue
+  // viendo. Mismo origen que usa la cabecera del hub OT.
+  useEffect(() => {
+    const transitOfficeId = params?.transitOfficeId;
+    if (!transitOfficeId) return;
+    const controller = new AbortController();
+    void fetchTransitOffices(undefined, controller.signal)
+      .then((catalogo) => {
+        if (controller.signal.aborted) return;
+        const oficina = catalogo.find((o) => o.id === transitOfficeId);
+        if (oficina) setOrganismo(`${oficina.name} (${oficina.code})`);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [params?.transitOfficeId]);
+
   const reintentar = useCallback(() => setIntento((n) => n + 1), []);
 
   // El detalle se pide con los MISMOS parámetros del panel, para que la lista nunca contradiga a la
@@ -117,12 +150,7 @@ export function OtDashboard() {
       className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-[#162744] dark:text-white"
       data-testid="ot-inicio"
     >
-      <header>
-        <h1 className="text-2xl font-bold leading-tight md:text-3xl">Tu cola de trabajo</h1>
-        <p className="mt-1 text-sm text-[#6B7280] dark:text-white/50">
-          Estado de este momento y movimiento del día calendario de Bogotá.
-        </p>
-      </header>
+      <Bienvenida organismo={organismo} />
 
       {estado === "error" ? (
         <ErrorPanel message={mensajeError} onRetry={reintentar} />
@@ -130,12 +158,119 @@ export function OtDashboard() {
         <PanelOperativo panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
       )}
 
+      <Actividad transitOfficeId={params?.transitOfficeId} />
+
       <DrilldownPanel
         state={drilldown}
         transitOfficeId={params?.transitOfficeId ?? ""}
         onClose={() => setDrilldown(null)}
       />
     </div>
+  );
+}
+
+/**
+ * Bienvenida del organismo.
+ *
+ * Sustituye al carrusel del gestor, que anunciaba «validación de identidad con IA ya integrada en
+ * TUS trámites»: un organismo no radica trámites ni valida biometrías, así que ese anuncio no
+ * describía nada suyo. Se cambió por una sola banda en vez de un carrusel porque las otras dos
+ * diapositivas tampoco tenían equivalente honesto aquí —inventar novedades para llenarlas habría
+ * sido el mismo defecto— y porque un bloque de 220 px rotando empujaba la cola bajo el pliegue.
+ */
+function Bienvenida({ organismo }: { organismo: string | null }) {
+  return (
+    <header
+      className="rounded-2xl px-6 py-5 text-white"
+      style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+        {organismo ?? "Organismo de tránsito"}
+      </p>
+      <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">Tu cola de trabajo</h1>
+      <p className="mt-1 text-sm opacity-90">
+        Estado de este momento y movimiento del día calendario de Bogotá.
+      </p>
+    </header>
+  );
+}
+
+/**
+ * Franja de actividad reciente: el ritmo, no la historia.
+ *
+ * Va en su propia llamada y con su propio ciclo de carga a propósito. Si el informe falla, la cola
+ * —que es a lo que se entra a esta pantalla— se sigue viendo; acoplarlas habría convertido un fallo
+ * secundario en una pantalla en blanco.
+ */
+function Actividad({ transitOfficeId }: { transitOfficeId: string | undefined }) {
+  const [serie, setSerie] = useState<OtReportSeriesPoint[] | null>(null);
+  const [estado, setEstado] = useState<Estado>("cargando");
+
+  useEffect(() => {
+    if (!transitOfficeId) return;
+    const controller = new AbortController();
+
+    async function cargar() {
+      setEstado("cargando");
+      try {
+        const informe = await fetchOtReport(
+          {
+            ...lastDaysRange(ACTIVIDAD_DIAS),
+            transitOfficeId,
+            // El informe pagina filas que aquí no se usan: solo interesa `resumen.serie`. Se pide la
+            // página mínima para no arrastrar un listado entero por una gráfica.
+            page: 1,
+            pageSize: 1,
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        setSerie(informe.resumen.serie);
+        setEstado("listo");
+      } catch (err) {
+        if (controller.signal.aborted || (err as Error)?.name === "AbortError") return;
+        setEstado("error");
+      }
+    }
+
+    void cargar();
+    return () => controller.abort();
+  }, [transitOfficeId]);
+
+  const hayMovimiento = (serie ?? []).some(
+    (p) => p.radicados > 0 || p.aprobados > 0 || p.rechazados > 0,
+  );
+
+  return (
+    <Tarjeta titulo={`Actividad de los últimos ${ACTIVIDAD_DIAS} días`}>
+      {estado === "cargando" && <Esqueleto filas={1} />}
+      {estado === "error" && (
+        <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+          No se pudo cargar la actividad reciente.
+        </p>
+      )}
+      {estado === "listo" && !hayMovimiento && (
+        // Un gráfico en blanco no distingue «no pasó nada» de «no cargó». Se dice con palabras.
+        <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+          No hubo movimiento en los últimos {ACTIVIDAD_DIAS} días.
+        </p>
+      )}
+      {estado === "listo" && hayMovimiento && (
+        <div className="h-56 w-full" data-testid="ot-inicio-actividad">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={serie ?? []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#EEF1F5" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+              <Tooltip cursor={{ fill: "rgba(85,126,255,0.06)" }} />
+              <Bar dataKey="radicados" name="Radicados" fill="#557EFF" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="aprobados" name="Aprobados" fill="#8CC63F" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="rechazados" name="Rechazados" fill="#FF4E00" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </Tarjeta>
   );
 }
 

@@ -24,11 +24,16 @@ function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Ventana de los últimos `dias` días contando hoy. */
+export function lastDaysRange(dias: number, reference: Date = new Date()): DateRange {
+  const start = new Date(reference);
+  start.setDate(start.getDate() - (dias - 1));
+  return { from: toIsoDate(start), to: toIsoDate(reference) };
+}
+
 /** Rango por defecto: últimos 30 días, la ventana con la que se mira una operación. */
 export function defaultRange(reference: Date = new Date()): DateRange {
-  const start = new Date(reference);
-  start.setDate(start.getDate() - 29);
-  return { from: toIsoDate(start), to: toIsoDate(reference) };
+  return lastDaysRange(30, reference);
 }
 
 /**
