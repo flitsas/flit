@@ -18,8 +18,8 @@ public sealed class PreviewFurHandlerTests
 
     public PreviewFurHandlerTests()
     {
-        _resolver.ResolveAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(FurTemplateFormat.Automotor);
+        _resolver.ResolveMatchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new FurClassificationMatch(FurTemplateFormat.Automotor, "AUTOMOVIL"));
         _handler = new PreviewFurHandler(_types, _generator, _resolver);
     }
 
@@ -129,14 +129,14 @@ public sealed class PreviewFurHandlerTests
             Family = "MATRICULAS",
             Name = "Matrícula inicial",
         });
-        _resolver.ResolveAsync("EXCAVADORA", Arg.Any<CancellationToken>())
-            .Returns(FurTemplateFormat.Maquinaria);
+        _resolver.ResolveMatchAsync("EXCAVADORA", Arg.Any<CancellationToken>())
+            .Returns(new FurClassificationMatch(FurTemplateFormat.Maquinaria, "CONSTRUCCION"));
 
         var result = await _handler.HandleAsync(
             new PreviewFurRequest(id, "natural", "natural", null, VehicleClass: "EXCAVADORA"),
             TestContext.Current.CancellationToken);
         result.Status.Should().Be(PreviewFurStatus.Ok);
         result.Document.Should().NotBeNull();
-        await _resolver.Received(1).ResolveAsync("EXCAVADORA", Arg.Any<CancellationToken>());
+        await _resolver.Received(1).ResolveMatchAsync("EXCAVADORA", Arg.Any<CancellationToken>());
     }
 }

@@ -70,7 +70,7 @@ public static class FurFieldMapper
 
         MarkTramite(dict, data);
         MarkAlertas(dict, data);
-        MarkClase(dict, data.Vehiculo.Clase);
+        MarkClase(dict, data);
         MarkCombustible(dict, data.Vehiculo.Combustible);
         MarkServicio(dict, data.Vehiculo.TipoServicio);
         MarkCheckbox(dict, "is_armored_vehicle_yes", data.Transformaciones.Blindaje);
@@ -239,12 +239,14 @@ public static class FurFieldMapper
     private static bool MarcaOtroPorTipo(string code) =>
         code is "DUPLICADO_PLACA" or "DUPLICADO_TARJETA" or "RADICADO_CUENTA" or "TRASLADO_CUENTA";
 
-    private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)
+    private static void MarkClase(Dictionary<string, FurFieldValue> dict, FurDocumentData data)
     {
-        var n = Norm(clase);
-        MarkCheckbox(dict, "vehicle_class_1", n.Contains("AUTOMOVIL"));
-        MarkCheckbox(dict, "vehicle_class_5", n.Contains("CAMIONETA"));
-        MarkCheckbox(dict, "vehicle_class_9", n.Contains("MOTOCICLETA") || n == "MOTO");
+        var token = string.IsNullOrWhiteSpace(data.FieldToFill)
+            ? data.Vehiculo.Clase
+            : data.FieldToFill;
+        var markId = FurNumeral4Marks.FieldId(token);
+        foreach (var id in FurNumeral4Marks.IdsFor(data.TemplateFormat))
+            MarkCheckbox(dict, id, markId.Length > 0 && string.Equals(id, markId, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void MarkCombustible(Dictionary<string, FurFieldValue> dict, string? combustible)

@@ -85,14 +85,15 @@ public sealed class PreviewFurHandler(
         FurDocumentData data;
         if (!string.IsNullOrWhiteSpace(request.VehicleClass))
         {
-            var format = await templateResolver.ResolveAsync(request.VehicleClass, ct).ConfigureAwait(false);
+            var match = await templateResolver.ResolveMatchAsync(request.VehicleClass, ct).ConfigureAwait(false);
             data = FurPreviewSample.BuildFromClassification(
                 type.Code,
                 type.Family,
                 sellerKind,
                 buyerKind,
                 request.VehicleClass,
-                format,
+                match.Format,
+                match.FieldToFill,
                 flags);
         }
         else

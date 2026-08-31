@@ -122,6 +122,11 @@ public sealed record FurDocumentData(
     // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
     // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).
     FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor,
+    /// <summary>
+    /// Valor de <c>tramites.vehicle_classification_fur.field_to_fill</c>: casilla a marcar en el
+    /// numeral 4. Si es null, el mapper intenta el literal de <see cref="VehiculoDatos.Clase"/>.
+    /// </summary>
+    string? FieldToFill = null,
     // Casilla 19 "EMPRESA VINCULADORA" del FUR: solo aplica a servicio público (transporte vinculado a
     // una empresa habilitada); en particular/matrícula sin vinculación queda null y la casilla sale en
     // blanco (comportamiento por defecto, sin romper trámites existentes que no traen este dato).

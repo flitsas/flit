@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-31-margen-firmas-obs",
+  "version": "2026-08-31-obs23-tabla",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -222,7 +222,7 @@
       "size": 10.1
     },
     {
-      "id": "vehicle_class_1",
+      "id": "vehicle_class_AUTOMOVIL",
       "page": 1,
       "type": "checkbox",
       "x": 56.5,
@@ -231,7 +231,34 @@
       "fontSize": 5.0
     },
     {
-      "id": "vehicle_class_5",
+      "id": "vehicle_class_BUS",
+      "page": 1,
+      "type": "checkbox",
+      "x": 101.9,
+      "y": 222.4,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_BUSETA",
+      "page": 1,
+      "type": "checkbox",
+      "x": 147.3,
+      "y": 222.4,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_CAMION",
+      "page": 1,
+      "type": "checkbox",
+      "x": 189.2,
+      "y": 222.4,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_CAMIONETA",
       "page": 1,
       "type": "checkbox",
       "x": 234.5,
@@ -240,11 +267,83 @@
       "fontSize": 5.0
     },
     {
-      "id": "vehicle_class_9",
+      "id": "vehicle_class_CAMPERO",
       "page": 1,
       "type": "checkbox",
-      "x": 111.5,
-      "y": 226.0,
+      "x": 278.4,
+      "y": 222.4,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_MICROBUS",
+      "page": 1,
+      "type": "checkbox",
+      "x": 333.3,
+      "y": 222.4,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_TRACTOCAMION",
+      "page": 1,
+      "type": "checkbox",
+      "x": 52.2,
+      "y": 244.9,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_MOTOCICLETA",
+      "page": 1,
+      "type": "checkbox",
+      "x": 101.2,
+      "y": 244.9,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_MOTOCARRO",
+      "page": 1,
+      "type": "checkbox",
+      "x": 146.3,
+      "y": 244.9,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_MOTOTRICICLO",
+      "page": 1,
+      "type": "checkbox",
+      "x": 188.9,
+      "y": 244.9,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_CUATRIMOTO",
+      "page": 1,
+      "type": "checkbox",
+      "x": 230.2,
+      "y": 244.9,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_VOLQUETA",
+      "page": 1,
+      "type": "checkbox",
+      "x": 276.8,
+      "y": 244.9,
+      "size": 8.0,
+      "fontSize": 5.0
+    },
+    {
+      "id": "vehicle_class_OTRO",
+      "page": 1,
+      "type": "checkbox",
+      "x": 332.9,
+      "y": 244.9,
       "size": 8.0,
       "fontSize": 5.0
     },
@@ -987,7 +1086,7 @@
       "x": 382.0,
       "y": 470.0,
       "w": 365.0,
-      "h": 46.0,
+      "h": 35.0,
       "fontSize": 6.5,
       "minFontSize": 5.0,
       "bold": false,

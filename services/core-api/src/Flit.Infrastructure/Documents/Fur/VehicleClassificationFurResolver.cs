@@ -16,7 +16,7 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<VehicleClassificationFurResolver> _logger;
-    private volatile IReadOnlyDictionary<string, FurTemplateFormat>? _cache;
+    private volatile IReadOnlyDictionary<string, FurClassificationMatch>? _cache;
 
     public VehicleClassificationFurResolver(
         IServiceScopeFactory scopeFactory,
@@ -26,20 +26,23 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
         _logger = logger;
     }
 
-    public async Task<FurTemplateFormat> ResolveAsync(string? vehicleClass, CancellationToken ct = default)
+    public async Task<FurTemplateFormat> ResolveAsync(string? vehicleClass, CancellationToken ct = default) =>
+        (await ResolveMatchAsync(vehicleClass, ct).ConfigureAwait(false)).Format;
+
+    public async Task<FurClassificationMatch> ResolveMatchAsync(string? vehicleClass, CancellationToken ct = default)
     {
         var map = await GetMapAsync(ct).ConfigureAwait(false);
-        var format = FurTemplateResolution.Resolve(vehicleClass, map);
+        var match = FurTemplateResolution.ResolveMatch(vehicleClass, map);
 
-        // Observabilidad (D2): dejar traza cuando una clasificación no matchea y cae al default.
-        if (format == FurTemplateFormat.Automotor
+        if (match.Format == FurTemplateFormat.Automotor
+            && match.FieldToFill is null
             && !string.IsNullOrWhiteSpace(vehicleClass)
             && !map.ContainsKey(FurClassificationNormalizer.Normalize(vehicleClass)))
         {
             LogSinMatch(vehicleClass);
         }
 
-        return format;
+        return match;
     }
 
     public async Task<IReadOnlyList<FurClassificationCatalogItem>> ListCatalogAsync(CancellationToken ct = default)
@@ -71,7 +74,7 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
         }
     }
 
-    private async Task<IReadOnlyDictionary<string, FurTemplateFormat>> GetMapAsync(CancellationToken ct)
+    private async Task<IReadOnlyDictionary<string, FurClassificationMatch>> GetMapAsync(CancellationToken ct)
     {
         var cached = _cache;
         if (cached is not null)
@@ -82,23 +85,24 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
             // Columnas en snake_case SIN alias: el DbContext usa UseSnakeCaseNamingConvention(), así que
-            // SqlQueryRaw<T> mapea la propiedad Classification→columna 'classification' y TemplateFormat→
-            // 'template_format'. Aliasarlas a PascalCase (AS "TemplateFormat") hacía que EF buscara
-            // 'template_format' y no lo hallara → InvalidOperationException → catch → catálogo vacío →
-            // TODO caía a AUTOMOTOR (maquinaria/remolques incluidos). Sin alias, EF materializa las 96 filas.
+            // SqlQueryRaw<T> mapea Classification→classification y TemplateFormat→template_format.
             var rows = await db.Database
-                .SqlQueryRaw<VehicleClassificationFurMapRow>(
-                    "SELECT classification, template_format "
+                .SqlQueryRaw<VehicleClassificationFurRow>(
+                    "SELECT classification, template_format, field_to_fill "
                     + "FROM tramites.vehicle_classification_fur WHERE deleted_at IS NULL")
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
 
-            var dict = new Dictionary<string, FurTemplateFormat>(StringComparer.Ordinal);
+            var dict = new Dictionary<string, FurClassificationMatch>(StringComparer.Ordinal);
             foreach (var r in rows)
             {
                 var key = FurClassificationNormalizer.Normalize(r.Classification);
                 if (key.Length > 0 && FurTemplateResolution.TryParseFormat(r.TemplateFormat, out var fmt))
-                    dict[key] = fmt;
+                {
+                    dict[key] = new FurClassificationMatch(
+                        fmt,
+                        string.IsNullOrWhiteSpace(r.FieldToFill) ? null : r.FieldToFill.Trim());
+                }
             }
 
             // Solo se cachea un catálogo NO vacío. Un resultado de 0 filas significa que el seed aún no
@@ -114,7 +118,7 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
         {
             // Degradación segura: sin catálogo, todo cae a AUTOMOTOR. NO se cachea el vacío (reintenta luego).
             LogCatalogoNoDisponible(ex);
-            return new Dictionary<string, FurTemplateFormat>(StringComparer.Ordinal);
+            return new Dictionary<string, FurClassificationMatch>(StringComparer.Ordinal);
         }
     }
 
@@ -125,8 +129,6 @@ internal sealed partial class VehicleClassificationFurResolver : IFurTemplateRes
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "FUR: no se pudo leer el catálogo de clasificación; se usará AUTOMOTOR por defecto")]
     private partial void LogCatalogoNoDisponible(Exception ex);
-
-    private sealed record VehicleClassificationFurMapRow(string Classification, string TemplateFormat);
 
     private sealed record VehicleClassificationFurRow(
         string Classification,

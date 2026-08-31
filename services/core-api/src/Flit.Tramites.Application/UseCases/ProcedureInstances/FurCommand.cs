@@ -273,17 +273,17 @@ public sealed class GenerarFurHandler(
                 sellosIdentidad.Remove(role);
         }
 
-        // HU #10920 — plantilla de FUR según la clasificación del vehículo (vehicle_class). Sin resolver → AUTOMOTOR.
-        var templateFormat = _templateResolver is not null
-            ? await _templateResolver.ResolveAsync(Get(fv, "vehicle_class"), ct)
-            : FurTemplateFormat.Automotor;
+        // HU #10920 — plantilla + casilla numeral 4 según vehicle_class. Sin resolver → AUTOMOTOR, sin X.
+        var classification = _templateResolver is not null
+            ? await _templateResolver.ResolveMatchAsync(Get(fv, "vehicle_class"), ct)
+            : new FurClassificationMatch(FurTemplateFormat.Automotor, null);
 
         // HU #11198 (AC3) — el nombre del representante lo manda el trámite; solo si no lo trajo se pide
         // al directorio de la compañía. Se resuelve ANTES de ensamblar para que AssembleData siga siendo
         // una función pura y síncrona.
         var nombresRlDirectorio = await ResolverNombresDelDirectorioAsync(instance, esTraspaso, ct);
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento, firmaImagenes, firmaBaulMetadatos, templateFormat, nombresRlDirectorio);
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento, firmaImagenes, firmaBaulMetadatos, classification.Format, nombresRlDirectorio, classification.FieldToFill);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -681,7 +681,8 @@ public sealed class GenerarFurHandler(
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
         FurTemplateFormat templateFormat,
-        IReadOnlyDictionary<string, string>? nombresRlDirectorio = null)
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio = null,
+        string? fieldToFill = null)
     {
         var partes = new List<DocumentParte>(3);
         AddParte(partes, instance, "comprador", nombresRlDirectorio);
@@ -799,6 +800,7 @@ public sealed class GenerarFurHandler(
             PrendaMarking: prendaMarking,
             AcreedorPrenda: acreedorPrenda,
             TemplateFormat: templateFormat,
+            FieldToFill: fieldToFill,
             // Casilla 19 "EMPRESA VINCULADORA" del FUR: opcional, mismo canal field_values que el resto
             // del paso de vehículo/comercial. Get() ya devuelve null si la llave no existe.
             EmpresaVinculadoraRazonSocial: Get(fv, "empresa_vinculadora_razon_social"),

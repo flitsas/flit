@@ -122,8 +122,8 @@ public static class FurPreviewSample
             throw new ArgumentOutOfRangeException(nameof(vehicleKind), "Parámetros de simulación inválidos.");
         }
 
-        var (template, clase, placa) = VehicleAssets(vehicle);
-        return FinishBuild(procedureCode, family, sellerKind, buyerKind, template, clase, placa, flags);
+        var (template, clase, placa, fieldToFill) = VehicleAssets(vehicle);
+        return FinishBuild(procedureCode, family, sellerKind, buyerKind, template, clase, placa, flags, fieldToFill);
     }
 
     public static FurDocumentData BuildFromClassification(
@@ -133,6 +133,7 @@ public static class FurPreviewSample
         string buyerPersonKind,
         string vehicleClass,
         FurTemplateFormat format,
+        string? fieldToFill,
         FurPreviewFlags? flags = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(procedureCode);
@@ -146,7 +147,7 @@ public static class FurPreviewSample
 
         var clase = vehicleClass.Trim();
         var placa = IsMotoClase(clase) ? "ABC12A" : PhPlaca;
-        return FinishBuild(procedureCode, family, sellerKind, buyerKind, format, clase, placa, flags);
+        return FinishBuild(procedureCode, family, sellerKind, buyerKind, format, clase, placa, flags, fieldToFill);
     }
 
     private static bool IsMotoClase(string clase)
@@ -163,7 +164,8 @@ public static class FurPreviewSample
         FurTemplateFormat template,
         string clase,
         string placa,
-        FurPreviewFlags? flags)
+        FurPreviewFlags? flags,
+        string? fieldToFill)
     {
         var esTraspaso = IsTraspaso(family, procedureCode);
         var partes = new List<DocumentParte>();
@@ -220,6 +222,7 @@ public static class FurPreviewSample
             PrendaMarking: prendaMarking,
             AcreedorPrenda: prendaMarking is FurPrendaMarking.Ninguna ? null : PhAcreedor,
             TemplateFormat: template,
+            FieldToFill: fieldToFill,
             Transformaciones: transformaciones);
     }
 
@@ -265,14 +268,14 @@ public static class FurPreviewSample
     public static FurTemplateFormat TemplateFormatFor(string vehicleKind) =>
         VehicleAssets(vehicleKind).Format;
 
-    private static (FurTemplateFormat Format, string Clase, string Placa) VehicleAssets(string kind) =>
+    private static (FurTemplateFormat Format, string Clase, string Placa, string FieldToFill) VehicleAssets(string kind) =>
         kind switch
         {
-            VehicleMoto => (FurTemplateFormat.Automotor, "MOTOCICLETA", "ABC12A"),
-            VehicleCamioneta => (FurTemplateFormat.Automotor, "CAMIONETA", PhPlaca),
-            VehicleRemolque => (FurTemplateFormat.Remolques, "REMOLQUE", PhPlaca),
-            VehicleMaquinaria => (FurTemplateFormat.Maquinaria, "EXCAVADORA", PhPlaca),
-            _ => (FurTemplateFormat.Automotor, "AUTOMOVIL", PhPlaca),
+            VehicleMoto => (FurTemplateFormat.Automotor, "MOTOCICLETA", "ABC12A", "MOTOCICLETA"),
+            VehicleCamioneta => (FurTemplateFormat.Automotor, "CAMIONETA", PhPlaca, "CAMIONETA"),
+            VehicleRemolque => (FurTemplateFormat.Remolques, "REMOLQUE", PhPlaca, "REMOLQUE"),
+            VehicleMaquinaria => (FurTemplateFormat.Maquinaria, "EXCAVADORA", PhPlaca, "CONSTRUCCION"),
+            _ => (FurTemplateFormat.Automotor, "AUTOMOVIL", PhPlaca, "AUTOMOVIL"),
         };
 
     private static FurPrendaMarking ResolvePrenda(string code)

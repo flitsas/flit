@@ -25,9 +25,17 @@ public sealed record FurClassificationCatalogItem(
     string TemplateFormat,
     string? FieldToFill);
 
+/// <summary>
+/// Resultado del catálogo: plantilla + casilla del numeral 4 (<c>field_to_fill</c>).
+/// Sin match: AUTOMOTOR y <see cref="FieldToFill"/> nulo (no se marca X).
+/// </summary>
+public sealed record FurClassificationMatch(FurTemplateFormat Format, string? FieldToFill);
+
 public interface IFurTemplateResolver
 {
     Task<FurTemplateFormat> ResolveAsync(string? vehicleClass, CancellationToken ct = default);
+
+    Task<FurClassificationMatch> ResolveMatchAsync(string? vehicleClass, CancellationToken ct = default);
 
     Task<IReadOnlyList<FurClassificationCatalogItem>> ListCatalogAsync(CancellationToken ct = default);
 }
@@ -79,6 +87,20 @@ public static class FurTemplateResolution
         ArgumentNullException.ThrowIfNull(normalizedCatalog);
         var key = FurClassificationNormalizer.Normalize(vehicleClass);
         return key.Length > 0 && normalizedCatalog.TryGetValue(key, out var fmt) ? fmt : FurTemplateFormat.Automotor;
+    }
+
+    /// <summary>
+    /// Resuelve plantilla + <c>field_to_fill</c>. Sin match → AUTOMOTOR y casilla nula.
+    /// </summary>
+    public static FurClassificationMatch ResolveMatch(
+        string? vehicleClass,
+        IReadOnlyDictionary<string, FurClassificationMatch> normalizedCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(normalizedCatalog);
+        var key = FurClassificationNormalizer.Normalize(vehicleClass);
+        return key.Length > 0 && normalizedCatalog.TryGetValue(key, out var match)
+            ? match
+            : new FurClassificationMatch(FurTemplateFormat.Automotor, null);
     }
 
     /// <summary>Parsea el texto del catálogo (AUTOMOTOR/MAQUINARIA/REMOLQUES) al enum.</summary>

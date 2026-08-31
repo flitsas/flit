@@ -415,9 +415,20 @@ public sealed class FurManifestGuardTests
         requested_process_13=cb:71.3,177,10.1
         requested_process_15=cb:167.7,177,10.1
         requested_process_16=cb:215.9,177,10.1
-        vehicle_class_1=cb:56.5,222.4,8
-        vehicle_class_5=cb:234.5,221.5,8
-        vehicle_class_9=cb:111.5,226,8
+        vehicle_class_AUTOMOVIL=cb:56.5,222.4,8
+        vehicle_class_BUS=cb:101.9,222.4,8
+        vehicle_class_BUSETA=cb:147.3,222.4,8
+        vehicle_class_CAMION=cb:189.2,222.4,8
+        vehicle_class_CAMIONETA=cb:234.5,221.5,8
+        vehicle_class_CAMPERO=cb:278.4,222.4,8
+        vehicle_class_MICROBUS=cb:333.3,222.4,8
+        vehicle_class_TRACTOCAMION=cb:52.2,244.9,8
+        vehicle_class_MOTOCICLETA=cb:101.2,244.9,8
+        vehicle_class_MOTOCARRO=cb:146.3,244.9,8
+        vehicle_class_MOTOTRICICLO=cb:188.9,244.9,8
+        vehicle_class_CUATRIMOTO=cb:230.2,244.9,8
+        vehicle_class_VOLQUETA=cb:276.8,244.9,8
+        vehicle_class_OTRO=cb:332.9,244.9,8
         vehicle_brand=Text:380.8,129.3,70.2,13.3,7.8,Left,False,null
         vehicle_line=Text:461.9,128.4,70,13,7.7,Left,False,null
         vehicle_colors=Text:380.5,157.5,229,13.7,7.5,Left,False,null
@@ -490,7 +501,7 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_city=Text:196,508.7,50,14.1,7.7,Left,False,null
         vehicle_buyer_phone=Text:314.8,509.3,44.9,14.1,7.7,Left,False,null
         vehicle_buyer_signature=Multiline:102,522,262,32,8,Left,False,null
-        observations=Multiline:382,470,365,46,6.5,Left,True,5
+        observations=Multiline:382,470,365,35,6.5,Left,True,5
         """;
 
     // Línea base congelada de la geometría del manifest MAQUINARIA (version 2026-07-24-maquinaria-v2-traspaso-calib,
@@ -517,6 +528,10 @@ public sealed class FurManifestGuardTests
         requested_process_2=cb:170,102,9
         requested_process_11=cb:303.6,129,9
         requested_process_12=cb:370,129,9
+        vehicle_class_AGRICOLA=cb:96,205,8
+        vehicle_class_INDUSTRIAL=cb:193,205,8
+        vehicle_class_CONSTRUCCION=cb:313,205,8
+        vehicle_class_OTROS=cb:429,205,8
         vehicle_brand=Text:508,95,66,12,7,Left,False,null
         vehicle_line=Text:578,95,74,12,7,Left,False,null
         vehicle_colors=Text:500,134,268,12,7,Left,False,null
@@ -587,6 +602,10 @@ public sealed class FurManifestGuardTests
         requested_process_10=cb:291.9,128,9
         requested_process_11=cb:361.5,128,9
         requested_process_12=cb:421.7,128,9
+        vehicle_class_REMOLQUE=cb:94,205,8
+        vehicle_class_SEMIREMOLQUE=cb:184,205,8
+        vehicle_class_MULTIMODULAR=cb:315,205,8
+        vehicle_class_SIMILAR=cb:431,205,8
         vehicle_brand=Text:498,96,160,12,7,Left,False,null
         vehicle_line=Text:666,96,165,12,7,Left,False,null
         vehicle_colors=Text:498,132,130,12,7,Left,False,null
