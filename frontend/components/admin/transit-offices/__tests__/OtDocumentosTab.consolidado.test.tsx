@@ -51,7 +51,7 @@ describe("OtDocumentosTab — consolidado del expediente", () => {
     fetchOtAttachmentPreviewUrl.mockRejectedValue(new Error("sin preview en test"));
   });
 
-  it("«Ver consolidado» no fuerza y la salida manual sí", async () => {
+  it("«Ver consolidado» no fuerza y «Actualizar consolidado» sí (HU #11932)", async () => {
     renderTab();
     const user = userEvent.setup();
 
@@ -59,7 +59,7 @@ describe("OtDocumentosTab — consolidado del expediente", () => {
     // Sin forzar: el backend decide por la marca de vigencia.
     await waitFor(() => expect(generarOtConsolidadoMaestro).toHaveBeenCalledWith("proc-1", undefined, false));
 
-    await user.click(screen.getByRole("button", { name: /Regenerar el consolidado del expediente/i }));
+    await user.click(screen.getByRole("button", { name: /Actualizar el consolidado del expediente/i }));
     await waitFor(() =>
       expect(generarOtConsolidadoMaestro).toHaveBeenLastCalledWith("proc-1", undefined, true),
     );
@@ -70,8 +70,23 @@ describe("OtDocumentosTab — consolidado del expediente", () => {
 
     await waitFor(() => expect(fetchOtDocuments).toHaveBeenCalled());
     expect(
-      screen.queryByRole("button", { name: /Regenerar el consolidado del expediente/i }),
+      screen.queryByRole("button", { name: /Actualizar el consolidado del expediente/i }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ver consolidado del expediente/i })).toBeInTheDocument();
+  });
+
+  it("HU #11932 — la acción se llama «Actualizar consolidado», sin rastro de «Regenerar»", async () => {
+    renderTab();
+
+    await waitFor(() => expect(fetchOtDocuments).toHaveBeenCalled());
+
+    const accion = screen.getByRole("button", { name: /Actualizar el consolidado del expediente/i });
+    // El texto visible y el nombre accesible dicen lo mismo: el PDF ya existe y se reconstruye.
+    expect(accion).toHaveTextContent("Actualizar consolidado");
+    expect(accion).toHaveAttribute(
+      "title",
+      "Reconstruye el expediente consolidado con el contenido actual del trámite",
+    );
+    expect(screen.queryByText(/regenerar/i)).not.toBeInTheDocument();
   });
 });
