@@ -4162,6 +4162,14 @@ paths:
                 parte:
                   type: string
                   enum: [comprador, vendedor]
+                documento:
+                  type: string
+                  nullable: true
+                  description: >
+                    ADR-0053 (Múltiple Propietario) — documento del SUJETO de identidad (persona
+                    natural: el propio actor; persona jurídica: su representante legal) al que se
+                    refiere el aseguramiento, cuando `parte` tiene 2..4 actores. Opcional/aditivo: con
+                    1 solo actor en el rol (caso mayoritario, contrato anterior a este ADR) se ignora.
       responses:
         "200":
           description: Desenlace de la verificación de identidad de la parte.
@@ -4247,6 +4255,50 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: El proveedor de identidad no está disponible (transitorio, AC7).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listProcedureInstanceBiometric
+      tags: [Tramites, Identidad]
+      summary: Lista las validaciones de identidad de un trámite (vista del gestor)
+      description: >
+        Devuelve todas las validaciones biométricas del trámite (propias + identidad REFERENCIADA de
+        otro trámite del tenant, HU #10350), con la prevalencia de Bug #11615 ya aplicada. No estaba
+        documentado en el contrato hasta ahora (brecha preexistente, no introducida por ADR-0053); se
+        añade junto con la ampliación de Múltiple Propietario porque `firmaBaulActores` (nuevo) y
+        `ordinal` de `BiometricValidationDto` son parte directa de ese cierre.
+
+        ADR-0053 (Múltiple Propietario) — con 2..4 actores por rol, `validations` trae una fila por
+        cada actor con identidad en curso (no solo el principal), cada una con su `ordinal`. Con 1 solo
+        actor por lado (caso mayoritario) el comportamiento es idéntico al anterior a este ADR.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Validaciones del trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiometricValidationsResponse"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite no existe.
           content:
             application/json:
               schema:
@@ -6525,6 +6577,14 @@ paths:
           in: query
           required: true
           schema: { type: string, enum: [comprador, vendedor, mandatario] }
+        - name: documento
+          in: query
+          required: false
+          schema: { type: string, nullable: true }
+          description: >
+            ADR-0053 (Múltiple Propietario) — documento del representante legal al que se refiere la
+            consulta, cuando `parte` tiene 2..4 actores jurídicos. Opcional/aditivo: con 1 solo actor
+            en el rol (caso mayoritario, contrato anterior a este ADR) se ignora.
       responses:
         "200":
           description: "Estado de la firma a posteriori para esa parte."
@@ -6555,6 +6615,14 @@ paths:
               type: object
               properties:
                 parte: { type: string, enum: [comprador, vendedor, mandatario] }
+                documento:
+                  type: string
+                  nullable: true
+                  description: >
+                    ADR-0053 (Múltiple Propietario) — documento del representante legal al que se
+                    refiere la marca, cuando `parte` tiene 2..4 actores jurídicos. Opcional/aditivo:
+                    con 1 solo actor en el rol (caso mayoritario, contrato anterior a este ADR) se
+                    ignora.
               required: [parte]
       responses:
         "200":
@@ -9044,6 +9112,95 @@ components:
           format: date-time
           nullable: true
           description: 'Fecha de registro de la validación (historial por persona: más reciente → más antigua).'
+        ordinal:
+          type: integer
+          nullable: true
+          description: >
+            ADR-0053 (Múltiple Propietario) — posición (1..4) del actor de `partyRole` al que
+            pertenece esta validación (1 = principal/solidario). Permite emparejar la fila con la
+            pestaña del actor sin comparar documentos. `null` cuando no se pudo atribuir a un actor
+            concreto (validación histórica/huérfana). Con 1 solo actor por lado (caso mayoritario)
+            siempre trae `1`.
+    BiometricValidationsResponse:
+      type: object
+      required: [validations, provider]
+      description: >
+        Respuesta de `GET /instances/{id}/biometric`. No estaba documentada hasta ahora (brecha
+        preexistente); se documenta junto con ADR-0053 porque `firmaBaulActores` es parte de ese cierre.
+      properties:
+        validations:
+          type: array
+          items:
+            $ref: "#/components/schemas/BiometricValidationDto"
+        provider:
+          type: string
+          enum: [mock, kyverum]
+          description: Proveedor biométrico CONFIGURADO (no por-validación); provider-aware del botón "Validar identidad".
+        firmaBaulPartes:
+          type: array
+          items: { type: string, enum: [comprador, vendedor] }
+          nullable: true
+          description: >
+            HU #11014 (ADR-0025 §4) — roles cuya identidad queda cubierta por la firma del baúl.
+            ADR-0053 (Múltiple Propietario): con 2+ actores jurídicos del mismo rol, este campo es
+            IMPRECISO A PROPÓSITO (rol presente si AL MENOS un actor de ese rol está cubierto) — se
+            conserva sin cambios para no romper a quien ya lo consume a nivel de rol. Usar
+            `firmaBaulActores` para la cobertura exacta por actor.
+        supersededValidations:
+          type: array
+          items:
+            $ref: "#/components/schemas/BiometricValidationDto"
+          nullable: true
+          description: >
+            Bug #11615 — intentos NO vigentes de una parte que ya tiene identidad aprobada y vigente
+            (propia o referenciada). Salen de `validations` para no suplantar el estado vigente, pero
+            siguen viajando aquí (histórico completo). Null cuando no hay ninguno.
+        motivosNoEnvio:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnvioValidacionMotivoDto"
+          nullable: true
+          description: >
+            HU #11665 — por qué no se envió la validación de identidad a un rol jurídico. Derivado al
+            vuelo, nunca persistido. ADR-0053: un motivo representativo por ROL (no por actor) — el
+            contrato no distingue actor aquí, a diferencia de `validations`/`firmaBaulActores`. Null
+            cuando no hay ninguno.
+        firmaBaulActores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FirmaBaulActorCoberturaDto"
+          nullable: true
+          description: >
+            ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR específico (documento +
+            ordinal), aditivo a `firmaBaulPartes`. Permite al frontend no pintar "firmado desde el
+            baúl" a un copropietario que en realidad todavía necesita validar su identidad. Null
+            cuando ningún actor está cubierto por el baúl.
+    FirmaBaulActorCoberturaDto:
+      type: object
+      required: [parte, documentNumber, ordinal]
+      description: >
+        ADR-0053 (Múltiple Propietario) — cobertura del baúl de UN actor específico dentro de su rol.
+      properties:
+        parte: { type: string, enum: [comprador, vendedor] }
+        documentNumber:
+          type: string
+          description: >
+            Documento del SUJETO de identidad (el representante legal — el baúl solo aplica a persona
+            jurídica, ver `FirmaBaulCobertura.Aplica`).
+        ordinal:
+          type: integer
+          description: Posición (1..4) del actor dentro de su rol.
+    EnvioValidacionMotivoDto:
+      type: object
+      required: [parte, codigo, informativo]
+      description: >
+        HU #11665 — motivo tipificado de no envío de la validación de identidad, por rol.
+        `informativo=true` no es un fallo: explica una ausencia legítima (el rol ya está cubierto) y la
+        UI no debe pintarlo como bloqueo.
+      properties:
+        parte: { type: string, enum: [comprador, vendedor] }
+        codigo: { type: string }
+        informativo: { type: boolean }
     TenantBiometricValidationDto:
       type: object
       required: [id, name, documentType, documentNumber, status, provider, expired, createdAt, email, attempts, maxAttempts, resendCount, linkedProcedures]

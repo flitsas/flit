@@ -70,7 +70,7 @@ public sealed class TransitionProcedureInstanceHandler(
         try
         {
             var mark = await marks
-                .FindPendienteAsync(tenantId, id, MarcarFirmaPosteriorHandler.ParteMandatario, ct)
+                .FindPendienteAsync(tenantId, id, MarcarFirmaPosteriorHandler.ParteMandatario, cancellationToken: ct)
                 .ConfigureAwait(false);
             if (mark is null)
                 return;

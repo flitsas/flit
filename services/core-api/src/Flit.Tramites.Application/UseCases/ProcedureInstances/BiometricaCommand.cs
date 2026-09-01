@@ -43,7 +43,15 @@ public sealed record BiometricValidationDto(
     string? Modalidad = null,
     IReadOnlyList<LinkedProcedureDto>? LinkedProcedures = null,
     /// <summary>Fecha de registro de la validación (para ordenar historial más reciente → más antigua).</summary>
-    DateTimeOffset? CreatedAt = null);
+    DateTimeOffset? CreatedAt = null,
+    /// <summary>
+    /// ADR-0053 (Múltiple Propietario) — posición (1..4) del actor al que pertenece esta validación
+    /// dentro de su <see cref="PartyRole"/> (1 = principal/solidario). Permite al frontend emparejar la
+    /// fila con la pestaña del actor correspondiente sin depender de comparar documentos. <c>null</c>
+    /// cuando no se pudo atribuir a un actor concreto (validación histórica/huérfana sin fila de actor
+    /// vigente en el rol) — el caso mayoritario (1 actor por lado) siempre trae <c>1</c>.
+    /// </summary>
+    int? Ordinal = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -71,7 +79,23 @@ public sealed record BiometricValidationsResponse(
     // HU #11665 — por qué NO se envió la validación de identidad a una parte jurídica. Derivado al
     // vuelo con la MISMA regla que usa el disparador (EnvioValidacionBloqueoRules), nunca persistido:
     // en cuanto el gestor corrige el dato, el motivo desaparece. Null cuando no hay ninguno.
-    IReadOnlyList<EnvioValidacionMotivoDto>? MotivosNoEnvio = null);
+    IReadOnlyList<EnvioValidacionMotivoDto>? MotivosNoEnvio = null,
+    // ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR, aditivo. `FirmaBaulPartes` queda
+    // sin cambios (rol cubierto si AL MENOS un actor de ese rol lo está — impreciso con 2+ actores
+    // jurídicos del mismo lado, pero se conserva para no romper a quien ya lo consume). Este campo nuevo
+    // permite al frontend saber CUÁL actor específico (documento/ordinal) está cubierto, para no pintar
+    // "firmado desde el baúl" a un copropietario que en realidad todavía necesita validar. Null cuando
+    // ningún actor está cubierto por el baúl.
+    IReadOnlyList<FirmaBaulActorCoberturaDto>? FirmaBaulActores = null);
+
+/// <summary>
+/// ADR-0053 (Múltiple Propietario) — cobertura del baúl de UN actor específico dentro de su rol.
+/// <paramref name="DocumentNumber"/> es el documento del SUJETO de identidad (el del representante
+/// legal en persona jurídica, que es el único caso donde el baúl aplica — ver
+/// <see cref="FirmaBaulCobertura.Aplica"/>). <paramref name="Ordinal"/> permite emparejar
+/// directamente con la pestaña del actor en el formulario, sin comparar documentos.
+/// </summary>
+public sealed record FirmaBaulActorCoberturaDto(string Parte, string DocumentNumber, int Ordinal);
 
 /// <summary>
 /// HU #11665 — motivo tipificado de no envío de la validación de identidad, por parte.
@@ -167,11 +191,17 @@ public sealed class IniciarBiometriaHandler(
 
         var tipoDoc = input.TipoDoc.Trim();
         var documento = input.Documento.Trim();
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        // ADR-0053 (Múltiple Propietario) — el actor se resuelve por el documento DECLARADO en la
+        // solicitud (el body ya lo trae, obligatorio), no por "el primero del rol": con 2+ actores del
+        // mismo rol, FirstOrDefault siempre habría resuelto al principal, ignorando a cuál copropietario
+        // se refería en realidad la llamada.
+        var actoresDelRol = instance.Actors
+            .Count(a => string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        var actor = IdentitySubjectResolver.ActorPorDocumento(instance, parte, documento);
         var now = DateTimeOffset.UtcNow;
 
-        // HU #11265 — precedencia de envío (capa PREVIA a idempotencia por parte).
+        // HU #11265 — precedencia de envío (capa PREVIA a idempotencia por parte). Ya es por documento
+        // (persona), no por rol: correcta sin cambios para Múltiple Propietario.
         var decision = await IdentitySendDecisionForTramite.EvaluateAsync(
             repo, _vaultPolicy, tenantId, actor, tipoDoc, documento,
             instance.BiometricValidations.ToList(), now, ct);
@@ -180,9 +210,16 @@ public sealed class IniciarBiometriaHandler(
         if (!continueStart)
             return (null, sendError, sendConflict);
 
-        // Idempotencia por parte: una validación activa o aprobada bloquea recrear.
+        // Idempotencia por parte. Con 2+ actores del mismo rol se exige ADEMÁS el documento: antes de
+        // ADR-0053 un rol tenía un solo actor, así que "parte" alcanzaba. Con 2+ actores, indexar solo
+        // por parte bloqueaba con `biometria_activa` al segundo actor aunque nunca hubiera tenido su
+        // propia validación — `ProcedureInstanceBiometricValidation` ya correlaciona por
+        // PartyRole+DocumentNumber (el modelo ya lo soportaba); lo que faltaba era esta guarda. Con 1
+        // solo actor por rol (caso mayoritario) NO se exige documento: cero regresión, mismo criterio
+        // que <see cref="SimularBiometriaHandler"/>.
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+            && (actoresDelRol <= 1 || BiometricRules.DocumentoCoincide(v, tipoDoc, documento))
             && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado);
         if (existing is not null)
             return (null, "biometria_activa", null);
@@ -221,7 +258,7 @@ public sealed class IniciarBiometriaHandler(
                 IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Tramite));
         }
 
-        var dto = ToDto(validation, now);
+        var dto = ToDto(validation, now, actor?.Ordinal);
         var result = new IniciarBiometriaResult(dto, token, $"/biometric/{token}");
         return (result, null, null);
     }
@@ -234,7 +271,8 @@ public sealed class IniciarBiometriaHandler(
         return p is BiometricRules.ParteComprador or BiometricRules.ParteVendedor ? p : "invalid";
     }
 
-    internal static BiometricValidationDto ToDto(ProcedureInstanceBiometricValidation v, DateTimeOffset now) =>
+    internal static BiometricValidationDto ToDto(
+        ProcedureInstanceBiometricValidation v, DateTimeOffset now, int? ordinal = null) =>
         new(v.Id, v.PartyRole, v.Name, v.DocumentType, v.DocumentNumber, v.Email, v.Status,
             v.Attempts, v.MaxAttempts, v.Score, v.ExpiresAt, v.ValidatedAt,
             v.Status != BiometricEstados.Aprobado && now > v.ExpiresAt,
@@ -246,7 +284,8 @@ public sealed class IniciarBiometriaHandler(
                     : null,
             ExtractMotivoRechazo(v),
             ExtractUltimoIntentoMotivo(v),
-            CreatedAt: v.CreatedAt);
+            CreatedAt: v.CreatedAt,
+            Ordinal: ordinal);
 
     /// <summary>
     /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado
@@ -376,168 +415,253 @@ public sealed class ListBiometriaHandler(
         // TRASPASO_UNILATERAL con solo "vendedor" — exige coincidencia exacta de rol, igual que traspaso.
         var esTraspaso = !(partes.Length == 1 && partes[0] == BiometricRules.ParteComprador);
         var firmaBaulPartes = new List<string>(partes.Length);
-        // Bug #11615 — identidad que PREVALECE por parte (aprobada + vigente, propia o referenciada) y
-        // resto de entradas aprobadas+vigentes de esa parte. Con esto el listado deja de depender de en
+        // ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR (documento + ordinal), aditivo
+        // a `firmaBaulPartes` (que se conserva imprecisa a propósito, para no romper a quien ya la
+        // consume a nivel de rol).
+        var firmaBaulActores = new List<FirmaBaulActorCoberturaDto>();
+        // Bug #11615 — identidad que PREVALECE por CLAVE (aprobada + vigente, propia o referenciada) y
+        // resto de entradas aprobadas+vigentes de esa clave. Con esto el listado deja de depender de en
         // qué posición cayó cada intento. Ver BiometricListPrevalence.
-        var prevalecientePorParte = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        var vigentesPorParte = new Dictionary<string, IReadOnlySet<Guid>>(StringComparer.OrdinalIgnoreCase);
-        // Documento del sujeto de identidad de cada parte: sin él, el emparejamiento de las filas SIN
+        //
+        // ADR-0053 — la CLAVE de agrupación es el rol cuando ese rol tiene UN SOLO actor (comportamiento
+        // previo a esta versión, byte a byte: la clave siempre fue el rol) y `"{rol}#{ordinal}"` cuando
+        // el rol tiene 2+ actores — así la prevalencia/cobertura de un copropietario no se mezcla con la
+        // de otro del MISMO rol. `BiometricListPrevalence.Pertenece` sabe interpretar ambas formas.
+        var prevalecientePorClave = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var vigentesPorClave = new Dictionary<string, IReadOnlySet<Guid>>(StringComparer.OrdinalIgnoreCase);
+        // Documento del sujeto de identidad de cada clave: sin él, el emparejamiento de las filas SIN
         // ROL (matrícula) le atribuiría a la parte intentos de otra persona y los sacaría de la vista.
-        var documentoPorParte = new Dictionary<string, ParteDocumento>(StringComparer.OrdinalIgnoreCase);
-        // HU #11665 — motivo tipificado de no envío por parte. `partesJuridicas` acota la segunda
-        // pasada (los motivos informativos): una persona natural no reporta motivos.
+        var documentoPorClave = new Dictionary<string, ParteDocumento>(StringComparer.OrdinalIgnoreCase);
+        // HU #11665 — motivo tipificado de no envío por ROL (se conserva a nivel de rol, no de actor: un
+        // solo motivo representativo por rol, igual que antes de ADR-0053 — ver comentario más abajo).
         var motivosNoEnvio = new List<EnvioValidacionMotivoDto>(partes.Length);
-        var partesJuridicas = new List<string>(partes.Length);
+        var rolesJuridicos = new List<string>(partes.Length);
+        // Ordinal de cada actor, por (rol, documento del sujeto): permite, al final, estampar `Ordinal`
+        // en TODAS las entradas de `dtos` (incluidas las que ya existían antes de este bucle) sin
+        // duplicar la resolución de sujeto por cada dto.
+        var ordinalPorClaveDocumento = new Dictionary<(string Rol, string Documento), int>(
+            new RolDocumentoComparer());
+
         foreach (var parte in partes)
         {
-            var actor = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-            if (actor is null)
-                continue;
-
-            // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
-            var subject = IdentitySubjectResolver.For(actor);
-
-            // HU #11665 — el motivo lo calcula la MISMA regla que usa el disparador al escribir
-            // (EnvioValidacionBloqueoRules): una sola fuente, así el listado no puede explicar el no
-            // envío de una forma distinta a como se decidió. Se registra ANTES de los `continue` de
-            // abajo, porque el caso «RL sin documento» es justamente uno de los que cortan aquí.
-            var estadoEnvio = EnvioValidacionBloqueoRules.EstadoDe(actor, subject, providerOptions.IsKyverum);
-            if (estadoEnvio.ActorEsJuridico)
-            {
-                partesJuridicas.Add(parte);
-                var motivoDatos = EnvioValidacionBloqueoRules.Evaluar(estadoEnvio);
-                if (motivoDatos is not null)
-                    motivosNoEnvio.Add(new EnvioValidacionMotivoDto(parte, motivoDatos.Codigo, motivoDatos.Informativo));
-            }
-
-            if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-                continue;
-
-            documentoPorParte[parte] = new ParteDocumento(subject.TipoDocumento, subject.NumeroDocumento);
-
-            // HU #11014 — cobertura por FIRMA DEL BAÚL: la identidad del sujeto queda satisfecha por su
-            // firma vigente y NO hay validación biométrica ni certificado que mostrar.
-            //
-            // Bug #11141 — antes bastaba con que EXISTIERA una firma vigente, sin mirar el mecanismo
-            // elegido por el gestor ni si el actor era jurídico. Con "validación de identidad"
-            // seleccionada, el documento se firmaba con el sello de identidad (correcto) pero esta
-            // lista rotulaba a la parte como firmada desde el baúl, y de ahí salían el resumen del paso
-            // FUR y las pestañas de comprador/vendedor del expediente. Ahora la condición es el mismo
-            // predicado que usa el generador, así que la vista no puede contradecir al documento.
-            if (FirmaBaulCobertura.Aplica(actor))
-            {
-                var firmaBaul = await _vaultPolicy
-                    .ResolveAsync(instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
-                    .ConfigureAwait(false);
-                if (firmaBaul is not null)
-                    firmaBaulPartes.Add(parte);
-            }
-
-            // Filas PROPIAS de la parte que ya están aprobadas y vigentes para el documento del sujeto:
-            // son las únicas que pueden representar el estado de la parte sin referenciar otro trámite.
-            var vigentesLocales = instance.BiometricValidations
-                .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-                            && BiometricRules.EsAprobadaVigente(v, now)
-                            && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento))
+            // ADR-0053 (Múltiple Propietario) — TODOS los actores del rol (1..4, orden de ordinal), no
+            // solo el primero: con 1 solo actor (caso mayoritario) este bucle itera una vez y el
+            // comportamiento es idéntico al anterior a esta versión.
+            var actoresDelRol = instance.Actors
+                .Where(a => string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(a => a.Ordinal)
                 .ToList();
-            if (vigentesLocales.Count > 0)
-            {
-                vigentesPorParte[parte] = vigentesLocales.Select(v => v.Id).ToHashSet();
-                // La más reciente manda: si hubo varias aprobaciones vigentes, la última aprobación es la
-                // que el gestor considera actual.
-                prevalecientePorParte[parte] = vigentesLocales
-                    .OrderByDescending(v => v.ValidatedAt ?? v.CreatedAt)
-                    .First().Id;
-                continue;
-            }
-
-            var source = await repo.FindVigenteApprovedByDocumentAsync(
-                instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
-            if (source is null)
+            if (actoresDelRol.Count == 0)
                 continue;
 
-            // La identidad referenciada solo se agrega si no está ya en el listado: la consulta busca por
-            // documento en TODO el tenant y puede devolver una fila de este mismo trámite (p.ej. rotulada
-            // con otro rol o sin rol).
-            //
-            // Cuando ya está, NO basta con marcarla como prevaleciente: los consumidores emparejan POR
-            // ROL, así que una fila de este trámite rotulada con el otro rol subía a la primera posición
-            // pero seguía sin representar a esta parte, y la parte se veía sin identidad vigente. Se
-            // re-rotula con la parte actual (mismo criterio que la fila que se agrega desde otro
-            // trámite), salvo que la etiqueta que trae sea LEGÍTIMA: si la otra parte del traspaso tiene
-            // ese mismo documento, la fila es suya y robársela dejaría a esa otra parte sin identidad.
-            var indiceExistente = dtos.FindIndex(d => d.Id == source.Id);
-            if (indiceExistente < 0)
-            {
-                dtos.Add(IniciarBiometriaHandler.ToDto(source, now) with { PartyRole = parte });
-            }
-            else if (!string.Equals(dtos[indiceExistente].PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-                     && !EsDeOtraParte(dtos[indiceExistente], parte, instance, partes))
-            {
-                dtos[indiceExistente] = dtos[indiceExistente] with { PartyRole = parte };
-            }
+            var multiActor = actoresDelRol.Count > 1;
+            var motivoDelRolYaRegistrado = false;
 
-            prevalecientePorParte[parte] = source.Id;
-            vigentesPorParte[parte] = new HashSet<Guid> { source.Id };
+            foreach (var actor in actoresDelRol)
+            {
+                var clave = multiActor ? $"{parte}#{actor.Ordinal}" : parte;
+
+                // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+                var subject = IdentitySubjectResolver.For(actor);
+
+                // HU #11665 — el motivo lo calcula la MISMA regla que usa el disparador al escribir
+                // (EnvioValidacionBloqueoRules): una sola fuente, así el listado no puede explicar el no
+                // envío de una forma distinta a como se decidió. Se registra ANTES de los `continue` de
+                // abajo, porque el caso «RL sin documento» es justamente uno de los que cortan aquí.
+                //
+                // ADR-0053 — se sigue publicando UN motivo por ROL (no por actor): el contrato de
+                // `motivosNoEnvio` es `{parte, codigo, informativo}` sin discriminador de actor, y
+                // ampliarlo no lo pidió el encargo (a diferencia de la biometría y el baúl). Se toma el
+                // motivo del PRIMER actor jurídico del rol con un motivo de datos — mismo criterio
+                // conservador que "cae al principal" del resto de este ADR.
+                var estadoEnvio = EnvioValidacionBloqueoRules.EstadoDe(actor, subject, providerOptions.IsKyverum);
+                if (estadoEnvio.ActorEsJuridico)
+                {
+                    if (!rolesJuridicos.Contains(parte, StringComparer.OrdinalIgnoreCase))
+                        rolesJuridicos.Add(parte);
+                    if (!motivoDelRolYaRegistrado)
+                    {
+                        var motivoDatos = EnvioValidacionBloqueoRules.Evaluar(estadoEnvio);
+                        if (motivoDatos is not null)
+                        {
+                            motivosNoEnvio.Add(new EnvioValidacionMotivoDto(
+                                parte, motivoDatos.Codigo, motivoDatos.Informativo));
+                            motivoDelRolYaRegistrado = true;
+                        }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+                    continue;
+
+                var documentoSujeto = subject.NumeroDocumento.Trim();
+                documentoPorClave[clave] = new ParteDocumento(subject.TipoDocumento, documentoSujeto);
+                ordinalPorClaveDocumento[(parte, documentoSujeto)] = actor.Ordinal;
+
+                // HU #11014 — cobertura por FIRMA DEL BAÚL: la identidad del sujeto queda satisfecha por su
+                // firma vigente y NO hay validación biométrica ni certificado que mostrar.
+                //
+                // Bug #11141 — antes bastaba con que EXISTIERA una firma vigente, sin mirar el mecanismo
+                // elegido por el gestor ni si el actor era jurídico. Con "validación de identidad"
+                // seleccionada, el documento se firmaba con el sello de identidad (correcto) pero esta
+                // lista rotulaba a la parte como firmada desde el baúl, y de ahí salían el resumen del paso
+                // FUR y las pestañas de comprador/vendedor del expediente. Ahora la condición es el mismo
+                // predicado que usa el generador, así que la vista no puede contradecir al documento.
+                if (FirmaBaulCobertura.Aplica(actor))
+                {
+                    var firmaBaul = await _vaultPolicy
+                        .ResolveAsync(instance.TenantId, subject.TipoDocumento.Trim(), documentoSujeto, ct)
+                        .ConfigureAwait(false);
+                    if (firmaBaul is not null)
+                    {
+                        if (!firmaBaulPartes.Contains(parte, StringComparer.OrdinalIgnoreCase))
+                            firmaBaulPartes.Add(parte);
+                        // ADR-0053 — cobertura precisa por actor (documento + ordinal), para que el
+                        // frontend no pinte "firmado desde el baúl" a un copropietario que no lo está.
+                        firmaBaulActores.Add(new FirmaBaulActorCoberturaDto(parte, documentoSujeto, actor.Ordinal));
+                    }
+                }
+
+                // Filas PROPIAS de la parte que ya están aprobadas y vigentes para el documento del sujeto:
+                // son las únicas que pueden representar el estado de la parte sin referenciar otro trámite.
+                var vigentesLocales = instance.BiometricValidations
+                    .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                                && BiometricRules.EsAprobadaVigente(v, now)
+                                && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, documentoSujeto))
+                    .ToList();
+                if (vigentesLocales.Count > 0)
+                {
+                    vigentesPorClave[clave] = vigentesLocales.Select(v => v.Id).ToHashSet();
+                    // La más reciente manda: si hubo varias aprobaciones vigentes, la última aprobación es la
+                    // que el gestor considera actual.
+                    prevalecientePorClave[clave] = vigentesLocales
+                        .OrderByDescending(v => v.ValidatedAt ?? v.CreatedAt)
+                        .First().Id;
+                    continue;
+                }
+
+                var source = await repo.FindVigenteApprovedByDocumentAsync(
+                    instance.TenantId, subject.TipoDocumento.Trim(), documentoSujeto, now, ct);
+                if (source is null)
+                    continue;
+
+                // La identidad referenciada solo se agrega si no está ya en el listado: la consulta busca por
+                // documento en TODO el tenant y puede devolver una fila de este mismo trámite (p.ej. rotulada
+                // con otro rol o sin rol).
+                //
+                // Cuando ya está, NO basta con marcarla como prevaleciente: los consumidores emparejan POR
+                // ROL, así que una fila de este trámite rotulada con el otro rol subía a la primera posición
+                // pero seguía sin representar a esta parte, y la parte se veía sin identidad vigente. Se
+                // re-rotula con la parte actual (mismo criterio que la fila que se agrega desde otro
+                // trámite), salvo que la etiqueta que trae sea LEGÍTIMA: si OTRO actor —de este rol o de
+                // otro— tiene ese mismo documento, la fila es suya y robársela lo dejaría sin identidad.
+                var indiceExistente = dtos.FindIndex(d => d.Id == source.Id);
+                if (indiceExistente < 0)
+                {
+                    dtos.Add(IniciarBiometriaHandler.ToDto(source, now, actor.Ordinal) with { PartyRole = parte });
+                }
+                else if (!string.Equals(dtos[indiceExistente].PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                         && !EsDeOtroActor(dtos[indiceExistente], actor, instance))
+                {
+                    dtos[indiceExistente] = dtos[indiceExistente] with { PartyRole = parte, Ordinal = actor.Ordinal };
+                }
+
+                prevalecientePorClave[clave] = source.Id;
+                vigentesPorClave[clave] = new HashSet<Guid> { source.Id };
+            }
         }
 
-        // HU #11665 — motivos INFORMATIVOS: la parte jurídica está completa, pero no se le envía nada
-        // porque ya está cubierta. Se derivan de lo que este handler YA resolvió —la cobertura del baúl
-        // y la identidad aprobada vigente (propia o referenciada)—, que son los pasos 1 y 2 de la
-        // precedencia que evalúa el disparador río abajo. Cero consultas nuevas.
-        foreach (var parte in partesJuridicas)
+        // HU #11665 — motivos INFORMATIVOS: el rol jurídico está completo, pero no se le envía nada
+        // porque ya está cubierta (algún actor). Se derivan de lo que este handler YA resolvió —la
+        // cobertura del baúl y la identidad aprobada vigente (propia o referenciada)—, que son los
+        // pasos 1 y 2 de la precedencia que evalúa el disparador río abajo. Cero consultas nuevas.
+        foreach (var parte in rolesJuridicos)
         {
             if (motivosNoEnvio.Exists(m => string.Equals(m.Parte, parte, StringComparison.OrdinalIgnoreCase)))
                 continue; // Ya hay un motivo de datos: ese manda, es el que el gestor debe corregir.
 
             var informativo = EnvioValidacionBloqueoRules.DesdeCobertura(
                 firmaBaulPartes.Contains(parte, StringComparer.OrdinalIgnoreCase),
-                prevalecientePorParte.ContainsKey(parte));
+                prevalecientePorClave.Keys.Any(k => EsClaveDelRol(k, parte)));
             if (informativo is not null)
                 motivosNoEnvio.Add(new EnvioValidacionMotivoDto(parte, informativo.Codigo, informativo.Informativo));
         }
 
-        // Bug #11615 — la entrada aprobada y vigente de cada parte prevalece sobre sus intentos
+        // ADR-0053 — estampa `Ordinal` en TODAS las entradas (incluidas las que ya existían en
+        // `instance.BiometricValidations` antes del bucle, que se construyeron sin saber a qué actor
+        // pertenecían): empareja por (PartyRole, DocumentNumber) contra el mapa resuelto arriba. Con un
+        // solo actor por rol, cada entrada recibe `Ordinal = 1` — idéntico en efecto a antes de ADR-0053
+        // (el campo simplemente no existía).
+        dtos = dtos
+            .Select(dto => dto.PartyRole is not null && dto.DocumentNumber is not null
+                && ordinalPorClaveDocumento.TryGetValue((dto.PartyRole, dto.DocumentNumber.Trim()), out var ordinal)
+                    ? dto with { Ordinal = ordinal }
+                    : dto)
+            .ToList();
+
+        // Bug #11615 — la entrada aprobada y vigente de cada clave prevalece sobre sus intentos
         // rechazados / expirados / en vuelo, que pasan a `supersededValidations`.
         var (validations, superseded) = BiometricListPrevalence.Apply(
-            dtos, prevalecientePorParte, vigentesPorParte, documentoPorParte, esTraspaso);
+            dtos, prevalecientePorClave, vigentesPorClave, documentoPorClave, esTraspaso);
 
         return (new BiometricValidationsResponse(
             validations,
             providerOptions.Provider,
             firmaBaulPartes,
             superseded.Count > 0 ? superseded : null,
-            motivosNoEnvio.Count > 0 ? motivosNoEnvio : null), null);
+            motivosNoEnvio.Count > 0 ? motivosNoEnvio : null,
+            firmaBaulActores.Count > 0 ? firmaBaulActores : null), null);
     }
 
+    /// <summary>¿La clave (rol, o "rol#ordinal") pertenece al rol dado?</summary>
+    private static bool EsClaveDelRol(string clave, string rol) =>
+        string.Equals(clave, rol, StringComparison.OrdinalIgnoreCase)
+        || clave.StartsWith(rol + "#", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
-    /// ¿La etiqueta de rol que ya trae la entrada pertenece legítimamente a OTRA parte del trámite? Lo
-    /// es cuando el sujeto de identidad de esa otra parte tiene el mismo documento que la entrada (dos
-    /// partes con el mismo documento). En ese caso la fila no se re-rotula: hacerlo dejaría sin
-    /// identidad vigente a la parte que sí la tenía.
+    /// ¿La etiqueta de rol que ya trae la entrada pertenece legítimamente a OTRO actor del trámite
+    /// (de este mismo rol o de otro)? Lo es cuando el sujeto de identidad de ese otro actor tiene el
+    /// mismo documento que la entrada. En ese caso la fila no se re-rotula/reasigna: hacerlo dejaría sin
+    /// identidad vigente al actor que sí la tenía.
+    ///
+    /// <para>ADR-0053 (Múltiple Propietario) — generaliza la comprobación anterior ("¿pertenece a OTRA
+    /// PARTE?", solo entre roles distintos) a "¿pertenece a OTRO ACTOR?" (cualquier rol, incluido el
+    /// mismo): con 2+ actores por rol, un copropietario del MISMO rol que <paramref name="actorActual"/>
+    /// también puede ser el dueño legítimo de la fila.</para>
     /// </summary>
-    private static bool EsDeOtraParte(
-        BiometricValidationDto dto, string parte, ProcedureInstance instance, IReadOnlyList<string> partes)
+    private static bool EsDeOtroActor(
+        BiometricValidationDto dto, ProcedureInstanceActor actorActual, ProcedureInstance instance)
     {
-        if (dto.PartyRole is null)
+        if (dto.PartyRole is null || string.IsNullOrWhiteSpace(dto.DocumentNumber))
             return false;
 
-        var otra = partes.FirstOrDefault(p =>
-            !string.Equals(p, parte, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(p, dto.PartyRole, StringComparison.OrdinalIgnoreCase));
-        if (otra is null)
-            return false;
+        foreach (var otro in instance.Actors)
+        {
+            if (otro.Id == actorActual.Id)
+                continue;
+            if (!string.Equals(otro.ActorType, dto.PartyRole, StringComparison.OrdinalIgnoreCase))
+                continue;
 
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, otra, StringComparison.OrdinalIgnoreCase));
-        if (actor is null)
-            return false;
+            var subject = IdentitySubjectResolver.For(otro);
+            if (!string.IsNullOrWhiteSpace(subject.NumeroDocumento)
+                && string.Equals(subject.NumeroDocumento.Trim(), dto.DocumentNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
 
-        var subject = IdentitySubjectResolver.For(actor);
-        return !string.IsNullOrWhiteSpace(subject.NumeroDocumento)
-            && !string.IsNullOrWhiteSpace(dto.DocumentNumber)
-            && string.Equals(subject.NumeroDocumento.Trim(), dto.DocumentNumber.Trim(), StringComparison.OrdinalIgnoreCase);
+        return false;
+    }
+
+    /// <summary>Comparador de (rol, documento) case-insensitive para <c>ordinalPorClaveDocumento</c>.</summary>
+    private sealed class RolDocumentoComparer : IEqualityComparer<(string Rol, string Documento)>
+    {
+        public bool Equals((string Rol, string Documento) x, (string Rol, string Documento) y) =>
+            string.Equals(x.Rol, y.Rol, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(x.Documento, y.Documento, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string Rol, string Documento) obj) =>
+            HashCode.Combine(
+                obj.Rol.ToUpperInvariant(),
+                obj.Documento.ToUpperInvariant());
     }
 
     /// <summary>
@@ -700,6 +824,7 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
         Guid id,
         Guid tenantId,
         string? parte,
+        string? documento = null,
         CancellationToken ct = default)
     {
         var normalized = string.IsNullOrWhiteSpace(parte)
@@ -714,21 +839,30 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
 
         var now = DateTimeOffset.UtcNow;
 
-        // Idempotencia por parte: una validación ya aprobada se devuelve intacta.
-        var existing = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.PartyRole, normalized, StringComparison.OrdinalIgnoreCase));
-        if (existing is { Status: BiometricEstados.Aprobado })
-            return (IniciarBiometriaHandler.ToDto(existing, now), null);
-
-        // Actor de la parte (ActorType guarda el rol: "comprador"/"vendedor").
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, normalized, StringComparison.OrdinalIgnoreCase));
+        // ADR-0053 (Múltiple Propietario) — actor por el documento DECLARADO (con 1 solo actor en el rol,
+        // caso mayoritario, el documento es irrelevante y cae siempre a ese único actor: cero regresión).
+        var actoresDelRol = instance.Actors
+            .Count(a => string.Equals(a.ActorType, normalized, StringComparison.OrdinalIgnoreCase));
+        var actor = IdentitySubjectResolver.ActorPorDocumento(instance, normalized, documento);
         if (actor is null)
             return (null, "actor_requerido");
 
         // Sujeto de identidad (HU #10688): natural → actor; jurídica → representante legal. La validación se
         // ancla al documento/correo del sujeto para que la PJ quede firmada por el RL, no por el NIT.
         var subject = IdentitySubjectResolver.For(actor);
+
+        // Idempotencia por parte. Con 2+ actores del mismo rol, se exige ADEMÁS el documento del sujeto
+        // ya resuelto: sin esta guarda, "simular" reusaba (¡y sobrescribía nombre/documento!) la fila del
+        // OTRO copropietario en vez de crear la suya. Con 1 solo actor en el rol (caso mayoritario) NO se
+        // exige documento — mismo comportamiento de siempre: la fila existente de la parte se reutiliza y
+        // se refresca con los datos del actor aunque su documento haya cambiado (p.ej. una corrección),
+        // que es justo lo que este flujo mock ya hacía.
+        var existing = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.PartyRole, normalized, StringComparison.OrdinalIgnoreCase)
+            && (actoresDelRol <= 1
+                || BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento)));
+        if (existing is { Status: BiometricEstados.Aprobado })
+            return (IniciarBiometriaHandler.ToDto(existing, now, actor.Ordinal), null);
 
         var detalle = JsonSerializer.Serialize(new
         {
@@ -782,6 +916,6 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
         }
 
         await repo.SaveChangesAsync(ct);
-        return (IniciarBiometriaHandler.ToDto(validation, now), null);
+        return (IniciarBiometriaHandler.ToDto(validation, now, actor.Ordinal), null);
     }
 }

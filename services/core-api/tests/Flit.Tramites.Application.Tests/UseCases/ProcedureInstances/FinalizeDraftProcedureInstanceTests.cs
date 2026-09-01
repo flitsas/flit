@@ -328,7 +328,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         var simular = new SimularBiometriaHandler(_repo);
-        var (result, error) = await simular.HandleAsync(id, tenant, "comprador", ct);
+        var (result, error) = await simular.HandleAsync(id, tenant, "comprador", ct: ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();

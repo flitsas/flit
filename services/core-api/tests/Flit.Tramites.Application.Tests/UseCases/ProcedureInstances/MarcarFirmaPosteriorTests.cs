@@ -38,7 +38,7 @@ public sealed class MarcarFirmaPosteriorTests
         _marks.When(m => m.Add(Arg.Any<DeferredSignatureMark>()))
             .Do(call => guardada = call.Arg<DeferredSignatureMark>());
 
-        var (result, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct);
+        var (result, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Marcado.Should().BeTrue();
@@ -59,7 +59,7 @@ public sealed class MarcarFirmaPosteriorTests
                 Guid.NewGuid(), "Ana Representante", "hash", "vault/f.png", "sha",
                 new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), "1090123456"));
 
-        var (_, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct);
+        var (_, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().Be("firma_disponible");
         _marks.DidNotReceive().Add(Arg.Any<DeferredSignatureMark>());
@@ -90,7 +90,7 @@ public sealed class MarcarFirmaPosteriorTests
                 CreatedAt = DateTimeOffset.UtcNow,
             });
 
-        var (_, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct);
+        var (_, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().Be("firma_disponible");
     }
@@ -101,7 +101,7 @@ public sealed class MarcarFirmaPosteriorTests
         var ct = TestContext.Current.CancellationToken;
         var id = SeedTramite(status: TramiteEstado.Entregado);
 
-        var (_, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct);
+        var (_, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().Be("not_draft");
     }
@@ -112,7 +112,7 @@ public sealed class MarcarFirmaPosteriorTests
         var ct = TestContext.Current.CancellationToken;
         var id = SeedTramite(juridica: false);
 
-        var (_, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct);
+        var (_, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().Be("no_aplica");
     }
@@ -133,9 +133,9 @@ public sealed class MarcarFirmaPosteriorTests
             RepresentativeDocumentNumber = "1090123456",
             CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
         };
-        _marks.FindPendienteAsync(Tenant, id, "comprador", Arg.Any<CancellationToken>()).Returns(previa);
+        _marks.FindPendienteAsync(Tenant, id, "comprador", "1090123456", Arg.Any<CancellationToken>()).Returns(previa);
 
-        var (result, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct);
+        var (result, error) = await Handler().HandleAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Marcado.Should().BeTrue();
@@ -153,7 +153,7 @@ public sealed class MarcarFirmaPosteriorTests
                 Guid.NewGuid(), "Ana Representante", "hash", "vault/f.png", "sha",
                 new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), "1090123456"));
 
-        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "comprador", ct);
+        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Aplica.Should().BeFalse();
@@ -166,7 +166,7 @@ public sealed class MarcarFirmaPosteriorTests
         var ct = TestContext.Current.CancellationToken;
         var id = SeedTramite();
 
-        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "comprador", ct);
+        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Aplica.Should().BeTrue();
@@ -181,7 +181,7 @@ public sealed class MarcarFirmaPosteriorTests
         var ct = TestContext.Current.CancellationToken;
         var id = SeedTramite(juridica: false);
 
-        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "comprador", ct);
+        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Aplica.Should().BeFalse();
@@ -201,7 +201,7 @@ public sealed class MarcarFirmaPosteriorTests
         _marks.When(m => m.Add(Arg.Any<DeferredSignatureMark>()))
             .Do(call => guardada = call.Arg<DeferredSignatureMark>());
 
-        var (result, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct);
+        var (result, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct: ct);
 
         error.Should().BeNull();
         result!.Marcado.Should().BeTrue();
@@ -222,7 +222,7 @@ public sealed class MarcarFirmaPosteriorTests
         var id = SeedTramite();
         SeedMandatario(identidadVigente: true);
 
-        var (_, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct);
+        var (_, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct: ct);
 
         error.Should().Be("firma_disponible");
         _marks.DidNotReceive().Add(Arg.Any<DeferredSignatureMark>());
@@ -239,7 +239,7 @@ public sealed class MarcarFirmaPosteriorTests
                 Guid.NewGuid(), "Carlos Ruiz", "hash", "vault/f.png", "sha",
                 new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1), "70111222"));
 
-        var (_, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct);
+        var (_, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct: ct);
 
         error.Should().Be("firma_disponible");
     }
@@ -252,7 +252,7 @@ public sealed class MarcarFirmaPosteriorTests
         var ct = TestContext.Current.CancellationToken;
         var id = SeedTramite();
 
-        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "mandatario", ct);
+        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "mandatario", ct: ct);
 
         error.Should().BeNull();
         result!.Aplica.Should().BeFalse();

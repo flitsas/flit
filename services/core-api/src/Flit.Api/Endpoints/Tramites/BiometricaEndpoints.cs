@@ -322,7 +322,7 @@ internal static class BiometricaEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, ct);
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, body?.Documento, ct);
             return error switch
             {
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
@@ -592,7 +592,7 @@ internal static class BiometricaEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, ct);
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, body?.Documento, ct);
             return error switch
             {
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor)."),
@@ -608,7 +608,19 @@ internal static class BiometricaEndpoints
 }
 
 /// <summary>Cuerpo de la simulación de biométrica. <c>parte</c> opcional (vacío → comprador).</summary>
-internal sealed record SimularBiometriaRequest(string? Parte);
+/// <remarks>
+/// ADR-0053 (Múltiple Propietario) — <c>Documento</c> es opcional/aditivo: identifica a CUÁL de los
+/// 1..4 actores del rol se refiere la simulación (el documento del sujeto de identidad, ya conocido por
+/// el cliente porque lo capturó/consultó en esa pestaña del formulario). Con un solo actor en el rol es
+/// irrelevante y se ignora — no está documentado en el contrato OpenAPI (mock-only, endpoint de
+/// desarrollo/QA, igual que antes de este ADR).
+/// </remarks>
+internal sealed record SimularBiometriaRequest(string? Parte, string? Documento = null);
 
 /// <summary>Cuerpo de "asegurar identidad" (HU #10350). <c>parte</c> = comprador|vendedor.</summary>
-internal sealed record EnsureIdentityRequest(string? Parte);
+/// <remarks>
+/// ADR-0053 (Múltiple Propietario) — <c>Documento</c> es opcional/aditivo: identifica a CUÁL de los
+/// 1..4 actores del rol (<c>parte</c>) se refiere el aseguramiento de identidad. Con un solo actor en
+/// el rol (caso mayoritario, contrato anterior) se ignora y el comportamiento es idéntico.
+/// </remarks>
+internal sealed record EnsureIdentityRequest(string? Parte, string? Documento = null);

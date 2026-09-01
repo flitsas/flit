@@ -42,8 +42,13 @@ public sealed class MarcarFirmaPosteriorHandler(
     /// <summary>Parte sintetica del mandatario: no es un actor del tramite, pero si un firmante.</summary>
     public const string ParteMandatario = "mandatario";
 
+    /// <param name="documento">
+    /// ADR-0053 (Múltiple Propietario) — documento del sujeto (representante legal) al que se refiere
+    /// esta llamada, cuando el rol tiene 2+ actores jurídicos. Opcional/aditivo: con 1 solo actor en el
+    /// rol (caso mayoritario) se ignora — cero regresión.
+    /// </param>
     public async Task<(FirmaPosteriorEstadoDto? Result, string? Error)> HandleAsync(
-        Guid id, Guid tenantId, string? parte, CancellationToken ct = default)
+        Guid id, Guid tenantId, string? parte, string? documento = null, CancellationToken ct = default)
     {
         var normalized = NormalizeParte(parte);
         if (normalized is null)
@@ -57,7 +62,7 @@ public sealed class MarcarFirmaPosteriorHandler(
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
-        var (actor, subject, identidadAdmin, error) = await ResolverSujetoAsync(instance, normalized, ct);
+        var (actor, subject, identidadAdmin, error) = await ResolverSujetoAsync(instance, normalized, documento, ct);
         if (error is not null)
             return (null, error);
 
@@ -66,7 +71,9 @@ public sealed class MarcarFirmaPosteriorHandler(
         if (identidadAdmin || await TieneFirmaDisponibleAsync(tenantId, instance, subject!, ct))
             return (null, "firma_disponible");
 
-        var existente = await marks.FindPendienteAsync(tenantId, id, normalized, ct);
+        // ADR-0053 — la marca pendiente se busca por (tenant, trámite, rol, DOCUMENTO DEL REPRESENTANTE):
+        // con 2+ actores jurídicos del mismo rol, cada copropietario tiene su propia marca independiente.
+        var existente = await marks.FindPendienteAsync(tenantId, id, normalized, subject!.NumeroDocumento!, ct);
         if (existente is not null)
         {
             // Idempotente: volver a marcar no crea una segunda marca ni mueve la fecha original.
@@ -97,7 +104,7 @@ public sealed class MarcarFirmaPosteriorHandler(
     /// crea ni modifica nada.
     /// </summary>
     public async Task<(FirmaPosteriorEstadoDto? Result, string? Error)> ConsultarAsync(
-        Guid id, Guid tenantId, string? parte, CancellationToken ct = default)
+        Guid id, Guid tenantId, string? parte, string? documento = null, CancellationToken ct = default)
     {
         var normalized = NormalizeParte(parte);
         if (normalized is null)
@@ -107,13 +114,13 @@ public sealed class MarcarFirmaPosteriorHandler(
         if (instance is null)
             return (null, "not_found");
 
-        var (_, subject, identidadAdmin, error) = await ResolverSujetoAsync(instance, normalized, ct);
+        var (_, subject, identidadAdmin, error) = await ResolverSujetoAsync(instance, normalized, documento, ct);
         if (error is not null)
             // Persona natural, sin representante o sin mandatario elegido: la opción sencillamente no
             // existe, no es un error que deba romperle la pantalla al gestor.
             return (new FirmaPosteriorEstadoDto(Aplica: false, Marcado: false), null);
 
-        var existente = await marks.FindPendienteAsync(tenantId, id, normalized, ct);
+        var existente = await marks.FindPendienteAsync(tenantId, id, normalized, subject!.NumeroDocumento!, ct);
         var editable = TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva);
         var aplica = editable
             && !identidadAdmin
@@ -155,7 +162,7 @@ public sealed class MarcarFirmaPosteriorHandler(
     /// (<c>IdentidadAdmin</c>) en vez de buscarla donde no está.</para>
     /// </summary>
     private async Task<(ProcedureInstanceActor? Actor, IdentitySubject? Subject, bool IdentidadAdmin, string? Error)>
-        ResolverSujetoAsync(ProcedureInstance instance, string parte, CancellationToken ct)
+        ResolverSujetoAsync(ProcedureInstance instance, string parte, string? documento, CancellationToken ct)
     {
         if (string.Equals(parte, ParteMandatario, StringComparison.Ordinal))
         {
@@ -181,8 +188,9 @@ public sealed class MarcarFirmaPosteriorHandler(
             return (null, sujetoMandatario, signer.IdentityVigente || signer.FirmaFisica, null);
         }
 
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        // ADR-0053 (Múltiple Propietario) — el actor se resuelve por el documento DECLARADO (con 1 solo
+        // actor jurídico en el rol, caso mayoritario, cae siempre a ese único actor: cero regresión).
+        var actor = IdentitySubjectResolver.ActorPorDocumento(instance, parte, documento);
         if (actor is null)
             return (null, null, false, "sin_actor");
 

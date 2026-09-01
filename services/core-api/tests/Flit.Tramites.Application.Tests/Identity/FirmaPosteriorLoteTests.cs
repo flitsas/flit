@@ -263,11 +263,14 @@ public sealed class FirmaPosteriorLoteTests
         public IReadOnlyList<DeferredSignatureMark> Todas => _items;
 
         public Task<DeferredSignatureMark?> FindPendienteAsync(
-            Guid tenantId, Guid procedureInstanceId, string partyRole, CancellationToken cancellationToken = default) =>
+            Guid tenantId, Guid procedureInstanceId, string partyRole, string? representativeDocumentNumber = null,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(_items.FirstOrDefault(m =>
                 m.TenantId == tenantId
                 && m.ProcedureInstanceId == procedureInstanceId
                 && m.PartyRole == partyRole
+                && (string.IsNullOrWhiteSpace(representativeDocumentNumber)
+                    || m.RepresentativeDocumentNumber == representativeDocumentNumber)
                 && m.EstaPendiente));
 
         public Task<IReadOnlyList<DeferredSignatureMark>> ListPendientesByRepresentativeAsync(

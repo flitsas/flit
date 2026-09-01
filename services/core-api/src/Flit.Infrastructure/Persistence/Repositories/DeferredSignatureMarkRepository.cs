@@ -15,13 +15,25 @@ internal sealed class DeferredSignatureMarkRepository(FlitDbContext db) : IDefer
         Guid tenantId,
         Guid procedureInstanceId,
         string partyRole,
-        CancellationToken cancellationToken = default) =>
-        db.DeferredSignatureMarks.FirstOrDefaultAsync(
+        string? representativeDocumentNumber = null,
+        CancellationToken cancellationToken = default)
+    {
+        // ADR-0053 (Múltiple Propietario) — sin el filtro por documento, dos actores jurídicos del mismo
+        // rol (dos copropietarios) comparten (tenant, trámite, rol) y la consulta devolvía SIEMPRE la
+        // primera marca pendiente que encontrara, sin importar a cuál representante pertenecía: la marca
+        // de un copropietario se leía/pisaba con la del otro. Sin documento (mandatario, que no es un
+        // actor y siempre es único por trámite) se preserva la búsqueda solo por rol.
+        var documento = string.IsNullOrWhiteSpace(representativeDocumentNumber)
+            ? null
+            : representativeDocumentNumber.Trim();
+        return db.DeferredSignatureMarks.FirstOrDefaultAsync(
             m => m.TenantId == tenantId
                 && m.ProcedureInstanceId == procedureInstanceId
                 && m.PartyRole == partyRole
+                && (documento == null || m.RepresentativeDocumentNumber == documento)
                 && m.Estado == DeferredSignatureEstados.Pendiente,
             cancellationToken);
+    }
 
     public async Task<IReadOnlyList<DeferredSignatureMark>> ListPendientesByRepresentativeAsync(
         Guid tenantId,
