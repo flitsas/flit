@@ -43,6 +43,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { actorsOrderedByOrdinal, identityStatusForActor } from '@/lib/tramites/ownership-share';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
 export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -157,6 +158,58 @@ function OrganismoInfoCard({ name }: { name: string }) {
           sistema en este punto, no un dato que haya que consultar aparte. */}
       <p className="mt-1 text-xs opacity-70">Convenio activo · Radicación electrónica habilitada</p>
     </ResumenCard>
+  );
+}
+
+/**
+ * Múltiple Propietario (ADR-0053) — estado de identidad de CADA copropietario de un lado, ordenado
+ * por `ordinal`. Existe porque el resumen embebido (`MatriculaResumen`, más abajo) sigue mostrando
+ * solo al ordinal=1 de cada lado (captura + biométrica embebida no se rediseñaron para N actores en
+ * este PR — brecha conocida, ver handoff), y "el trámite no avanza hasta que TODOS validen y
+ * firmen" exige que el gestor pueda ver A QUIÉN LE FALTA, no solo un agregado por lado que puede
+ * decir "falta 1" con 3 pendientes. Solo se pinta cuando el lado tiene 2+ actores — con uno solo,
+ * el resumen embebido de abajo ya lo cubre por completo y esta lista no aporta nada nuevo (cero
+ * regresión: no se pinta en el caso mayoritario).
+ */
+export function CopropietariosEstadoSection({
+  titulo,
+  actores,
+  biometric,
+  firmaBaulPartes,
+}: {
+  titulo: string;
+  actores: ProcedureActor[];
+  biometric: BiometricValidation[];
+  firmaBaulPartes: string[];
+}) {
+  const ordenados = actorsOrderedByOrdinal(actores);
+  if (ordenados.length < 2) return null;
+  return (
+    <div className={WIZARD_CARD}>
+      <WizardCardHeader title={`Copropietarios — ${titulo}`} />
+      <ul className="space-y-1.5" aria-label={`Estado de identidad por copropietario — ${titulo}`}>
+        {ordenados.map(({ item: actor, ordinal }) => {
+          const estado = identityStatusForActor(actor, biometric, firmaBaulPartes);
+          return (
+            <li
+              key={`${actor.rol}-${ordinal}`}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2.5"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-semibold">
+                  {titulo} {ordinal} · {actor.nombreCompleto || 'Sin nombre'}
+                </p>
+                <p className="text-xs opacity-70">
+                  {actor.tipoDocumento} {actor.numeroDocumento}
+                  {actor.porcentaje != null ? ` · ${actor.porcentaje}%` : ''}
+                </p>
+              </div>
+              <StatusBadge label={estado.label} tone={estado.tone} />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -421,6 +474,19 @@ export function FirmaFurStep({
   );
   const locatarioContact = useMemo(
     () => actorsContact.find((a) => a.rol === 'locatario') ?? null,
+    [actorsContact],
+  );
+
+  // Múltiple Propietario (ADR-0053) — TODOS los actores de cada lado (no solo el ordinal=1 que
+  // consumen `vendedor`/`comprador` arriba, para el resumen embebido que no cambia en este PR).
+  // `actorsContact` (GET .../actors) ya trae `ordinal`; `CopropietariosEstadoSection` los ordena y
+  // no pinta nada con un solo actor (cero regresión sobre el caso mayoritario).
+  const vendedoresContact = useMemo(
+    () => actorsContact.filter((a) => a.rol === 'vendedor'),
+    [actorsContact],
+  );
+  const compradoresContact = useMemo(
+    () => actorsContact.filter((a) => a.rol === 'comprador'),
     [actorsContact],
   );
 
@@ -698,6 +764,22 @@ export function FirmaFurStep({
         prioritario={prioritario}
         onPrioritarioChange={instanceId ? handlePrioritarioChange : undefined}
         extrasSlot={organismoRow}
+      />
+
+      {/* Múltiple Propietario (ADR-0053) — visibilidad por copropietario, ver docstring de
+          `CopropietariosEstadoSection`. Cada lado es independiente: un traspaso puede tener 3
+          vendedores y 1 comprador, o viceversa. */}
+      <CopropietariosEstadoSection
+        titulo={rotulosPorRol?.vendedor?.trim() || 'Vendedor'}
+        actores={vendedoresContact}
+        biometric={biometric}
+        firmaBaulPartes={firmaBaulPartes}
+      />
+      <CopropietariosEstadoSection
+        titulo={rotulosPorRol?.comprador?.trim() || 'Comprador'}
+        actores={compradoresContact}
+        biometric={biometric}
+        firmaBaulPartes={firmaBaulPartes}
       />
 
       <ExpedienteVisor
