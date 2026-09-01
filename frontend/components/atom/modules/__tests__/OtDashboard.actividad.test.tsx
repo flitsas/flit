@@ -173,7 +173,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(screen.queryByTestId("ot-inicio-composicion")).not.toBeInTheDocument();
   });
 
-  it("AC2 — sin movimiento lo dice con palabras, no con un gráfico en blanco", async () => {
+  it("AC3 — sin movimiento lo dice con palabras, no con un gráfico en blanco", async () => {
     fetchOtReport.mockResolvedValue(informe(SIN_MOVIMIENTO));
     render(<OtDashboard />);
 
@@ -183,7 +183,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(screen.queryByTestId("ot-inicio-actividad")).not.toBeInTheDocument();
   });
 
-  it("AC3 — la bienvenida nombra al organismo y no anuncia nada del gestor", async () => {
+  it("AC4 — la bienvenida nombra al organismo y no anuncia nada del gestor", async () => {
     render(<OtDashboard />);
 
     expect(
@@ -194,7 +194,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(screen.queryByText(/Nueva integración/i)).not.toBeInTheDocument();
   });
 
-  it("AC3 — el banner conserva el mecanismo de pasar mensajes, con contenido del organismo", async () => {
+  it("AC4 — el banner conserva el mecanismo de pasar mensajes, con contenido del organismo", async () => {
     render(<OtDashboard />);
 
     expect(await screen.findByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
@@ -221,7 +221,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(screen.getByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
   });
 
-  it("AC3 — con la cola vacía el banner no promete trabajo que no existe", async () => {
+  it("AC4 — con la cola vacía el banner no promete trabajo que no existe", async () => {
     fetchOtOperationalPanel.mockResolvedValue({
       ...PANEL,
       movimiento: { ...PANEL.movimiento, pendientesTotal: 0 },
@@ -234,7 +234,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     ).toBeInTheDocument();
   });
 
-  it("AC3 — si el catálogo no responde, la bienvenida degrada sin romper la pantalla", async () => {
+  it("AC4 — si el catálogo no responde, la bienvenida degrada sin romper la pantalla", async () => {
     fetchTransitOffices.mockRejectedValue(new Error("503"));
     render(<OtDashboard />);
 
@@ -242,7 +242,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(await screen.findByText("Pendientes en total")).toBeInTheDocument();
   });
 
-  it("AC4 — un fallo de la actividad no tumba los indicadores de la cola", async () => {
+  it("AC5 — un fallo de la actividad no tumba los indicadores de la cola", async () => {
     fetchOtReport.mockRejectedValue(new Error("500"));
     render(<OtDashboard />);
 
