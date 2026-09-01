@@ -47,7 +47,13 @@ public sealed record VehiculoDatos(
     string? TipoServicio = null,
     string? Capacidad = null,
     string? PesoBruto = null,
-    string? NumeroEjes = null);
+    string? NumeroEjes = null,
+    string? Alto = null,
+    string? Ancho = null,
+    string? Largo = null,
+    string? NumeroLlantas = null,
+    // Numeral 8 del FUR de maquinaria: datosTecnicos.rodaje (llantas / cilindros / orugas / resto → otros).
+    string? TipoTraccion = null);
 
 /// <summary>Organismo de tránsito seleccionado (de field_values transit_office_*).</summary>
 public sealed record OrganismoTransito(string? Codigo, string? Nombre, string? Ciudad);
@@ -122,6 +128,11 @@ public sealed record FurDocumentData(
     // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
     // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).
     FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor,
+    /// <summary>
+    /// Valor de <c>tramites.vehicle_classification_fur.field_to_fill</c>: casilla a marcar en el
+    /// numeral 4. Si es null, el mapper intenta el literal de <see cref="VehiculoDatos.Clase"/>.
+    /// </summary>
+    string? FieldToFill = null,
     // Casilla 19 "EMPRESA VINCULADORA" del FUR: solo aplica a servicio público (transporte vinculado a
     // una empresa habilitada); en particular/matrícula sin vinculación queda null y la casilla sale en
     // blanco (comportamiento por defecto, sin romper trámites existentes que no traen este dato).
@@ -210,6 +221,12 @@ public interface IFurDocumentGenerator
 {
     /// <summary>Genera el FUR (Formulario Único de Registro) con los datos del trámite.</summary>
     GeneratedDocument GenerateFur(FurDocumentData data);
+
+    /// <summary>
+    /// Preview de calibración: pinta todos los campos del manifiesto del formato indicado (por defecto
+    /// automotor). No usa tipología. Solo SuperAdmin preview.
+    /// </summary>
+    GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor);
 
     /// <summary>Genera el contrato de compraventa (solo traspaso) con los datos del trámite.</summary>
     GeneratedDocument GenerateCompraventa(FurDocumentData data);

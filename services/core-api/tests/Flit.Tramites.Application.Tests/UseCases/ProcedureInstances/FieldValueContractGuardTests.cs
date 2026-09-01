@@ -131,8 +131,13 @@ public sealed class FieldValueContractGuardTests
         // normaliza cualquiera de las dos formas a una sola casilla del FUR.
         ["vehicle_service"] = new([Verifik, CreateFromConsulta], Modo.Literal),
         ["vehicle_passengers"] = new(Verifik, Modo.Literal),
-        ["vehicle_weight"] = new(Verifik, Modo.Literal),
-        ["vehicle_axles"] = new(Verifik, Modo.Literal),
+        ["vehicle_weight"] = new([Verifik, Kyverum], Modo.Literal),
+        ["vehicle_axles"] = new([Verifik, Kyverum], Modo.Literal),
+        ["vehicle_height"] = new([Verifik, Kyverum], Modo.Literal),
+        ["vehicle_width"] = new([Verifik, Kyverum], Modo.Literal),
+        ["vehicle_length"] = new([Verifik, Kyverum], Modo.Literal),
+        ["vehicle_tires"] = new([Verifik, Kyverum], Modo.Literal),
+        ["vehicle_traction"] = new([Verifik, Kyverum], Modo.Literal),
         ["transit_office_name"] = new(Verifik, Modo.Literal),
 
         // Snapshot RUNT de las transformaciones (ADR-0029): llave CONSTRUIDA en ejecución como

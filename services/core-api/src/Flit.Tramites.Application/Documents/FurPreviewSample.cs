@@ -34,6 +34,7 @@ public static class FurPreviewSample
 
     public const string VehicleCarro = "carro";
     public const string VehicleMoto = "moto";
+    public const string VehicleCamioneta = "camioneta";
     public const string VehicleRemolque = "remolque";
     public const string VehicleMaquinaria = "maquinaria";
 
@@ -57,7 +58,7 @@ public static class FurPreviewSample
     {
         kind = VehicleCarro;
         var n = (raw ?? string.Empty).Trim().ToLowerInvariant();
-        if (n is VehicleCarro or VehicleMoto or VehicleRemolque or VehicleMaquinaria)
+        if (n is VehicleCarro or VehicleMoto or VehicleCamioneta or VehicleRemolque or VehicleMaquinaria)
         {
             kind = n;
             return true;
@@ -131,8 +132,54 @@ public static class FurPreviewSample
             throw new ArgumentOutOfRangeException(nameof(vehicleKind), "Parámetros de simulación inválidos.");
         }
 
+        var (template, clase, placa, fieldToFill) = VehicleAssets(vehicle);
+        return FinishBuild(procedureCode, family, sellerKind, buyerKind, template, clase, placa, flags, fieldToFill, profile);
+    }
+
+    public static FurDocumentData BuildFromClassification(
+        string procedureCode,
+        string family,
+        string sellerPersonKind,
+        string buyerPersonKind,
+        string vehicleClass,
+        FurTemplateFormat format,
+        string? fieldToFill,
+        FurPreviewFlags? flags = null,
+        ProcedureTypeGateProfile? profile = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(procedureCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(vehicleClass);
+
+        if (!TryParsePersonKind(sellerPersonKind, out var sellerKind)
+            || !TryParsePersonKind(buyerPersonKind, out var buyerKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sellerPersonKind), "Parámetros de simulación inválidos.");
+        }
+
+        var clase = vehicleClass.Trim();
+        var placa = IsMotoClase(clase) ? "ABC12A" : PhPlaca;
+        return FinishBuild(procedureCode, family, sellerKind, buyerKind, format, clase, placa, flags, fieldToFill, profile);
+    }
+
+    private static bool IsMotoClase(string clase)
+    {
+        var n = FurClassificationNormalizer.Normalize(clase);
+        return n.Contains("MOTO", StringComparison.Ordinal);
+    }
+
+    private static FurDocumentData FinishBuild(
+        string procedureCode,
+        string family,
+        string sellerKind,
+        string buyerKind,
+        FurTemplateFormat template,
+        string clase,
+        string placa,
+        FurPreviewFlags? flags,
+        string? fieldToFill,
+        ProcedureTypeGateProfile? profile)
+    {
         var requiresSeller = profile?.RequiresSeller ?? IsTraspaso(family, procedureCode);
-        var (template, clase, placa) = VehicleAssets(vehicle);
         var partes = new List<DocumentParte>();
         if (requiresSeller)
             partes.Add(BuildParte("vendedor", sellerKind, esVendedor: true));
@@ -173,7 +220,10 @@ public static class FurPreviewSample
                 TipoServicio: "PARTICULAR",
                 Capacidad: "5",
                 PesoBruto: "1200",
-                NumeroEjes: "2");
+                NumeroEjes: "3",
+                Alto: "2000",
+                Ancho: "2980",
+                Largo: "15500");
 
         return new FurDocumentData(
             ProcedureInstanceId: Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
@@ -194,6 +244,7 @@ public static class FurPreviewSample
             PrendaMarking: prendaMarking,
             AcreedorPrenda: prendaMarking is FurPrendaMarking.Ninguna ? null : PhAcreedor,
             TemplateFormat: template,
+            FieldToFill: fieldToFill,
             Transformaciones: transformaciones,
             RequiereVendedor: requiresSeller,
             SignatureActors: signatureRoles);
@@ -255,13 +306,17 @@ public static class FurPreviewSample
     private static DocumentParte BuildLocatario() =>
         new("locatario", PhLocatario, PhLocatarioDoc, null, PhLocatarioTipoDoc, null, "[DIRECCIÓN SINTÉTICA]", "Medellín");
 
-    private static (FurTemplateFormat Format, string Clase, string Placa) VehicleAssets(string kind) =>
+    public static FurTemplateFormat TemplateFormatFor(string vehicleKind) =>
+        VehicleAssets(vehicleKind).Format;
+
+    private static (FurTemplateFormat Format, string Clase, string Placa, string FieldToFill) VehicleAssets(string kind) =>
         kind switch
         {
-            VehicleMoto => (FurTemplateFormat.Automotor, "MOTOCICLETA", "ABC12A"),
-            VehicleRemolque => (FurTemplateFormat.Remolques, "REMOLQUE", PhPlaca),
-            VehicleMaquinaria => (FurTemplateFormat.Maquinaria, "EXCAVADORA", PhPlaca),
-            _ => (FurTemplateFormat.Automotor, "AUTOMOVIL", PhPlaca),
+            VehicleMoto => (FurTemplateFormat.Automotor, "MOTOCICLETA", "ABC12A", "MOTOCICLETA"),
+            VehicleCamioneta => (FurTemplateFormat.Automotor, "CAMIONETA", PhPlaca, "CAMIONETA"),
+            VehicleRemolque => (FurTemplateFormat.Remolques, "REMOLQUE", PhPlaca, "REMOLQUE"),
+            VehicleMaquinaria => (FurTemplateFormat.Maquinaria, "EXCAVADORA", PhPlaca, "CONSTRUCCION"),
+            _ => (FurTemplateFormat.Automotor, "AUTOMOVIL", PhPlaca, "AUTOMOVIL"),
         };
 
     private static FurPrendaMarking ResolvePrenda(string code)

@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Tramites.Application.Documents;
@@ -90,6 +91,33 @@ public sealed class FurOverlayDocumentGeneratorTests
         if (!TemplatesExist()) return;
 
         var doc = CreateGenerator().GenerateFur(TraspasoData());
+        CountPages(doc.Content).Should().Be(2);
+    }
+
+    [Fact]
+    public void GenerateFurFillAll_ProducesTwoPagePdfWithAllManifestFields()
+    {
+        if (!TemplatesExist()) return;
+
+        var manifest = FurFieldManifestLoader.LoadEmbedded();
+        var values = FurFillAllOverlay.FromManifest(manifest);
+        values.Count.Should().Be(manifest.Fields.Count);
+        values.Keys.Should().BeEquivalentTo(manifest.Fields.Select(f => f.Id));
+        values["processing_day"].Text.Should().Be("08");
+        values["processing_month"].Text.Should().Be("08");
+        values["processing_year"].Text.Should().Be("2026");
+        values["plate_letter"].Text.Should().Be("ABC");
+        values["plate_number"].Text.Should().Be("123");
+        foreach (var value in values.Values)
+        {
+            var hasText = !string.IsNullOrEmpty(value.Text);
+            var hasImage = value.ImageBytes is { Length: > 0 };
+            (hasText || hasImage).Should().BeTrue();
+        }
+
+        var doc = CreateGenerator().GenerateFurFillAll();
+        doc.Filename.Should().Be("fur_FILLALL_AUTOMOTOR.pdf");
+        Encoding.ASCII.GetString(doc.Content, 0, 4).Should().Be("%PDF");
         CountPages(doc.Content).Should().Be(2);
     }
 
@@ -316,7 +344,7 @@ public sealed class FurOverlayDocumentGeneratorTests
         var data = FullData() with { FechaTramite = new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc) };
         var values = FurFieldMapper.Map(data);
         values["processing_day"].Text.Should().Be("15");
-        values["processing_month"].Text.Should().Be("3");
+        values["processing_month"].Text.Should().Be("03");
         values["processing_year"].Text.Should().Be("2026");
     }
 

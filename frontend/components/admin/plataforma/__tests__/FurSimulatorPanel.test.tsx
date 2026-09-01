@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 
 const listProcedureTypes = vi.fn();
 const fetchFurPreview = vi.fn();
+const listFurClassifications = vi.fn();
 const openPdfBlobInNewTab = vi.fn();
 
 vi.mock("@/lib/api/superadmin-client", () => ({
@@ -16,6 +17,7 @@ vi.mock("@/lib/api/superadmin-client", () => ({
 
 vi.mock("@/lib/api/admin-plataforma-fur", () => ({
   fetchFurPreview: (...a: unknown[]) => fetchFurPreview(...a),
+  listFurClassifications: (...a: unknown[]) => listFurClassifications(...a),
 }));
 
 vi.mock("@/lib/documents/open-document-tab", () => ({
@@ -60,12 +62,20 @@ const sampleTypes = [
   },
 ];
 
+const sampleClassifications = [
+  { classification: "AUTOMOVIL", templateFormat: "AUTOMOTOR", fieldToFill: "AUTOMOVIL" },
+  { classification: "EXCAVADORA", templateFormat: "MAQUINARIA", fieldToFill: "CONSTRUCCION" },
+  { classification: "REMOLQUE", templateFormat: "REMOLQUES", fieldToFill: "REMOLQUE" },
+];
+
 describe("FurSimulatorPanel", () => {
   beforeEach(() => {
     listProcedureTypes.mockReset();
     fetchFurPreview.mockReset();
+    listFurClassifications.mockReset();
     openPdfBlobInNewTab.mockReset();
     listProcedureTypes.mockResolvedValue(sampleTypes);
+    listFurClassifications.mockResolvedValue(sampleClassifications);
     fetchFurPreview.mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
     openPdfBlobInNewTab.mockImplementation(async (fn: () => Promise<Blob>) => {
       await fn();
@@ -76,6 +86,29 @@ describe("FurSimulatorPanel", () => {
     renderPanel();
     const submit = await screen.findByRole("button", { name: /simular fur/i });
     expect(submit).toBeDisabled();
+    const fillAll = screen.getByRole("button", { name: /simular llenado completo — automotor/i });
+    expect(fillAll).toBeEnabled();
+  });
+
+  it("simula llenado completo de automotor sin tipo ni clase y envía fillAll + templateFormat", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const fillAll = await screen.findByRole("button", { name: /simular llenado completo — automotor/i });
+    await user.click(fillAll);
+    await waitFor(() => expect(openPdfBlobInNewTab).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchFurPreview).toHaveBeenCalledTimes(1));
+    expect(fetchFurPreview).toHaveBeenCalledWith({ fillAll: true, templateFormat: "AUTOMOTOR" });
+  });
+
+  it("llenado completo de maquinaria no depende de la clase seleccionada", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByLabelText(/tipo de clase del vehículo/i);
+    await user.selectOptions(screen.getByLabelText(/tipo de clase del vehículo/i), "EXCAVADORA");
+    await user.click(screen.getByRole("button", { name: /simular llenado completo — maquinaria/i }));
+    await waitFor(() =>
+      expect(fetchFurPreview).toHaveBeenCalledWith({ fillAll: true, templateFormat: "MAQUINARIA" }),
+    );
   });
 
   it("deshabilita vendedor en matrícula y muestra la pista", async () => {
@@ -94,7 +127,7 @@ describe("FurSimulatorPanel", () => {
     await screen.findByLabelText(/tipo de trámite padre/i);
     await user.selectOptions(screen.getByLabelText(/tipo de trámite padre/i), "TRASPASO");
     await user.selectOptions(screen.getByLabelText(/^tipo de trámite$/i), sampleTypes[1].id);
-    await user.selectOptions(screen.getByLabelText(/tipo de vehículo/i), "carro");
+    await user.selectOptions(screen.getByLabelText(/tipo de clase del vehículo/i), "AUTOMOVIL");
     expect(screen.getByLabelText(/^vendedor$/i)).toBeEnabled();
 
     await user.click(screen.getByLabelText(/cambio de color/i));
@@ -107,7 +140,7 @@ describe("FurSimulatorPanel", () => {
     expect(fetchFurPreview).toHaveBeenCalledWith(
       expect.objectContaining({
         procedureTypeId: sampleTypes[1].id,
-        vehicleKind: "carro",
+        vehicleClass: "AUTOMOVIL",
         sellerPersonKind: "natural",
         buyerPersonKind: "natural",
         cambioColor: true,

@@ -650,6 +650,9 @@ public sealed class FurHandlerTests
             return new GeneratedDocument("fur", "fur.pdf", "application/pdf", [1, 2, 3]);
         }
 
+        public GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor) =>
+            new("fur", "fur_FILLALL.pdf", "application/pdf", [1, 2, 3]);
+
         public GeneratedDocument GenerateCompraventa(FurDocumentData data)
         {
             Captured = data;
