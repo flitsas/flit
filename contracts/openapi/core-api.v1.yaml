@@ -3303,6 +3303,127 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/actors:
+    get:
+      operationId: tramitesGetActors
+      tags: [Tramites, Actores]
+      summary: Actores guardados de un trámite, incluidos los propietarios agregados (Múltiple Propietario)
+      description: >
+        Devuelve TODOS los actores persistidos por lado (vendedor/comprador/locatario), ordenados por
+        `ordinal` ascendente dentro de cada `rol` (ADR-0053, Propuesto). `ordinal=1` es el actor
+        PRINCIPAL/solidario: el que existía antes de Múltiple Propietario (siembra del paso 1, consulta
+        RUNT automática, no se elimina). `ordinal` 2..4 son propietarios AGREGADOS. `porcentaje` es
+        `null` cuando el lado tiene un solo actor (sin cambios respecto al contrato anterior); desde el
+        segundo actor de un lado, TODOS los actores de ese lado traen `porcentaje` no nulo y la suma de
+        ese lado es exactamente 100.00.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Actores del trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActorsResponse"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: tramitesPutActors
+      tags: [Tramites, Actores]
+      summary: Guarda los actores de uno o varios roles del trámite (upsert por rol; Múltiple Propietario)
+      description: >
+        Upsert INCREMENTAL por `rol` (comprador/vendedor/locatario): reemplaza TODOS los actores del/de
+        los `rol(es)` presentes en el body por el conjunto enviado para ese rol; los roles ausentes del
+        body se conservan intactos (sin cambios respecto al contrato anterior). Dentro de un mismo
+        `rol`, `ordinal` identifica a cada propietario (1 = principal/solidario, 2..4 = agregados) y NO
+        se reasigna entre PUTs: reenviar un `ordinal` ya guardado lo ACTUALIZA, omitirlo lo ELIMINA (y
+        redistribuye su porcentaje según reglas de UI, no de contrato), y un `ordinal` nuevo lo CREA.
+        `ordinal=1` no puede faltar en un PUT que incluya su `rol` (el actor principal no se elimina).
+        Cada actor del conjunto —principal y agregados por igual— pasa por la MISMA validación de forma
+        y el MISMO disparo de identidad/RUES/RUNT que antes solo corría para el actor único de cada rol
+        (ver ADR-0053, notas operativas). Reglas de porcentaje (autoritativas en backend, independientes
+        de cualquier cálculo del frontend):
+          - 1 actor en el rol → `porcentaje` debe venir `null` (si viene con valor, se ignora).
+          - ≥2 actores en el rol → la suma de `porcentaje` EFECTIVA del lado (actores del request +
+            actores conservados de ese rol que no vinieron en el request) debe ser EXACTAMENTE 100.00 y
+            ningún actor puede traer `porcentaje <= 0`.
+          - Documento duplicado dentro del MISMO lado se rechaza SIEMPRE (`actor_duplicado_mismo_lado`).
+          - La regla `vendedor ≠ comprador` (`partes_duplicadas`) solo se evalúa cuando el conjunto
+            efectivo deja EXACTAMENTE 1 actor en cada lado (comportamiento idéntico al contrato
+            anterior). Con 2+ actores en cualquiera de los dos lados, esa comprobación cruzada se omite
+            a propósito: un mismo documento puede aparecer como vendedor y como comprador (copropietario
+            que concurre a la venta y a la vez compra una cuota adicional). Ver ADR-0053.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutActorsRequest"
+      responses:
+        "200":
+          description: Actores guardados.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActorsResponse"
+        "400":
+          description: Datos inválidos (documento, email, rol, tipo de documento, header ausente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite no existe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            `not_draft` | `rol_not_allowed` | `partes_duplicadas` | `actor_duplicado_mismo_lado` |
+            `porcentajes_no_suman_100` | `porcentaje_en_cero` | `ordinal_fuera_de_rango` |
+            `ordinal_principal_ausente` | `locatario_igual_al_propietario`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: entity_catalog_missing — el catálogo de procedure_entities no está seedeado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/actors/contact-lookup:
     get:
       operationId: actorContactLookup
@@ -8740,6 +8861,102 @@ components:
         maxDeliveryAttempts:
           type: integer
           description: Tope de reintentos a partir del cual un evento se considera dead-letter.
+    ActorInput:
+      type: object
+      description: >
+        Un propietario/parte de un lado del trámite (Múltiple Propietario, ADR-0053 Propuesto). El
+        array `actors` de `PutActorsRequest` puede traer VARIOS `ActorInput` con el MISMO `rol` (hasta
+        4), cada uno con un `ordinal` distinto. Antes de esta versión cada `rol` admitía exactamente un
+        actor (`ordinal` implícito 1) — ese caso se sigue comportando IGUAL: un solo `ActorInput` por
+        `rol`, sin `ordinal` ni `porcentaje`.
+      required: [rol, tipoDocumento, numeroDocumento, nombreCompleto, email]
+      properties:
+        rol:
+          type: string
+          enum: [comprador, vendedor, locatario]
+        ordinal:
+          type: integer
+          minimum: 1
+          maximum: 4
+          default: 1
+          description: >
+            Posición del actor dentro de su `rol`. `1` = actor PRINCIPAL/solidario: conserva la
+            siembra del documento del paso 1 y su consulta RUNT automática; su pestaña no se puede
+            eliminar y absorbe el residuo (100 − suma de los demás) mientras el gestor no edite su
+            porcentaje explícitamente — esa auto-absorción es UX de frontend, el backend solo exige
+            el resultado final (suma 100, ninguno en 0). `2`..`4` = propietarios AGREGADOS: se digitan
+            y consultan uno a uno (mismo botón Consultar, RUES y RUNT) y sí se pueden eliminar.
+            Omitir el campo equivale a `1` (compatibilidad con el contrato anterior).
+        porcentaje:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 100
+          nullable: true
+          description: >
+            Porcentaje de propiedad, 2 decimales. `null` cuando el `rol` tiene un solo actor en el
+            conjunto EFECTIVO (request + actores conservados) — comportamiento sin cambios: sin
+            pestañas de reparto, sin bloque de porcentaje. Con 2+ actores del mismo `rol`, TODOS deben
+            traer `porcentaje` no nulo y la suma efectiva del lado debe ser EXACTAMENTE 100. NO se
+            hereda ni se compara contra el RUNT.
+        tipoDocumento: { type: string, enum: [CC, CE, NIT, PAS, TI] }
+        numeroDocumento: { type: string }
+        nombreCompleto: { type: string }
+        email: { type: string }
+        telefono: { type: string, nullable: true }
+        ciudad: { type: string, nullable: true }
+        direccion: { type: string, nullable: true }
+        personType: { type: string, enum: [natural, juridical], nullable: true }
+        esRepresentanteLegal: { type: boolean, default: false }
+        representanteLegal:
+          $ref: "#/components/schemas/ActorRepresentanteLegal"
+        mandante:
+          $ref: "#/components/schemas/ActorMandante"
+        autorizaReutilizacionDatos: { type: boolean, default: false }
+    ActorDto:
+      allOf:
+        - $ref: "#/components/schemas/ActorInput"
+      description: >
+        Actor persistido, devuelto por GET/PUT `.../instances/{id}/actors`. Mismos campos que
+        `ActorInput`; `ordinal` y `porcentaje` siempre presentes (porcentaje `null` cuando el lado
+        tiene un solo actor).
+    ActorRepresentanteLegal:
+      type: object
+      description: >
+        Representante legal / apoderado de un actor persona jurídica. Información de contacto
+        embebida en `actor.metadata` — no es un actor de primera clase (no participa en biométrica ni
+        en los gates del wizard salvo como sujeto de identidad de SU actor).
+      properties:
+        tipoDocumento: { type: string, nullable: true }
+        numeroDocumento: { type: string, nullable: true }
+        nombreCompleto: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        telefono: { type: string, nullable: true }
+        mecanismoFirma: { type: string, enum: [baul, identidad], nullable: true }
+    ActorMandante:
+      type: object
+      description: Mandante/poderdante de un actor. Información de contacto embebida en `actor.metadata`.
+      properties:
+        tipoDocumento: { type: string, nullable: true }
+        numeroDocumento: { type: string, nullable: true }
+        nombreCompleto: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+    PutActorsRequest:
+      type: object
+      required: [actors]
+      properties:
+        actors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActorInput"
+    ActorsResponse:
+      type: object
+      required: [actors]
+      properties:
+        actors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActorDto"
     ActorContactLookupResponse:
       type: object
       description: >

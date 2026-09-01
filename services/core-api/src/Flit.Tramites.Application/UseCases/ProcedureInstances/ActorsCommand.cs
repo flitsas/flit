@@ -30,6 +30,15 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// (fail-safe, ver <see cref="PutActorsHandler"/>). La captura UI (checkbox) llega en la HU de
 /// frontend #10885 — este campo ya queda disponible en el contrato para quien la implemente.
 /// </remarks>
+/// <remarks>
+/// ADR-0053 (Múltiple Propietario): <see cref="Ordinal"/> (1..4, default 1) identifica al actor
+/// dentro de su <see cref="Rol"/> — <c>1</c> es el principal/solidario (el que existía antes de
+/// ADR-0053; omitirlo cuando el request incluye su rol es <c>ordinal_principal_ausente</c>).
+/// <see cref="Porcentaje"/> (2 decimales) solo es exigido por el backend cuando el conjunto EFECTIVO
+/// del rol (request ∪ conservados) tiene 2 o más actores; con un solo actor se ignora y se persiste
+/// <c>null</c> (comportamiento previo, sin bloque de reparto). Omitir ambos campos equivale al
+/// contrato anterior a ADR-0053: un actor por rol, <c>ordinal=1</c>, sin porcentaje.
+/// </remarks>
 public sealed record ActorInput(
     string Rol,
     string TipoDocumento,
@@ -43,8 +52,11 @@ public sealed record ActorInput(
     bool EsRepresentanteLegal = false,
     ActorRepresentanteLegal? RepresentanteLegal = null,
     ActorMandante? Mandante = null,
-    bool AutorizaReutilizacionDatos = false);
+    bool AutorizaReutilizacionDatos = false,
+    int Ordinal = 1,
+    decimal? Porcentaje = null);
 
+/// <remarks>ADR-0053: ver <see cref="ActorInput"/> — mismos campos <see cref="Ordinal"/>/<see cref="Porcentaje"/>, siempre presentes en la respuesta.</remarks>
 public sealed record ActorDto(
     string Rol,
     string TipoDocumento,
@@ -57,7 +69,9 @@ public sealed record ActorDto(
     string? PersonType = null,
     bool EsRepresentanteLegal = false,
     ActorRepresentanteLegal? RepresentanteLegal = null,
-    ActorMandante? Mandante = null);
+    ActorMandante? Mandante = null,
+    int Ordinal = 1,
+    decimal? Porcentaje = null);
 
 /// <summary>
 /// Representante legal / apoderado de una persona jurídica (persona natural). Datos capturados
@@ -168,6 +182,9 @@ public sealed class PutActorsHandler(
             var rol = ParseRol(a.Rol);
             if (rol is null)
                 return (null, "invalid_rol");
+            // ADR-0053: posición del actor dentro de su rol, 1..4 (1 = principal/solidario).
+            if (a.Ordinal is < 1 or > 4)
+                return (null, "ordinal_fuera_de_rango");
             if (string.IsNullOrWhiteSpace(a.TipoDocumento) || !ValidDocumentTypes.Contains(a.TipoDocumento))
                 return (null, "invalid_document_type");
             if (string.IsNullOrWhiteSpace(a.NumeroDocumento))
@@ -204,15 +221,32 @@ public sealed class PutActorsHandler(
         // 2. Roles permitidos según modalidad_entrada (matriz de dominio, no hardcode).
         var allowedRoles = AllowedRoles(instance);
 
+        // ADR-0053: un rol admite ahora 1..4 actores (`providedRoles` deja de exigir unicidad de
+        // rol dentro del request — eso lo impone ahora `ordinal`, no la presencia del rol).
         var providedRoles = new List<ParteRol>();
         foreach (var a in inputs)
         {
             var rol = ParseRol(a.Rol)!.Value;
             if (!allowedRoles.Contains(rol))
                 return (null, "rol_not_allowed");
-            if (providedRoles.Contains(rol))
-                return (null, "duplicate_rol"); // un actor por rol (1:1 con la entity).
-            providedRoles.Add(rol);
+            if (!providedRoles.Contains(rol))
+                providedRoles.Add(rol);
+        }
+
+        // 2b. ADR-0053 — dentro de cada rol presente en el request: ordinal único (el índice de BD
+        // solo lo garantiza tras el SaveChanges; aquí se atrapa antes) y el principal (ordinal=1) no
+        // puede faltar — el upsert por rol BORRA todos los actores del rol y el PUT los reemplaza
+        // por el conjunto enviado, así que omitir ordinal=1 lo eliminaría.
+        foreach (var rol in providedRoles)
+        {
+            var ordinals = inputs
+                .Where(a => ParseRol(a.Rol) == rol)
+                .Select(a => a.Ordinal)
+                .ToList();
+            if (ordinals.Distinct().Count() != ordinals.Count)
+                return (null, "ordinal_fuera_de_rango"); // dos actores del mismo rol con el mismo ordinal.
+            if (!ordinals.Contains(1))
+                return (null, "ordinal_principal_ausente");
         }
 
         // 3. PUT incremental (upsert por rol): el wizard guarda un rol por paso
@@ -220,14 +254,37 @@ public sealed class PutActorsHandler(
         // completitud de roles obligatorios — eso lo validan los gates de pasos 3–4
         // y el SubmitGate al finalizar. Por eso ya no hay check de "missing_required_rol".
 
+        // 3b. ADR-0053 §4.1/§4.5 — reparto de propiedad sobre el conjunto EFECTIVO por rol (request ∪
+        // conservados): con 1 actor no se exige porcentaje (se ignora si viene); con 2+, todos deben
+        // traer porcentaje > 0 y la suma debe ser EXACTAMENTE 100.00. Autoritativo: el backend nunca
+        // confía en el cálculo del frontend (auto-absorción del residuo, que vive solo ahí).
+        var error = ValidateShares(instance, inputs, providedRoles);
+        if (error is not null)
+            return (null, error);
+
+        // 3c. ADR-0053 §4.4 nivel 1 — duplicidad INTRA-lado: bloqueada SIEMPRE, sin condición de
+        // conteo, sobre cada rol presente en el request (los roles conservados ya se validaron en su
+        // propio PUT).
+        error = ValidateDuplicadosIntraLado(instance, inputs, providedRoles);
+        if (error is not null)
+            return (null, error);
+
         // 4. Unicidad vendedor ≠ comprador (documento y email) sobre el conjunto
         // EFECTIVO: roles del request + actores existentes que se conservan. Así se
         // detecta el duplicado aunque cada parte se guarde en un PUT distinto.
-        var error = ValidateTraspasoPartes(instance, inputs);
+        //
+        // ADR-0053 §4.4 nivel 2 — CONFIRMADO: esta comparación cruzada solo se evalúa cuando AMBOS
+        // lados quedan en exactamente 1 actor efectivo (ver ValidateTraspasoPartes). Con cualquier
+        // lado en 2+, se omite a propósito (copropietario que concurre a la venta y compra una cuota
+        // adicional) — el `if` que envuelve la llamada NO toca la llamada en sí, así que el caso 1-a-1
+        // (mayoritario) ejecuta la MISMA ruta, en el MISMO orden, byte a byte.
+        error = ValidateTraspasoPartes(instance, inputs);
         if (error is not null)
             return (null, error);
 
         // Mismo criterio de conjunto efectivo para el arrendatario: no puede ser el propietario.
+        // ADR-0053 §4.4 — el locatario se deja FUERA del ajuste de nivel 2 (no se relaja): sigue
+        // comparándose 1-a-1 exactamente como antes.
         error = ValidateLocatario(instance, inputs);
         if (error is not null)
             return (null, error);
@@ -257,22 +314,41 @@ public sealed class PutActorsHandler(
             .Where(a => ParseRol(a.ActorType) is { } r && providedRolesSet.Contains(r))
             .ToList();
 
-        // HU #10880: sujeto de identidad ANTES del reemplazo (por rol), para poder comparar el correo tras
-        // el upsert. Solo interesan los roles que SÍ tenían actor previo (un rol nuevo no tiene nada que
-        // reenviar: AC1 exige una validación YA enviada).
-        var previousSubjectsByRol = toRemove
-            .Select(a => (Rol: ParseRol(a.ActorType)!.Value, Subject: IdentitySubjectResolver.For(a)))
-            .ToDictionary(x => x.Rol, x => x.Subject);
+        // HU #10880: sujeto de identidad ANTES del reemplazo (por rol + ordinal), para poder comparar
+        // el correo tras el upsert. Solo interesan los roles que SÍ tenían actor previo (un rol nuevo
+        // no tiene nada que reenviar: AC1 exige una validación YA enviada).
+        //
+        // ADR-0053 — antes de Múltiple Propietario cada rol tenía a lo sumo un actor `toRemove`, así
+        // que un `Dictionary<ParteRol, IdentitySubject>` bastaba. Con 2..4 actores por rol, esa clave
+        // ya no es única (dos filas `toRemove` del mismo rol lanzarían "An item with the same key has
+        // already been added"): la clave pasa a (rol, ordinal) — el ordinal es único dentro del rol
+        // por construcción (índice de BD) — para correlacionar cada actor previo con el nuevo que
+        // ocupa la MISMA posición tras el upsert (ver <see cref="ResendIdentityOnEmailChangeAsync"/>).
+        var previousSubjectsByRolOrdinal = toRemove
+            .Select(a => (Rol: ParseRol(a.ActorType)!.Value, a.Ordinal, Subject: IdentitySubjectResolver.For(a)))
+            .ToDictionary(x => (x.Rol, x.Ordinal), x => x.Subject);
 
         foreach (var actor in toRemove)
             instance.Actors.Remove(actor);
         await repo.SaveChangesAsync(ct);
 
+        // ADR-0053 §4.1/§4.5 — cuántos actores efectivos tendrá cada rol tras este PUT: si el rol viene
+        // en el request, es la cuenta de inputs de ese rol (el rol se reemplaza completo); ya validado
+        // en ValidateShares que con 2+ todos traen porcentaje > 0 sumando 100.00.
+        var countByRol = inputs
+            .GroupBy(a => ParseRol(a.Rol)!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+
         var now = DateTimeOffset.UtcNow;
-        var newActorsByRol = new Dictionary<ParteRol, ProcedureInstanceActor>();
+        var newActorsByRol = new Dictionary<ParteRol, List<ProcedureInstanceActor>>();
         foreach (var a in inputs)
         {
             var rol = ParseRol(a.Rol)!.Value;
+            // Con un solo actor efectivo en el rol, el porcentaje se IGNORA (persiste null) aunque el
+            // request traiga un valor — comportamiento previo a ADR-0053, sin bloque de reparto.
+            var porcentaje = countByRol[rol] <= 1
+                ? (decimal?)null
+                : Math.Round(a.Porcentaje!.Value, 2, MidpointRounding.AwayFromZero);
             var actor = new ProcedureInstanceActor
             {
                 Id = Guid.NewGuid(),
@@ -288,13 +364,20 @@ public sealed class PutActorsHandler(
                 PersonType = ActorPersonTypes.ResolveForDocument(a.TipoDocumento, a.PersonType),
                 EsRepresentanteLegal = a.EsRepresentanteLegal,
                 Metadata = SerializeMetadata(a.Ciudad, a.Direccion, a.RepresentanteLegal, a.Mandante),
+                Ordinal = a.Ordinal,
+                OwnershipPercentage = porcentaje,
                 CreatedAt = now,
             };
             instance.Actors.Add(actor);
             // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
             // INSERT. Sin esto, EF infiere Modified por la PK no-default → UPDATE de 0 filas.
             repo.Add(actor);
-            newActorsByRol[rol] = actor;
+            if (!newActorsByRol.TryGetValue(rol, out var list))
+            {
+                list = [];
+                newActorsByRol[rol] = list;
+            }
+            list.Add(actor);
         }
 
         await repo.SaveChangesAsync(ct);
@@ -307,7 +390,7 @@ public sealed class PutActorsHandler(
         // HU #10880 (AC1/AC2): reenvío de la validación de identidad cuando cambia el correo del sujeto.
         // Corre DESPUÉS del SaveChanges de los actores para que el correo nuevo ya esté persistido cuando
         // IniciarKyverumVerifyHandler recargue la instancia.
-        await ResendIdentityOnEmailChangeAsync(instance, tenantId, previousSubjectsByRol, newActorsByRol, ct);
+        await ResendIdentityOnEmailChangeAsync(instance, tenantId, previousSubjectsByRolOrdinal, newActorsByRol, ct);
 
         // HU #11662: validación de identidad del representante legal de una parte jurídica. Corre DESPUÉS
         // del reenvío por cambio de correo para que, si ese ya creó una validación nueva, la precedencia
@@ -357,12 +440,16 @@ public sealed class PutActorsHandler(
     private async Task EnviarValidacionAlRepresentanteDeLaParteJuridicaAsync(
         ProcedureInstance instance,
         Guid tenantId,
-        Dictionary<ParteRol, ProcedureInstanceActor> newActorsByRol,
+        Dictionary<ParteRol, List<ProcedureInstanceActor>> newActorsByRol,
         CancellationToken ct)
     {
         var rolesQueValidan = RolesQueValidanIdentidad(instance);
 
-        foreach (var (rol, actor) in newActorsByRol)
+        // ADR-0053 §4.1 — mismo cuerpo que antes de Múltiple Propietario, solo cambia la cardinalidad
+        // del bucle: cada actor del rol (1..4, `OrderBy(Ordinal)` para que el principal dispare
+        // primero) pasa por la MISMA regla, no solo el `ordinal=1`.
+        foreach (var (rol, actor) in newActorsByRol.SelectMany(
+            kv => kv.Value.OrderBy(a => a.Ordinal).Select(actor => (kv.Key, actor))))
         {
             // Una parte que el tipo NO manda a validar no convoca validación de nadie, ni siquiera de
             // su representante legal. Sin este corte, un locatario persona jurídica arrastraba a su
@@ -469,21 +556,28 @@ public sealed class PutActorsHandler(
     /// envía correos, así que no hay nada que "reenviar" ahí (la previa igual se conserva sin tocar).
     /// PJ (HU #10688): el sujeto es el representante legal (<see cref="IdentitySubjectResolver"/>), así que
     /// esta lógica ya compara el correo del RL, no el NIT de la empresa.
+    ///
+    /// <para><b>ADR-0053</b> — la correlación "actor previo → actor nuevo" pasa de por-rol a
+    /// por-(rol, ordinal): el upsert reemplaza TODO el rol de una vez, así que el actor previo que
+    /// ocupaba el `ordinal` N es, por construcción, el que se está reemplazando por el nuevo actor
+    /// del MISMO `ordinal` (misma posición de pestaña en el formulario). Con un solo actor por rol
+    /// (caso mayoritario) la clave sigue siendo, en la práctica, "el actor del rol" — cero regresión.</para>
     /// </summary>
     private async Task ResendIdentityOnEmailChangeAsync(
         ProcedureInstance instance,
         Guid tenantId,
-        Dictionary<ParteRol, IdentitySubject> previousSubjectsByRol,
-        Dictionary<ParteRol, ProcedureInstanceActor> newActorsByRol,
+        Dictionary<(ParteRol Rol, int Ordinal), IdentitySubject> previousSubjectsByRolOrdinal,
+        Dictionary<ParteRol, List<ProcedureInstanceActor>> newActorsByRol,
         CancellationToken ct)
     {
         if (!providerOptions.IsKyverum)
             return; // mock: no hay CaptureUrl/envío real que reenviar (AC1 no aplica a este proveedor).
 
-        foreach (var (rol, newActor) in newActorsByRol)
+        foreach (var (rol, newActor) in newActorsByRol.SelectMany(
+            kv => kv.Value.Select(actor => (kv.Key, actor))))
         {
-            if (!previousSubjectsByRol.TryGetValue(rol, out var previous))
-                continue; // actor nuevo para este rol: no había validación previa que reenviar.
+            if (!previousSubjectsByRolOrdinal.TryGetValue((rol, newActor.Ordinal), out var previous))
+                continue; // ordinal nuevo en este rol: no había validación previa que reenviar.
 
             var newSubject = IdentitySubjectResolver.For(newActor);
             var prevEmail = NormalizeEmail(previous.Email);
@@ -570,14 +664,22 @@ public sealed class PutActorsHandler(
         && string.Equals(v.DocumentNumber?.Trim(), documento.Trim(), StringComparison.OrdinalIgnoreCase)
         && string.Equals(v.DocumentType?.Trim(), tipoDoc.Trim(), StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// ADR-0053 §4.4 nivel 2 — CONFIRMADO: vendedor≠comprador solo se evalúa cuando el conjunto
+    /// EFECTIVO deja EXACTAMENTE 1 actor en cada lado. Con cualquier lado en 2+, la comprobación
+    /// cruzada se omite (copropietario que concurre a la venta y compra una cuota adicional). El
+    /// bloque <c>if</c> envuelve, SIN modificar, la llamada que ya existía a
+    /// <see cref="TraspasoPartes.DetectarDuplicadas"/>/<see cref="TraspasoPartes.MensajeDuplicadas"/>:
+    /// en el caso 1-a-1 (mayoritario) esta función ejecuta exactamente la misma ruta de antes.
+    /// </summary>
     private static string? ValidateTraspasoPartes(ProcedureInstance instance, IReadOnlyList<ActorInput> inputs)
     {
-        var vendedor = EffectiveParte(instance, inputs, ParteRol.Vendedor);
-        var comprador = EffectiveParte(instance, inputs, ParteRol.Comprador);
-        if (vendedor is null || comprador is null)
+        var vendedores = EffectivePartes(instance, inputs, ParteRol.Vendedor);
+        var compradores = EffectivePartes(instance, inputs, ParteRol.Comprador);
+        if (vendedores.Count != 1 || compradores.Count != 1)
             return null;
 
-        var dup = TraspasoPartes.DetectarDuplicadas(vendedor, comprador);
+        var dup = TraspasoPartes.DetectarDuplicadas(vendedores[0], compradores[0]);
         return TraspasoPartes.MensajeDuplicadas(dup) is null ? null : "partes_duplicadas";
     }
 
@@ -592,13 +694,22 @@ public sealed class PutActorsHandler(
     /// PASOS DISTINTOS: la pantalla del locatario nunca tiene al propietario a la vista. Se evalúa
     /// sobre el conjunto EFECTIVO (lo que trae el request + los actores que se conservan), igual que
     /// la regla de vendedor≠comprador, así que da lo mismo en qué orden se guarden.</para>
+    ///
+    /// <para><b>ADR-0053</b> — el locatario se deja FUERA de la relajación de nivel 2 (§4.4): el
+    /// encargo cerrado habla de vendedores/compradores como los dos repartos independientes, sin
+    /// mencionar al locatario. Esta comprobación sigue siendo estrictamente 1-a-1 (igual que antes);
+    /// con cualquier lado en 2+ actores, simplemente no se evalúa — no hay hoy un flujo de negocio que
+    /// capture un locatario o un "propietario" (rol comprador en la familia OTROS) con copropiedad.</para>
     /// </summary>
     private static string? ValidateLocatario(ProcedureInstance instance, IReadOnlyList<ActorInput> inputs)
     {
-        var locatario = EffectiveParte(instance, inputs, ParteRol.Locatario);
-        var propietario = EffectiveParte(instance, inputs, ParteRol.Comprador);
-        if (locatario is null || propietario is null)
+        var locatarios = EffectivePartes(instance, inputs, ParteRol.Locatario);
+        var propietarios = EffectivePartes(instance, inputs, ParteRol.Comprador);
+        if (locatarios.Count != 1 || propietarios.Count != 1)
             return null;
+
+        var locatario = locatarios[0];
+        var propietario = propietarios[0];
 
         // Se compara el NÚMERO, que es lo que `ParteDatos` transporta y el mismo criterio con el que
         // `TraspasoPartes` decide que vendedor y comprador son la misma persona.
@@ -610,30 +721,101 @@ public sealed class PutActorsHandler(
     }
 
     /// <summary>
-    /// Datos efectivos de un rol tras el upsert: el del request si viene en él; si no, el del
-    /// actor ya persistido que se conservará. Permite validar vendedor≠comprador aunque cada
-    /// parte se guarde en un PUT distinto.
+    /// ADR-0053 §4.1/§4.5 — reparto de propiedad sobre el conjunto EFECTIVO de cada rol presente en
+    /// el request. Autoritativo: el backend nunca confía en el cálculo del frontend (la auto-absorción
+    /// del residuo en <c>ordinal=1</c> es UX que vive solo ahí — aquí solo se valida el RESULTADO).
     /// </summary>
-    private static ParteDatos? EffectiveParte(
+    private static string? ValidateShares(
+        ProcedureInstance instance, IReadOnlyList<ActorInput> inputs, IReadOnlyList<ParteRol> providedRoles)
+    {
+        foreach (var rol in providedRoles)
+        {
+            var efectivos = EffectiveShares(instance, inputs, rol);
+            if (efectivos.Count <= 1)
+                continue; // 1 actor en el rol: el porcentaje se ignora, sin bloque de reparto (§4.5).
+
+            if (efectivos.Any(x => x.Porcentaje is null or <= 0m))
+                return "porcentaje_en_cero";
+
+            var suma = efectivos.Sum(x => x.Porcentaje!.Value);
+            if (Math.Round(suma, 2, MidpointRounding.AwayFromZero) != 100.00m)
+                return "porcentajes_no_suman_100";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// ADR-0053 §4.4 nivel 1 — duplicidad intra-lado: BLOQUEADA SIEMPRE, sin condición de conteo, para
+    /// cada rol presente en el request (los roles conservados intactos ya se validaron en su propio
+    /// PUT y no pueden haber quedado con duplicados). Código de error: <c>actor_duplicado_mismo_lado</c>.
+    /// </summary>
+    private static string? ValidateDuplicadosIntraLado(
+        ProcedureInstance instance, IReadOnlyList<ActorInput> inputs, IReadOnlyList<ParteRol> providedRoles)
+    {
+        foreach (var rol in providedRoles)
+        {
+            var efectivos = EffectivePartes(instance, inputs, rol);
+            if (TraspasoPartes.DetectarDuplicadosIntraLado(efectivos))
+                return "actor_duplicado_mismo_lado";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Datos efectivos (nombre/documento/email/contacto) de TODOS los actores de un rol tras el
+    /// upsert: los del request si el rol viene en él (el upsert reemplaza el rol COMPLETO); si no, los
+    /// de los actores ya persistidos que se conservarán, en orden de <c>Ordinal</c>. Generaliza el
+    /// antiguo <c>EffectiveParte</c> (que devolvía un único <see cref="ParteDatos"/>) a una lista —
+    /// ADR-0053, hasta 4 actores por rol. Permite validar vendedor≠comprador/duplicidad intra-lado
+    /// aunque cada parte se guarde en un PUT distinto.
+    /// </summary>
+    private static List<ParteDatos> EffectivePartes(
         ProcedureInstance instance,
         IReadOnlyList<ActorInput> inputs,
         ParteRol rol)
     {
-        var input = inputs.FirstOrDefault(a => ParseRol(a.Rol) == rol);
-        if (input is not null)
-            return new ParteDatos(
-                input.NombreCompleto, input.NumeroDocumento, input.Email,
-                input.Ciudad, input.Direccion, input.Telefono);
-
-        var existing = instance.Actors.FirstOrDefault(a => ParseRol(a.ActorType) == rol);
-        if (existing is null)
-            return null;
+        var fromRequest = inputs.Where(a => ParseRol(a.Rol) == rol).ToList();
+        if (fromRequest.Count > 0)
+            return fromRequest
+                .Select(input => new ParteDatos(
+                    input.NombreCompleto, input.NumeroDocumento, input.Email,
+                    input.Ciudad, input.Direccion, input.Telefono))
+                .ToList();
 
         // HU #11593 — ciudad/dirección viven en actor.metadata (JSON); el teléfono en la columna.
-        var (ciudad, direccion, _, _) = ActorMetadataReader.Parse(existing.Metadata);
-        return new ParteDatos(
-            existing.FullName, existing.DocumentNumber, existing.Email ?? string.Empty,
-            ciudad, direccion, existing.Phone);
+        return instance.Actors
+            .Where(a => ParseRol(a.ActorType) == rol)
+            .OrderBy(a => a.Ordinal)
+            .Select(existing =>
+            {
+                var (ciudad, direccion, _, _) = ActorMetadataReader.Parse(existing.Metadata);
+                return new ParteDatos(
+                    existing.FullName, existing.DocumentNumber, existing.Email ?? string.Empty,
+                    ciudad, direccion, existing.Phone);
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// ADR-0053 §4.1/§4.5 — ordinal + porcentaje EFECTIVOS de todos los actores de un rol tras el
+    /// upsert, mismo criterio de "request si viene, si no lo conservado" que <see cref="EffectivePartes"/>.
+    /// </summary>
+    private static List<(int Ordinal, decimal? Porcentaje)> EffectiveShares(
+        ProcedureInstance instance,
+        IReadOnlyList<ActorInput> inputs,
+        ParteRol rol)
+    {
+        var fromRequest = inputs.Where(a => ParseRol(a.Rol) == rol).ToList();
+        if (fromRequest.Count > 0)
+            return fromRequest.Select(a => (a.Ordinal, a.Porcentaje)).ToList();
+
+        return instance.Actors
+            .Where(a => ParseRol(a.ActorType) == rol)
+            .OrderBy(a => a.Ordinal)
+            .Select(a => (a.Ordinal, a.OwnershipPercentage))
+            .ToList();
     }
 
     /// <summary>
@@ -706,8 +888,15 @@ public sealed class PutActorsHandler(
         _ => rol.ToString().ToLowerInvariant(),
     };
 
+    /// <remarks>
+    /// ADR-0053 — ordenado por rol y luego por <c>Ordinal</c> ascendente dentro de cada rol (contrato
+    /// OpenAPI: "ordenados por ordinal ascendente dentro de cada rol"), para que el principal
+    /// (<c>ordinal=1</c>) siempre encabece la lista de su lado.
+    /// </remarks>
     internal static ActorsResponse ToResponse(ProcedureInstance instance) =>
         new(instance.Actors
+            .OrderBy(a => a.ActorType, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Ordinal)
             .Select(a =>
             {
                 var (ciudad, direccion, rl, mandante) = ActorMetadataReader.Parse(a.Metadata);
@@ -723,7 +912,9 @@ public sealed class PutActorsHandler(
                     a.PersonType,
                     a.EsRepresentanteLegal,
                     rl,
-                    mandante);
+                    mandante,
+                    a.Ordinal,
+                    a.OwnershipPercentage);
             })
             .ToList());
 

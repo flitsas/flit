@@ -526,8 +526,11 @@ public sealed class ActorsHandlerTests
         error.Should().Be("invalid_rol");
     }
 
+    // ADR-0053 (Múltiple Propietario) — "duplicate_rol" se RETIRA del contrato: un rol admite ahora
+    // 1..4 actores. Dos `ActorInput` del mismo rol con el MISMO `ordinal` (default 1, si no se
+    // especifica) ya no es "un actor de más en el rol": es un ordinal duplicado dentro del rol.
     [Fact]
-    public async Task Put_DuplicateRol_ReturnsDuplicateRol()
+    public async Task Put_SameRolSameOrdinal_ReturnsOrdinalFueraDeRango()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -537,7 +540,7 @@ public sealed class ActorsHandlerTests
         var (_, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Comprador(doc: "1"), Comprador(doc: "2")]), ct);
 
-        error.Should().Be("duplicate_rol");
+        error.Should().Be("ordinal_fuera_de_rango");
     }
 
     // ── Reemplazo total del set ───────────────────────────────────────────────
