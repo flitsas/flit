@@ -56,17 +56,23 @@ public static class FinalizeDraftGate
     /// (<see cref="ProcedureTypeGateProfile.RequiresSeller"/>) — sin distinguir si esa parte se captura
     /// por formulario o se sincronizó (ADR-0051 Decisión 5): un vendedor sincronizado sin nombre resuelto
     /// sigue incompleto para este gate, a propósito.
+    ///
+    /// <para><b>ADR-0053 (Múltiple Propietario)</b> — "completo" exige que TODOS los actores del lado
+    /// (1..4) estén completos, no solo uno: un lado con un copropietario sin nombre no puede finalizar
+    /// el borrador, aunque el principal (<c>ordinal=1</c>) sí lo esté. Con un solo actor por lado (caso
+    /// mayoritario), el comportamiento es idéntico al anterior.</para>
     /// </summary>
     private static bool ActoresCompletos(ProcedureInstance instance, bool requiresSeller)
     {
         bool Completo(string parte)
         {
-            var a = instance.Actors.FirstOrDefault(x =>
-                string.Equals(x.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-            return a is not null
-                && !string.IsNullOrWhiteSpace(a.FullName)
+            var actores = instance.Actors
+                .Where(x => string.Equals(x.ActorType, parte, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return actores.Count > 0 && actores.All(a =>
+                !string.IsNullOrWhiteSpace(a.FullName)
                 && !string.IsNullOrWhiteSpace(a.DocumentType)
-                && !string.IsNullOrWhiteSpace(a.DocumentNumber);
+                && !string.IsNullOrWhiteSpace(a.DocumentNumber));
         }
 
         return requiresSeller
