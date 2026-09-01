@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Shell, type ModuleId } from "@/components/atom/Shell";
 import { Dashboard } from "@/components/atom/modules/Dashboard";
+import { OtDashboard } from "@/components/atom/modules/OtDashboard";
 import { Tramites } from "@/components/atom/modules/Tramites";
 import { Reportes } from "@/components/atom/modules/Reportes";
 import { ReportesDetallados } from "@/components/atom/modules/ReportesDetallados";
@@ -156,7 +157,11 @@ function HomeContent() {
       ) : null}
 
       {/* Hold / loading RBAC: no montar módulo pedido (sin flash). */}
-      {moduleReady && module === "dashboard" && (
+      {/* El inicio se bifurca por rol (HU #11940): el tablero del gestor mide producción de una
+          empresa y consulta endpoints acotados al tenant de la empresa cliente, donde el organismo
+          no tiene ni una fila. El Admin OT ve su propia cola. */}
+      {moduleReady && module === "dashboard" && isOtAdminUser && <OtDashboard />}
+      {moduleReady && module === "dashboard" && !isOtAdminUser && (
         <Dashboard onNewTramite={() => handleNav("tramites")} />
       )}
       {moduleReady && module === "tramites" && <Tramites />}
