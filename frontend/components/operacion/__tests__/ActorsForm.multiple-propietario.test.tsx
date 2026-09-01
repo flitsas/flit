@@ -102,8 +102,8 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
     expect(screen.getByRole('tab', { name: /Comprador 2/ })).toBeInTheDocument();
     expect(screen.getByText(/Porcentaje de propiedad/)).toBeInTheDocument();
     // Reparto por defecto 50/50 — el solidario (Comprador 1) absorbe el residuo.
-    expect(screen.getByRole('tab', { name: /Comprador 1 · 50%/ })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Comprador 2 · 50%/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Comprador 1 50%/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Comprador 2 50%/ })).toBeInTheDocument();
   });
 
   it('el solidario (ordinal=1) absorbe el residuo mientras no se edite a mano', async () => {
@@ -116,7 +116,7 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
     await user.type(input2, '30');
 
     await waitFor(() =>
-      expect(screen.getByRole('tab', { name: /Comprador 1 · 70%/ })).toBeInTheDocument(),
+      expect(screen.getByRole('tab', { name: /Comprador 1 70%/ })).toBeInTheDocument(),
     );
   });
 
@@ -149,7 +149,7 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
 
     await waitFor(() => expect(screen.queryByRole('tab', { name: /Comprador 2/ })).toBeNull());
     // El bloque NO se oculta (encargo cerrado): sigue mostrando "Comprador 1" con 100%.
-    expect(screen.getByRole('tab', { name: /Comprador 1 · 100%/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Comprador 1 100%/ })).toBeInTheDocument();
     expect(screen.getByText(/Porcentaje de propiedad/)).toBeInTheDocument();
   });
 
