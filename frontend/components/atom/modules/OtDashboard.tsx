@@ -45,7 +45,6 @@ import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import {
   fetchOtDrilldown,
   fetchOtOperationalPanel,
-  fetchOtPerformance,
   fetchOtReport,
   OT_DRILLDOWN_BUCKETS,
   type OtDrilldownBucket,
@@ -53,7 +52,6 @@ import {
   type OtOperationalPanel,
   type OtReportSeriesPoint,
   type OtReportSummary,
-  type OtReviewer,
 } from "@/lib/api/ot-metrics";
 import { resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import {
@@ -350,34 +348,29 @@ function cargarResumenDelPeriodo(transitOfficeId: string, signal: AbortSignal) {
   ).then((informe) => informe.resumen);
 }
 
-function cargarRevisoresDelPeriodo(transitOfficeId: string) {
-  return fetchOtPerformance({ ...lastDaysRange(ACTIVIDAD_DIAS), transitOfficeId }).then(
-    (desempeno) => desempeno.revisores,
-  );
-}
-
 /**
- * Lo reciente: el ritmo del periodo y quién lo sacó adelante.
+ * Lo reciente: el ritmo del periodo y en qué quedó lo que entró.
  *
- * Cada tarjeta pide lo suyo y falla por separado, y las dos van aparte de la cola: si el informe se
- * cae, la cola —que es a lo que se entra a esta pantalla— se sigue viendo.
+ * Las dos tarjetas salen de UNA sola llamada —el informe devuelve la serie y el desglose juntos—,
+ * y van aparte de la cola: si el informe se cae, la cola, que es a lo que se entra a esta pantalla,
+ * se sigue viendo.
  */
 function PeriodoReciente({ transitOfficeId }: { transitOfficeId: string | undefined }) {
+  const { dato: resumen, estado } = useRecursoOt<OtReportSummary>(
+    transitOfficeId,
+    cargarResumenDelPeriodo,
+  );
+
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-      <Actividad transitOfficeId={transitOfficeId} />
-      <Evaluadores transitOfficeId={transitOfficeId} />
+      <Actividad estado={estado} serie={resumen?.serie ?? null} />
+      <Composicion estado={estado} resumen={resumen} />
     </div>
   );
 }
 
 /** Ritmo del periodo: qué entró y qué se decidió cada día. */
-function Actividad({ transitOfficeId }: { transitOfficeId: string | undefined }) {
-  const { dato: resumen, estado } = useRecursoOt<OtReportSummary>(
-    transitOfficeId,
-    cargarResumenDelPeriodo,
-  );
-  const serie: OtReportSeriesPoint[] | null = resumen?.serie ?? null;
+function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoint[] | null }) {
   const hayMovimiento = (serie ?? []).some(
     (p) => p.radicados > 0 || p.aprobados > 0 || p.rechazados > 0,
   );
@@ -416,66 +409,91 @@ function Actividad({ transitOfficeId }: { transitOfficeId: string | undefined })
 }
 
 /**
- * Colores del reparto entre evaluadores.
+ * Agrupación de lo recibido en el periodo, en las tres palabras con las que el organismo habla de un
+ * trámite: lo aprobó, lo rechazó, o todavía no lo decidió.
  *
- * Aquí el color solo separa una persona de otra —no codifica nada, como sí lo hace la paleta de
- * estados—, así que se recorre en orden y se repite si hiciera falta.
+ * El backend expone ocho estados propios del OT y aquí se doblan a cuatro grupos. El detalle de qué
+ * entra en cada uno va en el tooltip de la fila, porque la agrupación tiene juicio dentro y quien la
+ * lea tiene derecho a verlo:
+ *
+ * - «Esperando placa» es un expediente YA aprobado al que le falta la placa, así que cuenta como
+ *   aprobado. Ponerlo en «sin decisión» diría que el organismo no se ha pronunciado, y sí lo hizo.
+ * - «En subsanación» es un rechazo con la subsanación abierta: el verdicto fue en contra aunque el
+ *   trámite vaya a volver.
+ * - «Esperando al cliente» es el grupo con menos filo: cae ahí tanto un trámite pausado a la espera
+ *   de la empresa como uno ya con placa asignada. Se cuenta como sin decisión y el tooltip lo dice.
+ *
+ * El desglose fino de los ocho estados vive en la consola de Reportes; aquí se busca la lectura de
+ * un vistazo.
  */
-const COLORES_EVALUADOR = ["#557EFF", "#00DBD5", "#8CC63F", "#F9AC00", "#8A5CF6", "#0EA5E9"];
+function composicionDelPeriodo(resumen: OtReportSummary) {
+  return [
+    {
+      id: "aprobados",
+      name: "Aprobados",
+      color: "#8CC63F",
+      value: resumen.aprobados + resumen.esperandoPlaca,
+      hint: "Aprobados y los que ya tienen el expediente aprobado a la espera de asignar placa.",
+    },
+    {
+      id: "rechazados",
+      name: "Rechazados",
+      color: "#FF4E00",
+      value: resumen.rechazados + resumen.enSubsanacion,
+      hint: "Rechazados, con o sin subsanación abierta.",
+    },
+    {
+      id: "sin-decision",
+      name: "Sin decisión",
+      color: "#557EFF",
+      value: resumen.enRevision + resumen.esperandoCliente + resumen.otros,
+      hint: "En revisión y los que esperan algo de la empresa (SOAT, impuestos o trámite pausado).",
+    },
+    {
+      id: "anulados",
+      name: "Anulados",
+      color: "#94A3B8",
+      value: resumen.anulados,
+      hint: "La empresa los dio de baja después de radicarlos.",
+    },
+  ].filter((grupo) => grupo.value > 0);
+}
 
 /**
- * Quién sacó adelante el trabajo del periodo.
+ * En qué quedó lo que entró en el periodo.
  *
- * Esta tarjeta existe en lugar de un desglose por estado: la cola por estado ya la cuentan los
- * indicadores y las barras de arriba, y repetirla en un anillo era decir tres veces lo mismo. El
- * reparto entre evaluadores es lo único de la operación que la pantalla no dice en ningún otro
- * sitio.
- *
- * Se mide por DECISIONES tomadas (aprobar o rechazar), no por trámites tocados: es lo que de verdad
- * mueve la cola. El desglose de aprobados y rechazados de cada uno vive en la pestaña Revisores de
- * Reportes; aquí solo se responde quién y cuánto.
+ * El universo son los trámites RECIBIDOS en la ventana, no los decididos: es lo que hace que los
+ * cuatro grupos cierren contra el total y que el porcentaje del centro signifique algo.
  */
-function Evaluadores({ transitOfficeId }: { transitOfficeId: string | undefined }) {
-  const { dato: revisores, estado } = useRecursoOt<OtReviewer[]>(
-    transitOfficeId,
-    cargarRevisoresDelPeriodo,
-  );
-
-  const partes = (revisores ?? [])
-    .filter((r) => r.decididos > 0)
-    .sort((a, b) => b.decididos - a.decididos)
-    .map((r, i) => ({
-      userId: r.userId,
-      name: r.displayName,
-      value: r.decididos,
-      color: COLORES_EVALUADOR[i % COLORES_EVALUADOR.length],
-      hint: `${r.aprobados} aprobados · ${r.rechazados} rechazados`,
-    }));
-  const total = partes.reduce((suma, p) => suma + p.value, 0);
+function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSummary | null }) {
+  const grupos = resumen ? composicionDelPeriodo(resumen) : [];
+  const total = grupos.reduce((suma, g) => suma + g.value, 0);
+  const aprobados = grupos.find((g) => g.id === "aprobados")?.value ?? 0;
+  const pctAprobados = total === 0 ? 0 : (aprobados / total) * 100;
 
   return (
-    <Tarjeta titulo={`Quién decidió en los últimos ${ACTIVIDAD_DIAS} días`}>
+    <Tarjeta titulo={`En qué quedó lo recibido en ${ACTIVIDAD_DIAS} días`}>
       {estado === "cargando" && <Esqueleto filas={1} />}
       {estado === "error" && (
         <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-          No se pudo cargar el reparto entre evaluadores.
+          No se pudo cargar la composición del periodo.
         </p>
       )}
       {estado === "listo" && total === 0 && (
         <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-          Nadie decidió trámites en los últimos {ACTIVIDAD_DIAS} días.
+          No se recibió ningún trámite en los últimos {ACTIVIDAD_DIAS} días.
         </p>
       )}
       {estado === "listo" && total > 0 && (
         <div
           className="flex flex-col items-center gap-4 sm:flex-row"
-          data-testid="ot-inicio-evaluadores"
+          data-testid="ot-inicio-composicion"
         >
           <div className="relative h-40 w-40 shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={partes}
+                  data={grupos}
                   dataKey="value"
                   nameKey="name"
                   innerRadius="62%"
@@ -484,8 +502,8 @@ function Evaluadores({ transitOfficeId }: { transitOfficeId: string | undefined 
                   stroke="none"
                   isAnimationActive={false}
                 >
-                  {partes.map((p) => (
-                    <Cell key={p.userId} fill={p.color} />
+                  {grupos.map((g) => (
+                    <Cell key={g.id} fill={g.color} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -495,39 +513,39 @@ function Evaluadores({ transitOfficeId }: { transitOfficeId: string | undefined 
                 componerla con dos tamaños sin pelear con el posicionamiento de recharts. */}
             <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
               <div>
-                <p className="text-2xl font-bold tabular-nums">{total}</p>
+                <p className="text-xl font-bold tabular-nums">{formatPct(pctAprobados)}</p>
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-[#9AA5B4]">
-                  Decisiones
+                  Aprobados
                 </p>
               </div>
             </div>
           </div>
 
           <ul className="flex w-full min-w-0 flex-1 flex-col gap-1.5">
-            {partes.map((p) => (
+            {grupos.map((g) => (
               <li
-                key={p.userId}
-                title={p.hint}
+                key={g.id}
+                title={g.hint}
                 className="flex items-center justify-between gap-3 text-xs"
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: p.color }}
+                    style={{ background: g.color }}
                     aria-hidden="true"
                   />
-                  <span className="truncate">{p.name}</span>
+                  <span className="truncate">{g.name}</span>
                 </span>
                 <span className="shrink-0 tabular-nums">
-                  <b className="font-semibold">{p.value}</b>{" "}
+                  <b className="font-semibold">{g.value}</b>{" "}
                   <span className="text-[#9AA5B4] dark:text-white/40">
-                    ({formatPct((p.value / total) * 100)})
+                    ({formatPct((g.value / total) * 100)})
                   </span>
                 </span>
               </li>
             ))}
             <li className="mt-1 border-t border-[#EEF1F5] pt-1.5 text-[11px] text-[#9AA5B4] dark:border-white/10 dark:text-white/40">
-              {partes.length} {partes.length === 1 ? "evaluador" : "evaluadores"} con decisiones
+              {total} recibidos en total
             </li>
           </ul>
         </div>
