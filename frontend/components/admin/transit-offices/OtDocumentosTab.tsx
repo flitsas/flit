@@ -3,7 +3,7 @@
 /**
  * HU #10705 — Tab de documentos del expediente de un trámite de cliente OT.
  * Tabla: filename, tipo, tamaño, fecha, acciones (previsualizar + descargar).
- * Consolidado: "Generar consolidado" (expediente completo del trámite) + "Ver consolidado"
+ * Consolidado: "Actualizar consolidado" (reconstruye el expediente completo) + "Ver consolidado"
  * (previsualización inline, sin descarga).
  */
 
@@ -211,11 +211,11 @@ export function OtDocumentosTab({
               type="button"
               className="rounded-xl border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground disabled:opacity-50"
               disabled={consolidadoActing}
-              aria-label="Regenerar el consolidado del expediente"
+              aria-label="Actualizar el consolidado del expediente"
               title="Reconstruye el expediente consolidado con el contenido actual del trámite"
               onClick={() => void handleConsolidado(true)}
             >
-              Regenerar
+              Actualizar consolidado
             </button>
           ) : null}
         </div>

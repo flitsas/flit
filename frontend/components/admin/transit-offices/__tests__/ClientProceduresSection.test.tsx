@@ -260,7 +260,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     await user.click(await screen.findByRole("button", { name: /Ver consolidado/i }));
     // Asegura el consolidado (idempotente) y luego lo previsualiza inline con el id devuelto.
     // Tercer argumento `force`: en false por el camino normal —el backend decide si regenera por la
-    // marca de vigencia. El "Regenerar" del detalle es el que lo manda en true.
+    // marca de vigencia. El "Actualizar consolidado" de la sección Documentos lo manda en true.
     await waitFor(() =>
       expect(generarOtConsolidadoMaestro).toHaveBeenCalledWith("proc-1", undefined, false),
     );

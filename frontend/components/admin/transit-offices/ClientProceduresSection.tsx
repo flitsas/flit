@@ -28,18 +28,19 @@ import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
-import { Modal } from "@/components/atom/Modal";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
-import { ChevronDown, ChevronUp, FolderOpen } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
-import { ClientProcedureDetailPanel } from "./ClientProcedureDetailPanel";
+import {
+  ClientProcedureDetailModal,
+  type OtDetalleSeccionId,
+} from "./ClientProcedureDetailModal";
 import {
   assignPlateToProcedure,
   listPlateDetails,
   revokeProcedurePlate,
   type PlateDetail,
 } from "@/lib/api/admin-plate-ranges";
-import { OtDocumentosTab } from "./OtDocumentosTab";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 
@@ -130,7 +131,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [acting, setActing] = useState(false);
   const [profile, setProfile] = useState<OtProfile | null>(null);
   // HU #10705 — panel de documentos del expediente
-  const [documentosProcedure, setDocumentosProcedure] = useState<OtClientProcedure | null>(null);
+  // Sección con la que abre el modal de detalle: la bandeja tiene dos entradas al mismo trámite
+  // («ver detalle» y «ver documentos») y las dos llevan al mismo modal.
+  const [detailSection, setDetailSection] = useState<OtDetalleSeccionId>("vehiculo");
   // Panel lateral derecho — detalle del trámite
   const [detailProcedure, setDetailProcedure] = useState<OtClientProcedure | null>(null);
   // Previsualización inline del consolidado (sin forzar descarga).
@@ -814,8 +817,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               : undefined
           }
           consolidadoActingId={consolidadoActingId}
-          onVerDocumentos={setDocumentosProcedure}
-          onVerDetalle={setDetailProcedure}
+          onVerDocumentos={(row) => {
+            setDetailSection("documentos");
+            setDetailProcedure(row);
+          }}
+          onVerDetalle={(row) => {
+            setDetailSection("vehiculo");
+            setDetailProcedure(row);
+          }}
         />
       </UiStateBoundary>
 
@@ -1176,39 +1185,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         </div>
       )}
 
-      {/* Panel lateral — detalle del trámite */}
-      <ClientProcedureDetailPanel
+      {/* HU #11930 — modal de detalle del trámite; la sección Documentos absorbió el antiguo
+          modal del expediente (HU #10705), que se abría encima de este. */}
+      <ClientProcedureDetailModal
         open={!!detailProcedure}
         procedure={detailProcedure}
         onClose={() => setDetailProcedure(null)}
         scope={scope}
-        onVerDocumentos={(row) => {
-          setDocumentosProcedure(row);
-        }}
-        onVerConsolidado={handleConsolidado}
-        consolidadoActing={
-          !!detailProcedure && consolidadoActingId === detailProcedure.id
-        }
+        readOnly={isReadOnly}
+        initialSection={detailSection}
       />
-
-      {/* HU #10705 — Modal de documentos del expediente */}
-      {documentosProcedure && (
-        <Modal
-          open
-          onClose={() => setDocumentosProcedure(null)}
-          title={`Documentos — ${documentosProcedure.referenceNumber}`}
-          icon={FolderOpen}
-          size="xl"
-          zClassName="z-[90]"
-        >
-          <OtDocumentosTab
-            procedureId={documentosProcedure.id}
-            referenceNumber={documentosProcedure.referenceNumber}
-            scope={transitOfficeId ? { transitOfficeId } : undefined}
-            readOnly={isReadOnly}
-          />
-        </Modal>
-      )}
 
       {/* Previsualización inline del consolidado (botón "Ver consolidado" de la tabla) */}
       <DocumentPreviewModal
