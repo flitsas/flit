@@ -105,6 +105,10 @@ const ESPECIFICACIONES = {
   carroceria: 'SEDAN',
   capacidad: '5',
   ejes: '2',
+  alto: '2000',
+  ancho: '2980',
+  largo: '15500',
+  llantas: '12',
   estado: 'ACTIVO',
   motor: 'MOT-999',
   chasis: 'CHA-888',
@@ -248,7 +252,7 @@ describe('MatriculaResumen — inventario: cabecera y vehículo', () => {
     expect(fecha).toHaveAttribute('readonly');
   });
 
-  it('la sección de vehículo conserva placa, SOAT, modelo, VIN y las once especificaciones', async () => {
+  it('la sección de vehículo conserva placa, SOAT, modelo, VIN y las especificaciones técnicas', async () => {
     renderResumen();
 
     const vehiculo = screen.getByRole('region', { name: 'Vehículo' });
@@ -268,6 +272,10 @@ describe('MatriculaResumen — inventario: cabecera y vehículo', () => {
       'Carrocería',
       'Capacidad',
       'Ejes',
+      'Alto',
+      'Ancho',
+      'Largo',
+      'Llantas',
       'Estado',
       'N. Motor',
       'N. Chasis',

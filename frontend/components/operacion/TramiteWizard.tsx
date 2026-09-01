@@ -2161,6 +2161,11 @@ const VEHICLE_DETAILS: { key: string; label: string }[] = [
   { key: 'vehicle_chassis', label: 'Nº Chasis' },
   { key: 'vehicle_series', label: 'Nº Serie' },
   { key: 'vehicle_passengers', label: 'Pasajeros' },
+  { key: 'vehicle_axles', label: 'Ejes' },
+  { key: 'vehicle_height', label: 'Alto' },
+  { key: 'vehicle_width', label: 'Ancho' },
+  { key: 'vehicle_length', label: 'Largo' },
+  { key: 'vehicle_tires', label: 'Llantas' },
   { key: 'vehicle_registration_date', label: 'Fecha matrícula' },
   { key: 'transit_office_name', label: 'Organismo de tránsito' },
 ];
@@ -2184,11 +2189,16 @@ const VEHICLE_GRID_PDF: { key: string; label: string }[][] = [
     { key: 'vehicle_class', label: 'Clase' },
     { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
     { key: 'vehicle_passengers', label: 'Pasajeros' },
+    { key: 'vehicle_axles', label: 'Ejes' },
   ],
   [
     { key: 'vehicle_body_type', label: 'Carrocería' },
     { key: 'vehicle_engine_number', label: 'Nº Motor' },
     { key: 'transit_office_name', label: 'Organismo de Tránsito' },
+    { key: 'vehicle_height', label: 'Alto' },
+    { key: 'vehicle_length', label: 'Largo' },
+    { key: 'vehicle_width', label: 'Ancho' },
+    { key: 'vehicle_tires', label: 'Llantas' },
   ],
 ];
 
@@ -2196,6 +2206,12 @@ const VEHICLE_GRID_PDF: { key: string; label: string }[][] = [
 function formatVehicleDetailValue(key: string, value: string): string {
   if (key === 'vehicle_engine_displacement' && /^\d+$/.test(value.trim())) {
     return `${value} cc`;
+  }
+  if (
+    (key === 'vehicle_height' || key === 'vehicle_width' || key === 'vehicle_length') &&
+    /^\d+$/.test(value.trim())
+  ) {
+    return `${value} mm`;
   }
   if (key === 'vehicle_registration_date') return formatDateOnly(value);
   return value;

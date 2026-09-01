@@ -226,7 +226,7 @@ public static partial class FurOverlayRenderer
         if (sidecarW <= 0)
             return;
 
-        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText);
+        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText, field.Align);
     }
 
     private static void DrawSidecarText(
@@ -235,23 +235,40 @@ public static partial class FurOverlayRenderer
         double y,
         double w,
         double h,
-        string text)
+        string text,
+        FurTextAlign align = FurTextAlign.Left)
     {
         var font = CreateFont(SignatureSidecarFontSize, bold: false);
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var lineHeight = SignatureSidecarFontSize * 1.15;
         var maxLines = Math.Max(1, (int)Math.Floor(h / lineHeight));
+        var visible = Math.Min(lines.Length, maxLines);
+        var inset = align == FurTextAlign.Center ? 2.0 : 0.0;
+        var boxX = x + inset;
+        var boxW = Math.Max(0, w - inset * 2);
+        var boxY = y + inset;
+        var boxH = Math.Max(0, h - inset * 2);
+        var blockH = visible * lineHeight;
+        if (align == FurTextAlign.Center && blockH < boxH)
+            boxY += (boxH - blockH) / 2;
 
-        for (var i = 0; i < Math.Min(lines.Length, maxLines); i++)
+        for (var i = 0; i < visible; i++)
         {
             var line = lines[i];
-            if (w > 0)
+            if (boxW > 0)
             {
-                line = TruncateToWidth(gfx, line, font, w);
+                line = TruncateToWidth(gfx, line, font, boxW);
             }
 
-            var yBaseline = y + i * lineHeight + SignatureSidecarFontSize * 0.82;
-            gfx.DrawString(line, font, XBrushes.Black, new XPoint(x, yBaseline));
+            var drawX = boxX;
+            if (align == FurTextAlign.Center && boxW > 0)
+            {
+                var size = gfx.MeasureString(line, font);
+                drawX = boxX + Math.Max(0, (boxW - size.Width) / 2);
+            }
+
+            var yBaseline = boxY + i * lineHeight + SignatureSidecarFontSize * 0.82;
+            gfx.DrawString(line, font, XBrushes.Black, new XPoint(drawX, yBaseline));
         }
     }
 

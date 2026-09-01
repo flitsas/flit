@@ -201,7 +201,10 @@ public static class FurPreviewSample
                 TipoServicio: "PARTICULAR",
                 Capacidad: "5",
                 PesoBruto: "1200",
-                NumeroEjes: "2");
+                NumeroEjes: "3",
+                Alto: "2000",
+                Ancho: "2980",
+                Largo: "15500");
 
         return new FurDocumentData(
             ProcedureInstanceId: Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),

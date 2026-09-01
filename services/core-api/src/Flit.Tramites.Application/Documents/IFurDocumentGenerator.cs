@@ -47,7 +47,13 @@ public sealed record VehiculoDatos(
     string? TipoServicio = null,
     string? Capacidad = null,
     string? PesoBruto = null,
-    string? NumeroEjes = null);
+    string? NumeroEjes = null,
+    string? Alto = null,
+    string? Ancho = null,
+    string? Largo = null,
+    string? NumeroLlantas = null,
+    // Numeral 8 del FUR de maquinaria: datosTecnicos.rodaje (llantas / cilindros / orugas / resto → otros).
+    string? TipoTraccion = null);
 
 /// <summary>Organismo de tránsito seleccionado (de field_values transit_office_*).</summary>
 public sealed record OrganismoTransito(string? Codigo, string? Nombre, string? Ciudad);

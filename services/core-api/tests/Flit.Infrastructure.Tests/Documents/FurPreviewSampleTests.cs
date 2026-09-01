@@ -82,6 +82,21 @@ public sealed class FurPreviewSampleTests
         var mapped = FurFieldMapper.Map(data);
         mapped["vehicle_class_CONSTRUCCION"].Text.Should().Be("X");
         mapped["vehicle_class_AGRICOLA"].Text.Should().BeEmpty();
+        mapped["vehicle_axles"].Text.Should().Be("3");
+        mapped["vehicle_height"].Text.Should().Be("2");
+        mapped["vehicle_width"].Text.Should().Be("2.98");
+    }
+
+    [Fact]
+    public void Build_Remolque_PintaEjesAltoYAncho()
+    {
+        var data = FurPreviewSample.Build("MATRICULA_NUEVA", "MATRICULAS", "natural", "natural", "remolque");
+        var mapped = FurFieldMapper.Map(data);
+        mapped["vehicle_class_REMOLQUE"].Text.Should().Be("X");
+        mapped["vehicle_axles"].Text.Should().Be("3");
+        mapped["vehicle_height"].Text.Should().Be("2");
+        mapped["vehicle_width"].Text.Should().Be("2.98");
+        mapped["vehicle_length"].Text.Should().Be("15.5");
     }
 
     [Fact]

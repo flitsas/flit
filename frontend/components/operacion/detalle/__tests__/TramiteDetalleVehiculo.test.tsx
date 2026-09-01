@@ -68,6 +68,8 @@ describe('TramiteDetalleVehiculo — solo pinta las claves de fieldValues que ex
     expect(screen.queryByText('Carrocería')).not.toBeInTheDocument();
     expect(screen.queryByText('Capacidad')).not.toBeInTheDocument();
     expect(screen.queryByText('Ejes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alto')).not.toBeInTheDocument();
+    expect(screen.queryByText('Largo')).not.toBeInTheDocument();
     expect(screen.queryByText('Estado')).not.toBeInTheDocument();
     expect(screen.queryByText('N. Motor')).not.toBeInTheDocument();
     expect(screen.queryByText('N. Chasis')).not.toBeInTheDocument();
@@ -215,6 +217,32 @@ describe('TramiteDetalleVehiculo — estado lleno', () => {
     expect(screen.getByText('OK')).toBeInTheDocument();
     expect(screen.getByText('ADVERTENCIA')).toBeInTheDocument();
     expect(screen.getByText('FALLA')).toBeInTheDocument();
+  });
+
+  it('pinta alto, largo, ancho y llantas cuando llegaron en fieldValues', async () => {
+    client.getInstance.mockResolvedValue(
+      detail([
+        fv('vehicle_axles', '3'),
+        fv('vehicle_height', '2000'),
+        fv('vehicle_width', '2980'),
+        fv('vehicle_length', '15500'),
+        fv('vehicle_tires', '12'),
+      ]),
+    );
+    client.getPreflight.mockResolvedValue(null);
+
+    renderSeccion();
+
+    expect(await screen.findByText('Ejes')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('Alto')).toBeInTheDocument();
+    expect(screen.getByText('2000 mm')).toBeInTheDocument();
+    expect(screen.getByText('Ancho')).toBeInTheDocument();
+    expect(screen.getByText('2980 mm')).toBeInTheDocument();
+    expect(screen.getByText('Largo')).toBeInTheDocument();
+    expect(screen.getByText('15500 mm')).toBeInTheDocument();
+    expect(screen.getByText('Llantas')).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
   });
 });
 

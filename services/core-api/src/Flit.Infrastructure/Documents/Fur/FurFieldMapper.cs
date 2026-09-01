@@ -58,6 +58,14 @@ public static class FurFieldMapper
             ["linked_company_nit"] = Text(data.EmpresaVinculadoraNit),
         };
 
+        if (data.TemplateFormat is FurTemplateFormat.Remolques or FurTemplateFormat.Maquinaria)
+        {
+            dict["vehicle_axles"] = Text(data.Vehiculo.NumeroEjes);
+            dict["vehicle_height"] = Text(ToFurMeters(data.Vehiculo.Alto));
+            dict["vehicle_width"] = Text(ToFurMeters(data.Vehiculo.Ancho));
+            dict["vehicle_length"] = Text(ToFurMeters(data.Vehiculo.Largo));
+        }
+
         SetSignature(
             dict,
             "vehicle_owner_signature",
@@ -71,7 +79,16 @@ public static class FurFieldMapper
         MarkTramite(dict, data);
         MarkAlertas(dict, data);
         MarkClase(dict, data);
-        MarkCombustible(dict, data.Vehiculo.Combustible);
+        if (data.TemplateFormat == FurTemplateFormat.Maquinaria)
+        {
+            MarkTraccionMaquinaria(dict, data.Vehiculo.TipoTraccion);
+            MarkCabinaMaquinaria(dict);
+            MarkCombustibleMaquinaria(dict, data.Vehiculo.Combustible);
+        }
+        else
+        {
+            MarkCombustible(dict, data.Vehiculo.Combustible);
+        }
         MarkServicio(dict, data.Vehiculo.TipoServicio);
         MarkCheckbox(dict, "is_armored_vehicle_yes", data.Transformaciones.Blindaje);
         MarkCheckbox(dict, "is_armored_vehicle_no", !data.Transformaciones.Blindaje);
@@ -247,6 +264,64 @@ public static class FurFieldMapper
         var markId = FurNumeral4Marks.FieldId(token);
         foreach (var id in FurNumeral4Marks.IdsFor(data.TemplateFormat))
             MarkCheckbox(dict, id, markId.Length > 0 && string.Equals(id, markId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Numeral 8 del FUR de maquinaria. El blank numera: 1 llantas, 2 orugas, 3 cilindros, 4 mixto.
+    /// Producto: si el RUNT trae uno de los tres tipos conocidos se marca ese; en cualquier otro caso
+    /// (vacío, mixto, valor no reconocible) se marca la 4 (la casilla de «otros» del numeral).
+    /// </summary>
+    private static void MarkTraccionMaquinaria(Dictionary<string, FurFieldValue> dict, string? traccion)
+    {
+        var n = Norm(traccion);
+        var llantas = n.Contains("LLANT");
+        var orugas = n.Contains("ORUGA");
+        var cilindros = n.Contains("CILINDR") || n.Contains("CILUNDR");
+        var conocidos = (llantas ? 1 : 0) + (orugas ? 1 : 0) + (cilindros ? 1 : 0);
+        if (conocidos != 1)
+        {
+            llantas = false;
+            orugas = false;
+            cilindros = false;
+        }
+
+        MarkCheckbox(dict, "vehicle_traction_llantas", llantas);
+        MarkCheckbox(dict, "vehicle_traction_orugas", orugas);
+        MarkCheckbox(dict, "vehicle_traction_cilindros", cilindros);
+        MarkCheckbox(dict, "vehicle_traction_otros", conocidos != 1);
+    }
+
+    /// <summary>
+    /// Numeral 16 del FUR de maquinaria: 1 cerrada, 2 parasol, 3 sin cabina, 4 otros.
+    /// Producto: siempre se marca otros; el RUNT no hidrata cabina.
+    /// </summary>
+    private static void MarkCabinaMaquinaria(Dictionary<string, FurFieldValue> dict)
+    {
+        MarkCheckbox(dict, "vehicle_cabin_cerrada", false);
+        MarkCheckbox(dict, "vehicle_cabin_parasol", false);
+        MarkCheckbox(dict, "vehicle_cabin_sin", false);
+        MarkCheckbox(dict, "vehicle_cabin_otros", true);
+    }
+
+    /// <summary>
+    /// Numeral 20 del FUR de maquinaria (no es la fila de 8 combustibles del automotor):
+    /// 1 gasolina, 2 diésel, 3 eléctrico, 4 gas, 5 mixto, 6 otros. Sin valor válido → 6.
+    /// </summary>
+    private static void MarkCombustibleMaquinaria(Dictionary<string, FurFieldValue> dict, string? combustible)
+    {
+        var n = Norm(combustible);
+        var id = n.Contains("GASOLINA") || n.Contains("GASOL") ? "vehicle_fuel_maq_1"
+            : n.Contains("DIESEL") && !n.Contains("BIODIESEL") ? "vehicle_fuel_maq_2"
+            : n.Contains("ELECTRIC") ? "vehicle_fuel_maq_3"
+            : IsGasFuel(n) ? "vehicle_fuel_maq_4"
+            : n.Contains("MIXTO") || n.Contains("HIBRID") ? "vehicle_fuel_maq_5"
+            : "vehicle_fuel_maq_6";
+
+        for (var i = 1; i <= 6; i++)
+        {
+            var key = $"vehicle_fuel_maq_{i}";
+            MarkCheckbox(dict, key, string.Equals(key, id, StringComparison.Ordinal));
+        }
     }
 
     private static void MarkCombustible(Dictionary<string, FurFieldValue> dict, string? combustible)
@@ -432,6 +507,22 @@ public static class FurFieldMapper
         data.RequiereVendedor
         || Norm(data.TipologiaCodigo).Contains("TRASPASO")
         || Norm(data.Modalidad).Contains("TRASPASO");
+
+    /// <summary>
+    /// El blank de remolques/maquinaria pide largo/ancho/alto en metros. Kyverum/Verifik suelen
+    /// mandar milímetros enteros (p. ej. 2000). Valores ≥ 100 se tratan como mm.
+    /// </summary>
+    internal static string ToFurMeters(string? raw)
+    {
+        var v = Val(raw);
+        if (v.Length == 0)
+            return "";
+        if (!decimal.TryParse(v.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var n))
+            return v;
+        if (n >= 100m)
+            n /= 1000m;
+        return n.ToString("0.###", CultureInfo.InvariantCulture);
+    }
 
     private static FurFieldValue Text(string? value) => new(Val(value));
 

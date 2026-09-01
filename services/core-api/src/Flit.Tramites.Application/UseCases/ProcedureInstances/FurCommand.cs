@@ -719,7 +719,12 @@ public sealed class GenerarFurHandler(
             TipoServicio: Get(fv, "vehicle_service"),
             Capacidad: Get(fv, "vehicle_passengers"),
             PesoBruto: Get(fv, "vehicle_weight"),
-            NumeroEjes: Get(fv, "vehicle_axles"));
+            NumeroEjes: Get(fv, "vehicle_axles"),
+            Alto: Get(fv, "vehicle_height"),
+            Ancho: Get(fv, "vehicle_width"),
+            Largo: Get(fv, "vehicle_length"),
+            NumeroLlantas: Get(fv, "vehicle_tires"),
+            TipoTraccion: Get(fv, "vehicle_traction"));
 
         // El encabezado del FUR lleva el organismo donde el vehículo está matriculado HOY. En casi
         // todos los tipos coincide con el canónico; en un radicado de cuenta no, porque ahí el
