@@ -150,6 +150,18 @@ public sealed record WizardStateDto(
 public sealed record WizardCapabilitiesDto(
     string? EntryMode,
     bool RequiresSeller,
+    /// <summary>
+    /// ADR-0051 — esa parte vendedora se captura TECLEANDO datos en el asistente, o llega de otra
+    /// fuente (sincronizada desde el RUNT/RUES). Es distinto de <see cref="RequiresSeller"/>: en
+    /// <c>TRASPASO_UNILATERAL</c> hay propietario —comparece en el FUR y es el único que firma— pero
+    /// no se le pinta formulario, porque el trámite lo formaliza el locatario.
+    ///
+    /// <para>Viajaba solo en el <c>sectionConfig</c> de la sección <c>actor_form</c>, mientras el
+    /// asistente la leía de aquí: al no encontrarla caía a <see cref="RequiresSeller"/> y pintaba el
+    /// formulario del propietario en un trámite que no lo captura. Las dos vías publican ahora el
+    /// mismo dato.</para>
+    /// </summary>
+    bool SellerCapturedViaForm,
     bool RequiresBuyer,
     bool RequiresLessee,
     bool AllowsMultipleBuyer,
@@ -207,6 +219,7 @@ public sealed record WizardCapabilitiesDto(
         new(
             profile.EntryMode,
             profile.RequiresSeller,
+            profile.SellerCapturedViaForm,
             profile.RequiresBuyer,
             profile.RequiresLessee,
             profile.AllowsMultipleBuyer,

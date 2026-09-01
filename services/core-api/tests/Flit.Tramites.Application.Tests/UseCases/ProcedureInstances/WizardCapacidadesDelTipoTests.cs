@@ -69,6 +69,29 @@ public sealed class WizardCapacidadesDelTipoTests
     }
 
     [Fact]
+    public async Task ElUnilateralPublicaQueSuVendedorNoSeCapturaPorFormulario()
+    {
+        // El defecto que esto cubre: la llave viajaba SOLO en el `sectionConfig` de la sección
+        // `actor_form`, mientras el asistente la leía de `capabilities`. Al no encontrarla caía a
+        // `requiresSeller` —true— y pintaba el formulario del propietario en el único trámite que no
+        // lo captura: el gestor veía «Datos del propietario actual» en un traspaso unilateral, donde
+        // la parte que se teclea es el locatario y el propietario se sincroniza desde el RUNT.
+        var state = await EstadoDe(ProcedureTypeFixture.TraspasoUnilateral);
+
+        state.Capabilities!.RequiresSeller.Should().BeTrue("el propietario comparece en el FUR y firma");
+        state.Capabilities.SellerCapturedViaForm.Should().BeFalse("pero no pasa por el asistente");
+    }
+
+    [Fact]
+    public async Task ElTraspasoEstandarSigueCapturandoAlVendedorPorFormulario()
+    {
+        // La llave es aditiva: ausente equivale a `true`, que es el comportamiento de siempre.
+        var state = await EstadoDe(ProcedureTypeFixture.Traspaso);
+
+        state.Capabilities!.SellerCapturedViaForm.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task LaMatriculaEntraPorVinYNoTieneParteVendedora()
     {
         var state = await EstadoDe(ProcedureTypeFixture.Matricula);
@@ -89,6 +112,7 @@ public sealed class WizardCapacidadesDelTipoTests
         var state = await EstadoDe(tipo);
 
         state.Capabilities!.RequiresSeller.Should().Be(perfil.RequiresSeller);
+        state.Capabilities.SellerCapturedViaForm.Should().Be(perfil.SellerCapturedViaForm);
         state.Capabilities.RequiresBuyer.Should().Be(perfil.RequiresBuyer);
         state.Capabilities.RequiresCommercialValue.Should().Be(perfil.RequiresCommercialValue);
         state.Capabilities.HasPrendaGate.Should().Be(perfil.HasPrendaGate);

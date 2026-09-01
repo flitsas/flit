@@ -138,6 +138,22 @@ interface Props {
    * camino normal para capturarlo— y aun así seguir sin escritura que lo faculte.</p>
    */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
+  /**
+   * Rótulo del catálogo para un rol concreto: el `label` que el tipo le dio al paso que lo captura.
+   *
+   * <p>El rol persistido no siempre se llama como la parte real. `TRASPASO_UNILATERAL` guarda al
+   * locatario del leasing con el rol `comprador` —no hay rol propio para una única parte entrante, y
+   * cambiarlo movería el gate, la biometría y el FUR—, pero «Comprador» describe un contrato que ahí
+   * no existe: en un leasing nadie compra. El catálogo ya nombra ese paso «Locatario»; esta prop es
+   * lo que hace que ese nombre llegue a la tarjeta.</p>
+   *
+   * <p>Va por ROL y no como «rótulo de la parte única» porque la pantalla puede traer dos tarjetas y
+   * el nombre del paso solo describe a una: en el unilateral con el formulario del propietario
+   * revelado, «Locatario» nombra al comprador y el propietario conserva el suyo. Los roles sin
+   * entrada caen a {@link ROL_LABEL} (y a la regla de `hayLocatario`), que es el comportamiento
+   * previo.</p>
+   */
+  rotuloPorRol?: Partial<Record<ActorRol, string>>;
 }
 
 /** ¿La consulta de identidad resolvió datos? Gate duro de avance/guardado. */
@@ -686,6 +702,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     rnmcEnabled = false,
     onConsultationGateChange,
     onEscrituraRepresentanteGateChange,
+    rotuloPorRol,
   },
   ref,
 ) {
@@ -1197,6 +1214,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
   /** Hay arrendatario en esta pantalla: entonces la contraparte es el arrendador (propietario). */
   const hayLocatario = roles.includes('locatario');
+  /**
+   * Cómo se llama esta parte en pantalla. Tres fuentes, en orden:
+   *
+   * <p>1) El nombre que el CATÁLOGO le dio al paso que captura ese rol (`rotuloPorRol`): es la única
+   * fuente que sabe que el `comprador` de un `TRASPASO_UNILATERAL` es en realidad el locatario del
+   * leasing. 2) La regla del leasing de matrícula: junto a un locatario, la contraparte es el
+   * PROPIETARIO (arrendador), no un comprador. 3) El rótulo del rol.</p>
+   */
+  const rotuloDelActor = (rol: ActorRol): string => {
+    const delCatalogo = rotuloPorRol?.[rol]?.trim();
+    if (delCatalogo) return delCatalogo;
+    if (hayLocatario && rol === 'comprador') return 'Propietario';
+    return ROL_LABEL[rol];
+  };
 
   const validation = validateActors(actors, modalidad);
 
@@ -2739,7 +2770,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             natural → CC por defecto (RUNT puede corregirlo); jurídica → NIT fijo.
             Rejilla: número (span 2) | Consultar (+ hint a lo ancho). */}
         <WizardAccordion
-          title={esPropietarioInscrito ? 'Datos del propietario actual' : `Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
+          title={esPropietarioInscrito ? 'Datos del propietario actual' : `Datos del ${rotuloDelActor(actor.rol).toLowerCase()}`}
           defaultOpen
           /* Misma insignia de lectura que las tarjetas del traspaso: dice a qué registro se está
              consultando. Este layout no la tenía porque el interruptor PN/PJ ya lo decía por dentro;
@@ -3216,12 +3247,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 : runtState.status === 'not_found' || runtState.status === 'error'
                   ? { text: 'No verificado', tone: 'danger' }
                   : { text: 'Pendiente', tone: 'neutral' };
-          // En una pantalla con locatario, la contraparte NO es un comprador: es el arrendador, o
-          // sea el PROPIETARIO. Llamarla «Comprador» al lado de «Locatario» describe mal el
-          // contrato — en un leasing nadie compra.
-          const rotulo = hayLocatario && actor.rol === 'comprador'
-            ? 'Propietario'
-            : ROL_LABEL[actor.rol];
+          const rotulo = rotuloDelActor(actor.rol);
           return (
             <div
               key={actor.rol}

@@ -199,6 +199,58 @@ export function sourceLabel(source: string | null | undefined): string {
 }
 
 /**
+ * Sello de la consulta: qué fuentes respondieron y cuándo.
+ *
+ * <p>La fecha solo se mostraba cuando el resultado venía de CACHÉ («Dato reutilizado · Consultado
+ * el …»). En una consulta fresca el panel no decía nada, que es justo cuando más vale decirlo: lo
+ * que el gestor necesita saber es que esos datos los acaba de responder el RUNT, no que los dedujo
+ * la aplicación.</p>
+ *
+ * <p>Las fuentes salen de los propios checks, sin repetir: un panel con RUNT y SIMIT lo dice, y uno
+ * que solo consultó el RUNT no anuncia un SIMIT que nadie llamó. Sin fuentes reconocibles o sin
+ * fecha, devuelve `null` y no se pinta nada — nunca una frase a medias.</p>
+ */
+/**
+ * La comprobación no la respondió un tercero, la derivó FLIT. No cuenta como fuente consultada.
+ *
+ * <p>`flit_fines` NO entra aquí: es la cartera de comparendos de la compañía, un dato real que se
+ * consulta igual que el SIMIT, solo que la fuente somos nosotros.</p>
+ */
+function esFuenteInterna(source: string | null | undefined): boolean {
+  return (source ?? '').trim().toLowerCase() === 'system';
+}
+
+export function selloDeConsulta(
+  checks: readonly { source?: string | null }[],
+  fecha: string | null | undefined,
+): string | null {
+  if (!fecha) return null;
+  const cuando = new Date(fecha);
+  if (Number.isNaN(cuando.getTime())) return null;
+
+  // Solo fuentes EXTERNAS. El sello afirma «esto lo dijo el RUNT», así que una comprobación que
+  // deriva la propia plataforma (`system` → «FLIT»: el VIN ya matriculado, o una consulta que el
+  // organismo mandó omitir) no puede aparecer en la lista — «Consultado en RUNT y FLIT» se lee como
+  // que nos consultamos a nosotros mismos, y arruina justo la credibilidad que el sello viene a dar.
+  const fuentes = [
+    ...new Set(
+      checks
+        .filter((c) => !esFuenteInterna(c.source))
+        .map((c) => sourceLabel(c.source))
+        .filter(Boolean),
+    ),
+  ];
+  const origen =
+    fuentes.length === 0
+      ? ''
+      : fuentes.length === 1
+        ? ` en ${fuentes[0]}`
+        : ` en ${fuentes.slice(0, -1).join(', ')} y ${fuentes[fuentes.length - 1]}`;
+
+  return `Consultado${origen} el ${cuando.toLocaleString('es-CO')}`;
+}
+
+/**
  * RNMC (HU #10602/#10603) corre por actor persona natural: las claves quedan
  * `rnmc_comprador_*` / `rnmc_vendedor_*`. Devuelve el sufijo de rol para
  * distinguir ambos checks en el panel (el label del proveedor es idéntico).
@@ -296,6 +348,9 @@ export function PreflightPanel({
   // el gestor los vea de un vistazo. Se toman de `visibleChecks` para no repetir `vin_matricula`,
   // que ya tiene su propia tarjeta accionable arriba.
   const warnChecks = visibleChecks.filter((c) => c.status === 'warn');
+  // `queriedAt` solo lo completa la consulta con caché (ADR-0030); `createdAt` está siempre, así que
+  // es el que sostiene el sello en una consulta fresca — que es donde antes no se decía nada.
+  const sello = selloDeConsulta(checks, snapshot?.queriedAt ?? snapshot?.createdAt);
 
   return (
     <div className={bare ? '' : 'mt-4 rounded-2xl border bg-white p-4 dark:bg-[#162744]'}>
@@ -328,8 +383,17 @@ export function PreflightPanel({
 
       {/* Embebido en acordeón: el título lo pone el acordeón; aquí solo el subtítulo del prototipo. */}
       {bare && (
-        <p className="mb-4 text-[13px] leading-snug opacity-70">
+        <p className="mb-1.5 text-[13px] leading-snug opacity-70">
           Validación automática en fuentes RUNT, SIMIT y RNMC antes de radicar.
+        </p>
+      )}
+
+      {/* Sello de la consulta: la respalda diciendo qué fuentes contestaron y cuándo. Va debajo del
+          subtítulo en las dos variantes del panel (con cabecera propia o embebido en un acordeón),
+          porque la afirmación «esto lo dijo el RUNT» pertenece al resultado, no al encabezado. */}
+      {hasResult && sello && (
+        <p className="mb-4 text-xs opacity-70" role="status" aria-live="polite">
+          {sello}
         </p>
       )}
 
@@ -395,8 +459,13 @@ export function PreflightPanel({
           {visibleChecks.map((c) => {
             const pill = checkPillLabel(c);
             const pillTone = checkPillTone(c);
+            const datos = c.datos ?? [];
             const msg = c.message?.trim() ?? '';
-            const showMessage = !!msg && c.status !== 'ok';
+            // También en OK. Antes se ocultaba, y la tarjeta quedaba con la pastilla verde y el
+            // cuerpo vacío: el gestor veía que «está bien» sin ver de dónde salía eso. Ahora los
+            // mapeadores mandan el respaldo del proveedor —vencimiento del SOAT, póliza, aseguradora,
+            // CDA de la revisión— y es justo el dato que puede contrastar si el organismo pregunta.
+            const showMessage = !!msg;
             const aria = `${c.label}: ${pill}`;
             return (
               <li
@@ -429,6 +498,25 @@ export function PreflightPanel({
                     />
                   )}
                 </div>
+                {/* Los datos del proveedor, una fila por dato: la etiqueta arriba en versalitas y el
+                    valor debajo, como el resto del asistente presenta los datos del vehículo y de
+                    los actores. Encadenados en una frase se leían mal —el salto de línea partía el
+                    nombre de la aseguradora por la mitad— y el último campo quedaba sin etiqueta,
+                    como si formara parte del anterior. */}
+                {datos.length > 0 && (
+                  <dl className="space-y-1.5">
+                    {datos.map((d) => (
+                      <div key={`${d.etiqueta}-${d.valor}`}>
+                        <dt className="text-[10px] font-semibold uppercase tracking-wide opacity-55">
+                          {d.etiqueta}
+                        </dt>
+                        <dd className="text-[11.5px] leading-snug break-words">{d.valor}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {/* El mensaje se conserva para lo que NO es un par etiqueta/valor: «Sin gravámenes ni
+                    prendas registradas» es una afirmación, no un campo que etiquetar. */}
                 {showMessage && (
                   <p className="text-[11.5px] leading-snug opacity-70">{c.message}</p>
                 )}

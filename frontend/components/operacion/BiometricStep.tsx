@@ -92,6 +92,9 @@ function partesFor(modalidad: WizardModalidad): BiometricParte[] {
   return modalidad === 'traspaso' ? ['vendedor', 'comprador'] : ['comprador'];
 }
 
+/** Orden de presentación de las partes: saliente antes que entrante (HU21). */
+const ORDEN_PARTES: BiometricParte[] = ['vendedor', 'comprador'];
+
 const PARTE_LABEL: Record<BiometricParte, string> = {
   comprador: 'Comprador',
   vendedor: 'Vendedor',
@@ -221,8 +224,13 @@ export function BiometricStep({
   embedded = false,
   onIrAActores,
 }: Props) {
+  // Con `onlyPartes` la lista de partes ES la que se recibe, ordenada canónicamente; sin ella, la
+  // que impone la modalidad. Antes se intersectaban las dos, y esa intersección podía vaciarse: el
+  // paso de identidad declara sus firmantes por tipo (`biometricActors`, ADR-0051) y una combinación
+  // que la modalidad heredada no contemplara —firma el propietario en un recorrido que la modalidad
+  // lee como matrícula— dejaba el paso sin ninguna tarjeta, sin decir por qué.
   const partes = onlyPartes?.length
-    ? partesFor(modalidad).filter((p) => onlyPartes.includes(p))
+    ? ORDEN_PARTES.filter((p) => onlyPartes.includes(p))
     : partesFor(modalidad);
   // Solo lectura (Track C): sin iniciar/simular validación.
   const readOnly = useWizardReadOnly();

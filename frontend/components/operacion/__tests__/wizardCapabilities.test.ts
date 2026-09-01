@@ -239,6 +239,15 @@ describe('vendedor que no se captura por formulario (ADR-0051)', () => {
     expect(rolesDeActores(caps)).toEqual(['comprador']);
   });
 
+  it('solo el propietario valida identidad y firma: el locatario no', () => {
+    // Art. 5.3.2.2 — en el unilateral intervienen dos partes pero solo firma el propietario. El paso
+    // de identidad pintaba las dos tarjetas porque preguntaba «¿es un traspaso?» en vez de mirar lo
+    // que el tipo declara, y le pedía al locatario una validación que su trámite no exige.
+    const caps = capacidadesEfectivas(UNILATERAL, 'TRASPASO');
+
+    expect(caps.partesBiometricas).toEqual(['vendedor']);
+  });
+
   it('sigue validando la identidad del propietario, que es el único que interviene', () => {
     expect(capacidadesEfectivas(UNILATERAL, 'TRASPASO').validaIdentidadDelVendedor).toBe(true);
   });
@@ -299,5 +308,60 @@ describe('generación automática de impronta', () => {
     ).toBe(false);
     expect(capacidadesEfectivas(TRASPASO, 'TRASPASO').permiteGenerarImprontaAutomatica).toBe(true);
     expect(capacidadesEfectivas(null, 'TRASPASO').permiteGenerarImprontaAutomatica).toBe(true);
+  });
+});
+
+describe('partes que validan identidad (ADR-0051)', () => {
+  it('el traspaso estándar conserva las dos partes', () => {
+    expect(capacidadesEfectivas(TRASPASO, 'TRASPASO').partesBiometricas).toEqual([
+      'vendedor',
+      'comprador',
+    ]);
+  });
+
+  it('la matrícula solo pide la parte entrante', () => {
+    expect(capacidadesEfectivas(MATRICULA, 'MATRICULAS').partesBiometricas).toEqual(['comprador']);
+  });
+
+  // Un borrador anterior a la llave no trae capacidades: se cae al criterio de siempre y el paso de
+  // identidad nunca queda sin nadie.
+  it('sin capacidades cae al criterio por familia', () => {
+    expect(capacidadesEfectivas(null, 'TRASPASO').partesBiometricas).toEqual([
+      'vendedor',
+      'comprador',
+    ]);
+    expect(capacidadesEfectivas(null, 'MATRICULAS').partesBiometricas).toEqual(['comprador']);
+  });
+});
+
+describe('sellerCapturedViaForm sin parte vendedora (regresión)', () => {
+  // El backend manda la llave para TODOS los tipos, y su valor por defecto es `true` —describe «si
+  // hubiera vendedor, se capturaría por formulario»—. Un tipo SIN parte vendedora la recibe igual, y
+  // mientras `rolesDeActores` decidía solo con ella, una matrícula inicial o un blindaje acababan
+  // pintando una tarjeta de VENDEDOR. Las dos condiciones tienen que darse.
+  const MATRICULA_CON_LLAVE: WizardCapabilities = {
+    ...MATRICULA,
+    sellerCapturedViaForm: true,
+  };
+  const OTROS_CON_LLAVE: WizardCapabilities = {
+    ...OTROS,
+    sellerCapturedViaForm: true,
+  };
+
+  it('la matrícula no pinta vendedor aunque la llave venga en true', () => {
+    const caps = capacidadesEfectivas(MATRICULA_CON_LLAVE, 'MATRICULAS');
+
+    expect(caps.pideVendedor).toBe(false);
+    expect(rolesDeActores(caps)).toEqual(['comprador']);
+  });
+
+  it('la familia OTROS tampoco', () => {
+    expect(rolesDeActores(capacidadesEfectivas(OTROS_CON_LLAVE, 'OTROS'))).toEqual(['comprador']);
+  });
+
+  it('el traspaso estándar sigue pintando las dos partes', () => {
+    const caps = capacidadesEfectivas({ ...TRASPASO, sellerCapturedViaForm: true }, 'TRASPASO');
+
+    expect(rolesDeActores(caps)).toEqual(['vendedor', 'comprador']);
   });
 });

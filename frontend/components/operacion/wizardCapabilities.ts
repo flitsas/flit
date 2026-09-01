@@ -1,5 +1,6 @@
 import type {
   ActorRol,
+  BiometricParte,
   PrendaDecision,
   WizardCapabilities,
   WizardModalidad,
@@ -44,6 +45,15 @@ export interface CapacidadesEfectivas {
   prendaEsPuerta: boolean;
   /** Se valida la identidad de la parte saliente además de la entrante. */
   validaIdentidadDelVendedor: boolean;
+  /**
+   * Partes que VALIDAN IDENTIDAD y firman, en el orden de presentación (saliente antes que entrante).
+   *
+   * <p>Lo declara el tipo en `biometricActors`, y no se deduce de cuántas partes tiene el trámite: en
+   * `TRASPASO_UNILATERAL` hay dos partes —propietario y locatario— pero **solo el propietario firma**
+   * (art. 5.3.2.2). El paso de identidad preguntaba «¿es un traspaso?» para pintar las dos tarjetas,
+   * así que le pedía al locatario una validación que ese trámite no exige.</p>
+   */
+  partesBiometricas: BiometricParte[];
   /**
    * El expediente admite declarar transformaciones POR ENCIMA del tipo base (los «trámites
    * simultáneos» del art. 5.1.8). La familia OTROS no: allí el cambio ES el trámite, y agregar un
@@ -126,6 +136,8 @@ function desdeModalidad(familia: ProcedureFamily | WizardModalidad): Capacidades
     pideValorComercial: esTraspaso,
     prendaEsPuerta: esTraspaso,
     validaIdentidadDelVendedor: esTraspaso,
+    // El respaldo reproduce las dos ramas heredadas: en traspaso firmaban las dos partes.
+    partesBiometricas: esTraspaso ? ['vendedor', 'comprador'] : ['comprador'],
     permiteTransformacionesComplementarias: familiaAcumula(familia),
     permitePrendaComplementaria: familiaAcumula(familia),
     // El respaldo reproduce el criterio previo: solo elige organismo quien entra por VIN.
@@ -137,6 +149,24 @@ function desdeModalidad(familia: ProcedureFamily | WizardModalidad): Capacidades
     // Un borrador sin capacidades no debe perder el check de generar impronta.
     permiteGenerarImprontaAutomatica: true,
   };
+}
+
+/**
+ * Traduce el vocabulario del catálogo (`OWNER` / `BUYER`) al de las partes del asistente, en el orden
+ * de presentación: la saliente antes que la entrante, como se lee el expediente.
+ *
+ * <p>`LESSEE` no se traduce: el arrendatario no valida identidad en ningún tipo del catálogo (en el
+ * leasing quien firma es el propietario), y el paso solo sabe pintar comprador y vendedor.</p>
+ *
+ * <p>Lista vacía ⇒ el tipo no declaró firmantes: se cae al criterio anterior a la llave (las dos
+ * partes en traspaso, solo la entrante en el resto) para no dejar un paso de identidad sin nadie.</p>
+ */
+function partesBiometricasDe(actores: string[], esTraspaso: boolean): BiometricParte[] {
+  const partes: BiometricParte[] = [];
+  if (actores.includes('OWNER')) partes.push('vendedor');
+  if (actores.includes('BUYER')) partes.push('comprador');
+  if (partes.length > 0) return partes;
+  return esTraspaso ? ['vendedor', 'comprador'] : ['comprador'];
 }
 
 export function capacidadesEfectivas(
@@ -166,6 +196,7 @@ export function capacidadesEfectivas(
     // OWNER es la parte saliente. En la familia OTROS el titular se persiste como comprador y no
     // hay parte saliente que validar, así que la lista trae solo BUYER.
     validaIdentidadDelVendedor: capabilities.requiresBiometrics && actores.includes('OWNER'),
+    partesBiometricas: partesBiometricasDe(actores, esFamiliaTraspaso(familia)),
     // El backend ya resolvió perfil → familia. Ausente ⇒ se cae a la familia, que es lo que hace
     // falta para un borrador abierto antes de que estas llaves existieran: leerlo como `false` le
     // apagaría los simultáneos a un traspaso en curso sin que nadie lo hubiera pedido.
@@ -270,10 +301,17 @@ export function decisionesDelTipoDePrenda(
  */
 export function rolesDeActores(caps: CapacidadesEfectivas): ActorRol[] {
   const roles: ActorRol[] = [];
-  // ADR-0051 — NO es `caps.pideVendedor`: hay tipos con parte vendedora que no se captura aquí
-  // (`TRASPASO_UNILATERAL`, sincronizada desde el RUNT). Pintar su formulario es la excepción
-  // `revealSellerForm` que añade `TramiteWizard.tsx` por instancia, no la capacidad del tipo.
-  if (caps.vendedorCapturaPorFormulario) roles.push('vendedor');
+  // ADR-0051 — LAS DOS condiciones, y en este orden: que el tipo tenga parte vendedora, y que esa
+  // parte se capture aquí. `TRASPASO_UNILATERAL` tiene la primera y no la segunda (el propietario se
+  // sincroniza desde el RUNT); pintar su formulario es la excepción `revealSellerForm`, que añade
+  // `TramiteWizard.tsx` por instancia y no la capacidad del tipo.
+  //
+  // Antes bastaba `vendedorCapturaPorFormulario`, y funcionaba solo porque el backend NUNCA mandaba
+  // la llave: al caer a `?? requiresSeller`, las dos preguntas colapsaban en una. Desde que el DTO la
+  // publica de verdad, un tipo SIN parte vendedora la recibe en `true` —es su valor por defecto, y
+  // describe «si hubiera vendedor, se capturaría por formulario»— y la condición sola le pintaba una
+  // tarjeta de VENDEDOR a una matrícula inicial o a un blindaje.
+  if (caps.pideVendedor && caps.vendedorCapturaPorFormulario) roles.push('vendedor');
   if (caps.pideComprador) roles.push('comprador');
   // El locatario va al final y SIEMPRE en paso aparte (ver `rolesDelPasoDeActores`): no se unifica
   // con el propietario porque son dos personas distintas, no las dos caras de una transferencia.

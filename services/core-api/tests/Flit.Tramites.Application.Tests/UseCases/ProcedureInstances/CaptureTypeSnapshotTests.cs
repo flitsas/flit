@@ -43,11 +43,12 @@ public sealed class CaptureTypeSnapshotTests
             new ProcedureStep
             {
                 Code = "consulta",
+                Title = "Consulta del vehículo",
                 SortOrder = 1,
                 Sections =
                 [
-                    new ProcedureSection { SectionType = "vehicle_query", SortOrder = 1 },
-                    new ProcedureSection { SectionType = "document_checklist", SortOrder = 2 }
+                    new ProcedureSection { Code = "VEHICULO", SectionType = "vehicle_query", SortOrder = 1 },
+                    new ProcedureSection { Code = "CHECKLIST", SectionType = "document_checklist", SortOrder = 2 }
                 ]
             }
         ]
@@ -80,6 +81,15 @@ public sealed class CaptureTypeSnapshotTests
         steps[0].GetProperty("sectionTypes").EnumerateArray()
             .Select(e => e.GetString())
             .Should().ContainInOrder("vehicle_query", "document_checklist");
+
+        // `WizardStateQuery.FromSnapshot` LEE estas dos llaves, y nadie las escribía. Sin `stepTitle`
+        // el paso caía al respaldo genérico («Actores» en vez de «Vendedor»/«Comprador»/«Locatario»);
+        // sin `sectionCodes`, `SectionCoversSeller(null)` devuelve true y el paso de actores exigía
+        // la parte vendedora en un tipo cuyo recorrido no la tiene.
+        steps[0].GetProperty("stepTitle").GetString().Should().Be("Consulta del vehículo");
+        steps[0].GetProperty("sectionCodes").EnumerateArray()
+            .Select(e => e.GetString())
+            .Should().ContainInOrder("VEHICULO", "CHECKLIST");
     }
 
     [Fact]

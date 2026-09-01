@@ -387,6 +387,29 @@ function ReadOnlyStateNotice({
   );
 }
 
+/**
+ * Cómo llama el CATÁLOGO a cada parte, leyendo el `label` de los pasos que las capturan.
+ *
+ * <p>El rol persistido no siempre se llama como la parte real —en `TRASPASO_UNILATERAL` el locatario
+ * del leasing se guarda con el rol `comprador`— y el nombre bueno vive en el paso, que es lo que el
+ * tipo parametriza. Esto lo recoge una sola vez para que el paso de Actores y el Resumen no puedan
+ * discrepar sobre cómo se llama la misma persona.</p>
+ *
+ * <p>Solo mira los pasos de actores; un rol sin paso propio no aparece y el consumidor cae a su
+ * nombre de siempre.</p>
+ */
+function rotulosDeActores(
+  steps: WizardStep[],
+): Partial<Record<ActorRol, string>> {
+  const rotulos: Partial<Record<ActorRol, string>> = {};
+  for (const step of steps) {
+    if (resolveStepBody(step) !== 'actores') continue;
+    const label = step.label?.trim();
+    if (label) rotulos[resolveActorRole(step)] = label;
+  }
+  return rotulos;
+}
+
 /** Icono/marcador por status del paso — ver WizardStepTracker. */
 
 /**
@@ -1446,8 +1469,6 @@ export function TramiteWizard(props: Props) {
       // ADR-0050 — la parte la resuelve el ROL del paso, no su clave: el paso de la familia OTROS se
       // llama `propietario` y su titular se persiste como comprador, así que comparar contra la
       // clave literal dejaba a ese trámite sin asegurar la identidad de nadie.
-      // El locatario queda fuera a propósito: en el leasing quien valida identidad y firma es el
-      // propietario. El tipado lo hace explícito — `BiometricParte` no lo incluye.
       // En una pantalla unificada se aseguran TODAS sus partes en el mismo Continuar (el gestor las
       // llenó juntas); en una pantalla de una sola parte, solo esa.
       const rolesDelPasoActivo: ActorRol[] = !isActorStep || !activeStep
@@ -1455,9 +1476,19 @@ export function TramiteWizard(props: Props) {
         : esPasoDeActoresUnificado(steps, activeIndex)
           ? rolesDeActores(caps)
           : [resolveActorRole(activeStep)];
-      const partesIdentidad: BiometricParte[] = rolesDelPasoActivo.filter(
-        (r): r is BiometricParte => r !== 'locatario',
-      );
+      // ADR-0051 — y de esas partes, solo las que el TIPO declara como firmantes (`biometricActors`).
+      //
+      // Descartar el rol `locatario` no bastaba, y esa era la trampa: en `TRASPASO_UNILATERAL` el
+      // locatario NO se persiste con ese rol —no existe un rol propio para una única parte entrante—
+      // sino como `comprador`. El filtro por nombre de rol lo dejaba pasar, así que al Continuar se
+      // le aseguraba la identidad y le salía el correo de validación de Kyverum: exactamente la
+      // persona que en este trámite no firma (art. 5.3.2.2).
+      //
+      // El criterio correcto no es cómo se llama el rol sino a quién declara el tipo que valida, que
+      // es lo mismo que decide qué tarjetas pinta el paso de Identidad. Un solo origen para las dos.
+      const partesIdentidad: BiometricParte[] = rolesDelPasoActivo
+        .filter((r): r is BiometricParte => r !== 'locatario')
+        .filter((r) => caps.partesBiometricas.includes(r));
       if (partesIdentidad.length > 0 && instanceId) {
         for (const parteIdentidad of partesIdentidad) {
           // Qué se estaba haciendo cuando falló. El catch de abajo cubre CUATRO llamadas y hasta
@@ -1805,6 +1836,7 @@ export function TramiteWizard(props: Props) {
                 prendaFormRef={prendaFormRef}
                 onActorsConsultationGateChange={setActorsConsultationReady}
                 onEscrituraRepresentanteGateChange={setEscrituraRlGateOk}
+                rotulosActores={rotulosDeActores(steps)}
                 onIrAActores={irAPasoActor}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
@@ -4217,6 +4249,7 @@ function StepBody({
   prendaFormRef,
   onActorsConsultationGateChange,
   onEscrituraRepresentanteGateChange,
+  rotulosActores,
   onIrAActores,
   identityOperable = false,
   identityApproved = false,
@@ -4274,6 +4307,11 @@ function StepBody({
   onActorsConsultationGateChange?: (ready: boolean) => void;
   /** Gate Continuar: escritura del representante legal fuera del directorio ya adjunta (o no aplica). */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
+  /**
+   * Cómo llama el catálogo a cada parte (`rotulosDeActores`). Lo calcula la shell, que es quien tiene
+   * TODOS los pasos: el resumen necesita los rótulos de partes que su propio paso no captura.
+   */
+  rotulosActores?: Partial<Record<ActorRol, string>>;
   /** HU #11666 — navega al paso de actores de una parte (acción correctiva de los motivos de no envío). */
   onIrAActores?: (parte: BiometricParte) => void;
   /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
@@ -4626,24 +4664,35 @@ function StepBody({
       // documento de otra persona — y la guarda del servidor (locatario ≠ propietario) lo confirma.
       const hayPropietarioPrevio = !caps.entraPorVin;
       // Qué rol RECIBE el documento del propietario del paso 1 (y dispara la consulta automática al
-      // RUNT dentro de `ActorsForm`). Se deriva de `rolesBase` —lo que el TIPO captura por
-      // formulario— y NUNCA de `roles` (que ya incluye la excepción de revelado):
-      //   - `rolesBase` trae 'vendedor' (traspaso estándar / TRASPASO_TRANSFERENCIA_DE_DOMINIO): lo
-      //     recibe 'vendedor', el propietario que sale.
-      //   - `rolesBase` NO trae 'vendedor' y el tipo tampoco pide parte vendedora (`!caps.pideVendedor`,
+      // RUNT dentro de `ActorsForm`). Se deriva de los roles que de verdad están EN PANTALLA:
+      //   - Hay 'vendedor' pintado (traspaso estándar, TRASPASO_TRANSFERENCIA_DE_DOMINIO, o el
+      //     unilateral con el formulario revelado): lo recibe 'vendedor', que es el propietario que
+      //     sale. Es el propietario inscrito en el RUNT en los tres casos.
+      //   - No hay 'vendedor' pintado y el tipo tampoco pide parte vendedora (`!caps.pideVendedor`,
       //     familia OTROS): el titular ES el propietario inscrito y se persiste como 'comprador' → lo
       //     recibe 'comprador'.
-      //   - `rolesBase` NO trae 'vendedor' pero el tipo SÍ pide parte vendedora (`caps.pideVendedor`,
-      //     TRASPASO_UNILATERAL): hay propietario, pero no se captura en ESTE paso —el backend ya lo
-      //     sincronizó aparte desde el RUNT—, así que NINGÚN rol en pantalla debe recibirlo.
+      //   - No hay 'vendedor' pintado pero el tipo SÍ pide parte vendedora (`caps.pideVendedor`,
+      //     TRASPASO_UNILATERAL sin revelado): hay propietario, pero no está en ESTE paso —el backend
+      //     lo sincronizó aparte desde el RUNT—, así que NINGÚN rol en pantalla debe recibirlo.
       //     `rolDelPropietario` queda `null`. Sin esta distinción, 'comprador' (aquí el LOCATARIO,
       //     una persona distinta del propietario) heredaba el documento del propietario del RUNT en
       //     solo lectura — el traspaso encubierto que este comentario ya advertía, pero al revés: en
       //     vez de dejar teclear a otra persona, precargaba a la persona equivocada.
-      //   - Si además `revealSellerForm` añadió 'vendedor' a `roles`, ese actor sigue sin recibir la
-      //     siembra: ya lo sincronizó el backend por su cuenta (mismo documento, mismo origen); no
-      //     hay nada que sembrarle ni una consulta RUNT que `ActorsForm` deba disparar por él.
-      const rolDelPropietario: ActorRol | null = rolesBase.includes('vendedor')
+      //
+      // Antes se derivaba de `rolesBase` (lo que el TIPO captura por formulario) para dejar FUERA el
+      // revelado por excepción: se razonaba que al vendedor sincronizado no hay nada que sembrarle
+      // porque el backend ya lo resolvió. El resultado en pantalla era el contrario del buscado: al
+      // no ser `rolDelPropietario`, esa tarjeta perdía el trato de propietario inscrito —consulta
+      // automática, identidad en solo lectura, insignia de verificado— y caía en una rama de
+      // excepción que pintaba dos campos grises sueltos y cuatro campos de contacto VACÍOS, en rojo
+      // desde el instante de abrir el paso. Y precisamente esos datos de contacto son lo que la
+      // consulta al RUNT trae resueltos.
+      //
+      // Cuando la tarjeta del propietario está en pantalla, es el propietario inscrito: se trata como
+      // tal, sea cual sea la vía por la que llegó. La rama de excepción de `ActorsForm`
+      // (`vendedorSincronizado`) se apaga sola por construcción, porque su condición es justamente
+      // «hay tarjeta de vendedor y NO es `rolDelPropietario`».
+      const rolDelPropietario: ActorRol | null = roles.includes('vendedor')
         ? 'vendedor'
         : caps.pideVendedor
           ? null
@@ -4665,6 +4714,12 @@ function StepBody({
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
           onEscrituraRepresentanteGateChange={onEscrituraRepresentanteGateChange}
+          // Quien sabe cómo se llama la parte es el CATÁLOGO: en `TRASPASO_UNILATERAL` el rol
+          // persistido es `comprador` pero el paso se llama «Locatario», que es la parte real del
+          // leasing. El nombre del paso describe al rol que ese paso captura (`resolveActorRole`),
+          // así que se pasa apuntado a ese rol: en una pantalla de dos tarjetas nombra solo la suya
+          // y el propietario conserva la propia.
+          rotuloPorRol={{ [resolveActorRole(step)]: step.label }}
         />
       );
     }
@@ -4679,6 +4734,11 @@ function StepBody({
         <BiometricStep
           instanceId={instanceId}
           modalidad={modalidadPorPartes(caps)}
+          // ADR-0051 — quién valida identidad lo DECLARA el tipo (`biometricActors`), no lo deduce el
+          // número de partes. En `TRASPASO_UNILATERAL` intervienen dos —propietario y locatario— pero
+          // solo firma el propietario (art. 5.3.2.2); sin esto el paso pedía al locatario una
+          // validación que su trámite no exige, y el gestor la daba por obligatoria.
+          onlyPartes={caps.partesBiometricas}
           onRefresh={onRefresh}
           hideIntro
           heading="Identidad"
@@ -4754,6 +4814,13 @@ function StepBody({
             key={`${instanceId ?? 'new'}-${instanceStatus ?? 'borrador'}`}
             instanceId={instanceId}
             modalidad={modalidadPorEntrada(caps)}
+            // Mismo origen que el paso de Identidad: lo que el tipo declara en `biometricActors`. El
+            // resumen y el paso no pueden discrepar sobre quién firma.
+            partesBiometricas={caps.partesBiometricas}
+            // Y los mismos rótulos que el paso de Actores: los nombra el catálogo. Sin esto el
+            // resumen de un traspaso unilateral titulaba «Comprador» la tarjeta del locatario,
+            // mientras el paso anterior ya la llamaba «Locatario».
+            rotulosPorRol={rotulosActores}
             onRefresh={onRefresh}
             rnmcEnabled={rnmcEnabled}
             onPaqueteStatusChange={onPaqueteStatusChange}

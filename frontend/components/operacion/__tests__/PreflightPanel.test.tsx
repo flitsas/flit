@@ -2,7 +2,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PreflightPanel, checkPillLabel, checkRoleSuffix } from '../PreflightPanel';
+import {
+  PreflightPanel,
+  checkPillLabel,
+  checkRoleSuffix,
+  selloDeConsulta,
+} from '../PreflightPanel';
 import type {
   PreflightCheck,
   PreflightSnapshot,
@@ -419,5 +424,116 @@ describe('PreflightPanel — precarga con origen/fecha y forzar actualización (
 
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT y SIMIT' }));
     expect(onRun).toHaveBeenCalledWith(false);
+  });
+});
+
+describe('selloDeConsulta', () => {
+  // La fecha solo se mostraba cuando el resultado venía de caché. En una consulta fresca el panel no
+  // decía nada, que es cuando más vale decirlo: el respaldo de que el dato lo acaba de dar el RUNT.
+  it('nombra las fuentes que respondieron, sin repetirlas', () => {
+    const sello = selloDeConsulta(
+      [{ source: 'kyverum_runt' }, { source: 'verifik' }, { source: 'kyverum_fines' }],
+      '2026-08-31T20:42:00Z',
+    );
+
+    expect(sello).toMatch(/^Consultado en RUNT y SIMIT el /);
+  });
+
+  it('con una sola fuente no inventa las demás', () => {
+    expect(selloDeConsulta([{ source: 'kyverum_runt' }], '2026-08-31T20:42:00Z')).toMatch(
+      /^Consultado en RUNT el /,
+    );
+  });
+
+  // «Consultado en RUNT y FLIT» se lee como que nos consultamos a nosotros mismos, y arruina justo
+  // la credibilidad que el sello viene a dar. Las comprobaciones que deriva la plataforma no son una
+  // fuente consultada.
+  it('no cuenta como fuente lo que deriva la propia plataforma', () => {
+    const sello = selloDeConsulta(
+      [{ source: 'kyverum_runt' }, { source: 'system' }],
+      '2026-08-31T20:42:00Z',
+    );
+
+    expect(sello).toMatch(/^Consultado en RUNT el /);
+    expect(sello).not.toContain('FLIT');
+  });
+
+  // La cartera propia de comparendos SÍ es una consulta real: la fuente somos nosotros, pero el dato
+  // se consulta igual que el SIMIT.
+  it('la cartera propia de comparendos sí cuenta', () => {
+    expect(selloDeConsulta([{ source: 'flit_fines' }], '2026-08-31T20:42:00Z')).toMatch(
+      /Comparendos FLIT/,
+    );
+  });
+
+  // Nunca una frase a medias: sin fecha utilizable no se pinta nada.
+  it('sin fecha o con fecha inválida no devuelve sello', () => {
+    expect(selloDeConsulta([{ source: 'verifik' }], null)).toBeNull();
+    expect(selloDeConsulta([{ source: 'verifik' }], 'no-es-una-fecha')).toBeNull();
+  });
+});
+
+describe('PreflightPanel — respaldo de los checks en verde', () => {
+  // Antes la tarjeta en OK quedaba con la pastilla verde y el cuerpo vacío: decía «está bien» sin
+  // decir de dónde salía. Los mapeadores ahora mandan el respaldo del proveedor y aquí se muestra.
+  it('pinta los datos del proveedor como filas etiqueta/valor', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'green',
+          createdAt: '2026-08-31T20:42:00Z',
+          checks: [
+            {
+              key: 'soat',
+              label: 'SOAT',
+              status: 'ok',
+              source: 'kyverum_runt',
+              message: '',
+              datos: [
+                { etiqueta: 'Vigente hasta', valor: '2027/01/23' },
+                { etiqueta: 'Póliza', valor: '3506349600' },
+                { etiqueta: 'Aseguradora', valor: 'AXA COLPATRIA SEGUROS SA' },
+              ],
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+
+    // Cada dato con SU etiqueta: encadenados en una frase, el último quedaba sin ella y se leía como
+    // parte del anterior.
+    expect(screen.getByText('Vigente hasta')).toBeInTheDocument();
+    expect(screen.getByText('2027/01/23')).toBeInTheDocument();
+    expect(screen.getByText('Aseguradora')).toBeInTheDocument();
+    expect(screen.getByText('AXA COLPATRIA SEGUROS SA')).toBeInTheDocument();
+    expect(screen.getByText(/Consultado en RUNT el /)).toBeInTheDocument();
+  });
+
+  // Lo que no es un par etiqueta/valor sigue siendo un mensaje: «Sin gravámenes ni prendas
+  // registradas» es una afirmación, no un campo.
+  it('sin datos estructurados conserva el mensaje del check', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'green',
+          createdAt: '2026-08-31T20:42:00Z',
+          checks: [
+            {
+              key: 'gravamenes',
+              label: 'Gravámenes y limitaciones',
+              status: 'ok',
+              source: 'kyverum_runt',
+              message: 'Sin gravámenes ni prendas registradas en el RUNT',
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+
+    expect(
+      screen.getByText('Sin gravámenes ni prendas registradas en el RUNT'),
+    ).toBeInTheDocument();
   });
 });

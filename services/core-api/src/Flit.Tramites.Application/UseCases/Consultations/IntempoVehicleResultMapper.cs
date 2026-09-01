@@ -87,12 +87,16 @@ public static class IntempoVehicleResultMapper
             return new ConsultationCheck("estado_vehiculo", "Estado del vehículo", Unknown, Provider, "Sin información de estado");
 
         var activo = string.Equals(estado, "ACTIVO", StringComparison.OrdinalIgnoreCase);
+        var estadoDatos = ConsultationCheckDetail.Datos(("Estado", estado.Trim().ToUpperInvariant()));
         return new ConsultationCheck(
             "estado_vehiculo",
             "Estado del vehículo",
             activo ? Ok : Fail,
             Provider,
-            activo ? null : $"Estado: {estado}");
+            // El mensaje repite los datos en una línea: respaldo si el campo estructurado se pierde
+            // por el camino, y para los expedientes cuyo pre-vuelo se guardó antes de que existiera.
+            ConsultationCheckDetail.Resumen(estadoDatos),
+            Datos: estadoDatos);
     }
 
     private static ConsultationCheck MapSoat(List<IntempoSoat>? soat)
@@ -100,13 +104,21 @@ public static class IntempoVehicleResultMapper
         if (soat is null || soat.Count == 0)
             return new ConsultationCheck("soat", "SOAT", Fail, Provider, "Sin SOAT registrado");
 
-        var vigente = soat.Any(s => string.Equals(s.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase));
+        var poliza = soat.FirstOrDefault(s =>
+            string.Equals(s.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase));
+        var vigente = poliza is not null;
+        var soatDatos = vigente
+            ? ConsultationCheckDetail.Datos(
+                ("Vigente hasta", ConsultationCheckDetail.Fecha(poliza?.FechaVencimiento)),
+                ("Póliza", poliza?.NoPoliza))
+            : null;
         return new ConsultationCheck(
             "soat",
             "SOAT",
             vigente ? Ok : Fail,
             Provider,
-            vigente ? null : "SOAT vencido o no vigente");
+            vigente ? ConsultationCheckDetail.Resumen(soatDatos) : "SOAT vencido o no vigente",
+            Datos: soatDatos);
     }
 
     private static ConsultationCheck MapGravamenes(
@@ -121,7 +133,11 @@ public static class IntempoVehicleResultMapper
         var sinDetalle = gravamenesDetalle is null || gravamenesDetalle.Count == 0;
 
         if (sinGravamenes && sinPrendas && sinLimitaciones && sinDetalle)
-            return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
+        {
+            return new ConsultationCheck(
+                "gravamenes", "Gravámenes y limitaciones", Ok, Provider,
+                "Sin gravámenes ni prendas registradas en el RUNT");
+        }
 
         return new ConsultationCheck(
             "gravamenes",

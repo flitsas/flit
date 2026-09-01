@@ -25,7 +25,12 @@ public sealed record PreflightCheckDto(
     string Status,
     string Source,
     string? Message,
-    IReadOnlyList<FineDetail>? Details = null);
+    IReadOnlyList<FineDetail>? Details = null,
+    /// <summary>
+    /// Datos del proveedor que respaldan el resultado, ya separados en etiqueta y valor (ver
+    /// <see cref="CheckDato"/>). El panel los pinta como filas; sin ellos cae al <c>Message</c>.
+    /// </summary>
+    IReadOnlyList<CheckDato>? Datos = null);
 
 /// <summary>
 /// Snapshot preflight server-driven. <c>Overall</c> ∈ {green|yellow|red} (DI-1: 'yellow', no 'amber').
@@ -636,7 +641,7 @@ public sealed class RunPreflightHandler(
             var result = await chainResolver.ConsultAsync(kind, ctx, tenantOverride, ct);
             providersUsed.Add(result.Provider);
             foreach (var c in result.Checks)
-                checks.Add(new PreflightCheckDto(c.Key, c.Label, c.Status, c.Source, c.Message, c.Details));
+                checks.Add(new PreflightCheckDto(c.Key, c.Label, c.Status, c.Source, c.Message, c.Details, c.Datos));
 
             return result.HydratedFields;
         }
@@ -731,7 +736,7 @@ public sealed class RunPreflightHandler(
             foreach (var c in result.Checks)
             {
                 var key = keyPrefix is null ? c.Key : $"{keyPrefix}_{c.Key}";
-                checks.Add(new PreflightCheckDto(key, c.Label, c.Status, c.Source, c.Message, c.Details));
+                checks.Add(new PreflightCheckDto(key, c.Label, c.Status, c.Source, c.Message, c.Details, c.Datos));
             }
 
             return result.HydratedFields;

@@ -61,6 +61,13 @@ interface Props {
   onPaqueteStatusChange?: (status: PaqueteDocsStatus) => void;
   /** HU #10646 — partes con firma del baúl (biométrica embebida en resumen). */
   vaultCoveredPartes?: BiometricParte[];
+  /**
+   * ADR-0051 — partes que el TIPO somete a validación de identidad (`biometricActors`). El resumen
+   * solo pinta el bloque de firma de estas. Ausente ⇒ las dos, que es el criterio previo.
+   */
+  partesBiometricas?: BiometricParte[];
+  /** Cómo llama el catálogo a cada parte en este tipo (ver `MatriculaResumen.rotulosPorRol`). */
+  rotulosPorRol?: Partial<Record<'comprador' | 'vendedor' | 'locatario', string>>;
   /** Borrador finalizado: biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
 }
@@ -231,6 +238,8 @@ export function FirmaFurStep({
   rnmcEnabled = false,
   onPaqueteStatusChange,
   vaultCoveredPartes = [],
+  partesBiometricas,
+  rotulosPorRol,
   biometricForceEditable = false,
 }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
@@ -400,6 +409,18 @@ export function FirmaFurStep({
   );
   const vendedorContact = useMemo(
     () => actorsContact.find((a) => a.rol === 'vendedor') ?? null,
+    [actorsContact],
+  );
+  // Locatario: parte propia de los tipos con leasing (`requiresLessee`, DDL 88). Existe en el
+  // expediente desde que se puede capturar, pero el resumen nunca lo armó: solo conocía comprador y
+  // vendedor, así que el arrendatario del vehículo no aparecía en la pantalla donde el gestor revisa
+  // el trámite antes de radicarlo. Null en los tipos que no lo tienen.
+  const locatario = useMemo(
+    () => detail?.actors.find((a) => a.actorType === 'locatario') ?? null,
+    [detail],
+  );
+  const locatarioContact = useMemo(
+    () => actorsContact.find((a) => a.rol === 'locatario') ?? null,
     [actorsContact],
   );
 
@@ -602,6 +623,8 @@ export function FirmaFurStep({
     <div className="space-y-8">
       <MatriculaResumen
         modalidad={modalidad}
+        partesBiometricas={partesBiometricas}
+        rotulosPorRol={rotulosPorRol}
         status={detail?.status ?? 'borrador'}
         placa={fv('plate')}
         vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
@@ -626,6 +649,7 @@ export function FirmaFurStep({
         }}
         vendedor={toResumenActor(vendedor, vendedorContact)}
         comprador={toResumenActor(comprador, compradorContact)}
+        locatario={toResumenActor(locatario, locatarioContact)}
         archivosCount={attachments.length}
         identidadAprobada={identidadAprobada}
         firmaBaulPartes={firmaBaulPartes}

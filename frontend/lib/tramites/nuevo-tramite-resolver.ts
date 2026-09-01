@@ -47,6 +47,14 @@ function habilitadosDeFamilia(
   return tipos.filter((t) => t.wizardEnabled && t.family === family);
 }
 
+/**
+ * Primer código preferido que esté habilitado; si ninguno lo está, CUALQUIER otro de la familia.
+ *
+ * <p>La caída al primero de la familia solo vale donde las variantes son intercambiables para
+ * empezar el trámite: da igual entrar por `MATRICULA_NUEVA` o por `MATRICULA_INICIAL`, y un traspaso
+ * bilateral es un traspaso bilateral se llame como se llame el código. Donde la variante ES el
+ * trámite —el unilateral— no se puede caer a otra: ver {@link soloCodeExacto}.</p>
+ */
 function primerCodeDisponible(
   tiposFamilia: ProcedureTypeSummary[],
   preferidos: readonly string[],
@@ -55,6 +63,25 @@ function primerCodeDisponible(
     if (tiposFamilia.some((t) => t.code === code)) return code;
   }
   return tiposFamilia[0]?.code ?? null;
+}
+
+/**
+ * El código pedido, o nada. Sin caída al resto de la familia.
+ *
+ * <p>Existe por un defecto silencioso: el traspaso unilateral se resolvía con
+ * {@link primerCodeDisponible}, cuya caída devuelve el primer tipo habilitado de la familia. Con
+ * `TRASPASO_UNILATERAL` apagado y `TRASPASO_STANDARD` encendido —que es como estuvo el catálogo desde
+ * que existe el tipo— elegir «Traspaso Unilateral» en el modal abría un traspaso BILATERAL sin decir
+ * nada: otro FUR, otros firmantes (en el unilateral el locatario no firma, art. 5.3.2.2), otro
+ * checklist. El mensaje de «no está habilitado» nunca llegaba a verse.</p>
+ *
+ * <p>Un trámite equivocado y silencioso es peor que una opción bloqueada con su motivo.</p>
+ */
+function soloCodeExacto(
+  tiposFamilia: ProcedureTypeSummary[],
+  code: string,
+): string | null {
+  return tiposFamilia.some((t) => t.code === code) ? code : null;
 }
 
 /**
@@ -118,7 +145,8 @@ export function resolveNuevoTramiteCode(
   const familia = habilitadosDeFamilia(tipos, 'TRASPASO');
   const modalidad = seleccion.modalidadTraspaso ?? 'bilateral';
   if (modalidad === 'unilateral') {
-    const code = primerCodeDisponible(familia, CODES_TRASPASO_UNILATERAL);
+    // Exacto y sin caída: el unilateral no es una variante de nombre del bilateral (ver ADR-0051).
+    const code = soloCodeExacto(familia, CODES_TRASPASO_UNILATERAL[0]);
     if (!code) {
       return {
         ok: false,
