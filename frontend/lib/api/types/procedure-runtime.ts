@@ -479,6 +479,20 @@ export interface ProcedureActor {
    * lo descarta explícitamente antes de cada guardado — nunca vuelve a viajar en el PUT.
    */
   autorizaReutilizacionDatos?: boolean;
+  /**
+   * Múltiple Propietario (ADR-0053). Posición del actor dentro de su `rol`, 1..4. `1` es el
+   * actor PRINCIPAL/solidario (el que ya existía antes de esta funcionalidad: siembra del
+   * documento del paso 1, consulta RUNT automática, no se elimina). `2`..`4` son propietarios
+   * AGREGADOS. Ausente/`1` ⇒ comportamiento idéntico al contrato previo (un solo actor por rol).
+   */
+  ordinal?: number;
+  /**
+   * Múltiple Propietario (ADR-0053). Porcentaje de propiedad, 2 decimales. `null`/ausente cuando
+   * el `rol` tiene un solo actor (sin pestañas de reparto, sin bloque de porcentaje — comportamiento
+   * previo sin cambios). Con 2+ actores del mismo `rol`, todos traen valor y la suma del lado debe
+   * ser exactamente 100 (validado autoritativamente en backend; el frontend valida para UX).
+   */
+  porcentaje?: number | null;
 }
 
 // ── Precarga de datos de CONTACTO ya conocidos (HU #10956, revierte parcialmente HU #10885) ──────

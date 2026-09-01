@@ -58,6 +58,21 @@ import { WizardCardHeader } from './wizard-atoms';
 import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
+import { OwnershipShareControl, type OwnershipShareItem } from './OwnershipShareControl';
+import {
+  MAX_OWNERS_PER_SIDE,
+  applySolidarioAbsorption,
+  defaultPercentageForNewActor,
+  duplicateDocumentIndicesWithinSide,
+  indicesForRol,
+  isFirstOfRol,
+  redistributeAfterRemoval,
+  round2,
+  shiftIndexMapOnInsert,
+  shiftIndexMapOnRemove,
+  validateOwnershipShares,
+  withOwnershipFields,
+} from '@/lib/tramites/ownership-share';
 
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
 
@@ -291,11 +306,19 @@ export function validateActors(
     return e;
   });
 
-  // Regla vendedor≠comprador (solo traspaso, con ambos roles presentes).
+  // Regla vendedor≠comprador — Múltiple Propietario (ADR-0053 §4.4, dos niveles):
+  //
+  // Nivel 2 (entre lados): SOLO se evalúa cuando ambos lados quedan en EXACTAMENTE 1 actor
+  // efectivo — comportamiento IDÉNTICO al contrato/UI previos, sin tocar ni un carácter del caso
+  // 1-a-1 (mayoritario). Con 2+ actores en cualquiera de los dos lados, esta comparación cruzada
+  // se OMITE a propósito: un mismo documento puede figurar como vendedor Y como comprador (un
+  // copropietario que concurre a la venta y a la vez compra una cuota adicional).
   if (modalidad === 'traspaso') {
-    const vendedor = actors.find((a) => a.rol === 'vendedor');
-    const comprador = actors.find((a) => a.rol === 'comprador');
-    if (vendedor && comprador) {
+    const vendedores = actors.filter((a) => a.rol === 'vendedor');
+    const compradores = actors.filter((a) => a.rol === 'comprador');
+    if (vendedores.length === 1 && compradores.length === 1) {
+      const [vendedor] = vendedores;
+      const [comprador] = compradores;
       const sameDoc =
         vendedor.tipoDocumento === comprador.tipoDocumento &&
         vendedor.numeroDocumento.trim() !== '' &&
@@ -311,14 +334,28 @@ export function validateActors(
     }
   }
 
+  // Nivel 1 (intra-lado): bloqueada SIEMPRE, sin excepción — dos compradores no comparten
+  // documento, dos vendedores tampoco ("nadie es copropietario de sí mismo"). Solo puede disparar
+  // con 2+ actores por lado (Múltiple Propietario); con el caso 1-a-1 no encuentra nada que marcar.
+  for (const index of duplicateDocumentIndicesWithinSide(actors)) {
+    byActor[index].numeroDocumento =
+      'Ya existe un propietario con este mismo documento en este lado.';
+  }
+
   const valid = byActor.every((e) => Object.keys(e).length === 0);
   return { valid, byActor };
 }
 
-/** Normaliza opcionales vacíos a undefined antes de persistir. */
+/**
+ * Normaliza opcionales vacíos a undefined antes de persistir. Múltiple Propietario (ADR-0053) —
+ * también agrega `ordinal`/`porcentaje` frescos por posición dentro del lado (`withOwnershipFields`,
+ * `lib/tramites/ownership-share.ts`): con un solo actor por lado el resultado es byte a byte el
+ * mismo contrato de siempre (`ordinal:1`, `porcentaje:null`).
+ */
 function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
   const blankToUndef = (v?: string) => (v?.trim() ? v.trim() : undefined);
-  return actors.map((a) => {
+  const withOwnership = withOwnershipFields(actors);
+  return withOwnership.map((a) => {
     // HU #10956 (AC1) — el check de reutilización desapareció: el campo NUNCA viaja en el PUT,
     // ni siquiera si un actor persistido ANTES de esta HU lo trae en `true` desde el backend.
     const rest = { ...a };
@@ -1109,11 +1146,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     };
   }, [seedDocumentoFromOwner, instanceId, ownerSeedRetry]);
 
-  // Aplica el documento del propietario (paso 1) SOLO al rol que ES ese propietario y solo si aún
-  // no tiene documento. No pisa un documento ya escrito/persistido, y en el formulario unificado
+  // Aplica el documento del propietario (paso 1) SOLO al rol que ES ese propietario, SOLO a su
+  // actor ordinal=1 (el principal/solidario — Múltiple Propietario, ADR-0053) y solo si aún no
+  // tiene documento. No pisa un documento ya escrito/persistido, y en el formulario unificado
   // vendedor+comprador —donde ambos roles pasan por este helper— sigue sembrando a uno solo.
-  const withOwnerSeed = (a: ProcedureActor): ProcedureActor =>
-    ownerSeed && a.rol === rolDelPropietario && !a.numeroDocumento.trim()
+  // `isFirst` evita sembrarle el documento del propietario a un copropietario AGREGADO (ordinal
+  // 2..4) que todavía no ha escrito el suyo: ese documento se digita y consulta uno a uno.
+  const withOwnerSeed = (a: ProcedureActor, isFirst: boolean): ProcedureActor =>
+    ownerSeed && isFirst && a.rol === rolDelPropietario && !a.numeroDocumento.trim()
       ? withDerivedPersonType({
           ...a,
           numeroDocumento: ownerSeed.numero,
@@ -1121,32 +1161,62 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         })
       : a;
 
-  // Rehidrata desde el backend cuando llegan actores cargados, respetando los
-  // roles de la modalidad (rellena los faltantes con vacíos).
+  // Múltiple Propietario (ADR-0053) — el bloque de porcentaje, una vez visible, NO se oculta
+  // aunque el lado vuelva a un solo actor (encargo cerrado). Marcado por `rol`, no por índice: no
+  // participa del reindexado de los mapas posicionales (§ helpers de abajo).
+  const [ownershipRevealed, setOwnershipRevealed] = useState<Partial<Record<ActorRol, boolean>>>(
+    {},
+  );
+  // Pestaña activa por lado, como ORDINAL (1-based) dentro del grupo — no como índice absoluto del
+  // array `actors`: el índice absoluto se resuelve en cada render vía `indicesForRol`, así que este
+  // estado sobrevive intacto a que otro lado agregue/quite actores antes de él en el array.
+  const [activeTabByRol, setActiveTabByRol] = useState<Partial<Record<ActorRol, number>>>({});
+  // Lados cuyo ordinal=1 el gestor ya editó a mano: deja de absorber el residuo (§4.5 del diseño).
+  const [solidarioManuallyEdited, setSolidarioManuallyEdited] = useState<Set<ActorRol>>(
+    () => new Set(),
+  );
+
+  // Rehidrata desde el backend cuando llegan actores cargados, respetando los roles de la
+  // modalidad (rellena los faltantes con vacíos). Múltiple Propietario (ADR-0053) — un mismo rol
+  // puede traer VARIOS actores (ordinal 1..4); se agrupan y ordenan por `ordinal` antes de aplanar
+  // de vuelta a un solo array, preservando el invariante "actores del mismo rol contiguos".
   const loadedKey = state.actors
-    ? state.actors.map((a) => a.rol).join(',')
+    ? state.actors.map((a) => `${a.rol}:${a.ordinal ?? 1}`).join(',')
     : null;
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   if (state.actors && loadedKey !== hydratedKey) {
     setHydratedKey(loadedKey);
-    const nextActors = roles.map((rol) => {
-      const found = state.actors?.find((a) => a.rol === rol);
-      // HU #11014 — al rehidratar desde el backend también se deriva el tipo de persona: un actor
-      // persistido con NIT y personType 'natural' (creado antes de esta corrección) se corrige solo.
-      return withOwnerSeed(
-        found ? withDerivedPersonType({ ...emptyActor(rol), ...found }) : emptyActor(rol),
-      );
-    });
+    const nextActors: ProcedureActor[] = [];
+    const revealedByRol: Partial<Record<ActorRol, boolean>> = {};
+    for (const rol of roles) {
+      const foundForRol = (state.actors ?? [])
+        .filter((a) => a.rol === rol)
+        .sort((a, b) => (a.ordinal ?? 1) - (b.ordinal ?? 1));
+      if (foundForRol.length === 0) {
+        nextActors.push(emptyActor(rol));
+        continue;
+      }
+      if (foundForRol.length > 1) revealedByRol[rol] = true;
+      foundForRol.forEach((found, i) => {
+        // HU #11014 — al rehidratar desde el backend también se deriva el tipo de persona: un
+        // actor persistido con NIT y personType 'natural' (creado antes de esta corrección) se
+        // corrige solo.
+        nextActors.push(
+          withOwnerSeed(withDerivedPersonType({ ...emptyActor(rol), ...found }), i === 0),
+        );
+      });
+    }
     setActors(nextActors);
+    if (Object.keys(revealedByRol).length > 0) {
+      setOwnershipRevealed((prev) => ({ ...prev, ...revealedByRol }));
+    }
     // HU #11595 (AC4) — un trámite en curso que YA tenía un actor persistido (documento propio,
     // no un paso vacío recién abierto) pero quedó sin ciudad/dirección/teléfono debe mostrar esos
     // campos marcados como faltantes al abrir el paso, sin esperar a que el gestor pulse
     // "Continuar" (que es lo único que antes activaba `showErrors`).
-    const hasIncompleteExistingActor = state.actors.some((persisted) => {
-      if (!persisted.numeroDocumento?.trim()) return false;
-      const merged = nextActors.find((a) => a.rol === persisted.rol);
-      return !!merged && !validateActors([merged], modalidad).valid;
-    });
+    const hasIncompleteExistingActor = nextActors.some(
+      (a) => a.numeroDocumento.trim() && !validateActors([a], modalidad).valid,
+    );
     if (hasIncompleteExistingActor) setShowErrors(true);
     // Aquí NO se limpia la marca de pendiente, aunque lo rehidratado sea lo persistido: los actores
     // llegan de una carga asíncrona de la shell y esta rama corre cuando aterrizan, que puede ser
@@ -1156,12 +1226,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   }
 
   // El seed puede llegar después de la rehidratación (fetch async). Cuando
-  // aterriza, completa el documento del actor si seguía vacío.
+  // aterriza, completa el documento del actor ordinal=1 si seguía vacío.
   useEffect(() => {
     if (!ownerSeed) return;
-    setActors((prev) => prev.map(withOwnerSeed));
+    setActors((prev) => prev.map((a, i) => withOwnerSeed(a, isFirstOfRol(prev, i))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerSeed]);
+
+  // Múltiple Propietario (ADR-0053, §4.5) — auto-absorción del residuo: el ordinal=1 de CADA lado
+  // con 2+ actores recalcula su porcentaje como 100 − suma de los demás, mientras ese lado no haya
+  // sido editado a mano. `applySolidarioAbsorption` devuelve la MISMA referencia si no hay nada que
+  // cambiar, así que este efecto no reentra en bucle al no producir un nuevo `actors`.
+  useEffect(() => {
+    setActors((prev) => applySolidarioAbsorption(prev, solidarioManuallyEdited));
+  }, [actors, solidarioManuallyEdited]);
 
   // Siembra la fecha de expedición (RNMC) de cada actor desde los field_values persistidos
   // (`{rol}_document_issue_date`, DD/MM/YYYY → input YYYY-MM-DD). Best-effort.
@@ -1221,15 +1299,30 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
    * fuente que sabe que el `comprador` de un `TRASPASO_UNILATERAL` es en realidad el locatario del
    * leasing. 2) La regla del leasing de matrícula: junto a un locatario, la contraparte es el
    * PROPIETARIO (arrendador), no un comprador. 3) El rótulo del rol.</p>
+   *
+   * <p>Múltiple Propietario (ADR-0053) — `ordinal` es OPCIONAL y a propósito: los llamadores que
+   * pintan el caso de un solo actor por lado (el mayoritario, sin pestañas) siguen sin pasarlo, así
+   * que el rótulo no cambia ni un carácter frente al comportamiento previo. Los llamadores nuevos
+   * (pestañas, título de la tarjeta activa cuando el lado ya tiene 2+) lo pasan explícito y el
+   * rótulo pasa a «Comprador 1» / «Comprador 2» — NUNCA un literal fijo «Propietario N».</p>
    */
-  const rotuloDelActor = (rol: ActorRol): string => {
+  const rotuloDelActor = (rol: ActorRol, ordinal?: number): string => {
     const delCatalogo = rotuloPorRol?.[rol]?.trim();
-    if (delCatalogo) return delCatalogo;
-    if (hayLocatario && rol === 'comprador') return 'Propietario';
-    return ROL_LABEL[rol];
+    const base = delCatalogo || (hayLocatario && rol === 'comprador' ? 'Propietario' : ROL_LABEL[rol]);
+    return ordinal !== undefined ? `${base} ${ordinal}` : base;
   };
 
   const validation = validateActors(actors, modalidad);
+
+  /** Pestañas del lado `rol` para `OwnershipShareControl` — el ordinal=1 nunca es removible. */
+  const ownershipItemsForRol = (rol: ActorRol): OwnershipShareItem[] =>
+    indicesForRol(actors, rol).map((index, i) => ({
+      index,
+      ordinal: i + 1,
+      label: rotuloDelActor(rol, i + 1),
+      percentage: actors[index]?.porcentaje ?? 0,
+      removable: i > 0,
+    }));
 
   const setRuntFor = (index: number, value: LookupState) =>
     setRunt((prev) => {
@@ -1294,6 +1387,96 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       setRuntFor(index, { status: 'idle' });
       autoLookupTriggeredRef.current = null;
     }
+  };
+
+  // ── Múltiple Propietario (ADR-0053) — agregar/quitar copropietarios ──────────────────────────
+  //
+  // `ActorsForm.tsx` guarda estado efímero por actor (consulta RUNT/RUES, representante legal
+  // elegido, autocompletar de ciudad, fechas RNMC, contacto…) en 11 `Record<number, X>` indexados
+  // por POSICIÓN en `actors`, no por un id estable de actor. `addOwner`/`removeOwner` son el ÚNICO
+  // lugar donde `actors` cambia de longitud, y por eso son el único lugar donde estos 11 mapas se
+  // reindexan — en el MISMO gesto, con `shiftIndexMapOnInsert`/`shiftIndexMapOnRemove`
+  // (`lib/tramites/ownership-share.ts`, testeadas aparte). Sin este reindexado, la consulta de un
+  // actor eliminado quedaría reasociada al actor equivocado tras el desplazamiento de índices —el
+  // "estado fantasma" señalado en el encargo.
+  const shiftAllPositionalMaps = (shift: <T>(m: Record<number, T>) => Record<number, T>) => {
+    setRunt((prev) => shift(prev));
+    setRlRunt((prev) => shift(prev));
+    setRlBaselineDoc((prev) => shift(prev));
+    setSelectedRepIdx((prev) => shift(prev));
+    setDirectoryAbandoned((prev) => shift(prev));
+    setRlDirectorio((prev) => shift(prev));
+    setEscrituraRlAdjunta((prev) => shift(prev));
+    setCiudadOpen((prev) => shift(prev));
+    setIssueDates((prev) => shift(prev));
+    setContactLookup((prev) => shift(prev));
+    setTouchedContact((prev) => shift(prev));
+  };
+
+  /** Agrega un copropietario al final del grupo de `rol` (máximo 4 — ADR-0053). */
+  const addOwner = (rol: ActorRol) => {
+    if (readOnly) return;
+    const idxs = indicesForRol(actors, rol);
+    if (idxs.length >= MAX_OWNERS_PER_SIDE) return;
+    const insertAt = idxs.length ? idxs[idxs.length - 1] + 1 : actors.length;
+    const countAfter = idxs.length + 1;
+    const newActor: ProcedureActor = {
+      ...emptyActor(rol),
+      porcentaje: defaultPercentageForNewActor(countAfter),
+    };
+    markDirty();
+    setActors((prev) => {
+      const next = prev.slice();
+      next.splice(insertAt, 0, newActor);
+      return next;
+    });
+    shiftAllPositionalMaps((m) => shiftIndexMapOnInsert(m, insertAt));
+    setOwnershipRevealed((prev) => ({ ...prev, [rol]: true }));
+    setActiveTabByRol((prev) => ({ ...prev, [rol]: countAfter }));
+  };
+
+  /** Quita un copropietario (nunca el ordinal=1) y redistribuye su porcentaje entre los que quedan. */
+  const removeOwner = (index: number) => {
+    if (readOnly) return;
+    const rol = actors[index]?.rol;
+    if (!rol || isFirstOfRol(actors, index)) return;
+    markDirty();
+    setActors((prev) => redistributeAfterRemoval(prev, index));
+    shiftAllPositionalMaps((m) => shiftIndexMapOnRemove(m, index));
+    const remainingCount = indicesForRol(actors, rol).length - 1;
+    setActiveTabByRol((prev) => ({
+      ...prev,
+      [rol]: Math.max(1, Math.min(prev[rol] ?? 1, remainingCount)),
+    }));
+    // De vuelta a un solo propietario: la próxima vez que se agregue un segundo, el solidario
+    // vuelve a absorber desde cero (decisión de UI — el diseño no fija este caso puntual).
+    if (remainingCount <= 1) {
+      setSolidarioManuallyEdited((prev) => {
+        if (!prev.has(rol)) return prev;
+        const next = new Set(prev);
+        next.delete(rol);
+        return next;
+      });
+    }
+  };
+
+  /** Edita el porcentaje del actor de `index`; si es el ordinal=1, deja de absorber el residuo. */
+  const updateOwnershipPercentage = (index: number, rawValue: number) => {
+    if (readOnly) return;
+    const rol = actors[index]?.rol;
+    if (!rol) return;
+    const value = round2(Number.isFinite(rawValue) ? Math.max(0, rawValue) : 0);
+    markDirty();
+    if (isFirstOfRol(actors, index)) {
+      setSolidarioManuallyEdited((prev) => (prev.has(rol) ? prev : new Set(prev).add(rol)));
+    }
+    setActors((prev) => prev.map((a, i) => (i === index ? { ...a, porcentaje: value } : a)));
+  };
+
+  /** Activa la pestaña del actor real `realIndex` dentro del lado `rol` (guarda su ORDINAL). */
+  const selectOwnershipTab = (rol: ActorRol, realIndex: number) => {
+    const ordinal = ownershipItemsForRol(rol).find((it) => it.index === realIndex)?.ordinal ?? 1;
+    setActiveTabByRol((prev) => ({ ...prev, [rol]: ordinal }));
   };
 
   const setRlRuntFor = (index: number, value: LookupState) =>
@@ -1756,6 +1939,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const submitActors = async (): Promise<boolean> => {
     setShowErrors(true);
     if (!validateActors(actors, modalidad).valid) return false;
+    // Múltiple Propietario (ADR-0053) — gate de UX (el backend es SIEMPRE la autoridad, §4.5/§6
+    // del diseño): con un solo actor por lado `validateOwnershipShares` siempre es válida (no
+    // toca el flujo previo).
+    if (!validateOwnershipShares(actors).valid) return false;
 
     // Gate duro: cada actor debe tener consulta RUNT/RUES/directorio exitosa antes de persistir.
     // Novedad 28 (AC3/AC6) — además, si el documento del RL diverge de la línea base de precarga,
@@ -2766,6 +2953,26 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
        <fieldset disabled={readOnly} className="space-y-5 min-w-0 border-0 p-0 m-0">
         {errorBanner}
 
+        {/* Múltiple Propietario (ADR-0053) — solo matrícula inicial y traspaso, y solo sobre el
+            actor que SE captura por formulario (no el propietario inscrito de la familia OTROS,
+            cuya identidad viene fija del RUNT; no el locatario, fuera del alcance cerrado). */}
+        {!esPropietarioInscrito && actor.rol !== 'locatario' && (
+          <OwnershipShareControl
+            items={ownershipItemsForRol(actor.rol)}
+            activeIndex={0}
+            onSelectTab={() => {}}
+            onAdd={() => addOwner(actor.rol)}
+            onRemove={removeOwner}
+            onPercentageChange={updateOwnershipPercentage}
+            revealed={!!ownershipRevealed[actor.rol]}
+            maxReached={false}
+            readOnly={readOnly}
+            idPrefix={`actor-${actor.rol}-single`}
+            sideLabel={rotuloDelActor(actor.rol)}
+            showErrors={showErrors}
+          />
+        )}
+
         {/* Sección A — Identificación. Sin selector de tipo de documento en el actor:
             natural → CC por defecto (RUNT puede corregirlo); jurídica → NIT fijo.
             Rejilla: número (span 2) | Consultar (+ hint a lo ancho). */}
@@ -3209,7 +3416,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           tarjetas; al colapsar/expandir cualquiera se mueven ambas. */}
       <WizardAccordionRow defaultOpen>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 items-stretch">
-        {actors.map((actor, index) => {
+        {/* Múltiple Propietario (ADR-0053) — una tarjeta POR LADO (rol), no por actor: con 2+
+            propietarios de un mismo lado se pinta solo el de la pestaña ACTIVA (`activeTabByRol`);
+            el resto de la lógica del actor (identidad, representante legal, contacto…) sigue
+            siendo la MISMA de siempre, generalizada por índice real — nada de eso cambió. */}
+        {roles
+          .map((rol) => {
+            const idxs = indicesForRol(actors, rol);
+            if (idxs.length === 0) return null;
+            const activeOrdinal = Math.min(Math.max(activeTabByRol[rol] ?? 1, 1), idxs.length);
+            const index = idxs[activeOrdinal - 1] ?? idxs[0];
+            return { actor: actors[index], index };
+          })
+          .filter((d): d is { actor: ProcedureActor; index: number } => d !== null)
+          .map(({ actor, index }) => {
           const errors = showErrors ? validation.byActor[index] : {};
           const prefix = `actor-${actor.rol}`;
           const runtState: LookupState = runt[index] ?? { status: 'idle' };
@@ -3247,7 +3467,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 : runtState.status === 'not_found' || runtState.status === 'error'
                   ? { text: 'No verificado', tone: 'danger' }
                   : { text: 'Pendiente', tone: 'neutral' };
-          const rotulo = rotuloDelActor(actor.rol);
+          // Múltiple Propietario (ADR-0053) — pestañas de este lado + posición ordinal de la
+          // tarjeta activa. `rotuloDelActor` solo recibe el ordinal cuando el lado está `revealed`
+          // (2+ propietarios en algún momento): con un solo actor el rótulo NO cambia (sin "1").
+          const ownershipItems = ownershipItemsForRol(actor.rol);
+          const ownershipRevealedForRol = !!ownershipRevealed[actor.rol];
+          const activeOwnershipItem =
+            ownershipItems.find((it) => it.index === index) ?? ownershipItems[0];
+          const rotulo =
+            ownershipRevealedForRol && activeOwnershipItem
+              ? rotuloDelActor(actor.rol, activeOwnershipItem.ordinal)
+              : rotuloDelActor(actor.rol);
           return (
             <div
               key={actor.rol}
@@ -3255,6 +3485,25 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               aria-label={rotulo}
               className="flex h-full flex-col"
             >
+            {/* Solo matrícula inicial y traspaso, y solo sobre el lado que SE captura por
+                formulario (no el vendedor sincronizado por el backend, ADR-0051; no el locatario,
+                fuera del alcance cerrado del encargo). */}
+            {!vendedorSincronizado && actor.rol !== 'locatario' && (
+              <OwnershipShareControl
+                items={ownershipItems}
+                activeIndex={index}
+                onSelectTab={(i) => selectOwnershipTab(actor.rol, i)}
+                onAdd={() => addOwner(actor.rol)}
+                onRemove={removeOwner}
+                onPercentageChange={updateOwnershipPercentage}
+                revealed={ownershipRevealedForRol}
+                maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
+                readOnly={readOnly}
+                idPrefix={`actor-${actor.rol}`}
+                sideLabel={rotuloDelActor(actor.rol)}
+                showErrors={showErrors}
+              />
+            )}
             <WizardAccordion
               title={rotulo}
               level="h3"
