@@ -147,6 +147,23 @@ public sealed class TramiteNotificationRecipientResolverTests
         soloComprador.Recipients.Should().NotContain(r => r.Role == "vendedor");
     }
 
+    // ADR-0053 (Múltiple Propietario, §5 #16) — CONFIRMADO: todos los copropietarios de un lado
+    // reciben las notificaciones, no solo el principal (ordinal=1).
+    [Fact]
+    public void MultiplePropietario_TodosLosCopropietariosDelLadoReciben()
+    {
+        var principal = Natural("comprador", "principal@flit.test");
+        principal.Ordinal = 1;
+        var agregado = Natural("comprador", "agregado@flit.test");
+        agregado.Ordinal = 2;
+
+        var result = _sut.Resolve(Matricula(), [agregado, principal], []);
+
+        result.Recipients.Should().HaveCount(2);
+        result.Recipients.Select(r => r.Email).Should().BeEquivalentTo(
+            ["principal@flit.test", "agregado@flit.test"]);
+    }
+
     [Fact]
     public void CriterioDeIdentidadNoSeMueve()
     {
