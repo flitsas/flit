@@ -942,6 +942,18 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             Carroceria = carroceria,
         };
     }
+    /// <summary>
+    /// Universo de trámites que este organismo puede ver. Es el cuello de botella de TODA la superficie
+    /// OT: de aquí cuelgan la bandeja y <see cref="FindAccessibleProcedureAsync"/>, y de esa última el
+    /// detalle por id, aprobar, rechazar, asignar placa y revocar placa.
+    ///
+    /// <para>El filtro de estado (HU #11945) vive aquí y no en el listado a propósito. Antes, la única
+    /// defensa contra ver un borrador era que el cliente mandara un <c>status</c> en la consulta, así
+    /// que bastaba con pedir la bandeja sin filtro —o pedir el detalle por id— para leer trámites que la
+    /// empresa cliente todavía estaba redactando y no había enviado. Poniéndolo en la consulta base, un
+    /// <c>?status=borrador</c> devuelve vacío por construcción y el detalle de un no entregado da 404,
+    /// sin lógica adicional en ninguno de los consumidores.</para>
+    /// </summary>
     private IQueryable<ProcedureInstance> BuildAccessibleQuery(
         Guid transitOfficeId,
         IReadOnlyList<Guid> clientTenantIds) =>
@@ -949,7 +961,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             .AsNoTracking()
             .Where(p => p.DeletedAt == null
                 && p.TransitOfficeId == transitOfficeId
-                && clientTenantIds.Contains(p.TenantId));
+                && clientTenantIds.Contains(p.TenantId)
+                && TramiteEstado.RecibidosPorOrganismo.Contains(p.Status));
 
     private async Task<Guid?> ResolveTransitOfficeIdAsync(
         Guid otTenantId,
