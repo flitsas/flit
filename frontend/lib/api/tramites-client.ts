@@ -863,12 +863,19 @@ export const tramitesClient = {
     );
     return {
       overall: result.overall,
+      // El mapeo enumera campo por campo, así que todo lo que el servidor añada al check se pierde
+      // aquí en silencio si no se agrega también. Le pasó a `datos` —el respaldo del proveedor:
+      // vencimiento del SOAT, póliza, aseguradora, CDA—: el backend lo mandaba y el panel no lo veía
+      // nunca, porque este `map` lo dejaba fuera. `details` llevaba el mismo tiempo perdido, y con él
+      // el listado de comparendos bajo la advertencia de multas.
       checks: result.checks.map((c) => ({
         key: c.key,
         label: c.label,
         status: c.status,
         source: c.source,
         message: c.message ?? '',
+        details: c.details ?? null,
+        datos: c.datos ?? null,
       })),
       createdAt: new Date().toISOString(),
       fromCache: result.fromCache ?? false,

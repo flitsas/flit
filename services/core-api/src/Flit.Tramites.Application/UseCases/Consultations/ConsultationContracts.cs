@@ -52,7 +52,26 @@ public sealed record ConsultationCheck(
     string Status,
     string Source,
     string? Message,
-    IReadOnlyList<FineDetail>? Details = null);
+    IReadOnlyList<FineDetail>? Details = null,
+    IReadOnlyList<CheckDato>? Datos = null);
+
+/// <summary>
+/// Un dato del proveedor que respalda el resultado del check: la etiqueta y su valor, por separado.
+///
+/// <para><b>Por qué no es una cadena.</b> Los checks en OK mandaban <c>Message = null</c> y la tarjeta
+/// del panel quedaba con la pastilla verde y el cuerpo vacío. El primer arreglo metió el respaldo en
+/// el propio mensaje —«Vigente hasta … · Póliza … · Aseguradora …»— y eso se leía mal: tres campos
+/// encadenados con puntos medios que el salto de línea partía por la mitad, y una etiqueta menos en
+/// el último, como si la aseguradora fuera parte del número de póliza.</para>
+///
+/// <para>El mapeador ya tiene las partes separadas y las estaba aplastando para que el panel volviera
+/// a separarlas: mandarlas así evita ese contrato implícito por separador y deja que la pantalla
+/// decida cómo presentarlas.</para>
+///
+/// <para>Para las afirmaciones que no son un par etiqueta/valor —«Sin gravámenes ni prendas
+/// registradas»— se sigue usando <c>Message</c>: no hay campo que etiquetar.</para>
+/// </summary>
+public sealed record CheckDato(string Etiqueta, string Valor);
 
 /// <summary>
 /// Detalle de UN comparendo/multa pendiente, para listarlo bajo la advertencia de multas del

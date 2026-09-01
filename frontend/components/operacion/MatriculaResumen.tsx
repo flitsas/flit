@@ -72,12 +72,38 @@ export type ResumenActor = {
 
 interface Props {
   modalidad: WizardModalidad;
+  /**
+   * ADR-0051 — partes que el TIPO somete a validación de identidad (`biometricActors`), traducidas a
+   * los roles del asistente. El resumen pinta el bloque de firma SOLO de estas.
+   *
+   * <p>Antes se deducía: el del vendedor se condicionaba a `modalidad === 'traspaso'` y el del
+   * comprador no se condicionaba a nada. En `TRASPASO_UNILATERAL` firma únicamente el propietario
+   * (art. 5.3.2.2), así que el resumen le pedía al locatario —persistido como `comprador`— una
+   * validación que su trámite no exige.</p>
+   *
+   * <p>Ausente ⇒ las dos partes, que es el criterio previo: ningún otro tipo cambia.</p>
+   */
+  partesBiometricas?: BiometricParte[];
   status: InstanceStatus;
   placa: string;
   vehiculo: string;
   vin: string;
   especificaciones?: ResumenEspecificaciones;
   vendedor?: ResumenActor | null;
+  /**
+   * Arrendatario del vehículo, en los tipos que lo declaran (`requiresLessee`: matrícula leasing y
+   * cambio de locatario). El resumen solo conocía comprador y vendedor, así que el locatario —parte
+   * propia del expediente desde el DDL 88— no aparecía en la pantalla donde el gestor revisa el
+   * trámite antes de radicarlo. No firma: quien autoriza el leasing es el propietario.
+   */
+  locatario?: ResumenActor | null;
+  /**
+   * Cómo llama el CATÁLOGO a cada parte en este tipo. El rol persistido no siempre se llama como la
+   * parte real: en `TRASPASO_UNILATERAL` el locatario del leasing se guarda con el rol `comprador`,
+   * y la tarjeta lo anunciaba como «Comprador» en un trámite donde nadie compra. Sin entrada para un
+   * rol, se usa su nombre de siempre.
+   */
+  rotulosPorRol?: Partial<Record<'comprador' | 'vendedor' | 'locatario', string>>;
   comprador: ResumenActor | null;
   archivosCount: number;
   identidadAprobada: boolean;
@@ -387,6 +413,7 @@ function ActorBlock({
   certCache,
   showRepresentante,
   hideValidacion = false,
+  noFirma = false,
 }: {
   actor: ResumenActor;
   bio?: BiometricValidation | null;
@@ -394,6 +421,15 @@ function ActorBlock({
   certLabel: string;
   instanceId?: string | null;
   certCache: React.RefObject<Map<string, string>>;
+  /**
+   * Esta parte NO firma el trámite: en vez de la sección de validación de identidad, se dice que no
+   * le corresponde firmar. Es el locatario del leasing y del traspaso unilateral.
+   *
+   * <p>No es un relleno: sin esto la tarjeta terminaba en los datos de contacto y quedaba un hueco
+   * al lado de la parte que sí firma —las dos igualan altura—, y el gestor no tenía cómo saber si
+   * faltaba pedirle la firma o si de verdad no le tocaba.</p>
+   */
+  noFirma?: boolean;
   showRepresentante: boolean;
   /** Cuando la captura biométrica va embebida debajo, no repetir el campo Validación. */
   hideValidacion?: boolean;
@@ -425,7 +461,22 @@ function ActorBlock({
           </div>
         </div>
       )}
-      {!hideValidacion ? (
+      {noFirma ? (
+        // Misma anatomía que la sección de validación —título en versalitas y su contenido debajo—
+        // para que las dos tarjetas de la fila se lean como piezas del mismo tipo. Dice lo que el
+        // gestor necesita saber de esta parte: que no le toca firmar, y que aun así se le notifica.
+        <div className="space-y-2 border-t pt-3" style={{ borderColor: BORDER }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">Firma</p>
+          <p className="text-xs font-semibold" style={{ color: '#162744' }}>
+            No requiere firma
+          </p>
+          <p className="text-xs opacity-70">
+            Esta parte no firma el trámite: la validación de identidad y la firma corresponden al
+            propietario del vehículo.
+          </p>
+          <p className="text-xs opacity-70">Recibe los avisos de estado del trámite.</p>
+        </div>
+      ) : !hideValidacion ? (
         <div className="space-y-3 border-t pt-3" style={{ borderColor: BORDER }}>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
             Validación de identidad
@@ -551,6 +602,9 @@ function IdentityTrackingBlock({
 
 export default function MatriculaResumen({
   modalidad,
+  partesBiometricas,
+  locatario = null,
+  rotulosPorRol,
   status,
   placa,
   vehiculo,
@@ -618,9 +672,35 @@ export default function MatriculaResumen({
     firmaBaulPartes.includes('vendedor') || vaultCoveredPartes.includes('vendedor');
   const compradorFirmaBaul =
     firmaBaulPartes.includes('comprador') || vaultCoveredPartes.includes('comprador');
+  // ADR-0051 — qué partes firman lo declara el TIPO. Ausente ⇒ el criterio previo (vendedor solo en
+  // traspaso, comprador siempre), así que ningún tipo ya en operación cambia.
+  const firma = (parte: BiometricParte): boolean =>
+    partesBiometricas
+      ? partesBiometricas.includes(parte)
+      : parte === 'comprador' || modalidad === 'traspaso';
   const showBioVendedor =
-    modalidad === 'traspaso' && !!instanceId && identidadPendiente(vendedorBio, vendedorFirmaBaul);
-  const showBioComprador = !!instanceId && identidadPendiente(compradorBio, compradorFirmaBaul);
+    firma('vendedor') && !!instanceId && identidadPendiente(vendedorBio, vendedorFirmaBaul);
+  const showBioComprador =
+    firma('comprador') && !!instanceId && identidadPendiente(compradorBio, compradorFirmaBaul);
+  // La parte que NO firma no lleva sección de «Validación de identidad»: ni la captura biométrica ni
+  // el banner de estado con su certificado. Sus DATOS sí se muestran —el resumen es el inventario del
+  // expediente y el locatario es parte del trámite—; lo que desaparece es la firma que no le toca.
+  //
+  // Va aparte de `showBio*`: aquel decide si se EMBEBE la captura (y solo la embebe mientras la
+  // identidad está pendiente), mientras que este oculta el bloque de validación entero. Colgarlo de
+  // `hideValidacion={showBio*}` hacía que, al quitarle la captura a quien no firma, apareciera en su
+  // lugar el banner de validación — cambiar una cosa que sobra por otra.
+  const ocultaValidacion = (parte: BiometricParte): boolean => !firma(parte);
+
+  /**
+   * ¿La pantalla muestra DOS partes? Gobierna el reparto de la rejilla: con dos, el vehículo ocupa
+   * su propia fila. Traspaso las tiene por el vendedor; la matrícula leasing, por el locatario.
+   */
+  const dosPartes = !!vendedor || !!locatario;
+
+  /** Nombre de la parte en pantalla: el del catálogo si lo hay, si no el de siempre. */
+  const rotulo = (rol: 'comprador' | 'vendedor' | 'locatario', porDefecto: string): string =>
+    rotulosPorRol?.[rol]?.trim() || porDefecto;
 
   const embedBiometric = (parte: BiometricParte) => {
     const step = (
@@ -781,13 +861,18 @@ export default function MatriculaResumen({
         </div>
       ) : null}
 
-      {/* Vehículo + Vendedor + Comprador en la MISMA `grid lg:grid-cols-2`, en ese orden. El reparto
-          depende de cuántos actores hay: con dos (traspaso: vendedor y comprador) el vehículo se
-          lee solo, a fila completa, y debajo van vendedor y comprador uno al lado del otro; con un
-          solo actor (matrícula) vehículo y comprador comparten la primera fila, que es lo que cabe
-          sin dejar media rejilla vacía. */}
+      {/* Vehículo + partes en la MISMA `grid lg:grid-cols-2`, en ese orden. El reparto depende de
+          cuántas PARTES hay, no de cuál sea: con dos, el vehículo se lee solo a fila completa y las
+          dos partes van una al lado de la otra debajo; con una sola (matrícula), vehículo y parte
+          comparten la primera fila, que es lo que cabe sin dejar media rejilla vacía.
+
+          Antes la condición era literalmente `vendedor`, así que solo el traspaso conseguía ese
+          reparto. La matrícula leasing tiene también dos partes —propietario y locatario— y caía en
+          la rama de una: el vehículo compartía fila con el propietario y el locatario bajaba solo,
+          dejando el hueco al lado. Preguntar por el NÚMERO de partes le da a los dos el mismo trato
+          y no cambia nada donde solo hay una. */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch">
-        <ResumenCard title="Vehículo" className={vendedor ? 'lg:col-span-2' : ''}>
+        <ResumenCard title="Vehículo" className={dosPartes ? 'lg:col-span-2' : ''}>
           {placa ? (
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
@@ -824,7 +909,7 @@ export default function MatriculaResumen({
         </ResumenCard>
 
         {vendedor ? (
-          <ResumenCard title="Vendedor">
+          <ResumenCard title={rotulo('vendedor', 'Vendedor')}>
             <div className="space-y-4">
               <ActorBlock
                 actor={vendedor}
@@ -834,18 +919,19 @@ export default function MatriculaResumen({
                 instanceId={instanceId}
                 certCache={certCache}
                 showRepresentante={vendedor.tipoDoc === 'NIT'}
-                hideValidacion={showBioVendedor}
+                hideValidacion={showBioVendedor || ocultaValidacion('vendedor')}
+                noFirma={ocultaValidacion('vendedor')}
               />
               {showBioVendedor ? embedBiometric('vendedor') : null}
             </div>
           </ResumenCard>
         ) : null}
 
-        {/* Con vendedor, Comprador es su pareja en la segunda fila (el vehículo ya se llevó la
-            primera entera). Sin vendedor acompaña al vehículo en la única fila. En ninguno de los
-            dos casos necesita `col-span`. */}
+        {/* Con otra parte en pantalla (vendedor en traspaso, locatario en leasing) esta es su pareja
+            en la segunda fila, porque el vehículo ya se llevó la primera entera. Sola, acompaña al
+            vehículo en la única fila. En ninguno de los dos casos necesita `col-span`. */}
         {comprador || (!vendedor && partesTxt) ? (
-          <ResumenCard title="Comprador">
+          <ResumenCard title={rotulo('comprador', 'Comprador')}>
             {comprador ? (
               <div className="space-y-4">
                 <ActorBlock
@@ -856,7 +942,8 @@ export default function MatriculaResumen({
                   instanceId={instanceId}
                   certCache={certCache}
                   showRepresentante={comprador.tipoDoc === 'NIT'}
-                  hideValidacion={showBioComprador}
+                  hideValidacion={showBioComprador || ocultaValidacion('comprador')}
+                  noFirma={ocultaValidacion('comprador')}
                 />
                 {showBioComprador ? embedBiometric('comprador') : null}
               </div>
@@ -866,6 +953,29 @@ export default function MatriculaResumen({
                 {partesTxt}
               </p>
             )}
+          </ResumenCard>
+        ) : null}
+
+        {/* Locatario: los tipos con leasing lo declaran como parte propia (`requiresLessee`), pero el
+            resumen solo sabía de comprador y vendedor, así que el arrendatario del vehículo no salía
+            en la pantalla donde el gestor revisa el trámite antes de radicarlo.
+
+            No lleva bloque de validación ni captura biométrica: en el leasing quien firma es el
+            propietario, y el DDL 88 llega a abortar el arranque si alguien mete al locatario en
+            `biometricActors`. Se muestran sus datos, que es lo que el expediente necesita. */}
+        {locatario ? (
+          <ResumenCard title={rotulo('locatario', 'Locatario')}>
+            <ActorBlock
+              actor={locatario}
+              bio={null}
+              firmaBaul={false}
+              certLabel="Certificado ID · Locatario"
+              instanceId={instanceId}
+              certCache={certCache}
+              showRepresentante={locatario.tipoDoc === 'NIT'}
+              hideValidacion
+              noFirma
+            />
           </ResumenCard>
         ) : null}
       </div>

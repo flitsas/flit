@@ -75,6 +75,16 @@ export function resetMessageIdSeq(): void {
   messageSeq = 0;
 }
 
+/** Evita colisiones de id al hidratar conversación desde sessionStorage. */
+export function syncMessageIdSeqFromState(state: DrFlitChatState): void {
+  let max = 0;
+  for (const m of state.messages) {
+    const n = Number(String(m.id).replace(/^dr-flit-msg-/, ""));
+    if (Number.isFinite(n)) max = Math.max(max, n);
+  }
+  if (max > messageSeq) messageSeq = max;
+}
+
 function idleMenuFlags(): Pick<
   DrFlitChatState,
   "showSessionMenu" | "showSupportInfo"
@@ -489,5 +499,25 @@ export function isComposerEnabled(state: DrFlitChatState): boolean {
     state.phase === "idle" ||
     state.phase === "awaiting_value" ||
     state.phase === "awaiting_help_query"
+  );
+}
+
+/** True si hay una interacción en curso (no el menú principal Gestión/Ayuda). */
+export function hasActiveConversation(state: DrFlitChatState): boolean {
+  // En el menú raíz la interacción ya se considera cerrada: no mostrar “Terminar chat”.
+  if (state.phase === "idle" && state.showSessionMenu && !state.isTyping) {
+    return false;
+  }
+  return (
+    state.phase !== "idle" ||
+    !state.showSessionMenu ||
+    state.showBackToSearch ||
+    state.showSupportInfo ||
+    state.showClientBranch ||
+    state.tramiteResults != null ||
+    state.validacionResults != null ||
+    state.helpResults != null ||
+    state.manualHomeHref != null ||
+    state.isTyping
   );
 }

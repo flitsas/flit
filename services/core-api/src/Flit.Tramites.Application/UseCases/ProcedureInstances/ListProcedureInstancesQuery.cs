@@ -3,6 +3,7 @@ using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -168,6 +169,14 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         var modalidad = e.Family;
         var modalidadCode = ProcedureFamilyCodes.ToCode(modalidad);
 
+        // ADR-0051 — quién valida identidad y quién firma lo declara el TIPO (`biometricActors` /
+        // `signatureActors`), no la familia. Con la familia, `TRASPASO_UNILATERAL` heredaba las dos
+        // partes de un traspaso estándar y el listado pedía identidad y firma de un comprador que
+        // en ese trámite no comparece. Se resuelve una sola vez por fila: el perfil ya viene con el
+        // grafo del listado (`ListWithSummaryGraphAsync` incluye `ProcedureType`), sin consulta extra.
+        var profile = ProcedureTypeGateProfile.FromJson(e.ProcedureType?.GateProfile);
+        var partesIdentidad = PartesDeclaradas.Identidad(profile);
+
         // Estado server-driven del wizard: misma fuente de verdad que el frontend (canSubmit) y de
         // la que se deriva el progreso (PasoActual/TotalPasos). Se computa una sola vez.
         var state = GetWizardStateHandler.ComputeState(e, identidadAprobadaPartes);
@@ -191,8 +200,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             e.TenantId,
             string.IsNullOrWhiteSpace(companiaNombre) ? null : companiaNombre,
             e.DraftFinalizedAt,
-            DeriveIdentityStatus(e, modalidad, identidadAprobadaPartes),
-            DeriveSignaturePending(e, modalidad),
+            DeriveIdentityStatus(e, partesIdentidad, identidadAprobadaPartes),
+            DeriveSignaturePending(e, profile),
             state.CanSubmit,
             e.Prioritario,
             string.IsNullOrWhiteSpace(seller?.FullName) ? null : seller.FullName,
@@ -210,8 +219,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             e.UpdatedAt,
             string.IsNullOrWhiteSpace(gestorNombre) ? null : gestorNombre.Trim(),
             TramiteFuente.Desde(e.Origin, e.IsMigrated),
-            DeriveFirmaParte(e, modalidad, SellerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
-            DeriveFirmaParte(e, modalidad, BuyerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
+            DeriveFirmaParte(e, partesIdentidad, SellerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
+            DeriveFirmaParte(e, partesIdentidad, BuyerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
             DeriveConsolidadoAttachmentId(e),
             e.TypeName,
             e.TypeCode,
@@ -232,7 +241,9 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     ///   <item><b>rechazado</b> — identidad rechazada/expirada, o firma del baúl vencida.</item>
     ///   <item><b>pendiente</b> — no hay nada hecho todavía.</item>
     /// </list>
-    /// <c>null</c> = NO APLICA: la parte no existe en esta modalidad (el vendedor en matrícula inicial).
+    /// <c>null</c> = NO APLICA: el tipo no manda a esta parte a validar identidad — el vendedor en
+    /// matrícula inicial y, desde ADR-0051, el comprador en <c>TRASPASO_UNILATERAL</c>, donde el
+    /// locatario formaliza a su nombre y el único que acredita es el propietario.
     ///
     /// <para><b>Bug #11670 — el baúl solo cuenta si <see cref="FirmaBaulCobertura.Aplica"/> lo permite.</b>
     /// Esta columna resolvía el baúl por su cuenta: bastaba con encontrar la llave de la persona en el
@@ -251,14 +262,16 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// </summary>
     private static string? DeriveFirmaParte(
         ProcedureInstance e,
-        ProcedureFamily modalidad,
+        IReadOnlyList<string> partesIdentidad,
         string parte,
         IReadOnlySet<string> identidadAprobadaPartes,
         IReadOnlyDictionary<string, bool> firmaBaulPorPersona)
     {
-        // El vendedor solo existe en traspaso; el comprador siempre.
-        if (modalidad != ProcedureFamily.Traspaso
-            && string.Equals(parte, SellerActorType, StringComparison.OrdinalIgnoreCase))
+        // ADR-0051 — la columna solo acredita a las partes que el tipo manda a validar. Antes se
+        // preguntaba por la familia y el corte solo contemplaba al vendedor: el comprador se daba por
+        // presente SIEMPRE, así que un TRASPASO_UNILATERAL mostraba «pendiente» eterno en una parte
+        // que ese trámite nunca convoca.
+        if (!PartesDeclaradas.Incluye(partesIdentidad, parte))
             return null;
 
         var actor = e.Actors.FirstOrDefault(a =>
@@ -330,21 +343,20 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         return latest?.Reason?.Trim();
     }
 
-    /// <summary>Partes que llevan validación de identidad por modalidad (matrícula = solo comprador).</summary>
-    private static readonly string[] PartesTraspaso = ["comprador", "vendedor"];
-    private static readonly string[] PartesMatricula = ["comprador"];
-
     /// <summary>
     /// Estado agregado de la validación de identidad para los chips del listado (HU #10350): <c>aprobado</c>
     /// si TODAS las partes requeridas tienen una validación aprobada; <c>en_proceso</c> si alguna relevante
     /// está enviada/en proceso; <c>rechazado</c> si alguna relevante quedó rechazada/expirada; <c>null</c> si
     /// no hay ninguna validación iniciada. En matrícula la única parte (comprador) puede venir con
     /// <c>Parte</c> null o "comprador".
+    ///
+    /// <para>ADR-0051 — las partes requeridas son las que declara <c>biometricActors</c>, no las de la
+    /// familia: en <c>TRASPASO_UNILATERAL</c> es solo el vendedor, y exigirle también al comprador
+    /// dejaba el chip clavado en «sin iniciar» aunque el propietario ya hubiera validado.</para>
     /// </summary>
     private static string? DeriveIdentityStatus(
-        ProcedureInstance e, ProcedureFamily modalidad, IReadOnlySet<string> identidadAprobadaPartes)
+        ProcedureInstance e, string[] partes, IReadOnlySet<string> identidadAprobadaPartes)
     {
-        var partes = modalidad == ProcedureFamily.Traspaso ? PartesTraspaso : PartesMatricula;
 
         // Aprobado PER-PERSONA: TODAS las partes requeridas tienen identidad vigente aprobada (referenciada,
         // aunque el trámite no tenga fila propia). Se evalúa ANTES de mirar filas locales, porque un trámite
@@ -354,10 +366,16 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
 
         // Estados NO terminales/aprobados sí dependen de las validaciones PROPIAS del trámite (una captura en
         // curso o rechazada vive en su instancia): en_proceso / rechazado / sin iniciar.
-        var esMatricula = modalidad != ProcedureFamily.Traspaso;
+        //
+        // Filas SIN rol (legacy de matrícula) solo se atribuyen cuando la ÚNICA parte requerida es el
+        // comprador — mismo criterio que ya aplica `BiometricaCommand` al listar. Con cualquier otra
+        // combinación (traspaso, y también el TRASPASO_UNILATERAL de una sola parte vendedora) se
+        // exige coincidencia exacta de rol, para no atribuirle a una parte la captura de otra.
+        var legacySinRol = partes.Length == 1
+            && string.Equals(partes[0], BuyerActorType, StringComparison.OrdinalIgnoreCase);
         bool Relevant(ProcedureInstanceBiometricValidation v) =>
             partes.Any(p => string.Equals(v.PartyRole, p, StringComparison.OrdinalIgnoreCase))
-            || (esMatricula && v.PartyRole is null);
+            || (legacySinRol && v.PartyRole is null);
 
         var relevant = e.BiometricValidations.Where(Relevant).ToList();
         if (relevant.Count == 0)
@@ -373,12 +391,18 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     }
 
     /// <summary>
-    /// Firma de la compraventa pendiente (solo traspaso): alguna de las dos partes aún no tiene su firma
-    /// <c>firmada</c>. En matrícula no aplica firma de compraventa → siempre false.
+    /// Firma de la compraventa pendiente: alguna de las partes firmantes aún no tiene su firma
+    /// <c>firmada</c>. Donde no hay compraventa que firmar → siempre false.
+    ///
+    /// <para>ADR-0051 — las dos preguntas las responde el TIPO, no la familia: si el expediente
+    /// autogenera compraventa (<c>generatesSaleDocument</c>, ADR-0035) y quiénes la firman
+    /// (<c>signatureActors</c>). <c>TRASPASO_UNILATERAL</c> es de familia traspaso y NO genera
+    /// compraventa —el locatario ya tenía el vehículo por el contrato de leasing—, así que con el
+    /// criterio anterior el listado le reclamaba para siempre la firma de un documento inexistente.</para>
     /// </summary>
-    private static bool DeriveSignaturePending(ProcedureInstance e, ProcedureFamily modalidad)
+    private static bool DeriveSignaturePending(ProcedureInstance e, ProcedureTypeGateProfile profile)
     {
-        if (modalidad != ProcedureFamily.Traspaso)
+        if (!profile.GeneratesSaleDocumentAllowed(e.ProcedureType?.Family))
             return false;
 
         bool Firmada(string parte) => e.Signatures.Any(s =>
@@ -386,7 +410,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             && string.Equals(s.DocTipo, SignatureDocTipos.Compraventa, StringComparison.OrdinalIgnoreCase)
             && s.Estado == SignatureEstados.Firmada);
 
-        return !(Firmada("comprador") && Firmada("vendedor"));
+        return !PartesDeclaradas.Firma(profile).All(Firmada);
     }
 
     /// <summary>

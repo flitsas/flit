@@ -884,7 +884,7 @@ export function DocumentChecklist({
             showModeToggle ? (
               <div className="flex flex-wrap items-center gap-3">
                 {uploadMode === 'batch' && (
-                  <StatusBadge label="Clasificación automática por OCR" tone="info" />
+                  <StatusBadge label="Clasificación automática" tone="info" />
                 )}
                 <DocumentUploadModeToggle value={uploadMode} onChange={setUploadMode} />
               </div>
@@ -943,7 +943,7 @@ export function DocumentChecklist({
       {showModeToggle && (
         <div className="mb-3 flex flex-wrap items-center justify-end gap-3">
           {uploadMode === 'batch' && (
-            <StatusBadge label="Clasificación automática por OCR" tone="info" />
+            <StatusBadge label="Clasificación automática" tone="info" />
           )}
           <DocumentUploadModeToggle value={uploadMode} onChange={setUploadMode} />
         </div>
@@ -951,9 +951,14 @@ export function DocumentChecklist({
 
       {uploadMode === 'batch' && !readOnly && !!instanceId && items.length > 0 && (
         <div className="mb-4">
+          {/* Sin «IA» ni «slot»: lo primero es jerga de cómo está hecho el sistema y lo segundo es
+              inglés en una frase en español —la propia interfaz lo llama «casilla» en el resto de
+              textos—. La última frase es la que faltaba: sin ella, el panel de revisión que aparece
+              a continuación sorprende, y el gestor cree que ya se adjuntó algo. */}
           <p className="mb-3 text-[12px] opacity-70">
-            La IA identifica cada archivo cargado y lo ubica automáticamente en su slot
-            correspondiente, incluidos los trámites simultáneos.
+            Carga todos los documentos juntos y el sistema los reparte en la casilla que le
+            corresponde a cada uno, incluidos los de trámites simultáneos. Revisas el reparto antes
+            de que se adjunte nada.
           </p>
           {batch.state.phase === 'reviewing' || batch.state.phase === 'uploading' ? (
             <BatchReviewPanel

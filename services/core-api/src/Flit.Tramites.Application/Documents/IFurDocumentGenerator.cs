@@ -156,7 +156,15 @@ public sealed record FurDocumentData(
     /// deducirlo por substring sobre la tipología o la modalidad, que daba por traspaso cualquier
     /// código que contuviera esa palabra.</para>
     /// </summary>
-    bool RequiereVendedor = false)
+    bool RequiereVendedor = false,
+    /// <summary>
+    /// ADR-0051 — roles que firman el FUR (<c>gate_profile.signatureActors</c>, ya resueltos a
+    /// actor_type: "comprador"/"vendedor"/"locatario"). <c>null</c> = sin restricción declarada (el
+    /// mapper no condiciona ningún bloque de firma por esta lista — comportamiento previo a esta
+    /// llave). <c>TRASPASO_UNILATERAL</c> es el primer tipo con <c>["vendedor"]</c>: hay parte
+    /// vendedora en el FUR (<see cref="RequiereVendedor"/>) pero solo ella firma, el comprador no.
+    /// </summary>
+    IReadOnlyList<string>? SignatureActors = null)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;

@@ -3,6 +3,7 @@
 import { BookOpen, X } from "lucide-react";
 import { useEffect, useRef, type RefObject } from "react";
 import {
+  hasActiveConversation,
   isComposerEnabled,
   type DrFlitChatState,
 } from "./dr-flit-conversation";
@@ -16,6 +17,7 @@ import { DR_FLIT_ASSETS } from "./dr-flit-assets";
 import { DrFlitBackToSearch } from "./DrFlitBackToSearch";
 import { DrFlitClientBranchChoices } from "./DrFlitClientBranch";
 import { DrFlitComposer } from "./DrFlitComposer";
+import { DrFlitEndChatButton } from "./DrFlitEndChatButton";
 import { DrFlitHelpResults } from "./DrFlitHelpResults";
 import { DrFlitMessageBubble } from "./DrFlitMessageBubble";
 import { DrFlitSessionMenu } from "./DrFlitSessionMenu";
@@ -29,6 +31,7 @@ export function DrFlitChatPanel({
   panelId,
   state,
   onClose,
+  onEndChat,
   onSelectIntent,
   onSelectHelpOption,
   onSelectClientBranch,
@@ -43,6 +46,7 @@ export function DrFlitChatPanel({
   panelId: string;
   state: DrFlitChatState;
   onClose: () => void;
+  onEndChat: () => void;
   onSelectIntent: (id: DrFlitIntentId) => void;
   onSelectHelpOption: (id: DrFlitHelpOptionId) => void;
   onSelectClientBranch: (branch: DrFlitClientBranch) => void;
@@ -79,37 +83,26 @@ export function DrFlitChatPanel({
   if (!open) return null;
 
   const composerEnabled = isComposerEnabled(state);
+  const canEndChat = hasActiveConversation(state);
 
   return (
-    <div className="dr-flit fixed inset-0 z-50" role="presentation">
-      <button
-        type="button"
-        aria-label="Cerrar asistente"
-        className="absolute inset-0 border-0"
-        style={{
-          background: "var(--dr-flit-overlay)",
-          backdropFilter: "blur(4px)",
-        }}
-        onClick={onClose}
-      />
-
-      <div
-        ref={panelRef}
-        id={panelId}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`${panelId}-title`}
-        className="dr-flit-panel-enter absolute inset-y-0 right-0 flex w-full max-w-md flex-col overflow-hidden"
-        style={{
-          background: "var(--dr-flit-panel-bg)",
-          borderTopLeftRadius: "var(--dr-flit-radius-widget)",
-          borderBottomLeftRadius: "var(--dr-flit-radius-widget)",
-          boxShadow: "var(--dr-flit-shadow-panel)",
-          fontFamily: "var(--dr-flit-font)",
-        }}
-      >
+    <div
+      ref={panelRef}
+      id={panelId}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={`${panelId}-title`}
+      className="dr-flit dr-flit-panel-enter fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-hidden"
+      style={{
+        background: "var(--dr-flit-panel-bg)",
+        borderTopLeftRadius: "var(--dr-flit-radius-widget)",
+        borderBottomLeftRadius: "var(--dr-flit-radius-widget)",
+        boxShadow: "var(--dr-flit-shadow-panel)",
+        fontFamily: "var(--dr-flit-font)",
+      }}
+    >
         <header
-          className="flex shrink-0 items-center gap-3 px-4 py-3.5"
+          className="flex shrink-0 items-center gap-2 px-4 py-3.5"
           style={{ background: "var(--dr-flit-gradient-header)" }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -136,6 +129,7 @@ export function DrFlitChatPanel({
             type="button"
             onClick={onClose}
             aria-label="Cerrar DR. FLIT"
+            title="Ocultar panel (conserva la conversación)"
             className="rounded-md p-1.5 text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <X className="h-5 w-5" aria-hidden="true" />
@@ -246,14 +240,25 @@ export function DrFlitChatPanel({
               <DrFlitBackToSearch onBack={onBackToSearch} />
             </div>
           )}
+
+          {canEndChat && !state.isTyping && (
+            <div className="pt-2">
+              <DrFlitEndChatButton onEnd={onEndChat} />
+              <p
+                className="mt-1.5 text-center text-[11px] leading-snug"
+                style={{ color: "var(--dr-flit-text-muted)" }}
+              >
+                Borra esta conversación. La X solo oculta el panel.
+              </p>
+            </div>
+          )}
         </div>
 
-        <DrFlitComposer
-          onSend={onSend}
-          inputRef={inputRef}
-          disabled={state.isTyping || !composerEnabled}
-        />
-      </div>
+      <DrFlitComposer
+        onSend={onSend}
+        inputRef={inputRef}
+        disabled={state.isTyping || !composerEnabled}
+      />
     </div>
   );
 }

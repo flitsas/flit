@@ -6877,7 +6877,9 @@ components:
           description: >
             Flags de conformación del tipo (ver DDL comment de
             `tramites.procedure_types.gate_profile`): entryMode, requiresBuyer,
-            biometricActors, simitMode, etc. Objeto JSON abierto.
+            biometricActors, simitMode, y las capacidades declaradas de ADR-0051
+            (sellerCapturedViaForm, signatureActors, generatesSaleDocument,
+            hasAppraisalBlock). Objeto JSON abierto.
         conformationRules:
           type: array
           items:
@@ -6944,6 +6946,37 @@ components:
                 Cómo se obtiene la impronta en este tipo. Independiente de si el documento
                 es obligatorio en la matriz. Ausente o AUTO/OPERATOR_CHOICE: se puede generar.
                 MANUAL: solo carga de archivo.
+            sellerCapturedViaForm:
+              type: boolean
+              description: >
+                ADR-0051. Separa "hay parte vendedora en el FUR" (`requiresSeller`) de "esa parte
+                se captura tecleando datos en el wizard". Ausente equivale a true (todo tipo que
+                exige vendedor lo captura por formulario), que es el comportamiento previo a la
+                llave. En TRASPASO_UNILATERAL es false: el propietario existe y firma, pero no
+                pasa por el wizard — se sincroniza desde RUES/RUNT con el documento del paso 1.
+            signatureActors:
+              type: array
+              description: >
+                ADR-0051. Roles que firman el FUR, en el vocabulario de catálogo de
+                `biometricActors`. Ausente o vacío equivale al comportamiento previo:
+                [OWNER, BUYER] si el tipo exige vendedor, [BUYER] si no.
+              items:
+                type: string
+                enum: [OWNER, BUYER, LESSEE]
+            generatesSaleDocument:
+              type: boolean
+              nullable: true
+              description: >
+                ADR-0051. El expediente autogenera compraventa (ADR-0035). `null`/ausente NO es
+                false: significa "lo que diga `requiresSeller` + familia TRASPASO", el
+                comportamiento previo. TRASPASO_UNILATERAL lo declara false — el locatario ya
+                tenía el vehículo por el contrato de leasing.
+            hasAppraisalBlock:
+              type: boolean
+              nullable: true
+              description: >
+                ADR-0051. El FUR imprime bloque de avalúo comercial. Misma semántica de `null`
+                que `generatesSaleDocument`.
         sources:
           type: array
           description: >

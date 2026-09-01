@@ -60,10 +60,65 @@ public sealed class OtClientProcedureResponse
     public string? Marca { get; init; }
     public string? Linea { get; init; }
     public string? Modelo { get; init; }
+    /// <summary>Color EFECTIVO: el nuevo si el trámite declara un cambio. Contrastar con <see cref="RuntSnapshot"/>.</summary>
     public string? Color { get; init; }
     public string? Clase { get; init; }
     public string? Servicio { get; init; }
+    /// <summary>Combustible EFECTIVO. Ver <see cref="Color"/>.</summary>
     public string? Combustible { get; init; }
+    /// <summary>Carrocería EFECTIVA. Ver <see cref="Color"/>.</summary>
+    public string? Carroceria { get; init; }
+    public string? Cilindraje { get; init; }
+    public string? Capacidad { get; init; }
+    public string? Ejes { get; init; }
+    public string? EstadoVehiculo { get; init; }
+    public string? NumeroMotor { get; init; }
+    public string? NumeroChasis { get; init; }
+    public string? NumeroSerie { get; init; }
+
+    /// <summary>HU #11929 — valores del RUNT para los atributos transformables; null si el trámite no los capturó.</summary>
+    public OtClientProcedureVehicleSnapshotResponse? RuntSnapshot { get; init; }
+
+    /// <summary>HU #11929 — banderas cambio_color / cambio_combustible / cambio_carroceria.</summary>
+    public OtClientProcedureTransformationFlagsResponse TransformacionesDeclaradas { get; init; } = new();
+
+    /// <summary>HU #11929 — datos comerciales; null si el trámite no los tiene.</summary>
+    public OtClientProcedureCommercialResponse? Comercial { get; init; }
+
+    /// <summary>HU #11929 — decisión de prenda; null si el trámite no tiene decisión registrada.</summary>
+    public OtClientProcedurePrendaResponse? Prenda { get; init; }
+}
+
+public sealed class OtClientProcedureVehicleSnapshotResponse
+{
+    public string? Color { get; init; }
+    public string? Combustible { get; init; }
+    public string? Carroceria { get; init; }
+}
+
+public sealed class OtClientProcedureTransformationFlagsResponse
+{
+    public bool Color { get; init; }
+    public bool Combustible { get; init; }
+    public bool Carroceria { get; init; }
+}
+
+public sealed class OtClientProcedureCommercialResponse
+{
+    public decimal? ValorVenta { get; init; }
+    public string? Causal { get; init; }
+    public decimal? TasaImpuesto { get; init; }
+    public decimal? Derechos { get; init; }
+    public string? MetodoPago { get; init; }
+}
+
+public sealed class OtClientProcedurePrendaResponse
+{
+    public string Decision { get; init; } = string.Empty;
+    public string Estado { get; init; } = string.Empty;
+    public string? AcreedorNombre { get; init; }
+    public string? AcreedorDocumento { get; init; }
+    public string? LevantamientoEntidad { get; init; }
 }
 
 public sealed class OtClientProcedureActorResponse
@@ -159,5 +214,47 @@ internal static class OtClientProcedureMapper
             Clase = procedure.Clase,
             Servicio = procedure.Servicio,
             Combustible = procedure.Combustible,
+            Carroceria = procedure.Carroceria,
+            Cilindraje = procedure.Cilindraje,
+            Capacidad = procedure.Capacidad,
+            Ejes = procedure.Ejes,
+            EstadoVehiculo = procedure.EstadoVehiculo,
+            NumeroMotor = procedure.NumeroMotor,
+            NumeroChasis = procedure.NumeroChasis,
+            NumeroSerie = procedure.NumeroSerie,
+            RuntSnapshot = procedure.RuntSnapshot is null
+                ? null
+                : new OtClientProcedureVehicleSnapshotResponse
+                {
+                    Color = procedure.RuntSnapshot.Color,
+                    Combustible = procedure.RuntSnapshot.Combustible,
+                    Carroceria = procedure.RuntSnapshot.Carroceria,
+                },
+            TransformacionesDeclaradas = new OtClientProcedureTransformationFlagsResponse
+            {
+                Color = procedure.TransformacionesDeclaradas.Color,
+                Combustible = procedure.TransformacionesDeclaradas.Combustible,
+                Carroceria = procedure.TransformacionesDeclaradas.Carroceria,
+            },
+            Comercial = procedure.Comercial is null
+                ? null
+                : new OtClientProcedureCommercialResponse
+                {
+                    ValorVenta = procedure.Comercial.ValorVenta,
+                    Causal = procedure.Comercial.Causal,
+                    TasaImpuesto = procedure.Comercial.TasaImpuesto,
+                    Derechos = procedure.Comercial.Derechos,
+                    MetodoPago = procedure.Comercial.MetodoPago,
+                },
+            Prenda = procedure.Prenda is null
+                ? null
+                : new OtClientProcedurePrendaResponse
+                {
+                    Decision = procedure.Prenda.Decision,
+                    Estado = procedure.Prenda.Estado,
+                    AcreedorNombre = procedure.Prenda.AcreedorNombre,
+                    AcreedorDocumento = procedure.Prenda.AcreedorDocumento,
+                    LevantamientoEntidad = procedure.Prenda.LevantamientoEntidad,
+                },
         };
 }

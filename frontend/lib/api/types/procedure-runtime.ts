@@ -708,6 +708,21 @@ export interface PreflightCheck {
   action?: PreflightAction | null;
   /** Detalle line-by-line del hallazgo (hoy: los comparendos de un check de multas). */
   details?: FineDetail[] | null;
+  /**
+   * Datos del proveedor que respaldan el resultado, ya separados en etiqueta y valor: vencimiento del
+   * SOAT, número de póliza, aseguradora, CDA de la revisión…
+   *
+   * <p>Vienen separados y no como una frase porque el mapeador ya los tiene así: encadenarlos con
+   * puntos medios obligaba a la pantalla a desarmarlos otra vez y se leía mal —el salto de línea
+   * partía el nombre de la aseguradora, y el último campo se quedaba sin etiqueta—.</p>
+   */
+  datos?: CheckDato[] | null;
+}
+
+/** Un dato del proveedor que respalda un check: etiqueta y valor, por separado. */
+export interface CheckDato {
+  etiqueta: string;
+  valor: string;
 }
 
 export interface PreflightSnapshot {
@@ -733,6 +748,14 @@ export interface ConsultationCheck {
   status: PreflightCheckStatus;
   source: string;
   message?: string;
+  /** Detalle line-by-line del hallazgo (los comparendos de un check de multas). */
+  details?: FineDetail[] | null;
+  /**
+   * Datos del proveedor que respaldan el resultado (ver {@link CheckDato}). El tipo los declaraba
+   * incompletos respecto de lo que el servidor manda, y como el cliente mapea campo por campo, lo no
+   * declarado se perdía sin que TypeScript dijera nada.
+   */
+  datos?: CheckDato[] | null;
 }
 
 export interface ConsultationHydratedField {

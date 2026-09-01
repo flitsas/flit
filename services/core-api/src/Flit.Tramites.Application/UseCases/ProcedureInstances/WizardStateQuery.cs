@@ -150,6 +150,18 @@ public sealed record WizardStateDto(
 public sealed record WizardCapabilitiesDto(
     string? EntryMode,
     bool RequiresSeller,
+    /// <summary>
+    /// ADR-0051 — esa parte vendedora se captura TECLEANDO datos en el asistente, o llega de otra
+    /// fuente (sincronizada desde el RUNT/RUES). Es distinto de <see cref="RequiresSeller"/>: en
+    /// <c>TRASPASO_UNILATERAL</c> hay propietario —comparece en el FUR y es el único que firma— pero
+    /// no se le pinta formulario, porque el trámite lo formaliza el locatario.
+    ///
+    /// <para>Viajaba solo en el <c>sectionConfig</c> de la sección <c>actor_form</c>, mientras el
+    /// asistente la leía de aquí: al no encontrarla caía a <see cref="RequiresSeller"/> y pintaba el
+    /// formulario del propietario en un trámite que no lo captura. Las dos vías publican ahora el
+    /// mismo dato.</para>
+    /// </summary>
+    bool SellerCapturedViaForm,
     bool RequiresBuyer,
     bool RequiresLessee,
     bool AllowsMultipleBuyer,
@@ -207,6 +219,7 @@ public sealed record WizardCapabilitiesDto(
         new(
             profile.EntryMode,
             profile.RequiresSeller,
+            profile.SellerCapturedViaForm,
             profile.RequiresBuyer,
             profile.RequiresLessee,
             profile.AllowsMultipleBuyer,
@@ -265,7 +278,8 @@ public sealed class GetWizardStateHandler(
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
     IProcedureTypeRepository? typeRepo = null,
     IProcedureInstancePrendaRepository? prendaRepo = null,
-    IResolvedChecklistMatrixProvider? checklistMatrixProvider = null)
+    IResolvedChecklistMatrixProvider? checklistMatrixProvider = null,
+    IRepresentanteLegalDirectory? representanteDirectory = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -313,6 +327,13 @@ public sealed class GetWizardStateHandler(
     // booleano agregado DocumentosCompletos y CFD-06 no llegaba nunca al motor. Sin proveedor
     // (tests) se conserva ese fallback.
     private readonly IResolvedChecklistMatrixProvider? _checklistMatrixProvider = checklistMatrixProvider;
+
+    // ADR-0051 Decisión 6 — directorio de representantes legales (mismo puerto que FurCommand): sirve
+    // para saber si la parte vendedora sincronizada (persona jurídica) tiene un RL utilizable con el
+    // que enviar la validación de identidad. Default inerte (nunca resuelve nombre) para tests que no
+    // lo inyectan, mismo criterio que el resto de políticas opcionales de este handler.
+    private readonly IRepresentanteLegalDirectory _representanteDirectory =
+        representanteDirectory ?? NullRepresentanteLegalDirectory.Instance;
 
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -571,9 +592,60 @@ public sealed class GetWizardStateHandler(
             ? null
             : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
 
+        // ADR-0051 Decisión 6 — señal por instancia (no por tipo): solo el detalle del wizard la
+        // resuelve por IO; el listado (ComputeState) queda en el default `false`, mismo criterio que
+        // documentRequirements/prendaVigente arriba (sin consulta por fila).
+        var revealSellerForm = await ResolveRevealSellerFormAsync(instance, conformation.GateProfile, ct);
+
         return BuildDynamicStateCore(
             instance, conformation, partesEfectivas, prendaOtBlocker, comparendosBloquean,
-            runtExigido, documentRequirements, prendaVigente);
+            runtExigido, documentRequirements, prendaVigente, revealSellerForm);
+    }
+
+    /// <summary>
+    /// ADR-0051 Decisión 6 — ¿hay que revelar el formulario oculto del propietario porque falta el
+    /// dato con el que enviarle la validación de identidad? El disparador es el mismo hueco de dato que
+    /// gobierna <c>IdentitySendDecisionForTramite</c> (ADR-0039): esta señal NO decide si se envía
+    /// correo (esa decisión sigue siendo exclusiva de ADR-0039), solo expone al frontend que hace falta
+    /// un dato para poder ejecutarla. Tres casos, cualquiera revela:
+    /// <list type="number">
+    /// <item><description>Aún no hay actor "vendedor" sincronizado (la sincronización best-effort de
+    /// <see cref="SyncSellerActorFromConsultationsHandler"/> no corrió o no encontró nada que
+    /// persistir).</description></item>
+    /// <item><description>El actor existe pero sin <c>FullName</c> (el lookup RUNT/RUES no resolvió
+    /// nombre — riesgo documentado en ADR-0051 Decisión 5).</description></item>
+    /// <item><description>Persona jurídica sin representante legal utilizable en
+    /// <see cref="IRepresentanteLegalDirectory"/>, o persona natural sin correo conocido (la consulta
+    /// RUNT nunca lo trae; <c>IniciarBiometriaHandler</c> exige <c>Email</c> no vacío para poder
+    /// crear la validación).</description></item>
+    /// </list>
+    /// No aplica si el tipo captura al vendedor por formulario (ahí el gestor ya lo teclea) o si el
+    /// tipo no le exige validar identidad al propietario (<c>biometricActors</c> sin <c>OWNER</c>).
+    /// </summary>
+    private async Task<bool> ResolveRevealSellerFormAsync(
+        ProcedureInstance instance, ProcedureTypeGateProfile profile, CancellationToken ct)
+    {
+        if (!profile.RequiresSeller || profile.SellerCapturedViaForm)
+            return false;
+        if (!profile.RequiresBiometrics
+            || !profile.BiometricActors.Any(a => string.Equals(a, "OWNER", StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        var vendedor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, "vendedor", StringComparison.OrdinalIgnoreCase));
+        if (vendedor is null || string.IsNullOrWhiteSpace(vendedor.FullName))
+            return true;
+
+        var esJuridica = ActorPersonTypes.IsJuridical(vendedor.PersonType)
+            || string.Equals(vendedor.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
+        if (esJuridica)
+        {
+            var nombreRl = await _representanteDirectory.BuscarNombreRepresentanteAsync(
+                instance.TenantId, vendedor.DocumentNumber, null, null, ct).ConfigureAwait(false);
+            return string.IsNullOrWhiteSpace(nombreRl);
+        }
+
+        return string.IsNullOrWhiteSpace(vendedor.Email);
     }
 
     /// <summary>
@@ -582,6 +654,13 @@ public sealed class GetWizardStateHandler(
     /// prenda— y el listado de trámites, que necesita el mismo progreso por expediente y no puede
     /// pagar una consulta por fila.</para>
     /// </summary>
+    /// <param name="revealSellerForm">
+    /// ADR-0051 Decisión 6: <c>true</c> si al paso <c>actor_form</c> hay que revelar el formulario
+    /// oculto del propietario (falta un dato para poder enviarle validación de identidad). Resuelto por
+    /// IO en <see cref="ResolveRevealSellerFormAsync"/>; default <c>false</c> para el listado de
+    /// trámites (<see cref="ComputeState"/>), que no paga una consulta al directorio de RL por fila —
+    /// mismo criterio que <paramref name="documentRequirements"/>/<paramref name="prendaVigente"/>.
+    /// </param>
     private static WizardStateDto BuildDynamicStateCore(
         ProcedureInstance instance,
         WizardConformation conformation,
@@ -590,7 +669,8 @@ public sealed class GetWizardStateHandler(
         bool comparendosBloquean,
         RuntConsultaExigida? runtExigido,
         IReadOnlyList<DocumentRequirementItem> documentRequirements,
-        ProcedureInstancePrenda? prendaVigente)
+        ProcedureInstancePrenda? prendaVigente,
+        bool revealSellerForm = false)
     {
         var gateProfile = conformation.GateProfile;
         var steps = conformation.Steps;
@@ -647,7 +727,7 @@ public sealed class GetWizardStateHandler(
             {
                 SectionType = s.SectionType,
                 SectionTypes = s.SectionTypes,
-                SectionConfig = BuildSectionConfig(s, gateProfile),
+                SectionConfig = BuildSectionConfig(s, gateProfile, revealSellerForm),
             })
             .ToList();
 
@@ -735,8 +815,12 @@ public sealed class GetWizardStateHandler(
     /// sección. La propiedad existía en el contrato desde F08 y nunca se asignaba, así que el cliente
     /// recibía siempre <c>null</c> y no podía saber, por ejemplo, si el paso de actores pide vendedor.
     /// </summary>
+    /// <param name="revealSellerForm">
+    /// ADR-0051 Decisión 6 — ver <see cref="ResolveRevealSellerFormAsync"/>. Default <c>false</c>: el
+    /// preview sin instancia (<see cref="BuildPreview"/>) no tiene actor que evaluar.
+    /// </param>
     private static JsonObject? BuildSectionConfig(
-        DynamicWizardStepResult step, ProcedureTypeGateProfile profile)
+        DynamicWizardStepResult step, ProcedureTypeGateProfile profile, bool revealSellerForm = false)
     {
         switch (step.SectionType)
         {
@@ -750,6 +834,11 @@ public sealed class GetWizardStateHandler(
                     ["requiresBuyer"] = profile.RequiresBuyer,
                     ["allowsMultipleSeller"] = profile.AllowsMultipleSeller,
                     ["allowsMultipleBuyer"] = profile.AllowsMultipleBuyer,
+                    // ADR-0051 — vendedor capturado por formulario vs. sincronizado (Decisión 1), y si
+                    // hay que revelar su formulario oculto pese a `sellerCapturedViaForm:false`
+                    // (Decisión 6). El frontend decide con esto, sin recalcular nada.
+                    ["sellerCapturedViaForm"] = profile.SellerCapturedViaForm,
+                    ["revealSellerForm"] = revealSellerForm,
                 };
 
             case ProcedureSectionTypes.Commercial:

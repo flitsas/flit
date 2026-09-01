@@ -9,6 +9,7 @@ import {
   applyUserText,
   applyValidacionesSuccess,
   createInitialState,
+  hasActiveConversation,
   resetMessageIdSeq,
 } from "../dr-flit-conversation";
 
@@ -169,6 +170,15 @@ describe("dr-flit-conversation", () => {
     const next = applyBackToSearch(support);
     expect(next.showSessionMenu).toBe(true);
     expect(next.showSupportInfo).toBe(false);
+  });
+
+  it("hasActiveConversation distingue menú inicial de consulta en curso", () => {
+    const idle = createInitialState("Juan");
+    expect(hasActiveConversation(idle)).toBe(false);
+    const awaiting = applySelectIntent(idle, "placa")!.next;
+    expect(hasActiveConversation(awaiting)).toBe(true);
+    const back = applyBackToSearch(awaiting);
+    expect(hasActiveConversation(back)).toBe(false);
   });
 });
 

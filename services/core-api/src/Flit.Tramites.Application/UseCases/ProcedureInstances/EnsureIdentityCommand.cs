@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
@@ -28,6 +29,18 @@ public static class EnsureIdentityOutcomes
 
     /// <summary>La parte aún no tiene actor con documento → no se puede evaluar la identidad todavía.</summary>
     public const string SinActor = "sin_actor";
+
+    /// <summary>
+    /// ADR-0051 — el TIPO no declara a esta parte entre las que validan identidad
+    /// (<c>biometricActors</c>): no hay nada que asegurar y no se le manda ninguna validación.
+    ///
+    /// <para>El caso real es <c>TRASPASO_UNILATERAL</c>: intervienen propietario y locatario, pero
+    /// solo firma el propietario (art. 5.3.2.2). El locatario se persiste con el rol
+    /// <c>comprador</c> —no hay rol propio para una única parte entrante— así que descartarlo por el
+    /// NOMBRE del rol no lo atrapaba, y al continuar el paso de actores le salía el correo de
+    /// validación a la persona que en este trámite no firma.</para>
+    /// </summary>
+    public const string ParteNoValidaIdentidad = "parte_no_valida_identidad";
 }
 
 /// <summary>Resultado de <see cref="EnsureIdentityHandler"/>: el desenlace y, si aplica, la validación resultante.</summary>
@@ -65,6 +78,24 @@ public sealed class EnsureIdentityHandler(
         var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
+
+        // ADR-0051 — quién valida identidad lo declara el TIPO. Sin esta guarda, cualquier llamada con
+        // una parte que el trámite no somete a validación creaba la validación igual y disparaba el
+        // correo del proveedor: el handler resolvía el actor y seguía adelante sin preguntar nunca si
+        // esa parte firma. Se resuelve con el traductor único (`PartesDeclaradas`), el mismo que usan
+        // el FUR, el listado biométrico y el paso de Identidad.
+        //
+        // Solo se aplica cuando el perfil DECLARA los firmantes. Con la llave ausente,
+        // `PartesDeclaradas` cae a un respaldo por `requiresSeller` que en una instancia sin perfil
+        // —las legadas, y las de los tests que no lo sirven— resolvería «solo comprador» y dejaría
+        // fuera al vendedor de un traspaso que sí lo valida. La guarda es aditiva: donde el tipo no
+        // declara nada, el handler se comporta exactamente como antes.
+        var perfil = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (perfil.BiometricActors.Count > 0
+            && !PartesDeclaradas.Identidad(perfil).Contains(normalized, StringComparer.OrdinalIgnoreCase))
+        {
+            return (new EnsureIdentityResult(EnsureIdentityOutcomes.ParteNoValidaIdentidad), null);
+        }
 
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, normalized, StringComparison.OrdinalIgnoreCase));

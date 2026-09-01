@@ -1,4 +1,4 @@
-# ADR-0051: Resolución de mandato — modo del OT, nacimiento abierto y mandato cliente genérico
+# ADR-0052: Resolución de mandato — modo del OT, nacimiento abierto y mandato cliente genérico
 
 **Fecha**: 2026-08-26
 **Status**: Propuesto

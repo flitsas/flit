@@ -60,6 +60,45 @@ describe('resolveNuevoTramiteCode', () => {
     ).toEqual({ ok: true, procedureTypeCode: 'TRASPASO_UNILATERAL' });
   });
 
+  // Defecto silencioso: `primerCodeDisponible` cae al primer tipo habilitado de la familia, así que
+  // con TRASPASO_UNILATERAL apagado —como estuvo el catálogo desde que el tipo existe— elegir
+  // «Traspaso Unilateral» abría un traspaso BILATERAL sin avisar: otro FUR, otros firmantes, otro
+  // checklist. El mensaje de «no está habilitado» no llegaba a verse nunca.
+  it('el unilateral NO cae al bilateral cuando su tipo no está habilitado', () => {
+    const sinUnilateral = catalogo.filter((t) => t.code !== 'TRASPASO_UNILATERAL');
+    const r = resolveNuevoTramiteCode(
+      { tipo: 'TRASPASO', modalidadTraspaso: 'unilateral' },
+      sinUnilateral,
+    );
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe('not-found');
+      expect(r.message).toMatch(/unilateral no está habilitado/i);
+    }
+  });
+
+  it('el unilateral tampoco cae al bilateral cuando su tipo existe pero está deshabilitado', () => {
+    const apagado = catalogo.map((t) =>
+      t.code === 'TRASPASO_UNILATERAL' ? { ...t, wizardEnabled: false } : t,
+    );
+    const r = resolveNuevoTramiteCode(
+      { tipo: 'TRASPASO', modalidadTraspaso: 'unilateral' },
+      apagado,
+    );
+
+    expect(r.ok).toBe(false);
+  });
+
+  // El bilateral SÍ conserva la caída: ahí las variantes son intercambiables para empezar (da igual
+  // que el catálogo lo llame TRASPASO_STANDARD, TRASPASO_BILATERAL o TRASPASO).
+  it('el bilateral conserva la caída al primer traspaso habilitado', () => {
+    const otroNombre = [tipo('TRASPASO_OTRO_NOMBRE', 'Traspaso', 'TRASPASO')];
+    expect(
+      resolveNuevoTramiteCode({ tipo: 'TRASPASO', modalidadTraspaso: 'bilateral' }, otroNombre),
+    ).toEqual({ ok: true, procedureTypeCode: 'TRASPASO_OTRO_NOMBRE' });
+  });
+
   it('exige subtipo en Otros y usa el code del catálogo', () => {
     expect(resolveNuevoTramiteCode({ tipo: 'OTROS' }, catalogo).ok).toBe(false);
     expect(

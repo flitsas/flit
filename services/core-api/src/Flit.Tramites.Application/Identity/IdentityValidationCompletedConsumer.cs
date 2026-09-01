@@ -4,6 +4,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.Identity;
@@ -22,8 +23,9 @@ public sealed record IdentityValidationConsumeResult(
 /// paso de TODOS los borradores finalizados (<c>draft</c> + <c>draft_finalized_at NOT NULL</c>) del tenant
 /// donde ese sujeto (tipoDoc + documento) es actor de la parte validada:
 /// <list type="bullet">
-///   <item><b>Traspaso</b> → <see cref="SolicitarFirmaHandler"/> (compraventa) de la parte; idempotente.</item>
-///   <item><b>Matrícula</b> → <see cref="GenerarFurHandler"/> (FUR); sin firma de compraventa.</item>
+///   <item><b>Con compraventa autogenerada</b> → <see cref="SolicitarFirmaHandler"/> (compraventa) de
+///   la parte; idempotente.</item>
+///   <item><b>Sin compraventa</b> → <see cref="GenerarFurHandler"/> (FUR); sin firma de compraventa.</item>
 /// </list>
 /// Procesa en orden determinista (lo garantiza el repositorio: <c>draft_finalized_at</c> ASC, luego
 /// <c>reference_number</c>) y registra un evento de bitácora <c>firma_auto_solicitada</c> correlacionado
@@ -60,12 +62,17 @@ public sealed class IdentityValidationCompletedConsumer(
 
         foreach (var instance in instances)
         {
-            var esTraspaso = instance.Family
-                             == ProcedureFamily.Traspaso;
+            // ADR-0051 — lo que decide el encadenamiento es si el expediente autogenera compraventa
+            // (ADR-0035), no la familia. Coincidían hasta que apareció un tipo de familia TRASPASO sin
+            // compraventa: en `TRASPASO_UNILATERAL` este consumidor pedía la firma de un documento que
+            // `FurCommand` ya no genera, el handler devolvía error y el borrador se quedaba SIN FUR,
+            // contado como `skipped`. Misma llave y mismo resolutor que usa el generador.
+            var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+            var generaCompraventa = profile.GeneratesSaleDocumentAllowed(instance.ProcedureType?.Family);
 
             string? error;
             string accion;
-            if (esTraspaso)
+            if (generaCompraventa)
             {
                 accion = "firma_compraventa";
                 (_, error) = await firmaHandler.HandleAsync(

@@ -44,7 +44,7 @@ describe('TramiteDetalleVehiculo — estado cargando', () => {
     renderSeccion();
 
     expect(screen.getByLabelText('Cargando especificaciones técnicas')).toBeInTheDocument();
-    expect(screen.getByLabelText('Cargando pre-vuelo de requisitos')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cargando verificación de requisitos')).toBeInTheDocument();
   });
 });
 
@@ -90,7 +90,7 @@ describe('TramiteDetalleVehiculo — solo pinta las claves de fieldValues que ex
   });
 });
 
-describe('TramiteDetalleVehiculo — trámite sin pre-vuelo ejecutado', () => {
+describe('TramiteDetalleVehiculo — trámite sin verificación ejecutada', () => {
   it('usa el estado vacío en vez de un error cuando getPreflight resuelve null', async () => {
     client.getInstance.mockResolvedValue(detail([fv('vehicle_class', 'Automóvil')]));
     client.getPreflight.mockResolvedValue(null);
@@ -99,7 +99,7 @@ describe('TramiteDetalleVehiculo — trámite sin pre-vuelo ejecutado', () => {
 
     expect(
       await screen.findByText(
-        'Este trámite no tiene un pre-vuelo de requisitos ejecutado (RUNT/SIMIT/RNMC). Se ejecuta desde el asistente, no desde este detalle.',
+        'Este trámite no tiene una verificación de requisitos ejecutada (RUNT/SIMIT/RNMC). Se ejecuta desde el asistente, no desde este detalle.',
       ),
     ).toBeInTheDocument();
     // No dispara ninguna consulta: no hay botón de acción en esta sección de solo lectura.
@@ -108,7 +108,7 @@ describe('TramiteDetalleVehiculo — trámite sin pre-vuelo ejecutado', () => {
 });
 
 describe('TramiteDetalleVehiculo — fallo de una sola de las dos fuentes', () => {
-  it('si falla getInstance, el pre-vuelo igual se pinta (y el error queda solo en su tarjeta)', async () => {
+  it('si falla getInstance, la verificación igual se pinta (y el error queda solo en su tarjeta)', async () => {
     client.getInstance.mockRejectedValue(new Error('El servicio no está disponible en este momento.'));
     const snapshot: PreflightSnapshot = {
       overall: 'green',
@@ -123,7 +123,7 @@ describe('TramiteDetalleVehiculo — fallo de una sola de las dos fuentes', () =
       await screen.findByText('El servicio no está disponible en este momento.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
-    // El pre-vuelo sí llegó y se pinta normal.
+    // La verificación sí llegó y se pinta normal.
     expect(await screen.findByText('RUNT')).toBeInTheDocument();
     expect(screen.getByLabelText('RUNT: OK')).toBeInTheDocument();
   });
@@ -159,7 +159,7 @@ describe('TramiteDetalleVehiculo — fallo de una sola de las dos fuentes', () =
 });
 
 describe('TramiteDetalleVehiculo — estado lleno', () => {
-  it('pinta las especificaciones (incluida la empresa vinculadora con servicio Público) y el semáforo del pre-vuelo', async () => {
+  it('pinta las especificaciones (incluida la empresa vinculadora con servicio Público) y el semáforo de la verificación', async () => {
     client.getInstance.mockResolvedValue(
       detail([
         fv('vehicle_class', 'Automóvil'),
@@ -196,7 +196,7 @@ describe('TramiteDetalleVehiculo — estado lleno', () => {
     expect(screen.getByText('1998 cc')).toBeInTheDocument();
 
     // Resumen del semáforo arriba de la tarjeta.
-    expect(screen.getByText('Pre-vuelo con advertencias')).toBeInTheDocument();
+    expect(screen.getByText('Con advertencias')).toBeInTheDocument();
 
     // RUNT: OK.
     expect(screen.getByLabelText('RUNT: OK')).toBeInTheDocument();

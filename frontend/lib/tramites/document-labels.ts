@@ -14,6 +14,11 @@ const DOCUMENT_LABELS: Record<string, string> = {
   certificado_soat_rtm: 'Certificado SOAT / RTM',
   escritura: 'Escritura',
   escritura_comprador: 'Escritura (comprador)',
+  // Escritura cargada por el gestor para un representante legal que no está en el módulo de
+  // representantes de la compañía (y que por tanto no tiene escritura en el directorio).
+  escritura_representante: 'Escritura del representante legal',
+  escritura_representante_vendedor: 'Escritura del representante legal (vendedor)',
+  escritura_representante_locatario: 'Escritura del representante legal (locatario)',
   licencia_transito: 'Licencia de tránsito',
   factura: 'Factura',
   aduana: 'Declaración de importación',

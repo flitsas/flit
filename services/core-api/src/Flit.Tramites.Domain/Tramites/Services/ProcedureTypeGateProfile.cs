@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Domain.Tramites.Services;
 
@@ -31,6 +32,26 @@ public sealed record ProcedureTypeGateProfile
     public bool RequiresBiometrics { get; init; }
     public IReadOnlyList<string> BiometricActors { get; init; } = [];
     public bool RequiresSignature { get; init; }
+
+    /// <summary>
+    /// ADR-0051 — separa "hay parte vendedora en el FUR" (<see cref="RequiresSeller"/>, sin cambio de
+    /// significado) de "esa parte se captura tecleando datos en el wizard". <c>true</c> es el
+    /// comportamiento previo a esta llave (todo tipo que hoy exige vendedor lo captura por
+    /// formulario), por eso el default cuando la llave está AUSENTE del JSON es <c>true</c> —
+    /// modelado con el field initializer, no con <c>bool?</c>, porque aquí no hace falta distinguir
+    /// "ausente" de "declarado en su valor por defecto": ambos casos deben comportarse igual.
+    /// </summary>
+    public bool SellerCapturedViaForm { get; init; } = true;
+
+    /// <summary>
+    /// ADR-0051 — roles (vocabulario <c>OWNER</c>/<c>BUYER</c>/<c>LESSEE</c>, el mismo de
+    /// <see cref="BiometricActors"/>, traducido con <c>RuntConsultaExigida.ActorTypeDeEntidad</c>)
+    /// que firman el FUR. Lista cruda: un JSON sin la llave (o con arreglo vacío) no distingue
+    /// "ausente" de "declarado vacío" — ningún tipo real declara cero firmantes, así que ambos casos
+    /// resuelven al default. Resuélvelo SIEMPRE con <see cref="ResolveSignatureActors"/>, nunca
+    /// leyendo la propiedad cruda.
+    /// </summary>
+    public IReadOnlyList<string> SignatureActors { get; init; } = [];
     public bool RequiresPlateRequest { get; init; }
     public bool ValidateCompanyRule { get; init; }
     public bool ValidateOtOperability { get; init; }
@@ -59,6 +80,23 @@ public sealed record ProcedureTypeGateProfile
     /// <see cref="AllowsComplementaryTransformations"/>.
     /// </summary>
     public bool? AllowsComplementaryPrenda { get; init; }
+
+    /// <summary>
+    /// ADR-0051 — el expediente autogenera compraventa (ADR-0035). Mismo idioma de <c>null</c> que
+    /// <see cref="AllowsComplementaryTransformations"/>: ausente no es <c>false</c>, es "lo que diga
+    /// la combinación <see cref="RequiresSeller"/> + familia", resuelto SIEMPRE con
+    /// <see cref="GeneratesSaleDocumentAllowed"/>. <c>TRASPASO_UNILATERAL</c> es la primera excepción
+    /// declarada explícitamente en <c>false</c>: no hay compraventa entre dos partes porque el
+    /// locatario ya tenía el vehículo por contrato de leasing.
+    /// </summary>
+    public bool? GeneratesSaleDocument { get; init; }
+
+    /// <summary>
+    /// ADR-0051 — el FUR imprime bloque de avalúo comercial (resuelto contra Fasecolda vía VIN).
+    /// Misma semántica de <c>null</c> que <see cref="GeneratesSaleDocument"/>, resuelto SIEMPRE con
+    /// <see cref="HasAppraisalBlockAllowed"/>.
+    /// </summary>
+    public bool? HasAppraisalBlock { get; init; }
 
     /// <summary>
     /// Quién decide el organismo de tránsito del trámite: el RUNT o el operador.
@@ -156,6 +194,35 @@ public sealed record ProcedureTypeGateProfile
     /// <summary>¿Admite un gravamen complementario? Misma precedencia perfil → familia.</summary>
     public bool ComplementaryPrendaAllowed(string? familyCode) =>
         AllowsComplementaryPrenda ?? ProcedureTypeLayers.FamiliaAcumulaComplementarios(familyCode);
+
+    /// <summary>
+    /// ADR-0051 — roles que firman el FUR. Lo declarado en el perfil manda; sin declaración (o con
+    /// arreglo vacío), <c>RequiresSeller</c> decide: con parte vendedora firman propietario y
+    /// comprador (comportamiento previo de <c>TRASPASO_STANDARD</c> y de todo tipo con
+    /// <c>requiresSeller:true</c>); sin ella, solo el comprador (matrícula, <c>OTROS</c>).
+    /// </summary>
+    public IReadOnlyList<string> ResolveSignatureActors() =>
+        SignatureActors.Count > 0
+            ? SignatureActors
+            : RequiresSeller ? ["OWNER", "BUYER"] : ["BUYER"];
+
+    /// <summary>
+    /// ¿Este trámite autogenera compraventa (ADR-0035)? Lo declarado en el perfil manda; sin
+    /// declaración, decide la combinación parte vendedora + familia TRASPASO — el comportamiento
+    /// previo a esta llave, sin excepción.
+    /// </summary>
+    public bool GeneratesSaleDocumentAllowed(string? familyCode) =>
+        GeneratesSaleDocument ?? (RequiresSeller && FamilyIsTraspaso(familyCode));
+
+    /// <summary>
+    /// ¿El FUR imprime bloque de avalúo comercial? Misma precedencia perfil → (vendedor + familia
+    /// TRASPASO) que <see cref="GeneratesSaleDocumentAllowed"/>.
+    /// </summary>
+    public bool HasAppraisalBlockAllowed(string? familyCode) =>
+        HasAppraisalBlock ?? (RequiresSeller && FamilyIsTraspaso(familyCode));
+
+    private static bool FamilyIsTraspaso(string? familyCode) =>
+        ProcedureFamilyCodes.FromCode(familyCode) == ProcedureFamily.Traspaso;
 
     /// <summary>
     /// ¿Este expediente tiene dimensión de prenda EN ABSOLUTO? Une los dos únicos caminos por los que

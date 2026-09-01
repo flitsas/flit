@@ -1,6 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Enums;
-using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -44,10 +44,15 @@ public sealed class TramiteFirmaAplicador(
             return ("mandato", mandatoError);
         }
 
-        var esTraspaso = instance.Family
-            == ProcedureFamily.Traspaso;
+        // ADR-0051 Decisión 4 — "firmar" significa firma de compraventa cuando el tipo la autogenera
+        // (GeneratesSaleDocumentAllowed), no cuando la familia es TRASPASO. TRASPASO_UNILATERAL declara
+        // `generatesSaleDocument:false` (no hay compraventa entre dos partes: el locatario ya tenía el
+        // vehículo por contrato de leasing), así que el encadenado cae a `furHandler` — solo el FUR con
+        // el sello del vendedor, sin compraventa que firmar.
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        var generaCompraventa = profile.GeneratesSaleDocumentAllowed(instance.ProcedureType?.Family);
 
-        if (esTraspaso)
+        if (generaCompraventa)
         {
             var (_, error) = await firmaHandler
                 .HandleAsync(instance.Id, tenantId, new SolicitarFirmaInput(parte, null), cancellationToken)

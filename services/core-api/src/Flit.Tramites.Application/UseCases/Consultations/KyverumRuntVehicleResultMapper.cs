@@ -108,12 +108,18 @@ public static class KyverumRuntVehicleResultMapper
             return new ConsultationCheck("estado_vehiculo", "Estado del vehículo", Unknown, Provider, "Sin información de estado");
 
         var isActivo = string.Equals(estado, "ACTIVO", StringComparison.OrdinalIgnoreCase);
+        var estadoDatos = ConsultationCheckDetail.Datos(("Estado", estado.Trim().ToUpperInvariant()));
+        // También en OK se dice lo que el RUNT respondió: la tarjeta quedaba con la pastilla verde y
+        // el cuerpo vacío, sin decir de dónde salía ese verde.
         return new ConsultationCheck(
             "estado_vehiculo",
             "Estado del vehículo",
             isActivo ? Ok : Fail,
             Provider,
-            isActivo ? null : $"Estado: {estado}");
+            // El mensaje repite los datos en una línea: respaldo si el campo estructurado se pierde
+            // por el camino, y para los expedientes cuyo pre-vuelo se guardó antes de que existiera.
+            ConsultationCheckDetail.Resumen(estadoDatos),
+            Datos: estadoDatos);
     }
 
     private static ConsultationCheck MapSoat(List<KyverumRuntSoat>? soat)
@@ -122,13 +128,23 @@ public static class KyverumRuntVehicleResultMapper
         if (soat is null || soat.Count == 0)
             return new ConsultationCheck("soat", "SOAT", Unknown, Provider, "Sin SOAT registrado");
 
-        var vigente = soat.Any(s => string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase));
+        var poliza = soat.FirstOrDefault(s =>
+            string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase));
+        var vigente = poliza is not null;
+        var soatDatos = vigente
+            ? ConsultationCheckDetail.Datos(
+                ("Vigente hasta", ConsultationCheckDetail.Fecha(poliza?.FechaVencimSoat)),
+                ("Póliza", poliza?.NumSoat),
+                ("Aseguradora", poliza?.RazonSocialAsegur))
+            : null;
+        // El detalle de la póliza vigente: es lo que el gestor puede contrastar con el certificado.
         return new ConsultationCheck(
             "soat",
             "SOAT",
             vigente ? Ok : Fail,
             Provider,
-            vigente ? null : "SOAT vencido o no vigente");
+            vigente ? ConsultationCheckDetail.Resumen(soatDatos) : "SOAT vencido o no vigente",
+            Datos: soatDatos);
     }
 
     private static ConsultationCheck MapTecnomecanica(List<KyverumRuntRtm>? rtm)
@@ -139,8 +155,22 @@ public static class KyverumRuntVehicleResultMapper
         if (rtm is null || rtm.Count == 0)
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "Sin información de tecnomecánica");
 
-        if (rtm.Any(t => string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase)))
-            return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Ok, Provider, null);
+        var revision = rtm.FirstOrDefault(t =>
+            string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase));
+        if (revision is not null)
+        {
+            var rtmDatos = ConsultationCheckDetail.Datos(
+                ("Vigente hasta", ConsultationCheckDetail.Fecha(revision.FechaVencimientoRvt)),
+                ("Certificado", revision.NumeCerti),
+                ("CDA", revision.NombreCda));
+            return new ConsultationCheck(
+                "tecnomecanica",
+                "Revisión técnico-mecánica",
+                Ok,
+                Provider,
+                ConsultationCheckDetail.Resumen(rtmDatos),
+                Datos: rtmDatos);
+        }
 
         if (rtm.All(t => string.Equals(t?.Vigente, "NO APLICA", StringComparison.OrdinalIgnoreCase)))
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "No aplica para este vehículo");
@@ -161,7 +191,11 @@ public static class KyverumRuntVehicleResultMapper
         var sinPrendas = !IsSi(vehiculo.Prendas);
 
         if (sinGravamenes && sinPrendas)
-            return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
+        {
+            return new ConsultationCheck(
+                "gravamenes", "Gravámenes y limitaciones", Ok, Provider,
+                "Sin gravámenes ni prendas registradas en el RUNT");
+        }
 
         return new ConsultationCheck(
             "gravamenes",
