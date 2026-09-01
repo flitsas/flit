@@ -9,17 +9,25 @@ using QuestPDF.Infrastructure;
 namespace Flit.Infrastructure.Documents.Fur;
 
 /// <summary>
-/// Contrato de compraventa autogenerado por el sistema (traspaso), con el contenido y la disposición de
-/// la muestra oficial (recursos dllo membrete/PDF/compraventa-generado-sistema.pdf): texto de la
-/// declaración, fecha, placa de referencia, párrafo con las partes y sus casillas de tipo de documento,
-/// descripción del vehículo y bloques de firma con el sello de validación de identidad.
-/// <para><b>Sin encabezados personalizados</b> (decisión de negocio): este documento NO lleva el membrete
-/// FLIT ni pie de marca — es una declaración legal que debe presentarse limpia.</para>
+/// Contrato de compraventa autogenerado por el sistema (traspaso): declaración, fecha, placa,
+/// partes, descripción del vehículo y bloques de firma (sello de identidad o baúl).
+/// <para><b>ADR-0053</b>: lleva el membrete FLIT compartido (<see cref="FlitLetterhead"/>), igual que
+/// Mandato y Solicitud de trámite virtual. El pie con el nombre del documento lo estampa el
+/// consolidado (<see cref="FlitPdfStamper"/>), no este generador.</para>
 /// </summary>
 public static class FurCompraventaDocumentGenerator
 {
     private static readonly string[] MesesEs =
         ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+    private const float CellGapCm = 0.1f;
+    private const int VbCell = FlitRoundedCells.VbCell;
+
+    /// <summary>
+    /// Alto reservado para la estampa (baúl o, más adelante, imagen de firma). ~2–3 líneas a 9 pt,
+    /// sin línea horizontal: la guía de negocio deja aire abierto bajo el título del bloque.
+    /// </summary>
+    private const float FirmaEstampaAlto = 32f;
 
     // Tipos de documento que se marcan con casilla en el párrafo de cada parte (orden de la muestra).
     private static readonly (string Etiqueta, string[] Codigos)[] TiposDocumento =
@@ -48,82 +56,141 @@ public static class FurCompraventaDocumentGenerator
         {
             doc.Page(page =>
             {
-                page.Size(PageSizes.Letter);
-                // Márgenes ajustados (vertical más corto) para que el contenido quepa en UNA página con
-                // Poppins (más ancha que la Arial de la muestra) aun con los sellos/firmas de ambas partes.
-                page.MarginVertical(1.5f, Unit.Centimetre);
-                page.MarginHorizontal(2.5f, Unit.Centimetre);
+                // ADR-0053 — Carta + bandas de membrete; contenido flush con las bandas para que
+                // título, tabla de chips y ambas firmas quepan en UNA hoja (mismo criterio que
+                // Mandato HU #11034: se compacta caja, no el texto legal).
+                FlitLetterhead.ApplyTo(page);
                 page.DefaultTextStyle(t => t
                     .FontFamily(FlitDocumentTheme.FontRegular)
                     .FontSize(9)
                     .FontColor(Colors.Black));
-                // Sin Header/Footer: el documento no lleva encabezados personalizados.
 
-                page.Content().Column(col =>
+                // Cuerpo con aire normal arriba; el hueco libre de la hoja empuja las firmas al pie
+                // (no se compactan los párrafos para “llenar” la página).
+                FlitLetterhead.Content(page, FlitDocumentTheme.MarginCm, 0f).Column(col =>
                 {
-                    col.Spacing(6);
-
-                    col.Item().Text(
-                        "“Contrato de compraventa, documento o declaración en la que conste la transferencia "
-                        + "del derecho de dominio del vehículo celebrado con las exigencias de las normas civiles "
-                        + "y/o mercantiles”").Justify();
-
-                    col.Item().PaddingTop(6).Text(t =>
+                    col.Item().Column(cuerpo =>
                     {
-                        t.Span("Fecha: ");
-                        t.Span($"  {FechaLarga(data.FechaTramite)}  ").Underline();
+                        cuerpo.Spacing(6);
+
+                        cuerpo.Item().AlignCenter().Text("Contrato de Compraventa")
+                            .Bold().FontSize(14).FontColor(FlitDocumentTheme.DarkNavy);
+
+                        cuerpo.Item().PaddingTop(6).Text(t =>
+                        {
+                            t.Span("Fecha: ");
+                            t.Span(FechaLarga(data.FechaTramite));
+                        });
+
+                        cuerpo.Item().Text(t =>
+                        {
+                            t.Span("Ref. ");
+                            t.Span($"PLACA: {Val(data.Placa)}")
+                                .Bold()
+                                .FontColor(FlitDocumentTheme.PrimaryBlue);
+                        });
+
+                        cuerpo.Item().PaddingTop(6).Text(
+                            "“Contrato de compraventa, documento o declaración en la que conste la transferencia "
+                            + "del derecho de dominio del vehículo celebrado con las exigencias de las normas civiles "
+                            + "y/o mercantiles”").Justify();
+
+                        cuerpo.Item().PaddingTop(6).Text(t =>
+                        {
+                            t.Justify();
+                            t.Span("Por el presente documento se hace constar la voluntad expresa que tiene por un lado ");
+                            t.Span(Val(vendedor?.Nombre)).Bold();
+                            t.Span(", identificado(a) con ");
+                            t.Span(Casillas(vendedor?.DocumentType));
+                            t.Span($" {Val(vendedor?.Documento)} en su condición de propietario(a) inscrito(a) de "
+                                + "transferir la propiedad del vehículo de la placa de la referencia a ");
+                            t.Span(Val(comprador?.Nombre)).Bold();
+                            t.Span(", identificado(a) con ");
+                            t.Span(Casillas(comprador?.DocumentType));
+                            t.Span($" {Val(comprador?.Documento)}, en razón a un negocio jurídico de compraventa, "
+                                + "realizado entre ambas partes. Negocio que tuvo un valor de ");
+                            t.Span($"$ {Moneda(data.ValorVenta)}").Bold();
+                        });
+
+                        TablaVehiculo(cuerpo, data);
+
+                        cuerpo.Item().PaddingTop(6).Text(
+                            "Lo anterior también se encuentra avalado a través de las firmas puestas en el formulario "
+                            + "de solicitud de trámite adjunto al presente.").Justify();
                     });
 
-                    col.Item().Text(t =>
+                    col.Item().Extend().AlignBottom().PaddingBottom(6).Column(firmas =>
                     {
-                        t.Span("Ref. ");
-                        t.Span($"PLACA: {Val(data.Placa)}").Bold();
+                        firmas.Item().Text("Cordialmente,");
+                        BloqueFirma(firmas, "FIRMA DEL PROPIETARIO ACTUAL", data, vendedor, "vendedor");
+                        BloqueFirma(firmas, "FIRMA DEL NUEVO PROPIETARIO", data, comprador, "comprador");
                     });
-
-                    col.Item().PaddingTop(6).Text(t =>
-                    {
-                        t.Justify();
-                        t.Span("Por el presente documento se hace constar la voluntad expresa que tiene por un lado ");
-                        t.Span(Val(vendedor?.Nombre)).Bold();
-                        t.Span(", identificado(a) con ");
-                        t.Span(Casillas(vendedor?.DocumentType));
-                        t.Span($" {Val(vendedor?.Documento)} en su condición de propietario(a) inscrito(a) de "
-                            + "transferir la propiedad del vehículo de la placa de la referencia a ");
-                        t.Span(Val(comprador?.Nombre)).Bold();
-                        t.Span(", identificado(a) con ");
-                        t.Span(Casillas(comprador?.DocumentType));
-                        t.Span($" {Val(comprador?.Documento)}, en razón a un negocio jurídico de compraventa, "
-                            + "realizado entre ambas partes. Negocio que tuvo un valor de ");
-                        t.Span($"$ {Moneda(data.ValorVenta)}").Bold();
-                    });
-
-                    col.Item().PaddingTop(8).Text("DESCRIPCIÓN DEL VEHICULO").Bold();
-                    col.Item().Text($"Marca: {Val(data.Vehiculo.Marca)}        "
-                        + $"Chasis: {Val(data.Vehiculo.NumeroChasis)}        "
-                        + $"Motor: {Val(data.Vehiculo.NumeroMotor)}");
-                    col.Item().Text($"Modelo: {Val(data.Vehiculo.Modelo)}        "
-                        + $"VIN: {Val(data.Vin)}        "
-                        + $"Referencia: {Val(data.Vehiculo.Linea)}");
-
-                    col.Item().PaddingTop(6).Text(
-                        "Lo anterior también se encuentra avalado a través de las firmas puestas en el formulario "
-                        + "de solicitud de trámite adjunto al presente.").Justify();
-
-                    col.Item().PaddingTop(6).Text("Cordialmente,");
-
-                    BloqueFirma(col, "FIRMA DEL PROPIETARIO ACTUAL", data, vendedor, "vendedor");
-                    BloqueFirma(col, "FIRMA DEL NUEVO PROPIETARIO", data, comprador, "comprador");
                 });
             });
         }).GeneratePdf();
     }
 
-    // Bloque de firma de una parte: título, imagen de la firma (si el baúl la resolvió), identificación y
-    // sello de validación de identidad. Sin firma validada se deja el espacio en blanco (no bloquea).
+    // Grilla 2×3 tipo chip (cabecera azul + valor claro), mismo patrón que SOAT/RTM.
+    private static void TablaVehiculo(ColumnDescriptor col, FurDocumentData data)
+    {
+        col.Item().PaddingTop(8).AlignCenter().Text("DESCRIPCIÓN DEL VEHICULO")
+            .Bold().FontSize(10).FontColor(FlitDocumentTheme.DarkNavy);
+
+        col.Item().Column(tabla =>
+        {
+            tabla.Spacing(CellGapCm, Unit.Centimetre);
+            tabla.Item().Row(row =>
+            {
+                row.Spacing(CellGapCm, Unit.Centimetre);
+                Chip(row.RelativeItem(), "Marca", Val(data.Vehiculo.Marca), roundLeft: true, roundRight: false);
+                Chip(row.RelativeItem(), "Chasis", Val(data.Vehiculo.NumeroChasis), roundLeft: false, roundRight: false);
+                Chip(row.RelativeItem(), "Motor", Val(data.Vehiculo.NumeroMotor), roundLeft: false, roundRight: true);
+            });
+            tabla.Item().Row(row =>
+            {
+                row.Spacing(CellGapCm, Unit.Centimetre);
+                Chip(row.RelativeItem(), "Modelo", Val(data.Vehiculo.Modelo), roundLeft: true, roundRight: false);
+                Chip(row.RelativeItem(), "VIN", Val(data.Vin), roundLeft: false, roundRight: false);
+                Chip(row.RelativeItem(), "Referencia", Val(data.Vehiculo.Linea), roundLeft: false, roundRight: true);
+            });
+        });
+    }
+
+    private static void Chip(IContainer container, string label, string? value, bool roundLeft, bool roundRight)
+    {
+        container.Column(c =>
+        {
+            FlitRoundedCells.Cell(
+                c.Item(),
+                FlitRoundedCells.HeaderBg,
+                tl: roundLeft,
+                tr: roundRight,
+                br: false,
+                bl: false,
+                VbCell,
+                inner => inner.PaddingHorizontal(6).AlignCenter().AlignMiddle()
+                    .Text(label).Bold().FontSize(8).FontColor(FlitRoundedCells.White));
+            FlitRoundedCells.Cell(
+                c.Item(),
+                FlitRoundedCells.ValueBg,
+                tl: false,
+                tr: false,
+                br: roundRight,
+                bl: roundLeft,
+                VbCell,
+                inner => inner.PaddingHorizontal(6).AlignCenter().AlignMiddle()
+                    .Text(Val(value)).FontSize(8).FontColor(FlitDocumentTheme.DarkNavy));
+        });
+    }
+
+    // Bloque de firma de una parte: título, hueco de estampa (sin línea), identificación y sello.
+    // Sin firma validada el hueco queda en blanco (no bloquea).
     private static void BloqueFirma(
         ColumnDescriptor col, string titulo, FurDocumentData data, DocumentParte? parte, string rol)
     {
-        col.Item().PaddingTop(8).Text(titulo);
+        col.Item().PaddingTop(8).Text(titulo)
+            .Bold()
+            .FontColor(FlitDocumentTheme.DarkNavy);
 
         // Bug #11146 — la imagen del baúl y el sello de identidad son EXCLUYENTES: una parte firma de
         // una sola manera. Antes se pintaba la imagen y, más abajo, el sello sin condición alguna, así
@@ -136,34 +203,27 @@ public static class FurCompraventaDocumentGenerator
                 ? imagen
                 : null;
 
+        var hueco = col.Item().PaddingTop(2).Height(FirmaEstampaAlto);
         if (firmaBaul is not null)
-        {
-            col.Item().PaddingTop(2).Height(32).Image(firmaBaul).FitHeight();
-        }
-        else
-        {
-            col.Item().PaddingTop(12).Width(240).LineHorizontal(0.5f);
-        }
+            hueco.Image(firmaBaul).FitHeight();
 
         if (parte is null)
             return;
 
         if (parte.EsJuridica)
         {
-            col.Item().Text($"Razón Social: {Val(parte.Nombre)}").FontSize(9);
-            col.Item().Text($"NIT: {Val(parte.Documento)}").FontSize(9);
+            DatoFirmante(col, $"Razón Social: {Val(parte.Nombre)}");
+            DatoFirmante(col, $"NIT: {Val(parte.Documento)}");
             // Quien firma por la empresa es su REPRESENTANTE LEGAL, así que el bloque tiene que
             // identificarlo: sin su nombre y documento la firma no queda atribuida a nadie. Los datos ya
             // viajan en DocumentParte (ADR-0036); antes simplemente no se imprimían aquí.
-            col.Item().Text($"Representante legal: {Val(parte.RepresentanteLegalNombre)}").FontSize(9);
-            col.Item()
-                .Text($"{TipoDocRepresentante(parte)}: {Val(parte.RepresentanteLegalDocumento)}")
-                .FontSize(9);
+            DatoFirmante(col, $"Representante legal: {Val(parte.RepresentanteLegalNombre)}");
+            DatoFirmante(col, $"{TipoDocRepresentante(parte)}: {Val(parte.RepresentanteLegalDocumento)}");
         }
         else
         {
-            col.Item().Text($"Nombre: {Val(parte.Nombre)}").FontSize(9);
-            col.Item().Text($"{TipoDocParte(parte)}: {Val(parte.Documento)}").FontSize(9);
+            DatoFirmante(col, $"Nombre: {Val(parte.Nombre)}");
+            DatoFirmante(col, $"{TipoDocParte(parte)}: {Val(parte.Documento)}");
         }
 
         // Trazabilidad de la firma, en el mismo lugar sea cual sea el mecanismo:
@@ -178,6 +238,9 @@ public static class FurCompraventaDocumentGenerator
         if (sello is not null)
             col.Item().Text(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2);
     }
+
+    private static void DatoFirmante(ColumnDescriptor col, string linea) =>
+        col.Item().Text(linea).Bold().FontSize(9).FontColor(FlitDocumentTheme.DarkNavy);
 
     // Casillas de tipo de documento: se marca con [X] la del tipo de la parte y el resto en blanco.
     private static string Casillas(string? documentType)

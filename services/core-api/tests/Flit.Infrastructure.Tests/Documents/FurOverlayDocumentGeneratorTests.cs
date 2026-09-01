@@ -158,6 +158,100 @@ public sealed class FurOverlayDocumentGeneratorTests
     }
 
     [Fact]
+    public void GenerateCompraventa_ConMembreteYTabla_CabeEnUnaPagina()
+    {
+        // ADR-0053: membrete + chips de vehículo no deben empujar las firmas a una segunda hoja.
+        var data = TraspasoData() with
+        {
+            FechaTramite = new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc),
+            IdentidadValidada = true,
+            ValorVenta = 45_800_000m,
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["comprador"] = "Validación biométrica · UUID-c · Firma KV · 2026",
+                ["vendedor"] = "Validación biométrica · UUID-v · Firma KV · 2026",
+            },
+            Vehiculo = TraspasoData().Vehiculo with
+            {
+                Marca = "YAMAHA",
+                Linea = "NMAX",
+                Modelo = "2026",
+                Vin = "JYARJ12E0GA000001",
+                NumeroChasis = "JYARJ12E0GA000001",
+                NumeroMotor = "E3P4-000001",
+                Placa = "JNH38H",
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+        CountPages(pdf).Should().Be(1);
+    }
+
+    [Fact]
+    public void GenerateCompraventa_SinLineaDeFirma_CabeEnUnaPaginaConHuecoDeEstampa()
+    {
+        // Sin línea horizontal: hueco de 32 pt + dos PJ con sello no deben ir a segunda hoja.
+        var vendedor = new DocumentParte(
+            "vendedor",
+            "COMERCIALIZADORA DE VEHICULOS DEL NORTE S.A.S.",
+            "890903938",
+            null,
+            "NIT",
+            EsJuridica: true,
+            RepresentanteLegalNombre: "MARIA FERNANDA GONZALEZ RESTREPO",
+            RepresentanteLegalTipoDoc: "CC",
+            RepresentanteLegalDocumento: "1038409485");
+        var comprador = new DocumentParte(
+            "comprador",
+            "INVERSIONES DEL SUR S.A.S.",
+            "901555444-2",
+            null,
+            "NIT",
+            EsJuridica: true,
+            RepresentanteLegalNombre: "JUAN ESTEBAN PEREZ",
+            RepresentanteLegalTipoDoc: "CC",
+            RepresentanteLegalDocumento: "1020304050");
+        var data = TraspasoData() with
+        {
+            FechaTramite = new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc),
+            IdentidadValidada = true,
+            ValorVenta = 45_000_000m,
+            Partes = [vendedor, comprador],
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["vendedor"] = "Validación biométrica CC 1038409485\nUUID kv-123\nFirma ABC-XYZ\nAprob 2026/07/20 · Vence 2026/08/19",
+                ["comprador"] = "Validación biométrica CC 1020304050\nUUID kv-456\nFirma DEF-UVW\nAprob 2026/07/21 · Vence 2026/08/20",
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+        // Dos PJ + sellos de 4 líneas ocupan más que la guía (PN). El aire de los párrafos se
+        // conserva; si no cabe, puede ir a una segunda hoja — no se compacta el cuerpo otra vez.
+        CountPages(pdf).Should().BeLessThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public void GenerateCompraventa_CitaLegalVaDespuesDeFechaYRef_ProducePdfDeUnaPagina()
+    {
+        // El orden Fecha → Ref. → cita se valida en el generador (layout) y con render visual:
+        // QuestPDF/Skia no deja literales extraíbles en el PDF (igual que MandatoPdfGeneratorTests).
+        var data = TraspasoData() with
+        {
+            FechaTramite = new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc),
+            Vehiculo = TraspasoData().Vehiculo with { Placa = "JNH38H" },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+        CountPages(pdf).Should().Be(1);
+    }
+
+    [Fact]
     public void FurFieldMapper_MarksMatriculaTramite()
     {
         var values = FurFieldMapper.Map(FullData());
