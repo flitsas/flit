@@ -122,7 +122,11 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
     await userEvent.selectOptions(select, "");
 
     await waitFor(() => {
-      expect(vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0].status).toBeUndefined();
+      const ultima = vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0];
+      // Sin este `toBeDefined`, un array de llamadas vacío daría `undefined` igual y la
+      // aserción pasaría sin haber comprobado nada.
+      expect(ultima).toBeDefined();
+      expect(ultima?.status).toBeUndefined();
     });
   });
 
@@ -149,7 +153,7 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
     renderSection();
 
     await waitFor(() => {
-      expect(vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0].status).toBe("entregado");
+      expect(vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0]?.status).toBe("entregado");
     });
 
     const select = await abrirFiltros();
@@ -167,7 +171,7 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
       expect(vi.mocked(fetchOtClientProcedures)).toHaveBeenCalled();
     });
     expect(
-      vi.mocked(fetchOtClientProcedures).mock.calls.every((c) => c[0].status !== "borrador"),
+      vi.mocked(fetchOtClientProcedures).mock.calls.every((c) => c[0]?.status !== "borrador"),
     ).toBe(true);
 
     const select = await abrirFiltros();
@@ -180,7 +184,7 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
     renderSection();
 
     await waitFor(() => {
-      expect(vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0].status).toBe("aprobado");
+      expect(vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0]?.status).toBe("aprobado");
     });
 
     const select = await abrirFiltros();
