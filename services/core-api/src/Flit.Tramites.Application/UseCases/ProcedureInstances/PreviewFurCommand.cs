@@ -72,6 +72,13 @@ public sealed class PreviewFurHandler(
         if (!FurPreviewSample.TryParsePrenda(request.Prenda, out var prenda))
             return new PreviewFurResult(PreviewFurStatus.BadRequest, "prenda_invalida", null, ["ninguna", "inscripcion", "levantamiento", "ambas"]);
 
+        // HU #11701 — vehicle_kind se valida ANTES del lookup del tipo: un "barco" con un Guid
+        // inexistente es 400, no 404. vehicle_class (catálogo) sustituye a vehicle_kind.
+        string? vehicleKind = null;
+        if (string.IsNullOrWhiteSpace(request.VehicleClass)
+            && !FurPreviewSample.TryParseVehicleKind(request.VehicleKind, out vehicleKind))
+            return new PreviewFurResult(PreviewFurStatus.BadRequest, "vehicle_kind_invalido", null, AllowedVehicleKinds);
+
         var type = await procedureTypes.GetByIdAsync(request.ProcedureTypeId.Value, ct).ConfigureAwait(false);
         if (type is null)
             return new PreviewFurResult(PreviewFurStatus.NotFound, "procedure_type_no_encontrado", null, null);
@@ -103,9 +110,7 @@ public sealed class PreviewFurHandler(
         }
         else
         {
-            if (!FurPreviewSample.TryParseVehicleKind(request.VehicleKind, out var vehicleKind))
-                return new PreviewFurResult(PreviewFurStatus.BadRequest, "vehicle_kind_invalido", null, AllowedVehicleKinds);
-
+            ArgumentNullException.ThrowIfNull(vehicleKind);
             data = FurPreviewSample.Build(
                 type.Code,
                 type.Family,
