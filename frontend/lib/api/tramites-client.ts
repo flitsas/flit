@@ -9,6 +9,7 @@ import type {
   BiometricParte,
   BiometricValidation,
   BiometricValidationsResponse,
+  FirmaBaulActorCoberturaDto,
   ChecklistView,
   CommercialData,
   SuggestedCommercialValue,
@@ -1442,7 +1443,12 @@ export const tramitesClient = {
   listBiometricExpediente: async (
     instanceId: string,
     tenantId?: string,
-  ): Promise<{ validations: BiometricValidation[]; firmaBaulPartes: string[] }> => {
+  ): Promise<{
+    validations: BiometricValidation[];
+    firmaBaulPartes: string[];
+    /** ADR-0053 (Múltiple Propietario) — cobertura del baúl por actor (documento del RL + ordinal). */
+    firmaBaulActores: FirmaBaulActorCoberturaDto[];
+  }> => {
     const res = await request<BiometricValidationsResponse>(
       `/api/v1/tramites/instances/${instanceId}/biometric`,
       { headers: tenantHeader(tenantId) },
@@ -1450,6 +1456,7 @@ export const tramitesClient = {
     return {
       validations: res?.validations ?? [],
       firmaBaulPartes: res?.firmaBaulPartes ?? [],
+      firmaBaulActores: res?.firmaBaulActores ?? [],
     };
   },
 

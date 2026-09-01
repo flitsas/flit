@@ -365,65 +365,105 @@ describe('actorsOrderedByOrdinal', () => {
 });
 
 describe('identityStatusForActor', () => {
-  const comprador1 = { rol: 'comprador' as const, numeroDocumento: '111', personType: 'natural' as const };
-  const comprador2Juridico = {
-    rol: 'comprador' as const,
-    numeroDocumento: '900222333',
-    personType: 'juridical' as const,
-  };
+  // `numeroDocumento` del actor 2 es su NIT -- a proposito distinto del documento del sujeto de
+  // identidad (el representante legal) que viajaria en `BiometricValidation.documentNumber` o en
+  // `FirmaBaulActorCoberturaDto.documentNumber`. La correlacion real es por `ordinal`, nunca por
+  // este documento -- ver el caso "no confunde... por NIT" mas abajo.
+  const comprador1 = { rol: 'comprador' as const, numeroDocumento: '111' };
+  const comprador2Juridico = { rol: 'comprador' as const, numeroDocumento: '900222333' };
+  const comprador3Juridico = { rol: 'comprador' as const, numeroDocumento: '900444555' };
 
-  it('usa la validación biométrica propia, correlacionada por documento', () => {
+  it('usa la validacion biometrica propia, correlacionada por ordinal', () => {
     const biometric = [
-      { documentNumber: '111', partyRole: 'comprador' as const, status: 'aprobado' as const },
+      { documentNumber: '111', partyRole: 'comprador' as const, status: 'aprobado' as const, ordinal: 1 },
     ];
-    expect(identityStatusForActor(comprador1, biometric)).toEqual({
+    expect(identityStatusForActor(comprador1, 1, biometric)).toEqual({
       label: 'Identidad aprobada',
       tone: 'success',
     });
   });
 
-  it('no confunde la validación de OTRO copropietario del mismo lado (mismo rol, distinto documento)', () => {
+  it('no confunde la validacion de OTRO copropietario del mismo lado (mismo rol, distinto ordinal)', () => {
     const biometric = [
-      { documentNumber: '999-de-otro-actor', partyRole: 'comprador' as const, status: 'aprobado' as const },
+      { documentNumber: '999', partyRole: 'comprador' as const, status: 'aprobado' as const, ordinal: 2 },
     ];
-    expect(identityStatusForActor(comprador1, biometric).label).toBe('Pendiente');
+    expect(identityStatusForActor(comprador1, 1, biometric).label).toBe('Pendiente');
   });
 
-  it('mapea rechazado/vencido/en_proceso con tonos distintos (para que "a quién le falta" se note)', () => {
+  it('para persona juridica, el NIT del actor NO sirve para correlacionar -- solo el ordinal', () => {
+    // La fila biometrica trae el documento del REPRESENTANTE LEGAL (sujeto de identidad), no el NIT
+    // de la compania: comparar contra `comprador2Juridico.numeroDocumento` daria falso negativo.
+    const biometric = [
+      { documentNumber: '80112233', partyRole: 'comprador' as const, status: 'aprobado' as const, ordinal: 2 },
+    ];
+    expect(identityStatusForActor(comprador2Juridico, 2, biometric)).toEqual({
+      label: 'Identidad aprobada',
+      tone: 'success',
+    });
+  });
+
+  it('mapea rechazado/vencido/en_proceso con tonos distintos (para que "a quien le falta" se note)', () => {
     expect(
-      identityStatusForActor(comprador1, [
-        { documentNumber: '111', partyRole: 'comprador', status: 'rechazado' },
+      identityStatusForActor(comprador1, 1, [
+        { documentNumber: '111', partyRole: 'comprador', status: 'rechazado', ordinal: 1 },
       ]),
     ).toEqual({ label: 'Identidad rechazada', tone: 'danger' });
     expect(
-      identityStatusForActor(comprador1, [
-        { documentNumber: '111', partyRole: 'comprador', status: 'expirado' },
+      identityStatusForActor(comprador1, 1, [
+        { documentNumber: '111', partyRole: 'comprador', status: 'expirado', ordinal: 1 },
       ]),
     ).toEqual({ label: 'Identidad vencida', tone: 'danger' });
     expect(
-      identityStatusForActor(comprador1, [
-        { documentNumber: '111', partyRole: 'comprador', status: 'en_proceso' },
+      identityStatusForActor(comprador1, 1, [
+        { documentNumber: '111', partyRole: 'comprador', status: 'en_proceso', ordinal: 1 },
       ]),
     ).toEqual({ label: 'Validación en proceso', tone: 'info' });
   });
 
-  it('sin validación propia, persona jurídica cubierta por el baúl del lado cae a "Firma del baúl"', () => {
-    expect(identityStatusForActor(comprador2Juridico, [], ['comprador'])).toEqual({
+  it('sin validacion propia, cubierto por el baul DE ESE ACTOR (ordinal) cae a "Firma del baul"', () => {
+    const firmaBaulActores = [{ parte: 'comprador' as const, documentNumber: '80112233', ordinal: 2 }];
+    expect(identityStatusForActor(comprador2Juridico, 2, [], firmaBaulActores)).toEqual({
       label: 'Firma del baúl',
       tone: 'info',
     });
   });
 
-  it('persona natural NO usa la aproximación del baúl (esa cobertura es solo para el RL de jurídicas)', () => {
-    expect(identityStatusForActor(comprador1, [], ['comprador']).label).toBe('Pendiente');
+  it('dos actores juridicos del mismo lado: uno cubierto por el baul, el otro NO -- cada uno con su estado correcto', () => {
+    // El dato real (ADR-0053): `firmaBaulActores` reporta SOLO al ordinal cubierto, no al lado
+    // entero -- antes de este cierre, la aproximacion por `firmaBaulPartes` (a nivel de rol) habria
+    // marcado a AMBOS como cubiertos con que uno solo lo estuviera.
+    const firmaBaulActores = [{ parte: 'comprador' as const, documentNumber: '80112233', ordinal: 2 }];
+    expect(identityStatusForActor(comprador2Juridico, 2, [], firmaBaulActores)).toEqual({
+      label: 'Firma del baúl',
+      tone: 'info',
+    });
+    expect(identityStatusForActor(comprador3Juridico, 3, [], firmaBaulActores)).toEqual({
+      label: 'Pendiente',
+      tone: 'warning',
+    });
   });
 
-  it('sin nada: "Pendiente" — nunca un falso aprobado por defecto', () => {
-    expect(identityStatusForActor(comprador1, [], []).tone).toBe('warning');
+  it('sin nada: "Pendiente" -- nunca un falso aprobado por defecto', () => {
+    expect(identityStatusForActor(comprador1, 1, [], []).tone).toBe('warning');
   });
 
-  it('partyRole null (matrícula, actor único histórico) también correlaciona por documento', () => {
-    const biometric = [{ documentNumber: '111', partyRole: null, status: 'aprobado' as const }];
-    expect(identityStatusForActor(comprador1, biometric).label).toBe('Identidad aprobada');
+  it('partyRole null (matricula, actor unico historico) tambien correlaciona por ordinal', () => {
+    const biometric = [{ documentNumber: '111', partyRole: null, status: 'aprobado' as const, ordinal: 1 }];
+    expect(identityStatusForActor(comprador1, 1, biometric).label).toBe('Identidad aprobada');
+  });
+
+  it('validacion historica sin ordinal (previa a ADR-0053) cae al fallback por documento', () => {
+    const biometric = [
+      { documentNumber: '111', partyRole: 'comprador' as const, status: 'aprobado' as const, ordinal: null },
+    ];
+    expect(identityStatusForActor(comprador1, 1, biometric).label).toBe('Identidad aprobada');
+  });
+
+  it('fallback por documento no aplica si el documento del actor esta vacio', () => {
+    const sinDocumento = { rol: 'comprador' as const, numeroDocumento: '' };
+    const biometric = [
+      { documentNumber: '', partyRole: 'comprador' as const, status: 'aprobado' as const, ordinal: null },
+    ];
+    expect(identityStatusForActor(sinDocumento, 1, biometric).label).toBe('Pendiente');
   });
 });

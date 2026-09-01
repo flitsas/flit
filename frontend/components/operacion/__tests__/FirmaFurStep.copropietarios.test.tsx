@@ -8,7 +8,11 @@
 // conecta correctamente al DOM.
 import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
-import type { BiometricValidation, ProcedureActor } from '@/lib/api/types/procedure-runtime';
+import type {
+  BiometricValidation,
+  FirmaBaulActorCoberturaDto,
+  ProcedureActor,
+} from '@/lib/api/types/procedure-runtime';
 import { CopropietariosEstadoSection } from '@/components/operacion/FirmaFurStep';
 
 function comprador(overrides: Partial<ProcedureActor> = {}): ProcedureActor {
@@ -43,6 +47,8 @@ function bio(overrides: Partial<BiometricValidation> = {}): BiometricValidation 
   };
 }
 
+const NO_BAUL: FirmaBaulActorCoberturaDto[] = [];
+
 describe('CopropietariosEstadoSection — Múltiple Propietario', () => {
   it('con un solo actor por lado, no pinta nada (cero regresión: el resumen embebido ya lo cubre)', () => {
     render(
@@ -50,7 +56,7 @@ describe('CopropietariosEstadoSection — Múltiple Propietario', () => {
         titulo="Comprador"
         actores={[comprador()]}
         biometric={[]}
-        firmaBaulPartes={[]}
+        firmaBaulActores={NO_BAUL}
       />,
     );
     expect(screen.queryByRole('heading')).toBeNull();
@@ -59,7 +65,7 @@ describe('CopropietariosEstadoSection — Múltiple Propietario', () => {
 
   it('lista vacía no pinta nada', () => {
     const { container } = render(
-      <CopropietariosEstadoSection titulo="Comprador" actores={[]} biometric={[]} firmaBaulPartes={[]} />,
+      <CopropietariosEstadoSection titulo="Comprador" actores={[]} biometric={[]} firmaBaulActores={NO_BAUL} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -89,7 +95,7 @@ describe('CopropietariosEstadoSection — Múltiple Propietario', () => {
         titulo="Comprador"
         actores={actores}
         biometric={biometric}
-        firmaBaulPartes={[]}
+        firmaBaulActores={NO_BAUL}
       />,
     );
 
@@ -119,7 +125,7 @@ describe('CopropietariosEstadoSection — Múltiple Propietario', () => {
         titulo="Comprador"
         actores={actores}
         biometric={[]}
-        firmaBaulPartes={[]}
+        firmaBaulActores={NO_BAUL}
       />,
     );
 
@@ -141,7 +147,7 @@ describe('CopropietariosEstadoSection — Múltiple Propietario', () => {
         titulo="Comprador"
         actores={actores}
         biometric={biometric}
-        firmaBaulPartes={[]}
+        firmaBaulActores={NO_BAUL}
       />,
     );
 
@@ -159,11 +165,61 @@ describe('CopropietariosEstadoSection — Múltiple Propietario', () => {
         titulo="Locatario"
         actores={actores}
         biometric={[]}
-        firmaBaulPartes={[]}
+        firmaBaulActores={NO_BAUL}
       />,
     );
     expect(screen.getByText('Copropietarios — Locatario')).toBeInTheDocument();
     expect(screen.getByText(/Locatario 1 ·/)).toBeInTheDocument();
     expect(screen.getByText(/Locatario 2 ·/)).toBeInTheDocument();
+  });
+
+  // ADR-0053 — antes de este cierre, la cobertura del baúl solo se conocía por LADO
+  // (`firmaBaulPartes`): con dos copropietarios jurídicos, si UNO tenía baúl vigente, la aproximación
+  // marcaba a AMBOS como cubiertos. `firmaBaulActores` es el dato real, por documento del
+  // representante legal + ordinal — este es el caso exacto que antes no se podía distinguir.
+  it('dos copropietarios jurídicos, uno cubierto por el baúl y el otro no: cada uno con su estado correcto', () => {
+    const actores = [
+      comprador({
+        tipoDocumento: 'NIT',
+        numeroDocumento: '900111222',
+        nombreCompleto: 'Compañía Uno SAS',
+        personType: 'juridical',
+        ordinal: 1,
+        porcentaje: 50,
+        representanteLegal: { tipoDocumento: 'CC', numeroDocumento: '80100100' },
+      }),
+      comprador({
+        tipoDocumento: 'NIT',
+        numeroDocumento: '900333444',
+        nombreCompleto: 'Compañía Dos SAS',
+        personType: 'juridical',
+        ordinal: 2,
+        porcentaje: 50,
+        representanteLegal: { tipoDocumento: 'CC', numeroDocumento: '80200200' },
+      }),
+    ];
+    // Solo el ordinal=1 tiene baúl vigente (documento del SU representante legal, no el NIT de
+    // ninguna de las dos compañías) — el ordinal=2 no aparece en la lista en absoluto.
+    const firmaBaulActores: FirmaBaulActorCoberturaDto[] = [
+      { parte: 'comprador', documentNumber: '80100100', ordinal: 1 },
+    ];
+
+    render(
+      <CopropietariosEstadoSection
+        titulo="Comprador"
+        actores={actores}
+        biometric={[]}
+        firmaBaulActores={firmaBaulActores}
+      />,
+    );
+
+    const items = screen.getAllByRole('listitem');
+    expect(items).toHaveLength(2);
+    expect(within(items[0]).getByText(/Comprador 1 · Compañía Uno SAS/)).toBeInTheDocument();
+    expect(within(items[0]).getByText('Firma del baúl')).toBeInTheDocument();
+
+    expect(within(items[1]).getByText(/Comprador 2 · Compañía Dos SAS/)).toBeInTheDocument();
+    expect(within(items[1]).getByText('Pendiente')).toBeInTheDocument();
+    expect(within(items[1]).queryByText('Firma del baúl')).toBeNull();
   });
 });

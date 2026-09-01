@@ -15,6 +15,7 @@ import type {
   ActorRol,
   BiometricEstado,
   BiometricValidation,
+  FirmaBaulActorCoberturaDto,
   ProcedureActor,
 } from '@/lib/api/types/procedure-runtime';
 
@@ -269,23 +270,20 @@ export function withOwnershipFields(actors: ProcedureActor[]): ProcedureActor[] 
 
 // ── Estado de identidad/firma por actor (pantallas de solo lectura) ──────────────────────────────
 //
-// `FirmaFurStep.tsx` (resumen previo a radicar) y `TramiteDetalleActores.tsx` (modal de detalle)
-// necesitan mostrar, por CADA copropietario, si ya validó su identidad — "el gestor tiene que poder
-// ver a quién le falta" (no solo un agregado por lado que puede decir "falta 1" con 3 pendientes).
+// `FirmaFurStep.tsx` (resumen previo a radicar) necesita mostrar, por CADA copropietario, si ya
+// validó su identidad — "el gestor tiene que poder ver a quién le falta" (no solo un agregado por
+// lado que puede decir "falta 1" con 3 pendientes).
 //
-// Dato disponible HOY: `BiometricValidation[]` (GET .../biometric-validations, ya lo consume
-// `FirmaFurStep.tsx`) trae `documentNumber` por fila — la correlación por documento que el diseño
-// (ADR-0053 §1, Opción A) ya daba por sentada ("`procedure_instance_biometric_validations` YA es
-// 1:N por `PartyRole`+`DocumentNumber`"). Este helper correlaciona por ESE documento, no por rol a
-// secas, así que si el backend hoy solo persiste/devuelve la fila del ordinal=1 (la brecha que el
-// backend-agent está cerrando en paralelo — ver nota de datos faltantes en el handoff), los
-// agregados simplemente no encuentran fila y caen a "Pendiente": no hay error, pero tampoco hay
-// falso positivo.
+// Correlación por ORDINAL, no por documento — y a propósito: `documentNumber` en
+// `BiometricValidationDto` y en `FirmaBaulActorCoberturaDto` es el documento del SUJETO de
+// identidad, que para persona JURÍDICA es el representante legal, no el NIT de la compañía
+// (`actor.numeroDocumento`). Comparar contra el NIT ahí daría un falso negativo permanente para
+// cualquier actor jurídico. `ordinal` (ADR-0053, en ambos DTOs) evita esa ambigüedad por completo:
+// identifica la fila sin necesidad de saber cuál documento es "el" del actor.
 //
-// Dato NO disponible por actor (aproximado por LADO): `firmaBaulPartes`/`vaultCoveredPartes` son
-// `BiometricParte[]` (comprador/vendedor), no una lista de documentos — no distinguen cuál
-// copropietario jurídico de un mismo lado está cubierto por el baúl. Se usa como aproximación
-// best-effort (documentado en la UI) mientras el backend no exponga esa cobertura por actor.
+// Con `ordinal` ausente (`null`) en una fila — validación histórica/huérfana previa a ADR-0053 — se
+// cae a comparar por documento como antes (correcto para persona natural, que es el caso de esas
+// filas viejas: la firma del baúl no existía como concepto "por actor" hasta este cierre).
 export interface ActorIdentityStatus {
   label: string;
   tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
@@ -302,28 +300,31 @@ const BIOMETRIC_ESTADO_STATUS: Record<BiometricEstado, ActorIdentityStatus> = {
 };
 
 /**
- * Estado de identidad/firma de UN actor, para pintar en las pantallas de solo lectura. Prioridad:
- * 1) validación biométrica propia (correlacionada por documento — ver nota arriba), 2) cobertura de
- * firma del baúl aproximada por lado (solo si es persona jurídica), 3) "Pendiente" (nadie ha hecho
- * nada por esta persona todavía — el caso por defecto, nunca un falso "aprobado").
+ * Estado de identidad/firma de UN actor (identificado por `rol` + `ordinal`), para pintar en las
+ * pantallas de solo lectura. Prioridad: 1) validación biométrica propia (correlacionada por
+ * `ordinal`, con fallback a documento para filas históricas sin `ordinal`), 2) cobertura de firma
+ * del baúl DE ESE ACTOR (`firmaBaulActores`, ADR-0053 — dato real, ya no aproximado por lado),
+ * 3) "Pendiente" (nadie ha hecho nada por esta persona todavía — el caso por defecto, nunca un
+ * falso "aprobado").
  */
 export function identityStatusForActor(
-  actor: Pick<ProcedureActor, 'rol' | 'numeroDocumento' | 'personType'>,
-  biometric: Pick<BiometricValidation, 'documentNumber' | 'partyRole' | 'status'>[],
-  firmaBaulPartes: readonly string[] = [],
+  actor: Pick<ProcedureActor, 'rol' | 'numeroDocumento'>,
+  ordinal: number,
+  biometric: readonly Pick<BiometricValidation, 'documentNumber' | 'partyRole' | 'status' | 'ordinal'>[],
+  firmaBaulActores: readonly Pick<FirmaBaulActorCoberturaDto, 'parte' | 'ordinal'>[] = [],
 ): ActorIdentityStatus {
   const numero = actor.numeroDocumento.trim();
-  const bio = numero
-    ? biometric.find(
-        (b) =>
-          b.documentNumber.trim() === numero &&
-          (b.partyRole === actor.rol || b.partyRole === null),
-      )
-    : undefined;
+  const mismaParte = (partyRole: string | null) => partyRole === actor.rol || partyRole === null;
+  const bio = biometric.find((b) => {
+    if (!mismaParte(b.partyRole)) return false;
+    if (b.ordinal != null) return b.ordinal === ordinal;
+    return numero ? b.documentNumber.trim() === numero : false;
+  });
   if (bio) {
     return BIOMETRIC_ESTADO_STATUS[bio.status] ?? { label: bio.status, tone: 'neutral' };
   }
-  if (actor.personType === 'juridical' && firmaBaulPartes.includes(actor.rol)) {
+  const cubiertoPorBaul = firmaBaulActores.some((c) => c.parte === actor.rol && c.ordinal === ordinal);
+  if (cubiertoPorBaul) {
     return { label: 'Firma del baúl', tone: 'info' };
   }
   return { label: 'Pendiente', tone: 'warning' };

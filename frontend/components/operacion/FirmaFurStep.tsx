@@ -31,6 +31,7 @@ import type {
   BiometricValidation,
   ChecklistItemView,
   FieldValue,
+  FirmaBaulActorCoberturaDto,
   InstanceStatus,
   Participant,
   ParticipantRol,
@@ -175,12 +176,13 @@ export function CopropietariosEstadoSection({
   titulo,
   actores,
   biometric,
-  firmaBaulPartes,
+  firmaBaulActores,
 }: {
   titulo: string;
   actores: ProcedureActor[];
   biometric: BiometricValidation[];
-  firmaBaulPartes: string[];
+  /** ADR-0053 — cobertura del baúl POR ACTOR (documento del RL + ordinal), no aproximada por lado. */
+  firmaBaulActores: FirmaBaulActorCoberturaDto[];
 }) {
   const ordenados = actorsOrderedByOrdinal(actores);
   if (ordenados.length < 2) return null;
@@ -189,7 +191,7 @@ export function CopropietariosEstadoSection({
       <WizardCardHeader title={`Copropietarios — ${titulo}`} />
       <ul className="space-y-1.5" aria-label={`Estado de identidad por copropietario — ${titulo}`}>
         {ordenados.map(({ item: actor, ordinal }) => {
-          const estado = identityStatusForActor(actor, biometric, firmaBaulPartes);
+          const estado = identityStatusForActor(actor, ordinal, biometric, firmaBaulActores);
           return (
             <li
               key={`${actor.rol}-${ordinal}`}
@@ -317,6 +319,9 @@ export function FirmaFurStep({
   // HU #11014 — partes cubiertas por la firma del baúl: el expediente las rotula como firmadas desde
   // el baúl en vez de hablar del certificado de validación de identidad.
   const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
+  // ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR (documento del RL + ordinal),
+  // dato real que reemplaza la aproximación por lado para `CopropietariosEstadoSection`.
+  const [firmaBaulActores, setFirmaBaulActores] = useState<FirmaBaulActorCoberturaDto[]>([]);
   // Decisión de prenda/gravamen (si el gestor ya eligió una opción en el paso previo).
   const [prenda, setPrenda] = useState<PrendaData | null>(null);
   // HU #10988 — fecha del trámite en el resumen (estampa FUR y documentos).
@@ -410,6 +415,7 @@ export function FirmaFurStep({
       if (bio.status === 'fulfilled') {
         setBiometric(bio.value.validations);
         setFirmaBaulPartes(bio.value.firmaBaulPartes);
+        setFirmaBaulActores(bio.value.firmaBaulActores);
       }
       if (chk.status === 'fulfilled') setChecklist(chk.value.items);
     } catch {
@@ -773,13 +779,13 @@ export function FirmaFurStep({
         titulo={rotulosPorRol?.vendedor?.trim() || 'Vendedor'}
         actores={vendedoresContact}
         biometric={biometric}
-        firmaBaulPartes={firmaBaulPartes}
+        firmaBaulActores={firmaBaulActores}
       />
       <CopropietariosEstadoSection
         titulo={rotulosPorRol?.comprador?.trim() || 'Comprador'}
         actores={compradoresContact}
         biometric={biometric}
-        firmaBaulPartes={firmaBaulPartes}
+        firmaBaulActores={firmaBaulActores}
       />
 
       <ExpedienteVisor

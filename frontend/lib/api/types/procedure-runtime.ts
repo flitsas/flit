@@ -1331,6 +1331,15 @@ export interface BiometricValidation {
   linkedProcedures?: LinkedProcedureRef[] | null;
   /** Fecha de registro (historial por persona: más reciente → más antigua). */
   createdAt?: string | null;
+  /**
+   * ADR-0053 (Múltiple Propietario) — posición (1..4) del actor de `partyRole` al que pertenece
+   * esta validación (1 = principal/solidario). Permite emparejar la fila con el actor SIN comparar
+   * documentos — necesario para persona jurídica, donde `documentNumber` es el del representante
+   * legal (el sujeto de identidad), no el NIT de la compañía: comparar contra `actor.numeroDocumento`
+   * ahí daría un falso negativo. `null` cuando no se pudo atribuir a un actor concreto (validación
+   * histórica/huérfana) — con 1 solo actor por lado (caso mayoritario) siempre trae `1`.
+   */
+  ordinal?: number | null;
 }
 
 /**
@@ -1412,6 +1421,26 @@ export interface BiometricValidationsResponse {
    * gestor corrige el dato. `null`/ausente cuando no hay ningún motivo que reportar.
    */
   motivosNoEnvio?: EnvioValidacionMotivo[] | null;
+  /**
+   * ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR específico (documento del
+   * representante legal + ordinal), aditivo a `firmaBaulPartes`. `firmaBaulPartes` sigue existiendo
+   * intacto pero es IMPRECISO A PROPÓSITO con 2+ actores del mismo rol (rol presente si AL MENOS un
+   * actor está cubierto) — usar `firmaBaulActores` para la cobertura exacta por actor. Null cuando
+   * ningún actor está cubierto por el baúl.
+   */
+  firmaBaulActores?: FirmaBaulActorCoberturaDto[] | null;
+}
+
+/**
+ * ADR-0053 (Múltiple Propietario) — cobertura del baúl de UN actor específico dentro de su rol.
+ * `documentNumber` es el documento del SUJETO de identidad (el representante legal — el baúl solo
+ * aplica a persona jurídica), NO el NIT de la compañía. `ordinal` es la clave de correlación
+ * recomendada: evita depender de esa distinción documento-de-actor vs. documento-del-RL.
+ */
+export interface FirmaBaulActorCoberturaDto {
+  parte: BiometricParte;
+  documentNumber: string;
+  ordinal: number;
 }
 
 /**

@@ -66,6 +66,7 @@ describe('TramiteDetalleModal', () => {
     vi.mocked(tramitesClient.listBiometricExpediente).mockResolvedValue({
       validations: [],
       firmaBaulPartes: ['vendedor'],
+      firmaBaulActores: [],
     });
   });
 
@@ -141,6 +142,7 @@ describe('TramiteDetalleModal — subsanación', () => {
     vi.mocked(tramitesClient.listBiometricExpediente).mockResolvedValue({
       validations: [],
       firmaBaulPartes: [],
+      firmaBaulActores: [],
     });
     vi.mocked(tramitesClient.startSubsanacion).mockResolvedValue({
       id: 'inst-1',
