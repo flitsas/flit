@@ -131,18 +131,17 @@ export function OwnershipTabsBar({
         {items.map((item) => {
           const isActive = item.index === activeIndex;
           const showRemove = isActive && item.removable && !readOnly;
+          // La píldora entera es el control: el borde, el fondo, la altura y el padding viven en
+          // el propio `<button role="tab">`, no en un `<div>` envolvente sin `onClick` — así toda
+          // su superficie (no solo el texto) cambia de pestaña al clic. La "×", cuando aplica, es
+          // un `<button>` HERMANO (nunca anidado dentro de otro botón) que completa visualmente la
+          // píldora: mismo borde/fondo/color, sin borde compartido en el punto de unión
+          // (`border-r-0`/`border-l-0`) para que se vea como una sola forma continua.
+          const pillStyle = isActive
+            ? { borderColor: '#557EFF', color: '#557EFF', background: 'rgba(85,126,255,0.08)' }
+            : { borderColor: '#DFE5ED', color: '#59677D', background: '#fff' };
           return (
-            <div
-              key={item.index}
-              className={`flex h-9 items-center gap-1.5 rounded-full border pl-3 text-xs font-semibold transition ${
-                showRemove ? 'pr-2' : 'pr-3'
-              }`}
-              style={
-                isActive
-                  ? { borderColor: '#557EFF', color: '#557EFF', background: 'rgba(85,126,255,0.08)' }
-                  : { borderColor: '#DFE5ED', color: '#59677D', background: '#fff' }
-              }
-            >
+            <div key={item.index} className="flex items-center">
               <button
                 type="button"
                 role="tab"
@@ -150,7 +149,10 @@ export function OwnershipTabsBar({
                 aria-selected={isActive}
                 aria-controls={hasPercentagePanel ? panelId : undefined}
                 onClick={() => onSelectTab(item.index)}
-                className="flex items-center gap-1.5 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                className={`flex h-9 items-center gap-1.5 border pl-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF] ${
+                  showRemove ? 'rounded-l-full border-r-0 pr-2' : 'rounded-full pr-3'
+                }`}
+                style={pillStyle}
               >
                 <span>{item.label}</span>{' '}
                 <span className="font-bold" style={{ color: colorDeParticipacion(item.percentage, allPct) }}>
@@ -162,7 +164,8 @@ export function OwnershipTabsBar({
                   type="button"
                   onClick={() => onRemove(item.index)}
                   aria-label={`Quitar ${item.label}`}
-                  className="grid place-items-center rounded opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                  className="grid h-9 place-items-center rounded-r-full border border-l-0 pl-1 pr-3 opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+                  style={pillStyle}
                 >
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
