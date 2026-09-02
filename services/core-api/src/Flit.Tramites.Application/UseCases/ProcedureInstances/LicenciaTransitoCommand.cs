@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.Json;
 using Flit.Tramites.Application.Ocr;
 using Flit.Tramites.Application.Storage;
@@ -37,11 +38,19 @@ public sealed class AdjuntarLicenciaTransitoHandler(
     /// <summary>Tipo documental de la Licencia de Tránsito en <c>procedure_instance_attachments</c>.</summary>
     public const string Tipo = "licencia_transito";
 
+    /// <param name="ocrPrecomputado">
+    /// HU #12042 — resultado que el frontend YA obtuvo al seleccionar el archivo, para mostrárselo al OT
+    /// ANTES de que decida. Si viene, NO se vuelve a analizar: además de no pagar dos veces, garantiza
+    /// que lo que queda registrado sea exactamente lo que el usuario vio. No es un detalle: en la prueba
+    /// en vivo dos análisis del mismo archivo devolvieron VIN distintos, y registrar uno mientras se
+    /// muestra el otro sería peor que no mostrar nada.
+    /// </param>
     public async Task<(AttachmentDto? Result, string? Error, DocumentOcrResponse? Ocr)> HandleAsync(
         Guid id,
         Guid tenantId,
         UploadAttachmentInput input,
         Guid? uploadedBy = null,
+        JsonObject? ocrPrecomputado = null,
         CancellationToken ct = default)
     {
         if (input.Content is null || input.SizeBytes <= 0)
@@ -62,7 +71,9 @@ public sealed class AdjuntarLicenciaTransitoHandler(
         // El stream se consume una sola vez y el OCR necesita los mismos bytes que se guardan,
         // así que se materializa antes de tocar el almacenamiento.
         var bytes = await LeerTodoAsync(input.Content, ct).ConfigureAwait(false);
-        var ocrResultado = await AnalizarSinBloquearAsync(bytes, ct).ConfigureAwait(false);
+        var ocrResultado = ocrPrecomputado is not null
+            ? new DocumentOcrResponse(true, TipoOcr, ocrPrecomputado)
+            : await AnalizarSinBloquearAsync(bytes, ct).ConfigureAwait(false);
 
         var now = DateTimeOffset.UtcNow;
 

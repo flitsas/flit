@@ -199,6 +199,12 @@ export async function adjuntarOtLicenciaTransito(
   id: string,
   file: File,
   scope?: OtApiScope,
+  /**
+   * HU #12042 — análisis que el frontend YA hizo al seleccionar el archivo, para enseñárselo al OT
+   * antes de que decida. Se manda para que el backend no lo repita: además de no pagar dos veces,
+   * garantiza que lo que queda registrado en el trámite sea exactamente lo que el usuario vio.
+   */
+  ocrData?: Record<string, unknown> | null,
 ): Promise<AdjuntarLtResult> {
   const origin =
     API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
@@ -209,6 +215,7 @@ export async function adjuntarOtLicenciaTransito(
 
   const formData = new FormData();
   formData.append("file", file);
+  if (ocrData) formData.append("ocr", JSON.stringify(ocrData));
 
   const token = getToken();
   const response = await fetch(url.toString(), {

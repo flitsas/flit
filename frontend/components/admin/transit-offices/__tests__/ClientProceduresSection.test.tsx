@@ -32,6 +32,8 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
 
 vi.mock("@/lib/api/tramites-client", () => ({
   tramitesClient: {
+    // HU #12042 — la LT se analiza al SELECCIONARLA, para que el OT vea el veredicto antes de decidir.
+    analyzeDocument: vi.fn(),
     listPublishedProcedureTypes: vi.fn().mockResolvedValue([
       {
         id: "matricula_inicial-type-id",
@@ -46,6 +48,7 @@ vi.mock("@/lib/api/tramites-client", () => ({
   },
 }));
 
+import { tramitesClient } from "@/lib/api/tramites-client";
 import {
   adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
@@ -292,7 +295,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
-    await waitFor(() => expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined));
+    await waitFor(() => expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined, null));
     expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1", undefined);
     // La aprobación va PRIMERO: el gate de la LT exige el trámite en aprobado (ruta de placa
     // Feature #10587: llega a la aprobación en 'asignado', donde adjuntar antes fallaría).
@@ -330,7 +333,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     await user.upload(within(dialog).getByLabelText(/Archivo de la Licencia de Tránsito/i), file);
     await user.click(within(dialog).getByRole("button", { name: /^Adjuntar LT$/i }));
     await waitFor(() =>
-      expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined),
+      expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined, null),
     );
   });
 
@@ -363,4 +366,89 @@ describe("ClientProceduresSection — HU #10220", () => {
       }),
     );
   });
+
+  // ── HU #12042 — el veredicto ANTES de decidir ──────────────────────────────
+  // El defecto que corrige: el OCR corría DESPUÉS de aprobar y se anunciaba en un toast efímero, así
+  // que el OT decidía a ciegas. Ahora se analiza al seleccionar y el resultado vive en la modal.
+
+  it("analiza la LT al seleccionarla, sin esperar a que el OT confirme", async () => {
+    vi.mocked(tramitesClient.analyzeDocument).mockResolvedValue({
+      ok: true,
+      tipo: "tarjeta_propiedad",
+      data: { es_valido: true, vehiculo_placa: "ABC123" },
+    } as never);
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
+
+    await waitFor(() =>
+      expect(tramitesClient.analyzeDocument).toHaveBeenCalledWith("tarjeta_propiedad", file),
+    );
+    expect(await screen.findByText(/Parece una Licencia de Tránsito/i)).toBeInTheDocument();
+    expect(screen.getByText("ABC123")).toBeInTheDocument();
+  });
+
+  it("avisa en la modal cuando el documento NO parece una licencia, y deja confirmar igual", async () => {
+    vi.mocked(tramitesClient.analyzeDocument).mockResolvedValue({
+      ok: true,
+      tipo: "tarjeta_propiedad",
+      data: { es_valido: false, observaciones: "Es un recibo de derechos de tránsito." },
+    } as never);
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await user.upload(
+      screen.getByLabelText(/Licencia de Tránsito \(LT\)/i),
+      new File(["%PDF"], "recibo.pdf", { type: "application/pdf" }),
+    );
+
+    expect(await screen.findByText(/NO parece una Licencia de Tránsito/i)).toBeInTheDocument();
+    expect(screen.getByText(/recibo de derechos de tránsito/i)).toBeInTheDocument();
+    // El OCR informa, nunca bloquea: el botón sigue disponible.
+    expect(screen.getByRole("button", { name: /Confirmar$/i })).toBeEnabled();
+  });
+
+  it("registra el MISMO análisis que se le mostró al OT", async () => {
+    // Dos análisis del mismo archivo pueden diferir, así que se manda el que el usuario vio en vez
+    // de dejar que el backend lo repita.
+    const data = { es_valido: true, vehiculo_placa: "XYZ789" };
+    vi.mocked(tramitesClient.analyzeDocument).mockResolvedValue({
+      ok: true,
+      tipo: "tarjeta_propiedad",
+      data,
+    } as never);
+    vi.mocked(adjuntarOtLicenciaTransito).mockResolvedValue({ ocr: null, attachment: null } as never);
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
+    await screen.findByText(/Parece una Licencia de Tránsito/i);
+    await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
+
+    await waitFor(() =>
+      expect(adjuntarOtLicenciaTransito).toHaveBeenCalledWith("proc-1", file, undefined, data),
+    );
+  });
+
+  it("si no se puede analizar, lo dice y permite continuar", async () => {
+    vi.mocked(tramitesClient.analyzeDocument).mockRejectedValue(new Error("proveedor caído"));
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await user.upload(
+      screen.getByLabelText(/Licencia de Tránsito \(LT\)/i),
+      new File(["%PDF"], "lt.pdf", { type: "application/pdf" }),
+    );
+
+    expect(await screen.findByText(/No se pudo verificar el documento/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirmar$/i })).toBeEnabled();
+  });
+
 });

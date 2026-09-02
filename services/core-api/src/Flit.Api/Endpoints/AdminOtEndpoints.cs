@@ -1210,12 +1210,23 @@ public static class AdminOtEndpoints
         ITransitOfficeCatalog transitOfficeCatalog,
         Flit.Tramites.Application.UseCases.ProcedureInstances.AdjuntarLicenciaTransitoHandler handler,
         IFormFile? file,
+        // HU #12042 — el frontend analiza el documento al seleccionarlo, para enseñarle el veredicto al
+        // OT antes de que decida, y manda aquí ESE resultado. Si llega, no se vuelve a analizar.
+        [FromForm(Name = "ocr")] string? ocrJson,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
         {
             return Results.BadRequest(new { error = "missing_file", message = "Falta el archivo (file)." });
+        }
+
+        // Un JSON corrupto no puede tumbar la carga: se ignora y el backend analiza por su cuenta.
+        System.Text.Json.Nodes.JsonObject? ocrPrecomputado = null;
+        if (!string.IsNullOrWhiteSpace(ocrJson))
+        {
+            try { ocrPrecomputado = System.Text.Json.Nodes.JsonNode.Parse(ocrJson) as System.Text.Json.Nodes.JsonObject; }
+            catch (System.Text.Json.JsonException) { ocrPrecomputado = null; }
         }
 
         var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
@@ -1244,7 +1255,7 @@ public static class AdminOtEndpoints
 
         var (result, error, ocr) = await repository.ExecuteInClientTenantScopeAsync(
             access!.ClientTenantId,
-            () => handler.HandleAsync(id, access.ClientTenantId, input, ResolveUserId(httpContext.User), cancellationToken),
+            () => handler.HandleAsync(id, access.ClientTenantId, input, ResolveUserId(httpContext.User), ocrPrecomputado, cancellationToken),
             cancellationToken).ConfigureAwait(false);
 
         return error switch

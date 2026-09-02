@@ -110,26 +110,103 @@ export function readAssignPlateError(err: unknown): string {
  *  - `es_valido` false → el archivo no parece una licencia (típicamente un recibo de derechos).
  *  - placa/VIN leídos  → se devuelven para que el OT coteje de un vistazo contra el trámite.
  */
-function mensajeOcrLt(
-  ocr: AdjuntarLtResult["ocr"],
-): { texto: string; tono: "success" | "error" } | null {
-  const data = ocr?.data;
-  if (!data) return null;
+type LtOcrEstado =
+  | { fase: "analizando" }
+  | { fase: "listo"; data: Record<string, unknown>; valido: boolean; motivo: string }
+  | { fase: "sin_analisis"; nota: string };
 
-  if (data.es_valido === false) {
-    const detalle = typeof data.observaciones === "string" ? data.observaciones.trim() : "";
+/** Lee un campo de texto del JSON del OCR sin romperse si no viene o no es string. */
+function campoOcr(data: Record<string, unknown>, clave: string): string {
+  const v = data[clave];
+  return typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "";
+}
+
+/**
+ * HU #12042 — traduce la respuesta del OCR a lo que el OT necesita ver ANTES de decidir.
+ *
+ * El defecto que corrige: antes esto se calculaba DESPUÉS de aprobar y se mostraba en un toast
+ * efímero, así que el OT decidía a ciegas y se enteraba cuando ya no podía hacer nada. Ahora el
+ * análisis ocurre al seleccionar el archivo y el resultado vive dentro de la modal hasta que el
+ * usuario decide.
+ *
+ * Sigue sin bloquear nada: `sin_analisis` (proveedor caído, archivo >10 MB) informa y deja seguir.
+ */
+function evaluarLtOcr(data: Record<string, unknown> | null | undefined): LtOcrEstado {
+  if (!data) {
     return {
-      tono: "error",
-      texto: detalle
-        ? `El documento adjuntado no parece una Licencia de Tránsito: ${detalle.slice(0, 160)}`
-        : "El documento adjuntado no parece una Licencia de Tránsito. Verifícalo.",
+      fase: "sin_analisis",
+      nota: "No se pudo verificar el documento automáticamente. Puedes continuar igual.",
     };
   }
+  const valido = data.es_valido !== false;
+  const motivo = campoOcr(data, "observaciones");
+  return { fase: "listo", data, valido, motivo };
+}
 
-  const placa = typeof data.vehiculo_placa === "string" ? data.vehiculo_placa.trim() : "";
-  return placa
-    ? { tono: "success", texto: `Licencia de Tránsito verificada (placa ${placa}).` }
-    : null;
+/** Los campos con los que el OT coteja la licencia contra el trámite de un vistazo. */
+const LT_OCR_CAMPOS: ReadonlyArray<{ label: string; clave: string }> = [
+  { label: "Placa", clave: "vehiculo_placa" },
+  { label: "VIN", clave: "vehiculo_vin" },
+  { label: "Vehículo", clave: "vehiculo_marca" },
+  { label: "Propietario", clave: "propietario_nombre" },
+  { label: "Organismo", clave: "organismo_transito" },
+  { label: "Expedición", clave: "fecha_expedicion" },
+];
+
+/** Panel del veredicto dentro de la modal. Informa; nunca deshabilita el botón de confirmar. */
+function LtOcrPanel({ estado }: { estado: LtOcrEstado | null }) {
+  if (!estado) return null;
+
+  if (estado.fase === "analizando") {
+    return (
+      <p className="mt-3 rounded-xl border px-3 py-2 text-xs opacity-70">
+        Verificando la Licencia de Tránsito…
+      </p>
+    );
+  }
+
+  if (estado.fase === "sin_analisis") {
+    return (
+      <p className="mt-3 rounded-xl border px-3 py-2 text-xs opacity-70">{estado.nota}</p>
+    );
+  }
+
+  const campos = LT_OCR_CAMPOS.map((c) => ({ ...c, valor: campoOcr(estado.data, c.clave) })).filter(
+    (c) => c.valor !== "",
+  );
+  const tono = estado.valido
+    ? { borde: "#3B8A00", texto: "#3B8A00", titulo: "Parece una Licencia de Tránsito" }
+    : { borde: "#C81E1E", texto: "#C81E1E", titulo: "El documento NO parece una Licencia de Tránsito" };
+
+  return (
+    <div className="mt-3 rounded-xl border px-3 py-2" style={{ borderColor: tono.borde }}>
+      <p className="text-xs font-semibold" style={{ color: tono.texto }}>
+        {tono.titulo}
+      </p>
+      {!estado.valido && estado.motivo && (
+        <p className="mt-1 text-[11px] opacity-80">{estado.motivo.slice(0, 220)}</p>
+      )}
+      {campoOcr(estado.data, "legibilidad") !== "" &&
+        campoOcr(estado.data, "legibilidad") !== "buena" && (
+          <p className="mt-1 text-[11px] font-medium" style={{ color: "#B77900" }}>
+            El documento se leyó con dificultad: comprueba los datos antes de darlos por buenos.
+          </p>
+        )}
+      {campos.length > 0 && (
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+          {campos.map((c) => (
+            <div key={c.clave} className="flex items-baseline gap-1 text-[11px]">
+              <dt className="shrink-0 opacity-60">{c.label}:</dt>
+              <dd className="font-medium">{c.valor}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <p className="mt-2 text-[11px] opacity-60">
+        Esta verificación es informativa: puedes continuar en cualquier caso.
+      </p>
+    </div>
+  );
 }
 
 export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?: string }) {
@@ -182,6 +259,27 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const rejectCatalogRequestRef = useRef<string | null>(null);
   // Licencia de Tránsito opcional al aprobar; también adjuntable después (fila aprobada).
   const [ltFile, setLtFile] = useState<File | null>(null);
+  // HU #12042 — veredicto del OCR de la LT, calculado al SELECCIONAR el archivo para que el OT lo
+  // vea antes de decidir. Vive mientras la modal esté abierta; nunca deshabilita el confirmar.
+  const [ltOcr, setLtOcr] = useState<LtOcrEstado | null>(null);
+
+  /**
+   * Selección del archivo de la LT: se guarda y se manda a analizar de inmediato, igual que hace el
+   * wizard del gestor. El `await` no bloquea al usuario —puede confirmar mientras tanto— y el
+   * resultado se guarda para enviarlo con la aprobación, de modo que lo registrado sea lo mostrado.
+   */
+  const seleccionarLt = useCallback(async (file: File | null) => {
+    setLtFile(file);
+    setLtOcr(file ? { fase: "analizando" } : null);
+    if (!file) return;
+    try {
+      const res = await tramitesClient.analyzeDocument("tarjeta_propiedad", file);
+      setLtOcr(evaluarLtOcr(res?.data));
+    } catch {
+      // Proveedor caído, archivo > 10 MB o tipo no soportado: se informa y se sigue.
+      setLtOcr(evaluarLtOcr(null));
+    }
+  }, []);
   const [ltTarget, setLtTarget] = useState<OtClientProcedure | null>(null);
   const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
@@ -371,17 +469,20 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       const updated = await approveOtClientProcedure(target.id, mandateSignerId);
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
-      let avisoOcr: ReturnType<typeof mensajeOcrLt> = null;
       if (ltFile) {
         try {
-          const { ocr } = await adjuntarOtLicenciaTransito(target.id, ltFile, scope);
-          avisoOcr = mensajeOcrLt(ocr);
+          // Se manda el análisis que el OT ya vio: el backend no lo repite y lo registrado coincide
+          // con lo mostrado. Dos análisis del mismo archivo pueden diferir, y esa incoherencia sería
+          // peor que no mostrar nada.
+          const analizado = ltOcr?.fase === "listo" ? ltOcr.data : null;
+          await adjuntarOtLicenciaTransito(target.id, ltFile, scope, analizado);
         } catch {
           // La aprobación YA quedó firme; solo falló el adjunto. Se puede reintentar con la
           // acción dedicada de Licencia de Tránsito.
           setApproveTarget(null);
           setMandatarioTarget(null);
           setLtFile(null);
+          setLtOcr(null);
           show(
             "Trámite aprobado, pero no se pudo adjuntar la Licencia de Tránsito. Reintenta la carga.",
             "error",
@@ -390,16 +491,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         }
       }
 
+      const traiaLt = ltFile !== null;
       setApproveTarget(null);
       setMandatarioTarget(null);
       setLtFile(null);
-      // El resultado del OCR manda sobre el mensaje genérico: si la LT no parece una licencia, el
-      // OT tiene que enterarse en el mismo momento, no al abrir el expediente más tarde.
-      if (avisoOcr) {
-        show(`Trámite aprobado. ${avisoOcr.texto}`, avisoOcr.tono);
-      } else {
-        show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
-      }
+      setLtOcr(null);
+      // El veredicto del OCR ya se mostró DENTRO de la modal, antes de que el OT decidiera; aquí
+      // solo se acusa recibo de la aprobación. Antes se anunciaba en este toast, y llegaba tarde:
+      // el usuario ya había aprobado sin saber qué decía el análisis.
+      show(traiaLt ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
     } catch (err) {
       const errorCode =
         err instanceof ApiError && err.status === 409
@@ -512,11 +612,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (!ltTarget || !ltFile) return;
     setActing(true);
     try {
-      const { ocr } = await adjuntarOtLicenciaTransito(ltTarget.id, ltFile, scope);
-      const aviso = mensajeOcrLt(ocr);
+      const analizado = ltOcr?.fase === "listo" ? ltOcr.data : null;
+      await adjuntarOtLicenciaTransito(ltTarget.id, ltFile, scope, analizado);
       setLtTarget(null);
       setLtFile(null);
-      show(aviso ? aviso.texto : "Licencia de Tránsito adjuntada.", aviso ? aviso.tono : "success");
+      setLtOcr(null);
+      // El veredicto ya se mostró en la modal antes de confirmar; aquí solo se acusa recibo.
+      show("Licencia de Tránsito adjuntada.", "success");
     } catch {
       show("No se pudo adjuntar la Licencia de Tránsito.", "error");
     } finally {
@@ -918,17 +1020,22 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 accept="application/pdf,image/jpeg,image/png,image/webp"
                 aria-label="Licencia de Tránsito (LT)"
                 className={`mt-1 ${OT_INPUT_CLS}`}
-                onChange={(e) => setLtFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => void seleccionarLt(e.target.files?.[0] ?? null)}
               />
               <span className="mt-1 block text-[11px] font-normal opacity-60">
                 Se adjunta al expediente del trámite y entra al consolidado al generarlo o regenerarlo.
               </span>
             </label>
+            <LtOcrPanel estado={ltOcr} />
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
                 className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                onClick={() => setApproveTarget(null)}
+                onClick={() => {
+                  setApproveTarget(null);
+                  setLtFile(null);
+                  setLtOcr(null);
+                }}
                 disabled={acting}
               >
                 Cancelar
@@ -1225,11 +1332,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               accept="application/pdf,image/jpeg,image/png,image/webp"
               aria-label="Archivo de la Licencia de Tránsito"
               className={`mt-4 ${OT_INPUT_CLS}`}
-              onChange={(e) => setLtFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => void seleccionarLt(e.target.files?.[0] ?? null)}
             />
             <p className="mt-1 text-[11px] opacity-60">
               Reemplaza la LT previa si existe; regenera el consolidado para incluirla.
             </p>
+            <LtOcrPanel estado={ltOcr} />
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
@@ -1237,6 +1345,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 onClick={() => {
                   setLtTarget(null);
                   setLtFile(null);
+                  setLtOcr(null);
                 }}
                 disabled={acting}
               >
