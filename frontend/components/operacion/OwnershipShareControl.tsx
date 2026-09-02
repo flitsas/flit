@@ -122,23 +122,20 @@ export function OwnershipTabsBar({
   const allPct = items.map((i) => i.percentage);
 
   return (
-    // Dos renglones dentro de la tarjeta (maqueta de referencia): la etiqueta de copropiedad
-    // arriba, alineada a la derecha (en la maqueta acompaña al título de la tarjeta, en la MISMA
-    // línea — aquí no hay título propio: `OwnershipTabsBar` se monta COMO PRIMER elemento del
-    // cuerpo del `WizardAccordion`, así que su propio renglón alineado a la derecha es el sustituto
-    // más fiel sin invadir la cabecera del acordeón — ni desplazar el badge de Persona
-    // Natural/Jurídica que ya vive ahí, ni arriesgar que el título se comprima en tarjetas
-    // angostas). Las píldoras van SIEMPRE debajo, en su propio renglón, alineadas a la izquierda.
-    <div className="mb-4">
-      <div className="flex justify-end">
-        <span className="text-xs opacity-70 whitespace-nowrap">
-          Copropiedad: hasta <span className="font-semibold" style={{ color: '#557EFF' }}>4</span> propietarios
-        </span>
-      </div>
+    // Un solo renglón (corrección del usuario: la separación en dos renglones dejaba un hueco
+    // muerto a la izquierda de la etiqueta, con las píldoras "flotando" abajo, despegadas de la
+    // cabecera de la tarjeta — capturas de referencia). Píldoras a la izquierda, etiqueta de
+    // copropiedad a la derecha, repartidas con `justify-between` en la MISMA línea — así vivía
+    // antes de separarlas y es fiel a la maqueta (ahí la etiqueta comparte línea con el TÍTULO de
+    // la tarjeta; nuestra cabecera de acordeón no la admite sin comprimir el título en las tarjetas
+    // angostas de traspaso, así que comparte línea con las píldoras en su lugar). `flex-wrap` deja
+    // que la etiqueta envuelva a su propia línea con elegancia si 4 píldoras no caben junto a ella
+    // (tarjetas a media pantalla de traspaso), en vez de comprimir las píldoras.
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       <div
         role="tablist"
         aria-label={`Copropietarios — ${sideLabel}`}
-        className="mt-3 flex flex-wrap items-center gap-1.5"
+        className="flex flex-wrap items-center gap-1.5"
       >
         {items.map((item) => {
           const isActive = item.index === activeIndex;
@@ -197,6 +194,9 @@ export function OwnershipTabsBar({
           <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
+      <span className="text-xs opacity-70 whitespace-nowrap">
+        Copropiedad: hasta <span className="font-semibold" style={{ color: '#557EFF' }}>4</span> propietarios
+      </span>
     </div>
   );
 }

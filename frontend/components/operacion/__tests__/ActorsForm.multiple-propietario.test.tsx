@@ -494,7 +494,7 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
 });
 
 describe('ActorsForm — Múltiple Propietario, la fila de pestañas vive DENTRO de la tarjeta', () => {
-  it('matrícula inicial: la fila de pestañas está dentro de la región "Datos del comprador", con la etiqueta de copropiedad ANTES en el DOM', async () => {
+  it('matrícula inicial: la fila de pestañas está dentro de la región "Datos del comprador", con las píldoras ANTES que la etiqueta en el DOM', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     await screen.findByLabelText(/Número de documento/);
 
@@ -502,9 +502,10 @@ describe('ActorsForm — Múltiple Propietario, la fila de pestañas vive DENTRO
     const tablist = within(tarjeta).getByRole('tablist');
     const etiqueta = within(tarjeta).getByText(/Copropiedad: hasta/);
 
-    // La etiqueta va en su propio renglón, ANTES que las píldoras (mismo orden que la maqueta:
-    // encabezado arriba, píldoras debajo).
-    expect(etiqueta.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Un solo renglón, `justify-between`: las píldoras van a la izquierda, la etiqueta de
+    // copropiedad a la derecha — así vivía antes de que una ronda anterior las separara en dos
+    // renglones (corregido: dejaba un hueco muerto a la izquierda de la etiqueta).
+    expect(tablist.compareDocumentPosition(etiqueta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('traspaso: la fila de pestañas está dentro de la tarjeta de cada lado (Vendedor y Comprador), no flotando por fuera', async () => {
@@ -521,6 +522,7 @@ describe('ActorsForm — Múltiple Propietario, la fila de pestañas vive DENTRO
 
     const etiquetaVendedor = within(vendedorRegion).getByText(/Copropiedad: hasta/);
     const tablistVendedor = within(vendedorRegion).getByRole('tablist');
-    expect(etiquetaVendedor.compareDocumentPosition(tablistVendedor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Mismo renglón, píldoras primero: ver la prueba de matrícula inicial arriba.
+    expect(tablistVendedor.compareDocumentPosition(etiquetaVendedor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
