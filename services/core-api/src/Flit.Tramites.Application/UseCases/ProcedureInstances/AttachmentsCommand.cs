@@ -81,6 +81,23 @@ public static class AttachmentRules
         "soat", "soat_manual",
     };
 
+    /// <summary>
+    /// HU #12046 — tipos que admiten VARIOS adjuntos a la vez. Son bolsas por definición: su nombre no
+    /// designa un documento concreto sino "lo demás", así que subir uno nuevo no puede retirar el anterior.
+    /// <para>Para todos los demás la casilla es UNA: el checklist mapea tipo → un adjunto, el consolidado
+    /// tiene una precedencia por tipo, el FUR y la Licencia de Tránsito reemplazan al regenerarse y la
+    /// impronta se protege no regenerando. La subida del gestor era la única que acumulaba, y por eso el
+    /// botón decía «Reemplazar archivo» mientras el expediente se quedaba con los dos.</para>
+    /// </summary>
+    public static readonly IReadOnlySet<string> TiposMultiples = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "otro", "anexos_generales", "documentosTramite",
+    };
+
+    /// <summary>¿Subir este tipo debe RETIRAR el adjunto anterior del mismo tipo?</summary>
+    public static bool ReemplazaAlSubir(string? tipo) =>
+        !string.IsNullOrWhiteSpace(tipo) && !TiposMultiples.Contains(tipo.Trim());
+
     public static bool IsSoatEvidenceTipo(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
 
@@ -172,7 +189,24 @@ public sealed class UploadAttachmentHandler(
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
+
+        // HU #12046 — «Reemplazar archivo» tiene que reemplazar. Antes esto solo añadía: el expediente se
+        // quedaba con el documento corregido Y con el que se quiso corregir, el consolidado los metía los
+        // dos (ordena por tipo y luego por fecha, sin deduplicar) y la pantalla enseñaba el PRIMERO, o sea
+        // el viejo. Misma semántica que ya tenían el FUR y la Licencia de Tránsito.
+        var previos = AttachmentRules.ReemplazaAlSubir(tipo)
+            ? instance.Attachments.Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)).ToList()
+            : [];
+
         var stored = await storage.SaveAsync(id, tipo, input.Filename ?? "file", input.Content, ct);
+
+        // Se retiran DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor conserva el que tenía.
+        foreach (var prev in previos)
+        {
+            storage.Delete(prev.StoragePath);
+            instance.Attachments.Remove(prev);
+            repo.RemoveAttachment(prev);
+        }
 
         var attachment = new ProcedureInstanceAttachment
         {

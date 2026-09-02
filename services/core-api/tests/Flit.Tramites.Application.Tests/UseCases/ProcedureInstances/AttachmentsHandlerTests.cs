@@ -845,4 +845,82 @@ public sealed class AttachmentsHandlerTests
         result!.Items.Should().Contain(i => i.Key == "aduana");
         result.FaltanObligatorios.Should().Contain("aduana");
     }
+
+    // ── HU #12046 — «Reemplazar archivo» tiene que reemplazar ──────────────────────────────
+
+    /// <summary>
+    /// El botón dice «Reemplazar archivo» desde siempre, pero la subida solo AÑADÍA. Medido en la BD de
+    /// desarrollo: los únicos expedientes con dos adjuntos del mismo tipo son los de esa prueba. El daño no
+    /// se veía en la pantalla —enseñaba uno de los dos— sino en el consolidado, que ordena por tipo y luego
+    /// por fecha SIN deduplicar: el organismo recibía el documento corregido y también el que se corrigió.
+    /// </summary>
+    [Fact]
+    public async Task Upload_MismoTipo_ReemplazaElAnterior()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(name: "viejo.pdf"), null, ct);
+        var (result, error) = await _upload.HandleAsync(id, tenantId, Pdf(name: "nuevo.pdf"), null, ct);
+
+        error.Should().BeNull();
+        instance.Attachments.Should().ContainSingle().Which.Filename.Should().Be("nuevo.pdf");
+        result!.Filename.Should().Be("nuevo.pdf");
+        // El binario del anterior también se retira: dejarlo huérfano en el almacenamiento sería pagar por
+        // guardar un archivo que ya nadie puede alcanzar.
+        _storage.Deleted.Should().ContainSingle().Which.Should().Contain("viejo.pdf");
+    }
+
+    /// <summary>
+    /// El borrado va DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor se queda con el
+    /// documento que ya tenía en vez de con la casilla vacía.
+    /// </summary>
+    [Fact]
+    public async Task Upload_MismoTipo_NoBorraElAnteriorAntesDeGuardarElNuevo()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        await _upload.HandleAsync(id, tenantId, Pdf(name: "viejo.pdf"), null, ct);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(name: "nuevo.pdf"), null, ct);
+
+        _storage.Saved.Should().HaveCount(2);
+        _storage.Saved[1].Should().Contain("nuevo.pdf", "el nuevo se guarda antes de retirar el anterior");
+    }
+
+    [Fact]
+    public async Task Upload_TipoDistinto_NoTocaLosDemas()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "factura", name: "f.pdf"), null, ct);
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "soat", name: "s.pdf"), null, ct);
+
+        instance.Attachments.Select(a => a.Tipo).Should().BeEquivalentTo(["factura", "soat"]);
+        _storage.Deleted.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// `otro` es una bolsa: su nombre no designa un documento concreto sino «lo demás», así que subir uno
+    /// nuevo no puede retirar el anterior. Es la excepción, y por eso está declarada.
+    /// </summary>
+    [Fact]
+    public async Task Upload_TipoBolsa_Acumula()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "otro", name: "uno.pdf"), null, ct);
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "otro", name: "dos.pdf"), null, ct);
+
+        instance.Attachments.Should().HaveCount(2);
+        _storage.Deleted.Should().BeEmpty();
+        AttachmentRules.ReemplazaAlSubir("otro").Should().BeFalse();
+        AttachmentRules.ReemplazaAlSubir("factura").Should().BeTrue();
+    }
 }

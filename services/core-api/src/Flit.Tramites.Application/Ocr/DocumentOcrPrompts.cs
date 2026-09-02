@@ -39,6 +39,13 @@ public static class DocumentOcrPrompts
             // HU #11999 — inscripcion de prenda (garantia mobiliaria). Obligatoria en los tres tramites
             // de prenda de V2, y en V1 el 17 % de la casilla era un PDF en blanco reutilizado.
             "inscripcion_prenda",
+            // HU #12045 — mismo documento, segundo codigo. `inscripcion_prenda` es la casilla del catalogo
+            // (document_types) y `prenda_registro` es el DocTipo del adjunto que exige la decision
+            // «registrar» del agregado de prenda (Feature #10585): ambos son el soporte de que la garantia
+            // esta constituida, asi que comparten prompt. NO se mapea `prenda_levantamiento`: acredita lo
+            // contrario, y darle este prompt haria que un levantamiento pasara por una inscripcion valida.
+            // Tampoco `prenda_solicitud` mientras no haya muestra medida de lo que llega en esa casilla.
+            "prenda_registro",
             // HU #12000 — comprobante de pago. En V1 la casilla contiene dos documentos distintos segun
             // el tramite: el impuesto en matricula y los derechos de transito en traspaso y otros.
             "comprobante_derechos",
@@ -97,7 +104,7 @@ JSON valido sin markdown:
         "rtm" => Rtm,
         "tarjeta_propiedad" => TarjetaPropiedad,
         "paz_salvo" => PazSalvo,
-        "inscripcion_prenda" => InscripcionPrenda,
+        "inscripcion_prenda" or "prenda_registro" => InscripcionPrenda,
         "comprobante_derechos" => ComprobanteDerechos,
         "contrato_leasing" => ContratoLeasing,
         "camara_comercio" => CamaraComercio,
@@ -107,6 +114,183 @@ JSON valido sin markdown:
     };
 
     /// <summary>
+    /// Cómo reconocer cada tipo, para el clasificador del cargue masivo. Va indexado por tipo porque
+    /// el prompt solo debe describir los tipos que ESE trámite pide: describirle al modelo un tipo que
+    /// nadie va a recibir es invitarlo a proponerlo.
+    /// <para>Las descripciones salen de lo medido al calibrar cada prompt por tipo, no de la intuición:
+    /// por eso nombran al confusable concreto de cada documento —que casi siempre es otro documento que
+    /// también procesamos— en vez de describir solo el caso feliz.</para>
+    /// </summary>
+    private static readonly Dictionary<string, string> ComoReconocer =
+        new(StringComparer.Ordinal)
+        {
+            ["factura"] =
+                """
+                FACTURA ELECTRONICA DE VENTA, factura de venta, cuenta de cobro o documento equivalente por la
+                  compraventa del vehiculo. Lleva numero de factura, CUFE o resolucion DIAN, emisor con NIT, comprador,
+                  descripcion del vehiculo y valores (subtotal, IVA, total).
+                """,
+            ["aduana"] =
+                """
+                DECLARACION DE IMPORTACION (formulario DIAN/MUISCA), manifiesto de importacion, certificado de
+                  homologacion o licencia de importacion. Lleva numero de declaracion, subpartida arancelaria (8703,
+                  8704, 8711...), importador o agente de aduana, pais de origen y valores FOB/CIF. Tambien cuenta la
+                  certificacion de nacionalizacion que expide el importador citando el numero de declaracion —cada uno
+                  la titula distinto: "Certificacion DIAN", "Certificado de empadronamiento", "Certificado de
+                  importacion"—, y el
+                  certificado individual de aduanas de un vehiculo ENSAMBLADO en Colombia bajo regimen de
+                  transformacion (Sofasa y similares), que sustituye a la declaracion de importacion.
+                  OJO: una misma declaracion suele amparar un LOTE de 30 a 50 vehiculos y ocupar VARIAS paginas
+                  seguidas (2 a 5). Agrupalas TODAS en una sola entrada, no una entrada por pagina.
+                """,
+            ["impronta"] =
+                """
+                CERTIFICADO DE IMPRONTAS, hoja de improntas digitales, acta de improntas o fotoimpronta. Lleva
+                  los numeros fisicos del vehiculo (motor, chasis, VIN, serie), normalmente en recuadros o calcos.
+                  OJO: suele ocupar DOS paginas seguidas — la primera con el encabezado y los datos del vehiculo, y la
+                  siguiente con las fotos o calcos de los numeros. Agrupa AMBAS en una sola entrada: la pagina del
+                  encabezado sola no permite verificar nada.
+                  Cuenta tanto el certificado de un CDA como la hoja de "improntas del cliente" que solo trae la foto
+                  de la placa VIN y los numeros transcritos: ambas son el documento de improntas.
+                """,
+            ["soat"] =
+                """
+                POLIZA SOAT o certificado de SOAT de una aseguradora colombiana. Lleva numero de poliza,
+                  aseguradora, vigencia y datos del vehiculo.
+                """,
+            ["rtm"] =
+                """
+                CERTIFICADO DE REVISION TECNICO-MECANICA Y DE EMISIONES CONTAMINANTES expedido por un CDA. Lleva
+                  numero de certificado, nombre del CDA, vigencia y resultado.
+                """,
+            // HU #12044 — los siete tipos siguientes tenian prompt propio pero NINGUNA descripcion aqui: el
+            // lote los "clasificaba" a ciegas y la lista de descartes de abajo mandaba cuatro de ellos a
+            // paginas no reconocidas.
+            ["tarjeta_propiedad"] =
+                """
+                LICENCIA DE TRANSITO o TARJETA DE PROPIEDAD expedida por un organismo de transito. Lleva placa,
+                  VIN o chasis, marca, linea, modelo, propietario y el organismo que la expide.
+                  OJO: llega escaneada y en tres disposiciones distintas —anverso primero, REVERSO primero, o las dos
+                  caras en una misma pagina—. Cuando ocupa dos paginas, agrupa AMBAS en una sola entrada.
+                  No la confundas con una consulta del RUNT ni con un recibo de derechos que mencione la placa.
+                """,
+            ["paz_salvo"] =
+                """
+                Acreditacion de que el vehiculo esta al dia con el IMPUESTO vehicular, emitida por la autoridad
+                  TRIBUTARIA (gobernacion, secretaria de hacienda departamental).
+                  OJO: casi nunca contiene la frase "PAZ Y SALVO". Se presenta como estado de cuenta, historico de
+                  pagos del portal, o la declaracion del impuesto. Lo decide QUIEN LO EMITE y sobre que —autoridad
+                  tributaria, impuesto vehicular—, no el titulo ni el formato.
+                """,
+            ["inscripcion_prenda"] =
+                """
+                Contrato de GARANTIA MOBILIARIA o prenda sin tenencia, certificado de inscripcion en el RUG/RNGM
+                  de Confecamaras, o la consulta del RUNT que muestra la garantia ya registrada. Lleva el ACREEDOR
+                  GARANTIZADO ("a favor de"), el deudor, y el vehiculo identificado por chasis o VIN.
+                  OJO: muchos NO traen placa y muchos NO estan registrados todavia —el tramite existe para
+                  inscribirlos—: ninguna de las dos cosas lo descarta.
+                  NO lo confundas con el paz y salvo de prenda, que acredita justo lo contrario: el levantamiento.
+                """,
+            ["comprobante_derechos"] =
+                """
+                Recibo de DERECHOS de transito del organismo (tramite, sistematizacion, semaforizacion),
+                  comprobante electronico de pago PSE, o declaracion/liquidacion del impuesto vehicular. Lleva el
+                  concepto, el valor liquidado y normalmente la placa.
+                  OJO: aqui SI cuentan el comprobante PSE y el recibo de caja de la secretaria de transito.
+                """,
+            ["contrato_leasing"] =
+                """
+                CONTRATO DE LEASING o de arrendamiento financiero. Lleva el ARRENDADOR (la entidad financiera, a
+                  cuyo nombre queda el vehiculo), el LOCATARIO, el plazo, el canon y el vehiculo identificado por VIN
+                  o chasis.
+                  OJO: casi nunca trae placa, porque el vehiculo aun no esta matriculado. Suele ocupar VARIAS paginas
+                  seguidas: agrupalas en una sola entrada.
+                """,
+            ["camara_comercio"] =
+                """
+                CERTIFICADO DE EXISTENCIA Y REPRESENTACION LEGAL expedido por una CAMARA DE COMERCIO. Lleva NIT,
+                  razon social, matricula mercantil, objeto social y representante legal.
+                  OJO: lo define el emisor. Un documento del MINISTERIO DE TRANSPORTE no es este certificado por mucho
+                  que tenga numeros largos y muchos campos. Suele ocupar VARIAS paginas seguidas.
+                """,
+            ["certificado_ambiental"] =
+                """
+                FICHA TECNICA DE HOMOLOGACION del Ministerio de Transporte: FORMATO FTH-002, "CARACTERISTICAS
+                  TECNICO-MECANICAS DE VEHICULOS", con un numero de ficha tipo A00201725. Lo que acredita las
+                  emisiones (el CEPD) es su seccion EMISIONES: CO y HC en prueba estatica, CO/HC/NOx en dinamica y
+                  % DE OPACIDAD en diesel.
+                  OJO: NO existe un certificado suelto titulado "CEPD" — es esa seccion de la ficha. Y una lista de
+                  chequeo del concesionario NO es este documento, aunque llegue en la misma casilla.
+                """,
+        };
+
+    /// <summary>
+    /// Tipos que son el MISMO documento con otro código y por tanto comparten descripción. Existe para que
+    /// el texto viva en un solo sitio: dos copias del mismo párrafo se separan a la primera corrección.
+    /// </summary>
+    private static readonly Dictionary<string, string> AliasReconocer = new(StringComparer.Ordinal)
+    {
+        ["prenda_registro"] = "inscripcion_prenda",
+    };
+
+    /// <summary>
+    /// Lo que NO es ninguno de los tipos, con el tipo con el que cada ejemplo CHOCA cuando el trámite sí
+    /// lo pide. Sin ese segundo dato la lista se contradecía con la de tipos solicitados: le decía al
+    /// modelo «identifica tarjeta_propiedad» y tres párrafos después «la licencia de tránsito va a páginas
+    /// no reconocidas». Cuatro de los siete tipos nuevos estaban descritos aquí como descartes.
+    /// </summary>
+    private static readonly (string Ejemplo, string? Choca)[] NoSonNinguno =
+    [
+        ("Contrato privado de mandato o poder / autorizacion al apoderado", null),
+        ("Solicitud de tramite de forma virtual", null),
+        ("Carta de validacion de identidad, carta selfie, cedula o documento de identidad", null),
+        ("Formulario del Ministerio de Transporte (FUR) y su hoja de instrucciones", null),
+        ("""
+         Formato FTH-002 del Ministerio de Transporte ("Caracteristicas tecnico-mecanicas de vehiculos"): es
+           la ficha tecnica del vehiculo, NO un documento de aduana. Aunque hable de homologacion, va a
+           paginas no reconocidas
+         """, "certificado_ambiental"),
+        ("Licencia de transito", "tarjeta_propiedad"),
+        ("Contrato de compraventa", null),
+        ("Formato o datos de prenda / garantia", "inscripcion_prenda"),
+        ("Certificado de paz y salvo de impuestos o de tradicion", "paz_salvo"),
+        ("""
+         Certificados de consulta al RUNT generados por una plataforma (NO son el SOAT ni el RTM originales:
+           son un reporte de consulta, no el certificado expedido por la aseguradora o el CDA)
+         """, null),
+        ("""
+         Portadas del expediente y hojas sueltas de firmas, hashes y sellos de tiempo. OJO: muchas paginas
+           llevan al pie un bloque de "Firma digital impronta" o un hash; eso es la firma electronica de la
+           pagina y NO decide su tipo. Clasifica por el contenido principal de la pagina, no por ese bloque.
+         """, null),
+    ];
+
+    /// <summary>
+    /// Avisos que solo tienen sentido cuando el trámite pide LOS DOS tipos de un par que se confunde entre
+    /// sí. Se emiten condicionados para no gastar contexto —ni sembrar dudas— en el caso en que uno de los
+    /// dos ni siquiera está en juego.
+    /// </summary>
+    private static readonly (string A, string B, string Aviso)[] Desambiguaciones =
+    [
+        ("certificado_ambiental", "aduana",
+            """
+            la ficha FTH-002 va SIEMPRE en el certificado ambiental. En aduana van la declaracion de
+              importacion y la certificacion de nacionalizacion, nunca la ficha.
+            """),
+        ("paz_salvo", "comprobante_derechos",
+            """
+            los distingue el emisor y el objeto. Autoridad TRIBUTARIA sobre el IMPUESTO vehicular -> el paz y
+              salvo. Organismo de TRANSITO sobre DERECHOS de tramite, o un comprobante de pago PSE -> el
+              comprobante de derechos.
+            """),
+        ("inscripcion_prenda", "paz_salvo",
+            """
+            el paz y salvo DE PRENDA acredita el levantamiento de la garantia y no es ninguno de los dos
+              tipos; va a paginas no reconocidas.
+            """),
+    ];
+
+    /// <summary>
     /// Prompt de CLASIFICACIÓN del cargue masivo. A diferencia de los prompts por tipo (que son
     /// dirigidos: "esto es una factura, verifícala"), este es el inverso — recibe un documento
     /// cualquiera y decide QUÉ hay en cada página. Es la única pieza del OCR que no sabe de antemano
@@ -114,10 +298,37 @@ JSON valido sin markdown:
     /// <c>tipo → páginas</c> salen los recortes que después verifica el prompt por tipo de arriba.
     /// <para><paramref name="tipos"/> son los tipos que el trámite espera (varían por modalidad:
     /// traspaso no lleva factura ni aduana), así el modelo no propone tipos que nadie va a recibir.</para>
+    /// <para>HU #12044 — las tres secciones que dependen de <paramref name="tipos"/> (cómo reconocer, qué
+    /// descartar y las desambiguaciones) se arman a partir de esa misma lista, de modo que no puedan
+    /// contradecirse entre sí. Añadir un tipo al OCR ya no exige acordarse de tocar este prompt.</para>
     /// </summary>
     public static string ClassificationPrompt(IEnumerable<string> tipos)
     {
-        var solicitados = string.Join(", ", tipos.Where(IsSupported));
+        var pedidos = tipos.Where(IsSupported).Distinct(StringComparer.Ordinal).ToArray();
+        var solicitados = string.Join(", ", pedidos);
+
+        // El modelo responde con el tipo REAL (`prenda_registro`), así que la lista solicitada conserva los
+        // códigos tal cual; el alias solo resuelve de qué descripción tira cada uno y con qué descarte choca.
+        var canonicos = pedidos.Select(Canonico).ToHashSet(StringComparer.Ordinal);
+
+        var reconocer = string.Join("\n", pedidos
+            .Where(t => ComoReconocer.ContainsKey(Canonico(t)))
+            .Select(t => $"- {t}: {Desangrar(ComoReconocer[Canonico(t)])}"));
+
+        var descartes = string.Join("\n", NoSonNinguno
+            .Where(n => n.Choca is null || !canonicos.Contains(n.Choca))
+            .Select(n => $"- {Desangrar(n.Ejemplo)}"));
+
+        // El encabezado se arma con los códigos REALMENTE pedidos, no con los canónicos: nombrarle al modelo
+        // `inscripcion_prenda` cuando el trámite pide `prenda_registro` es ofrecerle un tipo que no existe aquí.
+        var avisos = Desambiguaciones
+            .Where(d => canonicos.Contains(d.A) && canonicos.Contains(d.B))
+            .Select(d => $"- {Pedido(pedidos, d.A)} vs {Pedido(pedidos, d.B)}: {Desangrar(d.Aviso)}")
+            .ToArray();
+        var bloqueAvisos = avisos.Length == 0
+            ? string.Empty
+            : "\nPARES QUE SE CONFUNDEN ENTRE SI:\n" + string.Join("\n", avisos) + "\n";
+
         return $$"""
 Analiza este documento PDF o imagen. Puede contener UN solo documento, o VARIOS documentos distintos
 concatenados en un mismo archivo (un expediente completo). Tu tarea es decir QUÉ documento hay en CADA
@@ -126,50 +337,12 @@ página, y agrupar las páginas que forman cada documento.
 TIPOS QUE DEBES IDENTIFICAR (y SOLO estos): {{solicitados}}
 
 Cómo reconocer cada tipo:
-- factura: FACTURA ELECTRONICA DE VENTA, factura de venta, cuenta de cobro o documento equivalente por la
-  compraventa del vehiculo. Lleva numero de factura, CUFE o resolucion DIAN, emisor con NIT, comprador,
-  descripcion del vehiculo y valores (subtotal, IVA, total).
-- aduana: DECLARACION DE IMPORTACION (formulario DIAN/MUISCA), manifiesto de importacion, certificado de
-  homologacion o licencia de importacion. Lleva numero de declaracion, subpartida arancelaria (8703,
-  8704, 8711...), importador o agente de aduana, pais de origen y valores FOB/CIF. Tambien cuenta la
-  certificacion de nacionalizacion que expide el importador citando el numero de declaracion —cada uno
-  la titula distinto: "Certificacion DIAN", "Certificado de empadronamiento", "Certificado de
-  importacion"—, y el
-  certificado individual de aduanas de un vehiculo ENSAMBLADO en Colombia bajo regimen de
-  transformacion (Sofasa y similares), que sustituye a la declaracion de importacion.
-  OJO: una misma declaracion suele amparar un LOTE de 30 a 50 vehiculos y ocupar VARIAS paginas
-  seguidas (2 a 5). Agrupalas TODAS en una sola entrada, no una entrada por pagina.
-- impronta: CERTIFICADO DE IMPRONTAS, hoja de improntas digitales, acta de improntas o fotoimpronta. Lleva
-  los numeros fisicos del vehiculo (motor, chasis, VIN, serie), normalmente en recuadros o calcos.
-  OJO: suele ocupar DOS paginas seguidas — la primera con el encabezado y los datos del vehiculo, y la
-  siguiente con las fotos o calcos de los numeros. Agrupa AMBAS en una sola entrada: la pagina del
-  encabezado sola no permite verificar nada.
-  Cuenta tanto el certificado de un CDA como la hoja de "improntas del cliente" que solo trae la foto
-  de la placa VIN y los numeros transcritos: ambas son el documento de improntas.
-- soat: POLIZA SOAT o certificado de SOAT de una aseguradora colombiana. Lleva numero de poliza,
-  aseguradora, vigencia y datos del vehiculo.
-- rtm: CERTIFICADO DE REVISION TECNICO-MECANICA Y DE EMISIONES CONTAMINANTES expedido por un CDA. Lleva
-  numero de certificado, nombre del CDA, vigencia y resultado.
-
+{{reconocer}}
+{{bloqueAvisos}}
 DOCUMENTOS QUE NO SON NINGUNO DE LOS ANTERIORES:
 Los expedientes suelen traer muchas paginas que NO corresponden a ningun tipo solicitado. NO las fuerces
 dentro de un tipo: reportalas como no reconocidas. Ejemplos frecuentes:
-- Contrato privado de mandato o poder / autorizacion al apoderado
-- Solicitud de tramite de forma virtual
-- Carta de validacion de identidad, carta selfie, cedula o documento de identidad
-- Formulario del Ministerio de Transporte (FUR) y su hoja de instrucciones
-- Formato FTH-002 del Ministerio de Transporte ("Caracteristicas tecnico-mecanicas de vehiculos"): es
-  la ficha tecnica del vehiculo, NO un documento de aduana. Aunque hable de homologacion, va a
-  paginas no reconocidas
-- Licencia de transito
-- Contrato de compraventa
-- Formato o datos de prenda / garantia
-- Certificado de paz y salvo de impuestos o de tradicion
-- Certificados de consulta al RUNT generados por una plataforma (NO son el SOAT ni el RTM originales:
-  son un reporte de consulta, no el certificado expedido por la aseguradora o el CDA)
-- Portadas del expediente y hojas sueltas de firmas, hashes y sellos de tiempo. OJO: muchas paginas
-  llevan al pie un bloque de "Firma digital impronta" o un hash; eso es la firma electronica de la
-  pagina y NO decide su tipo. Clasifica por el contenido principal de la pagina, no por ese bloque.
+{{descartes}}
 
 REGLAS CRITICAS:
 1. Una pagina pertenece a UN solo documento. No repitas el mismo numero de pagina en dos entradas.
@@ -189,6 +362,19 @@ Devuelve UNICAMENTE este JSON, sin markdown y sin texto adicional:
 {"total_paginas":0,"documentos":[{"tipo":"factura","paginas":[1,2],"confianza":0.95,"motivo":"Factura electronica de venta con CUFE y datos del vehiculo"}],"paginas_no_reconocidas":[3,4]}
 """;
     }
+
+    /// <summary>
+    /// Quita la sangría con la que el literal queda escrito en el código y deja el texto pegado al guion
+    /// de su viñeta. Sin esto, un bloque multilínea rompe la lista visualmente para el modelo.
+    /// </summary>
+    /// <summary>El código tal y como el trámite lo pidió, dado su canónico.</summary>
+    private static string Pedido(IEnumerable<string> pedidos, string canonico) =>
+        pedidos.FirstOrDefault(t => Canonico(t) == canonico) ?? canonico;
+
+    /// <summary>Resuelve el código a aquel cuya descripción le corresponde (ver <see cref="AliasReconocer"/>).</summary>
+    private static string Canonico(string tipo) => AliasReconocer.GetValueOrDefault(tipo, tipo);
+
+    private static string Desangrar(string texto) => texto.Trim().Replace("\n         ", "\n  ");
 
     private const string Factura =
 """

@@ -911,10 +911,15 @@ export function DocumentChecklist({
   // checklist conserva el casing con que se creó el tipo en el módulo Documental, y el `tipo` del
   // adjunto lo persiste el backend en minúsculas. Emparejar tal cual dejaba la casilla vacía —y al
   // gestor reintentando— con un documento que en realidad ya estaba cargado.
+  // HU #12046 — cuando hay más de uno del mismo tipo gana el MÁS RECIENTE. Antes ganaba el primero de
+  // la lista, así que tras «Reemplazar archivo» la casilla seguía enseñando el documento viejo. El
+  // backend ya no acumula, pero los expedientes creados antes del arreglo sí traen duplicados, y las
+  // bolsas (`otro`, anexos) siguen admitiendo varios legítimamente.
   const attachmentByTipo = new Map<string, ProcedureAttachment>();
   for (const a of attachments) {
     const key = a.tipo.toLowerCase();
-    if (!attachmentByTipo.has(key)) attachmentByTipo.set(key, a);
+    const previo = attachmentByTipo.get(key);
+    if (!previo || a.uploadedAt >= previo.uploadedAt) attachmentByTipo.set(key, a);
   }
 
   // Prenda se carga en PrendaForm (`prenda_*` / `inscripcion_prenda`); no duplicar aquí.

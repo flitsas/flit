@@ -812,4 +812,88 @@ public sealed class DocumentOcrPromptsTests
                 .Contain("Vacio es una respuesta correcta y util");
         }
     }
+
+    // ── HU #12044 — el clasificador del lote conocía solo 5 de los 12 tipos ─────────────────
+
+    /// <summary>
+    /// El guardián de la causa raíz. El defecto no fue olvidar un párrafo: fue que se podía añadir un tipo
+    /// al OCR, con su prompt calibrado y su casilla configurada, y el cargue masivo seguía sin saber
+    /// reconocerlo — sin error en ninguna parte. Esta prueba hace que ese olvido rompa el build.
+    /// </summary>
+    [Fact]
+    public void Todo_tipo_documental_sabe_como_reconocerse_en_el_lote()
+    {
+        var prompt = DocumentOcrPrompts.ClassificationPrompt(DocumentOcrPrompts.TiposDocumentales);
+
+        foreach (var tipo in DocumentOcrPrompts.TiposDocumentales)
+        {
+            prompt.Should().Contain($"- {tipo}: ", $"el lote no sabe reconocer «{tipo}»");
+        }
+    }
+
+    /// <summary>
+    /// La lista de descartes le decía al modelo que mandara a «no reconocidas» cuatro documentos que ahora
+    /// son tipos solicitados: la licencia de tránsito, el paz y salvo, la prenda y la ficha FTH-002. Un
+    /// prompt que se contradice a sí mismo no falla ruidosamente: clasifica mal y en silencio.
+    /// </summary>
+    [Theory]
+    [InlineData("tarjeta_propiedad", "Licencia de transito")]
+    [InlineData("paz_salvo", "Certificado de paz y salvo de impuestos")]
+    [InlineData("inscripcion_prenda", "Formato o datos de prenda")]
+    [InlineData("certificado_ambiental", "Formato FTH-002")]
+    public void No_descarta_un_tipo_que_el_tramite_esta_pidiendo(string tipo, string descarte)
+    {
+        DocumentOcrPrompts.ClassificationPrompt([tipo]).Should().NotContain(descarte);
+
+        // Y cuando el trámite NO lo pide, el descarte sigue ahí: es útil, solo que incompatible.
+        DocumentOcrPrompts.ClassificationPrompt(["factura"]).Should().Contain(descarte);
+    }
+
+    [Fact]
+    public void Solo_describe_los_tipos_que_el_tramite_pide()
+    {
+        var prompt = DocumentOcrPrompts.ClassificationPrompt(["factura", "soat"]);
+
+        prompt.Should().Contain("- factura: ").And.Contain("- soat: ");
+        prompt.Should().NotContain("- contrato_leasing: ", "describir un tipo que nadie va a recibir invita a proponerlo");
+    }
+
+    [Fact]
+    public void Avisa_de_los_pares_confundibles_solo_cuando_los_dos_estan_en_juego()
+    {
+        DocumentOcrPrompts.ClassificationPrompt(["paz_salvo", "comprobante_derechos"])
+            .Should().Contain("paz_salvo vs comprobante_derechos");
+
+        DocumentOcrPrompts.ClassificationPrompt(["paz_salvo"])
+            .Should().NotContain("paz_salvo vs comprobante_derechos");
+    }
+
+    // ── HU #12045 — el mismo documento con dos códigos ──────────────────────────────────────
+
+    /// <summary>
+    /// `prenda_registro` es el DocTipo del adjunto que exige la decisión «registrar» y `inscripcion_prenda`
+    /// la casilla del catálogo: los dos son el soporte de que la garantía está constituida.
+    /// </summary>
+    [Fact]
+    public void Prenda_registro_usa_el_prompt_de_inscripcion_de_prenda()
+    {
+        DocumentOcrPrompts.IsSupported("prenda_registro").Should().BeTrue();
+        DocumentOcrPrompts.PromptFor("prenda_registro")
+            .Should().Be(DocumentOcrPrompts.PromptFor("inscripcion_prenda"));
+        DocumentOcrPrompts.ClassificationPrompt(["prenda_registro"])
+            .Should().Contain("- prenda_registro: ").And.Contain("ACREEDOR");
+    }
+
+    /// <summary>
+    /// El levantamiento acredita lo CONTRARIO. Darle este prompt haría que un paz y salvo de prenda pasara
+    /// por una inscripción válida, que es justo el error que el documento existe para impedir.
+    /// </summary>
+    [Theory]
+    [InlineData("prenda_levantamiento")]
+    [InlineData("prenda_solicitud")]
+    public void No_hereda_el_prompt_de_prenda_quien_no_es_ese_documento(string tipo)
+    {
+        DocumentOcrPrompts.IsSupported(tipo).Should().BeFalse();
+        DocumentOcrPrompts.PromptFor(tipo).Should().BeNull();
+    }
 }
