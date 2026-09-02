@@ -279,6 +279,20 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
     { label: 'Periodo certificado', value: (d) => pickStr(d, 'vigencia_certificada') },
     { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
   ],
+  // HU #11999 — inscripción de prenda. El resumen antepone el ACREEDOR porque es el dato por el que
+  // se pide el documento: el gestor lo coteja contra el acreedor registrado en el trámite. La placa va
+  // después y a menudo viene vacía, porque muchos contratos identifican el vehículo solo por chasis.
+  inscripcion_prenda: [
+    { label: 'Acreedor', value: (d) => pickStr(d, 'acreedor_nombre') },
+    { label: 'NIT del acreedor', value: (d) => pickStr(d, 'acreedor_documento') },
+    { label: 'Garante', value: (d) => pickStr(d, 'garante_nombre') },
+    { label: 'N.º de registro', value: (d) => pickStr(d, 'numero_registro') },
+    { label: 'Fecha de registro', value: (d) => pickStr(d, 'fecha_registro') },
+    { label: 'Placa', value: (d) => pickStr(d, 'vehiculo_placa') },
+    { label: 'Chasis', value: (d) => pickStr(d, 'vehiculo_chasis') },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+  ],
   // HU #11996 — licencia de tránsito. El resumen prioriza lo que el gestor coteja de un vistazo
   // contra el trámite: placa y VIN primero, y el organismo que la expidió, que es lo que distingue
   // una licencia legítima de un recibo de la misma secretaría.
@@ -315,6 +329,7 @@ const TIPO_LABEL: Record<string, string> = {
   rtm: 'RTM',
   tarjeta_propiedad: 'Licencia de Tránsito',
   paz_salvo: 'Paz y Salvo de Impuestos',
+  inscripcion_prenda: 'Inscripción de Prenda',
 };
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */

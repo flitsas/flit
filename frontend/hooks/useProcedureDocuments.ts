@@ -23,7 +23,7 @@ import type {
 // licencia es requisito de entrada (17 asignaciones en `procedure_document_requirements`).
 export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
   matricula_inicial: ['factura', 'aduana', 'impronta', 'soat', 'rtm', 'tarjeta_propiedad', 'paz_salvo'],
-  traspaso: ['impronta', 'soat', 'rtm', 'tarjeta_propiedad', 'paz_salvo'],
+  traspaso: ['impronta', 'soat', 'rtm', 'tarjeta_propiedad', 'paz_salvo', 'inscripcion_prenda'],
 };
 
 /**

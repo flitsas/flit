@@ -36,6 +36,9 @@ public static class DocumentOcrPrompts
             // HU #11998 — paz y salvo de impuestos. Presente en 32.514 de los 32.870 traspasos de V1,
             // y con 15 casillas ya configuradas en V2.
             "paz_salvo",
+            // HU #11999 — inscripcion de prenda (garantia mobiliaria). Obligatoria en los tres tramites
+            // de prenda de V2, y en V1 el 17 % de la casilla era un PDF en blanco reutilizado.
+            "inscripcion_prenda",
             // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
             "mandato_config",
         };
@@ -53,6 +56,7 @@ public static class DocumentOcrPrompts
         "rtm" => Rtm,
         "tarjeta_propiedad" => TarjetaPropiedad,
         "paz_salvo" => PazSalvo,
+        "inscripcion_prenda" => InscripcionPrenda,
         "mandato_config" => MandatoConfig,
         _ => null,
     };
@@ -713,6 +717,112 @@ EXTRAER:
 
 JSON valido sin markdown:
 {"tipo_documento":"estado_cuenta","es_valido":true,"paginas_documento":[1],"total_paginas":1,"emisor":"","emisor_es_autoridad_tributaria":true,"numero_certificado":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","propietario_nombre":"","propietario_documento":"","municipio":"","departamento":"","estado_deuda":"no_determinado","vigencias_adeudadas":"","vigencia_certificada":"","fecha_expedicion":"","avaluo":0,"observaciones":""}
+""";
+
+    /// <summary>
+    /// HU #11999 — <b>Inscripción de Prenda</b> (<c>id_attached_registered_pledge</c> en V1). Obligatoria
+    /// en los tres trámites de prenda de V2: Inscribir prenda, Levantar e inscribir prenda y Cambio acreedor.
+    /// <para><b>El dato de valor es el ACREEDOR, no el vehículo.</b> A diferencia de la licencia de tránsito
+    /// —donde lo útil era cruzar placa y VIN— aquí lo que el trámite necesita saber es a favor de quién queda
+    /// el vehículo, para contrastarlo con el acreedor registrado en el trámite. Por eso el prompt insiste en
+    /// buscar «ACREEDOR GARANTIZADO» / «a favor de» en el CUERPO del contrato: quien firma al pie suele ser
+    /// el deudor o un apoderado, y ese nombre no sirve.</para>
+    /// <para><b>Tres formatos, todos válidos:</b> el contrato de garantía mobiliaria (prenda sin tenencia),
+    /// el certificado de inscripción en el RUG/RNGM de Confecámaras, y la consulta del RUNT que muestra la
+    /// garantía ya registrada. Solo 16 de los 65 ejemplares medidos traían capa de texto: esto es visión sobre
+    /// escaneos, no extracción de texto.</para>
+    /// <para><b>Lo que el prompt NO debe exigir.</b> El trámite existe precisamente para INSCRIBIR la prenda,
+    /// así que el contrato llega normalmente ANTES de estar registrado: pedir folio del RUG o constancia de
+    /// registro sería pedir el resultado como requisito de entrada. Tampoco se exige la placa —muchos contratos
+    /// identifican el vehículo solo por chasis— y basta uno de placa/chasis/VIN/motor. Ambas exigencias
+    /// causaron falsos rechazos reales en la primera versión.</para>
+    /// <para><b>Medición (claude-haiku-4-5, max_tokens 2000, 65 documentos de 7 secretarías, dos corridas):</b>
+    /// acreedor correcto 40/40 en ambas y NIT 37/40 en ambas; decisión aceptar/rechazar IDÉNTICA entre corridas
+    /// y <c>tipo_documento</c> coincidente en 65/65. La placa acierta el 81 % donde el documento la trae, pero
+    /// 14 de los 50 aceptados sencillamente no la traen. Falsos positivos: 0 — los 11 documentos en blanco de
+    /// la muestra se rechazaron los 11.</para>
+    /// <para><b>Límite conocido, y no es del prompt.</b> Un expediente de 37 páginas con el contrato válido en
+    /// la página 1 y 31 páginas de certificado de cámara de comercio del banco se rechaza en las tres versiones
+    /// del prompt. El mismo prompt contra el mismo archivo recortado a 6 páginas lo acepta y extrae todo bien:
+    /// es dilución de atención por longitud. Se resuelve con selección de páginas en el preprocesado, no
+    /// escribiendo más instrucciones. Impacto medido: 1 de 65.</para>
+    /// <para><b>Dato de negocio:</b> 11 de los 65 documentos (17 %) eran una página en blanco, y 10 de ellos
+    /// eran el MISMO archivo byte a byte reutilizado para poder pasar el formulario de V1.</para>
+    /// </summary>
+    private const string InscripcionPrenda =
+"""
+Analiza este documento. Determina si acredita que sobre un vehiculo se constituyo o se registro una PRENDA a favor de un acreedor (lo que el tramite pide como "Inscripcion / Registro de Prenda"). En Colombia esa figura se llama hoy GARANTIA MOBILIARIA sobre vehiculo automotor, tambien llamada "prenda sin tenencia".
+
+QUE SE CONSIDERA VALIDO — TRES FORMAS, TODAS SIRVEN:
+1. CONTRATO DE GARANTIA MOBILIARIA (o "prenda sin tenencia", o "garantia mobiliaria prioritaria de adquisicion"). Es el mas frecuente. Lo emite una entidad financiera y lleva: el nombre del ACREEDOR GARANTIZADO (banco, cooperativa, compania de financiamiento o leasing), el nombre del GARANTE o DEUDOR, la cuantia garantizada, y una tabla con los datos del vehiculo (PLACA, MARCA, LINEA, MODELO, COLOR, CLASE, CHASIS, MOTOR, CILINDRAJE). Suele ocupar varias paginas de clausulas y venir escaneado.
+2. CERTIFICADO o FORMULARIO DE INSCRIPCION en el Registro de Garantias Mobiliarias (RUG / RNGM, operado por Confecamaras). Lleva un numero de folio o de inscripcion, la fecha de registro, el acreedor garantizado y el bien.
+3. CONSULTA DEL RUNT que muestre la seccion de GARANTIAS MOBILIARIAS con la garantia ya registrada: una tabla con "ID Prenda", "Fecha de Registro", la identificacion y el nombre de la entidad, y un estado como "Registro de la garantia en el RNGM por parte de RUNT". Es una impresion de pantalla del portal oficial y eso NO la invalida.
+
+QUE NO ES VALIDO:
+1. Una PAGINA EN BLANCO, un archivo cuyo unico contenido es la palabra "Blanco", una plantilla vacia o un archivo con solo un logo. Es un relleno para pasar el formulario, no un documento.
+2. Una CARTA DE APROBACION DE CREDITO, un PAGARE o una carta de intencion: anuncian un credito o mencionan que habra una prenda, pero NO constituyen la garantia sobre el vehiculo.
+3. Una POLIZA DE SEGURO, aunque el banco figure como beneficiario.
+4. Una FACTURA de compraventa del vehiculo, o una cotizacion.
+5. Un CERTIFICADO DE CAMARA DE COMERCIO o de existencia y representacion legal del acreedor.
+6. Una consulta del RUNT SIN la seccion de garantias mobiliarias diligenciada, o con esa seccion vacia.
+7. Un SOAT, una revision tecnico-mecanica, una licencia de transito, un paz y salvo o una impronta.
+
+COMO DECIDIR — PROCEDE EN ESTE ORDEN:
+PASO 1. Busca la figura juridica: un contrato de garantia mobiliaria o prenda, un registro en el RUG/RNGM, o la tabla de garantias del RUNT. Si no aparece ninguna de las tres, NO es valido.
+PASO 2. Busca al ACREEDOR: debe identificarse la entidad a favor de la cual queda la garantia. Sin acreedor identificable NO es valido.
+PASO 3. Busca el BIEN: el vehiculo debe estar identificado por AL MENOS UNO de estos: placa, chasis, VIN o numero de motor. UNO SOLO BASTA. Que falte la placa NO es motivo de rechazo si hay chasis, VIN o motor. Solo se rechaza si la garantia es generica sobre bienes indeterminados.
+PASO 4. Solo si los tres pasos dan positivo, es_valido = true.
+Un contrato SIN firmar sigue siendo valido para este control: no juzgues la firma, solo el contenido.
+
+LO QUE NO DEBES EXIGIR — LEE ESTO ANTES DE RECHAZAR:
+El tramite para el que sirve este documento es, precisamente, INSCRIBIR la prenda. Por eso el contrato llega normalmente ANTES de estar registrado. NO exijas numero de folio del RUG, ni fecha de inscripcion, ni constancia de registro: su ausencia es lo normal y NO es motivo de rechazo. Tampoco exijas la placa, ni el avaluo, ni la firma, ni que el contrato este completo palabra por palabra.
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Estos archivos suelen traer decenas de paginas y mezclar documentos. Si el PDF contiene MULTIPLES documentos, identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1] o [2,3]). Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro, NO lo invalida y NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+SI EL ARCHIVO TIENE MAS DE 10 PAGINAS, sigue este orden antes de decidir: mira la PAGINA 1, luego la 2 y la 3, y solo despues el resto. En los expedientes largos el contrato va casi siempre al principio y los anexos corporativos del banco (certificado de camara de comercio, estatutos, poderes) van despues; si te dejas llevar por lo que mas se repite vas a rechazar un contrato valido.
+LA PROPORCION NO CUENTA. Es habitual que el contrato ocupe 6 paginas y las otras 31 sean el certificado de camara de comercio del banco: eso sigue siendo VALIDO. UNA SOLA pagina con el contrato basta para que es_valido sea true. No dejes que el documento mayoritario decida por ti: RECORRE TODAS LAS PAGINAS, y en especial la PRIMERA, antes de concluir que la prenda no esta.
+
+EL ACREEDOR — ES EL DATO MAS VALIOSO:
+El punto de este documento es saber A FAVOR DE QUIEN queda el vehiculo. En un contrato el acreedor es quien aparece como "EL ACREEDOR GARANTIZADO", "a favor de", "el Banco" o "el acreedor prendario"; NO es el garante, ni el deudor, ni el concesionario, ni el titular del vehiculo. Buscalo en el CUERPO del contrato, no al pie: quien firma abajo suele ser el deudor o un apoderado, y su nombre NO va en acreedor_nombre. Si solo encuentras nombres de personas naturales y ninguna entidad designada como acreedora, deja acreedor_nombre VACIO en lugar de poner a la persona que firma. Copia la razon social completa tal como esta escrita, incluidos "S.A.", "BIC" o "S.A.S.". Si el documento lleva una marca comercial junto a la entidad (por ejemplo "Sufi" junto a Bancolombia), pon en acreedor_nombre la ENTIDAD, no la marca.
+Si aparece el NIT del acreedor, ponlo en acreedor_documento solo con digitos, sin puntos, sin guion y SIN el digito de verificacion.
+
+LA PLACA — DOS COMPROBACIONES OBLIGATORIAS:
+1. FORMATO: una placa colombiana es 3 LETRAS + 3 DIGITOS (automoviles) o 3 LETRAS + 2 DIGITOS + 1 LETRA (motos). SIEMPRE 6 caracteres, sin espacios ni guiones. Si lo que transcribiste no encaja, esta mal leido.
+   USA EL FORMATO PARA CORREGIRTE, POSICION POR POSICION: los caracteres 1, 2 y 3 son SIEMPRE LETRAS y los caracteres 4, 5 y 6 son SIEMPRE DIGITOS (salvo en motos, donde el 6 es letra). Por eso: un 0 en las tres primeras posiciones es en realidad una O; un 4 ahi es una A o una Y; un 1 es una I o una L; un 8 es una B. Y al reves, una O entre los tres ultimos es un 0, y una I o una L ahi es un 1. Corrige cada caracter que este en la posicion equivocada ANTES de responder.
+2. Las letras Q, O, G, D y C se confunden entre si en los escaneos: Q lleva colita, O es un ovalo limpio, G lleva barra horizontal, D tiene el lado izquierdo recto, C esta abierta. Mira cada una de las tres letras antes de darla por buena.
+3. NO confundas la placa con el VIN, el chasis o la serie: si lo que ibas a copiar tiene mas de 6 caracteres o mezcla mas de 3 letras, NO es la placa.
+4. Confusiones de digito frecuentes en escaneos: Y con 4, 6 con 5, 1 con 7, 8 con B. Reconstruye cada caracter mirando la forma, no el parecido global.
+Si el documento no trae placa, dejala VACIA. No la inventes ni la tomes de otro documento del archivo. Repito: la placa vacia NO invalida el documento.
+
+EL CHASIS Y EL VIN:
+Muchos contratos traen CHASIS pero no VIN, o al reves, y en los vehiculos importados ambos coinciden. Transcribe cada uno en su campo y NO copies el chasis dentro de vehiculo_vin si el documento no lo llama VIN. Si un campo aparece relleno de asteriscos o guiones, dejalo vacio.
+
+EXTRAER:
+- tipo_documento: "contrato_garantia_mobiliaria" | "certificado_rug" | "consulta_runt_garantias" | "aprobacion_credito" | "pagare" | "poliza" | "factura" | "certificado_camara_comercio" | "documento_en_blanco" | "otro"
+  Si el archivo mezcla varios, pon el tipo del documento SOLICITADO cuando lo encuentres, no el del mayoritario.
+- es_valido: true/false
+- paginas_documento: [paginas], total_paginas: numero
+- acreedor_nombre: razon social de la entidad a favor de la cual queda la garantia
+- acreedor_documento: NIT del acreedor, solo digitos, sin digito de verificacion
+- acreedor_es_entidad_financiera: true/false
+- garante_nombre, garante_documento: quien da el vehiculo en garantia
+- numero_registro: folio del RUG, "ID Prenda" del RUNT o numero de garantia, si lo tiene
+- fecha_registro (YYYY-MM-DD): fecha de inscripcion en el registro, si aparece
+- fecha_contrato (YYYY-MM-DD): fecha de suscripcion del contrato, si aparece
+- cuantia_garantia: monto garantizado (numerico, sin puntos ni simbolos), 0 si no aparece
+- vehiculo_placa
+- vehiculo_vin, vehiculo_chasis, vehiculo_motor
+- vehiculo_marca, vehiculo_linea, vehiculo_modelo
+- observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
+
+JSON valido sin markdown:
+{"tipo_documento":"contrato_garantia_mobiliaria","es_valido":true,"paginas_documento":[1],"total_paginas":1,"acreedor_nombre":"","acreedor_documento":"","acreedor_es_entidad_financiera":true,"garante_nombre":"","garante_documento":"","numero_registro":"","fecha_registro":"","fecha_contrato":"","cuantia_garantia":0,"vehiculo_placa":"","vehiculo_vin":"","vehiculo_chasis":"","vehiculo_motor":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","observaciones":""}
 """;
 
     private const string MandatoConfig =

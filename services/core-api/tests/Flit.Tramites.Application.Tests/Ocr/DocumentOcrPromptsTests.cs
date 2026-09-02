@@ -14,6 +14,7 @@ public sealed class DocumentOcrPromptsTests
     [InlineData("rtm")] // HU #10977
     [InlineData("tarjeta_propiedad")] // HU #11996
     [InlineData("paz_salvo")] // HU #11998
+    [InlineData("inscripcion_prenda")] // HU #11999
     public void Tipos_soportados_tienen_prompt(string tipo)
     {
         DocumentOcrPrompts.IsSupported(tipo).Should().BeTrue();
@@ -361,6 +362,87 @@ public sealed class DocumentOcrPromptsTests
                      "estado_deuda", "vigencias_adeudadas", "emisor", "numero_certificado",
                      "vehiculo_placa", "propietario_nombre", "municipio", "departamento",
                      "vigencia_certificada", "fecha_expedicion",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #11999 — inscripción de prenda ────────────────────────────────────────────────────
+    // Aquí el dato de valor no es el vehículo sino el acreedor. Estas aserciones fijan las dos
+    // decisiones que costaron falsos rechazos reales en la primera versión del prompt.
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_acepta_las_tres_formas_de_acreditar_la_garantia()
+    {
+        // Contrato de garantía mobiliaria (41 de 65), consulta RUNT del RNGM (9) y certificado del
+        // RUG. Aceptar solo el contrato dejaría fuera a quien acredita con el registro ya hecho.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("CONTRATO DE GARANTIA MOBILIARIA");
+        prompt.Should().Contain("RUG / RNGM");
+        prompt.Should().Contain("CONSULTA DEL RUNT");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_no_exige_el_registro_que_el_tramite_va_a_hacer()
+    {
+        // Falso rechazo real: el modelo pedía folio del RUG y fecha de inscripción. El trámite
+        // existe precisamente para inscribir la prenda, así que el contrato llega ANTES de estar
+        // registrado; exigir la constancia es pedir el resultado como requisito de entrada.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("LO QUE NO DEBES EXIGIR");
+        prompt.Should().Contain("NO exijas numero de folio del RUG");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_se_conforma_con_un_solo_identificador_del_vehiculo()
+    {
+        // El otro falso rechazo: 14 de los 50 documentos aceptados no traen placa, porque el
+        // contrato identifica el vehículo por chasis. La placa vacía no puede invalidar nada.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("UNO SOLO BASTA");
+        prompt.Should().Contain("la placa vacia NO invalida el documento");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_busca_al_acreedor_en_el_cuerpo_y_no_en_la_firma()
+    {
+        // Quien firma al pie es el deudor o un apoderado. Acotar la búsqueda al cuerpo del
+        // contrato subió el acierto del acreedor del 95 % al 100 % (40/40, en dos corridas).
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("ACREEDOR GARANTIZADO");
+        prompt.Should().Contain("no al pie");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_rechaza_el_documento_en_blanco()
+    {
+        // 11 de los 65 documentos de la muestra eran una página en blanco, y 10 de ellos el MISMO
+        // archivo byte a byte: un relleno para poder pasar el formulario de V1.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("PAGINA EN BLANCO");
+        prompt.Should().Contain("documento_en_blanco");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_corrige_la_placa_por_posicion()
+    {
+        // Las tres primeras posiciones son letras y las tres últimas dígitos, así que un 0 al
+        // principio es una O. Eso arregló JR0888 → JRO888 sin tocar nada más.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("POSICION POR POSICION");
+        prompt.Should().Contain("un 0 en las tres primeras posiciones es en realidad una O");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        foreach (var campo in new[]
+                 {
+                     "acreedor_nombre", "acreedor_documento", "garante_nombre", "numero_registro",
+                     "fecha_registro", "vehiculo_placa", "vehiculo_chasis", "vehiculo_vin",
+                     "vehiculo_marca", "vehiculo_linea", "vehiculo_modelo",
                  })
         {
             prompt.Should().Contain(campo);
