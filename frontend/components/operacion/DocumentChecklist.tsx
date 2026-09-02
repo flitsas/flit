@@ -222,6 +222,15 @@ const ESTADO_SOCIEDAD: Record<string, string> = {
   no_determinado: 'No se puede determinar',
 };
 
+/**
+ * HU #12038 — aviso cuando el modelo declara que no pudo leer bien el documento. Solo hay texto para
+ * los casos que piden cautela: con «buena» no se muestra nada, que es el 95 % de las veces.
+ */
+const LEGIBILIDAD_AVISO: Record<string, string> = {
+  parcial: 'El documento se leyó con dificultad: comprueba los datos antes de darlos por buenos.',
+  mala: 'No se pudo leer el documento con fiabilidad. Los campos que falten es porque no se distinguían.',
+};
+
 /** Descriptor de un campo del resumen OCR. */
 interface OcrField {
   label: string;
@@ -480,6 +489,12 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         .filter((x) => x.value !== '')
     : [];
 
+  // HU #12038 — el modelo declara si pudo LEER el documento o si estaba completando. Medido: sobre
+  // las 7 fichas giradas en las que inventaba, las 7 dijeron «parcial» y ninguna «buena»; de las 56
+  // derechas, 54 dijeron «buena». No señala qué campo concreto falla, así que el aviso es sobre el
+  // conjunto: los valores de abajo pueden no ser fiables.
+  const avisoLegibilidad = data ? (LEGIBILIDAD_AVISO[pickStr(data, 'legibilidad')] ?? null) : null;
+
   const tipId = `ocr-tip-${tipo}`;
 
   return (
@@ -580,6 +595,11 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
             {(tipoDocumento || recorte) && (
               <p className="mb-2 text-xs opacity-70">
                 {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {avisoLegibilidad && (
+              <p className="mb-2 text-xs font-medium" style={{ color: '#B77900' }}>
+                {avisoLegibilidad}
               </p>
             )}
             {fields.length === 0 ? (

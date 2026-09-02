@@ -221,7 +221,18 @@ Presta maxima atencion a los caracteres que se confunden: 0 vs O vs D, 1 vs I vs
 6, 2 vs Z, 6 vs G. El VIN tiene EXACTAMENTE 17 caracteres y nunca contiene las letras I, O ni Q. Si
 lees mas o menos de 17, vuelve a mirar.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "factura_electronica" | "factura_venta" | "cuenta_cobro" | "documento_equivalente" | "no_es_factura"
 - es_factura_valida: true/false
 - paginas_documento: [numeros de pagina donde esta la factura]
@@ -234,7 +245,7 @@ EXTRAER:
 - forma_pago, cufe, observaciones
 
 JSON valido sin markdown:
-{"tipo_documento":"factura_electronica","es_factura_valida":true,"paginas_documento":[1],"total_paginas":1,"numero_factura":"","fecha":"","resolucion_dian":"","emisor_nit":"","emisor_nombre":"","emisor_direccion":"","emisor_ciudad":"","comprador_nombre":"","comprador_documento":"","comprador_tipo_doc":"CC","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_color":"","vehiculo_vin":"","vehiculo_motor":"","vehiculo_clase":"","vehiculo_cilindraje":"","vehiculo_placa":"","subtotal":0,"iva":0,"total":0,"forma_pago":"","cufe":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"factura_electronica","es_factura_valida":true,"paginas_documento":[1],"total_paginas":1,"numero_factura":"","fecha":"","resolucion_dian":"","emisor_nit":"","emisor_nombre":"","emisor_direccion":"","emisor_ciudad":"","comprador_nombre":"","comprador_documento":"","comprador_tipo_doc":"CC","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_color":"","vehiculo_vin":"","vehiculo_motor":"","vehiculo_clase":"","vehiculo_cilindraje":"","vehiculo_placa":"","subtotal":0,"iva":0,"total":0,"forma_pago":"","cufe":"","observaciones":""}
 """;
 
     private const string Aduana =
@@ -349,8 +360,19 @@ en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicit
 expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
 false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
 
+
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 JSON valido sin markdown:
-{"tipo_documento":"declaracion_importacion","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_documento":"","fecha":"","aduana":"","importador_nombre":"","importador_nit":"","importador_direccion":"","importador_ciudad":"","agente_aduana":"","agente_aduana_nit":"","pais_origen":"","pais_procedencia":"","puerto_entrada":"","subpartida_arancelaria":"","tipo_vehiculo":"automovil","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_vin":"","vehiculo_motor":"","vehiculo_chasis":"","vehiculo_cilindraje":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_combustible":"","vehiculo_pasajeros":"","vehiculo_peso_bruto":"","cantidad":1,"ampara_multiples_vehiculos":false,"valor_fob_usd":0,"valor_flete_usd":0,"valor_seguro_usd":0,"valor_cif_usd":0,"valor_cif_cop":0,"tasa_cambio":0,"arancel_porcentaje":0,"arancel_valor":0,"iva_porcentaje":0,"iva_valor":0,"total_tributos":0,"regimen":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"declaracion_importacion","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_documento":"","fecha":"","aduana":"","importador_nombre":"","importador_nit":"","importador_direccion":"","importador_ciudad":"","agente_aduana":"","agente_aduana_nit":"","pais_origen":"","pais_procedencia":"","puerto_entrada":"","subpartida_arancelaria":"","tipo_vehiculo":"automovil","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_vin":"","vehiculo_motor":"","vehiculo_chasis":"","vehiculo_cilindraje":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_combustible":"","vehiculo_pasajeros":"","vehiculo_peso_bruto":"","cantidad":1,"ampara_multiples_vehiculos":false,"valor_fob_usd":0,"valor_flete_usd":0,"valor_seguro_usd":0,"valor_cif_usd":0,"valor_cif_cop":0,"tasa_cambio":0,"arancel_porcentaje":0,"arancel_valor":0,"iva_porcentaje":0,"iva_valor":0,"total_tributos":0,"regimen":"","observaciones":""}
 """;
 
     private const string Impronta =
@@ -455,8 +477,19 @@ en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicit
 expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
 false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
 
+
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 JSON valido sin markdown:
-{"tipo_documento":"certificado_improntas","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","fecha":"","entidad_emisora":"","entidad_nit":"","entidad_ciudad":"","inspector_nombre":"","inspector_documento":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_servicio":"","vehiculo_vin":"","vehiculo_vin_datos":"","vehiculo_motor":"","vehiculo_motor_datos":"","vehiculo_chasis":"","vehiculo_chasis_datos":"","vehiculo_serie":"","estado_motor":"no_verificado","estado_chasis":"no_verificado","estado_vin":"no_verificado","estado_serie":"no_verificado","tiene_qr":false,"tiene_hash":false,"hash_valor":"","resolucion_referencia":"","alertas":[],"observaciones":""}
+{"legibilidad":"buena","tipo_documento":"certificado_improntas","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","fecha":"","entidad_emisora":"","entidad_nit":"","entidad_ciudad":"","inspector_nombre":"","inspector_documento":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_servicio":"","vehiculo_vin":"","vehiculo_vin_datos":"","vehiculo_motor":"","vehiculo_motor_datos":"","vehiculo_chasis":"","vehiculo_chasis_datos":"","vehiculo_serie":"","estado_motor":"no_verificado","estado_chasis":"no_verificado","estado_vin":"no_verificado","estado_serie":"no_verificado","tiene_qr":false,"tiene_hash":false,"hash_valor":"","resolucion_referencia":"","alertas":[],"observaciones":""}
 """;
 
     private const string Soat =
@@ -483,7 +516,18 @@ en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicit
 expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
 false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "soat" | "certificado_soat" | "otro"
 - es_valido: true/false
 - paginas_documento: [paginas], total_paginas: numero
@@ -500,7 +544,7 @@ EXTRAER:
 - observaciones
 
 JSON valido sin markdown:
-{"tipo_documento":"soat","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_poliza":"","aseguradora":"","fecha_expedicion":"","fecha_inicio":"","fecha_vencimiento":"","estado_poliza":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","tomador_nombre":"","tomador_documento":"","valor_prima":0,"observaciones":""}
+{"legibilidad":"buena","tipo_documento":"soat","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_poliza":"","aseguradora":"","fecha_expedicion":"","fecha_inicio":"","fecha_vencimiento":"","estado_poliza":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","tomador_nombre":"","tomador_documento":"","valor_prima":0,"observaciones":""}
 """;
 
     // HU #10977 (Feature #10972) — prompt NUEVO. El certificado de vigencia SOAT y RTM pide seis datos
@@ -536,7 +580,18 @@ en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicit
 expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en
 false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "rtm" | "certificado_rtm" | "otro"
 - es_valido: true/false
 - paginas_documento: [paginas], total_paginas: numero
@@ -553,7 +608,7 @@ EXTRAER:
 - observaciones
 
 JSON valido sin markdown:
-{"tipo_documento":"rtm","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","cda_expide":"","cda_nit":"","fecha_expedicion":"","fecha_vigencia":"","fecha_vencimiento":"","estado":"no_determinado","resultado":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"rtm","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","cda_expide":"","cda_nit":"","fecha_expedicion":"","fecha_vigencia":"","fecha_vencimiento":"","estado":"no_determinado","resultado":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","observaciones":""}
 """;
 
     /// <summary>
@@ -650,7 +705,18 @@ LA PLACA — TRES COMPROBACIONES OBLIGATORIAS ANTES DE RESPONDER:
    - C esta abierta por la derecha.
    Si dudas entre Q y O, fijate solo en si hay algo por debajo del circulo.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "licencia_transito" | "recibo_pago" | "comprobante_runt" | "otro"
 - es_valido: true/false
 - paginas_documento: [paginas], total_paginas: numero
@@ -675,7 +741,7 @@ EXTRAER:
 - observaciones: si es_valido es false, explica en una frase QUE es el documento
 
 JSON valido sin markdown:
-{"tipo_documento":"licencia_transito","es_valido":true,"paginas_documento":[1],"total_paginas":1,"caras_presentes":"ambas","numero_licencia":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_cilindrada":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_carroceria":"","vehiculo_combustible":"","vehiculo_servicio":"","vehiculo_capacidad":"","vehiculo_motor":"","vehiculo_vin":"","vehiculo_serie":"","vehiculo_chasis":"","regrabado_motor":"","regrabado_serie":"","regrabado_chasis":"","propietario_nombre":"","propietario_tipo_documento":"","propietario_documento":"","potencia_hp":"","puertas":"","declaracion_importacion":"","fecha_importacion":"","fecha_matricula":"","fecha_expedicion":"","fecha_vencimiento":"","organismo_transito":"","serial_especie_venal":"","restriccion_movilidad":"","blindaje":"","limitacion_propiedad":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"licencia_transito","es_valido":true,"paginas_documento":[1],"total_paginas":1,"caras_presentes":"ambas","numero_licencia":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_cilindrada":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_carroceria":"","vehiculo_combustible":"","vehiculo_servicio":"","vehiculo_capacidad":"","vehiculo_motor":"","vehiculo_vin":"","vehiculo_serie":"","vehiculo_chasis":"","regrabado_motor":"","regrabado_serie":"","regrabado_chasis":"","propietario_nombre":"","propietario_tipo_documento":"","propietario_documento":"","potencia_hp":"","puertas":"","declaracion_importacion":"","fecha_importacion":"","fecha_matricula":"","fecha_expedicion":"","fecha_vencimiento":"","organismo_transito":"","serial_especie_venal":"","restriccion_movilidad":"","blindaje":"","limitacion_propiedad":"","observaciones":""}
 """;
 
     /// <summary>
@@ -742,7 +808,18 @@ LA PLACA — DOS COMPROBACIONES OBLIGATORIAS:
 2. Las letras Q, O, G, D y C se confunden entre si en los escaneos: Q lleva colita, O es un ovalo limpio, G lleva barra horizontal, D tiene el lado izquierdo recto, C esta abierta. Mira cada una de las tres letras antes de darla por buena.
 Si el documento no trae placa, dejala VACIA. No la inventes ni la tomes de otro documento del archivo.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "estado_cuenta" | "historico_pagos" | "declaracion_impuesto" | "comprobante_pago_bancario" | "recibo_derechos_transito" | "otro"
 - es_valido: true/false
 - paginas_documento: [paginas], total_paginas: numero
@@ -761,7 +838,7 @@ EXTRAER:
 - observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
 
 JSON valido sin markdown:
-{"tipo_documento":"estado_cuenta","es_valido":true,"paginas_documento":[1],"total_paginas":1,"emisor":"","emisor_es_autoridad_tributaria":true,"numero_certificado":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","propietario_nombre":"","propietario_documento":"","municipio":"","departamento":"","estado_deuda":"no_determinado","vigencias_adeudadas":"","vigencia_certificada":"","fecha_expedicion":"","avaluo":0,"observaciones":""}
+{"legibilidad":"buena","tipo_documento":"estado_cuenta","es_valido":true,"paginas_documento":[1],"total_paginas":1,"emisor":"","emisor_es_autoridad_tributaria":true,"numero_certificado":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","propietario_nombre":"","propietario_documento":"","municipio":"","departamento":"","estado_deuda":"no_determinado","vigencias_adeudadas":"","vigencia_certificada":"","fecha_expedicion":"","avaluo":0,"observaciones":""}
 """;
 
     /// <summary>
@@ -848,7 +925,18 @@ Si el documento no trae placa, dejala VACIA. No la inventes ni la tomes de otro 
 EL CHASIS Y EL VIN:
 Muchos contratos traen CHASIS pero no VIN, o al reves, y en los vehiculos importados ambos coinciden. Transcribe cada uno en su campo y NO copies el chasis dentro de vehiculo_vin si el documento no lo llama VIN. Si un campo aparece relleno de asteriscos o guiones, dejalo vacio.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "contrato_garantia_mobiliaria" | "certificado_rug" | "consulta_runt_garantias" | "aprobacion_credito" | "pagare" | "poliza" | "factura" | "certificado_camara_comercio" | "documento_en_blanco" | "otro"
   Si el archivo mezcla varios, pon el tipo del documento SOLICITADO cuando lo encuentres, no el del mayoritario.
 - es_valido: true/false
@@ -867,7 +955,7 @@ EXTRAER:
 - observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
 
 JSON valido sin markdown:
-{"tipo_documento":"contrato_garantia_mobiliaria","es_valido":true,"paginas_documento":[1],"total_paginas":1,"acreedor_nombre":"","acreedor_documento":"","acreedor_es_entidad_financiera":true,"garante_nombre":"","garante_documento":"","numero_registro":"","fecha_registro":"","fecha_contrato":"","cuantia_garantia":0,"vehiculo_placa":"","vehiculo_vin":"","vehiculo_chasis":"","vehiculo_motor":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"contrato_garantia_mobiliaria","es_valido":true,"paginas_documento":[1],"total_paginas":1,"acreedor_nombre":"","acreedor_documento":"","acreedor_es_entidad_financiera":true,"garante_nombre":"","garante_documento":"","numero_registro":"","fecha_registro":"","fecha_contrato":"","cuantia_garantia":0,"vehiculo_placa":"","vehiculo_vin":"","vehiculo_chasis":"","vehiculo_motor":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","observaciones":""}
 """;
 
     /// <summary>
@@ -948,7 +1036,18 @@ LA PLACA — DOS COMPROBACIONES OBLIGATORIAS:
 2. Las letras Q, O, G, D y C se confunden entre si en los escaneos: Q lleva colita, O es un ovalo limpio, G lleva barra horizontal, D tiene el lado izquierdo recto, C esta abierta. Mira cada una de las tres letras antes de darla por buena.
 Si el documento no trae placa, dejala VACIA. No la inventes ni la tomes de otro documento del archivo.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "recibo_derechos_transito" | "comprobante_pago_electronico" | "declaracion_impuesto" | "estado_cuenta" | "factura_venta" | "licencia_transito" | "documento_en_blanco" | "otro"
 - es_valido: true/false
 - paginas_documento: [paginas], total_paginas: numero
@@ -965,7 +1064,7 @@ EXTRAER:
 - observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
 
 JSON valido sin markdown:
-{"tipo_documento":"recibo_derechos_transito","es_valido":true,"paginas_documento":[1],"total_paginas":1,"entidad_recaudadora":"","entidad_es_autoridad":true,"hay_constancia_pago":false,"valor_total":0,"fecha_pago":"","numero_referencia":"","conceptos":"","vehiculo_placa":"","propietario_nombre":"","propietario_documento":"","municipio":"","departamento":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"recibo_derechos_transito","es_valido":true,"paginas_documento":[1],"total_paginas":1,"entidad_recaudadora":"","entidad_es_autoridad":true,"hay_constancia_pago":false,"valor_total":0,"fecha_pago":"","numero_referencia":"","conceptos":"","vehiculo_placa":"","propietario_nombre":"","propietario_documento":"","municipio":"","departamento":"","observaciones":""}
 """;
 
     /// <summary>
@@ -1062,7 +1161,18 @@ Una placa colombiana es 3 LETRAS + 3 DIGITOS (automoviles) o 3 LETRAS + 2 DIGITO
 USA EL FORMATO PARA CORREGIRTE, POSICION POR POSICION: los caracteres 1, 2 y 3 son SIEMPRE LETRAS y los caracteres 4, 5 y 6 son SIEMPRE DIGITOS (salvo en motos, donde el 6 es letra). Por eso un 0 en las tres primeras posiciones es en realidad una O; un 4 ahi es una A o una Y; un 1 es una I o una L. Corrige cada caracter que este en la posicion equivocada ANTES de responder.
 Si el documento no trae placa, dejala VACIA. No la inventes. Repito: la placa vacia es lo NORMAL en este documento.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "contrato_leasing" | "contrato_garantia_mobiliaria" | "factura_venta" | "poliza" | "certificado_camara_comercio" | "documento_en_blanco" | "otro"
 - es_valido: true/false
 - paginas_documento: [paginas], total_paginas: numero
@@ -1078,7 +1188,7 @@ EXTRAER:
 - observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve; si es valido y hay mas de un bien, dilo aqui
 
 JSON valido sin markdown:
-{"tipo_documento":"contrato_leasing","es_valido":true,"paginas_documento":[1],"total_paginas":1,"arrendador_nombre":"","arrendador_documento":"","locatario_nombre":"","locatario_documento":"","numero_locatarios":1,"numero_contrato":"","fecha_contrato":"","numero_bienes":1,"vehiculo_descripcion":"","vehiculo_placa":"","vehiculo_vin":"","vehiculo_chasis":"","vehiculo_motor":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","proveedor_nombre":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"contrato_leasing","es_valido":true,"paginas_documento":[1],"total_paginas":1,"arrendador_nombre":"","arrendador_documento":"","locatario_nombre":"","locatario_documento":"","numero_locatarios":1,"numero_contrato":"","fecha_contrato":"","numero_bienes":1,"vehiculo_descripcion":"","vehiculo_placa":"","vehiculo_vin":"","vehiculo_chasis":"","vehiculo_motor":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","proveedor_nombre":"","observaciones":""}
 """;
 
     /// <summary>
@@ -1165,7 +1275,18 @@ LA VIGENCIA — INFORMA, NO BLOQUEA:
 EL REPRESENTANTE LEGAL:
 Busca el apartado de NOMBRAMIENTOS o REPRESENTACION LEGAL y toma al representante legal PRINCIPAL, no al suplente. Si solo hay suplente, ponlo e indicalo en el cargo. Copia su documento si aparece.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "certificado_camara_comercio" | "rut" | "cedula" | "certificado_rues" | "ficha_homologacion" | "documento_en_blanco" | "otro"
 - es_valido: true/false
 - paginas_documento: [paginas], total_paginas: numero
@@ -1182,7 +1303,7 @@ EXTRAER:
 - observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
 
 JSON valido sin markdown:
-{"tipo_documento":"certificado_camara_comercio","es_valido":true,"paginas_documento":[1],"total_paginas":1,"camara_emisora":"","razon_social":"","nit":"","matricula_mercantil":"","fecha_expedicion":"","ultimo_ano_renovado":"","estado_sociedad":"activa","representante_legal_nombre":"","representante_legal_documento":"","representante_legal_cargo":"","incluye_cedula_representante":false,"domicilio":"","codigo_verificacion":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"certificado_camara_comercio","es_valido":true,"paginas_documento":[1],"total_paginas":1,"camara_emisora":"","razon_social":"","nit":"","matricula_mercantil":"","fecha_expedicion":"","ultimo_ano_renovado":"","estado_sociedad":"activa","representante_legal_nombre":"","representante_legal_documento":"","representante_legal_cargo":"","incluye_cedula_representante":false,"domicilio":"","codigo_verificacion":"","observaciones":""}
 """;
 
     /// <summary>
@@ -1279,7 +1400,18 @@ Estos escaneos son de mala calidad y el PRIMER digito es el que mas se pierde. A
 
 EL MODELO de la ficha es el año homologado y puede NO coincidir con el año del vehiculo del tramite. Transcribe el que ves y no lo ajustes.
 
+SI NO PUEDES LEERLO, DILO — NO LO ADIVINES:
+Estos documentos llegan escaneados y a veces la calidad no da. Antes de responder, comprueba si de
+verdad estas LEYENDO los campos o si estas completando con lo que suele haber en un documento asi.
+- legibilidad = "buena" si distingues con claridad el texto de los campos que devuelves.
+- legibilidad = "parcial" si el grueso se lee pero hay campos concretos que no distingues con seguridad.
+- legibilidad = "mala" si la imagen esta tan borrosa, tan oscura o tan torcida que no puedes leer los
+  datos: en ese caso deja los campos VACIOS y no propongas ninguno.
+Un campo que no puedes leer va VACIO. Vacio es una respuesta correcta y util; un valor plausible pero
+inventado no lo es, porque nadie podra distinguirlo de uno bueno.
+
 EXTRAER:
+- legibilidad: "buena" | "parcial" | "mala"
 - tipo_documento: "ficha_homologacion" | "certificado_emisiones" | "check_list_concesionario" | "camara_comercio" | "factura" | "prenda" | "impronta" | "aduana" | "documento_en_blanco" | "otro"
 - es_valido: true/false
 - paginas_documento: [paginas], total_paginas: numero
@@ -1297,7 +1429,7 @@ EXTRAER:
 - observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
 
 JSON valido sin markdown:
-{"tipo_documento":"ficha_homologacion","es_valido":true,"paginas_documento":[1,2],"total_paginas":2,"numero_ficha":"","fecha_ficha":"","tipo_homologacion":"","clase_vehiculo":"","tipo_carroceria":"","servicio":"","vehiculo_marca":"","vehiculo_referencia":"","vehiculo_modelo":"","motor_marca":"","cilindrada":"","combustible":"","numero_ejes":"","numero_sillas":"","capacidad":"","tiene_seccion_emisiones":true,"emisiones_co_ralenti":"","emisiones_hc_ralenti":"","emisiones_co_dinamica":"","emisiones_hc_dinamica":"","emisiones_nox_dinamica":"","opacidad_diesel":"","tiene_canister":false,"certificado_por":"","observaciones":""}
+{"legibilidad":"buena","tipo_documento":"ficha_homologacion","es_valido":true,"paginas_documento":[1,2],"total_paginas":2,"numero_ficha":"","fecha_ficha":"","tipo_homologacion":"","clase_vehiculo":"","tipo_carroceria":"","servicio":"","vehiculo_marca":"","vehiculo_referencia":"","vehiculo_modelo":"","motor_marca":"","cilindrada":"","combustible":"","numero_ejes":"","numero_sillas":"","capacidad":"","tiene_seccion_emisiones":true,"emisiones_co_ralenti":"","emisiones_hc_ralenti":"","emisiones_co_dinamica":"","emisiones_hc_dinamica":"","emisiones_nox_dinamica":"","opacidad_diesel":"","tiene_canister":false,"certificado_por":"","observaciones":""}
 """;
 
     private const string MandatoConfig =

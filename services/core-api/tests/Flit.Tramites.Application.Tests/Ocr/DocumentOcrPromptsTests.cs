@@ -785,4 +785,31 @@ public sealed class DocumentOcrPromptsTests
             prompt.Should().Contain(campo);
         }
     }
+
+    // ── HU #12038 — «si no puedes leerlo, dilo» ──────────────────────────────────────────────
+
+    [Fact]
+    public void Todos_los_prompts_documentales_piden_declarar_la_legibilidad()
+    {
+        // Medido: sobre las 7 fichas giradas donde el modelo INVENTABA, las 7 reportaron «parcial» y
+        // ninguna dijo «buena»; de las 56 derechas, 54 dijeron «buena». La señal no predice qué campo
+        // concreto falla, pero sí distingue «leí esto» de «me lo estoy imaginando».
+        foreach (var tipo in DocumentOcrPrompts.TiposDocumentales)
+        {
+            var prompt = DocumentOcrPrompts.PromptFor(tipo)!;
+            prompt.Should().Contain("SI NO PUEDES LEERLO, DILO", because: $"«{tipo}» debe poder decir que no ve el documento");
+            prompt.Should().Contain("legibilidad", because: $"«{tipo}» debe devolver el campo en el JSON");
+        }
+    }
+
+    [Fact]
+    public void Todos_los_prompts_documentales_prefieren_el_campo_vacio_a_uno_inventado()
+    {
+        // Es la regla que hace útil la señal: un valor plausible pero falso no se distingue de uno bueno.
+        foreach (var tipo in DocumentOcrPrompts.TiposDocumentales)
+        {
+            DocumentOcrPrompts.PromptFor(tipo)!.Should()
+                .Contain("Vacio es una respuesta correcta y util");
+        }
+    }
 }
