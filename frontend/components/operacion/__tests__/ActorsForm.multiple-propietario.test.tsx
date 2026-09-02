@@ -283,6 +283,33 @@ describe('ActorsForm — Múltiple Propietario, sin estado fantasma al desplazar
     expect((within(compradorCard).getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('');
     expect(mocks.runtPersonLookup).toHaveBeenCalledTimes(1);
   });
+
+  it('la consulta RUNT del comprador#1 (presentación partida, matrícula) no se mezcla con el comprador#2 recién agregado', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByLabelText(/Número de documento/);
+
+    // Consulta RUNT del único propietario (ordinal=1, índice 0), TODAVÍA en la presentación
+    // partida — sin pasar por la rejilla de traspaso.
+    await user.type(screen.getByLabelText(/Número de documento/), '111');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+    await screen.findByText(/Persona encontrada en RUNT/i);
+
+    // Agrega el segundo: se inserta EN el índice 1, justo después del primero. Sin reindexar los
+    // mapas posicionales, la consulta del primero podría "saltar" al recién creado.
+    await user.click(addButton('comprador'));
+    await screen.findByRole('tablist');
+
+    // El nuevo (activo tras agregar) NO heredó la consulta del primero.
+    expect(screen.queryByText(/Persona encontrada en RUNT/i)).toBeNull();
+    expect((screen.getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('');
+
+    // Vuelve al primero: su consulta sigue siendo LA SUYA.
+    await user.click(screen.getByRole('tab', { name: /Comprador 1/ }));
+    expect(screen.getByText(/Persona encontrada en RUNT/i)).toBeInTheDocument();
+    expect((screen.getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('111');
+    expect(mocks.runtPersonLookup).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ActorsForm — Múltiple Propietario, toda la píldora es clicable (no solo el texto)', () => {
@@ -340,27 +367,43 @@ describe('ActorsForm — Múltiple Propietario, toda la píldora es clicable (no
 });
 
 describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarjeta, nunca apiladas)', () => {
-  it('matrícula inicial: el contenido se reemplaza al cambiar de pestaña, y sobrevive limpio a la transición isSplit → MULTI → isSplit', async () => {
+  // CORRECCION (diagnostico del usuario): la verificacion previa de este test confirmo que el
+  // DATO sobrevivia a la transicion isSplit -> MULTI, pero no cuestiono que la transicion ocurriera
+  // - y no debia: al agregar el segundo propietario en matricula, la pantalla se salia de las
+  // secciones anchas de siempre y caia en la rejilla de tarjetas de traspaso. Eso era lo que el
+  // usuario veia "aparecer" al pulsar "+". Ahora SPLIT soporta 1..4 propietarios sin cambiar de
+  // presentacion - este test verifica AMBAS cosas: que el contenido se reemplaza (nunca se apila)
+  // Y que la presentacion de matricula (secciones anchas) NUNCA cambia a la rejilla de traspaso.
+  it('matricula inicial: el contenido se reemplaza al cambiar de pestana - la presentacion partida NUNCA cambia a la rejilla de traspaso', async () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    // Fase 1 (layout "isSplit", un solo actor): el gestor ya escribió el documento del primero.
+    // Fase 1 (un solo propietario, el caso mayoritario): el gestor ya escribio su documento.
     const doc = await screen.findByLabelText(/Número de documento/);
     await user.type(doc, '111');
     expect((screen.getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('111');
+    // Presentacion "isSplit": titulo de seccion ancha, SIN el encabezado "Actores del tramite" ni
+    // la tarjeta agrupada (`role="group"`) que solo existen en la rejilla de traspaso.
+    expect(screen.getByText(/Datos del comprador/)).toBeInTheDocument();
+    expect(screen.queryByText('Actores del trámite')).toBeNull();
+    expect(screen.queryByRole('group', { name: /Comprador/i })).toBeNull();
 
-    // Fase 2: agrega el segundo → abandona "isSplit", cae al layout MULTI. `getByLabelText`
-    // exige UN solo nodo con ese nombre accesible: si hubiera dos tarjetas apiladas (la vieja Y
-    // la nueva), esta misma línea ya fallaría por ambigüedad.
+    // Fase 2: agrega el segundo propietario. `getByLabelText` exige UN solo nodo con ese nombre
+    // accesible: si hubiera dos tarjetas apiladas (la vieja Y la nueva), esta misma linea ya
+    // fallaria por ambiguedad - y la presentacion partida debe seguir intacta, NO caer a la
+    // rejilla de tarjetas.
     await user.click(addButton('comprador'));
     await screen.findByRole('tablist');
+    expect(screen.getByText(/Datos del comprador/)).toBeInTheDocument();
+    expect(screen.queryByText('Actores del trámite')).toBeNull();
+    expect(screen.queryByRole('group', { name: /Comprador/i })).toBeNull();
 
     // La pestaña nueva (Comprador 2) queda activa, y su documento es el de un actor VACÍO — no
     // heredó lo que el gestor había escrito para Comprador 1, ni lo perdió (se verifica abajo).
     expect(screen.getByRole('tab', { name: /Comprador 2/ })).toHaveAttribute('aria-selected', 'true');
     expect((screen.getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('');
 
-    // Fase 3: vuelve a Comprador 1 — su "111" sigue ahí, intacto pese al cambio de layout.
+    // Fase 3: vuelve a Comprador 1 — su "111" sigue ahí, intacto.
     await user.click(screen.getByRole('tab', { name: /Comprador 1/ }));
     expect((screen.getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('111');
 
@@ -368,13 +411,50 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
     await user.click(screen.getByRole('tab', { name: /Comprador 2/ }));
     expect((screen.getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('');
 
-    // Fase 5: elimina Comprador 2 (activo) → el formulario regresa a "isSplit" (un solo actor).
-    // Comprador 1 no perdió su documento en el viaje de ida y vuelta entre layouts.
+    // Fase 5: elimina Comprador 2 (activo) → vuelve a un solo propietario, MISMA presentación en
+    // todo momento (nunca hubo rejilla que "regresar" de). Comprador 1 no perdió su documento.
     await user.click(screen.getByRole('button', { name: 'Quitar Comprador 2' }));
     await waitFor(() =>
       expect(screen.queryByRole('tablist')?.querySelectorAll('[role="tab"]').length ?? 0).toBe(1),
     );
     expect((screen.getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('111');
+    expect(screen.getByText(/Datos del comprador/)).toBeInTheDocument();
+    expect(screen.queryByText('Actores del trámite')).toBeNull();
+    expect(screen.queryByRole('group', { name: /Comprador/i })).toBeNull();
+  });
+
+  it('matricula inicial: el bloque "Porcentaje de propiedad" aparece al final desde el segundo propietario, y desaparece si vuelve a uno solo - en la presentacion partida', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByLabelText(/Número de documento/);
+    expect(screen.queryByText(/Porcentaje de propiedad/)).toBeNull();
+
+    await user.click(addButton('comprador'));
+    await screen.findByRole('tablist');
+    const panel = screen.getByText(/Porcentaje de propiedad/);
+    expect(panel).toBeInTheDocument();
+
+    // Va al FINAL: después de "Datos de contacto", igual que en el layout MULTI.
+    const datosContacto = screen.getByText('Datos de contacto');
+    expect(datosContacto.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Quitar Comprador 2' }));
+    await waitFor(() => expect(screen.queryByText(/Porcentaje de propiedad/)).toBeNull());
+  });
+
+  it('matricula inicial: toda la pildora responde al clic (misma superficie completa que en traspaso)', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByLabelText(/Número de documento/);
+    await user.click(addButton('comprador'));
+    await screen.findByRole('tablist');
+
+    const tab1 = screen.getByRole('tab', { name: /Comprador 1/ });
+    expect(tab1.className).toMatch(/\bborder\b/);
+    expect(tab1.className).toMatch(/\bh-9\b/);
+
+    await user.click(tab1);
+    expect(tab1).toHaveAttribute('aria-selected', 'true');
   });
 
   it('traspaso: vendedores y compradores se comportan IGUAL — el contenido se reemplaza al cambiar de pestaña en ambos lados', async () => {

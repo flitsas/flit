@@ -1834,7 +1834,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   useEffect(() => {
     if (!autoConsultRunt || !instanceId || readOnly) return;
     if (propietarioIndex < 0) return;
-    if (isSplit && (actors.length !== 1 || actors[0]?.rol !== rolDelPropietario)) return;
+    // Multiple Propietario (ADR-0053) - el criterio real es UN SOLO LADO (rol), no un solo
+    // actor: en SPLIT ahora puede haber 2..4 actores del mismo rol. Si el rol que este layout
+    // captura no es el del propietario, la auto-consulta no aplica (mismo criterio de siempre,
+    // generalizado por rol en vez de por conteo de actores).
+    if (isSplit && roles[0] !== rolDelPropietario) return;
 
     const documentNumber = (propietarioDoc ?? '').trim();
     if (!documentNumber) return;
@@ -1856,7 +1860,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     instanceId,
     readOnly,
     isSplit,
-    actors.length,
+    roles,
     rolDelPropietario,
     propietarioIndex,
     propietarioDoc,
@@ -2925,14 +2929,26 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const consultandoActor = consultasManuales > 0;
 
   // ── Layout SPLIT (un comprador): 2 secciones ──────────────────────────────
-  if (isSplit && actors.length === 1) {
-    const actor = actors[0];
-    const errors = showErrors ? validation.byActor[0] : {};
-    const runtState: LookupState = runt[0] ?? { status: 'idle' };
+  if (isSplit) {
+    // Multiple Propietario (ADR-0053) - el criterio de entrada a SPLIT es UN SOLO LADO (rol), no
+    // un solo actor: `roles.length === 1` (implícito en `isSplit`) ya garantiza que TODOS los
+    // actores en `actors` son del mismo rol. Con 2..4 propietarios de ese rol, SPLIT conserva su
+    // presentación de siempre (secciones anchas, no rejilla) y solo cambia CUÁL actor pinta el
+    // cuerpo — el de la pestaña activa — exactamente el mismo cálculo que usa el layout MULTI
+    // (`activeTabByRol` + `indicesForRol`), reutilizado tal cual.
+    const splitRol = roles[0];
+    const splitIdxs = indicesForRol(actors, splitRol);
+    const splitActiveOrdinal = Math.min(Math.max(activeTabByRol[splitRol] ?? 1, 1), splitIdxs.length || 1);
+    const activeIndex = splitIdxs[splitActiveOrdinal - 1] ?? 0;
+    const ownershipItems = ownershipItemsForRol(splitRol);
+    const hasPercentagePanel = ownershipItems.length >= 2;
+    const actor = actors[activeIndex];
+    const errors = showErrors ? validation.byActor[activeIndex] : {};
+    const runtState: LookupState = runt[activeIndex] ?? { status: 'idle' };
     const docLocked = autoConsultRunt && !!actor.numeroDocumento.trim();
-    const razonLocked = isRazonSocialLocked(actor, 0);
+    const razonLocked = isRazonSocialLocked(actor, activeIndex);
     const ciudades = filterCiudades(actor.ciudad ?? '');
-    const showCiudades = !!ciudadOpen[0] && ciudades.length > 0;
+    const showCiudades = !!ciudadOpen[activeIndex] && ciudades.length > 0;
     // Novedad nov.41 — este actor es el que recibe la precarga silenciosa del documento del
     // propietario (paso 1). Aplica al rol que ES ese propietario: el vendedor del traspaso, o el
     // titular donde el vehículo ya está inscrito y no hay parte vendedora (familia OTROS).
@@ -2945,8 +2961,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // cubre la razón social que vino de RUES, y `isNameLockedByRunt` solo la persona natural, así
     // que una jurídica resuelta por otra vía quedaba editable — y ahí es donde se cambia de titular.
     const identidadDelRegistro = esPropietarioInscrito && runtState.status === 'found';
-    const nombreBloqueado = razonLocked || isNameLockedByRunt(0, actor) || identidadDelRegistro;
-    const rnmcIssueDate = issueDateField(0);
+    const nombreBloqueado = razonLocked || isNameLockedByRunt(activeIndex, actor) || identidadDelRegistro;
+    const rnmcIssueDate = issueDateField(activeIndex);
     return (
       <>
       {/* El velo va en los DOS layouts. Estaba solo en el de traspaso, que es el que cierra el
@@ -2963,25 +2979,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
         {/* Múltiple Propietario (ADR-0053) — solo matrícula inicial y traspaso, y solo sobre el
             actor que SE captura por formulario (no el propietario inscrito de la familia OTROS,
-            cuya identidad viene fija del RUNT; no el locatario, fuera del alcance cerrado).
-            Solo la fila de pestañas: este layout ("isSplit") únicamente se alcanza cuando
-            `actors.length === 1` en TODO el formulario, así que este lado nunca tiene un segundo
-            actor mientras se siga renderizando aquí — el bloque "Porcentaje de propiedad" jamás
-            aplicaría (ver `OwnershipPercentagePanel`, condición `items.length >= 2`). En cuanto se
-            agrega el segundo, `actors.length` pasa a 2 y el render cae al layout MULTI de abajo,
-            que sí monta ambas piezas. */}
+            cuya identidad viene fija del RUNT; no el locatario, fuera del alcance cerrado). SPLIT
+            conserva su presentación de siempre — secciones anchas, nunca rejilla de tarjetas — y
+            soporta 1..4 propietarios del mismo modo que MULTI: la fila de pestañas arriba, y el
+            cuerpo (más abajo) pinta los datos de la pestaña ACTIVA (`activeIndex`), reemplazándolos
+            al cambiar — nunca se apilan tarjetas. */}
         {!esPropietarioInscrito && actor.rol !== 'locatario' && (
           <OwnershipTabsBar
-            items={ownershipItemsForRol(actor.rol)}
-            activeIndex={0}
-            onSelectTab={() => {}}
+            items={ownershipItems}
+            activeIndex={activeIndex}
+            onSelectTab={(i) => selectOwnershipTab(actor.rol, i)}
             onAdd={() => addOwner(actor.rol)}
             onRemove={removeOwner}
-            maxReached={ownershipItemsForRol(actor.rol).length >= MAX_OWNERS_PER_SIDE}
+            maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
             readOnly={readOnly}
             idPrefix={`actor-${actor.rol}-single`}
             sideLabel={rotuloDelActor(actor.rol)}
-            hasPercentagePanel={false}
+            hasPercentagePanel={hasPercentagePanel}
           />
         )}
 
@@ -3017,7 +3031,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             {!isJuridical(actor) ? (
               /* Natural: tipo | Número (col-span-2) | Consultar RUNT | hint col-span-4 */
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-end">
-                {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0), '')}
+                {docTypeSelector(activeIndex, 'comprador', isDocTypeLockedByRunt(activeIndex), '')}
                 <div className="lg:col-span-2">
                   <label htmlFor="comprador-numeroDoc" className={`${WIZARD_LABEL} mb-1.5`}>
                     Número de documento
@@ -3027,12 +3041,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     type="text"
                     value={actor.numeroDocumento}
                     readOnly={docLocked || (seedingOwnerDoc && ownerSeedStatus === 'loading')}
-                    onChange={(e) => updateActor(0, { numeroDocumento: e.target.value })}
+                    onChange={(e) => updateActor(activeIndex, { numeroDocumento: e.target.value })}
                     onKeyDown={(e) => {
                       if (docLocked) return;
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        conVelo(handleIdentityLookup(0));
+                        conVelo(handleIdentityLookup(activeIndex));
                       }
                     }}
                     aria-label="Número de documento"
@@ -3089,7 +3103,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 {!readOnly && !autoConsultRunt && (
                   <button
                     type="button"
-                    onClick={() => conVelo(handleIdentityLookup(0))}
+                    onClick={() => conVelo(handleIdentityLookup(activeIndex))}
                     disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
                     className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-[#557EFF] px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
@@ -3109,7 +3123,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             ) : (
               /* Jurídica: tipo | NIT (col-span-2) | Consultar RUES | hint col-span-4 */
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-end">
-                {docTypeSelector(0, 'comprador', isDocTypeLockedByRunt(0), '')}
+                {docTypeSelector(activeIndex, 'comprador', isDocTypeLockedByRunt(activeIndex), '')}
                 <div className="lg:col-span-2">
                   <label htmlFor="comprador-numeroDoc" className={`${WIZARD_LABEL} mb-1.5`}>
                     NIT
@@ -3119,12 +3133,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     type="text"
                     value={actor.numeroDocumento}
                     readOnly={docLocked}
-                    onChange={(e) => updateActor(0, { numeroDocumento: e.target.value })}
+                    onChange={(e) => updateActor(activeIndex, { numeroDocumento: e.target.value })}
                     onKeyDown={(e) => {
                       if (docLocked) return;
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        conVelo(handleIdentityLookup(0));
+                        conVelo(handleIdentityLookup(activeIndex));
                       }
                     }}
                     aria-label="NIT"
@@ -3143,7 +3157,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 {!readOnly && !autoConsultRunt && (
                   <button
                     type="button"
-                    onClick={() => conVelo(handleIdentityLookup(0))}
+                    onClick={() => conVelo(handleIdentityLookup(activeIndex))}
                     disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
                     className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-[#557EFF] px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
@@ -3157,7 +3171,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </p>
               </div>
             )}
-            {runtResult(0)}
+            {runtResult(activeIndex)}
           </div>
         </WizardAccordion>
 
@@ -3175,7 +3189,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 ? 'Datos de notificación del locatario: recibirá los avisos del trámite.'
                 : 'Confirma o edita la información de notificación del propietario.'}
           </p>
-          <div className="text-xs opacity-70">{contactLookupHint(0)}</div>
+          <div className="text-xs opacity-70">{contactLookupHint(activeIndex)}</div>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Fila 1: nombre | documento | correo */}
             <div>
@@ -3191,7 +3205,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     ? shortRuesRazonSocial(actor.nombreCompleto) || actor.nombreCompleto
                     : actor.nombreCompleto
                 }
-                onChange={(e) => updateActor(0, { nombreCompleto: e.target.value })}
+                onChange={(e) => updateActor(activeIndex, { nombreCompleto: e.target.value })}
                 readOnly={nombreBloqueado}
                 aria-invalid={!!errors.nombreCompleto}
                 aria-describedby={
@@ -3239,8 +3253,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 type="email"
                 value={actor.email}
                 onChange={(e) => {
-                  markContactTouched(0, 'email');
-                  updateActor(0, { email: e.target.value });
+                  markContactTouched(activeIndex, 'email');
+                  updateActor(activeIndex, { email: e.target.value });
                 }}
                 placeholder="correo@ejemplo.com"
                 aria-invalid={!!errors.email}
@@ -3269,8 +3283,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 aria-required="true"
                 value={actor.telefono ?? ''}
                 onChange={(e) => {
-                  markContactTouched(0, 'telefono');
-                  updateActor(0, { telefono: e.target.value });
+                  markContactTouched(activeIndex, 'telefono');
+                  updateActor(activeIndex, { telefono: e.target.value });
                 }}
                 placeholder="3001234567"
                 aria-invalid={!!errors.telefono}
@@ -3295,14 +3309,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 aria-required="true"
                 value={actor.ciudad ?? ''}
                 onChange={(e) => {
-                  markContactTouched(0, 'ciudad');
-                  updateActor(0, { ciudad: e.target.value });
-                  setCiudadOpen((p) => ({ ...p, 0: true }));
+                  markContactTouched(activeIndex, 'ciudad');
+                  updateActor(activeIndex, { ciudad: e.target.value });
+                  setCiudadOpen((p) => ({ ...p, [activeIndex]: true }));
                 }}
                 onFocus={() => {
-                  if ((actor.ciudad ?? '').trim().length >= 2) setCiudadOpen((p) => ({ ...p, 0: true }));
+                  if ((actor.ciudad ?? '').trim().length >= 2) setCiudadOpen((p) => ({ ...p, [activeIndex]: true }));
                 }}
-                onBlur={() => setTimeout(() => setCiudadOpen((p) => ({ ...p, 0: false })), 150)}
+                onBlur={() => setTimeout(() => setCiudadOpen((p) => ({ ...p, [activeIndex]: false })), 150)}
                 autoComplete="off"
                 placeholder="Escribe para buscar…"
                 aria-invalid={!!errors.ciudad}
@@ -3326,9 +3340,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          markContactTouched(0, 'ciudad');
-                          updateActor(0, { ciudad: c });
-                          setCiudadOpen((p) => ({ ...p, 0: false }));
+                          markContactTouched(activeIndex, 'ciudad');
+                          updateActor(activeIndex, { ciudad: c });
+                          setCiudadOpen((p) => ({ ...p, [activeIndex]: false }));
                         }}
                         className="w-full text-left px-3 py-2 text-xs border-b last:border-0 hover:bg-[rgba(85,126,255,0.06)]"
                       >
@@ -3351,8 +3365,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 aria-required="true"
                 value={actor.direccion ?? ''}
                 onChange={(e) => {
-                  markContactTouched(0, 'direccion');
-                  updateActor(0, { direccion: e.target.value });
+                  markContactTouched(activeIndex, 'direccion');
+                  updateActor(activeIndex, { direccion: e.target.value });
                 }}
                 aria-invalid={!!errors.direccion}
                 aria-describedby={errors.direccion ? 'comprador-direccion-err' : undefined}
@@ -3371,8 +3385,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
         {isJuridical(actor) && (
           <WizardAccordion title="Representante legal" defaultOpen>
-            {rlSection(0)}
+            {rlSection(activeIndex)}
           </WizardAccordion>
+        )}
+
+        {/* Múltiple Propietario (ADR-0053) — "Porcentaje de propiedad" cierra el formulario,
+            después de todos los datos del actor (igual que en el layout MULTI). Solo se monta con
+            2+ propietarios EN ESTE MOMENTO — sin memoria histórica: si el lado vuelve a 1, el
+            bloque desaparece de nuevo. */}
+        {!esPropietarioInscrito && actor.rol !== 'locatario' && hasPercentagePanel && (
+          <OwnershipPercentagePanel
+            items={ownershipItems}
+            activeIndex={activeIndex}
+            onPercentageChange={updateOwnershipPercentage}
+            readOnly={readOnly}
+            idPrefix={`actor-${actor.rol}-single`}
+            showErrors={showErrors}
+          />
         )}
 
         {footer}
