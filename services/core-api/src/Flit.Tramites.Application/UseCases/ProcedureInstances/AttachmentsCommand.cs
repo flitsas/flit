@@ -84,12 +84,15 @@ public static class AttachmentRules
     public static bool IsSoatEvidenceTipo(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
 
+
     /// <summary>
     /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: editable como
     /// borrador (<see cref="TramiteEstado.PermiteEdicionDatos"/> — borrador, rechazado+flag, o
     /// legado <c>subsanacion</c>). Excepción de la ruta de placa (HU #10785): la evidencia de SOAT
     /// se puede cargar con el trámite <c>entregado</c> y el sub-estado interno de placa en
     /// <c>asignado</c>, para desbloquear la aprobación del OT.
+    /// <para>La Licencia de Tránsito que emite el OT NO pasa por aquí: tiene su propio gate de estado
+    /// en <see cref="AdjuntarLicenciaTransitoHandler"/>, que acepta <c>entregado</c> y <c>aprobado</c>.</para>
     /// </summary>
     public static bool AllowsUploadInState(
         string status,

@@ -1242,7 +1242,7 @@ public static class AdminOtEndpoints
             file.Length,
             stream);
 
-        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
+        var (result, error, ocr) = await repository.ExecuteInClientTenantScopeAsync(
             access!.ClientTenantId,
             () => handler.HandleAsync(id, access.ClientTenantId, input, ResolveUserId(httpContext.User), cancellationToken),
             cancellationToken).ConfigureAwait(false);
@@ -1254,7 +1254,12 @@ public static class AdminOtEndpoints
             "file_too_large" => Results.BadRequest(new { error = "file_too_large", message = "El archivo excede el tamaño máximo permitido para este documento." }),
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "estado_invalido" => Results.Conflict(new { error = "INVALID_STATE", message = "La Licencia de Tránsito solo se adjunta con el trámite entregado o aprobado." }),
-            _ => Results.Created($"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}", result),
+            // HU #11996 — el adjunto se crea SIEMPRE; `ocr` es informativo y puede venir null cuando el
+            // análisis no se pudo hacer (proveedor caído, sin key, archivo >10 MB). La pantalla lo
+            // presenta como «no analizado», nunca como un fallo del cargue.
+            _ => Results.Created(
+                $"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}",
+                new { attachment = result, ocr }),
         };
     }
 

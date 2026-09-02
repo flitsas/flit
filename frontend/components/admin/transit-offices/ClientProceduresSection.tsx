@@ -7,6 +7,7 @@ import { tramitesClient } from "@/lib/api/tramites-client";
 import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 import {
   adjuntarOtLicenciaTransito,
+  type AdjuntarLtResult,
   approveOtClientProcedure,
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaHealth,
@@ -98,6 +99,39 @@ export function readAssignPlateError(err: unknown): string {
  * "desaparecen"). Para ot_admin el backend ignora el override (seguridad) y sigue
  * resolviendo por su propio tenant.
  */
+
+/**
+ * HU #11996 — mensaje del OCR de la Licencia de Tránsito para el toast del OT.
+ *
+ * El análisis NUNCA bloquea el adjunto: aquí solo se traduce el resultado a algo accionable. Tres
+ * desenlaces posibles y ninguno impide que la LT quede guardada:
+ *  - `ocr` en null  → no se pudo analizar (proveedor caído, sin key, archivo >10 MB) ⇒ silencio: el
+ *                     OT no puede hacer nada al respecto y un aviso ahí solo sería ruido.
+ *  - `es_valido` false → el archivo no parece una licencia (típicamente un recibo de derechos).
+ *  - placa/VIN leídos  → se devuelven para que el OT coteje de un vistazo contra el trámite.
+ */
+function mensajeOcrLt(
+  ocr: AdjuntarLtResult["ocr"],
+): { texto: string; tono: "success" | "error" } | null {
+  const data = ocr?.data;
+  if (!data) return null;
+
+  if (data.es_valido === false) {
+    const detalle = typeof data.observaciones === "string" ? data.observaciones.trim() : "";
+    return {
+      tono: "error",
+      texto: detalle
+        ? `El documento adjuntado no parece una Licencia de Tránsito: ${detalle.slice(0, 160)}`
+        : "El documento adjuntado no parece una Licencia de Tránsito. Verifícalo.",
+    };
+  }
+
+  const placa = typeof data.vehiculo_placa === "string" ? data.vehiculo_placa.trim() : "";
+  return placa
+    ? { tono: "success", texto: `Licencia de Tránsito verificada (placa ${placa}).` }
+    : null;
+}
+
 export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?: string }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -337,9 +371,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       const updated = await approveOtClientProcedure(target.id, mandateSignerId);
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
 
+      let avisoOcr: ReturnType<typeof mensajeOcrLt> = null;
       if (ltFile) {
         try {
-          await adjuntarOtLicenciaTransito(target.id, ltFile, scope);
+          const { ocr } = await adjuntarOtLicenciaTransito(target.id, ltFile, scope);
+          avisoOcr = mensajeOcrLt(ocr);
         } catch {
           // La aprobación YA quedó firme; solo falló el adjunto. Se puede reintentar con la
           // acción dedicada de Licencia de Tránsito.
@@ -357,7 +393,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       setApproveTarget(null);
       setMandatarioTarget(null);
       setLtFile(null);
-      show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
+      // El resultado del OCR manda sobre el mensaje genérico: si la LT no parece una licencia, el
+      // OT tiene que enterarse en el mismo momento, no al abrir el expediente más tarde.
+      if (avisoOcr) {
+        show(`Trámite aprobado. ${avisoOcr.texto}`, avisoOcr.tono);
+      } else {
+        show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
+      }
     } catch (err) {
       const errorCode =
         err instanceof ApiError && err.status === 409
@@ -470,10 +512,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (!ltTarget || !ltFile) return;
     setActing(true);
     try {
-      await adjuntarOtLicenciaTransito(ltTarget.id, ltFile, scope);
+      const { ocr } = await adjuntarOtLicenciaTransito(ltTarget.id, ltFile, scope);
+      const aviso = mensajeOcrLt(ocr);
       setLtTarget(null);
       setLtFile(null);
-      show("Licencia de Tránsito adjuntada.", "success");
+      show(aviso ? aviso.texto : "Licencia de Tránsito adjuntada.", aviso ? aviso.tono : "success");
     } catch {
       show("No se pudo adjuntar la Licencia de Tránsito.", "error");
     } finally {

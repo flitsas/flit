@@ -1,4 +1,5 @@
 using System.Text;
+using Flit.Tramites.Application.Ocr;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
@@ -87,7 +88,7 @@ public sealed class LicenciaTransitoHandlerTests
         var instance = Instance(id, tenantId, status);
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
 
-        var (result, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
+        var (result, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
 
         error.Should().BeNull();
         result!.Tipo.Should().Be("licencia_transito");
@@ -108,7 +109,7 @@ public sealed class LicenciaTransitoHandlerTests
         instance.ConsolidadoMaestroVigente = true;
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
 
-        var (_, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
+        var (_, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
 
         error.Should().BeNull();
         instance.ConsolidadoMaestroVigente.Should().BeFalse();
@@ -125,7 +126,7 @@ public sealed class LicenciaTransitoHandlerTests
         var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(Instance(id, tenantId, status));
 
-        var (result, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
+        var (result, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
 
         error.Should().Be("estado_invalido");
         result.Should().BeNull();
@@ -152,7 +153,7 @@ public sealed class LicenciaTransitoHandlerTests
         });
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
 
-        var (result, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf("lt_nueva.pdf"), null, ct);
+        var (result, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf("lt_nueva.pdf"), null, ct);
 
         error.Should().BeNull();
         _storage.Deleted.Should().Contain("old/lt");
@@ -169,7 +170,7 @@ public sealed class LicenciaTransitoHandlerTests
             AdjuntarLicenciaTransitoHandler.Tipo, "lt.exe", "application/octet-stream", 10,
             new MemoryStream([1, 2]));
 
-        var (result, error) = await _adjuntar.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), input, null, ct);
+        var (result, error, _) = await _adjuntar.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), input, null, ct);
 
         error.Should().Be("invalid_mime");
         result.Should().BeNull();
@@ -184,7 +185,7 @@ public sealed class LicenciaTransitoHandlerTests
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
         _repo.UserExistsAsync(user, ct).Returns(false);
 
-        var (_, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), user, ct);
+        var (_, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), user, ct);
 
         error.Should().BeNull();
         instance.Attachments.Single(a => a.Tipo == "licencia_transito").UploadedBy.Should().BeNull();
@@ -402,5 +403,62 @@ public sealed class LicenciaTransitoHandlerTests
             StoragePath = stored.StoragePath,
             UploadedAt = DateTimeOffset.UtcNow,
         });
+    }
+
+    // ── HU #11996 — verificación por OCR de la LT que entrega el OT ──────────
+
+    /// <summary>Analizador que siempre falla, para probar que el adjunto NO depende del OCR.</summary>
+    private sealed class AnalizadorCaido : IDocumentOcrAnalyzer
+    {
+        public Task<DocumentOcrAnalysis> AnalyzeAsync(string tipo, ReadOnlyMemory<byte> content, string mediaType, CancellationToken ct)
+            => throw new HttpRequestException("proveedor caido");
+    }
+
+    [Fact]
+    public async Task Lt_se_adjunta_igual_aunque_el_proveedor_de_ia_este_caido()
+    {
+        // La LT es el entregable del OT: perderla porque la IA no responde sería peor que no
+        // verificarla. El adjunto se crea y el resultado del análisis viaja en null.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Entregado);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(
+            _repo, _storage, new AnalyzeDocumentHandler(new AnalizadorCaido()));
+
+        var (result, error, ocr) = await handler.HandleAsync(id, tenantId, LtPdf(), null, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        ocr.Should().BeNull("un fallo del proveedor no puede costarle al OT el adjunto");
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == AdjuntarLicenciaTransitoHandler.Tipo);
+    }
+
+    [Fact]
+    public async Task Lt_se_adjunta_igual_cuando_no_hay_analizador_configurado()
+    {
+        // Entornos sin OCR (mock apagado, sin key): el handler debe seguir funcionando igual que antes.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Entregado);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage);
+
+        var (result, error, ocr) = await handler.HandleAsync(id, tenantId, LtPdf(), null, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        ocr.Should().BeNull();
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == AdjuntarLicenciaTransitoHandler.Tipo);
+    }
+
+    [Fact]
+    public void El_ocr_de_la_lt_usa_el_prompt_de_la_licencia_de_transito()
+    {
+        // El tipo documental del OT (`licencia_transito`) y el de la casilla del wizard
+        // (`tarjeta_propiedad`) son códigos distintos para el MISMO documento: comparten prompt.
+        AdjuntarLicenciaTransitoHandler.TipoOcr.Should().Be("tarjeta_propiedad");
+        DocumentOcrPrompts.IsSupported(AdjuntarLicenciaTransitoHandler.TipoOcr).Should().BeTrue();
+        AdjuntarLicenciaTransitoHandler.Tipo.Should().Be("licencia_transito");
     }
 }

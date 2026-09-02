@@ -272,14 +272,18 @@ describe("ClientProceduresSection — HU #10220", () => {
 
   it("aprobar con LT seleccionada aprueba ANTES de adjuntar la licencia", async () => {
     vi.mocked(adjuntarOtLicenciaTransito).mockResolvedValue({
-      id: "att-lt",
-      tipo: "licencia_transito",
-      filename: "lt.pdf",
-      mimetype: "application/pdf",
-      sizeBytes: 10,
-      sha256: "x",
-      source: "ot",
-      uploadedAt: "2026-07-06T10:00:00Z",
+      // HU #11996 — el backend devuelve el adjunto junto al análisis OCR.
+      ocr: null,
+      attachment: {
+        id: "att-lt",
+        tipo: "licencia_transito",
+        filename: "lt.pdf",
+        mimetype: "application/pdf",
+        sizeBytes: 10,
+        sha256: "x",
+        source: "ot",
+        uploadedAt: "2026-07-06T10:00:00Z",
+      },
     });
     const user = userEvent.setup();
     renderSection();
@@ -305,14 +309,18 @@ describe("ClientProceduresSection — HU #10220", () => {
       pageSize: 20,
     });
     vi.mocked(adjuntarOtLicenciaTransito).mockResolvedValue({
-      id: "att-lt",
-      tipo: "licencia_transito",
-      filename: "lt.pdf",
-      mimetype: "application/pdf",
-      sizeBytes: 10,
-      sha256: "x",
-      source: "ot",
-      uploadedAt: "2026-07-06T10:00:00Z",
+      // HU #11996 — el backend devuelve el adjunto junto al análisis OCR.
+      ocr: null,
+      attachment: {
+        id: "att-lt",
+        tipo: "licencia_transito",
+        filename: "lt.pdf",
+        mimetype: "application/pdf",
+        sizeBytes: 10,
+        sha256: "x",
+        source: "ot",
+        uploadedAt: "2026-07-06T10:00:00Z",
+      },
     });
     const user = userEvent.setup();
     renderSection();

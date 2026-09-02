@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Tramites.Application.Ocr;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -12,15 +13,31 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// adjunta con el trámite <c>entregado</c> o <c>aprobado</c>. Idempotente: re-adjuntar
 /// reemplaza la LT previa (el consolidado siempre toma la vigente). Registra el evento
 /// <c>lt_adjuntada</c> en la bitácora.
+/// <para><b>HU #11996 — verificación por OCR.</b> La LT que entrega el OT es el resultado del trámite:
+/// si viene equivocada, el expediente queda cerrado con el documento de otro vehículo y nadie lo nota.
+/// Se analiza aquí, en el backend, y no en la modal, porque hay DOS caminos que llegan a este handler
+/// —el cargue junto con la aprobación y la acción dedicada de reintento— y ponerlo en el front
+/// obligaría a recordarlo en ambos.</para>
+/// <para>El análisis <b>nunca</b> bloquea el adjunto, igual que en el wizard: la LT es el entregable
+/// del OT y perderla por un fallo del proveedor de IA sería peor que no verificarla. El resultado
+/// viaja en la respuesta para que la pantalla lo muestre, y queda en el evento <c>lt_adjuntada</c>
+/// para que sea auditable después.</para>
 /// </summary>
 public sealed class AdjuntarLicenciaTransitoHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    AnalyzeDocumentHandler? ocr = null)
 {
+    /// <summary>
+    /// Prompt con el que se verifica la LT. Es el mismo documento que la casilla del wizard, así que
+    /// comparten prompt aunque el tipo documental difiera (<c>licencia_transito</c> lo emite el OT;
+    /// <c>tarjeta_propiedad</c> es la licencia vigente que el gestor aporta como insumo).
+    /// </summary>
+    public const string TipoOcr = "tarjeta_propiedad";
     /// <summary>Tipo documental de la Licencia de Tránsito en <c>procedure_instance_attachments</c>.</summary>
     public const string Tipo = "licencia_transito";
 
-    public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
+    public async Task<(AttachmentDto? Result, string? Error, DocumentOcrResponse? Ocr)> HandleAsync(
         Guid id,
         Guid tenantId,
         UploadAttachmentInput input,
@@ -28,19 +45,24 @@ public sealed class AdjuntarLicenciaTransitoHandler(
         CancellationToken ct = default)
     {
         if (input.Content is null || input.SizeBytes <= 0)
-            return (null, "missing_file");
+            return (null, "missing_file", null);
         if (string.IsNullOrWhiteSpace(input.Mimetype) || !AttachmentRules.ValidMimetypes.Contains(input.Mimetype))
-            return (null, "invalid_mime");
+            return (null, "invalid_mime", null);
         if (input.SizeBytes > AttachmentRules.MaxSizeBytes)
-            return (null, "file_too_large");
+            return (null, "file_too_large", null);
 
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
-            return (null, "not_found");
+            return (null, "not_found", null);
 
         // La LT la emite el OT sobre un trámite ya radicado: entregado (en decisión) o aprobado.
         if (instance.Status is not (TramiteEstado.Entregado or TramiteEstado.Aprobado))
-            return (null, "estado_invalido");
+            return (null, "estado_invalido", null);
+
+        // El stream se consume una sola vez y el OCR necesita los mismos bytes que se guardan,
+        // así que se materializa antes de tocar el almacenamiento.
+        var bytes = await LeerTodoAsync(input.Content, ct).ConfigureAwait(false);
+        var ocrResultado = await AnalizarSinBloquearAsync(bytes, ct).ConfigureAwait(false);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -55,7 +77,8 @@ public sealed class AdjuntarLicenciaTransitoHandler(
         }
 
         var filename = string.IsNullOrWhiteSpace(input.Filename) ? "licencia_transito.pdf" : input.Filename.Trim();
-        var stored = await storage.SaveAsync(id, Tipo, filename, input.Content, ct);
+        using var contenido = new MemoryStream(bytes, writable: false);
+        var stored = await storage.SaveAsync(id, Tipo, filename, contenido, ct);
 
         // Guarda FK (HU #10431): si el sub del JWT no existe en identity.users, se registra null.
         var resolvedUploadedBy = uploadedBy is { } ub && ub != Guid.Empty
@@ -96,6 +119,13 @@ public sealed class AdjuntarLicenciaTransitoHandler(
                 filename,
                 sha256 = stored.Sha256,
                 adjuntada_at = now,
+                // Deja rastro de la verificación: sin esto, un expediente cerrado con una LT
+                // equivocada no tendría cómo explicarse después.
+                ocr_verificada = ocrResultado?.Data is not null
+                    ? ocrResultado.Data["es_valido"]?.GetValue<bool>()
+                    : null,
+                ocr_placa = ocrResultado?.Data?["vehiculo_placa"]?.GetValue<string>(),
+                ocr_vin = ocrResultado?.Data?["vehiculo_vin"]?.GetValue<string>(),
             }),
             CreatedAt = now,
             CreatedBy = resolvedUploadedBy,
@@ -105,7 +135,37 @@ public sealed class AdjuntarLicenciaTransitoHandler(
 
         await repo.SaveChangesAsync(ct);
 
-        return (UploadAttachmentHandler.ToDto(attachment), null);
+        return (UploadAttachmentHandler.ToDto(attachment), null, ocrResultado);
+    }
+
+    /// <summary>
+    /// Analiza la LT sin dejar que ningún fallo impida adjuntarla. Devuelve null cuando el análisis
+    /// no se pudo hacer —proveedor caído, sin API key, archivo mayor de 10 MB o formato no
+    /// soportado—, que la pantalla presenta como «no analizado», no como rechazo.
+    /// </summary>
+    private async Task<DocumentOcrResponse?> AnalizarSinBloquearAsync(byte[] bytes, CancellationToken ct)
+    {
+        if (ocr is null)
+            return null;
+        try
+        {
+            var (resultado, _) = await ocr.HandleAsync(TipoOcr, bytes, ct).ConfigureAwait(false);
+            return resultado;
+        }
+        catch
+        {
+            // Silencio deliberado: el adjunto es el entregable y el análisis es una ayuda.
+            return null;
+        }
+    }
+
+    private static async Task<byte[]> LeerTodoAsync(Stream origen, CancellationToken ct)
+    {
+        if (origen is MemoryStream ya)
+            return ya.ToArray();
+        using var buffer = new MemoryStream();
+        await origen.CopyToAsync(buffer, ct).ConfigureAwait(false);
+        return buffer.ToArray();
     }
 }
 
