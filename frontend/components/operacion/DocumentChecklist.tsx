@@ -400,6 +400,24 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
 };
 
 /** Nombre corto del tipo para el encabezado de la tarjeta. */
+/**
+ * HU #12047 — códigos que son el MISMO documento y comparten etiqueta y resumen. Espejo de
+ * `AliasReconocer` en el backend (HU #12045): `prenda_registro` es el DocTipo del adjunto que exige
+ * la decisión «registrar» y `inscripcion_prenda` la casilla del catálogo.
+ *
+ * Sin esto el panel salía con el código crudo por título y la rejilla VACÍA —el mismo fallo que ya
+ * tuvo `rtm`, ver el comentario en OCR_RESUMEN_FIELDS—: el análisis corría y se pagaba, pero al
+ * gestor no se le enseñaba ni el acreedor ni el NIT, que son el dato por el que se pide el documento.
+ */
+const TIPO_ALIAS: Record<string, string> = {
+  prenda_registro: 'inscripcion_prenda',
+};
+
+/** El código del que cuelgan la etiqueta y el resumen de este tipo. */
+export function tipoCanonico(tipo: string): string {
+  return TIPO_ALIAS[tipo] ?? tipo;
+}
+
 const TIPO_LABEL: Record<string, string> = {
   factura: 'Factura',
   aduana: 'Aduana',
@@ -417,7 +435,7 @@ const TIPO_LABEL: Record<string, string> = {
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */
 export function tipoLabel(tipo: string): string {
-  return TIPO_LABEL[tipo] ?? tipo;
+  return TIPO_LABEL[tipoCanonico(tipo)] ?? tipo;
 }
 
 /**
@@ -475,13 +493,13 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
   };
 
   const data = ocr.data;
-  const nombre = TIPO_LABEL[tipo] ?? tipo;
+  const nombre = tipoLabel(tipo);
   const tipoDocumento = data ? pickStr(data, 'tipo_documento') : '';
   const recorte = recorteLabel(data);
   const rechazoPorVin = ocr.status === 'rejected' && !!ocr.motivo && /VIN/i.test(ocr.motivo);
 
   const fields = data
-    ? (OCR_RESUMEN_FIELDS[tipo] ?? [])
+    ? (OCR_RESUMEN_FIELDS[tipoCanonico(tipo)] ?? [])
         .map((field) => {
           const value = field.value(data);
           return { field, value: field.vin ? resumirVins(value) : value };
