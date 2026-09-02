@@ -88,7 +88,7 @@ public sealed class FurObservacionesYFechaTests
         var data = Data(fechaTramite: new DateTime(2026, 7, 20, 0, 0, 0, DateTimeKind.Utc));
 
         Campo(data, "processing_day").Should().Be("20");
-        Campo(data, "processing_month").Should().Be("7");
+        Campo(data, "processing_month").Should().Be("07");
         Campo(data, "processing_year").Should().Be("2026");
     }
 
@@ -99,8 +99,8 @@ public sealed class FurObservacionesYFechaTests
         var hoy = DateTime.UtcNow;
         var data = Data(fechaTramite: null);
 
-        Campo(data, "processing_day").Should().Be(hoy.Day.ToString(CultureInfo.InvariantCulture));
-        Campo(data, "processing_month").Should().Be(hoy.Month.ToString(CultureInfo.InvariantCulture));
-        Campo(data, "processing_year").Should().Be(hoy.Year.ToString(CultureInfo.InvariantCulture));
+        Campo(data, "processing_day").Should().Be(hoy.Day.ToString("00", CultureInfo.InvariantCulture));
+        Campo(data, "processing_month").Should().Be(hoy.Month.ToString("00", CultureInfo.InvariantCulture));
+        Campo(data, "processing_year").Should().Be(hoy.Year.ToString("0000", CultureInfo.InvariantCulture));
     }
 }

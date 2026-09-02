@@ -12,6 +12,7 @@ namespace Flit.Admin.Tests.Plataforma;
 public sealed class AdminPlataformaFurEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private const string PreviewUrl = "/api/v1/admin/plataforma/fur/preview";
+    private const string ClassificationsUrl = "/api/v1/admin/plataforma/fur/classifications";
 
     private readonly WebApplicationFactory<Program> _factory;
 
@@ -71,6 +72,14 @@ public sealed class AdminPlataformaFurEndpointsTests : IClassFixture<WebApplicat
             },
             TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Classifications_WithoutToken_Returns401()
+    {
+        using var client = _factory.CreateClient();
+        var response = await client.GetAsync(ClassificationsUrl, TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     private HttpClient SuperAdminClient()

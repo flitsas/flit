@@ -14,6 +14,7 @@ public sealed class FurPreviewSampleTests
     [Theory]
     [InlineData(FurPreviewSample.VehicleCarro, FurTemplateFormat.Automotor)]
     [InlineData(FurPreviewSample.VehicleMoto, FurTemplateFormat.Automotor)]
+    [InlineData(FurPreviewSample.VehicleCamioneta, FurTemplateFormat.Automotor)]
     [InlineData(FurPreviewSample.VehicleRemolque, FurTemplateFormat.Remolques)]
     [InlineData(FurPreviewSample.VehicleMaquinaria, FurTemplateFormat.Maquinaria)]
     public void Build_GenerateFur_ProducesTwoPagePdf(string vehicleKind, FurTemplateFormat expectedFormat)
@@ -57,8 +58,65 @@ public sealed class FurPreviewSampleTests
     {
         var data = FurPreviewSample.Build("MATRICULA_NUEVA", "MATRICULAS", "natural", "natural", "moto");
         var mapped = FurFieldMapper.Map(data);
-        mapped["vehicle_class_9"].Text.Should().Be("X");
-        mapped["vehicle_class_1"].Text.Should().BeEmpty();
+        mapped["vehicle_class_MOTOCICLETA"].Text.Should().Be("X");
+        mapped["vehicle_class_AUTOMOVIL"].Text.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BuildFromClassification_Cuadriciclo_MarksCuatrimotoNotAutomovil()
+    {
+        var data = FurPreviewSample.BuildFromClassification(
+            "MATRICULA_NUEVA", "MATRICULAS", "natural", "natural",
+            "CUADRICICLO", FurTemplateFormat.Automotor, "CUATRIMOTO");
+        var mapped = FurFieldMapper.Map(data);
+        mapped["vehicle_class_CUATRIMOTO"].Text.Should().Be("X");
+        mapped["vehicle_class_AUTOMOVIL"].Text.Should().BeEmpty();
+        mapped["vehicle_class_MOTOCICLETA"].Text.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Build_Maquinaria_MarksConstruccion()
+    {
+        var data = FurPreviewSample.Build("MATRICULA_NUEVA", "MATRICULAS", "natural", "natural", "maquinaria");
+        data.FieldToFill.Should().Be("CONSTRUCCION");
+        var mapped = FurFieldMapper.Map(data);
+        mapped["vehicle_class_CONSTRUCCION"].Text.Should().Be("X");
+        mapped["vehicle_class_AGRICOLA"].Text.Should().BeEmpty();
+        mapped["vehicle_axles"].Text.Should().Be("3");
+        mapped["vehicle_height"].Text.Should().Be("2");
+        mapped["vehicle_width"].Text.Should().Be("2.98");
+    }
+
+    [Fact]
+    public void Build_Remolque_PintaEjesAltoYAncho()
+    {
+        var data = FurPreviewSample.Build("MATRICULA_NUEVA", "MATRICULAS", "natural", "natural", "remolque");
+        var mapped = FurFieldMapper.Map(data);
+        mapped["vehicle_class_REMOLQUE"].Text.Should().Be("X");
+        mapped["vehicle_axles"].Text.Should().Be("3");
+        mapped["vehicle_height"].Text.Should().Be("2");
+        mapped["vehicle_width"].Text.Should().Be("2.98");
+        mapped["vehicle_length"].Text.Should().Be("15.5");
+    }
+
+    [Fact]
+    public void BuildFromClassification_Carretilla_MarksIndustrial()
+    {
+        var data = FurPreviewSample.BuildFromClassification(
+            "MATRICULA_NUEVA", "MATRICULAS", "natural", "natural",
+            "CARRETILLA APILADORA", FurTemplateFormat.Maquinaria, "INDUSTRIAL");
+        FurFieldMapper.Map(data)["vehicle_class_INDUSTRIAL"].Text.Should().Be("X");
+    }
+
+    [Fact]
+    public void BuildFromClassification_MaqConstruccion_MarksSimilar()
+    {
+        var data = FurPreviewSample.BuildFromClassification(
+            "MATRICULA_NUEVA", "MATRICULAS", "natural", "natural",
+            "MAQ. CONSTRUCCION O MINERA", FurTemplateFormat.Remolques, "SIMILAR");
+        var mapped = FurFieldMapper.Map(data);
+        mapped["vehicle_class_SIMILAR"].Text.Should().Be("X");
+        mapped["vehicle_class_REMOLQUE"].Text.Should().BeEmpty();
     }
 
     [Fact]

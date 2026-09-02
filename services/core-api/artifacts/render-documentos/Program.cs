@@ -89,6 +89,10 @@ File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "virtual.pdf"), virtua
 var fur = new FurOverlayDocumentGenerator().GenerateFur(data);
 File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "fur.pdf"), fur.Content);
 
+File.WriteAllBytes(
+    Path.Combine(AppContext.BaseDirectory, "compraventa.pdf"),
+    FurCompraventaDocumentGenerator.Generate(data));
+
 // HU #11170 — variante FIRMADA CON EL BAÚL, para comprobar que la vigencia y el hash acompañan a la
 // imagen en los cuatro documentos (antes solo los llevaba el FUR). Requiere una imagen de firma:
 // FIRMA_PNG=<ruta a un png>. Sin la variable se omite y el render normal no cambia.

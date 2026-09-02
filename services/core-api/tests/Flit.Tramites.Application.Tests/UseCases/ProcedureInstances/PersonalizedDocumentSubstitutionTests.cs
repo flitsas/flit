@@ -540,6 +540,8 @@ public sealed class PersonalizedDocumentSubstitutionTests
     private sealed class SelloEstampandoGenerator : IFurDocumentGenerator, ISolicitudVirtualGenerator
     {
         public GeneratedDocument GenerateFur(FurDocumentData data) => Doc("fur", data);
+        public GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor) =>
+            new("fur", "fur_FILLALL.pdf", "application/pdf", Encoding.UTF8.GetBytes("%PDF fur FILLALL"));
         public GeneratedDocument GenerateCompraventa(FurDocumentData data) => Doc("compraventa", data);
         public GeneratedDocument GenerateSolicitudVirtual(FurDocumentData data) => Doc("tramite_virtual", data);
 

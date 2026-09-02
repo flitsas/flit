@@ -176,6 +176,23 @@ public sealed class KyverumRuntDatosTecnicos
 
     [JsonPropertyName("noEjes")]
     public string? NoEjes { get; set; }
+
+    /// <summary>Alto del vehículo (típicamente mm). En remolques/maquinaria vive aquí, no en <c>vehiculo</c>.</summary>
+    [JsonPropertyName("alto")]
+    public string? Alto { get; set; }
+
+    [JsonPropertyName("ancho")]
+    public string? Ancho { get; set; }
+
+    [JsonPropertyName("largo")]
+    public string? Largo { get; set; }
+
+    [JsonPropertyName("noLlantas")]
+    public string? NoLlantas { get; set; }
+
+    /// <summary>Tipo de tracción / rodaje (llantas, orugas, cilindros…). En maquinaria alimenta el numeral 8 del FUR.</summary>
+    [JsonPropertyName("rodaje")]
+    public string? Rodaje { get; set; }
 }
 
 /// <summary>

@@ -14,6 +14,11 @@ vi.mock("@/lib/api/superadmin-client", () => ({
   },
 }));
 
+vi.mock("@/lib/api/admin-plataforma-fur", () => ({
+  listFurClassifications: vi.fn().mockResolvedValue([]),
+  fetchFurPreview: vi.fn(),
+}));
+
 describe("AdminFurPage", () => {
   beforeEach(() => {
     push.mockClear();

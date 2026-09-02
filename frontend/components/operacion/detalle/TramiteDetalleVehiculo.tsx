@@ -50,6 +50,7 @@ const MENSAJE_CORTO_MAX = 60;
  */
 function buildEspecificaciones(fieldValues: FieldValue[]): { campo: string; valor: string }[] {
   const valorDe = (key: string) => fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
+  const conMm = (valor: string) => (valor && /^\d+$/.test(valor) ? `${valor} mm` : valor);
 
   const servicio = valorDe('vehicle_service');
   // Casilla 19 del FUR: la empresa vinculadora solo aplica con servicio Público o Especial (mismo
@@ -74,6 +75,10 @@ function buildEspecificaciones(fieldValues: FieldValue[]): { campo: string; valo
     { campo: 'Carrocería', valor: valorDe('vehicle_body_type') },
     { campo: 'Capacidad', valor: valorDe('vehicle_passengers') },
     { campo: 'Ejes', valor: valorDe('vehicle_axles') },
+    { campo: 'Alto', valor: conMm(valorDe('vehicle_height')) },
+    { campo: 'Ancho', valor: conMm(valorDe('vehicle_width')) },
+    { campo: 'Largo', valor: conMm(valorDe('vehicle_length')) },
+    { campo: 'Llantas', valor: valorDe('vehicle_tires') },
     { campo: 'Estado', valor: valorDe('vehicle_state') },
     { campo: 'N. Motor', valor: valorDe('vehicle_engine_number') },
     { campo: 'N. Chasis', valor: valorDe('vehicle_chassis') },

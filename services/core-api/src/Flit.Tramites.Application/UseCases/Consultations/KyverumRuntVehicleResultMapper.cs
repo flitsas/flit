@@ -37,7 +37,7 @@ public static class KyverumRuntVehicleResultMapper
     /// volver a pagar la consulta. <c>v2</c> = HU #11303, la que empieza a leer póliza, fechas de
     /// expedición, número de certificado, CDA y fecha de matrícula.
     /// </summary>
-    public const string MapperVersion = "kyverum-v2";
+    public const string MapperVersion = "kyverum-v4";
 
     public static ConsultationResult MapVehicle(KyverumRuntVehicleResponse response) =>
         MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).Date));
@@ -243,6 +243,11 @@ public static class KyverumRuntVehicleResultMapper
         Add(fields, "vehicle_passengers", v.PasajerosSentados);
         Add(fields, "vehicle_weight", v.PesoBruto ?? data?.DatosTecnicos?.PesoBrutoVehicular);
         Add(fields, "vehicle_axles", v.NumeroEjes ?? data?.DatosTecnicos?.NoEjes);
+        Add(fields, "vehicle_height", data?.DatosTecnicos?.Alto);
+        Add(fields, "vehicle_width", data?.DatosTecnicos?.Ancho);
+        Add(fields, "vehicle_length", data?.DatosTecnicos?.Largo);
+        Add(fields, "vehicle_tires", data?.DatosTecnicos?.NoLlantas);
+        Add(fields, "vehicle_traction", data?.DatosTecnicos?.Rodaje);
 
         // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta).
         Add(fields, "runt_tiene_gravamenes", v.Gravamenes);

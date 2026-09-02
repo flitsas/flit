@@ -50,6 +50,10 @@ export type ResumenEspecificaciones = {
   carroceria?: string;
   capacidad?: string;
   ejes?: string;
+  alto?: string;
+  ancho?: string;
+  largo?: string;
+  llantas?: string;
   estado?: string;
   motor?: string;
   chasis?: string;
@@ -858,6 +862,31 @@ export default function MatriculaResumen({
     { label: 'Carrocería', value: especificaciones.carroceria },
     { label: 'Capacidad', value: especificaciones.capacidad },
     { label: 'Ejes', value: especificaciones.ejes },
+    {
+      label: 'Alto',
+      value: especificaciones.alto
+        ? /^\d+$/.test(especificaciones.alto.trim())
+          ? `${especificaciones.alto.trim()} mm`
+          : especificaciones.alto
+        : undefined,
+    },
+    {
+      label: 'Ancho',
+      value: especificaciones.ancho
+        ? /^\d+$/.test(especificaciones.ancho.trim())
+          ? `${especificaciones.ancho.trim()} mm`
+          : especificaciones.ancho
+        : undefined,
+    },
+    {
+      label: 'Largo',
+      value: especificaciones.largo
+        ? /^\d+$/.test(especificaciones.largo.trim())
+          ? `${especificaciones.largo.trim()} mm`
+          : especificaciones.largo
+        : undefined,
+    },
+    { label: 'Llantas', value: especificaciones.llantas },
     { label: 'Estado', value: especificaciones.estado },
     { label: 'N. Motor', value: especificaciones.motor },
     { label: 'N. Chasis', value: especificaciones.chasis },

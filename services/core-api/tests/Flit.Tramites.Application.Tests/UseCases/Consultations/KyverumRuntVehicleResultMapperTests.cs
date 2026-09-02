@@ -188,4 +188,39 @@ public sealed class KyverumRuntVehicleResultMapperTests
         Status(result, "tecnomecanica").Should().Be("fail");
         Field(result, "rtm_estado").Should().Be("NO VIGENTE");
     }
+
+    [Fact]
+    public void DatosTecnicos_HidratanDimensionesEjesYLlantas_CuandoNoVienenEnVehiculo()
+    {
+        var json = """
+        {
+          "ok": true,
+          "data": {
+            "vehiculo": {
+              "placa": "S07249",
+              "vin": "9F9CHJ3UMEP185065",
+              "clase": "SEMIREMOLQUE",
+              "estadoAutomotor": "ACTIVO"
+            },
+            "datosTecnicos": {
+              "alto": "2000",
+              "ancho": "2980",
+              "largo": "15500",
+              "noEjes": "3",
+              "noLlantas": "12",
+              "rodaje": "ORUGAS"
+            }
+          }
+        }
+        """;
+        var response = JsonSerializer.Deserialize<KyverumRuntVehicleResponse>(json, WebJsonOptions)!;
+        var result = KyverumRuntVehicleResultMapper.MapVehicle(response);
+
+        Field(result, "vehicle_axles").Should().Be("3");
+        Field(result, "vehicle_height").Should().Be("2000");
+        Field(result, "vehicle_width").Should().Be("2980");
+        Field(result, "vehicle_length").Should().Be("15500");
+        Field(result, "vehicle_tires").Should().Be("12");
+        Field(result, "vehicle_traction").Should().Be("ORUGAS");
+    }
 }

@@ -45,6 +45,29 @@ public sealed class FurTemplateResolverTests
     public void Resolve_MapsOrDefaultsAutomotor(string? vehicleClass, FurTemplateFormat expected) =>
         FurTemplateResolution.Resolve(vehicleClass, Catalog()).Should().Be(expected);
 
+    [Fact]
+    public void ResolveMatch_ReturnsFieldToFillOrNull()
+    {
+        var catalog = new Dictionary<string, FurClassificationMatch>(StringComparer.Ordinal)
+        {
+            [FurClassificationNormalizer.Normalize("CUADRICICLO")] =
+                new FurClassificationMatch(FurTemplateFormat.Automotor, "CUATRIMOTO"),
+            [FurClassificationNormalizer.Normalize("ALZADORA DE CAÑA")] =
+                new FurClassificationMatch(FurTemplateFormat.Maquinaria, "AGRICOLA"),
+            [FurClassificationNormalizer.Normalize("MAQ. CONSTRUCCION O MINERA")] =
+                new FurClassificationMatch(FurTemplateFormat.Remolques, "SIMILAR"),
+        };
+
+        FurTemplateResolution.ResolveMatch("CUADRICICLO", catalog)
+            .Should().Be(new FurClassificationMatch(FurTemplateFormat.Automotor, "CUATRIMOTO"));
+        FurTemplateResolution.ResolveMatch("alzadora de caña", catalog)
+            .Should().Be(new FurClassificationMatch(FurTemplateFormat.Maquinaria, "AGRICOLA"));
+        FurTemplateResolution.ResolveMatch("Maq. Construccion O Minera", catalog)
+            .Should().Be(new FurClassificationMatch(FurTemplateFormat.Remolques, "SIMILAR"));
+        FurTemplateResolution.ResolveMatch("NAVE ESPACIAL", catalog)
+            .Should().Be(new FurClassificationMatch(FurTemplateFormat.Automotor, null));
+    }
+
     [Theory]
     [InlineData("AUTOMOTOR", true, FurTemplateFormat.Automotor)]
     [InlineData("maquinaria", true, FurTemplateFormat.Maquinaria)]

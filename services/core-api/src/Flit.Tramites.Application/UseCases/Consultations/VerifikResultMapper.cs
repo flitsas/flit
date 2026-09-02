@@ -26,7 +26,7 @@ public static class VerifikResultMapper
     private const string Red = "red";
 
     /// <summary>Versión del mapeo; se persiste con cada fila certificada (HU #11303, ADR-0041).</summary>
-    public const string MapperVersion = "verifik-v2";
+    public const string MapperVersion = "verifik-v4";
 
     private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
@@ -253,11 +253,20 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(info.PasajerosSentados))
             fields.Add(new HydratedField("vehicle_passengers", info.PasajerosSentados, null));
 
-        if (!string.IsNullOrWhiteSpace(info.PesoBruto))
-            fields.Add(new HydratedField("vehicle_weight", info.PesoBruto, null));
+        var tec = data?.DatosTecnicos;
+        var peso = FirstNonEmpty(info.PesoBruto, tec?.PesoBrutoVehicular);
+        if (!string.IsNullOrWhiteSpace(peso))
+            fields.Add(new HydratedField("vehicle_weight", peso, null));
 
-        if (!string.IsNullOrWhiteSpace(info.NoEjes))
-            fields.Add(new HydratedField("vehicle_axles", info.NoEjes, null));
+        var ejes = FirstNonEmpty(info.NoEjes, tec?.NoEjes);
+        if (!string.IsNullOrWhiteSpace(ejes))
+            fields.Add(new HydratedField("vehicle_axles", ejes, null));
+
+        AddSiHay(fields, "vehicle_height", tec?.Alto);
+        AddSiHay(fields, "vehicle_width", tec?.Ancho);
+        AddSiHay(fields, "vehicle_length", tec?.Largo);
+        AddSiHay(fields, "vehicle_tires", tec?.NoLlantas);
+        AddSiHay(fields, "vehicle_traction", tec?.Rodaje);
 
         if (!string.IsNullOrWhiteSpace(info.FechaMatricula))
             fields.Add(new HydratedField("vehicle_registration_date", info.FechaMatricula, null));
@@ -335,6 +344,9 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(value))
             fields.Add(new HydratedField(key, value, null));
     }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
     private static string ComputeOverall(IReadOnlyList<ConsultationCheck> checks)
     {

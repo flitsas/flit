@@ -22,6 +22,15 @@ public sealed class MockFurDocumentGenerator : IFurDocumentGenerator
         return Build("fur", "fur", data.ReferenceNumber, sb);
     }
 
+    public GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("=== FUR FILL-ALL (calibración) — DOCUMENTO MOCK ===");
+        sb.AppendLine("FILL_ALL_MANIFEST");
+        sb.AppendLine($"FORMAT={format}");
+        return Build("fur", "fur_FILLALL", "FILLALL", sb);
+    }
+
     public GeneratedDocument GenerateCompraventa(FurDocumentData data)
     {
         ArgumentNullException.ThrowIfNull(data);

@@ -10,16 +10,16 @@ namespace Flit.Infrastructure.Documents.Fur;
 public static partial class FurOverlayRenderer
 {
     /// <summary>Ancho máximo de la imagen de firma del baúl dentro del campo (el resto es metadatos).</summary>
-    private const double SignatureImageMaxWidth = 115;
+    private const double SignatureImageMaxWidth = 145;
 
     /// <summary>
     /// HU #11016 — fracción del ALTO del campo que puede ocupar la firma. El resto es aire: una firma
     /// que llena el campo de borde a borde termina tocando (o pisando) las líneas vecinas del FUR.
     /// </summary>
-    private const double SignatureImageMaxHeightRatio = 0.8;
+    private const double SignatureImageMaxHeightRatio = 0.88;
 
     /// <summary>Separación entre imagen de firma y bloque de metadatos.</summary>
-    private const double SignatureSidecarGap = 6;
+    private const double SignatureSidecarGap = 8;
 
     /// <summary>Tamaño de fuente del bloque de metadatos junto a la firma.</summary>
     private const double SignatureSidecarFontSize = 3;
@@ -207,7 +207,7 @@ public static partial class FurOverlayRenderer
     {
         var fieldH = field.H > 0 ? field.H : 36;
         var fieldW = field.W > 0 ? field.W : 120;
-        var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.38);
+        var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.50);
 
         // HU #11016 — la firma se dibujaba con el ALTO COMPLETO del campo y sin respetar la relación de
         // aspecto: un PNG apaisado se estiraba verticalmente y se salía del espacio de firma, pisando lo
@@ -226,7 +226,7 @@ public static partial class FurOverlayRenderer
         if (sidecarW <= 0)
             return;
 
-        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText);
+        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText, field.Align);
     }
 
     private static void DrawSidecarText(
@@ -235,23 +235,40 @@ public static partial class FurOverlayRenderer
         double y,
         double w,
         double h,
-        string text)
+        string text,
+        FurTextAlign align = FurTextAlign.Left)
     {
         var font = CreateFont(SignatureSidecarFontSize, bold: false);
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var lineHeight = SignatureSidecarFontSize * 1.15;
         var maxLines = Math.Max(1, (int)Math.Floor(h / lineHeight));
+        var visible = Math.Min(lines.Length, maxLines);
+        var inset = align == FurTextAlign.Center ? 2.0 : 0.0;
+        var boxX = x + inset;
+        var boxW = Math.Max(0, w - inset * 2);
+        var boxY = y + inset;
+        var boxH = Math.Max(0, h - inset * 2);
+        var blockH = visible * lineHeight;
+        if (align == FurTextAlign.Center && blockH < boxH)
+            boxY += (boxH - blockH) / 2;
 
-        for (var i = 0; i < Math.Min(lines.Length, maxLines); i++)
+        for (var i = 0; i < visible; i++)
         {
             var line = lines[i];
-            if (w > 0)
+            if (boxW > 0)
             {
-                line = TruncateToWidth(gfx, line, font, w);
+                line = TruncateToWidth(gfx, line, font, boxW);
             }
 
-            var yBaseline = y + i * lineHeight + SignatureSidecarFontSize * 0.82;
-            gfx.DrawString(line, font, XBrushes.Black, new XPoint(x, yBaseline));
+            var drawX = boxX;
+            if (align == FurTextAlign.Center && boxW > 0)
+            {
+                var size = gfx.MeasureString(line, font);
+                drawX = boxX + Math.Max(0, (boxW - size.Width) / 2);
+            }
+
+            var yBaseline = boxY + i * lineHeight + SignatureSidecarFontSize * 0.82;
+            gfx.DrawString(line, font, XBrushes.Black, new XPoint(drawX, yBaseline));
         }
     }
 
@@ -298,6 +315,7 @@ public static partial class FurOverlayRenderer
     {
         using var ms = new MemoryStream(imageBytes);
         using var img = XImage.FromStream(() => ms);
+        img.Interpolate = true;
         gfx.DrawImage(img, x, y, w, h);
     }
 

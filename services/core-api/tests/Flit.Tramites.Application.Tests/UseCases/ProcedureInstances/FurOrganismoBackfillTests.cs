@@ -255,6 +255,9 @@ public sealed class FurOrganismoBackfillTests
             return _inner.GenerateFur(data);
         }
 
+        public GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor) =>
+            _inner.GenerateFurFillAll(format);
+
         public GeneratedDocument GenerateCompraventa(FurDocumentData data)
         {
             Ultima = data;
