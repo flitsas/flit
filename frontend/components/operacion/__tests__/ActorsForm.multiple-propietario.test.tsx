@@ -118,6 +118,30 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
     expect(screen.getByRole('tab', { name: /Comprador 2 50%/ })).toBeInTheDocument();
   });
 
+  it('el bloque de porcentaje va DESPUÉS de los datos del actor (Datos de contacto), no junto a las pestañas', async () => {
+    const user = userEvent.setup();
+    await addSecondComprador(user);
+
+    const tablist = screen.getByRole('tablist');
+    const datosContacto = screen.getByText('Datos de contacto');
+    const panel = screen.getByText(/Porcentaje de propiedad/);
+
+    // DOCUMENT_POSITION_PRECEDING: el nodo de referencia aparece ANTES en el árbol del DOM.
+    expect(datosContacto.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(panel.compareDocumentPosition(datosContacto) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
+  it('el tab activo y el panel de porcentaje se enlazan por aria-controls/aria-labelledby aunque estén lejos en el DOM', async () => {
+    const user = userEvent.setup();
+    await addSecondComprador(user);
+
+    const activeTab = screen.getByRole('tab', { name: /Comprador 2/ }); // recién agregado, queda activo
+    const panel = screen.getByRole('tabpanel');
+
+    expect(activeTab).toHaveAttribute('aria-controls', panel.id);
+    expect(panel).toHaveAttribute('aria-labelledby', activeTab.id);
+  });
+
   it('el solidario (ordinal=1) absorbe el residuo mientras no se edite a mano', async () => {
     const user = userEvent.setup();
     await addSecondComprador(user);
@@ -153,16 +177,27 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
     expect(input1Again).toHaveValue(40);
   });
 
-  it('al eliminar la segunda pestaña, la primera queda con 100% escrito (no se oculta el bloque)', async () => {
+  // CAMBIO DE COMPORTAMIENTO (decisión del usuario, con capturas de por medio): el bloque
+  // "Porcentaje de propiedad" ya NO tiene memoria histórica. Antes, una vez `revealed` quedaba en
+  // `true` para siempre (regla previa: "al eliminar el segundo, el primero queda con 100%
+  // escrito" se leía como "y el bloque se queda visible"). El usuario mandó una captura con un
+  // solo propietario donde el bloque SÍ se veía y corrigió: "esto debería aparecer únicamente
+  // cuando se escoja otro propietario, si solo hay un propietario... esto se oculta". La fila de
+  // pestañas sigue viéndose siempre (eso no cambió) y el 100% del ordinal=1 se sigue escribiendo
+  // (la lógica de `redistributeAfterRemoval` no se tocó) — lo único que cambia es que el bloque de
+  // porcentaje deja de montarse en cuanto el lado vuelve a tener un solo propietario.
+  it('al eliminar la segunda pestaña, la primera queda con 100% y el bloque de porcentaje se oculta de nuevo', async () => {
     const user = userEvent.setup();
     await addSecondComprador(user);
 
     await user.click(screen.getByRole('button', { name: 'Quitar Comprador 2' }));
 
     await waitFor(() => expect(screen.queryByRole('tab', { name: /Comprador 2/ })).toBeNull());
-    // El bloque NO se oculta (encargo cerrado): sigue mostrando "Comprador 1" con 100%.
-    expect(screen.getByRole('tab', { name: /Comprador 1 100%/ })).toBeInTheDocument();
-    expect(screen.getByText(/Porcentaje de propiedad/)).toBeInTheDocument();
+    // La pestaña sigue viéndose (nunca se oculta) y el 100% se escribe en el ordinal=1…
+    expect(screen.getByRole('tab', { name: 'Comprador 1 100%' })).toBeInTheDocument();
+    // …pero el bloque de porcentaje (slider/casilla/consolidado) desaparece: de vuelta a un solo
+    // propietario, es "el normal de siempre".
+    expect(screen.queryByText(/Porcentaje de propiedad/)).toBeNull();
   });
 
   it('máximo 4 propietarios por lado: el botón "+" se deshabilita al llegar al límite', async () => {

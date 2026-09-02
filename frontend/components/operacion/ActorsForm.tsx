@@ -58,7 +58,7 @@ import { WizardCardHeader } from './wizard-atoms';
 import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
-import { OwnershipShareControl, type OwnershipShareItem } from './OwnershipShareControl';
+import { OwnershipTabsBar, OwnershipPercentagePanel, type OwnershipShareItem } from './OwnershipShareControl';
 import {
   MAX_OWNERS_PER_SIDE,
   applySolidarioAbsorption,
@@ -2963,21 +2963,25 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
         {/* Múltiple Propietario (ADR-0053) — solo matrícula inicial y traspaso, y solo sobre el
             actor que SE captura por formulario (no el propietario inscrito de la familia OTROS,
-            cuya identidad viene fija del RUNT; no el locatario, fuera del alcance cerrado). */}
+            cuya identidad viene fija del RUNT; no el locatario, fuera del alcance cerrado).
+            Solo la fila de pestañas: este layout ("isSplit") únicamente se alcanza cuando
+            `actors.length === 1` en TODO el formulario, así que este lado nunca tiene un segundo
+            actor mientras se siga renderizando aquí — el bloque "Porcentaje de propiedad" jamás
+            aplicaría (ver `OwnershipPercentagePanel`, condición `items.length >= 2`). En cuanto se
+            agrega el segundo, `actors.length` pasa a 2 y el render cae al layout MULTI de abajo,
+            que sí monta ambas piezas. */}
         {!esPropietarioInscrito && actor.rol !== 'locatario' && (
-          <OwnershipShareControl
+          <OwnershipTabsBar
             items={ownershipItemsForRol(actor.rol)}
             activeIndex={0}
             onSelectTab={() => {}}
             onAdd={() => addOwner(actor.rol)}
             onRemove={removeOwner}
-            onPercentageChange={updateOwnershipPercentage}
-            revealed={!!ownershipRevealed[actor.rol]}
-            maxReached={false}
+            maxReached={ownershipItemsForRol(actor.rol).length >= MAX_OWNERS_PER_SIDE}
             readOnly={readOnly}
             idPrefix={`actor-${actor.rol}-single`}
             sideLabel={rotuloDelActor(actor.rol)}
-            showErrors={showErrors}
+            hasPercentagePanel={false}
           />
         )}
 
@@ -3478,14 +3482,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           // Múltiple Propietario (ADR-0053) — pestañas de este lado + posición ordinal de la
           // tarjeta activa. `rotuloDelActor` solo recibe el ordinal cuando el lado está `revealed`
           // (2+ propietarios en algún momento): con un solo actor el rótulo NO cambia (sin "1").
+          // `ownershipRevealedForRol` es HISTÓRICA a propósito (gobierna el rótulo de la tarjeta,
+          // sin cambios en este ajuste) — NO confundir con `hasPercentagePanel`, que es del
+          // MOMENTO (gobierna si se monta el bloque "Porcentaje de propiedad": el usuario cerró que
+          // ese bloque se oculta de nuevo si el lado vuelve a un solo propietario).
           const ownershipItems = ownershipItemsForRol(actor.rol);
           const ownershipRevealedForRol = !!ownershipRevealed[actor.rol];
+          const hasPercentagePanel = ownershipItems.length >= 2;
           const activeOwnershipItem =
             ownershipItems.find((it) => it.index === index) ?? ownershipItems[0];
           const rotulo =
             ownershipRevealedForRol && activeOwnershipItem
               ? rotuloDelActor(actor.rol, activeOwnershipItem.ordinal)
               : rotuloDelActor(actor.rol);
+          // Solo matrícula inicial y traspaso, y solo sobre el lado que SE captura por formulario
+          // (no el vendedor sincronizado por el backend, ADR-0051; no el locatario, fuera del
+          // alcance cerrado del encargo). Gobierna AMBAS piezas (pestañas arriba, porcentaje abajo).
+          const mostrarOwnership = !vendedorSincronizado && actor.rol !== 'locatario';
           return (
             <div
               key={actor.rol}
@@ -3493,23 +3506,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               aria-label={rotulo}
               className="flex h-full flex-col"
             >
-            {/* Solo matrícula inicial y traspaso, y solo sobre el lado que SE captura por
-                formulario (no el vendedor sincronizado por el backend, ADR-0051; no el locatario,
-                fuera del alcance cerrado del encargo). */}
-            {!vendedorSincronizado && actor.rol !== 'locatario' && (
-              <OwnershipShareControl
+            {mostrarOwnership && (
+              <OwnershipTabsBar
                 items={ownershipItems}
                 activeIndex={index}
                 onSelectTab={(i) => selectOwnershipTab(actor.rol, i)}
                 onAdd={() => addOwner(actor.rol)}
                 onRemove={removeOwner}
-                onPercentageChange={updateOwnershipPercentage}
-                revealed={ownershipRevealedForRol}
                 maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
                 readOnly={readOnly}
                 idPrefix={`actor-${actor.rol}`}
                 sideLabel={rotuloDelActor(actor.rol)}
-                showErrors={showErrors}
+                hasPercentagePanel={hasPercentagePanel}
               />
             )}
             <WizardAccordion
@@ -3954,6 +3962,21 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* Representante legal DESPUÉS del contacto de la empresa (Lovable Traspaso P1) */}
                 {rlSection(index)}
+
+                {/* Múltiple Propietario (ADR-0053) — "Porcentaje de propiedad" CIERRA la tarjeta,
+                    después de todos los datos del actor (maqueta de referencia: va tras "Datos de
+                    contacto"). Solo se monta con 2+ propietarios EN ESTE MOMENTO — no hay memoria
+                    histórica: si el lado vuelve a 1, este bloque desaparece de nuevo. */}
+                {mostrarOwnership && hasPercentagePanel && (
+                  <OwnershipPercentagePanel
+                    items={ownershipItems}
+                    activeIndex={index}
+                    onPercentageChange={updateOwnershipPercentage}
+                    readOnly={readOnly}
+                    idPrefix={`actor-${actor.rol}`}
+                    showErrors={showErrors}
+                  />
+                )}
               </div>
             </WizardAccordion>
             </div>
