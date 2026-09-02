@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Info, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { isRuesPreviewUnavailable, tramitesClient } from '@/lib/api/tramites-client';
 import { shortRuesRazonSocial } from '@/lib/tramites/rues-razon-social';
 import type {
@@ -90,7 +90,6 @@ export function DeclaracionesTramite({
   const [ruesError, setRuesError] = useState<string | null>(null);
   const [ruesUnavailable, setRuesUnavailable] = useState(false);
   /** La razón social salió del directorio de la compañía, no del RUES: hay que decirlo. */
-  const [razonSocialDesdeDirectorio, setRazonSocialDesdeDirectorio] = useState(false);
 
   /**
    * Carga inicial: instancia y catálogo EN PARALELO, y se hidrata todo junto. El catálogo hace
@@ -187,7 +186,6 @@ export function DeclaracionesTramite({
     setEmpresaVinculadoraRazonSocial(null);
     setRuesError(null);
     setRuesUnavailable(false);
-    setRazonSocialDesdeDirectorio(false);
     // La empresa vinculadora (casilla 19) solo tiene sentido con servicio PÚBLICO: al cambiar de
     // tipo se borra también en el trámite, o quedaría un NIT huérfano en el FUR.
     await persistir([
@@ -204,7 +202,6 @@ export function DeclaracionesTramite({
     setEmpresaVinculadoraRazonSocial(null);
     setRuesError(null);
     setRuesUnavailable(false);
-    setRazonSocialDesdeDirectorio(false);
   };
 
   /**
@@ -219,7 +216,6 @@ export function DeclaracionesTramite({
     setRuesLoading(true);
     setRuesError(null);
     setRuesUnavailable(false);
-    setRazonSocialDesdeDirectorio(false);
     try {
       const result = await tramitesClient.ruesPreview({ documentNumber: nit });
       if (result.found) {
@@ -368,27 +364,12 @@ export function DeclaracionesTramite({
                       </label>
                       <output
                         id="tramite-empresa-vinculadora-razon-social"
-                        aria-describedby={
-                          razonSocialDesdeDirectorio ? 'tramite-razon-social-origen' : undefined
-                        }
                         className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#EEF5FF] px-3 py-2 text-xs leading-relaxed dark:bg-[#162744] ${
                           empresaVinculadoraRazonSocial ? '' : 'opacity-70'
                         }`}
                       >
                         {empresaVinculadoraRazonSocial || 'El RUES no reportó razón social para este NIT'}
                       </output>
-                      {razonSocialDesdeDirectorio && (
-                        <p
-                          id="tramite-razon-social-origen"
-                          className="mt-1.5 flex items-center gap-1 text-xs leading-tight"
-                          style={{ color: '#557EFF' }}
-                          role="status"
-                          aria-live="polite"
-                        >
-                          <Info className="h-3 w-3 shrink-0" aria-hidden="true" />
-                          Precargado desde el directorio de la compañía
-                        </p>
-                      )}
                     </div>
                   )}
                 </>

@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".
   listInstances: vi.fn(),
+  // La tira de KPIs pide sus conteos al backend (no se derivan del array del listado).
+  listInstanceEstadoCounts: vi.fn().mockResolvedValue({}),
   getConsultationConfig: vi.fn(),
 }));
 

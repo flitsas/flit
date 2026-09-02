@@ -152,7 +152,6 @@ describe('ActorsForm — precarga RUES + directorio RL', () => {
     expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
 
     expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
-    expect(screen.getByText('Precargado desde el directorio de la compañía')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Razón social RUES SAS')).toBeInTheDocument();
     expect(screen.queryByDisplayValue('Comercializadora del Valle SAS')).toBeNull();
     expect(screen.getByDisplayValue('Carlos Ramírez Núñez')).toBeInTheDocument();
@@ -168,9 +167,8 @@ describe('ActorsForm — precarga RUES + directorio RL', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
 
     expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
-    expect(
-      await screen.findByText('Precargado desde el directorio de la compañía'),
-    ).toBeInTheDocument();
+    // La tarjeta del directorio ya no se anuncia con un título propio: se reconoce por sus datos.
+    expect(await screen.findByText('Representante:')).toBeInTheDocument();
     // Con un único representante no se ofrece selección.
     expect(screen.queryByLabelText('Representante legal que firma')).toBeNull();
     // El representante único quedó precargado en la sección de representante legal.
@@ -256,9 +254,7 @@ describe('ActorsForm — precarga RUES + directorio RL', () => {
       }),
     );
     expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
-    expect(
-      screen.queryByText('Precargado desde el directorio de la compañía'),
-    ).toBeNull();
+    expect(screen.queryByText('Representante:')).toBeNull();
     const razon = await screen.findByLabelText(/razón social/i);
     expect(razon).toHaveValue('Empresa Externa SAS');
     expect(razon).toHaveAttribute('readonly');

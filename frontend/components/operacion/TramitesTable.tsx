@@ -44,6 +44,7 @@ import {
   type TramitesGridLayout,
 } from '@/lib/tramites/tramites-table-columns';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
+import { controlCls } from './tramites-control-styles';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { PageNav } from '@/components/atom/PageNav';
 import { Modal } from '@/components/atom/Modal';
@@ -336,6 +337,8 @@ interface TramitesTableProps {
 export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTableProps) {
   const router = useRouter();
   const [items, setItems] = useState<InstanceSummary[]>([]);
+  /** Conteo por estado del UNIVERSO filtrado — lo sirve el backend, no se deriva de `items`. */
+  const [estadoCounts, setEstadoCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /** Bloqueo de creación por modalidad (config compañía → Trámites). */
@@ -368,6 +371,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [compradorFilter, setCompradorFilter] = useState('');
   const [gestorFilter, setGestorFilter] = useState('');
   const [firmadoFilter, setFirmadoFilter] = useState<'' | 'true' | 'false'>('');
+  const [organismoFilter, setOrganismoFilter] = useState('');
+  const [tipoFilter, setTipoFilter] = useState('');
   // "Rango sobre" + "Periodo" reemplazan a los 4 inputs de fecha sueltos: el usuario elige a qué
   // campo apunta el rango (creación o actualización) y un periodo predefinido — o "Rango propio"
   // con fechas propias. `rangoDePeriodo` (TramitesFiltrosBar) hace la conversión a
@@ -381,6 +386,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [appliedComprador, setAppliedComprador] = useState('');
   const [appliedGestor, setAppliedGestor] = useState('');
   const [appliedFirmado, setAppliedFirmado] = useState<'' | 'true' | 'false'>('');
+  const [appliedOrganismo, setAppliedOrganismo] = useState('');
+  const [appliedTipo, setAppliedTipo] = useState('');
   const [appliedCreatedFrom, setAppliedCreatedFrom] = useState('');
   const [appliedCreatedTo, setAppliedCreatedTo] = useState('');
   const [appliedUpdatedFrom, setAppliedUpdatedFrom] = useState('');
@@ -422,6 +429,19 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         : visibleColumns,
     [visibleColumns, modalidad],
   );
+  /**
+   * ¿El gestor cambió las columnas respecto al default? Es lo que marca "Columnas" en azul, con el
+   * mismo criterio que "Periodo" y "+ Filtro": el azul dice "aquí hay algo aplicado". Antes el
+   * botón venía azul de fábrica y el color no distinguía nada.
+   */
+  const columnasPersonalizadas = useMemo(() => {
+    const actual = [...visibleColumns].sort();
+    const porDefecto = [...DEFAULT_TRAMITES_VISIBLE_COLUMNS].sort();
+    return (
+      actual.length !== porDefecto.length || actual.some((k, i) => k !== porDefecto[i])
+    );
+  }, [visibleColumns]);
+
   const gridLayout = useMemo(
     () => buildTramitesGridLayout(effectiveColumns, { includeSelectColumn }),
     [effectiveColumns, includeSelectColumn],
@@ -551,6 +571,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       if (appliedGestor.trim()) query.gestor = appliedGestor.trim();
       if (appliedFirmado === 'true') query.firmado = true;
       if (appliedFirmado === 'false') query.firmado = false;
+      // Estado y familia van al SERVIDOR, no al array ya traído: el listado devuelve como mucho
+      // SERVER_LIST_TAKE filas, así que filtrarlos en cliente respondía "los borradores que cupieron
+      // en la ventana" en vez de "los borradores del tenant". Con pocos trámites daba igual; con un
+      // tenant grande la respuesta era incompleta y nada lo delataba.
+      if (estado) query.estado = estado;
+      if (modalidad) query.modalidad = modalidad;
+      if (appliedOrganismo.trim()) query.organismoTransito = appliedOrganismo.trim();
+      if (appliedTipo.trim()) query.tipoCodigo = appliedTipo.trim();
       if (appliedCreatedFrom.trim()) query.createdFrom = appliedCreatedFrom.trim();
       if (appliedCreatedTo.trim()) query.createdTo = appliedCreatedTo.trim();
       if (appliedUpdatedFrom.trim()) query.updatedFrom = appliedUpdatedFrom.trim();
@@ -564,10 +592,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         query.take = SERVER_LIST_TAKE;
         query.skip = 0;
       }
-      const data = await tramitesClient.listInstances(
-        Object.keys(query).length > 0 ? query : undefined,
-      );
+      // Las dos llamadas van en paralelo: la tabla y la tira de KPIs son independientes y
+      // encadenarlas solo sumaría latencia. Los conteos no pueden salir de `data` — esa es la
+      // PÁGINA, y la tira habla del universo entero.
+      const [data, counts] = await Promise.all([
+        tramitesClient.listInstances(Object.keys(query).length > 0 ? query : undefined),
+        tramitesClient.listInstanceEstadoCounts(query),
+      ]);
       setItems(data);
+      setEstadoCounts(counts);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -583,6 +616,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     appliedCreatedTo,
     appliedUpdatedFrom,
     appliedUpdatedTo,
+    appliedOrganismo,
+    appliedTipo,
+    estado,
+    modalidad,
     sortBy,
     sortDir,
   ]);
@@ -594,9 +631,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     void load();
   }, [load, refreshKey]);
 
-  // Conteo por estado para la tira KPI (`flit-tramites-chrome`): cambia con el tab de modalidad,
-  // no con búsqueda ni filtro de estado — mismo criterio que el mockup.
-  const estadoCounts = useMemo(() => {
+  /**
+   * Conteo por estado para la tira KPI. Viene del servidor (`/instances/estado-counts`), NO de
+   * `items`: `items` es una página de como mucho SERVER_LIST_TAKE filas, así que contarla decía
+   * "69 borradores" cuando el tenant tenía muchos más.
+   *
+   * El backend aplica el resto de filtros y descarta el de estado, que es lo que hace que las siete
+   * tarjetas sigan diciendo a dónde puede moverse el gestor después de elegir una.
+   */
+  const estadoCountsMostrados = useMemo(() => {
     const c: Record<EstadoTramite, number> = {
       borrador: 0,
       anulado: 0,
@@ -606,12 +649,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       rechazado: 0,
       subsanacion: 0,
     };
-    for (const it of items) {
-      if (modalidad && it.modalidad !== modalidad) continue;
-      if (it.estado in c) c[it.estado as EstadoTramite] += 1;
-    }
+    for (const key of Object.keys(c) as EstadoTramite[]) c[key] = estadoCounts[key] ?? 0;
     return c;
-  }, [items, modalidad]);
+  }, [estadoCounts]);
 
   // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
   const companias = useMemo(() => {
@@ -620,7 +660,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     return [...set].sort((a, b) => a.localeCompare(b, 'es'));
   }, [items]);
 
-  // Filtrado en cadena: búsqueda → modalidad → estado → compañía.
+  // Filtrado en cadena de lo que SIGUE siendo de cliente: búsqueda libre, compañía y prioritarios.
+  // Estado y familia ya no están aquí — los resuelve el servidor (ver `load`), que es lo único que
+  // puede verlos sobre el universo completo en vez de sobre la página traída.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((item) => {
@@ -639,13 +681,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           .toLowerCase();
         if (!haystack.includes(q)) return false;
       }
-      if (modalidad && item.modalidad !== modalidad) return false;
-      if (estado && item.estado !== estado) return false;
       if (compania && item.companiaNombre !== compania) return false;
       if (soloPrioritarios && !item.prioritario) return false;
       return true;
     });
-  }, [items, search, modalidad, estado, compania, soloPrioritarios]);
+  }, [items, search, compania, soloPrioritarios]);
 
   // HU #10536 — sin orden explicito por columna, el backend devuelve los prioritarios primero. Al
   // marcar uno desde la tabla se replica ESE mismo criterio en cliente, para que suba a la primera
@@ -808,6 +848,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     appliedComprador.trim() !== '' ||
     appliedGestor.trim() !== '' ||
     appliedFirmado !== '' ||
+    appliedOrganismo.trim() !== '' ||
+    appliedTipo.trim() !== '' ||
     appliedCreatedFrom.trim() !== '' ||
     appliedCreatedTo.trim() !== '' ||
     appliedUpdatedFrom.trim() !== '' ||
@@ -839,6 +881,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setAppliedComprador(compradorFilter);
     setAppliedGestor(gestorFilter);
     setAppliedFirmado(firmadoFilter);
+    setAppliedOrganismo(organismoFilter);
+    setAppliedTipo(tipoFilter);
 
     // "Periodo" → fechas: "Rango propio" usa lo que el usuario escribió en el popover; cualquier
     // otro periodo predefinido se calcula con rangoDePeriodo. "Sin periodo" no filtra (null).
@@ -896,6 +940,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             setFirmadoFilter('');
             setAppliedFirmado('');
             break;
+          case 'organismo':
+            setOrganismoFilter('');
+            setAppliedOrganismo('');
+            break;
+          case 'tipo':
+            setTipoFilter('');
+            setAppliedTipo('');
+            break;
         }
       } else {
         next.add(key);
@@ -917,6 +969,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setCompradorFilter('');
     setGestorFilter('');
     setFirmadoFilter('');
+    setOrganismoFilter('');
+    setTipoFilter('');
     setRangoSobre('created');
     setPeriodo('Sin periodo');
     setRangoPropioDesde('');
@@ -926,6 +980,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setAppliedComprador('');
     setAppliedGestor('');
     setAppliedFirmado('');
+    setAppliedOrganismo('');
+    setAppliedTipo('');
     setAppliedCreatedFrom('');
     setAppliedCreatedTo('');
     setAppliedUpdatedFrom('');
@@ -999,6 +1055,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               onGestorChange={setGestorFilter}
               firmado={firmadoFilter}
               onFirmadoChange={setFirmadoFilter}
+              organismo={organismoFilter}
+              onOrganismoChange={setOrganismoFilter}
+              tipo={tipoFilter}
+              onTipoChange={setTipoFilter}
               search={search}
               onSearchChange={handleSearchChange}
               onAplicar={applyServerFilters}
@@ -1011,6 +1071,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                   onChange={setVisibleColumns}
                   label="Columnas"
                   disabled={savingColumns}
+                  buttonClassName={controlCls(columnasPersonalizadas)}
                 />
               }
               isAdmin={isAdmin}
@@ -1026,7 +1087,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           {!loading && !error ? (
             <div className="min-w-0 flex-1">
               <EstadoFunnel
-                counts={estadoCounts}
+                counts={estadoCountsMostrados}
                 selected={estado}
                 onSelect={handleEstadoChange}
               />
@@ -1063,6 +1124,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           appliedComprador={appliedComprador}
           appliedGestor={appliedGestor}
           appliedFirmado={appliedFirmado}
+          appliedOrganismo={appliedOrganismo}
+          appliedTipo={appliedTipo}
         />
 
         {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
@@ -1481,6 +1544,13 @@ function TableBody({
         <table
           aria-label="Trámites en curso"
           style={{
+            // `width: 100%` + `minWidth`: la tabla ocupa SIEMPRE el ancho del contenedor y los
+            // porcentajes del `<colgroup>` reparten ese ancho entre las columnas visibles. Sin el
+            // 100% la tabla era shrink-to-fit y se encogía cada vez que se ocultaba una columna,
+            // dejando un hueco a la derecha. El mínimo sigue mandando cuando las columnas
+            // visibles no caben: ahí entra el scroll horizontal del contenedor, no celdas
+            // ilegibles.
+            width: '100%',
             minWidth: `${gridLayout.minWidthPx}px`,
             borderCollapse: 'separate',
             borderSpacing: '0 8px',
@@ -1579,44 +1649,38 @@ function TableBody({
 }
 
 /**
- * Celda de actor: solo el nombre. La acreditación de esa parte ya NO vive aquí — se consolidó en
- * la columna única "Firmas" (ver `FirmaParteLinea`), que es lo que dibuja el diseño. Tenerla en
- * los dos sitios repetía el mismo chip dos veces por fila.
- */
-function ActorCell({ nombre }: { nombre: string | null | undefined }) {
-  const texto = nombre?.trim();
-  return (
-    <span
-      className="block w-full truncate text-[#162744] dark:text-white/90"
-      title={texto || undefined}
-    >
-      {texto || '—'}
-    </span>
-  );
-}
-
-/**
- * Una parte dentro de la columna "Firmas": rótulo + chip de acreditación (identidad validada o
- * firma del baúl). El rótulo NO es decorativo — con dos chips apilados es lo único que dice de
- * quién es cada firma.
+ * Celda de actor: nombre + la acreditación DE ESA PARTE (identidad validada o firma del baúl).
  *
- * `estado` null significa que la parte existe pero aún no tiene acreditación registrada; se
- * muestra como "Sin registrar" en vez de un guion mudo, que se confundía con "no aplica".
+ * Las dos cosas viven juntas porque la acreditación es por parte, no del trámite: teniéndolas en
+ * columnas separadas el gestor leía "Firmado" y tenía que cruzar la vista a otra columna para
+ * saber de quién. Unidas, la cabecera de la columna ya dice de quién es —"Vendedor",
+ * "Comprador"—, así que la línea de firma no necesita repetir el rótulo.
+ *
+ * El nombre envuelve en vez de truncar, por el mismo motivo que la secretaría: "WILLYN SMITH
+ * LONDOÑ…" no identifica a nadie, y el gestor tenía que pasar el puntero por encima para leer con
+ * quién está tratando. Un nombre tiene espacios donde partirse, así que la segunda línea sale
+ * natural; la fila crece lo que haga falta, como ya hace con el organismo de tránsito.
  */
-function FirmaParteLinea({
+function ActorCell({
+  nombre,
   rotulo,
   estado,
   onOpenTracking,
 }: {
+  nombre: string | null | undefined;
+  /** Parte a la que pertenece la celda; solo se usa para nombrar la acción de trazabilidad. */
   rotulo: string;
+  /** `null` = la parte YA está en la fila pero aún no tiene acreditación; se dice, no se calla. */
   estado?: FirmaParteEstado | null;
-  /** Click en el indicador → modal de tracking de identidad de esta parte. */
+  /** Click en la acreditación → modal de tracking de identidad de esta parte. */
   onOpenTracking?: () => void;
 }) {
-  // Fragmento de DOS celdas, no una línea cerrada: la rejilla vive en el contenedor (ver la celda
-  // `firmado`), y así el valor de vendedor y el de comprador quedan alineados en la misma columna.
-  // Con la línea corrida anterior ("Vendedor: …" / "Comprador: …") los valores bailaban, porque
-  // los dos rótulos no miden lo mismo, y la columna no se podía barrer en vertical.
+  const texto = nombre?.trim();
+  // Sin actor en la celda no hay firma que reportar: "Sin registrar" debajo de un guion se lee
+  // como una acreditación pendiente de alguien que ni siquiera está capturado todavía. Cubre los
+  // dos casos de una: la parte que NO EXISTE en ese tipo de trámite (el vendedor en matrícula
+  // inicial, en los tipos de OTROS) y la que todavía no se ha capturado en un borrador.
+  const mostrarFirma = !!texto;
   const valor = estado ? (
     <span
       className="whitespace-nowrap text-xs font-semibold"
@@ -1631,27 +1695,32 @@ function FirmaParteLinea({
   );
 
   return (
-    <>
-      <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
-        {rotulo}
+    <span className="flex min-w-0 flex-col items-start gap-0.5">
+      <span
+        className="block w-full break-words leading-snug text-[#162744] dark:text-white/90"
+        title={texto || undefined}
+      >
+        {texto || '—'}
       </span>
-      {onOpenTracking ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenTracking();
-          }}
-          aria-label={`Ver tracking de identidad de ${rotulo}`}
-          title={`Ver tracking de identidad · ${rotulo}`}
-          className="rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
-        >
-          {valor}
-        </button>
-      ) : (
-        valor
-      )}
-    </>
+      {mostrarFirma ? (
+        onOpenTracking ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenTracking();
+            }}
+            aria-label={`Ver tracking de identidad de ${rotulo}`}
+            title={`Ver tracking de identidad · ${rotulo}`}
+            className="rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+          >
+            {valor}
+          </button>
+        ) : (
+          valor
+        )
+      ) : null}
+    </span>
   );
 }
 
@@ -1890,19 +1959,27 @@ function TramiteRow({
         ) : null}
       </span>
     ),
-    vin: (
-      <span className="block truncate font-mono text-xs text-[#162744]/80 dark:text-white/70">
-        {item.vin ?? '—'}
-      </span>
-    ),
+    // Vehículo: placa, VIN y marca/modelo apilados. Los tres identifican el MISMO objeto, así que
+    // se leen juntos; en columnas separadas había que barrer la fila a lo ancho para reconocerlo.
+    // Los dos apilados son CONDICIONALES: si el gestor enciende su columna de desglose, el dato se
+    // muda allí en vez de salir dos veces.
     placa: (
-      <span className="block min-w-0">
+      <span className="flex min-w-0 flex-col gap-0.5">
         <span className="block truncate font-mono font-semibold tracking-wider text-[#162744] dark:text-white">
           {item.placa ?? '—'}
         </span>
+        {/* El VIN no envuelve: es un token de 17 caracteres sin espacios y partirlo en dos líneas
+            no ayuda a compararlo de un vistazo. El piso de la columna cabe los 17 enteros. */}
+        {!shows('vin') ? (
+          <span className="block truncate font-mono text-xs text-[#162744]/80 dark:text-white/70">
+            {item.vin ?? '—'}
+          </span>
+        ) : null}
+        {/* La marca sí envuelve: "SUZUKI GIXXER 250" cortado a "SUZUKI GIXX…" deja de decir qué
+            vehículo es. */}
         {!shows('vehiculo') ? (
           <span
-            className="block truncate text-xs text-[#162744]/60 dark:text-white/50"
+            className="block break-words leading-snug text-xs text-[#162744]/60 dark:text-white/50"
             title={vehiculo(item)}
           >
             {vehiculo(item)}
@@ -1917,58 +1994,61 @@ function TramiteRow({
     // Qué partes aparecen depende del tipo de trámite: el traspaso tiene vendedor y comprador; la
     // matrícula inicial no tiene vendedor, así que se muestra solo el comprador en lugar de gastar
     // una línea en un "No aplica" repetido en todas las filas.
-    firmado: (
-      <span className="grid min-w-0 grid-cols-[auto_auto] justify-start items-center gap-x-2 gap-y-1">
-        {item.modalidad === 'TRASPASO' ? (
-          <FirmaParteLinea
-            rotulo="Vendedor"
-            estado={item.firmaVendedorEstado}
-            onOpenTracking={() =>
-              onOpenIdentidadTracking({ item, parte: 'vendedor', rotulo: 'Vendedor' })
-            }
-          />
-        ) : null}
-        <FirmaParteLinea
-          rotulo="Comprador"
-          estado={item.firmaCompradorEstado}
-          onOpenTracking={() =>
-            onOpenIdentidadTracking({ item, parte: 'comprador', rotulo: 'Comprador' })
-          }
-        />
-      </span>
-    ),
     // El chip de estado se inyecta más abajo (solo si la columna `estado` está oculta), para
     // reutilizar EXACTAMENTE la misma celda —popover de rechazo incluido— en vez de duplicarla.
     tramite: (
       <span className="flex min-w-0 flex-col items-start gap-1">
         <span
-          className="block truncate text-xs font-semibold text-[#162744] dark:text-white"
-          // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta: el
-          // truncado necesita que el nombre completo siga estando disponible al pasar por encima.
+          className="block break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
+          // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta, así
+          // que envuelven en vez de cortarse: es el rótulo que distingue un trámite de otro. El
+          // `title` se conserva para el caso extremo de una palabra sola más ancha que la celda.
           title={tramiteLabel(item)}
         >
           {tramiteLabel(item)}
         </span>
         {!shows('paso') ? (
-          <span className="flex min-w-0 items-center gap-1 text-xs text-[#162744]/60 dark:text-white/50">
+          <span className="flex min-w-0 items-start gap-1 text-xs text-[#162744]/60 dark:text-white/50">
             <span className="shrink-0 font-mono tabular-nums">
               {item.pasoActual}/{item.totalPasos}
             </span>
-            <span className="truncate">{stepLabel(item)}</span>
+            <span className="break-words leading-snug">{stepLabel(item)}</span>
           </span>
         ) : null}
       </span>
     ),
-    vehiculo: (
-      <span className="block truncate text-[#162744]/90 dark:text-white/80" title={vehiculo(item)}>
-        {vehiculo(item)}
-      </span>
-    ),
     propietario: (
-      <ActorCell nombre={item.vendedorNombre} />
+      <ActorCell
+        nombre={item.vendedorNombre}
+        rotulo="Vendedor"
+        estado={item.firmaVendedorEstado}
+        onOpenTracking={() =>
+          onOpenIdentidadTracking({ item, parte: 'vendedor', rotulo: 'Vendedor' })
+        }
+      />
     ),
     comprador: (
-      <ActorCell nombre={item.compradorNombre} />
+      <ActorCell
+        nombre={item.compradorNombre}
+        rotulo="Comprador"
+        estado={item.firmaCompradorEstado}
+        onOpenTracking={() =>
+          onOpenIdentidadTracking({ item, parte: 'comprador', rotulo: 'Comprador' })
+        }
+      />
+    ),
+    vin: (
+      <span className="block truncate font-mono text-xs text-[#162744]/80 dark:text-white/70">
+        {item.vin ?? '—'}
+      </span>
+    ),
+    vehiculo: (
+      <span
+        className="block break-words leading-snug text-[#162744]/90 dark:text-white/80"
+        title={vehiculo(item)}
+      >
+        {vehiculo(item)}
+      </span>
     ),
     paso: (
       <span className="block min-w-0">
@@ -2127,16 +2207,19 @@ function TramiteRow({
     // Gestor = empresa que radica + persona que la operó. Sustituye a la antigua columna
     // "Compañía" del SuperAdmin: era exactamente la misma razón social, sin la persona. El
     // filtro por compañía sigue existiendo (arriba), y ahora todos los perfiles ven el dato.
+    // Envuelven las dos líneas: una razón social cortada a "Empresa Demo S.A…" y un operador a
+    // "Radicador Empresa De…" no distinguen a una compañía o a una persona de otra, que es
+    // justo para lo que está la columna. Mismo criterio que la secretaría y los actores.
     gestor: (
       <span className="block min-w-0">
         <span
-          className="block truncate text-xs font-semibold text-[#162744] dark:text-white"
+          className="block break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
           title={item.companiaNombre ?? undefined}
         >
           {item.companiaNombre ?? '—'}
         </span>
         <span
-          className="block truncate text-xs text-[#162744]/60 dark:text-white/50"
+          className="block break-words leading-snug text-xs text-[#162744]/60 dark:text-white/50"
           title={item.gestorNombre ?? undefined}
         >
           {item.gestorNombre ?? '—'}

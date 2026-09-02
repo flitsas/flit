@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
@@ -7,6 +7,8 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
+  // La tira de KPIs pide sus conteos al backend (no se derivan del array del listado).
+  listInstanceEstadoCounts: vi.fn().mockResolvedValue({}),
   setPriority: vi.fn(),
   // HU #11054 / #11055 — documentos y consolidado desde el listado.
   getAttachments: vi.fn(),
@@ -47,6 +49,19 @@ vi.mock('next/navigation', () => ({
 import { TramitesTable } from '@/components/operacion/TramitesTable';
 
 /** Genera n instancias draft con placa única (P0001, P0002, …). */
+/**
+ * Enciende desde el selector columnas que NO vienen en el default de la pantalla (Firmas, Gestor,
+ * Fuente y los desgloses). Cierra el panel al terminar para que sus etiquetas no interfieran con
+ * las búsquedas por texto del propio test.
+ */
+async function activarColumnas(...labels: string[]): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+  for (const label of labels) {
+    await userEvent.click(screen.getByRole('checkbox', { name: new RegExp(`^${label}$`, 'i') }));
+  }
+  await userEvent.keyboard('{Escape}');
+}
+
 function makeInstances(n: number): InstanceSummary[] {
   return Array.from({ length: n }, (_, i) => {
     const num = String(i + 1).padStart(4, '0');
@@ -187,27 +202,56 @@ describe('TramitesTable — paginación', () => {
 });
 
 describe('TramitesTable — filtro por estado en el slider KPI', () => {
-  it('filtra la tabla al clic en una tarjeta y no expone el filtro en + Filtro', async () => {
+  // El estado dejó de filtrarse en cliente: la tarjeta manda `estado` al backend. Lo que se
+  // comprueba aquí es esa llamada, no que el array se recorte en memoria — el listado trae como
+  // mucho una página, así que recortarla contestaba "los entregados que cupieron", no "los
+  // entregados". Y el conteo de la tarjeta viene del backend por la misma razón.
+  it('al clic en una tarjeta pide ese estado al backend y no expone el filtro en + Filtro', async () => {
     const [a, b] = makeInstances(2);
-    mocks.listInstances.mockResolvedValue([
-      { ...a, estado: 'borrador', placa: 'AAA111' },
-      { ...b, estado: 'entregado', placa: 'BBB222' },
-    ]);
+    const borrador = { ...a, estado: 'borrador', placa: 'AAA111' };
+    const entregado = { ...b, estado: 'entregado', placa: 'BBB222' };
+    // El mock hace de servidor: devuelve según el `estado` pedido.
+    mocks.listInstances.mockImplementation(async (params?: { estado?: string }) =>
+      params?.estado === 'entregado' ? [entregado] : [borrador, entregado],
+    );
+    mocks.listInstanceEstadoCounts.mockResolvedValue({ borrador: 1, entregado: 1 });
     render(<TramitesTable />);
 
     await screen.findByText('AAA111');
     expect(screen.getByText('BBB222')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Entregado: 1 trámite' }));
+    await waitFor(() =>
+      expect(mocks.listInstances).toHaveBeenCalledWith(
+        expect.objectContaining({ estado: 'entregado' }),
+      ),
+    );
+    expect(await screen.findByText('BBB222')).toBeInTheDocument();
     expect(screen.queryByText('AAA111')).not.toBeInTheDocument();
-    expect(screen.getByText('BBB222')).toBeInTheDocument();
 
+    // Segundo clic en la misma tarjeta: quita el filtro y la petición vuelve a ir sin `estado`.
     await userEvent.click(screen.getByRole('button', { name: 'Entregado: 1 trámite' }));
-    expect(screen.getByText('AAA111')).toBeInTheDocument();
+    expect(await screen.findByText('AAA111')).toBeInTheDocument();
     expect(screen.getByText('BBB222')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
     expect(screen.queryByText('Filtrar por estado')).not.toBeInTheDocument();
+  });
+
+  // La tira habla del UNIVERSO, la tabla de una página: por eso los conteos no se derivan de las
+  // filas traídas. Si se derivaran, un tenant que no cupiera en la ventana vería "1 borrador"
+  // teniendo cientos.
+  it('los conteos de la tira los sirve el backend, no se cuentan las filas de la página', async () => {
+    const [a] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([{ ...a, estado: 'borrador', placa: 'AAA111' }]);
+    mocks.listInstanceEstadoCounts.mockResolvedValue({ borrador: 340, entregado: 12 });
+    render(<TramitesTable />);
+
+    await screen.findByText('AAA111');
+    expect(
+      await screen.findByRole('button', { name: 'Borrador: 340 trámites' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Entregado: 12 trámites' })).toBeInTheDocument();
   });
 });
 
@@ -502,7 +546,8 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     render(<TramitesTable />);
 
     await screen.findByText('AAA111');
-    // Gestor entra en el default de la pantalla principal: ya no hay que activarla a mano.
+    // Gestor está fuera del default de la pantalla: el gestor la enciende desde "Columnas".
+    await activarColumnas('Gestor');
     // `getByRole('row')` ya no es único: la cabecera y cada fila de datos son `<tr>` (role="row"
     // implícito), así que se acota a la cabecera con `getAllByRole('row')[0]`.
     const table = screen.getByRole('table', { name: 'Trámites en curso' });
@@ -529,9 +574,9 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    // HU #11057 renombró la cabecera a "Propietario / vendedor" (rótulo del negocio).
-    // El mismo texto aparece en el formulario de filtros; basta con que exista ≥1.
-    expect(screen.getAllByText('Propietario / vendedor').length).toBeGreaterThanOrEqual(1);
+    // La cabecera dice "Vendedor" a secas: la celda solo pinta `vendedorNombre`. El filtro
+    // específico conserva su propio rótulo, así que basta con que el texto exista ≥1 vez.
+    expect(screen.getAllByText('Vendedor').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Comprador').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Vendedor 0001')).toBeInTheDocument();
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
@@ -563,25 +608,28 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     )[0];
     for (const col of [
       'Radicado',
-      'VIN',
-      'Placa',
-      'Propietario / vendedor',
+      'Vehículo',
+      'Vendedor',
       'Comprador',
-      'Firmas',
       'Trámite / Estado',
       'Secretaría',
-      'Gestor',
-      'Fuente',
       'Acciones',
     ]) {
       expect(within(header).getByText(col)).toBeInTheDocument();
     }
+    // Placa, VIN y marca/modelo van juntos en la columna "Vehículo": no hay columnas propias.
+    expect(within(header).queryByText('VIN')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Placa')).not.toBeInTheDocument();
     // Columnas cuyo dato viaja apilado en una celda compuesta: fuera de la cabecera por defecto,
     // disponibles en el selector para moverlo a su propia columna.
-    expect(within(header).queryByText('Vehículo')).not.toBeInTheDocument();
     expect(within(header).queryByText('Paso')).not.toBeInTheDocument();
     expect(within(header).queryByText('Estado')).not.toBeInTheDocument();
     expect(within(header).queryByText('Fecha de creación')).not.toBeInTheDocument();
+    // La acreditación de cada parte va dentro de su columna de actor: no hay columna "Firmas".
+    expect(within(header).queryByText('Firmas')).not.toBeInTheDocument();
+    // Fuera del default por decisión de producto: el gestor las enciende desde "Columnas".
+    expect(within(header).queryByText('Gestor')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Fuente')).not.toBeInTheDocument();
   });
 
   it('permite activar columnas opcionales desde el selector', async () => {
@@ -591,13 +639,13 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     await screen.findByText('P0001');
 
     await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
-    await userEvent.click(screen.getByRole('checkbox', { name: /^Vehículo$/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Estado$/i }));
     await userEvent.click(screen.getByRole('checkbox', { name: /^Paso$/i }));
 
     const header = within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole(
       'row',
     )[0];
-    expect(within(header).getByText('Vehículo')).toBeInTheDocument();
+    expect(within(header).getByText('Estado')).toBeInTheDocument();
     expect(within(header).getByText('Paso')).toBeInTheDocument();
   });
 
@@ -610,13 +658,12 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     await screen.findByText('P0001');
 
     const rows = () => screen.getByRole('table', { name: 'Trámites en curso' });
-    // Por defecto el vehículo va apilado bajo la placa: aparece UNA vez.
+    // Por defecto la marca va apilada dentro de "Vehículo", bajo la placa: aparece UNA vez.
     expect(within(rows()).getAllByText('RENAULT STEPWAY')).toHaveLength(1);
 
-    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
-    await userEvent.click(screen.getByRole('checkbox', { name: /^Vehículo$/i }));
+    await activarColumnas('Marca / modelo');
 
-    // Con la columna dedicada activa sigue apareciendo UNA sola vez, ahora en su propia celda.
+    // Con la columna de desglose activa sigue apareciendo UNA sola vez, ya en su propia celda.
     expect(within(rows()).getAllByText('RENAULT STEPWAY')).toHaveLength(1);
   });
 
@@ -636,10 +683,9 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    // Gestor y Fuente ya vienen en el default; solo hay que activar la fecha de actualización,
-    // que por defecto va apilada dentro del radicado.
-    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
-    await userEvent.click(screen.getByRole('checkbox', { name: /Fecha de actualización/i }));
+    // Ninguna de las tres viene en el default: Gestor y Fuente están fuera por decisión de
+    // producto, y la fecha de actualización viaja apilada dentro del radicado.
+    await activarColumnas('Gestor', 'Fuente', 'Fecha de actualización');
 
     const rows = screen.getByRole('table', { name: 'Trámites en curso' });
     expect(within(rows).getByText('Empresa Gestora SAS')).toBeInTheDocument();
@@ -648,9 +694,9 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     expect(within(rows).getByText('2026/07/20')).toBeInTheDocument();
   });
 
-  // Las firmas de las dos partes viven en UNA sola columna ("Firmas"), cada una con su rótulo:
-  // apiladas sin rótulo no se sabría de quién es cada chip.
-  it('en traspaso muestra la acreditación de vendedor y comprador, cada una rotulada', async () => {
+  // La acreditación de cada parte vive DENTRO de la celda de esa parte: quién firmó lo dice la
+  // columna en la que está, no un rótulo repetido dentro de la celda.
+  it('en traspaso cada actor muestra su propia acreditación en su columna', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
@@ -663,23 +709,25 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    // El rótulo ya no lleva dos puntos —rótulo y valor se alinean en dos columnas dentro de la
-    // celda, y el separador lo da la rejilla—, así que se busca dentro de la FILA de datos y no
-    // de la tabla entera: "Comprador" es también el texto de una cabecera ordenable. Lo que se
-    // comprueba sigue siendo lo mismo: que cada acreditación diga de qué parte es.
+    // Sin encender nada: las dos columnas de actor vienen en el default y cada una trae su firma.
     const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
     const fila = within(tabla).getAllByRole('row')[1];
-    expect(within(fila).getByText('Vendedor')).toBeInTheDocument();
-    expect(within(fila).getByText('Comprador')).toBeInTheDocument();
     expect(within(fila).getByText('Firmado')).toBeInTheDocument();
     expect(within(fila).getByText('Rechazado')).toBeInTheDocument();
-    // El chip ya no se repite junto al nombre del actor: existe una sola vez por parte.
+    // Y cada una está en la celda de SU parte: la acción de trazabilidad lo nombra.
+    expect(
+      within(fila).getByRole('button', { name: 'Ver tracking de identidad de Vendedor' }),
+    ).toBeInTheDocument();
+    expect(
+      within(fila).getByRole('button', { name: 'Ver tracking de identidad de Comprador' }),
+    ).toBeInTheDocument();
+    // Una sola vez por parte: el valor no se repite en otra columna.
     expect(within(fila).getAllByText('Firmado')).toHaveLength(1);
   });
 
   // La columna del vendedor se ata a la pestaña, no a la preferencia: en matrícula inicial no
   // existe vendedor, pero en "Todos" la lista mezcla ambas modalidades y el dato sí aplica.
-  it('la columna Propietario / vendedor sigue a la pestaña sin alterar la preferencia guardada', async () => {
+  it('la columna Vendedor sigue a la pestaña sin alterar la preferencia guardada', async () => {
     // Una instancia de cada modalidad: si no, al cambiar de pestaña el listado queda vacío y no
     // hay cabecera que comprobar (el caso se estaría midiendo contra el estado "Sin resultados").
     const [uno, dos] = makeInstances(2);
@@ -693,17 +741,17 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     const header = () =>
       within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole('row')[0];
     // Pestaña "Todos": presente.
-    expect(within(header()).getByText('Propietario / vendedor')).toBeInTheDocument();
+    expect(within(header()).getByText('Vendedor')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Matrículas' }));
-    expect(within(header()).queryByText('Propietario / vendedor')).not.toBeInTheDocument();
+    expect(within(header()).queryByText('Vendedor')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Traspaso' }));
-    expect(within(header()).getByText('Propietario / vendedor')).toBeInTheDocument();
+    expect(within(header()).getByText('Vendedor')).toBeInTheDocument();
 
     // Y al volver a "Todos" reaparece: nunca se tocó la preferencia, solo se derivó la vista.
     await userEvent.click(screen.getByRole('tab', { name: 'Todos' }));
-    expect(within(header()).getByText('Propietario / vendedor')).toBeInTheDocument();
+    expect(within(header()).getByText('Vendedor')).toBeInTheDocument();
   });
 
   it('en matrícula inicial solo aparece la línea del comprador (no hay vendedor)', async () => {
@@ -720,13 +768,43 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    // Acotado a la fila de datos: "Comprador" es también el texto de una cabecera ordenable.
     const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
     const fila = within(tabla).getAllByRole('row')[1];
-    expect(within(fila).queryByText('Vendedor')).toBeNull();
-    expect(within(fila).getByText('Comprador')).toBeInTheDocument();
-    // Parte existente pero sin acreditación registrada: se dice, no se deja un guion mudo.
+    // El vendedor NO EXISTE en matrícula inicial: su celda no ofrece acreditación (un "Sin
+    // registrar" ahí se leería como una firma pendiente que nadie va a dar).
+    expect(
+      within(fila).queryByRole('button', { name: 'Ver tracking de identidad de Vendedor' }),
+    ).toBeNull();
+    // El comprador sí existe: sin acreditación registrada se dice, no se deja un guion mudo.
     expect(within(fila).getByText('Sin registrar')).toBeInTheDocument();
+    expect(
+      within(fila).getByRole('button', { name: 'Ver tracking de identidad de Comprador' }),
+    ).toBeInTheDocument();
+  });
+
+  it('un actor todavía sin capturar no muestra acreditación (ni "Sin registrar")', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...item,
+        modalidad: 'TRASPASO',
+        vendedorNombre: null,
+        compradorNombre: null,
+        firmaVendedorEstado: null,
+        firmaCompradorEstado: null,
+      },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
+    const fila = within(tabla).getAllByRole('row')[1];
+    // Borrador sin actores capturados: las dos celdas muestran el guion y nada más. "Sin
+    // registrar" bajo un guion se leería como una firma pendiente de alguien que no existe aún.
+    expect(within(fila).queryByText('Sin registrar')).toBeNull();
+    expect(
+      within(fila).queryAllByRole('button', { name: /Ver tracking de identidad/ }),
+    ).toHaveLength(0);
   });
 });
 
@@ -988,6 +1066,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     });
     render(<TramitesTable />);
 
+    await screen.findByText('RADID1');
     await userEvent.click(
       await screen.findByRole('button', { name: /Ver tracking de identidad de Comprador/i }),
     );
@@ -1375,7 +1454,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
-    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Placa/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Vehículo/i }));
 
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(
@@ -1387,7 +1466,9 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
       );
     });
 
-    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Placa \(ascendente\)/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /Ordenar por Vehículo \(ascendente\)/i }),
+    );
 
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(

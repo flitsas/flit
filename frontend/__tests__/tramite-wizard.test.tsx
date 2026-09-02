@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type {
@@ -363,6 +363,67 @@ describe('TramiteWizard — sidebar server-driven por modalidad', () => {
     // "Requisitos" aparece UNA sola vez: dos pasos con el mismo rótulo significa que el backend
     // sigue emitiendo el paso `comercial` que ya no existe.
     expect(screen.getAllByRole('button', { name: /^Paso \d+: Requisitos/ })).toHaveLength(1);
+  });
+});
+
+// El botón "Anular trámite" del pie SOLO llamaba a onExit(): el trámite seguía en `borrador` y
+// reaparecía intacto en el listado, así que el gestor creía haberlo anulado y no era cierto.
+// Anular es una transición de estado, no una forma de salir del asistente.
+describe('TramiteWizard — anular trámite', () => {
+  const abrirDialogo = async () => {
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-99" onExit={onExit} />);
+    await screen.findAllByRole('button', { name: /^Paso \d+:/ });
+    await user.click(screen.getByRole('button', { name: 'Anular trámite' }));
+    return user;
+  };
+
+  const onExit = vi.fn();
+
+  beforeEach(() => {
+    onExit.mockClear();
+  });
+
+  it('pide el motivo y transiciona a `anulado` antes de salir', async () => {
+    const user = await abrirDialogo();
+
+    fireEvent.change(screen.getByLabelText('Motivo de la anulación'), {
+      target: { value: 'El cliente desistió de la compra' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Sí, anular' }));
+
+    await waitFor(() =>
+      expect(mocks.transitionInstance).toHaveBeenCalledWith(
+        'inst-99',
+        'anulado',
+        'El cliente desistió de la compra',
+      ),
+    );
+    // Y solo DESPUÉS de que la transición resuelve se cierra el asistente.
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
+  });
+
+  it('sin motivo no llama al backend: la máquina de estados lo exige para anular', async () => {
+    const user = await abrirDialogo();
+
+    await user.click(screen.getByRole('button', { name: 'Sí, anular' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/motivo/i);
+    expect(mocks.transitionInstance).not.toHaveBeenCalled();
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it('si la transición falla NO cierra el asistente: cerrarlo repetiría el engaño en silencio', async () => {
+    mocks.transitionInstance.mockRejectedValueOnce(new Error('El trámite ya fue entregado.'));
+    const user = await abrirDialogo();
+
+    fireEvent.change(screen.getByLabelText('Motivo de la anulación'), {
+      target: { value: 'Duplicado' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Sí, anular' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('El trámite ya fue entregado.');
+    expect(onExit).not.toHaveBeenCalled();
   });
 });
 

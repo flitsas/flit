@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<ListProcedureInstancesHandler>();
         // Filtrado/ordenamiento server-side del listado (WHERE/ORDER BY en SQL, no en memoria).
         services.AddScoped<ListProcedureInstancesFilteredHandler>();
+        services.AddScoped<CountProcedureInstancesByStatusHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
         services.AddScoped<PersistOcrFieldsHandler>();

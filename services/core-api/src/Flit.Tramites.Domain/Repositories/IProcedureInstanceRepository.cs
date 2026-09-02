@@ -477,6 +477,26 @@ public interface IProcedureInstanceRepository
         ProcedureInstanceSortBy sortBy,
         SortDirection direction,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Conteo por ESTADO del ciclo de vida, aplicando <paramref name="filter"/> sobre TODO el universo
+    /// (no sobre una página): un <c>GROUP BY status</c> en SQL, sin cargar entidades ni el grafo.
+    /// <para>
+    /// Existe porque la tira de KPIs del listado necesita el conteo del universo completo mientras la
+    /// tabla trae solo una página. Calcularlo en el cliente sobre las filas ya traídas daba números que
+    /// solo eran ciertos si el tenant cabía entero en la ventana; a partir de ahí la tarjeta decía "69
+    /// borradores" cuando el tenant tenía muchos más.
+    /// </para>
+    /// <para>
+    /// Quien pide los conteos debe pasar el filtro SIN <see cref="ProcedureInstanceListFilter.Estados"/>:
+    /// las tarjetas muestran cuántos hay de cada estado bajo el resto de criterios, y acotarlas al estado
+    /// ya elegido dejaría las otras seis en cero.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
 }
 
 /// <summary>

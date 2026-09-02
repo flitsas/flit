@@ -614,8 +614,10 @@ function ParteBlock({
   // ya resolvía el sujeto correctamente sin `documento` — no se toca ese camino (regresión cero).
   const subject = multipleOwners && actor ? subjectForActor(actor) : undefined;
 
+  // Con firma del baúl no se describe el mecanismo: el badge de arriba ya lo dice y el detalle
+  // solo aporta cuando hay algo que aclarar (sello de identidad, o mecanismo ausente).
   const sigDetalle = vaultCovered
-    ? `${PARTE_LABEL[parte]} firmará con la firma electrónica precargada en el baúl.`
+    ? null
     : mecanismoFirma === 'identidad'
     ? `${PARTE_LABEL[parte]} firmará con el sello de la validación de identidad (biométrica) como mecanismo de firma.`
     : `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`;
@@ -650,7 +652,7 @@ function ParteBlock({
             <div className="mt-2">
               <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
             </div>
-            <p className="mt-2 text-xs opacity-70">{sigDetalle}</p>
+            {sigDetalle ? <p className="mt-2 text-xs opacity-70">{sigDetalle}</p> : null}
           </div>
         </div>
         <div className="mt-3">

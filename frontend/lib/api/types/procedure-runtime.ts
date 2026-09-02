@@ -258,6 +258,20 @@ export interface ListInstancesParams {
    * No es el chip de identidad/baúl de la columna de actores.
    */
   firmado?: boolean;
+  /**
+   * Estados del ciclo de vida a incluir, separados por coma (`'borrador,preparado'`). Vacío = todos.
+   *
+   * Dejó de filtrarse en el cliente: el listado trae como mucho 200 filas, así que aplicar el
+   * estado sobre lo ya traído respondía "los borradores que cupieron en la ventana" en vez de "los
+   * borradores del tenant" — una respuesta distinta, y silenciosamente incompleta.
+   */
+  estado?: string;
+  /** Familia del trámite (MATRICULAS | TRASPASO | OTROS). Misma razón que `estado`. */
+  modalidad?: string;
+  /** Subcadena sobre el nombre del organismo de tránsito elegido en el trámite. */
+  organismoTransito?: string;
+  /** Código del TIPO concreto, no la familia: "OTROS" agrupa quince tipos distintos. */
+  tipoCodigo?: string;
   /** ISO-8601 / fecha `YYYY-MM-DD` (el cliente normaliza a inicio/fin de día). */
   createdFrom?: string;
   createdTo?: string;
@@ -274,6 +288,18 @@ export interface ListInstancesParams {
 export interface InstancesResponse {
   items: InstanceSummary[];
   total?: number;
+}
+
+/**
+ * Respuesta de GET /instances/estado-counts: cuántos trámites hay de cada estado bajo los filtros
+ * activos, sobre el UNIVERSO completo y no sobre la página que trae la tabla.
+ *
+ * Endpoint aparte del listado porque los conteos se piden con un juego de filtros DISTINTO —sin
+ * `estado`—: las tarjetas dicen a dónde puede moverse el gestor, y acotarlas al estado ya elegido
+ * dejaría las otras seis en cero.
+ */
+export interface InstanceEstadoCountsResponse {
+  counts: Record<string, number>;
 }
 
 /** Organismo de tránsito habilitado para la empresa (catálogo + grant). */

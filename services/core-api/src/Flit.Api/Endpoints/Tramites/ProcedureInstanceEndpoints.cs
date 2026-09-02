@@ -121,6 +121,10 @@ internal static class ProcedureInstanceEndpoints
             [FromQuery] string? comprador,
             [FromQuery] string? gestor,
             [FromQuery] bool? firmado,
+            [FromQuery] string? estado,
+            [FromQuery] string? modalidad,
+            [FromQuery] string? organismoTransito,
+            [FromQuery] string? tipoCodigo,
             [FromQuery] DateTimeOffset? createdFrom,
             [FromQuery] DateTimeOffset? createdTo,
             [FromQuery] DateTimeOffset? updatedFrom,
@@ -141,6 +145,8 @@ internal static class ProcedureInstanceEndpoints
                 !string.IsNullOrWhiteSpace(vin) || !string.IsNullOrWhiteSpace(placa)
                 || !string.IsNullOrWhiteSpace(vendedor) || !string.IsNullOrWhiteSpace(comprador)
                 || !string.IsNullOrWhiteSpace(gestor) || firmado is not null
+                || !string.IsNullOrWhiteSpace(estado) || !string.IsNullOrWhiteSpace(modalidad)
+                || !string.IsNullOrWhiteSpace(organismoTransito) || !string.IsNullOrWhiteSpace(tipoCodigo)
                 || createdFrom is not null || createdTo is not null
                 || updatedFrom is not null || updatedTo is not null
                 || !string.IsNullOrWhiteSpace(sortBy) || !string.IsNullOrWhiteSpace(sortDir)
@@ -163,6 +169,10 @@ internal static class ProcedureInstanceEndpoints
                 Comprador = comprador,
                 Gestor = gestor,
                 Firmado = firmado,
+                Estados = ParseEstados(estado),
+                Modalidad = modalidad,
+                OrganismoTransito = organismoTransito,
+                TipoCodigo = tipoCodigo,
                 CreatedFrom = createdFrom,
                 CreatedTo = createdTo,
                 UpdatedFrom = updatedFrom,
@@ -176,6 +186,57 @@ internal static class ProcedureInstanceEndpoints
             var (filteredItems, total) = await filteredHandler.HandleAsync(request, ct);
             return Results.Ok(new { items = filteredItems, total });
         }).WithName("ListProcedureInstances");
+
+        // GET /api/v1/tramites/instances/estado-counts — conteo por estado del UNIVERSO que matchea los
+        // filtros, para la tira de KPIs del listado.
+        //
+        // Endpoint aparte y no un campo más en la respuesta de /instances: esa respuesta es un objeto
+        // con `items` que ya consumen otros clientes, y los conteos se piden con un juego de filtros
+        // DISTINTO (sin `estado`) — meterlos en la misma llamada obligaría a decidir si el filtro de
+        // estado aplica a los items, a los conteos o a los dos.
+        group.MapGet("/instances/estado-counts", async (
+            HttpContext http,
+            CountProcedureInstancesByStatusHandler handler,
+            [FromQuery] string? vin,
+            [FromQuery] string? placa,
+            [FromQuery] string? vendedor,
+            [FromQuery] string? comprador,
+            [FromQuery] string? gestor,
+            [FromQuery] bool? firmado,
+            [FromQuery] string? modalidad,
+            [FromQuery] string? organismoTransito,
+            [FromQuery] string? tipoCodigo,
+            [FromQuery] DateTimeOffset? createdFrom,
+            [FromQuery] DateTimeOffset? createdTo,
+            [FromQuery] DateTimeOffset? updatedFrom,
+            [FromQuery] DateTimeOffset? updatedTo,
+            CancellationToken ct) =>
+        {
+            var (tenantId, _) = ResolveTenantContext(http);
+
+            // `estado` NO se acepta aquí: las tarjetas dicen cuántos hay de cada estado bajo el resto de
+            // criterios. Filtrarlas por el estado ya elegido dejaría las otras seis en cero.
+            var request = new ProcedureInstanceListRequest
+            {
+                TenantId = tenantId,
+                Vin = vin,
+                Placa = placa,
+                Vendedor = vendedor,
+                Comprador = comprador,
+                Gestor = gestor,
+                Firmado = firmado,
+                Modalidad = modalidad,
+                OrganismoTransito = organismoTransito,
+                TipoCodigo = tipoCodigo,
+                CreatedFrom = createdFrom,
+                CreatedTo = createdTo,
+                UpdatedFrom = updatedFrom,
+                UpdatedTo = updatedTo,
+            };
+
+            var counts = await handler.HandleAsync(request, ct);
+            return Results.Ok(new { counts });
+        }).WithName("CountProcedureInstancesByEstado");
 
         // GET /api/v1/tramites/transit-offices — Organismos de tránsito HABILITADOS para la
         // empresa (tenant del header). #2: el operador solo puede elegir/enviar a los OT que la
@@ -986,6 +1047,32 @@ internal static class ProcedureInstanceEndpoints
     /// Tenant + rol resueltos por <see cref="TenantEnforcementMiddleware"/> desde el JWT.
     /// <c>TenantId == null</c> solo ocurre para un SuperAdmin sin acotar (ver todo).
     /// </summary>
+    /// <summary>
+    /// `estado` acepta UNO o VARIOS separados por coma (<c>?estado=borrador,preparado</c>): la consulta
+    /// natural del gestor —"todo lo que no está cerrado"— son varios estados a la vez, y la coma evita
+    /// repetir el parámetro N veces.
+    /// <para>
+    /// Los valores desconocidos se DESCARTAN en silencio en vez de devolver 400: un estado que no existe
+    /// no puede casar ninguna fila, así que el resultado correcto es "no filtra por eso", igual que hace
+    /// <c>ProcedureInstanceSortFields.Resolve</c> con un <c>sortBy</c> inventado. Si tras descartar no
+    /// queda ninguno, se devuelve null y el filtro no se aplica.
+    /// </para>
+    /// </summary>
+    private static List<string>? ParseEstados(string? estado)
+    {
+        if (string.IsNullOrWhiteSpace(estado)) return null;
+
+        var validos = estado
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.ToLowerInvariant())
+            .Where(e => TramiteEstado.EsValido(e)
+                || string.Equals(e, TramiteEstado.Subsanacion, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return validos.Count > 0 ? validos : null;
+    }
+
     private static (Guid? TenantId, bool IsSuperAdmin) ResolveTenantContext(HttpContext http)
     {
         var isSuperAdmin = http.Items.TryGetValue(TenantEnforcementMiddleware.SuperAdminItemKey, out var sa)

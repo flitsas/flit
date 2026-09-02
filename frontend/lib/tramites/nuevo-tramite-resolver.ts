@@ -171,21 +171,58 @@ export function resolveNuevoTramiteCode(
 export const TIPOS_UI_MOCKUP: {
   id: NuevoTramiteTipoUi;
   title: string;
+  /** Ya no se pinta en la tarjeta (el diseño la deja con icono + título + desplegable). Se conserva
+   *  como texto accesible del icono y para los mensajes de familia bloqueada / sin tipos. */
   subtitle: string;
+  /** Ilustración de la tarjeta. Trae su círculo azul dentro, igual que los iconos de estado. */
+  icon: string;
+  /** Rótulo del desplegable de la tarjeta cuando aún no se ha elegido nada. */
+  placeholder: string;
 }[] = [
   {
     id: 'MATRICULAS',
     title: 'Matrícula Inicial',
     subtitle: 'Vehículo nuevo sin placa asignada',
+    icon: '/assets/tipos-tramite/matriculas.svg',
+    placeholder: 'Selecciona tipo',
   },
   {
     id: 'TRASPASO',
     title: 'Traspaso',
     subtitle: 'Cambio de propietario del vehículo',
+    icon: '/assets/tipos-tramite/traspaso.svg',
+    placeholder: 'Selecciona modalidad',
   },
   {
     id: 'OTROS',
     title: 'Otros Trámites',
     subtitle: 'Modificaciones y novedades',
+    icon: '/assets/tipos-tramite/otros.svg',
+    placeholder: 'Selecciona trámite',
   },
 ];
+
+/**
+ * Texto de la franja informativa del selector: explica en una línea qué implica la configuración
+ * elegida. Null mientras no haya nada que aclarar — la franja se reserva igual (ver el modal), para
+ * que el alto no salte al elegir.
+ *
+ * "Otros" no tiene texto: son quince tipos con explicaciones propias, y una frase genérica no diría
+ * nada que el nombre del trámite ya elegido no diga mejor.
+ */
+export function infoTextNuevoTramite(
+  tipo: NuevoTramiteTipoUi | null,
+  opciones: { leasing?: boolean; modalidadTraspaso?: ModalidadTraspasoUi },
+): string | null {
+  if (tipo === 'MATRICULAS') {
+    return opciones.leasing
+      ? 'Matrícula tipo Leasing: el vehículo queda registrado a nombre de la entidad financiera (arrendador), mientras lo usas como locatario según el contrato.'
+      : 'Matrícula tradicional: el vehículo nuevo será matriculado a nombre del comprador ante el organismo de tránsito elegido.';
+  }
+  if (tipo === 'TRASPASO') {
+    return opciones.modalidadTraspaso === 'unilateral'
+      ? 'Traspaso unilateral: traspaso realizado únicamente por el propietario actual, sin requerir la presencia del comprador en la sede de tránsito.'
+      : 'Traspaso bilateral: traspaso vehicular donde el comprador y el vendedor radican ante el organismo de tránsito.';
+  }
+  return null;
+}

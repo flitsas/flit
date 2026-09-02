@@ -719,11 +719,6 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   </div>
                 </>
               )}
-              {muestraAcreedor && runtHasGravamen && !acreedorReadOnly && (
-                <p className="md:col-span-3 -mt-2 text-xs opacity-70">
-                  Acreedor y documento se precargaron desde el RUNT; puedes editarlos si aplica.
-                </p>
-              )}
               {acreedorReadOnly && (
                 <p className="md:col-span-3 text-xs opacity-70 -mt-2">
                   Al levantar el gravamen, Acreedor y documento quedan inhabilitados.

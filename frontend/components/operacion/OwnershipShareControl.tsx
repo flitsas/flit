@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { WIZARD_LABEL } from './wizard-field-styles';
 
 /**
@@ -77,10 +77,21 @@ function ownershipPanelId(idPrefix: string): string {
   return `${idPrefix}-ownership-panel`;
 }
 
+/**
+ * Píldora azul maciza con el icono y su rótulo. Lleva TEXTO además del icono porque un botón
+ * redondo con un "+" sobre una fila de píldoras no dice qué añade, y la única pista era el
+ * `title`, que exige pasar el puntero por encima y no existe en táctil.
+ *
+ * El fondo es el MISMO #557EFF que el círculo que trae dentro el SVG
+ * (`public/assets/agregar-copropietario.svg`): los dos azules se funden y el icono se lee como el
+ * glifo blanco sobre la píldora, sin un círculo recortado dentro de otra forma. `pr-3` y no un
+ * padding simétrico porque el icono ya trae su propio margen visual dentro del SVG.
+ */
 const ADD_BUTTON_CLASS =
-  'grid h-9 w-9 shrink-0 place-items-center rounded-full text-white transition ' +
-  'disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 ' +
-  'focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]';
+  'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#557EFF] pr-3 text-xs ' +
+  'font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed ' +
+  'disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
+  'focus-visible:ring-[#557EFF]';
 
 export interface OwnershipTabsBarProps {
   /** Pestañas de este lado, en orden de ordinal. */
@@ -186,12 +197,23 @@ export function OwnershipTabsBar({
           type="button"
           onClick={onAdd}
           disabled={readOnly || maxReached}
-          title={maxReached ? 'Máximo 4 propietarios permitidos por trámite.' : 'Agregar copropietario'}
-          aria-label={`Agregar copropietario de ${sideLabel.toLowerCase()}`}
+          title={maxReached ? 'Máximo 4 propietarios permitidos por trámite.' : undefined}
+          // El nombre accesible EMPIEZA por el texto visible ("Agregar propietario") y solo le
+          // añade de qué lado es: quien dicta por voz lo que ve en pantalla acierta igual.
+          aria-label={`Agregar propietario de ${sideLabel.toLowerCase()}`}
           className={ADD_BUTTON_CLASS}
-          style={{ backgroundColor: '#557EFF' }}
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />
+          {/* Decorativo: lo que nombra el botón es el rótulo de al lado. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/assets/agregar-copropietario.svg"
+            alt=""
+            aria-hidden="true"
+            width={36}
+            height={36}
+            className="h-9 w-9"
+          />
+          Agregar propietario
         </button>
       </div>
       <span className="text-xs opacity-70 whitespace-nowrap">

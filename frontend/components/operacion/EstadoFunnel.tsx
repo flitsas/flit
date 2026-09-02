@@ -1,16 +1,8 @@
 'use client';
 
 import {
-  BadgeCheck,
-  Ban,
-  CheckCircle2,
-  FileCheck2,
-  FileText,
-  Sparkles,
-  XCircle,
-} from 'lucide-react';
-import {
   ESTADO_CHIP_STYLES,
+  ESTADO_ICONO,
   ESTADO_LABELS,
   type EstadoTramite,
 } from '@/lib/tramites/estados';
@@ -35,16 +27,6 @@ const FUNNEL_ORDER: EstadoTramite[] = [
   'anulado',
 ];
 
-const ESTADO_ICON: Record<EstadoTramite, typeof FileText> = {
-  borrador: FileText,
-  preparado: FileCheck2,
-  entregado: BadgeCheck,
-  aprobado: CheckCircle2,
-  subsanacion: Sparkles,
-  rechazado: XCircle,
-  anulado: Ban,
-};
-
 export interface EstadoFunnelProps {
   /** Conteo por estado (calculado sobre el total de trámites). */
   counts: Record<EstadoTramite, number>;
@@ -63,7 +45,6 @@ export function EstadoFunnel({ counts, selected = '', onSelect }: EstadoFunnelPr
     >
       {FUNNEL_ORDER.map((estado) => {
         const style = ESTADO_CHIP_STYLES[estado];
-        const Icon = ESTADO_ICON[estado];
         const label = ESTADO_LABELS[estado];
         const count = counts[estado] ?? 0;
         const activo = selected === estado;
@@ -77,12 +58,18 @@ export function EstadoFunnel({ counts, selected = '', onSelect }: EstadoFunnelPr
             className="flex flex-col items-center gap-1 px-2 py-2 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
             style={activo ? { background: style.bg } : undefined}
           >
-            <span
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
-              style={{ background: `${style.accent}1F` }}
-            >
-              <Icon className="h-3.5 w-3.5" style={{ color: style.accent }} aria-hidden="true" />
-            </span>
+            {/* El SVG ya trae su círculo de color: se pinta entero, sin pastilla tintada
+                alrededor ni recoloreado por CSS. Decorativo — el nombre accesible del botón ya
+                dice el estado y el conteo. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={ESTADO_ICONO[estado]}
+              alt=""
+              aria-hidden="true"
+              width={28}
+              height={28}
+              className="h-7 w-7 shrink-0"
+            />
             <span className="max-w-full truncate text-xs font-medium opacity-70 text-[#162744] dark:text-white/70">
               {label}
             </span>
