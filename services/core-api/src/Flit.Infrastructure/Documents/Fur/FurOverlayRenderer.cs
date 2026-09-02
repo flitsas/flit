@@ -77,6 +77,12 @@ public static partial class FurOverlayRenderer
         ILogger logger,
         string? referenceNumber)
     {
+        if (value.SignatureStamps is { Count: > 1 } stamps)
+        {
+            DrawSignatureStamps(gfx, field, stamps, logger, referenceNumber);
+            return;
+        }
+
         if (value.ImageBytes is { Length: > 0 })
         {
             DrawSignatureImage(gfx, field, value.ImageBytes, value.ImageSidecarText);
@@ -87,7 +93,7 @@ public static partial class FurOverlayRenderer
         {
             case FurFieldType.Checkbox:
                 if (string.Equals(value.Text, "X", StringComparison.OrdinalIgnoreCase))
-                    DrawCheckbox(gfx, field);
+                    DrawCheckbox(gfx, field, value.CheckboxRepeat);
                 break;
             case FurFieldType.Image when value.ImageBytes is { Length: > 0 }:
                 DrawImage(gfx, field, value.ImageBytes);
@@ -100,11 +106,14 @@ public static partial class FurOverlayRenderer
         }
     }
 
-    private static void DrawCheckbox(XGraphics gfx, FurFieldDefinition field)
+    private static void DrawCheckbox(XGraphics gfx, FurFieldDefinition field, int repeat = 1)
     {
-        var font = CreateFont(field.FontSize > 0 ? field.FontSize + 2 : 10, true);
-        var yBaseline = field.Y + field.Size * 0.85;
-        gfx.DrawString("X", font, XBrushes.Black, new XPoint(field.X, yBaseline));
+        var n = Math.Clamp(repeat, 1, 4);
+        var single = field.FontSize > 0 ? field.FontSize + 2 : 10;
+        var (fontSize, firstBaseline, step) = FurCheckboxLayout.Stack(field.Y, field.Size, n, single);
+        var font = CreateFont(fontSize, true);
+        for (var i = 0; i < n; i++)
+            gfx.DrawString("X", font, XBrushes.Black, new XPoint(field.X, firstBaseline + i * step));
     }
 
     private static void DrawText(
@@ -120,7 +129,12 @@ public static partial class FurOverlayRenderer
         var fontSize = Math.Max(3, field.FontSize + fontSizeDelta);
         string[] lines;
 
-        if (field.Type == FurFieldType.Multiline)
+        if (text.Contains('\n') && field.Type != FurFieldType.Multiline)
+        {
+            // Copropiedad en casillas `text`: un renglón por dueño, sin el wrap horizontal de Fit.
+            lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        else if (field.Type == FurFieldType.Multiline)
         {
             if (field.AutoFit)
             {
@@ -177,7 +191,7 @@ public static partial class FurOverlayRenderer
         }
 
         var font = CreateFont(fontSize, field.Bold);
-        var lineHeight = fontSize * 1.25;
+        var lineHeight = fontSize * (lines.Length >= 3 ? 1.12 : 1.25);
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i];
@@ -199,6 +213,46 @@ public static partial class FurOverlayRenderer
         }
     }
 
+    private static void DrawSignatureStamps(
+        XGraphics gfx,
+        FurFieldDefinition field,
+        IReadOnlyList<FurOverlaySignatureStamp> stamps,
+        ILogger logger,
+        string? referenceNumber)
+    {
+        var fieldH = field.H > 0 ? field.H : 36;
+        var fieldW = field.W > 0 ? field.W : 120;
+        var cols = FurSignatureLayout.Columns(field.X, fieldW, stamps.Count);
+        for (var i = 0; i < cols.Length; i++)
+        {
+            var (colX, colW) = cols[i];
+            var stamp = stamps[i];
+            var colField = new FurFieldDefinition
+            {
+                Id = field.Id,
+                Page = field.Page,
+                Type = field.Type,
+                X = colX,
+                Y = field.Y,
+                W = colW,
+                H = fieldH,
+                Size = field.Size,
+                FontSize = field.FontSize,
+                Bold = field.Bold,
+                Align = FurTextAlign.Left,
+            };
+
+            if (stamp.ImageBytes is { Length: > 0 })
+            {
+                DrawSignatureImage(gfx, colField, stamp.ImageBytes, stamp.ImageSidecarText);
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(stamp.Text))
+                DrawText(gfx, colField, stamp.Text!, stamp.FontSizeDelta, logger, referenceNumber);
+        }
+    }
+
     private static void DrawSignatureImage(
         XGraphics gfx,
         FurFieldDefinition field,
@@ -207,7 +261,7 @@ public static partial class FurOverlayRenderer
     {
         var fieldH = field.H > 0 ? field.H : 36;
         var fieldW = field.W > 0 ? field.W : 120;
-        var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.50);
+        var imageW = FurSignatureLayout.ImageWidthCap(fieldW, SignatureImageMaxWidth);
 
         // HU #11016 — la firma se dibujaba con el ALTO COMPLETO del campo y sin respetar la relación de
         // aspecto: un PNG apaisado se estiraba verticalmente y se salía del espacio de firma, pisando lo

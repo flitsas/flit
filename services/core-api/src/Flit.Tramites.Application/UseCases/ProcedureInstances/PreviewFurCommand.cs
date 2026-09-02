@@ -16,7 +16,9 @@ public sealed record PreviewFurRequest(
     string? Prenda = null,
     bool? FillAll = null,
     string? VehicleClass = null,
-    string? TemplateFormat = null);
+    string? TemplateFormat = null,
+    int? BuyerCount = null,
+    int? SellerCount = null);
 
 public enum PreviewFurStatus
 {
@@ -72,6 +74,10 @@ public sealed class PreviewFurHandler(
         if (!FurPreviewSample.TryParsePrenda(request.Prenda, out var prenda))
             return new PreviewFurResult(PreviewFurStatus.BadRequest, "prenda_invalida", null, ["ninguna", "inscripcion", "levantamiento", "ambas"]);
 
+        if (!TryParseOwnerCount(request.BuyerCount, out var buyerCount)
+            || !TryParseOwnerCount(request.SellerCount, out var sellerCount))
+            return new PreviewFurResult(PreviewFurStatus.BadRequest, "owner_count_invalido", null, ["1", "2", "3", "4"]);
+
         // HU #11701 — vehicle_kind se valida ANTES del lookup del tipo: un "barco" con un Guid
         // inexistente es 400, no 404. vehicle_class (catálogo) sustituye a vehicle_kind.
         string? vehicleKind = null;
@@ -91,7 +97,9 @@ public sealed class PreviewFurHandler(
             request.CambioCombustible,
             request.CambioCarroceria,
             request.Blindaje,
-            prenda);
+            prenda,
+            buyerCount,
+            sellerCount);
 
         FurDocumentData data;
         if (!string.IsNullOrWhiteSpace(request.VehicleClass))
@@ -123,6 +131,17 @@ public sealed class PreviewFurHandler(
 
         var doc = generator.GenerateFur(data);
         return new PreviewFurResult(PreviewFurStatus.Ok, null, doc, null);
+    }
+
+    private static bool TryParseOwnerCount(int? raw, out int count)
+    {
+        count = raw ?? 1;
+        if (raw is null)
+            return true;
+        if (raw is < 1 or > 4)
+            return false;
+        count = raw.Value;
+        return true;
     }
 }
 

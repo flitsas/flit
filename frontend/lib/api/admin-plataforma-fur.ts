@@ -21,6 +21,8 @@ export interface FurPreviewRequest {
   blindaje?: boolean;
   prenda?: FurPrendaKind;
   fillAll?: boolean;
+  buyerCount?: number;
+  sellerCount?: number;
 }
 
 export interface FurClassificationItem {

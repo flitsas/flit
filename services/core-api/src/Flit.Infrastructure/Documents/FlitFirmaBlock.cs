@@ -104,56 +104,61 @@ internal static class FlitFirmaBlock
         bool datosBold = false,
         string? selloBaul = null,
         string? etiquetaSinEstampa = null,
-        byte[]? firmaIdentidad = null)
+        byte[]? firmaIdentidad = null,
+        bool compact = false)
     {
         ArgumentNullException.ThrowIfNull(col);
         ArgumentNullException.ThrowIfNull(datos);
+
+        var alto = compact ? 18f : ImagenAlto;
+        var datosSize = compact ? 7f : 10f;
+        var selloSize = compact ? 5.5f : selloFontSize;
 
         // 1. Estampa SOBRE la línea. Sin firma ni sello se deja el aire para la firma manuscrita, de modo
         //    que la línea no suba y el bloque conserve su altura en cualquier caso.
         switch (ResolverEstampa(firmaBaul, firmaIdentidad, selloIdentidad))
         {
             case FlitEstampa.Baul:
-                col.Item().Height(ImagenAlto).Image(firmaBaul!).FitHeight();
+                col.Item().Height(alto).Image(firmaBaul!).FitHeight();
                 // La trazabilidad de la firma custodiada acompaña a la imagen, no a los datos del
                 // firmante: si el documento se lee sin ella, la imagen no se puede verificar.
-                RenderSello(col, selloBaul, selloFontSize);
+                RenderSello(col, selloBaul, selloSize);
                 break;
 
             case FlitEstampa.ImagenIdentidad:
-                col.Item().Height(ImagenAlto).Image(firmaIdentidad!).FitHeight();
-                RenderSello(col, selloIdentidad, selloFontSize);
+                col.Item().Height(alto).Image(firmaIdentidad!).FitHeight();
+                RenderSello(col, selloIdentidad, selloSize);
                 break;
 
             case FlitEstampa.SelloIdentidad:
-                RenderSello(col, selloIdentidad, selloFontSize);
+                RenderSello(col, selloIdentidad, selloSize);
                 break;
 
             default:
                 if (!string.IsNullOrWhiteSpace(etiquetaSinEstampa))
                 {
-                    col.Item().Height(ImagenAlto).AlignMiddle().Text(t =>
-                        t.Span(etiquetaSinEstampa.Trim()).FontSize(9).FontColor(Colors.Grey.Darken2));
+                    col.Item().Height(alto).AlignMiddle().Text(t =>
+                        t.Span(etiquetaSinEstampa.Trim()).FontSize(compact ? 7 : 9).FontColor(Colors.Grey.Darken2));
                 }
                 else
                 {
-                    col.Item().Height(ImagenAlto);
+                    col.Item().Height(alto);
                 }
                 break;
         }
 
         // 2. La línea, SIEMPRE presente.
         if (linea == FlitFirmaLinea.Grafica)
-            col.Item().PaddingBottom(4).Width(LineaAncho).LineHorizontal(0.5f);
+            col.Item().PaddingBottom(compact ? 2 : 4).Width(compact ? 90f : LineaAncho).LineHorizontal(0.5f);
         else
-            col.Item().Text(LineaUnderscores);
+            col.Item().Text(compact ? "______________" : LineaUnderscores);
 
         // 3. Datos del firmante, bajo la línea.
         foreach (var line in datos)
         {
             col.Item().Text(t =>
             {
-                var span = t.Span(line).FontSize(10);
+                var span = t.Span(line).FontSize(datosSize);
                 if (datosBold)
                     span.Bold();
             });

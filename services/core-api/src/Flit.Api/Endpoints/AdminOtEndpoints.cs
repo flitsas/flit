@@ -1210,12 +1210,23 @@ public static class AdminOtEndpoints
         ITransitOfficeCatalog transitOfficeCatalog,
         Flit.Tramites.Application.UseCases.ProcedureInstances.AdjuntarLicenciaTransitoHandler handler,
         IFormFile? file,
+        // HU #12042 — el frontend analiza el documento al seleccionarlo, para enseñarle el veredicto al
+        // OT antes de que decida, y manda aquí ESE resultado. Si llega, no se vuelve a analizar.
+        [FromForm(Name = "ocr")] string? ocrJson,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
         {
             return Results.BadRequest(new { error = "missing_file", message = "Falta el archivo (file)." });
+        }
+
+        // Un JSON corrupto no puede tumbar la carga: se ignora y el backend analiza por su cuenta.
+        System.Text.Json.Nodes.JsonObject? ocrPrecomputado = null;
+        if (!string.IsNullOrWhiteSpace(ocrJson))
+        {
+            try { ocrPrecomputado = System.Text.Json.Nodes.JsonNode.Parse(ocrJson) as System.Text.Json.Nodes.JsonObject; }
+            catch (System.Text.Json.JsonException) { ocrPrecomputado = null; }
         }
 
         var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
@@ -1242,9 +1253,9 @@ public static class AdminOtEndpoints
             file.Length,
             stream);
 
-        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
+        var (result, error, ocr) = await repository.ExecuteInClientTenantScopeAsync(
             access!.ClientTenantId,
-            () => handler.HandleAsync(id, access.ClientTenantId, input, ResolveUserId(httpContext.User), cancellationToken),
+            () => handler.HandleAsync(id, access.ClientTenantId, input, ResolveUserId(httpContext.User), ocrPrecomputado, cancellationToken),
             cancellationToken).ConfigureAwait(false);
 
         return error switch
@@ -1254,7 +1265,12 @@ public static class AdminOtEndpoints
             "file_too_large" => Results.BadRequest(new { error = "file_too_large", message = "El archivo excede el tamaño máximo permitido para este documento." }),
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "estado_invalido" => Results.Conflict(new { error = "INVALID_STATE", message = "La Licencia de Tránsito solo se adjunta con el trámite entregado o aprobado." }),
-            _ => Results.Created($"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}", result),
+            // HU #11996 — el adjunto se crea SIEMPRE; `ocr` es informativo y puede venir null cuando el
+            // análisis no se pudo hacer (proveedor caído, sin key, archivo >10 MB). La pantalla lo
+            // presenta como «no analizado», nunca como un fallo del cargue.
+            _ => Results.Created(
+                $"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}",
+                new { attachment = result, ocr }),
         };
     }
 

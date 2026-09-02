@@ -63,16 +63,15 @@ alcance por restricción explícita del encargo).
 - **Notificaciones (CONFIRMADO):** todos los copropietarios agregados reciben los correos de cambio de
   estado y de asignación de placa, no solo el `ordinal=1` (ver §5 #16/#17).
 
-## Brecha conocida — FUR y Consolidado (fuera de alcance, NO se diseña aquí)
+## Brecha conocida — documentos autogenerados
 
-`Flit.Infrastructure/Documents/Fur/FurFieldMapper.cs` y el resto de la familia de documentos
-autogenerados (FUR, compraventa autogenerada, consolidado, impronta, certificado RUES, deed/escritura)
-tienen campos **singulares** por lado (`vendedor_nombre`, `comprador_documento`, etc.). Con Múltiple
-Propietario, **estos documentos seguirán tomando el actor `ordinal=1` de cada lado** — el mismo que
-hoy es "el" vendedor/comprador. Esto es una **brecha conocida, no una decisión aprobada**: el FUR de
-un trámite con 3 vendedores imprimirá solo al vendedor principal hasta que un trabajo posterior
-(fuera de este encargo) rediseñe esos documentos para múltiples firmantes/titulares. Se deja explícito
-en el ADR (§Consecuencias) para que no se lea como omisión.
+**Cerrada (HU #12048, 2026-09-02):** FUR overlay, compraventa, mandato y solicitud de trámite virtual
+pintan todos los copropietarios (2–4) y sus firmas; un solo actor por lado conserva el layout histórico.
+Detalle: [MULTIPLE-PROPIETARIO-documentos-autogenerados.md](MULTIPLE-PROPIETARIO-documentos-autogenerados.md).
+
+**Sigue abierta:** consolidado del expediente, impronta, certificado RUES y escrituras. Esos
+documentos **siguen tomando el actor `ordinal=1` de cada lado**. No es omisión: no formaron parte
+del pedido de documentos de 2026-09-02.
 
 ---
 

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
-  OCR_TIPOS,
+  cargarTiposOcr,
   OCR_TIPOS_PERSISTIBLES,
   evaluateOcr,
   type OcrEvaluation,
@@ -92,16 +92,20 @@ export function base64ToFile(base64: string, filename: string, mimetype: string)
 }
 
 /**
- * Tipos que el lote puede repartir: los que pasan por OCR en esta modalidad Y que el checklist
- * realmente muestra. El checklist es configurable por tenant, así que proponer un tipo oculto sería
- * ofrecerle al operador un campo que no existe.
+ * Tipos que el lote puede repartir: los que tienen OCR Y que el checklist realmente muestra. El
+ * checklist es configurable por tenant, así que proponer un tipo oculto sería ofrecerle al operador un
+ * campo que no existe.
+ *
+ * HU #12034 — `tiposOcr` lo resuelve el backend y se inyecta aquí para que la función siga siendo pura
+ * y testeable. Con `null` —no se pudo consultar— se proponen TODOS los visibles: el backend descarta
+ * por su cuenta los que no tengan prompt, y es preferible eso a repartir de menos en silencio.
  */
 export function tiposDelLote(
-  modalidad: WizardModalidad,
+  tiposOcr: ReadonlySet<string> | null,
   items: readonly ChecklistItemView[],
 ): string[] {
-  const visibles = new Set(items.map((i) => i.docTipo ?? i.key));
-  return OCR_TIPOS[modalidad].filter((tipo) => visibles.has(tipo));
+  const visibles = items.map((i) => i.docTipo ?? i.key);
+  return tiposOcr === null ? [...visibles] : visibles.filter((t) => tiposOcr.has(t.toLowerCase()));
 }
 
 /** Valida los archivos antes de gastar una llamada. Devuelve el error, o null si el lote es aceptable. */
@@ -205,7 +209,7 @@ export function useProcedureBatchUpload(
         return false;
       }
 
-      const tipos = tiposDelLote(modalidad, checklistItems);
+      const tipos = tiposDelLote(await cargarTiposOcr(), checklistItems);
       if (tipos.length === 0) {
         setState((s) => ({
           ...s,

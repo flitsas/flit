@@ -7,6 +7,7 @@ import { tramitesClient } from "@/lib/api/tramites-client";
 import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 import {
   adjuntarOtLicenciaTransito,
+  type AdjuntarLtResult,
   approveOtClientProcedure,
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaHealth,
@@ -98,6 +99,233 @@ export function readAssignPlateError(err: unknown): string {
  * "desaparecen"). Para ot_admin el backend ignora el override (seguridad) y sigue
  * resolviendo por su propio tenant.
  */
+
+/**
+ * HU #11996 — mensaje del OCR de la Licencia de Tránsito para el toast del OT.
+ *
+ * El análisis NUNCA bloquea el adjunto: aquí solo se traduce el resultado a algo accionable. Tres
+ * desenlaces posibles y ninguno impide que la LT quede guardada:
+ *  - `ocr` en null  → no se pudo analizar (proveedor caído, sin key, archivo >10 MB) ⇒ silencio: el
+ *                     OT no puede hacer nada al respecto y un aviso ahí solo sería ruido.
+ *  - `es_valido` false → el archivo no parece una licencia (típicamente un recibo de derechos).
+ *  - placa/VIN leídos  → se devuelven para que el OT coteje de un vistazo contra el trámite.
+ */
+type LtOcrEstado =
+  | { fase: "analizando" }
+  | { fase: "listo"; data: Record<string, unknown>; valido: boolean; motivo: string }
+  | { fase: "sin_analisis"; nota: string };
+
+/** Lee un campo de texto del JSON del OCR sin romperse si no viene o no es string. */
+function campoOcr(data: Record<string, unknown>, clave: string): string {
+  const v = data[clave];
+  return typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "";
+}
+
+/**
+ * HU #12042 — traduce la respuesta del OCR a lo que el OT necesita ver ANTES de decidir.
+ *
+ * El defecto que corrige: antes esto se calculaba DESPUÉS de aprobar y se mostraba en un toast
+ * efímero, así que el OT decidía a ciegas y se enteraba cuando ya no podía hacer nada. Ahora el
+ * análisis ocurre al seleccionar el archivo y el resultado vive dentro de la modal hasta que el
+ * usuario decide.
+ *
+ * Sigue sin bloquear nada: `sin_analisis` (proveedor caído, archivo >10 MB) informa y deja seguir.
+ */
+function evaluarLtOcr(data: Record<string, unknown> | null | undefined): LtOcrEstado {
+  if (!data) {
+    return {
+      fase: "sin_analisis",
+      nota: "No se pudo verificar el documento automáticamente. Puedes continuar igual.",
+    };
+  }
+  const valido = data.es_valido !== false;
+  const motivo = campoOcr(data, "observaciones");
+  return { fase: "listo", data, valido, motivo };
+}
+
+/**
+ * Pares de caracteres que el OCR confunde de forma sistemática al leer placas y VIN sobre un
+ * escaneo. Existen para no gritar «otro vehículo» por un solo carácter mal leído: un VIN que
+ * difiere en un `0` donde debía ir una `O` casi siempre es el mismo vehículo y una lectura
+ * imperfecta, mientras que uno que difiere en seis caracteres es, sin ambigüedad, otro carro.
+ */
+const CARACTERES_CONFUNDIBLES: ReadonlyArray<string> = ["0O", "1I", "1L", "5S", "8B", "2Z", "6G", "4A"];
+
+/** Deja el identificador comparable: sin espacios, guiones ni minúsculas. */
+export function normalizarIdentificador(valor: string): string {
+  return valor.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export type CotejoResultado = "coincide" | "posible_lectura" | "difiere";
+
+/**
+ * Compara lo que el OCR leyó contra lo que el trámite dice. Devuelve `null` cuando falta cualquiera
+ * de los dos lados: sin las dos mitades no hay nada que afirmar, y callar es mejor que inventar.
+ */
+export function compararIdentificador(leido: string, esperado: string): CotejoResultado | null {
+  const a = normalizarIdentificador(leido);
+  const b = normalizarIdentificador(esperado);
+  if (!a || !b) return null;
+  if (a === b) return "coincide";
+  if (a.length !== b.length) return "difiere";
+  let distintos = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] === b[i]) continue;
+    distintos += 1;
+    const par = `${a[i]}${b[i]}`;
+    const confundible = CARACTERES_CONFUNDIBLES.some(
+      (c) => c === par || c === `${par[1]}${par[0]}`,
+    );
+    if (!confundible) return "difiere";
+  }
+  return distintos <= 1 ? "posible_lectura" : "difiere";
+}
+
+export interface CotejoCampo {
+  label: string;
+  leido: string;
+  esperado: string;
+  resultado: CotejoResultado;
+}
+
+export interface CotejoVehiculo {
+  campos: CotejoCampo[];
+  /** Al menos un identificador es de otro vehículo: el aviso fuerte. */
+  difiere: boolean;
+  /** Todo cuadra salvo un carácter confundible: aviso suave, probablemente sea el mismo vehículo. */
+  dudas: boolean;
+}
+
+/**
+ * HU #12043 — coteja la licencia contra el vehículo del trámite.
+ *
+ * El defecto que corrige: el panel enseñaba la placa y el VIN leídos y esperaba que el OT los
+ * comparara de memoria contra un trámite que ni siquiera tenía delante. En la prueba se adjuntó una
+ * licencia legítima de un vehículo distinto —VIN 9F8HJD49RM640413 sobre un trámite de
+ * LRWYGCEK7TC769623— y el sistema, teniendo los dos números, la dio por buena.
+ *
+ * Sigue sin bloquear: el OT puede adjuntarla igual. La diferencia es que ahora se le dice.
+ */
+export function cotejarVehiculo(
+  data: Record<string, unknown>,
+  tramite: { vin?: string | null; placa?: string | null } | null | undefined,
+): CotejoVehiculo {
+  const campos: CotejoCampo[] = [];
+  const pares: ReadonlyArray<{ label: string; clave: string; esperado?: string | null }> = [
+    { label: "VIN", clave: "vehiculo_vin", esperado: tramite?.vin },
+    { label: "Placa", clave: "vehiculo_placa", esperado: tramite?.placa },
+  ];
+  for (const par of pares) {
+    const leido = campoOcr(data, par.clave);
+    const esperado = (par.esperado ?? "").trim();
+    const resultado = compararIdentificador(leido, esperado);
+    if (resultado) campos.push({ label: par.label, leido, esperado, resultado });
+  }
+  return {
+    campos,
+    difiere: campos.some((c) => c.resultado === "difiere"),
+    dudas: campos.some((c) => c.resultado === "posible_lectura"),
+  };
+}
+
+/** Los campos con los que el OT coteja la licencia contra el trámite de un vistazo. */
+const LT_OCR_CAMPOS: ReadonlyArray<{ label: string; clave: string }> = [
+  { label: "Placa", clave: "vehiculo_placa" },
+  { label: "VIN", clave: "vehiculo_vin" },
+  { label: "Vehículo", clave: "vehiculo_marca" },
+  { label: "Propietario", clave: "propietario_nombre" },
+  { label: "Organismo", clave: "organismo_transito" },
+  { label: "Expedición", clave: "fecha_expedicion" },
+];
+
+/** Panel del veredicto dentro de la modal. Informa; nunca deshabilita el botón de confirmar. */
+function LtOcrPanel({
+  estado,
+  tramite,
+}: {
+  estado: LtOcrEstado | null;
+  tramite: { vin?: string | null; placa?: string | null } | null;
+}) {
+  if (!estado) return null;
+
+  if (estado.fase === "analizando") {
+    return (
+      <p className="mt-3 rounded-xl border px-3 py-2 text-xs opacity-70">
+        Verificando la Licencia de Tránsito…
+      </p>
+    );
+  }
+
+  if (estado.fase === "sin_analisis") {
+    return (
+      <p className="mt-3 rounded-xl border px-3 py-2 text-xs opacity-70">{estado.nota}</p>
+    );
+  }
+
+  const campos = LT_OCR_CAMPOS.map((c) => ({ ...c, valor: campoOcr(estado.data, c.clave) })).filter(
+    (c) => c.valor !== "",
+  );
+  const cotejo = cotejarVehiculo(estado.data, tramite);
+  // Una licencia de otro vehículo es tan grave como un documento equivocado: manda el rojo.
+  const tono = !estado.valido
+    ? { borde: "#C81E1E", texto: "#C81E1E", titulo: "El documento NO parece una Licencia de Tránsito" }
+    : cotejo.difiere
+      ? { borde: "#C81E1E", texto: "#C81E1E", titulo: "Esta licencia es de OTRO vehículo" }
+      : { borde: "#3B8A00", texto: "#3B8A00", titulo: "Parece una Licencia de Tránsito" };
+
+  return (
+    <div className="mt-3 rounded-xl border px-3 py-2" style={{ borderColor: tono.borde }}>
+      <p className="text-xs font-semibold" style={{ color: tono.texto }}>
+        {tono.titulo}
+      </p>
+      {!estado.valido && estado.motivo && (
+        <p className="mt-1 text-[11px] opacity-80">{estado.motivo.slice(0, 220)}</p>
+      )}
+      {cotejo.difiere && (
+        <div className="mt-2 rounded-lg px-2 py-1.5" style={{ backgroundColor: "#FDECEC" }}>
+          {cotejo.campos
+            .filter((c) => c.resultado === "difiere")
+            .map((c) => (
+              <p key={c.label} className="text-[11px] leading-relaxed" style={{ color: "#C81E1E" }}>
+                <span className="font-semibold">{c.label}</span> — el trámite es{" "}
+                <span className="font-semibold">{c.esperado}</span> y la licencia dice{" "}
+                <span className="font-semibold">{c.leido}</span>
+              </p>
+            ))}
+          <p className="mt-1 text-[11px]" style={{ color: "#C81E1E" }}>
+            Revisa que sea la licencia de este trámite antes de continuar.
+          </p>
+        </div>
+      )}
+      {!cotejo.difiere && cotejo.dudas && (
+        <p className="mt-1 text-[11px] font-medium" style={{ color: "#B77900" }}>
+          La placa o el VIN coinciden salvo un carácter: puede ser un error de lectura, pero
+          compruébalo.
+        </p>
+      )}
+      {campoOcr(estado.data, "legibilidad") !== "" &&
+        campoOcr(estado.data, "legibilidad") !== "buena" && (
+          <p className="mt-1 text-[11px] font-medium" style={{ color: "#B77900" }}>
+            El documento se leyó con dificultad: comprueba los datos antes de darlos por buenos.
+          </p>
+        )}
+      {campos.length > 0 && (
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+          {campos.map((c) => (
+            <div key={c.clave} className="flex items-baseline gap-1 text-[11px]">
+              <dt className="shrink-0 opacity-60">{c.label}:</dt>
+              <dd className="font-medium">{c.valor}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <p className="mt-2 text-[11px] opacity-60">
+        Esta verificación es informativa: puedes continuar en cualquier caso.
+      </p>
+    </div>
+  );
+}
+
 export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?: string }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -148,6 +376,27 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const rejectCatalogRequestRef = useRef<string | null>(null);
   // Licencia de Tránsito opcional al aprobar; también adjuntable después (fila aprobada).
   const [ltFile, setLtFile] = useState<File | null>(null);
+  // HU #12042 — veredicto del OCR de la LT, calculado al SELECCIONAR el archivo para que el OT lo
+  // vea antes de decidir. Vive mientras la modal esté abierta; nunca deshabilita el confirmar.
+  const [ltOcr, setLtOcr] = useState<LtOcrEstado | null>(null);
+
+  /**
+   * Selección del archivo de la LT: se guarda y se manda a analizar de inmediato, igual que hace el
+   * wizard del gestor. El `await` no bloquea al usuario —puede confirmar mientras tanto— y el
+   * resultado se guarda para enviarlo con la aprobación, de modo que lo registrado sea lo mostrado.
+   */
+  const seleccionarLt = useCallback(async (file: File | null) => {
+    setLtFile(file);
+    setLtOcr(file ? { fase: "analizando" } : null);
+    if (!file) return;
+    try {
+      const res = await tramitesClient.analyzeDocument("tarjeta_propiedad", file);
+      setLtOcr(evaluarLtOcr(res?.data));
+    } catch {
+      // Proveedor caído, archivo > 10 MB o tipo no soportado: se informa y se sigue.
+      setLtOcr(evaluarLtOcr(null));
+    }
+  }, []);
   const [ltTarget, setLtTarget] = useState<OtClientProcedure | null>(null);
   const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
@@ -339,13 +588,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       if (ltFile) {
         try {
-          await adjuntarOtLicenciaTransito(target.id, ltFile, scope);
+          // Se manda el análisis que el OT ya vio: el backend no lo repite y lo registrado coincide
+          // con lo mostrado. Dos análisis del mismo archivo pueden diferir, y esa incoherencia sería
+          // peor que no mostrar nada.
+          const analizado = ltOcr?.fase === "listo" ? ltOcr.data : null;
+          await adjuntarOtLicenciaTransito(target.id, ltFile, scope, analizado);
         } catch {
           // La aprobación YA quedó firme; solo falló el adjunto. Se puede reintentar con la
           // acción dedicada de Licencia de Tránsito.
           setApproveTarget(null);
           setMandatarioTarget(null);
           setLtFile(null);
+          setLtOcr(null);
           show(
             "Trámite aprobado, pero no se pudo adjuntar la Licencia de Tránsito. Reintenta la carga.",
             "error",
@@ -354,10 +608,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         }
       }
 
+      const traiaLt = ltFile !== null;
       setApproveTarget(null);
       setMandatarioTarget(null);
       setLtFile(null);
-      show(ltFile ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
+      setLtOcr(null);
+      // El veredicto del OCR ya se mostró DENTRO de la modal, antes de que el OT decidiera; aquí
+      // solo se acusa recibo de la aprobación. Antes se anunciaba en este toast, y llegaba tarde:
+      // el usuario ya había aprobado sin saber qué decía el análisis.
+      show(traiaLt ? "Trámite aprobado con Licencia de Tránsito adjunta." : "Trámite aprobado.", "success");
     } catch (err) {
       const errorCode =
         err instanceof ApiError && err.status === 409
@@ -470,9 +729,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (!ltTarget || !ltFile) return;
     setActing(true);
     try {
-      await adjuntarOtLicenciaTransito(ltTarget.id, ltFile, scope);
+      const analizado = ltOcr?.fase === "listo" ? ltOcr.data : null;
+      await adjuntarOtLicenciaTransito(ltTarget.id, ltFile, scope, analizado);
       setLtTarget(null);
       setLtFile(null);
+      setLtOcr(null);
+      // El veredicto ya se mostró en la modal antes de confirmar; aquí solo se acusa recibo.
       show("Licencia de Tránsito adjuntada.", "success");
     } catch {
       show("No se pudo adjuntar la Licencia de Tránsito.", "error");
@@ -875,17 +1137,22 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 accept="application/pdf,image/jpeg,image/png,image/webp"
                 aria-label="Licencia de Tránsito (LT)"
                 className={`mt-1 ${OT_INPUT_CLS}`}
-                onChange={(e) => setLtFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => void seleccionarLt(e.target.files?.[0] ?? null)}
               />
               <span className="mt-1 block text-[11px] font-normal opacity-60">
                 Se adjunta al expediente del trámite y entra al consolidado al generarlo o regenerarlo.
               </span>
             </label>
+            <LtOcrPanel estado={ltOcr} tramite={approveTarget} />
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
                 className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                onClick={() => setApproveTarget(null)}
+                onClick={() => {
+                  setApproveTarget(null);
+                  setLtFile(null);
+                  setLtOcr(null);
+                }}
                 disabled={acting}
               >
                 Cancelar
@@ -1182,11 +1449,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               accept="application/pdf,image/jpeg,image/png,image/webp"
               aria-label="Archivo de la Licencia de Tránsito"
               className={`mt-4 ${OT_INPUT_CLS}`}
-              onChange={(e) => setLtFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => void seleccionarLt(e.target.files?.[0] ?? null)}
             />
             <p className="mt-1 text-[11px] opacity-60">
               Reemplaza la LT previa si existe; regenera el consolidado para incluirla.
             </p>
+            <LtOcrPanel estado={ltOcr} tramite={ltTarget} />
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
@@ -1194,6 +1462,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 onClick={() => {
                   setLtTarget(null);
                   setLtFile(null);
+                  setLtOcr(null);
                 }}
                 disabled={acting}
               >

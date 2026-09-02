@@ -1,4 +1,6 @@
+using System.Text.Json.Nodes;
 using System.Text;
+using Flit.Tramites.Application.Ocr;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
@@ -71,6 +73,14 @@ public sealed class LicenciaTransitoHandlerTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
+    /// <summary>
+    /// PDF con cabecera real: <see cref="LtPdf"/> lleva texto suelto y el analizador lo descarta por
+    /// magic bytes antes de mirarlo, así que no sirve para ejercer el camino de análisis.
+    /// </summary>
+    private static UploadAttachmentInput LtPdfConCabecera() =>
+        new(AdjuntarLicenciaTransitoHandler.Tipo, "lt.pdf", "application/pdf", 512,
+            new MemoryStream(Encoding.UTF8.GetBytes("%PDF-1.7\nlicencia-transito")));
+
     private static UploadAttachmentInput LtPdf(string name = "lt.pdf") =>
         new(AdjuntarLicenciaTransitoHandler.Tipo, name, "application/pdf", 512,
             new MemoryStream(Encoding.UTF8.GetBytes("licencia-transito")));
@@ -87,7 +97,7 @@ public sealed class LicenciaTransitoHandlerTests
         var instance = Instance(id, tenantId, status);
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
 
-        var (result, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
+        var (result, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, null, ct);
 
         error.Should().BeNull();
         result!.Tipo.Should().Be("licencia_transito");
@@ -108,7 +118,7 @@ public sealed class LicenciaTransitoHandlerTests
         instance.ConsolidadoMaestroVigente = true;
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
 
-        var (_, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
+        var (_, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, null, ct);
 
         error.Should().BeNull();
         instance.ConsolidadoMaestroVigente.Should().BeFalse();
@@ -125,7 +135,7 @@ public sealed class LicenciaTransitoHandlerTests
         var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(Instance(id, tenantId, status));
 
-        var (result, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
+        var (result, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, null, ct);
 
         error.Should().Be("estado_invalido");
         result.Should().BeNull();
@@ -152,7 +162,7 @@ public sealed class LicenciaTransitoHandlerTests
         });
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
 
-        var (result, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf("lt_nueva.pdf"), null, ct);
+        var (result, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf("lt_nueva.pdf"), null, null, ct);
 
         error.Should().BeNull();
         _storage.Deleted.Should().Contain("old/lt");
@@ -169,7 +179,7 @@ public sealed class LicenciaTransitoHandlerTests
             AdjuntarLicenciaTransitoHandler.Tipo, "lt.exe", "application/octet-stream", 10,
             new MemoryStream([1, 2]));
 
-        var (result, error) = await _adjuntar.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), input, null, ct);
+        var (result, error, _) = await _adjuntar.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), input, null, null, ct);
 
         error.Should().Be("invalid_mime");
         result.Should().BeNull();
@@ -184,7 +194,7 @@ public sealed class LicenciaTransitoHandlerTests
         _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
         _repo.UserExistsAsync(user, ct).Returns(false);
 
-        var (_, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), user, ct);
+        var (_, error, _) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), user, null, ct);
 
         error.Should().BeNull();
         instance.Attachments.Single(a => a.Tipo == "licencia_transito").UploadedBy.Should().BeNull();
@@ -402,5 +412,190 @@ public sealed class LicenciaTransitoHandlerTests
             StoragePath = stored.StoragePath,
             UploadedAt = DateTimeOffset.UtcNow,
         });
+    }
+
+    // ── HU #11996 — verificación por OCR de la LT que entrega el OT ──────────
+
+    /// <summary>Analizador que siempre falla, para probar que el adjunto NO depende del OCR.</summary>
+    private sealed class AnalizadorCaido : IDocumentOcrAnalyzer
+    {
+        public Task<DocumentOcrAnalysis> AnalyzeAsync(string tipo, ReadOnlyMemory<byte> content, string mediaType, CancellationToken ct)
+            => throw new HttpRequestException("proveedor caido");
+    }
+
+    [Fact]
+    public async Task Lt_se_adjunta_igual_aunque_el_proveedor_de_ia_este_caido()
+    {
+        // La LT es el entregable del OT: perderla porque la IA no responde sería peor que no
+        // verificarla. El adjunto se crea y el resultado del análisis viaja en null.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Entregado);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(
+            _repo, _storage, new AnalyzeDocumentHandler(new AnalizadorCaido()));
+
+        var (result, error, ocr) = await handler.HandleAsync(id, tenantId, LtPdf(), null, null, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        ocr.Should().BeNull("un fallo del proveedor no puede costarle al OT el adjunto");
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == AdjuntarLicenciaTransitoHandler.Tipo);
+    }
+
+    [Fact]
+    public async Task Lt_se_adjunta_igual_cuando_no_hay_analizador_configurado()
+    {
+        // Entornos sin OCR (mock apagado, sin key): el handler debe seguir funcionando igual que antes.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Entregado);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage);
+
+        var (result, error, ocr) = await handler.HandleAsync(id, tenantId, LtPdf(), null, null, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        ocr.Should().BeNull();
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == AdjuntarLicenciaTransitoHandler.Tipo);
+    }
+
+    [Fact]
+    public void El_ocr_de_la_lt_usa_el_prompt_de_la_licencia_de_transito()
+    {
+        // El tipo documental del OT (`licencia_transito`) y el de la casilla del wizard
+        // (`tarjeta_propiedad`) son códigos distintos para el MISMO documento: comparten prompt.
+        AdjuntarLicenciaTransitoHandler.TipoOcr.Should().Be("tarjeta_propiedad");
+        DocumentOcrPrompts.IsSupported(AdjuntarLicenciaTransitoHandler.TipoOcr).Should().BeTrue();
+        AdjuntarLicenciaTransitoHandler.Tipo.Should().Be("licencia_transito");
+    }
+
+    // ── HU #12042 — el análisis que el OT ya vio ────────────────────────────────────────────
+
+    /// <summary>Analizador que cuenta cuántas veces lo llaman: si lo llaman, se pagó dos veces.</summary>
+    private sealed class AnalizadorEspia : IDocumentOcrAnalyzer
+    {
+        public int Llamadas { get; private set; }
+
+        public Task<DocumentOcrAnalysis> AnalyzeAsync(string tipo, ReadOnlyMemory<byte> content, string mediaType, CancellationToken ct)
+        {
+            Llamadas++;
+            return Task.FromResult(new DocumentOcrAnalysis(true, new JsonObject { ["vehiculo_vin"] = "OTRO_VIN" }));
+        }
+    }
+
+    [Fact]
+    public async Task Con_analisis_precomputado_no_vuelve_a_analizar_y_registra_lo_que_vio_el_OT()
+    {
+        // El frontend analiza al SELECCIONAR el archivo para enseñarle el veredicto al OT antes de que
+        // decida, y manda ese resultado. Volver a analizar aquí no solo costaría el doble: dos lecturas
+        // del mismo documento pueden diferir —en la prueba en vivo dieron VIN distintos—, y registrar
+        // una cosa mientras se le mostró otra al usuario sería peor que no mostrarle nada.
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(Instance(id, tenantId, TramiteEstado.Aprobado));
+        var espia = new AnalizadorEspia();
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage, new AnalyzeDocumentHandler(espia));
+        var yaVisto = new JsonObject { ["es_valido"] = true, ["vehiculo_vin"] = "VIN_QUE_VIO_EL_OT" };
+
+        var (result, error, ocr) = await handler.HandleAsync(id, tenantId, LtPdf(), null, yaVisto, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        espia.Llamadas.Should().Be(0, "el documento ya venía analizado");
+        ocr!.Data!["vehiculo_vin"]!.GetValue<string>().Should().Be("VIN_QUE_VIO_EL_OT");
+    }
+
+    [Fact]
+    public async Task Sin_analisis_precomputado_el_backend_analiza_por_su_cuenta()
+    {
+        // Compatibilidad: si el frontend no pudo analizar (proveedor caído al seleccionar, archivo
+        // grande) o llama otro cliente, el backend sigue haciendo su parte.
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(Instance(id, tenantId, TramiteEstado.Aprobado));
+        var espia = new AnalizadorEspia();
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage, new AnalyzeDocumentHandler(espia));
+
+        var (_, error, ocr) = await handler.HandleAsync(id, tenantId, LtPdfConCabecera(), null, null, ct);
+
+        error.Should().BeNull();
+        espia.Llamadas.Should().Be(1);
+        ocr!.Data!["vehiculo_vin"]!.GetValue<string>().Should().Be("OTRO_VIN");
+    }
+
+    // ── HU #12043 — la licencia tiene que ser de ESTE vehículo ──────────────────────────────
+
+    /// <summary>
+    /// El cotejo se guarda en la bitácora, no solo se pinta en pantalla: un expediente cerrado con la
+    /// licencia de otro carro tiene que poder explicarse después. En la prueba en vivo el evento
+    /// quedó con <c>ocr_verificada: true</c> y el VIN de otro vehículo, sin nada que lo delatara.
+    /// </summary>
+    [Fact]
+    public async Task Registra_que_la_licencia_es_de_otro_vehiculo()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        instance.Vin = "LRWYGCEK7TC769623";
+        instance.Plate = "OCR001";
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage, new AnalyzeDocumentHandler(new AnalizadorEspia()));
+        var yaVisto = new JsonObject
+        {
+            ["es_valido"] = true,
+            ["vehiculo_vin"] = "9F8HJD49RM640413",
+            ["vehiculo_placa"] = "LRT863",
+        };
+
+        var (_, error, _) = await handler.HandleAsync(id, tenantId, LtPdf(), null, yaVisto, ct);
+
+        error.Should().BeNull();
+        var payload = JsonNode.Parse(instance.Events.Single(e => e.Tipo == "lt_adjuntada").Payload)!;
+        payload["ocr_vin_coincide"]!.GetValue<bool>().Should().BeFalse();
+        payload["ocr_placa_coincide"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Registra_la_coincidencia_ignorando_guiones_y_mayusculas()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        instance.Vin = "LRWYGCEK7TC769623";
+        instance.Plate = "OCR001";
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage, new AnalyzeDocumentHandler(new AnalizadorEspia()));
+        var yaVisto = new JsonObject
+        {
+            ["es_valido"] = true,
+            ["vehiculo_vin"] = "lrwygcek7tc769623",
+            ["vehiculo_placa"] = "OCR-001",
+        };
+
+        await handler.HandleAsync(id, tenantId, LtPdf(), null, yaVisto, ct);
+
+        var payload = JsonNode.Parse(instance.Events.Single(e => e.Tipo == "lt_adjuntada").Payload)!;
+        payload["ocr_vin_coincide"]!.GetValue<bool>().Should().BeTrue();
+        payload["ocr_placa_coincide"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Un trámite sin placa asignada todavía no permite afirmar nada. Un <c>false</c> ahí sería una
+    /// acusación inventada, así que se registra <c>null</c>.
+    /// </summary>
+    [Fact]
+    public async Task Sin_placa_en_el_tramite_no_afirma_nada_sobre_la_placa()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        instance.Vin = "LRWYGCEK7TC769623";
+        instance.Plate = null;
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage, new AnalyzeDocumentHandler(new AnalizadorEspia()));
+        var yaVisto = new JsonObject { ["vehiculo_vin"] = "LRWYGCEK7TC769623", ["vehiculo_placa"] = "LRT863" };
+
+        await handler.HandleAsync(id, tenantId, LtPdf(), null, yaVisto, ct);
+
+        var payload = JsonNode.Parse(instance.Events.Single(e => e.Tipo == "lt_adjuntada").Payload)!;
+        payload["ocr_vin_coincide"]!.GetValue<bool>().Should().BeTrue();
+        payload["ocr_placa_coincide"].Should().BeNull();
     }
 }

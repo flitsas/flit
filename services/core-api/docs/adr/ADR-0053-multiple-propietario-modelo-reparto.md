@@ -24,10 +24,12 @@ está asumida en **~30 archivos** de `services/core-api`. La decisión de este A
 datos**; el barrido completo, los sequence diagrams y el contrato ampliado viven en
 `docs/design/MULTIPLE-PROPIETARIO-diseno-tecnico.md`.
 
-**Fuera de alcance de este ADR** (restricción explícita del encargo): la familia de documentos
-autogenerados FUR/consolidado/compraventa/impronta/certificado RUES sigue leyendo el actor `ordinal=1`
-de cada lado — sus campos son singulares y su rediseño es un trabajo posterior. Este ADR no toca
-`Flit.Infrastructure/Documents/Fur/FurFieldMapper.cs`.
+**Documentos autogenerados:** este ADR decide el **modelo de actores**, no el layout de PDF. El
+encargo original dejó FUR/consolidado/compraventa fuera de alcance. **HU #12048 (2026-09-02)** cerró
+FUR overlay, compraventa, mandato y solicitud virtual para 2–4 copropietarios; consolidado, impronta,
+RUES y escrituras siguen en `ordinal=1`. Ver
+`docs/design/MULTIPLE-PROPIETARIO-documentos-autogenerados.md`. Este ADR **no** prescribe geometría de
+overlay ni copy de QuestPDF.
 
 ## Decisión
 
@@ -132,8 +134,9 @@ alto para un riesgo que el patrón de upsert de dos fases ya hace improbable en 
   `ownership_percentage=NULL`, comportamiento idéntico al actual).
 - Reutilización total del patrón de validación de conjunto efectivo ya vigente en `ActorsCommand.cs`
   para vendedor≠comprador/locatario≠propietario, extendido a duplicidad intra-lado y a suma=100.
-- La familia de documentos autogenerados (FUR/consolidado) queda intacta: sigue leyendo `ordinal=1`
-  sin ningún cambio de código, documentado como brecha conocida y no como omisión.
+- La familia de documentos autogenerados ya no es un bloque único: FUR, compraventa, mandato y
+  solicitud virtual listan copropietarios (HU #12048). Consolidado, impronta, RUES y escrituras
+  siguen en `ordinal=1` (brecha residual documentada en la nota de diseño).
 
 ### Lo que se pierde
 - El índice único deja de ser, por sí mismo, la garantía completa de cardinalidad — la garantía de
@@ -168,9 +171,10 @@ alto para un riesgo que el patrón de upsert de dos fases ya hace improbable en 
   Confirmar que ningún seed/fixture existente tenga ya un `ordinal` implícito distinto de 1 antes de
   crear el índice nuevo. Checklist §A: A12 (nombres `ck__`/`uq_` siguen convención), A17 (Up/Down, Down
   condicionado).
-- **Backend Agent**: implementar según la nota de diseño técnico §4 y §8. **No tocar**
-  `FurFieldMapper.cs` ni el resto de la familia FUR/consolidado. Reglas de negocio CONFIRMADAS a
-  implementar sin necesidad de validación adicional: (1) duplicidad de dos niveles — intra-lado
+- **Backend Agent**: implementar según la nota de diseño técnico §4 y §8. Los PDF de FUR/compraventa/
+  mandato/solicitud virtual de copropiedad viven en la HU #12048 (no reabrir el modelo de actores).
+  Consolidado/impronta/RUES/escrituras siguen `ordinal=1` hasta un encargo explícito. Reglas de negocio
+  CONFIRMADAS a implementar sin necesidad de validación adicional: (1) duplicidad de dos niveles — intra-lado
   siempre bloqueada (`actor_duplicado_mismo_lado`), entre lados (`partes_duplicadas`) solo cuando
   ambos lados quedan en exactamente 1 actor efectivo (§4.4); (2) "todos firman" = la misma cobertura
   de identidad de `IdentityApprovalResolver` extendida a todos los actores del lado — persona natural

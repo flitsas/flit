@@ -148,7 +148,26 @@ describe("FurSimulatorPanel", () => {
         cambioCarroceria: false,
         blindaje: false,
         prenda: "inscripcion",
+        buyerCount: 1,
+        sellerCount: 1,
       }),
+    );
+  });
+
+  it("envía el número de copropietarios al preview", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByLabelText(/tipo de trámite padre/i);
+    await user.selectOptions(screen.getByLabelText(/tipo de trámite padre/i), "TRASPASO");
+    await user.selectOptions(screen.getByLabelText(/^tipo de trámite$/i), sampleTypes[1].id);
+    await user.selectOptions(screen.getByLabelText(/tipo de clase del vehículo/i), "AUTOMOVIL");
+    await user.selectOptions(screen.getByLabelText(/copropietarios vendedor/i), "2");
+    await user.selectOptions(screen.getByLabelText(/copropietarios comprador/i), "3");
+    await user.click(screen.getByRole("button", { name: /simular fur/i }));
+    await waitFor(() =>
+      expect(fetchFurPreview).toHaveBeenCalledWith(
+        expect.objectContaining({ buyerCount: 3, sellerCount: 2 }),
+      ),
     );
   });
 

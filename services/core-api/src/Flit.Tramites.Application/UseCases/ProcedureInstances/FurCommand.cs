@@ -238,11 +238,11 @@ public sealed class GenerarFurHandler(
         {
             // ADR-0051 Decisión 2 — quién lleva sello de identidad en su espacio de firma lo dice
             // `signatureActors`, no `esTraspaso`.
-            foreach (var role in signatureRoles)
+            foreach (var slot in SignatureSlots(instance, signatureRoles))
             {
-                var val = await ResolveApprovedValidationAsync(instance, role, DateTimeOffset.UtcNow, ct);
+                var val = await ResolveApprovedValidationAsync(instance, slot.Actor, slot.Role, DateTimeOffset.UtcNow, ct);
                 if (val is not null)
-                    sellosIdentidad[role] = BuildIdentidadSello(val);
+                    sellosIdentidad[slot.Key] = BuildIdentidadSello(val);
             }
         }
 
@@ -287,12 +287,12 @@ public sealed class GenerarFurHandler(
         //    si REALMENTE hay firma. Sin ella se cae al sello de identidad, que es el comportamiento de
         //    siempre. Retirarlo aquí por el mero hecho de ser persona jurídica dejaba sin firma a
         //    comprador y vendedor con identidad validada y sin baúl.
-        foreach (var role in signatureRoles)
+        foreach (var slot in SignatureSlots(instance, signatureRoles))
         {
-            var eligioBaul = EligioExplicitamenteElBaul(instance, role);
-            var tieneFirmaDelBaul = firmaImagenes?.ContainsKey(role) == true;
+            var eligioBaul = FirmaBaulCobertura.EligioBaulExplicitamente(slot.Actor);
+            var tieneFirmaDelBaul = firmaImagenes?.ContainsKey(slot.Key) == true;
             if (eligioBaul || tieneFirmaDelBaul)
-                sellosIdentidad.Remove(role);
+                sellosIdentidad.Remove(slot.Key);
         }
 
         // La rúbrica hay que extraerla ANTES de GenerateFur: el certificado Kyverum se adjuntaba
@@ -907,23 +907,17 @@ public sealed class GenerarFurHandler(
         BlindajeOpcion blindajeOpcion)
     {
         var automatico = FurPrendaObservation.Join(
-            // La causal de la cancelación entra por el bloque del TIPO, junto a los de leasing: es lo
-            // que la casilla 13 no alcanza a decir, igual que el nivel es lo que no dice la casilla
-            // de blindado.
-            // El organismo DESTINO es el canónico (`transit_office_name`): es quien aprueba. El del
-            // encabezado, en cambio, es el actual del vehículo, que vive en las claves descriptivas.
             FurTramiteObservation.Compose(
                 codigo,
                 partes,
                 new FurTramiteObservationContext(
                     CancelacionCausal: Get(fv, CancelacionCausales.FieldKey),
-                    // El destino sale de la clave DECLARATIVA cuando el trámite lo declara (traslado:
-                    // lo expide el organismo de origen) y de la canónica cuando el destino ES el
-                    // organismo del trámite (radicado). La caída cubre los dos sin ramificar por tipo.
                     OrganismoDestino: Get(fv, TransitOfficeFieldKeys.DestinoName)
                                       ?? Get(fv, TransitOfficeFieldKeys.Name),
                     Placa: Get(fv, "plate"))),
             FurPrendaObservation.Join(
+                FurCopropiedadObservation.Compose(partes),
+                FurPrendaObservation.Join(
                 FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento),
                 FurPrendaObservation.Join(
                     FurTransformationObservations.ComposeDeclaradas(
@@ -931,14 +925,12 @@ public sealed class GenerarFurHandler(
                         Get(fv, "vehicle_color"),
                         Get(fv, "vehicle_fuel"),
                         Get(fv, "vehicle_body_type")),
-                    // El blindaje va junto a las demás transformaciones —es la capa del tipo, igual
-                    // que ellas— y antes de la vinculadora, que cierra el bloque automático.
                     FurPrendaObservation.Join(
                         FurBlindajeObservation.Compose(blindajeOpcion),
                         FurServicioVinculadoraObservation.Compose(
                             Get(fv, "vehicle_service"),
                             Get(fv, "empresa_vinculadora_razon_social"),
-                            Get(fv, "empresa_vinculadora_nit"))))));
+                            Get(fv, "empresa_vinculadora_nit")))))));
 
         return FurObservacionesComposer.Componer(automatico, Get(fv, "fur_observations"));
     }
@@ -980,26 +972,12 @@ public sealed class GenerarFurHandler(
         Dictionary<string, byte[]>? images = null;
         Dictionary<string, FirmaBaulMetadata>? metadata = null;
 
-        foreach (var role in roles)
+        foreach (var slot in SignatureSlots(instance, roles))
         {
-            var actor = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-
-            // HU #11061 — si el gestor eligió EXPLÍCITAMENTE el sello de identidad, no se consume el
-            // baúl aunque tenga firma vigente. Es el único punto donde se resuelve la imagen del baúl,
-            // así que el guard aquí honra la elección en TODOS los documentos (FUR, mandato, solicitud
-            // de trámite virtual y compraventa consumen `FirmaImagenes` de este mismo ensamblado).
-            // Sin elección explícita se mantiene la precedencia del baúl (HU #11031).
-            // Bug #11141 — la decisión vive en un único predicado, compartido con la consulta que
-            // alimenta la interfaz: lo que se muestra debe ser lo que se plasma.
-            // Bug #11146 — y es el MISMO predicado que decide si esa parte conserva su sello de
-            // identidad, para que la imagen y el sello no puedan aparecer los dos ni faltar los dos.
-            if (actor is null || !FirmaBaulCobertura.Aplica(actor))
+            if (slot.Actor is null || !FirmaBaulCobertura.Aplica(slot.Actor))
                 continue;
 
-            // HU #10930/#10937 — la firma del baúl es de la PERSONA: se resuelve por el documento del
-            // REPRESENTANTE LEGAL seleccionado (sujeto de identidad del actor jurídico), no por el NIT.
-            var subject = IdentitySubjectResolver.For(actor);
+            var subject = IdentitySubjectResolver.For(slot.Actor);
             if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
                 continue;
 
@@ -1020,8 +998,8 @@ public sealed class GenerarFurHandler(
                     await stream.CopyToAsync(ms, ct);
                     if (ms.Length == 0)
                         continue;
-                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[role] = ms.ToArray();
-                    (metadata ??= new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase))[role] =
+                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[slot.Key] = ms.ToArray();
+                    (metadata ??= new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase))[slot.Key] =
                         new FirmaBaulMetadata(
                             match.DocumentNumber,
                             match.FullName,
@@ -1053,12 +1031,12 @@ public sealed class GenerarFurHandler(
         CancellationToken ct)
     {
         Dictionary<string, byte[]>? images = null;
-        foreach (var role in roles)
+        foreach (var slot in SignatureSlots(instance, roles))
         {
-            if (!sellosIdentidad.ContainsKey(role))
+            if (!sellosIdentidad.ContainsKey(slot.Key))
                 continue;
 
-            var val = await ResolveApprovedValidationAsync(instance, role, DateTimeOffset.UtcNow, ct);
+            var val = await ResolveApprovedValidationAsync(instance, slot.Actor, slot.Role, DateTimeOffset.UtcNow, ct);
             if (val is null || string.IsNullOrWhiteSpace(val.SignatureImagePath))
                 continue;
 
@@ -1078,7 +1056,7 @@ public sealed class GenerarFurHandler(
                         continue;
                     if (identitySignatureExtractor is not null && !identitySignatureExtractor.IsUsableInk(bytes))
                         continue;
-                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[role] = bytes;
+                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[slot.Key] = bytes;
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1096,18 +1074,6 @@ public sealed class GenerarFurHandler(
     private static bool EsActorJuridico(string? documentType) =>
         FirmaBaulCobertura.EsJuridico(documentType);
 
-    /// <summary>
-    /// Bug #11146 — ¿el gestor eligió el baúl <b>a propósito</b> para esta parte? Se apoya en el mismo
-    /// predicado compartido que decide si procede bajar la imagen, para no reintroducir una segunda
-    /// definición de la regla.
-    /// </summary>
-    private static bool EligioExplicitamenteElBaul(ProcedureInstance instance, string role)
-    {
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-        return FirmaBaulCobertura.EligioBaulExplicitamente(actor);
-    }
-
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
     private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
@@ -1117,11 +1083,8 @@ public sealed class GenerarFurHandler(
     /// clonar). Devuelve null si la parte no tiene identidad aprobada vigente.
     /// </summary>
     private async Task<ProcedureInstanceBiometricValidation?> ResolveApprovedValidationAsync(
-        ProcedureInstance instance, string role, DateTimeOffset now, CancellationToken ct)
+        ProcedureInstance instance, ProcedureInstanceActor? actor, string role, DateTimeOffset now, CancellationToken ct)
     {
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-        // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
         var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
 
         // Fila propia aprobada+vigente del rol Y del documento del sujeto actual. El filtro por documento es
@@ -1796,14 +1759,52 @@ public sealed class GenerarFurHandler(
         return nombres;
     }
 
+    private static IEnumerable<(string Role, string Key, ProcedureInstanceActor? Actor)> SignatureSlots(
+        ProcedureInstance instance, IEnumerable<string> roles)
+    {
+        foreach (var role in roles)
+        {
+            var actors = instance.Actors
+                .Where(a => string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(a => a.Ordinal)
+                .ToList();
+            if (actors.Count == 0)
+            {
+                yield return (role, role, null);
+                continue;
+            }
+
+            foreach (var actor in actors)
+                yield return (role, FurOverlayPartyKey.For(role, actor.Ordinal), actor);
+        }
+    }
+
     private static void AddParte(
         List<DocumentParte> partes,
         ProcedureInstance instance,
         string rol,
         IReadOnlyDictionary<string, string>? nombresRlDirectorio = null)
     {
-        var a = instance.Actors.FirstOrDefault(x =>
-            string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
+        var actors = instance.Actors
+            .Where(x => string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.Ordinal)
+            .ToList();
+        if (actors.Count == 0)
+        {
+            AppendParte(partes, rol, null, nombresRlDirectorio);
+            return;
+        }
+
+        foreach (var a in actors)
+            AppendParte(partes, rol, a, nombresRlDirectorio);
+    }
+
+    private static void AppendParte(
+        List<DocumentParte> partes,
+        string rol,
+        ProcedureInstanceActor? a,
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio)
+    {
         var (ciudad, direccion, rl) = ParseActorMetadata(a?.Metadata);
         // HU #10688 — persona jurídica (tipo juridical o documento NIT): la razón social no se trocea en el FUR.
         var esJuridica = ActorPersonTypes.IsJuridical(a?.PersonType)
@@ -1827,7 +1828,9 @@ public sealed class GenerarFurHandler(
                     ? Trim(respaldo)
                     : null),
             RepresentanteLegalTipoDoc: Trim(rl?.TipoDocumento),
-            RepresentanteLegalDocumento: Trim(rl?.NumeroDocumento)));
+            RepresentanteLegalDocumento: Trim(rl?.NumeroDocumento),
+            Ordinal: a?.Ordinal > 0 ? a.Ordinal : 1,
+            OwnershipPercentage: a?.OwnershipPercentage));
     }
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

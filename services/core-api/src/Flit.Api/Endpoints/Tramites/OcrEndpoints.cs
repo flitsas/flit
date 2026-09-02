@@ -18,6 +18,14 @@ internal static class OcrEndpoints
     {
         var group = app.MapGroup("/api/v1/tramites");
 
+        // GET /ocr/tipos -> 200 { tipos: [...] }
+        // HU #12034 — fuente de verdad de QUÉ documentos tienen OCR. El frontend la consulta en vez de
+        // mantener su propia lista por modalidad: esa lista duplicaba lo que ya sabe la BD y, si un
+        // documento se asignaba a un trámite de la modalidad «equivocada», el análisis no corría y no
+        // había error en ninguna parte. Es estático y no depende del inquilino: no pide X-Tenant-Id.
+        group.MapGet("/ocr/tipos", () => Results.Ok(new { tipos = DocumentOcrPrompts.TiposDocumentales }))
+            .WithName("ListTramiteOcrTipos");
+
         // POST /ocr/{tipo} (multipart/form-data: file) -> 200 { ok, tipo, data, extractedPdfBase64 }
         // tipo ∈ { factura, aduana, impronta, soat }. Máx 10 MB. Formato validado por magic bytes.
         // extractedPdfBase64: PDF recortado (base64) cuando el documento ocupaba sólo un subconjunto de

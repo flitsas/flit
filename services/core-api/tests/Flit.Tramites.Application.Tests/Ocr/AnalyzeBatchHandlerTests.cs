@@ -372,6 +372,8 @@ public sealed class AnalyzeBatchHandlerTests
 
         public byte[]? ExtractPages(ReadOnlyMemory<byte> pdf, IReadOnlyList<int> pages) =>
             extractFails || totalPages is null ? null : [0x25, 0x50, 0x44, 0x46, (byte)pages.Count];
+
+        public byte[]? Rotate(ReadOnlyMemory<byte> pdf, int quarterTurns) => pdf.ToArray();
     }
 
     private static byte[] Zip(params (string Name, byte[] Content)[] entries)

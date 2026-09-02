@@ -166,6 +166,7 @@ Se **suma** al tipo de la tabla 1 cuando el gestor activa transformaciones. No d
 | Composición de `{{tramite}}` | `MandatoObjetoComposer` |
 | Identidad del tipo (code/familia) | `MandatoTramiteIdentity` |
 | Generador (las 4 plantillas) | `MandatoPdfGenerator` |
+| Copropietarios (comparecencia y firmas; **no** el objeto `{{tramite}}`) | `FurCompraventaCopropiedad` + `MandatoPdfGenerator` — HU #12048 |
 | Muestra / simulador | `MandatoPreviewSample`, `MandateSimulatorService` |
 | Simulador UI | `MandatoSimuladorPanel` |
 

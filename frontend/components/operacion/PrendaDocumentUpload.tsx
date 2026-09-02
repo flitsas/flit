@@ -17,7 +17,6 @@ interface Props {
   instanceId: string | null;
   decision: PrendaDecision;
   docTipo: string;
-  modalidad?: WizardModalidad;
   /** Compañía+OT: default true (obligatorio). false ⇒ badge Opcional. */
   documentRequired?: boolean;
   /** Notifica si el adjunto de soporte está presente (para el gate de Continuar). */
@@ -33,12 +32,11 @@ export function PrendaDocumentUpload({
   instanceId,
   decision,
   docTipo,
-  modalidad = 'matricula_inicial',
   documentRequired = true,
   onSatisfiedChange,
   onChanged,
 }: Props) {
-  const { state, upload, remove } = useProcedureDocuments(instanceId, { modalidad });
+  const { state, upload, remove } = useProcedureDocuments(instanceId);
   const { attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults, error } = state;
 
   const attachment = attachments.find(

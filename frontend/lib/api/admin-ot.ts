@@ -185,11 +185,27 @@ export function descargarOtConsolidado(
  * Adjunta la Licencia de Tránsito (LT) al trámite de un cliente OT (multipart —
  * `apiFetch` es JSON-only, así que se usa fetch directo con FormData).
  */
+/**
+ * Resultado de adjuntar la LT. HU #11996 — el backend verifica el documento por OCR y devuelve el
+ * análisis junto al adjunto. `ocr` viene null cuando no se pudo analizar (proveedor caído, sin key,
+ * archivo mayor de 10 MB): eso NO es un rechazo, es «no analizado», y el adjunto se creó igual.
+ */
+export interface AdjuntarLtResult {
+  attachment: OtProcedureAttachment;
+  ocr: { ok: boolean; tipo: string; data: Record<string, unknown> | null } | null;
+}
+
 export async function adjuntarOtLicenciaTransito(
   id: string,
   file: File,
   scope?: OtApiScope,
-): Promise<OtProcedureAttachment> {
+  /**
+   * HU #12042 — análisis que el frontend YA hizo al seleccionar el archivo, para enseñárselo al OT
+   * antes de que decida. Se manda para que el backend no lo repita: además de no pagar dos veces,
+   * garantiza que lo que queda registrado en el trámite sea exactamente lo que el usuario vio.
+   */
+  ocrData?: Record<string, unknown> | null,
+): Promise<AdjuntarLtResult> {
   const origin =
     API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${base}/client-procedures/${id}/attachments`, origin);
@@ -199,6 +215,7 @@ export async function adjuntarOtLicenciaTransito(
 
   const formData = new FormData();
   formData.append("file", file);
+  if (ocrData) formData.append("ocr", JSON.stringify(ocrData));
 
   const token = getToken();
   const response = await fetch(url.toString(), {
@@ -218,7 +235,7 @@ export async function adjuntarOtLicenciaTransito(
     throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
   }
 
-  return (await response.json()) as OtProcedureAttachment;
+  return (await response.json()) as AdjuntarLtResult;
 }
 
 /** Lista documentos del expediente OT (HU #10704/#10705). Respuesta BE: data + flags consolidado. */

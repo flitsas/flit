@@ -474,9 +474,9 @@ public sealed class FurManifestGuardTests
         alert_data_code_3=cb:460.2,411.5,8
         alert_data_code_4=cb:489.5,411.5,8
         alert_data_code_5=Multiline:509.5,411.5,50,23,4.2,Left,True,3.4
-        vehicle_owner_first_last_name=Text:30,303.8,128.4,14.3,7.7,Left,False,null
-        vehicle_owner_second_last_name=Text:140,304.3,114,14.4,7.8,Left,False,null
-        vehicle_owner_name=Text:258,301,108,20,7,Left,False,5.5
+        vehicle_owner_first_last_name=Text:35,301.8,128.4,14.3,7.7,Left,False,null
+        vehicle_owner_second_last_name=Text:140,301.3,114,14.4,7.8,Left,False,null
+        vehicle_owner_name=Text:258,303,108,20,7,Left,False,5.5
         vehicle_owner_document_type_c=cb:40.7,338.2,8
         vehicle_owner_document_type_nit=cb:63,338.2,8
         vehicle_owner_document_type_nn=cb:96,338.2,8
@@ -485,14 +485,14 @@ public sealed class FurManifestGuardTests
         vehicle_owner_document_type_ti=cb:200.1,338.2,8
         vehicle_owner_document_type_nuip=cb:244,338.2,8
         vehicle_owner_document_type_cd=cb:286.9,338.2,8
-        vehicle_owner_document_number=Text:318,335.1,43,14.3,7.8,Left,False,null
+        vehicle_owner_document_number=Multiline:318,332.1,43,26,6.5,Left,True,4.5
         vehicle_owner_address=Text:36,364.6,152,14,7.6,Left,False,null
         vehicle_owner_city=Text:196,363.8,50,14,7.7,Left,False,null
         vehicle_owner_phone=Text:317,364.9,44.9,14.2,7.7,Left,False,null
         vehicle_owner_signature=Multiline:102,378,262,32,6.5,Left,False,null
-        vehicle_buyer_first_last_name=Text:30.5,451.5,127.3,14,7.6,Left,False,null
-        vehicle_buyer_second_last_name=Text:141,451.2,114,14.1,7.7,Left,False,null
-        vehicle_buyer_name=Text:258,449,108,20,7,Left,False,5.5
+        vehicle_buyer_first_last_name=Text:33.5,445.5,127.3,14,7.6,Left,False,null
+        vehicle_buyer_second_last_name=Text:141,445.2,114,14.1,7.7,Left,False,null
+        vehicle_buyer_name=Text:258,446,108,20,7,Left,False,5.5
         vehicle_buyer_document_type_c=cb:41.2,481.4,8
         vehicle_buyer_document_type_nit=cb:64.7,481.4,8
         vehicle_buyer_document_type_nn=cb:99.6,481.4,8
@@ -501,7 +501,7 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_document_type_ti=cb:198.1,481.4,8
         vehicle_buyer_document_type_nuip=cb:239.5,481.4,8
         vehicle_buyer_document_type_cd=cb:284.6,481.4,8
-        vehicle_buyer_document_number=Text:314.8,482,42.9,14.1,7.7,Left,False,null
+        vehicle_buyer_document_number=Multiline:314.8,476,42.9,24,6.5,Left,True,4.5
         vehicle_buyer_address=Text:36,508.7,152,14.1,7.7,Left,False,null
         vehicle_buyer_city=Text:196,508.7,50,14.1,7.7,Left,False,null
         vehicle_buyer_phone=Text:314.8,509.3,44.9,14.1,7.7,Left,False,null
@@ -565,7 +565,7 @@ public sealed class FurManifestGuardTests
         vehicle_owner_document_type_ti=cb:275,321.5,8
         vehicle_owner_document_type_nuip=cb:321.5,321.5,8
         vehicle_owner_document_type_cd=cb:379,321.5,8
-        vehicle_owner_document_number=Text:426,323,58,13,7,Left,False,null
+        vehicle_owner_document_number=Multiline:426,323,58,24,6.5,Left,True,4.5
         vehicle_owner_address=Text:88,348,188,13,7,Left,False,null
         vehicle_owner_city=Text:286,348,118,13,7,Left,False,null
         vehicle_owner_phone=Text:418,348,66,13,7,Left,False,null
@@ -581,7 +581,7 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_document_type_ti=cb:275,482,8
         vehicle_buyer_document_type_nuip=cb:321.5,482,8
         vehicle_buyer_document_type_cd=cb:379,482,8
-        vehicle_buyer_document_number=Text:426,484,58,13,7,Left,False,null
+        vehicle_buyer_document_number=Multiline:426,484,58,24,6.5,Left,True,4.5
         vehicle_buyer_address=Text:88,508,188,13,7,Left,False,null
         vehicle_buyer_city=Text:286,508,118,13,7,Left,False,null
         vehicle_buyer_phone=Text:418,508,66,13,7,Left,False,null
@@ -635,7 +635,7 @@ public sealed class FurManifestGuardTests
         vehicle_owner_document_type_ti=cb:278,321.5,8
         vehicle_owner_document_type_nuip=cb:328,321.5,8
         vehicle_owner_document_type_cd=cb:384,321.5,8
-        vehicle_owner_document_number=Text:428,322,58,13,7,Left,False,null
+        vehicle_owner_document_number=Multiline:428,322,58,24,6.5,Left,True,4.5
         vehicle_owner_address=Text:88,349,188,13,7,Left,False,null
         vehicle_owner_city=Text:286,349,118,13,7,Left,False,null
         vehicle_owner_phone=Text:421,349,66,13,7,Left,False,null
@@ -651,7 +651,7 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_document_type_ti=cb:278,482,8
         vehicle_buyer_document_type_nuip=cb:328,482,8
         vehicle_buyer_document_type_cd=cb:384,482,8
-        vehicle_buyer_document_number=Text:428,483,58,13,7,Left,False,null
+        vehicle_buyer_document_number=Multiline:428,483,58,24,6.5,Left,True,4.5
         vehicle_buyer_address=Text:88,509,188,13,7,Left,False,null
         vehicle_buyer_city=Text:286,509,118,13,7,Left,False,null
         vehicle_buyer_phone=Text:421,509,66,13,7,Left,False,null
