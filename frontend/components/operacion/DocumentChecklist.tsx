@@ -198,6 +198,39 @@ function joinFields(data: Record<string, unknown>, keys: string[], sep = ' '): s
   return keys.map((k) => pickStr(data, k)).filter(Boolean).join(sep);
 }
 
+/**
+ * HU #11998 — estado de deuda del paz y salvo, en palabras. `no_determinado` no es un fallo del
+ * análisis: hay documentos —una declaración suelta, por ejemplo— que sencillamente no permiten
+ * saber el saldo, y decirlo es más honesto que suponer que está al día.
+ */
+const ESTADO_DEUDA: Record<string, string> = {
+  al_dia: 'Al día',
+  adeuda: 'Adeuda vigencias',
+  no_determinado: 'No se puede determinar',
+};
+
+/**
+ * HU #12030 — estado de la sociedad en el certificado de cámara de comercio. Una sociedad disuelta o
+ * en liquidación no invalida el documento: el certificado sigue siendo el correcto y lo que cambia es
+ * lo que el gestor debe saber antes de radicar. Por eso se informa aquí y no en el veredicto del OCR.
+ */
+const ESTADO_SOCIEDAD: Record<string, string> = {
+  activa: 'Activa',
+  disuelta: 'Disuelta',
+  en_liquidacion: 'En liquidación',
+  cancelada: 'Matrícula cancelada',
+  no_determinado: 'No se puede determinar',
+};
+
+/**
+ * HU #12038 — aviso cuando el modelo declara que no pudo leer bien el documento. Solo hay texto para
+ * los casos que piden cautela: con «buena» no se muestra nada, que es el 95 % de las veces.
+ */
+const LEGIBILIDAD_AVISO: Record<string, string> = {
+  parcial: 'El documento se leyó con dificultad: comprueba los datos antes de darlos por buenos.',
+  mala: 'No se pudo leer el documento con fiabilidad. Los campos que falten es porque no se distinguían.',
+};
+
 /** Descriptor de un campo del resumen OCR. */
 interface OcrField {
   label: string;
@@ -253,6 +286,108 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
   ],
   // El prompt de `rtm` llegó en HU #10977 pero su resumen nunca se añadió aquí, así que el panel salía
   // con el encabezado y la grilla vacía. Los campos son los que pide el certificado de vigencia.
+  // HU #11998 — paz y salvo de impuestos. El resumen antepone la DEUDA: es el dato por el que se
+  // pide el documento. El emisor va justo después porque es lo que distingue un paz y salvo legítimo
+  // de un recibo de caja de la secretaría de tránsito, que se le parece mucho.
+  paz_salvo: [
+    { label: 'Estado', value: (d) => ESTADO_DEUDA[pickStr(d, 'estado_deuda')] ?? pickStr(d, 'estado_deuda') },
+    { label: 'Vigencias adeudadas', value: (d) => pickStr(d, 'vigencias_adeudadas') },
+    { label: 'Emisor', value: (d) => pickStr(d, 'emisor') },
+    { label: 'N.º certificado', value: (d) => pickStr(d, 'numero_certificado') },
+    { label: 'Placa', value: (d) => pickStr(d, 'vehiculo_placa') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+    { label: 'Propietario', value: (d) => pickStr(d, 'propietario_nombre') },
+    { label: 'Ubicación', value: (d) => joinFields(d, ['municipio', 'departamento'], ', ') },
+    { label: 'Periodo certificado', value: (d) => pickStr(d, 'vigencia_certificada') },
+    { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
+  ],
+  // HU #12037 — Certificado CEPD. El resumen antepone el combustible y las emisiones, que es por lo
+  // que se pide el documento, y luego el vehículo homologado para cotejarlo con el trámite.
+  // NO se muestra la cilindrada a propósito: se midió un 16 % de error real sobre un dato que el
+  // trámite ya tiene, y mostrarla mal invitaría a «corregir» el trámite con un valor peor.
+  certificado_ambiental: [
+    { label: 'Combustible', value: (d) => pickStr(d, 'combustible') },
+    { label: 'Emisiones', value: (d) => (d.tiene_seccion_emisiones ? 'Sección presente' : 'Sin sección de emisiones') },
+    { label: 'Prueba dinámica', value: (d) => joinFields(d, ['emisiones_co_dinamica', 'emisiones_hc_dinamica', 'emisiones_nox_dinamica'], ' · ') },
+    { label: 'Opacidad (diésel)', value: (d) => pickStr(d, 'opacidad_diesel') },
+    { label: 'N.º de ficha', value: (d) => pickStr(d, 'numero_ficha') },
+    { label: 'Homologación', value: (d) => pickStr(d, 'tipo_homologacion') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_referencia', 'vehiculo_modelo']) },
+    { label: 'Clase', value: (d) => joinFields(d, ['clase_vehiculo', 'tipo_carroceria'], ' — ') },
+    { label: 'Certifica', value: (d) => pickStr(d, 'certificado_por') },
+  ],
+  // HU #12030 — certificado de cámara de comercio. El resumen antepone NIT y razón social, que es lo
+  // que el gestor coteja contra la empresa que figura como parte, y después el representante legal,
+  // que es quien puede firmar por ella. La vigencia se informa, nunca bloquea.
+  camara_comercio: [
+    { label: 'NIT', value: (d) => pickStr(d, 'nit') },
+    { label: 'Razón social', value: (d) => pickStr(d, 'razon_social') },
+    { label: 'Representante legal', value: (d) => joinFields(d, ['representante_legal_nombre', 'representante_legal_cargo'], ' — ') },
+    { label: 'Estado', value: (d) => ESTADO_SOCIEDAD[pickStr(d, 'estado_sociedad')] ?? pickStr(d, 'estado_sociedad') },
+    { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
+    { label: 'Último año renovado', value: (d) => pickStr(d, 'ultimo_ano_renovado') },
+    { label: 'Matrícula mercantil', value: (d) => pickStr(d, 'matricula_mercantil') },
+    { label: 'Cámara', value: (d) => pickStr(d, 'camara_emisora') },
+    { label: 'Domicilio', value: (d) => pickStr(d, 'domicilio') },
+  ],
+  // HU #12001 — contrato de leasing. El resumen antepone las dos partes, que es lo que define el
+  // trámite: el vehículo quedará a nombre del arrendador y el locatario se registra aparte.
+  // NO se muestra el NIT del arrendador a propósito: la carátula no lo trae —trae la cédula del
+  // representante— y en la medición el modelo lo inventaba. Un dato que nadie ve no induce a error.
+  contrato_leasing: [
+    { label: 'Arrendador', value: (d) => pickStr(d, 'arrendador_nombre') },
+    { label: 'Locatario', value: (d) => pickStr(d, 'locatario_nombre') },
+    { label: 'N.º de contrato', value: (d) => pickStr(d, 'numero_contrato') },
+    { label: 'Fecha', value: (d) => pickStr(d, 'fecha_contrato') },
+    { label: 'Bien', value: (d) => pickStr(d, 'vehiculo_descripcion') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin') },
+    { label: 'Proveedor', value: (d) => pickStr(d, 'proveedor_nombre') },
+  ],
+  // HU #12000 — comprobante de pago. El resumen antepone si YA ESTÁ PAGADO y el valor: es lo que el
+  // gestor necesita saber de un vistazo. Una liquidación sin pagar es válida, así que el estado se
+  // informa aparte del veredicto del OCR.
+  comprobante_derechos: [
+    { label: 'Estado', value: (d) => (d.hay_constancia_pago ? 'Pagado' : 'Liquidado, sin constancia de pago') },
+    { label: 'Valor', value: (d) => pickStr(d, 'valor_total') },
+    { label: 'Entidad', value: (d) => pickStr(d, 'entidad_recaudadora') },
+    { label: 'Conceptos', value: (d) => pickStr(d, 'conceptos') },
+    { label: 'Referencia', value: (d) => pickStr(d, 'numero_referencia') },
+    { label: 'Fecha', value: (d) => pickStr(d, 'fecha_pago') },
+    { label: 'Placa', value: (d) => pickStr(d, 'vehiculo_placa') },
+    { label: 'Propietario', value: (d) => pickStr(d, 'propietario_nombre') },
+    { label: 'Ubicación', value: (d) => joinFields(d, ['municipio', 'departamento'], ', ') },
+  ],
+  // HU #11999 — inscripción de prenda. El resumen antepone el ACREEDOR porque es el dato por el que
+  // se pide el documento: el gestor lo coteja contra el acreedor registrado en el trámite. La placa va
+  // después y a menudo viene vacía, porque muchos contratos identifican el vehículo solo por chasis.
+  inscripcion_prenda: [
+    { label: 'Acreedor', value: (d) => pickStr(d, 'acreedor_nombre') },
+    { label: 'NIT del acreedor', value: (d) => pickStr(d, 'acreedor_documento') },
+    { label: 'Garante', value: (d) => pickStr(d, 'garante_nombre') },
+    { label: 'N.º de registro', value: (d) => pickStr(d, 'numero_registro') },
+    { label: 'Fecha de registro', value: (d) => pickStr(d, 'fecha_registro') },
+    { label: 'Placa', value: (d) => pickStr(d, 'vehiculo_placa') },
+    { label: 'Chasis', value: (d) => pickStr(d, 'vehiculo_chasis') },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+  ],
+  // HU #11996 — licencia de tránsito. El resumen prioriza lo que el gestor coteja de un vistazo
+  // contra el trámite: placa y VIN primero, y el organismo que la expidió, que es lo que distingue
+  // una licencia legítima de un recibo de la misma secretaría.
+  tarjeta_propiedad: [
+    { label: 'Placa', value: (d) => pickStr(d, 'vehiculo_placa') },
+    { label: 'N.º licencia', value: (d) => pickStr(d, 'numero_licencia') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+    { label: 'Color', value: (d) => pickStr(d, 'vehiculo_color') },
+    { label: 'Servicio', value: (d) => pickStr(d, 'vehiculo_servicio') },
+    { label: 'Motor', value: (d) => pickStr(d, 'vehiculo_motor') },
+    { label: 'Propietario', value: (d) => pickStr(d, 'propietario_nombre') },
+    { label: 'Identificación', value: (d) => joinFields(d, ['propietario_tipo_documento', 'propietario_documento'], ' ') },
+    { label: 'Organismo', value: (d) => pickStr(d, 'organismo_transito') },
+    { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin'), vin: true },
+  ],
   rtm: [
     { label: 'N.º certificado', value: (d) => pickStr(d, 'numero_certificado') },
     { label: 'CDA', value: (d) => pickStr(d, 'cda_expide') },
@@ -265,17 +400,42 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
 };
 
 /** Nombre corto del tipo para el encabezado de la tarjeta. */
+/**
+ * HU #12047 — códigos que son el MISMO documento y comparten etiqueta y resumen. Espejo de
+ * `AliasReconocer` en el backend (HU #12045): `prenda_registro` es el DocTipo del adjunto que exige
+ * la decisión «registrar» y `inscripcion_prenda` la casilla del catálogo.
+ *
+ * Sin esto el panel salía con el código crudo por título y la rejilla VACÍA —el mismo fallo que ya
+ * tuvo `rtm`, ver el comentario en OCR_RESUMEN_FIELDS—: el análisis corría y se pagaba, pero al
+ * gestor no se le enseñaba ni el acreedor ni el NIT, que son el dato por el que se pide el documento.
+ */
+const TIPO_ALIAS: Record<string, string> = {
+  prenda_registro: 'inscripcion_prenda',
+};
+
+/** El código del que cuelgan la etiqueta y el resumen de este tipo. */
+export function tipoCanonico(tipo: string): string {
+  return TIPO_ALIAS[tipo] ?? tipo;
+}
+
 const TIPO_LABEL: Record<string, string> = {
   factura: 'Factura',
   aduana: 'Aduana',
   impronta: 'Impronta',
   soat: 'SOAT',
   rtm: 'RTM',
+  tarjeta_propiedad: 'Licencia de Tránsito',
+  paz_salvo: 'Paz y Salvo de Impuestos',
+  inscripcion_prenda: 'Inscripción de Prenda',
+  comprobante_derechos: 'Comprobante de pago',
+  contrato_leasing: 'Contrato de Leasing',
+  camara_comercio: 'Certificado de Cámara de Comercio',
+  certificado_ambiental: 'Certificado CEPD',
 };
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */
 export function tipoLabel(tipo: string): string {
-  return TIPO_LABEL[tipo] ?? tipo;
+  return TIPO_LABEL[tipoCanonico(tipo)] ?? tipo;
 }
 
 /**
@@ -333,19 +493,25 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
   };
 
   const data = ocr.data;
-  const nombre = TIPO_LABEL[tipo] ?? tipo;
+  const nombre = tipoLabel(tipo);
   const tipoDocumento = data ? pickStr(data, 'tipo_documento') : '';
   const recorte = recorteLabel(data);
   const rechazoPorVin = ocr.status === 'rejected' && !!ocr.motivo && /VIN/i.test(ocr.motivo);
 
   const fields = data
-    ? (OCR_RESUMEN_FIELDS[tipo] ?? [])
+    ? (OCR_RESUMEN_FIELDS[tipoCanonico(tipo)] ?? [])
         .map((field) => {
           const value = field.value(data);
           return { field, value: field.vin ? resumirVins(value) : value };
         })
         .filter((x) => x.value !== '')
     : [];
+
+  // HU #12038 — el modelo declara si pudo LEER el documento o si estaba completando. Medido: sobre
+  // las 7 fichas giradas en las que inventaba, las 7 dijeron «parcial» y ninguna «buena»; de las 56
+  // derechas, 54 dijeron «buena». No señala qué campo concreto falla, así que el aviso es sobre el
+  // conjunto: los valores de abajo pueden no ser fiables.
+  const avisoLegibilidad = data ? (LEGIBILIDAD_AVISO[pickStr(data, 'legibilidad')] ?? null) : null;
 
   const tipId = `ocr-tip-${tipo}`;
 
@@ -447,6 +613,11 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
             {(tipoDocumento || recorte) && (
               <p className="mb-2 text-xs opacity-70">
                 {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {avisoLegibilidad && (
+              <p className="mb-2 text-xs font-medium" style={{ color: '#B77900' }}>
+                {avisoLegibilidad}
               </p>
             )}
             {fields.length === 0 ? (
@@ -740,10 +911,7 @@ export function DocumentChecklist({
   hideModeToggle = false,
   permiteGenerarImprontaAutomatica = true,
 }: Props) {
-  const { state, refresh, upload, remove, clearError } = useProcedureDocuments(
-    instanceId,
-    { modalidad },
-  );
+  const { state, refresh, upload, remove, clearError } = useProcedureDocuments(instanceId);
   const { checklist, attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults } =
     state;
 
@@ -761,10 +929,15 @@ export function DocumentChecklist({
   // checklist conserva el casing con que se creó el tipo en el módulo Documental, y el `tipo` del
   // adjunto lo persiste el backend en minúsculas. Emparejar tal cual dejaba la casilla vacía —y al
   // gestor reintentando— con un documento que en realidad ya estaba cargado.
+  // HU #12046 — cuando hay más de uno del mismo tipo gana el MÁS RECIENTE. Antes ganaba el primero de
+  // la lista, así que tras «Reemplazar archivo» la casilla seguía enseñando el documento viejo. El
+  // backend ya no acumula, pero los expedientes creados antes del arreglo sí traen duplicados, y las
+  // bolsas (`otro`, anexos) siguen admitiendo varios legítimamente.
   const attachmentByTipo = new Map<string, ProcedureAttachment>();
   for (const a of attachments) {
     const key = a.tipo.toLowerCase();
-    if (!attachmentByTipo.has(key)) attachmentByTipo.set(key, a);
+    const previo = attachmentByTipo.get(key);
+    if (!previo || a.uploadedAt >= previo.uploadedAt) attachmentByTipo.set(key, a);
   }
 
   // Prenda se carga en PrendaForm (`prenda_*` / `inscripcion_prenda`); no duplicar aquí.

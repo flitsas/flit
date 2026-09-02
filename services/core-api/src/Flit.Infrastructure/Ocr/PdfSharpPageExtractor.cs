@@ -30,6 +30,40 @@ internal sealed class PdfSharpPageExtractor(ILogger<PdfSharpPageExtractor> logge
         }
     }
 
+    public byte[]? Rotate(ReadOnlyMemory<byte> pdf, int quarterTurns)
+    {
+        // Girar es sumar al /Rotate que el PDF ya declara. Nada de rasterizar: el visor —y el modelo de
+        // visión— aplican ese campo al renderizar, así que basta con reescribirlo. El PDF admite solo
+        // múltiplos de 90 y los normaliza a [0,360).
+        var delta = ((quarterTurns % 4) + 4) % 4 * 90;
+        if (delta == 0)
+            return pdf.ToArray();
+
+        try
+        {
+            using var stream = new MemoryStream(pdf.ToArray(), writable: false);
+            using var doc = PdfReader.Open(stream, PdfDocumentOpenMode.Modify);
+
+            if (doc.PageCount > MaxSourcePages)
+            {
+                PdfExtractLog.TooManyPages(logger, doc.PageCount);
+                return null;
+            }
+
+            foreach (var page in doc.Pages)
+                page.Rotate = (page.Rotate + delta) % 360;
+
+            using var outStream = new MemoryStream();
+            doc.Save(outStream, closeStream: false);
+            return outStream.ToArray();
+        }
+        catch (Exception ex) when (ex is PdfReaderException or InvalidOperationException or IOException or ArgumentException or NotSupportedException)
+        {
+            PdfExtractLog.ExtractFailed(logger, ex.Message);
+            return null;
+        }
+    }
+
     public byte[]? ExtractPages(ReadOnlyMemory<byte> pdf, IReadOnlyList<int> pages)
     {
         try

@@ -973,6 +973,20 @@ export const tramitesClient = {
     return res?.attachments ?? [];
   },
 
+  // HU #12034 — qué tipos de documento tienen OCR, según el backend. Es la fuente de verdad: sustituye
+  // a la lista por modalidad que el frontend mantenía a mano y que podía contradecir a la BD en silencio.
+  // Estático y sin inquilino, así que no manda X-Tenant-Id. Lanza si la respuesta no es OK; quien llama
+  // decide qué hacer con el fallo (y en el hook la decisión es fallar ABIERTO: intentar el análisis).
+  listOcrTipos: async (): Promise<readonly string[]> => {
+    const res = await fetch(apiUrl('/api/v1/tramites/ocr/tipos'), { method: 'GET' });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    const json = JSON.parse(await res.text()) as { tipos?: readonly string[] };
+    return json.tipos ?? [];
+  },
+
   // OCR semántico de un documento ANTES de subirlo al expediente. Multipart POST a través del API
   // (a diferencia de uploadAttachment, que sube el binario directo a S3). Devuelve el JSON extraído y,
   // en PDFs multi-documento, el recorte en base64. Lanza si la respuesta no es OK (proveedor caído/

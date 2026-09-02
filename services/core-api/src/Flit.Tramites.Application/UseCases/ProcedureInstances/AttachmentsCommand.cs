@@ -81,8 +81,26 @@ public static class AttachmentRules
         "soat", "soat_manual",
     };
 
+    /// <summary>
+    /// HU #12046 — tipos que admiten VARIOS adjuntos a la vez. Son bolsas por definición: su nombre no
+    /// designa un documento concreto sino "lo demás", así que subir uno nuevo no puede retirar el anterior.
+    /// <para>Para todos los demás la casilla es UNA: el checklist mapea tipo → un adjunto, el consolidado
+    /// tiene una precedencia por tipo, el FUR y la Licencia de Tránsito reemplazan al regenerarse y la
+    /// impronta se protege no regenerando. La subida del gestor era la única que acumulaba, y por eso el
+    /// botón decía «Reemplazar archivo» mientras el expediente se quedaba con los dos.</para>
+    /// </summary>
+    public static readonly IReadOnlySet<string> TiposMultiples = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "otro", "anexos_generales", "documentosTramite",
+    };
+
+    /// <summary>¿Subir este tipo debe RETIRAR el adjunto anterior del mismo tipo?</summary>
+    public static bool ReemplazaAlSubir(string? tipo) =>
+        !string.IsNullOrWhiteSpace(tipo) && !TiposMultiples.Contains(tipo.Trim());
+
     public static bool IsSoatEvidenceTipo(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
+
 
     /// <summary>
     /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: editable como
@@ -90,6 +108,8 @@ public static class AttachmentRules
     /// legado <c>subsanacion</c>). Excepción de la ruta de placa (HU #10785): la evidencia de SOAT
     /// se puede cargar con el trámite <c>entregado</c> y el sub-estado interno de placa en
     /// <c>asignado</c>, para desbloquear la aprobación del OT.
+    /// <para>La Licencia de Tránsito que emite el OT NO pasa por aquí: tiene su propio gate de estado
+    /// en <see cref="AdjuntarLicenciaTransitoHandler"/>, que acepta <c>entregado</c> y <c>aprobado</c>.</para>
     /// </summary>
     public static bool AllowsUploadInState(
         string status,
@@ -169,7 +189,33 @@ public sealed class UploadAttachmentHandler(
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
+
+        // HU #12046 — «Reemplazar archivo» tiene que reemplazar. Antes esto solo añadía: el expediente se
+        // quedaba con el documento corregido Y con el que se quiso corregir, el consolidado los metía los
+        // dos (ordena por tipo y luego por fecha, sin deduplicar) y la pantalla enseñaba el PRIMERO, o sea
+        // el viejo. Misma semántica que ya tenían el FUR y la Licencia de Tránsito.
+        // Y reemplaza SOLO lo que es del mismo dueño que la carga. Un documento que generó el sistema
+        // (FUR, mandato, certificado de identidad…) o que personalizó la compañía tiene su propio ciclo
+        // de vida y no puede desaparecer porque el gestor suba un archivo en la misma casilla: `rtm`,
+        // `soat` y otros trece tipos están marcados `is_system_generated` Y son cargables a mano, así
+        // que la colisión es real. Es el mismo principio que `AttachmentCleanup` aplica en la dirección
+        // contraria —al limpiar lo generado, respeta lo cargado— y que motivó el Bug #11310.
+        var previos = AttachmentRules.ReemplazaAlSubir(tipo)
+            ? instance.Attachments
+                .Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
+                            && !EsDeOtroDueno(a))
+                .ToList()
+            : [];
+
         var stored = await storage.SaveAsync(id, tipo, input.Filename ?? "file", input.Content, ct);
+
+        // Se retiran DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor conserva el que tenía.
+        foreach (var prev in previos)
+        {
+            storage.Delete(prev.StoragePath);
+            instance.Attachments.Remove(prev);
+            repo.RemoveAttachment(prev);
+        }
 
         var attachment = new ProcedureInstanceAttachment
         {
@@ -201,6 +247,14 @@ public sealed class UploadAttachmentHandler(
 
         return (ToDto(attachment), null);
     }
+
+    /// <summary>
+    /// ¿Este adjunto lo puso alguien que no es el gestor que ahora sube? Lo generado por el sistema y lo
+    /// personalizado por la compañía se retiran por sus propias vías, nunca de rebote por una carga.
+    /// </summary>
+    private static bool EsDeOtroDueno(ProcedureInstanceAttachment a) =>
+        string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase);
 
     internal static AttachmentDto ToDto(ProcedureInstanceAttachment a) =>
         new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt);

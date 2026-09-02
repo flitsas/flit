@@ -19,4 +19,12 @@ public interface IPdfPageExtractor
     /// archivos demasiado largos ANTES de gastar una llamada al clasificador.
     /// </summary>
     int? CountPages(ReadOnlyMemory<byte> pdf);
+
+    /// <summary>
+    /// HU #12036 — devuelve el PDF con TODAS sus páginas giradas <paramref name="quarterTurns"/> cuartos
+    /// de vuelta en sentido horario (1 = 90°), o null si no se puede. No rasteriza nada: solo suma al
+    /// campo <c>/Rotate</c> que el propio PDF ya declara, que es lo que el visor —y el modelo de
+    /// visión— respetan al renderizar.
+    /// </summary>
+    byte[]? Rotate(ReadOnlyMemory<byte> pdf, int quarterTurns);
 }

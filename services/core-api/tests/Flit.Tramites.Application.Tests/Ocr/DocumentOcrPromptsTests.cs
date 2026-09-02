@@ -12,6 +12,13 @@ public sealed class DocumentOcrPromptsTests
     [InlineData("impronta")]
     [InlineData("soat")]
     [InlineData("rtm")] // HU #10977
+    [InlineData("tarjeta_propiedad")] // HU #11996
+    [InlineData("paz_salvo")] // HU #11998
+    [InlineData("inscripcion_prenda")] // HU #11999
+    [InlineData("comprobante_derechos")] // HU #12000
+    [InlineData("contrato_leasing")] // HU #12001
+    [InlineData("camara_comercio")] // HU #12030
+    [InlineData("certificado_ambiental")] // HU #12037
     public void Tipos_soportados_tienen_prompt(string tipo)
     {
         DocumentOcrPrompts.IsSupported(tipo).Should().BeTrue();
@@ -219,5 +226,674 @@ public sealed class DocumentOcrPromptsTests
         // Los vehículos ensamblados en Colombia (Sofasa) no traen Declaración de Importación.
         DocumentOcrPrompts.ClassificationPrompt(["aduana"])
             .Should().Contain("ENSAMBLADO en Colombia");
+    }
+
+    // ── HU #11996 — prompt de la licencia de tránsito ────────────────────────
+    //
+    // Cada aserción de aquí abajo corresponde a un fallo REAL observado al calibrar contra 55
+    // licencias de las 8 secretarías. No son comprobaciones de estilo: si una se cae, vuelve un
+    // fallo que ya costó una iteración de prompt.
+
+    [Fact]
+    public void Prompt_licencia_prohibe_suponer_el_orden_de_las_caras()
+    {
+        // Medellín y Envigado traen el REVERSO en la página 1; Funza y Palmira el anverso; Sabaneta
+        // mete las dos caras en una sola página. Suponer el orden se traduce en campos vacíos.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("NO ASUMAS EL ORDEN");
+        prompt.Should().Contain("LAS DOS CARAS EN UNA MISMA PAGINA");
+    }
+
+    [Fact]
+    public void Prompt_licencia_distingue_los_dos_significados_del_asterisco()
+    {
+        // "*****" a solas es SIN DATO (motor y cilindrada de los eléctricos) y debe salir vacío;
+        // el asterisco dentro del valor es troquelado y se conserva ("L4F*242904046*"). La BD de V1
+        // guarda esa misma convención, así que confundirlas rompe el cruce.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("ASTERISCOS");
+        prompt.Should().Contain("L4F*242904046*");
+        prompt.Should().Contain("CADENA VACIA");
+    }
+
+    [Fact]
+    public void Prompt_licencia_obliga_a_contar_los_caracteres_del_vin_y_de_la_placa()
+    {
+        // Enunciar "el VIN tiene 17 caracteres" no bastó: 7 de 11 VIN erróneos tenían otra longitud.
+        // Lo que funcionó fue ordenar el acto de contar. Igual con la placa, que subió de 88,7 % a
+        // 92,7 % al pedir contar y verificar el patrón en vez de solo describirlo.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("CUENTALOS");
+        prompt.Should().Contain("EXACTAMENTE 17 caracteres");
+        prompt.Should().Contain("CUENTA los caracteres");
+    }
+
+    [Fact]
+    public void Prompt_licencia_no_confunde_la_placa_con_el_serial_del_reverso()
+    {
+        // El escaneo de Medellín hizo que el modelo devolviera "LT10099922" como placa: es el serial
+        // de la especie venal del reverso.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("serial_especie_venal");
+        // Los dos valores reales que el modelo devolvió como placa antes de la corrección.
+        prompt.Should().Contain("LT10099922");
+        prompt.Should().Contain("son el serial del reverso, NO placas");
+    }
+
+    [Fact]
+    public void Prompt_licencia_rechaza_el_recibo_sin_rechazar_el_expediente_que_la_contiene()
+    {
+        // Las dos reglas se contradicen si no se reconcilian: al endurecer el rechazo de recibos
+        // aparecieron 2 falsos rechazos de expedientes que SÍ traían la tarjeta en páginas posteriores.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("Especie Venal Lic.Tto.");
+        prompt.Should().Contain("ESTO NO SIGNIFICA RECHAZAR EL ARCHIVO");
+        prompt.Should().Contain("NUNCA rechaces un archivo por lo que contienen las paginas que NO son la licencia");
+    }
+
+    [Fact]
+    public void Prompt_licencia_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        // Contrato implícito con OCR_RESUMEN_FIELDS del front: si un nombre cambia aquí, la tarjeta
+        // del checklist se queda con la fila en blanco y nadie se entera hasta producción.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        foreach (var campo in new[]
+                 {
+                     "vehiculo_placa", "numero_licencia", "vehiculo_marca", "vehiculo_linea",
+                     "vehiculo_modelo", "vehiculo_color", "vehiculo_servicio", "vehiculo_motor",
+                     "propietario_nombre", "propietario_tipo_documento", "propietario_documento",
+                     "organismo_transito", "fecha_expedicion", "vehiculo_vin",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #11998 — prompt del paz y salvo de impuestos ──────────────────────
+    //
+    // El paz y salvo no es un artefacto con formato fijo: es un requisito que cada departamento
+    // acredita distinto. Estas aserciones fijan las decisiones que hicieron que el prompt funcione.
+
+    [Fact]
+    public void Prompt_paz_salvo_decide_por_el_emisor_y_no_por_el_formato()
+    {
+        // Ninguno de los 43 ejemplares con capa de texto contenía la frase "PAZ Y SALVO": buscarla
+        // como criterio habría rechazado la muestra entera.
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        prompt.Should().Contain("LA CLAVE ES QUIEN LO EMITE");
+        prompt.Should().Contain("AUTORIDAD TRIBUTARIA");
+    }
+
+    [Fact]
+    public void Prompt_paz_salvo_acepta_las_tres_formas_en_que_se_acredita()
+    {
+        // Estado de cuenta (Antioquia, Caldas), histórico del portal (Cundinamarca) y declaración
+        // (Valle, Santander). Aceptar solo la primera rechazaría ~70 % de lo que se sube.
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        prompt.Should().Contain("ESTADO DE CUENTA");
+        prompt.Should().Contain("HISTORICO DE PAGOS");
+        prompt.Should().Contain("DECLARACION del impuesto");
+    }
+
+    [Fact]
+    public void Prompt_paz_salvo_rechaza_lo_que_mas_se_le_parece()
+    {
+        // Los dos falsos amigos, que suman 12 de 54 en la muestra: el comprobante PSE acredita una
+        // transacción y no un estado de cuenta; el recibo de caja de la secretaría cobra derechos de
+        // trámite y ni siquiera es del impuesto vehicular, aunque hable del SIMIT (que son multas).
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        prompt.Should().Contain("Pago PSE");
+        prompt.Should().Contain("Derechos de Sistematizacion");
+        prompt.Should().Contain("SIMIT son MULTAS");
+    }
+
+    [Fact]
+    public void Prompt_paz_salvo_no_supone_que_esta_al_dia_por_existir()
+    {
+        // El sesgo obvio del modelo es dar por bueno cualquier documento que le pongan delante. Un
+        // recuadro de vigencias VACÍO sí significa al día; que no haya recuadro, no.
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        prompt.Should().Contain("NO deduzcas \"al_dia\" solo porque el documento existe");
+        prompt.Should().Contain("no_determinado");
+    }
+
+    [Fact]
+    public void Prompt_paz_salvo_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        foreach (var campo in new[]
+                 {
+                     "estado_deuda", "vigencias_adeudadas", "emisor", "numero_certificado",
+                     "vehiculo_placa", "propietario_nombre", "municipio", "departamento",
+                     "vigencia_certificada", "fecha_expedicion",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #11999 — inscripción de prenda ────────────────────────────────────────────────────
+    // Aquí el dato de valor no es el vehículo sino el acreedor. Estas aserciones fijan las dos
+    // decisiones que costaron falsos rechazos reales en la primera versión del prompt.
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_acepta_las_tres_formas_de_acreditar_la_garantia()
+    {
+        // Contrato de garantía mobiliaria (41 de 65), consulta RUNT del RNGM (9) y certificado del
+        // RUG. Aceptar solo el contrato dejaría fuera a quien acredita con el registro ya hecho.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("CONTRATO DE GARANTIA MOBILIARIA");
+        prompt.Should().Contain("RUG / RNGM");
+        prompt.Should().Contain("CONSULTA DEL RUNT");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_no_exige_el_registro_que_el_tramite_va_a_hacer()
+    {
+        // Falso rechazo real: el modelo pedía folio del RUG y fecha de inscripción. El trámite
+        // existe precisamente para inscribir la prenda, así que el contrato llega ANTES de estar
+        // registrado; exigir la constancia es pedir el resultado como requisito de entrada.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("LO QUE NO DEBES EXIGIR");
+        prompt.Should().Contain("NO exijas numero de folio del RUG");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_se_conforma_con_un_solo_identificador_del_vehiculo()
+    {
+        // El otro falso rechazo: 14 de los 50 documentos aceptados no traen placa, porque el
+        // contrato identifica el vehículo por chasis. La placa vacía no puede invalidar nada.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("UNO SOLO BASTA");
+        prompt.Should().Contain("la placa vacia NO invalida el documento");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_busca_al_acreedor_en_el_cuerpo_y_no_en_la_firma()
+    {
+        // Quien firma al pie es el deudor o un apoderado. Acotar la búsqueda al cuerpo del
+        // contrato subió el acierto del acreedor del 95 % al 100 % (40/40, en dos corridas).
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("ACREEDOR GARANTIZADO");
+        prompt.Should().Contain("no al pie");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_rechaza_el_documento_en_blanco()
+    {
+        // 11 de los 65 documentos de la muestra eran una página en blanco, y 10 de ellos el MISMO
+        // archivo byte a byte: un relleno para poder pasar el formulario de V1.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("PAGINA EN BLANCO");
+        prompt.Should().Contain("documento_en_blanco");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_corrige_la_placa_por_posicion()
+    {
+        // Las tres primeras posiciones son letras y las tres últimas dígitos, así que un 0 al
+        // principio es una O. Eso arregló JR0888 → JRO888 sin tocar nada más.
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        prompt.Should().Contain("POSICION POR POSICION");
+        prompt.Should().Contain("un 0 en las tres primeras posiciones es en realidad una O");
+    }
+
+    [Fact]
+    public void Prompt_inscripcion_prenda_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("inscripcion_prenda")!;
+        foreach (var campo in new[]
+                 {
+                     "acreedor_nombre", "acreedor_documento", "garante_nombre", "numero_registro",
+                     "fecha_registro", "vehiculo_placa", "vehiculo_chasis", "vehiculo_vin",
+                     "vehiculo_marca", "vehiculo_linea", "vehiculo_modelo",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #12000 — comprobante de pago ──────────────────────────────────────────────────────
+    // Una casilla con dos documentos dentro, y un criterio que se invierte respecto al paz y salvo.
+
+    [Fact]
+    public void Prompt_comprobante_derechos_acepta_las_tres_familias_de_la_casilla()
+    {
+        // Recibo de derechos del organismo (25 de 66), declaración del impuesto (33) y comprobante
+        // electrónico (5). En matrícula la casilla es del impuesto y en traspaso de los derechos.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("RECIBO DE CAJA");
+        prompt.Should().Contain("COMPROBANTE DE PAGO ELECTRONICO O BANCARIO");
+        prompt.Should().Contain("DECLARACION o LIQUIDACION DEL IMPUESTO");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_advierte_que_aqui_el_pago_PSE_si_vale()
+    {
+        // El paz y salvo rechaza el comprobante PSE porque acredita una transacción y no un estado
+        // de cuenta. Aquí es exactamente lo que se pide, y hay que decirlo para que el modelo no
+        // arrastre el criterio del documento vecino.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("AQUI EL COMPROBANTE DE PAGO SI VALE");
+        prompt.Should().Contain("A diferencia de un paz y salvo");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_no_rechaza_una_liquidacion_sin_pagar()
+    {
+        // El documento correcto sin cancelar sigue siendo el documento correcto. Eso se informa en
+        // hay_constancia_pago, no en es_valido.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("una liquidacion sin pagar sigue siendo el documento correcto");
+        prompt.Should().Contain("hay_constancia_pago");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_extrae_el_valor_este_pagado_o_no()
+    {
+        // Falla real del v1: el campo se llamaba valor_pagado y el modelo lo tomó al pie de la letra,
+        // dejando en 0 los 15 documentos aún no cancelados. Separar el valor del estado lo arregló.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("EL VALOR VA SIEMPRE, ESTE PAGADO O NO");
+        prompt.Should().Contain("valor_total");
+        prompt.Should().NotContain("valor_pagado");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_rechaza_el_paz_y_salvo_y_la_licencia()
+    {
+        // Los dos rechazos reales de la muestra fueron licencias de tránsito cargadas en esta casilla.
+        // El estado de cuenta se rechaza porque tiene casilla propia.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("ESTADO DE CUENTA o PAZ Y SALVO");
+        prompt.Should().Contain("LICENCIA DE TRANSITO");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        foreach (var campo in new[]
+                 {
+                     "hay_constancia_pago", "valor_total", "entidad_recaudadora", "conceptos",
+                     "numero_referencia", "fecha_pago", "vehiculo_placa", "propietario_nombre",
+                     "municipio", "departamento",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #12001 — contrato de leasing ──────────────────────────────────────────────────────
+    // El documento donde el vehículo todavía no tiene placa, y donde un campo mal especificado
+    // hizo que el modelo inventara el NIT del arrendador en los 50 documentos aceptados.
+
+    [Fact]
+    public void Prompt_contrato_leasing_prohibe_exigir_la_placa()
+    {
+        // La Matrícula Leasing es la que asigna la placa: el contrato es anterior. Medido, la placa
+        // aparece en 1 de 52 documentos, así que exigirla rechazaría la muestra entera.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("NO exijas la PLACA");
+        prompt.Should().Contain("todavia NO tiene placa");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_separa_al_arrendador_del_locatario()
+    {
+        // El vehículo queda a nombre del arrendador y el locatario es una parte distinta que V2
+        // registra aparte. Confundirlos rompería el FUR.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("LAS DOS PARTES");
+        prompt.Should().Contain("NUNCA pongas el mismo nombre en los dos campos");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_prefiere_el_NIT_vacio_a_un_NIT_deducido()
+    {
+        // La carátula no trae el NIT de la entidad, trae la cédula del REPRESENTANTE. En la primera
+        // versión el modelo rellenó el campo en los 50 aceptados y los 50 estaban mal.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("SOLO SI ESTA ROTULADO COMO DE ESA PARTE, NUNCA DEDUCIDO");
+        prompt.Should().Contain("Vacio es la respuesta correcta y esperada");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_avisa_de_los_escaneos_girados()
+    {
+        // Solo 1 de 52 ejemplares trae capa de texto y muchas carátulas vienen de lado.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("GIRADAS 90 GRADOS");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_contempla_que_un_contrato_ampare_varios_bienes()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("UN CONTRATO PUEDE CUBRIR VARIOS BIENES");
+        prompt.Should().Contain("numero_bienes");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_distingue_el_leasing_de_la_prenda()
+    {
+        // En la prenda el vehículo es del deudor y el banco es acreedor; en el leasing el vehículo es
+        // del arrendador. Es la confusión más plausible entre los dos documentos de esta Feature.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("CONTRATO DE GARANTIA MOBILIARIA");
+        prompt.Should().Contain("En el leasing el vehiculo es DEL ARRENDADOR");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        foreach (var campo in new[]
+                 {
+                     "arrendador_nombre", "locatario_nombre", "numero_contrato", "fecha_contrato",
+                     "vehiculo_descripcion", "vehiculo_marca", "vehiculo_linea", "vehiculo_modelo",
+                     "vehiculo_vin", "proveedor_nombre",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #12030 — certificado de cámara de comercio ────────────────────────────────────────
+    // Cubre a la persona jurídica, que hoy no valida nadie. La cédula de la persona natural queda
+    // fuera a propósito: Kyverum ya la captura y valida mejor de lo que podría hacerlo un OCR.
+
+    [Fact]
+    public void Prompt_camara_comercio_pide_el_NIT_sin_digito_de_verificacion()
+    {
+        // El NIT es el dato que se coteja contra la empresa que figura como parte del trámite, y el
+        // dígito de verificación lo rompería. Medido: 54/54 correctos en dos corridas.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("SIN EL DIGITO DE VERIFICACION");
+        prompt.Should().Contain("900485418");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_no_confunde_el_NIT_con_la_matricula_ni_el_recibo()
+    {
+        // En la carátula del certificado conviven cuatro números largos: NIT, matrícula mercantil,
+        // número de recibo y código de verificación.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("NO confundas el NIT con la MATRICULA MERCANTIL");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_rechaza_la_ficha_de_homologacion()
+    {
+        // Falso positivo real del v1: una ficha FTH-002 cargada en esta casilla se aceptó como
+        // certificado en 3 de sus 4 ejemplares, devolviendo «MINISTERIO DE TRANSPORTE» como razón
+        // social. Se parece de lejos — entidad oficial, números largos, muchos campos.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("FICHA TECNICA DE HOMOLOGACION");
+        prompt.Should().Contain("El emisor manda sobre cualquier otra señal");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_rechaza_el_RUT_que_es_el_otro_confusable()
+    {
+        // El RUT acredita la inscripción tributaria, no la existencia ni quién representa.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("REGISTRO UNICO TRIBUTARIO");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_no_exige_la_cedula_del_representante()
+    {
+        // Suele cargarse aparte: en la muestra solo 22 de 54 la traían en el mismo archivo.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("NO exijas que venga la CEDULA DEL REPRESENTANTE");
+        prompt.Should().Contain("incluye_cedula_representante");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_informa_la_vigencia_en_vez_de_bloquear()
+    {
+        // Un certificado viejo o una matrícula sin renovar son información para el gestor, no motivo
+        // de rechazo: el documento sigue siendo el correcto.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("INFORMA, NO BLOQUEA");
+        prompt.Should().Contain("ultimo_ano_renovado");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_toma_al_representante_principal_y_no_al_suplente()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("representante legal PRINCIPAL, no al suplente");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        foreach (var campo in new[]
+                 {
+                     "nit", "razon_social", "representante_legal_nombre", "representante_legal_cargo",
+                     "estado_sociedad", "fecha_expedicion", "ultimo_ano_renovado",
+                     "matricula_mercantil", "camara_emisora", "domicilio",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #12034 — los tipos documentales que consume el frontend ───────────────────────────
+
+    [Fact]
+    public void TiposDocumentales_excluye_el_extractor_de_mandatos()
+    {
+        // `mandato_config` no es un documento del expediente: es el extractor de plantillas de
+        // Plataforma → Mandatos. Ofrecérselo al wizard sería ofrecer una casilla que no existe.
+        DocumentOcrPrompts.TiposDocumentales.Should().NotContain("mandato_config");
+        DocumentOcrPrompts.SupportedTipos.Should().Contain("mandato_config");
+    }
+
+    [Fact]
+    public void TiposDocumentales_son_exactamente_los_soportados_menos_el_extractor()
+    {
+        // Si algún día se añade un tipo a SupportedTipos y no aparece aquí, el frontend nunca lo
+        // analizaría. Esta aserción hace que ese olvido rompa un test en vez de pasar en silencio.
+        DocumentOcrPrompts.TiposDocumentales.Should()
+            .BeEquivalentTo(DocumentOcrPrompts.SupportedTipos.Where(t => t != "mandato_config"));
+    }
+
+    [Fact]
+    public void TiposDocumentales_todos_tienen_prompt()
+    {
+        foreach (var tipo in DocumentOcrPrompts.TiposDocumentales)
+        {
+            DocumentOcrPrompts.PromptFor(tipo).Should().NotBeNullOrWhiteSpace(
+                because: $"el frontend va a pedir el OCR de «{tipo}» en cuanto un trámite lo exija");
+        }
+    }
+
+    // ── HU #12037 — Certificado CEPD ─────────────────────────────────────────────────────────
+    // El CEPD no es un documento: es la sección EMISIONES de la ficha de homologación. Y el 58,8 %
+    // de esa casilla son listas de chequeo del concesionario, así que rechazar bien es medio trabajo.
+
+    [Fact]
+    public void Prompt_cepd_acepta_la_ficha_de_homologacion_por_su_seccion_de_emisiones()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("FORMATO FTH-002");
+        prompt.Should().Contain("EMISIONES");
+    }
+
+    [Fact]
+    public void Prompt_cepd_rechaza_el_check_list_del_concesionario()
+    {
+        // Es lo que más se carga por error: 163 de 277 adjuntos medidos.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("CHECK LIST MATRICULAS INICIALES");
+        prompt.Should().Contain("Orden de Compra");
+    }
+
+    [Fact]
+    public void Prompt_cepd_acepta_el_vehiculo_electrico_con_la_seccion_vacia()
+    {
+        // Falso rechazo real del v2, con un razonamiento impecable y una conclusión falsa: un
+        // eléctrico no quema combustible, luego no hay emisiones que medir. Su ficha es la correcta.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("UN VEHICULO ELECTRICO DEJA LA SECCION DE EMISIONES ENTERAMENTE VACIA");
+        prompt.Should().Contain("Rechazarla por no traer valores de emisiones seria rechazar el documento correcto");
+    }
+
+    [Fact]
+    public void Prompt_cepd_no_exige_valores_segun_el_combustible()
+    {
+        // Un diésel deja vacíos los campos de gasolina y solo rellena la opacidad, y al revés.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("NO exijas que los recuadros de emisiones tengan numeros");
+        prompt.Should().Contain("lo que se exige es que la SECCION EXISTA");
+    }
+
+    [Fact]
+    public void Prompt_cepd_no_confunde_la_marca_del_vehiculo_con_la_de_un_componente()
+    {
+        // La ficha trae la marca del motor, los ejes, la dirección, los frenos y la carrocería. En el
+        // v1 el modelo llegó a poner la referencia en el campo de la marca.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("CADA DATO EN SU CASILLA");
+        prompt.Should().Contain("ese es un componente");
+    }
+
+    [Fact]
+    public void Prompt_cepd_avisa_de_los_escaneos_girados()
+    {
+        // Depende de la HU #12036: sin enderezar, este mismo prompt inventaba marcas y números de ficha.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("GIRADAS 90 GRADOS");
+    }
+
+    [Fact]
+    public void Prompt_cepd_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        foreach (var campo in new[]
+                 {
+                     "combustible", "tiene_seccion_emisiones", "emisiones_co_dinamica",
+                     "emisiones_hc_dinamica", "emisiones_nox_dinamica", "opacidad_diesel",
+                     "numero_ficha", "tipo_homologacion", "vehiculo_marca", "vehiculo_referencia",
+                     "vehiculo_modelo", "clase_vehiculo", "tipo_carroceria", "certificado_por",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #12038 — «si no puedes leerlo, dilo» ──────────────────────────────────────────────
+
+    [Fact]
+    public void Todos_los_prompts_documentales_piden_declarar_la_legibilidad()
+    {
+        // Medido: sobre las 7 fichas giradas donde el modelo INVENTABA, las 7 reportaron «parcial» y
+        // ninguna dijo «buena»; de las 56 derechas, 54 dijeron «buena». La señal no predice qué campo
+        // concreto falla, pero sí distingue «leí esto» de «me lo estoy imaginando».
+        foreach (var tipo in DocumentOcrPrompts.TiposDocumentales)
+        {
+            var prompt = DocumentOcrPrompts.PromptFor(tipo)!;
+            prompt.Should().Contain("SI NO PUEDES LEERLO, DILO", because: $"«{tipo}» debe poder decir que no ve el documento");
+            prompt.Should().Contain("legibilidad", because: $"«{tipo}» debe devolver el campo en el JSON");
+        }
+    }
+
+    [Fact]
+    public void Todos_los_prompts_documentales_prefieren_el_campo_vacio_a_uno_inventado()
+    {
+        // Es la regla que hace útil la señal: un valor plausible pero falso no se distingue de uno bueno.
+        foreach (var tipo in DocumentOcrPrompts.TiposDocumentales)
+        {
+            DocumentOcrPrompts.PromptFor(tipo)!.Should()
+                .Contain("Vacio es una respuesta correcta y util");
+        }
+    }
+
+    // ── HU #12044 — el clasificador del lote conocía solo 5 de los 12 tipos ─────────────────
+
+    /// <summary>
+    /// El guardián de la causa raíz. El defecto no fue olvidar un párrafo: fue que se podía añadir un tipo
+    /// al OCR, con su prompt calibrado y su casilla configurada, y el cargue masivo seguía sin saber
+    /// reconocerlo — sin error en ninguna parte. Esta prueba hace que ese olvido rompa el build.
+    /// </summary>
+    [Fact]
+    public void Todo_tipo_documental_sabe_como_reconocerse_en_el_lote()
+    {
+        var prompt = DocumentOcrPrompts.ClassificationPrompt(DocumentOcrPrompts.TiposDocumentales);
+
+        foreach (var tipo in DocumentOcrPrompts.TiposDocumentales)
+        {
+            prompt.Should().Contain($"- {tipo}: ", $"el lote no sabe reconocer «{tipo}»");
+        }
+    }
+
+    /// <summary>
+    /// La lista de descartes le decía al modelo que mandara a «no reconocidas» cuatro documentos que ahora
+    /// son tipos solicitados: la licencia de tránsito, el paz y salvo, la prenda y la ficha FTH-002. Un
+    /// prompt que se contradice a sí mismo no falla ruidosamente: clasifica mal y en silencio.
+    /// </summary>
+    [Theory]
+    [InlineData("tarjeta_propiedad", "Licencia de transito")]
+    [InlineData("paz_salvo", "Certificado de paz y salvo de impuestos")]
+    [InlineData("inscripcion_prenda", "Formato o datos de prenda")]
+    [InlineData("certificado_ambiental", "Formato FTH-002")]
+    public void No_descarta_un_tipo_que_el_tramite_esta_pidiendo(string tipo, string descarte)
+    {
+        DocumentOcrPrompts.ClassificationPrompt([tipo]).Should().NotContain(descarte);
+
+        // Y cuando el trámite NO lo pide, el descarte sigue ahí: es útil, solo que incompatible.
+        DocumentOcrPrompts.ClassificationPrompt(["factura"]).Should().Contain(descarte);
+    }
+
+    [Fact]
+    public void Solo_describe_los_tipos_que_el_tramite_pide()
+    {
+        var prompt = DocumentOcrPrompts.ClassificationPrompt(["factura", "soat"]);
+
+        prompt.Should().Contain("- factura: ").And.Contain("- soat: ");
+        prompt.Should().NotContain("- contrato_leasing: ", "describir un tipo que nadie va a recibir invita a proponerlo");
+    }
+
+    [Fact]
+    public void Avisa_de_los_pares_confundibles_solo_cuando_los_dos_estan_en_juego()
+    {
+        DocumentOcrPrompts.ClassificationPrompt(["paz_salvo", "comprobante_derechos"])
+            .Should().Contain("paz_salvo vs comprobante_derechos");
+
+        DocumentOcrPrompts.ClassificationPrompt(["paz_salvo"])
+            .Should().NotContain("paz_salvo vs comprobante_derechos");
+    }
+
+    // ── HU #12045 — el mismo documento con dos códigos ──────────────────────────────────────
+
+    /// <summary>
+    /// `prenda_registro` es el DocTipo del adjunto que exige la decisión «registrar» y `inscripcion_prenda`
+    /// la casilla del catálogo: los dos son el soporte de que la garantía está constituida.
+    /// </summary>
+    [Fact]
+    public void Prenda_registro_usa_el_prompt_de_inscripcion_de_prenda()
+    {
+        DocumentOcrPrompts.IsSupported("prenda_registro").Should().BeTrue();
+        DocumentOcrPrompts.PromptFor("prenda_registro")
+            .Should().Be(DocumentOcrPrompts.PromptFor("inscripcion_prenda"));
+        DocumentOcrPrompts.ClassificationPrompt(["prenda_registro"])
+            .Should().Contain("- prenda_registro: ").And.Contain("ACREEDOR");
+    }
+
+    /// <summary>
+    /// El levantamiento acredita lo CONTRARIO. Darle este prompt haría que un paz y salvo de prenda pasara
+    /// por una inscripción válida, que es justo el error que el documento existe para impedir.
+    /// </summary>
+    [Theory]
+    [InlineData("prenda_levantamiento")]
+    [InlineData("prenda_solicitud")]
+    public void No_hereda_el_prompt_de_prenda_quien_no_es_ese_documento(string tipo)
+    {
+        DocumentOcrPrompts.IsSupported(tipo).Should().BeFalse();
+        DocumentOcrPrompts.PromptFor(tipo).Should().BeNull();
     }
 }
