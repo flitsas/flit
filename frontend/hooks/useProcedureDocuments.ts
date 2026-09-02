@@ -16,9 +16,14 @@ import type {
 // HU #10977 (Feature #10972) — se añade `rtm` en AMBAS modalidades: el certificado de vigencia
 // SOAT y RTM pide número, entidad, expedición y vigencia de la revisión, y esos tres últimos no
 // los entrega ningún proveedor de consulta. Salen del propio certificado del CDA.
+// HU #11996 — se añade `tarjeta_propiedad` (licencia de tránsito) en AMBAS modalidades: es el
+// documento más cargado de la plataforma (72.813 cargas medidas en V1) y hasta ahora no tenía
+// ninguna validación. Va también en `traspaso` porque `modalidadPorEntrada` mapea a esa modalidad
+// TODO lo que entra por placa, familia OTROS incluida — y es justo en otros servicios donde la
+// licencia es requisito de entrada (17 asignaciones en `procedure_document_requirements`).
 export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
-  matricula_inicial: ['factura', 'aduana', 'impronta', 'soat', 'rtm'],
-  traspaso: ['impronta', 'soat', 'rtm'],
+  matricula_inicial: ['factura', 'aduana', 'impronta', 'soat', 'rtm', 'tarjeta_propiedad'],
+  traspaso: ['impronta', 'soat', 'rtm', 'tarjeta_propiedad'],
 };
 
 /**
@@ -328,20 +333,30 @@ export function useProcedureDocuments(
       }));
 
       if (analizaAhora) {
-        let ocr: DocumentOcrResult;
+        // HU #11996 — el OCR NUNCA impide cargar. Antes, un fallo HTTP aquí hacía `return false` y el
+        // documento no se subía: como el proveedor devuelve 503 ante cualquier problema suyo (sin key,
+        // caído, respuesta inválida), una caída de la IA dejaba al operador sin poder adjuntar NADA de
+        // los tipos con OCR. Ahora se degrada igual que un archivo de 10–20 MB: sube y queda "no
+        // analizado". El análisis es una ayuda, no una compuerta.
+        let ocr: DocumentOcrResult | null = null;
         try {
           ocr = await tramitesClient.analyzeDocument(tipo.toLowerCase(), file, tenantId);
-        } catch (err) {
-          // Fallo HTTP del OCR → NO se sube. El círculo ya se apagó; el adjunto anterior queda.
+        } catch {
           setState((s) => ({
             ...s,
             analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
-            error:
-              err instanceof Error ? err.message : 'Error al analizar el documento',
+            ocrResults: {
+              ...s.ocrResults,
+              [tipo]: {
+                status: 'skipped',
+                motivo: 'No se pudo analizar el documento automáticamente: se subió sin verificar.',
+                data: null,
+              },
+            },
           }));
-          return false;
         }
 
+        if (ocr) {
         const evaluation = evaluateOcr(ocr.data, vinRef.current, ocr.ok);
         const ocrUi: OcrUiResult = {
           status: evaluation.rechazado ? 'rejected' : 'verified',
@@ -374,6 +389,7 @@ export function useProcedureDocuments(
           } catch {
             // Silencio intencionado: ver comentario de arriba.
           }
+        }
         }
       } else if (usaOcr && file.size > OCR_MAX_BYTES) {
         // 10–20 MB: se salta el OCR (excede el límite del análisis), se sube igual y se marca "no analizado".
