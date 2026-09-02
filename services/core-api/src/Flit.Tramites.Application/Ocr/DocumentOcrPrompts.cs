@@ -33,6 +33,9 @@ public static class DocumentOcrPrompts
             // HU #11996 — la licencia de transito (tarjeta de propiedad). Es el documento MAS cargado
             // de la plataforma (72.813 cargas medidas en V1) y hasta ahora no tenia ninguna validacion.
             "tarjeta_propiedad",
+            // HU #11998 — paz y salvo de impuestos. Presente en 32.514 de los 32.870 traspasos de V1,
+            // y con 15 casillas ya configuradas en V2.
+            "paz_salvo",
             // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
             "mandato_config",
         };
@@ -49,6 +52,7 @@ public static class DocumentOcrPrompts
         "soat" => Soat,
         "rtm" => Rtm,
         "tarjeta_propiedad" => TarjetaPropiedad,
+        "paz_salvo" => PazSalvo,
         "mandato_config" => MandatoConfig,
         _ => null,
     };
@@ -623,6 +627,92 @@ EXTRAER:
 
 JSON valido sin markdown:
 {"tipo_documento":"licencia_transito","es_valido":true,"paginas_documento":[1],"total_paginas":1,"caras_presentes":"ambas","numero_licencia":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_cilindrada":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_carroceria":"","vehiculo_combustible":"","vehiculo_servicio":"","vehiculo_capacidad":"","vehiculo_motor":"","vehiculo_vin":"","vehiculo_serie":"","vehiculo_chasis":"","regrabado_motor":"","regrabado_serie":"","regrabado_chasis":"","propietario_nombre":"","propietario_tipo_documento":"","propietario_documento":"","potencia_hp":"","puertas":"","declaracion_importacion":"","fecha_importacion":"","fecha_matricula":"","fecha_expedicion":"","fecha_vencimiento":"","organismo_transito":"","serial_especie_venal":"","restriccion_movilidad":"","blindaje":"","limitacion_propiedad":"","observaciones":""}
+""";
+
+    /// <summary>
+    /// HU #11998 — paz y salvo de impuestos. Calibrado sobre 54 documentos reales de 12 secretarias.
+    /// <para><b>Esto no es un documento, es una funcion.</b> A diferencia de la licencia de transito
+    /// —un artefacto con formato fijo—, el paz y salvo es un REQUISITO que cada departamento acredita
+    /// con algo distinto: estado de cuenta de la gobernacion, historico de pagos del portal, o la
+    /// declaracion del impuesto. Ninguno de los 43 ejemplares con capa de texto contiene la frase
+    /// «PAZ Y SALVO». Por eso el prompt decide por QUIEN LO EMITE (autoridad tributaria) y no por el
+    /// formato, y por eso rechaza dos cosas que se le parecen mucho: el comprobante de pago PSE
+    /// —acredita una transaccion, no un estado de cuenta— y el recibo de caja de derechos de la
+    /// secretaria de transito, que cobra sistematizacion o semaforizacion y ni siquiera es del
+    /// impuesto vehicular aunque mencione el SIMIT (que son multas).</para>
+    /// <para><b>El dato de valor no es la identidad, es la deuda.</b> Aqui el documento ya trae la
+    /// placa; lo que importa es si el vehiculo adeuda vigencias. El estado de cuenta lo dice en un
+    /// recuadro propio, vacio cuando esta al dia; el historico hay que deducirlo; una declaracion
+    /// suelta no lo permite saber y devuelve «no_determinado» a proposito. El OCR informa, no bloquea.</para>
+    /// <para><b>Medicion (claude-haiku-4-5, max_tokens 2000, dos corridas):</b> la decision de
+    /// aceptar/rechazar salio IDENTICA en ambas —41 aceptados y los MISMOS 13 rechazados— y el tipo
+    /// coincidio en 53 de 54. La placa oscilo entre 87,8 % y 90,2 %. Lo binario es estable, los
+    /// porcentajes tienen una banda de ±8 puntos: no se mezclan en un mismo umbral.</para>
+    /// <para><b>Dato de negocio:</b> 20 de 61 documentos de la muestra (33 %) no eran un paz y salvo.</para>
+    /// </summary>
+    private const string PazSalvo =
+"""
+Analiza este documento. Determina si acredita el ESTADO DE IMPUESTOS de un vehiculo ante la autoridad tributaria en Colombia (lo que en el tramite se pide como "Paz y Salvo de Impuestos").
+
+QUE SE CONSIDERA VALIDO — LA CLAVE ES QUIEN LO EMITE:
+Este requisito NO tiene un formato unico: cada departamento lo acredita con un documento distinto. Es VALIDO cualquier documento emitido por una AUTORIDAD TRIBUTARIA (gobernacion, secretaria de hacienda, unidad de rentas, o el portal oficial de impuestos del departamento) que informe sobre el impuesto de vehiculos automotores de un vehiculo concreto. Los formatos que veras:
+1. ESTADO DE CUENTA o CERTIFICADO de la gobernacion / unidad de rentas: lleva numero de certificado, la tabla de declaraciones por vigencia, un recuadro de VIGENCIAS ADEUDADAS, firma de un funcionario y a veces codigo de barras. Es el mas completo.
+2. HISTORICO DE PAGOS del portal de impuestos del departamento: una pagina web impresa con la placa y una tabla de vigencias con formulario, fecha y valor pagado. Puede llevar visibles los botones "Regresar" o "Imprimir": eso NO lo invalida, es una impresion de pantalla del portal oficial.
+3. DECLARACION del impuesto sobre vehiculos automotores (formulario departamental o formulario web), presentada por el contribuyente ante la gobernacion.
+
+QUE NO ES VALIDO:
+1. Un COMPROBANTE DE PAGO BANCARIO o de PSE ("Pago PSE", "Pago exitoso", "Sucursal Virtual", "Comprobante en linea", numero CUS): acredita UNA transaccion, no el estado de cuenta del vehiculo. Aunque el comercio sea una gobernacion, sigue siendo un comprobante de pago.
+2. Un RECIBO DE CAJA de derechos de tramite de una secretaria de transito o movilidad: cobra conceptos como "Derechos de Sistematizacion", "Facturacion", "Especie Venal" o "Costo lamina", lleva "NOMBRE Y FIRMA CAJERO", y NO es del impuesto vehicular. Ojo: puede mencionar un periodo liquidado y decir que el usuario no tiene deudas con el SIMIT —el SIMIT son MULTAS, no impuestos— y aun asi NO sirve.
+3. Una PAGINA EN BLANCO, una plantilla vacia o un archivo cuyo unico contenido es un logo.
+4. Un SOAT, una revision tecnico-mecanica, una licencia de transito, una factura, una impronta o una declaracion de importacion.
+
+COMO DECIDIR — PROCEDE EN ESTE ORDEN:
+PASO 1. Busca al emisor: gobernacion, departamento, secretaria de hacienda, unidad de rentas o portal de impuestos ⇒ candidato a valido. Banco, PSE o secretaria de transito/movilidad ⇒ NO valido.
+PASO 2. Busca el objeto: debe hablar del IMPUESTO SOBRE VEHICULOS AUTOMOTORES de un vehiculo identificado por su placa. Si solo hay una transaccion o unos derechos de tramite, NO es valido.
+PASO 3. Solo si los dos pasos anteriores dan positivo, es_valido = true.
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos (comprobante de pago + certificado + otros), identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1] o [2,3]). Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro, NO lo invalida y NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
+LA DEUDA — ES EL DATO MAS VALIOSO, LEELO CON CUIDADO:
+El punto de este documento es saber si el vehiculo esta al dia. Determina estado_deuda asi:
+- "al_dia": el recuadro VIGENCIAS ADEUDADAS esta VACIO, o el documento dice expresamente que no adeuda, o el historico muestra pagada la vigencia del ano en curso.
+- "adeuda": el recuadro VIGENCIAS ADEUDADAS lista uno o mas anos, o aparecen procesos fiscales, bloqueos o sanciones pendientes.
+- "no_determinado": el documento no permite saberlo (tipico de una declaracion suelta, que acredita que se declaro pero no el saldo).
+NO deduzcas "al_dia" solo porque el documento existe. Un recuadro vacio SI significa al dia; la ausencia del recuadro NO. Ante la duda, "no_determinado".
+En vigencias_adeudadas pon los anos listados como adeudados, separados por coma; vacio si no adeuda ninguno.
+
+LA PLACA — DOS COMPROBACIONES OBLIGATORIAS:
+1. FORMATO: una placa colombiana es 3 LETRAS + 3 DIGITOS (automoviles) o 3 LETRAS + 2 DIGITOS + 1 LETRA (motos). SIEMPRE 6 caracteres, sin espacios ni guiones. Si lo que transcribiste no encaja, esta mal leido.
+2. Las letras Q, O, G, D y C se confunden entre si en los escaneos: Q lleva colita, O es un ovalo limpio, G lleva barra horizontal, D tiene el lado izquierdo recto, C esta abierta. Mira cada una de las tres letras antes de darla por buena.
+Si el documento no trae placa, dejala VACIA. No la inventes ni la tomes de otro documento del archivo.
+
+EXTRAER:
+- tipo_documento: "estado_cuenta" | "historico_pagos" | "declaracion_impuesto" | "comprobante_pago_bancario" | "recibo_derechos_transito" | "otro"
+- es_valido: true/false
+- paginas_documento: [paginas], total_paginas: numero
+- emisor: nombre de la entidad que lo expide, tal cual aparece
+- emisor_es_autoridad_tributaria: true/false
+- numero_certificado: numero del certificado o del formulario, si lo tiene
+- vehiculo_placa
+- vehiculo_marca, vehiculo_linea, vehiculo_modelo
+- propietario_nombre, propietario_documento
+- municipio, departamento
+- estado_deuda: "al_dia" | "adeuda" | "no_determinado"
+- vigencias_adeudadas: anos adeudados separados por coma, vacio si ninguno
+- vigencia_certificada: periodo que cubre el documento (ej: "2023 - 2026"), vacio si no aplica
+- fecha_expedicion (YYYY-MM-DD)
+- avaluo: avaluo del vehiculo si aparece (numerico, sin puntos)
+- observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
+
+JSON valido sin markdown:
+{"tipo_documento":"estado_cuenta","es_valido":true,"paginas_documento":[1],"total_paginas":1,"emisor":"","emisor_es_autoridad_tributaria":true,"numero_certificado":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","propietario_nombre":"","propietario_documento":"","municipio":"","departamento":"","estado_deuda":"no_determinado","vigencias_adeudadas":"","vigencia_certificada":"","fecha_expedicion":"","avaluo":0,"observaciones":""}
 """;
 
     private const string MandatoConfig =

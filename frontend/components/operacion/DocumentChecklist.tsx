@@ -198,6 +198,17 @@ function joinFields(data: Record<string, unknown>, keys: string[], sep = ' '): s
   return keys.map((k) => pickStr(data, k)).filter(Boolean).join(sep);
 }
 
+/**
+ * HU #11998 — estado de deuda del paz y salvo, en palabras. `no_determinado` no es un fallo del
+ * análisis: hay documentos —una declaración suelta, por ejemplo— que sencillamente no permiten
+ * saber el saldo, y decirlo es más honesto que suponer que está al día.
+ */
+const ESTADO_DEUDA: Record<string, string> = {
+  al_dia: 'Al día',
+  adeuda: 'Adeuda vigencias',
+  no_determinado: 'No se puede determinar',
+};
+
 /** Descriptor de un campo del resumen OCR. */
 interface OcrField {
   label: string;
@@ -253,6 +264,21 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
   ],
   // El prompt de `rtm` llegó en HU #10977 pero su resumen nunca se añadió aquí, así que el panel salía
   // con el encabezado y la grilla vacía. Los campos son los que pide el certificado de vigencia.
+  // HU #11998 — paz y salvo de impuestos. El resumen antepone la DEUDA: es el dato por el que se
+  // pide el documento. El emisor va justo después porque es lo que distingue un paz y salvo legítimo
+  // de un recibo de caja de la secretaría de tránsito, que se le parece mucho.
+  paz_salvo: [
+    { label: 'Estado', value: (d) => ESTADO_DEUDA[pickStr(d, 'estado_deuda')] ?? pickStr(d, 'estado_deuda') },
+    { label: 'Vigencias adeudadas', value: (d) => pickStr(d, 'vigencias_adeudadas') },
+    { label: 'Emisor', value: (d) => pickStr(d, 'emisor') },
+    { label: 'N.º certificado', value: (d) => pickStr(d, 'numero_certificado') },
+    { label: 'Placa', value: (d) => pickStr(d, 'vehiculo_placa') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+    { label: 'Propietario', value: (d) => pickStr(d, 'propietario_nombre') },
+    { label: 'Ubicación', value: (d) => joinFields(d, ['municipio', 'departamento'], ', ') },
+    { label: 'Periodo certificado', value: (d) => pickStr(d, 'vigencia_certificada') },
+    { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
+  ],
   // HU #11996 — licencia de tránsito. El resumen prioriza lo que el gestor coteja de un vistazo
   // contra el trámite: placa y VIN primero, y el organismo que la expidió, que es lo que distingue
   // una licencia legítima de un recibo de la misma secretaría.
@@ -288,6 +314,7 @@ const TIPO_LABEL: Record<string, string> = {
   soat: 'SOAT',
   rtm: 'RTM',
   tarjeta_propiedad: 'Licencia de Tránsito',
+  paz_salvo: 'Paz y Salvo de Impuestos',
 };
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */

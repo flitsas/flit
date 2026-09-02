@@ -13,6 +13,7 @@ public sealed class DocumentOcrPromptsTests
     [InlineData("soat")]
     [InlineData("rtm")] // HU #10977
     [InlineData("tarjeta_propiedad")] // HU #11996
+    [InlineData("paz_salvo")] // HU #11998
     public void Tipos_soportados_tienen_prompt(string tipo)
     {
         DocumentOcrPrompts.IsSupported(tipo).Should().BeTrue();
@@ -297,6 +298,69 @@ public sealed class DocumentOcrPromptsTests
                      "vehiculo_modelo", "vehiculo_color", "vehiculo_servicio", "vehiculo_motor",
                      "propietario_nombre", "propietario_tipo_documento", "propietario_documento",
                      "organismo_transito", "fecha_expedicion", "vehiculo_vin",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #11998 — prompt del paz y salvo de impuestos ──────────────────────
+    //
+    // El paz y salvo no es un artefacto con formato fijo: es un requisito que cada departamento
+    // acredita distinto. Estas aserciones fijan las decisiones que hicieron que el prompt funcione.
+
+    [Fact]
+    public void Prompt_paz_salvo_decide_por_el_emisor_y_no_por_el_formato()
+    {
+        // Ninguno de los 43 ejemplares con capa de texto contenía la frase "PAZ Y SALVO": buscarla
+        // como criterio habría rechazado la muestra entera.
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        prompt.Should().Contain("LA CLAVE ES QUIEN LO EMITE");
+        prompt.Should().Contain("AUTORIDAD TRIBUTARIA");
+    }
+
+    [Fact]
+    public void Prompt_paz_salvo_acepta_las_tres_formas_en_que_se_acredita()
+    {
+        // Estado de cuenta (Antioquia, Caldas), histórico del portal (Cundinamarca) y declaración
+        // (Valle, Santander). Aceptar solo la primera rechazaría ~70 % de lo que se sube.
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        prompt.Should().Contain("ESTADO DE CUENTA");
+        prompt.Should().Contain("HISTORICO DE PAGOS");
+        prompt.Should().Contain("DECLARACION del impuesto");
+    }
+
+    [Fact]
+    public void Prompt_paz_salvo_rechaza_lo_que_mas_se_le_parece()
+    {
+        // Los dos falsos amigos, que suman 12 de 54 en la muestra: el comprobante PSE acredita una
+        // transacción y no un estado de cuenta; el recibo de caja de la secretaría cobra derechos de
+        // trámite y ni siquiera es del impuesto vehicular, aunque hable del SIMIT (que son multas).
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        prompt.Should().Contain("Pago PSE");
+        prompt.Should().Contain("Derechos de Sistematizacion");
+        prompt.Should().Contain("SIMIT son MULTAS");
+    }
+
+    [Fact]
+    public void Prompt_paz_salvo_no_supone_que_esta_al_dia_por_existir()
+    {
+        // El sesgo obvio del modelo es dar por bueno cualquier documento que le pongan delante. Un
+        // recuadro de vigencias VACÍO sí significa al día; que no haya recuadro, no.
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        prompt.Should().Contain("NO deduzcas \"al_dia\" solo porque el documento existe");
+        prompt.Should().Contain("no_determinado");
+    }
+
+    [Fact]
+    public void Prompt_paz_salvo_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("paz_salvo")!;
+        foreach (var campo in new[]
+                 {
+                     "estado_deuda", "vigencias_adeudadas", "emisor", "numero_certificado",
+                     "vehiculo_placa", "propietario_nombre", "municipio", "departamento",
+                     "vigencia_certificada", "fecha_expedicion",
                  })
         {
             prompt.Should().Contain(campo);
