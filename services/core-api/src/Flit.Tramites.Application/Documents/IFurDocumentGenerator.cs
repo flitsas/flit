@@ -22,7 +22,9 @@ public sealed record DocumentParte(
     // firma en representación de la empresa en la solicitud virtual y el mandato. Null si no aplica.
     string? RepresentanteLegalNombre = null,
     string? RepresentanteLegalTipoDoc = null,
-    string? RepresentanteLegalDocumento = null);
+    string? RepresentanteLegalDocumento = null,
+    int Ordinal = 1,
+    decimal? OwnershipPercentage = null);
 
 /// <summary>
 /// Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).

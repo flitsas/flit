@@ -139,4 +139,14 @@ public sealed class PreviewFurHandlerTests
         result.Document.Should().NotBeNull();
         await _resolver.Received(1).ResolveMatchAsync("EXCAVADORA", Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task InvalidOwnerCount_ReturnsBadRequest()
+    {
+        var result = await _handler.HandleAsync(
+            new PreviewFurRequest(Guid.NewGuid(), "natural", "natural", "carro", BuyerCount: 5),
+            TestContext.Current.CancellationToken);
+        result.Status.Should().Be(PreviewFurStatus.BadRequest);
+        result.Error.Should().Be("owner_count_invalido");
+    }
 }

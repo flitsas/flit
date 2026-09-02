@@ -40,6 +40,8 @@ const PRENDA: { value: FurPrendaKind; label: string }[] = [
   { value: "ambas", label: "Ambas (inscripción y levantamiento)" },
 ];
 
+const OWNER_COUNTS = [1, 2, 3, 4] as const;
+
 const FAMILY_LABEL: Record<string, string> = {
   MATRICULAS: "Matrículas",
   TRASPASO: "Traspaso",
@@ -232,6 +234,8 @@ export function FurSimulatorPanel() {
   const [cambioCarroceria, setCambioCarroceria] = useState(false);
   const [blindaje, setBlindaje] = useState(false);
   const [prenda, setPrenda] = useState<FurPrendaKind>("ninguna");
+  const [buyerCount, setBuyerCount] = useState(1);
+  const [sellerCount, setSellerCount] = useState(1);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -312,6 +316,8 @@ export function FurSimulatorPanel() {
             cambioCarroceria,
             blindaje,
             prenda,
+            buyerCount,
+            sellerCount,
           }),
         { maximize: true },
       );
@@ -440,6 +446,33 @@ export function FurSimulatorPanel() {
             {PERSONS.map((p) => (
               <option key={p.value} value={p.value}>
                 {p.label}
+              </option>
+            ))}
+          </SelectField>
+
+          <SelectField
+            id="fur-seller-count"
+            label="Copropietarios vendedor"
+            value={String(sellerCount)}
+            disabled={!canChooseSeller}
+            onChange={(v) => setSellerCount(Number(v))}
+          >
+            {OWNER_COUNTS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </SelectField>
+
+          <SelectField
+            id="fur-buyer-count"
+            label="Copropietarios comprador / matrícula"
+            value={String(buyerCount)}
+            onChange={(v) => setBuyerCount(Number(v))}
+          >
+            {OWNER_COUNTS.map((n) => (
+              <option key={n} value={n}>
+                {n}
               </option>
             ))}
           </SelectField>

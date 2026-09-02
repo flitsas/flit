@@ -86,4 +86,45 @@ public sealed class SolicitudVirtualPdfGeneratorTests
         // Sin parte radicadora: no debe lanzar (usa placeholders).
         Generator.GenerateSolicitudVirtual(DataWith(null)).Content.Should().NotBeEmpty();
     }
+
+    [Fact]
+    public void Copropietarios_Traspaso_CabeEnUnaPagina()
+    {
+        var vendedores = Enumerable.Range(0, 4).Select(i => new DocumentParte(
+            "vendedor",
+            $"VENDEDOR {i + 1} APELLIDO",
+            $"1000000{i}",
+            null,
+            "CC",
+            Ordinal: i + 1)).ToList();
+        var data = new FurDocumentData(
+            ProcedureInstanceId: Guid.NewGuid(),
+            ReferenceNumber: "REF-COP-1",
+            Modalidad: "TRASPASO",
+            TipologiaCodigo: "TRASPASO_STANDARD",
+            Vehiculo: new VehiculoDatos(null, null, null, null, null, null, null, "VIN123", "ICS187"),
+            Organismo: new OrganismoTransito("11001000", "OT BOGOTA", "Bogota"),
+            Partes:
+            [
+                .. vendedores,
+                new DocumentParte("comprador", "COMPRADOR UNO", "43623787", null, "CC"),
+            ],
+            ValorVenta: null,
+            Causal: null,
+            SellosFirma: [],
+            FechaTramite: new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc),
+            IdentidadValidada: true);
+
+        var doc = Generator.GenerateSolicitudVirtual(data);
+
+        doc.Content.Should().NotBeEmpty();
+        CountPages(doc.Content).Should().Be(1);
+    }
+
+    private static int CountPages(byte[] pdf)
+    {
+        using var ms = new MemoryStream(pdf);
+        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(ms, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
+        return doc.PageCount;
+    }
 }

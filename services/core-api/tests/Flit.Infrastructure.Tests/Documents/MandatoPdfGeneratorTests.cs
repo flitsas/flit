@@ -152,11 +152,50 @@ public sealed class MandatoPdfGeneratorTests
             .Should().NotContain("FirmasVisibles");
     }
 
-    [Fact]
-    public void DoesNotThrow_WithoutSignerOrRadicador()
+    [Theory]
+    [InlineData("generico")]
+    [InlineData("sabaneta")]
+    [InlineData("bello")]
+    [InlineData("municipio")]
+    public void Copropietarios_CuatroMandantes_CabeEnUnaPagina(string template)
     {
-        // Sin parte radicadora: usa placeholders, no lanza (las tres variantes).
-        foreach (var template in new[] { "generico", "sabaneta", "bello", "municipio" })
-            Generator.GenerateMandato(Mandato(null, template)).Content.Should().NotBeEmpty();
+        var vendedores = Enumerable.Range(0, 4).Select(i => new DocumentParte(
+            "vendedor",
+            $"VENDEDOR {i + 1} APELLIDO",
+            $"1000000{i}",
+            null,
+            "CC",
+            Ordinal: i + 1)).ToList();
+        var data = new FurDocumentData(
+            ProcedureInstanceId: Guid.NewGuid(),
+            ReferenceNumber: "REF-COP-M",
+            Modalidad: "TRASPASO",
+            TipologiaCodigo: "TRASPASO_STANDARD",
+            Vehiculo: new VehiculoDatos(null, null, null, null, null, null, null, "VIN123", "ICS187"),
+            Organismo: new OrganismoTransito("5631000", "STRIA MOVILIDAD SABANETA", "Sabaneta"),
+            Partes: vendedores,
+            ValorVenta: null,
+            Causal: null,
+            SellosFirma: [],
+            FechaTramite: new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc),
+            IdentidadValidada: true);
+        var mandato = new MandatoData(
+            data,
+            template,
+            null,
+            null,
+            new MandatarioFirmante("Carlos Ruiz", "70111222"));
+
+        var pdf = Generator.GenerateMandato(mandato).Content;
+
+        System.Text.Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+        CountPages(pdf).Should().Be(1);
+    }
+
+    private static int CountPages(byte[] pdf)
+    {
+        using var ms = new MemoryStream(pdf);
+        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(ms, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
+        return doc.PageCount;
     }
 }

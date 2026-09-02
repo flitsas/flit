@@ -83,4 +83,25 @@ public sealed class FurSignatureLayoutTests
         imageY.Should().BeApproximately(200 + Math.Max(0, (36 - drawH) / 2) - FurSignatureLayout.ImageLift, 0.01);
         FurSignatureLayout.ImageLift.Should().Be(2);
     }
+
+    [Fact]
+    public void Columns_FourOwners_SplitsFieldInEqualSlots()
+    {
+        var cols = FurSignatureLayout.Columns(100, 400, 4);
+        cols.Should().HaveCount(4);
+        cols[0].X.Should().Be(100);
+        cols[0].W.Should().Be(100);
+        cols[3].X.Should().Be(400);
+        cols.Sum(c => c.W).Should().Be(400);
+    }
+
+    [Fact]
+    public void ImageWidthCap_NarrowColumn_LeavesRoomForSidecar()
+    {
+        var fieldW = 65.5;
+        var imageW = FurSignatureLayout.ImageWidthCap(fieldW, 145);
+        var sidecarW = fieldW - imageW - FurSignatureLayout.SidecarGap;
+        sidecarW.Should().BeGreaterThan(22);
+        imageW.Should().BeLessThan(fieldW * 0.45);
+    }
 }

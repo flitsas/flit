@@ -58,10 +58,11 @@ Varios bloques automáticos **se unen con un espacio**. Ninguno pisa al anterior
 Orden:
 
 1. Bloque del tipo — `FurTramiteObservation`: trámite de locatario (`MATRICULA_LEASING` y `TRASPASO_UNILATERAL` de tabla 1; `CAMBIO_LOCATARIO` de tabla 4) y **causal de cancelación** (`CANCELACION_MATRICULA`, ver tabla 5)
-2. Gravamen (tabla 2 o tipo prenda) — `FurPrendaObservation`
-3. Transformaciones (tabla 3 o tipo cambio) — `FurTransformationObservations`
-4. Servicio + empresa vinculadora, **solo si hay razón social** — `FurServicioVinculadoraObservation`
-5. Texto libre del gestor (`fur_observations`) — se recorta si no cabe (presupuesto 500 caracteres)
+2. Copropiedad (2+ actores en un lado) — `FurCopropiedadObservation`: `{NOMBRE} es el propietario del {n}%.` por cada actor del lado, en orden de ordinal. No se emite si el lado tiene un solo actor.
+3. Gravamen (tabla 2 o tipo prenda) — `FurPrendaObservation`
+4. Transformaciones (tabla 3 o tipo cambio) — `FurTransformationObservations`
+5. Servicio + empresa vinculadora, **solo si hay razón social** — `FurServicioVinculadoraObservation`
+6. Texto libre del gestor (`fur_observations`) — se recorta si no cabe (presupuesto 500 caracteres)
 
 Bloques automáticos separados por un espacio. Si faltan datos (nombre del locatario o del acreedor), **sí casilla / sí tipo, no se inventa el texto** de ese bloque.
 
@@ -207,6 +208,7 @@ Inscripción de prenda a favor de FONDEICON Color nuevo(NUEVO COLOR: NEGRO) Carr
 | Observaciones | `FurTramiteObservation`, `FurPrendaObservation`, `FurTransformationObservations`, `FurServicioVinculadoraObservation`, `FurObservacionesComposer` |
 | Ensamblado real | `FurCommand.AssembleData` |
 | Simulador | `FurPreviewSample` + `frontend/` admin plataforma FUR |
+| Copropietarios (titulares y firmas, no casillas) | `FurFieldMapper` / `FurOverlayRenderer` / `FurCopropiedadObservation` — HU #12048; ver `docs/design/MULTIPLE-PROPIETARIO-documentos-autogenerados.md` |
 
 Al implementar, contrastar **objetivo (estas tablas)** vs **lo que el mapper emite hoy**. Las brechas conocidas (p. ej. marcar 1 en trámites que no son matrícula; no emitir 3, 4, 10, 13, 15, 16) no se perpetúan: el desarrollo nuevo debe cerrarlas o dejar el gap explícito en el PR citando este archivo.
 

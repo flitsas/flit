@@ -30,16 +30,6 @@ public static class FurCompraventaDocumentGenerator
     /// </summary>
     private const float FirmaEstampaAlto = 32f;
 
-    // Tipos de documento que se marcan con casilla en el párrafo de cada parte (orden de la muestra).
-    private static readonly (string Etiqueta, string[] Codigos)[] TiposDocumento =
-    [
-        ("NIT", ["NIT", "N"]),
-        ("C.C.", ["CC", "C", "C.C."]),
-        ("C.E.", ["CE", "E", "C.E."]),
-        ("T.I", ["TI", "T", "T.I"]),
-        ("P.A", ["PA", "P", "PAS", "P.A"]),
-    ];
-
     static FurCompraventaDocumentGenerator()
     {
         Settings.License = LicenseType.Community;
@@ -50,8 +40,10 @@ public static class FurCompraventaDocumentGenerator
         ArgumentNullException.ThrowIfNull(data);
         FlitFonts.EnsureRegistered();
 
-        var vendedor = Parte(data, "vendedor");
-        var comprador = Parte(data, "comprador");
+        var vendedores = FurCompraventaCopropiedad.DelRol(data.Partes, "vendedor");
+        var compradores = FurCompraventaCopropiedad.DelRol(data.Partes, "comprador");
+        var copropiedad = FurCompraventaCopropiedad.EsMultiple(vendedores)
+            || FurCompraventaCopropiedad.EsMultiple(compradores);
 
         return Document.Create(doc =>
         {
@@ -67,17 +59,18 @@ public static class FurCompraventaDocumentGenerator
                     .FontColor(Colors.Black));
 
                 // Cuerpo con aire normal arriba; el hueco libre de la hoja empuja las firmas al pie
-                // (no se compactan los párrafos para “llenar” la página).
+                // (no se compactan los párrafos para “llenar” la página). Con copropiedad las firmas
+                // van en fila justo bajo el cuerpo para no saltar de hoja.
                 FlitLetterhead.Content(page, FlitDocumentTheme.MarginCm, 0f).Column(col =>
                 {
                     col.Item().Column(cuerpo =>
                     {
-                        cuerpo.Spacing(6);
+                        cuerpo.Spacing(copropiedad ? 4 : 6);
 
                         cuerpo.Item().AlignCenter().Text("Contrato de Compraventa")
                             .Bold().FontSize(14).FontColor(FlitDocumentTheme.DarkNavy);
 
-                        cuerpo.Item().PaddingTop(6).Text(t =>
+                        cuerpo.Item().PaddingTop(copropiedad ? 4 : 6).Text(t =>
                         {
                             t.Span("Fecha: ");
                             t.Span(FechaLarga(data.FechaTramite));
@@ -91,44 +84,67 @@ public static class FurCompraventaDocumentGenerator
                                 .FontColor(FlitDocumentTheme.PrimaryBlue);
                         });
 
-                        cuerpo.Item().PaddingTop(6).Text(
+                        cuerpo.Item().PaddingTop(copropiedad ? 4 : 6).Text(
                             "“Contrato de compraventa, documento o declaración en la que conste la transferencia "
                             + "del derecho de dominio del vehículo celebrado con las exigencias de las normas civiles "
                             + "y/o mercantiles”").Justify();
 
-                        cuerpo.Item().PaddingTop(6).Text(t =>
+                        cuerpo.Item().PaddingTop(copropiedad ? 4 : 6).Text(t =>
                         {
                             t.Justify();
                             t.Span("Por el presente documento se hace constar la voluntad expresa que tiene por un lado ");
-                            t.Span(Val(vendedor?.Nombre)).Bold();
-                            t.Span(", identificado(a) con ");
-                            t.Span(Casillas(vendedor?.DocumentType));
-                            t.Span($" {Val(vendedor?.Documento)} en su condición de propietario(a) inscrito(a) de "
-                                + "transferir la propiedad del vehículo de la placa de la referencia a ");
-                            t.Span(Val(comprador?.Nombre)).Bold();
-                            t.Span(", identificado(a) con ");
-                            t.Span(Casillas(comprador?.DocumentType));
-                            t.Span($" {Val(comprador?.Documento)}, en razón a un negocio jurídico de compraventa, "
+                            PintarIdentificacion(t, vendedores);
+                            t.Span(" en su condición de "
+                                + FurCompraventaCopropiedad.CondicionPropietario(vendedores)
+                                + " de transferir la propiedad del vehículo de la placa de la referencia a ");
+                            PintarIdentificacion(t, compradores);
+                            t.Span(", en razón a un negocio jurídico de compraventa, "
                                 + "realizado entre ambas partes. Negocio que tuvo un valor de ");
                             t.Span($"$ {Moneda(data.ValorVenta)}").Bold();
                         });
 
                         TablaVehiculo(cuerpo, data);
 
-                        cuerpo.Item().PaddingTop(6).Text(
+                        cuerpo.Item().PaddingTop(copropiedad ? 4 : 6).Text(
                             "Lo anterior también se encuentra avalado a través de las firmas puestas en el formulario "
                             + "de solicitud de trámite adjunto al presente.").Justify();
                     });
 
-                    col.Item().Extend().AlignBottom().PaddingBottom(6).Column(firmas =>
+                    var firmasSlot = copropiedad
+                        ? col.Item().PaddingTop(4)
+                        : col.Item().Extend().AlignBottom().PaddingBottom(6);
+                    firmasSlot.Column(firmas =>
                     {
                         firmas.Item().Text("Cordialmente,");
-                        BloqueFirma(firmas, "FIRMA DEL PROPIETARIO ACTUAL", data, vendedor, "vendedor");
-                        BloqueFirma(firmas, "FIRMA DEL NUEVO PROPIETARIO", data, comprador, "comprador");
+                        LadoFirmas(
+                            firmas,
+                            "FIRMA DEL PROPIETARIO ACTUAL",
+                            "FIRMAS DE LOS PROPIETARIOS ACTUALES",
+                            data,
+                            vendedores,
+                            "vendedor");
+                        LadoFirmas(
+                            firmas,
+                            "FIRMA DEL NUEVO PROPIETARIO",
+                            "FIRMAS DE LOS NUEVOS PROPIETARIOS",
+                            data,
+                            compradores,
+                            "comprador");
                     });
                 });
             });
         }).GeneratePdf();
+    }
+
+    private static void PintarIdentificacion(TextDescriptor t, List<DocumentParte> partes)
+    {
+        foreach (var (text, bold) in FurCompraventaCopropiedad.Identificacion(partes))
+        {
+            if (bold)
+                t.Span(text).Bold();
+            else
+                t.Span(text);
+        }
     }
 
     // Grilla 2×3 tipo chip (cabecera azul + valor claro), mismo patrón que SOAT/RTM.
@@ -184,36 +200,74 @@ public static class FurCompraventaDocumentGenerator
         });
     }
 
+    private static void LadoFirmas(
+        ColumnDescriptor col,
+        string tituloSingular,
+        string tituloPlural,
+        FurDocumentData data,
+        List<DocumentParte> partes,
+        string rol)
+    {
+        if (!FurCompraventaCopropiedad.EsMultiple(partes))
+        {
+            BloqueFirma(
+                col,
+                tituloSingular,
+                data,
+                partes.Count == 1 ? partes[0] : null,
+                rol,
+                compact: false,
+                FirmaEstampaAlto);
+            return;
+        }
+
+        col.Item().PaddingTop(6).Text(tituloPlural)
+            .Bold()
+            .FontColor(FlitDocumentTheme.DarkNavy);
+
+        var alto = FurCompraventaCopropiedad.EstampaAlto(partes.Count);
+        col.Item().PaddingTop(2).Row(row =>
+        {
+            row.Spacing(6);
+            foreach (var parte in partes)
+            {
+                row.RelativeItem().Column(c =>
+                    BloqueFirma(c, titulo: null, data, parte, rol, compact: true, alto));
+            }
+        });
+    }
+
     // Bloque de firma de una parte: título, hueco de estampa (sin línea), identificación y sello.
     // Sin firma validada el hueco queda en blanco (no bloquea).
     private static void BloqueFirma(
-        ColumnDescriptor col, string titulo, FurDocumentData data, DocumentParte? parte, string rol)
+        ColumnDescriptor col,
+        string? titulo,
+        FurDocumentData data,
+        DocumentParte? parte,
+        string rol,
+        bool compact,
+        float estampaAlto)
     {
-        col.Item().PaddingTop(8).Text(titulo)
-            .Bold()
-            .FontColor(FlitDocumentTheme.DarkNavy);
+        if (!string.IsNullOrEmpty(titulo))
+        {
+            col.Item().PaddingTop(8).Text(titulo)
+                .Bold()
+                .FontColor(FlitDocumentTheme.DarkNavy);
+        }
 
         // Bug #11146 — la imagen del baúl y el sello de identidad son EXCLUYENTES: una parte firma de
         // una sola manera. Antes se pintaba la imagen y, más abajo, el sello sin condición alguna, así
         // que quien firmaba por el baúl y además tenía identidad vigente aparecía firmando dos veces
         // por vías distintas. El mandato y la solicitud de trámite virtual ya lo resolvían así.
-        var firmaBaul =
-            data.FirmaImagenes is not null
-            && data.FirmaImagenes.TryGetValue(rol, out var imagen)
-            && imagen.Length > 0
-                ? imagen
-                : null;
+        var firmaKey = parte is null ? rol : FurCompraventaCopropiedad.FirmaKey(parte);
+        var firmaBaul = ImagenDe(data.FirmaImagenes, firmaKey, rol);
+        var firmaIdentidad = firmaBaul is null
+            ? ImagenDe(data.FirmaIdentidadImagenes, firmaKey, rol)
+            : null;
+        if (firmaIdentidad is not null && !IdentitySignatureImageFormat.IsSupported(firmaIdentidad))
+            firmaIdentidad = null;
 
-        var firmaIdentidad =
-            firmaBaul is null
-            && data.FirmaIdentidadImagenes is not null
-            && data.FirmaIdentidadImagenes.TryGetValue(rol, out var recorte)
-            && recorte.Length > 0
-            && IdentitySignatureImageFormat.IsSupported(recorte)
-                ? recorte
-                : null;
-
-        var hueco = col.Item().PaddingTop(2).Height(FirmaEstampaAlto);
+        var hueco = col.Item().PaddingTop(2).Height(estampaAlto);
         if (firmaBaul is not null)
             hueco.Image(firmaBaul).FitHeight();
         else if (firmaIdentidad is not null)
@@ -222,20 +276,31 @@ public static class FurCompraventaDocumentGenerator
         if (parte is null)
             return;
 
+        var fontDato = compact ? 7f : 9f;
         if (parte.EsJuridica)
         {
-            DatoFirmante(col, $"Razón Social: {Val(parte.Nombre)}");
-            DatoFirmante(col, $"NIT: {Val(parte.Documento)}");
-            // Quien firma por la empresa es su REPRESENTANTE LEGAL, así que el bloque tiene que
-            // identificarlo: sin su nombre y documento la firma no queda atribuida a nadie. Los datos ya
-            // viajan en DocumentParte (ADR-0036); antes simplemente no se imprimían aquí.
-            DatoFirmante(col, $"Representante legal: {Val(parte.RepresentanteLegalNombre)}");
-            DatoFirmante(col, $"{TipoDocRepresentante(parte)}: {Val(parte.RepresentanteLegalDocumento)}");
+            DatoFirmante(col, $"Razón Social: {Val(parte.Nombre)}", fontDato);
+            DatoFirmante(col, $"NIT: {Val(parte.Documento)}", fontDato);
+            if (!compact)
+            {
+                // Quien firma por la empresa es su REPRESENTANTE LEGAL, así que el bloque tiene que
+                // identificarlo: sin su nombre y documento la firma no queda atribuida a nadie. Los datos ya
+                // viajan en DocumentParte (ADR-0036); antes simplemente no se imprimían aquí.
+                DatoFirmante(col, $"Representante legal: {Val(parte.RepresentanteLegalNombre)}", fontDato);
+                DatoFirmante(col, $"{TipoDocRepresentante(parte)}: {Val(parte.RepresentanteLegalDocumento)}", fontDato);
+            }
+            else
+            {
+                DatoFirmante(
+                    col,
+                    $"RL: {Val(parte.RepresentanteLegalNombre)} {TipoDocRepresentante(parte)} {Val(parte.RepresentanteLegalDocumento)}",
+                    6.5f);
+            }
         }
         else
         {
-            DatoFirmante(col, $"Nombre: {Val(parte.Nombre)}");
-            DatoFirmante(col, $"{TipoDocParte(parte)}: {Val(parte.Documento)}");
+            DatoFirmante(col, $"Nombre: {Val(parte.Nombre)}", fontDato);
+            DatoFirmante(col, $"{TipoDocParte(parte)}: {Val(parte.Documento)}", fontDato);
         }
 
         // Trazabilidad de la firma, en el mismo lugar sea cual sea el mecanismo:
@@ -245,25 +310,29 @@ public static class FurCompraventaDocumentGenerator
         //    visible al retirar el sello de identidad que se pintaba de más—.
         //  · Sin ella, el sello de la validación biométrica.
         var sello = firmaBaul is null
-            ? Sello(data, rol)
-            : FlitFirmaBaulSello.Resolve(data.FirmaBaulMetadatos, rol, incluirIdentificacion: false);
+            ? Sello(data, firmaKey, rol)
+            : FlitFirmaBaulSello.Resolve(data.FirmaBaulMetadatos, firmaKey, incluirIdentificacion: false)
+              ?? FlitFirmaBaulSello.Resolve(data.FirmaBaulMetadatos, rol, incluirIdentificacion: false);
         if (sello is not null)
-            col.Item().Text(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2);
+            col.Item().Text(sello).FontSize(compact ? 5.5f : 6.5f).FontColor(Colors.Grey.Darken2);
     }
 
-    private static void DatoFirmante(ColumnDescriptor col, string linea) =>
-        col.Item().Text(linea).Bold().FontSize(9).FontColor(FlitDocumentTheme.DarkNavy);
-
-    // Casillas de tipo de documento: se marca con [X] la del tipo de la parte y el resto en blanco.
-    private static string Casillas(string? documentType)
+    private static byte[]? ImagenDe(
+        IReadOnlyDictionary<string, byte[]>? dict, string key, string rolFallback)
     {
-        var tipo = (documentType ?? string.Empty).Trim().ToUpperInvariant().Replace(".", "", StringComparison.Ordinal);
-        return string.Join("   ", TiposDocumento.Select(t =>
-        {
-            var marcada = t.Codigos.Any(c => string.Equals(c.Replace(".", "", StringComparison.Ordinal), tipo, StringComparison.Ordinal));
-            return $"{t.Etiqueta} [{(marcada ? "X" : " ")}]";
-        }));
+        if (dict is null)
+            return null;
+        if (dict.TryGetValue(key, out var imagen) && imagen.Length > 0)
+            return imagen;
+        if (!string.Equals(key, rolFallback, StringComparison.Ordinal)
+            && dict.TryGetValue(rolFallback, out imagen)
+            && imagen.Length > 0)
+            return imagen;
+        return null;
     }
+
+    private static void DatoFirmante(ColumnDescriptor col, string linea, float fontSize) =>
+        col.Item().Text(linea).Bold().FontSize(fontSize).FontColor(FlitDocumentTheme.DarkNavy);
 
     /// <summary>
     /// Rótulo del documento de la parte natural ("C.C.", "Documento"…). Se usa el tipo real cuando
@@ -278,17 +347,18 @@ public static class FurCompraventaDocumentGenerator
             ? "Documento"
             : parte.RepresentanteLegalTipoDoc.Trim();
 
-    private static DocumentParte? Parte(FurDocumentData data, string rol) =>
-        data.Partes.FirstOrDefault(p => string.Equals(p.Rol, rol, StringComparison.OrdinalIgnoreCase));
-
-    // Sello de identidad de la parte, solo si la identidad está validada y hay sello para el rol.
-    private static string? Sello(FurDocumentData data, string rol) =>
-        data.IdentidadValidada
-        && data.SellosIdentidad is not null
-        && data.SellosIdentidad.TryGetValue(rol, out var sello)
-        && !string.IsNullOrWhiteSpace(sello)
-            ? sello
-            : null;
+    private static string? Sello(FurDocumentData data, string key, string rolFallback)
+    {
+        if (!data.IdentidadValidada || data.SellosIdentidad is null)
+            return null;
+        if (data.SellosIdentidad.TryGetValue(key, out var sello) && !string.IsNullOrWhiteSpace(sello))
+            return sello;
+        if (!string.Equals(key, rolFallback, StringComparison.Ordinal)
+            && data.SellosIdentidad.TryGetValue(rolFallback, out sello)
+            && !string.IsNullOrWhiteSpace(sello))
+            return sello;
+        return null;
+    }
 
     // Fecha "22 Jul 2026" sin depender de la cultura (el contenedor corre en modo invariante).
     private static string FechaLarga(DateTime? fecha)

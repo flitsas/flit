@@ -16,11 +16,13 @@ public static class FurFieldMapper
     {
         ArgumentNullException.ThrowIfNull(data);
         var esTraspaso = IsTraspaso(data);
-        var propietario = ResolvePropietario(data, esTraspaso);
-        var comprador = esTraspaso ? ResolveComprador(data) : null;
+        var propietarios = ResolvePropietarios(data, esTraspaso);
+        var compradores = esTraspaso ? ResolveCompradores(data) : [];
+        var propietario = propietarios.Count > 0 ? propietarios[0] : null;
+        var comprador = compradores.Count > 0 ? compradores[0] : null;
         var (placaLetras, placaNumeros) = SplitPlaca(data.Placa);
-        var (propAp1, propAp2, propNom) = NameParts(propietario);
-        var (compAp1, compAp2, compNom) = NameParts(comprador);
+        var (propAp1, propAp2, propNom) = JoinNameColumns(propietarios);
+        var (compAp1, compAp2, compNom) = JoinNameColumns(compradores);
         var fecha = data.FechaTramite ?? DateTime.UtcNow;
 
         var dict = new Dictionary<string, FurFieldValue>(StringComparer.OrdinalIgnoreCase)
@@ -44,10 +46,10 @@ public static class FurFieldMapper
             ["vehicle_chassis_number"] = Text(Upper(data.Vehiculo.NumeroChasis)),
             ["vehicle_serial_number"] = Text(Upper(data.Vehiculo.NumeroSerie)),
             ["vehicle_vin_number"] = Text(Upper(data.Vehiculo.Vin)),
-            ["vehicle_owner_first_last_name"] = Text(Upper(propAp1)),
-            ["vehicle_owner_second_last_name"] = Text(Upper(propAp2)),
-            ["vehicle_owner_name"] = Text(Upper(propNom)),
-            ["vehicle_owner_document_number"] = Text(propietario?.Documento),
+            ["vehicle_owner_first_last_name"] = CopropiedadText(Upper(propAp1), propietarios.Count),
+            ["vehicle_owner_second_last_name"] = CopropiedadText(Upper(propAp2), propietarios.Count),
+            ["vehicle_owner_name"] = CopropiedadText(Upper(propNom), propietarios.Count),
+            ["vehicle_owner_document_number"] = CopropiedadText(JoinDocumentos(propietarios), propietarios.Count),
             ["vehicle_owner_address"] = Text(DisplayOrDash(propietario?.Address)),
             ["vehicle_owner_city"] = Text(DisplayOrDash(propietario?.City)),
             ["vehicle_owner_phone"] = Text(DisplayOrDash(propietario?.Phone)),
@@ -67,14 +69,16 @@ public static class FurFieldMapper
             dict["vehicle_length"] = Text(ToFurMeters(data.Vehiculo.Largo));
         }
 
-        SetSignature(
+        SetSignatureRow(
             dict,
             "vehicle_owner_signature",
             data,
-            propietario?.Rol,
+            propietarios,
             IdentidadOrSello(
                 data,
-                esTraspaso ? "vendedor" : "comprador",
+                propietario is null
+                    ? (esTraspaso ? "vendedor" : "comprador")
+                    : FurOverlayPartyKey.For(propietario.Rol, propietario.Ordinal),
                 esTraspaso ? ["vendedor", "propietario"] : ["comprador", "propietario"]));
 
         MarkTramite(dict, data);
@@ -97,10 +101,10 @@ public static class FurFieldMapper
 
         if (esTraspaso && comprador is not null)
         {
-            dict["vehicle_buyer_first_last_name"] = Text(Upper(compAp1));
-            dict["vehicle_buyer_second_last_name"] = Text(Upper(compAp2));
-            dict["vehicle_buyer_name"] = Text(Upper(compNom));
-            dict["vehicle_buyer_document_number"] = Text(comprador.Documento);
+            dict["vehicle_buyer_first_last_name"] = CopropiedadText(Upper(compAp1), compradores.Count);
+            dict["vehicle_buyer_second_last_name"] = CopropiedadText(Upper(compAp2), compradores.Count);
+            dict["vehicle_buyer_name"] = CopropiedadText(Upper(compNom), compradores.Count);
+            dict["vehicle_buyer_document_number"] = CopropiedadText(JoinDocumentos(compradores), compradores.Count);
             dict["vehicle_buyer_address"] = Text(DisplayOrDash(comprador.Address));
             dict["vehicle_buyer_city"] = Text(DisplayOrDash(comprador.City));
             dict["vehicle_buyer_phone"] = Text(DisplayOrDash(comprador.Phone));
@@ -112,19 +116,19 @@ public static class FurFieldMapper
             {
                 // HU #11035 — el sello del comprador baja 4pt (el campo declara 8pt, frente a 6,5pt del
                 // propietario): con la reducción uniforme de 2pt seguía saliéndose del recuadro.
-                SetSignature(
+                SetSignatureRow(
                     dict,
                     "vehicle_buyer_signature",
                     data,
-                    comprador.Rol,
-                    IdentidadOrSello(data, "comprador", ["comprador"]),
+                    compradores,
+                    IdentidadOrSello(data, FurOverlayPartyKey.For(comprador.Rol, comprador.Ordinal), ["comprador"]),
                     selloFontSizeDelta: -4);
             }
             else
             {
                 dict["vehicle_buyer_signature"] = Text("");
             }
-            MarkDocType(dict, comprador.Documento, comprador.DocumentType, "vehicle_buyer");
+            MarkDocTypes(dict, compradores, "vehicle_buyer");
         }
         else
         {
@@ -143,7 +147,7 @@ public static class FurFieldMapper
             MarkDocType(dict, null, null, "vehicle_buyer");
         }
 
-        MarkDocType(dict, propietario?.Documento, propietario?.DocumentType, "vehicle_owner");
+        MarkDocTypes(dict, propietarios, "vehicle_owner");
 
         // HU #10463 — sin validación de identidad aprobada, el espacio de firma del FUR muestra
         // "NO FIRMADO" (matrícula: propietario; traspaso: vendedor + comprador).
@@ -210,6 +214,91 @@ public static class FurFieldMapper
     }
 
     /// <summary>
+    /// Un recuadro de firma por lado: 1 firmante usa el layout histórico; 2–4 se pintan en columnas.
+    /// </summary>
+    private static void SetSignatureRow(
+        Dictionary<string, FurFieldValue> dict,
+        string fieldId,
+        FurDocumentData data,
+        List<DocumentParte> partes,
+        string fallbackText,
+        double selloFontSizeDelta = -2)
+    {
+        if (partes.Count == 0)
+        {
+            dict[fieldId] = new FurFieldValue(Val(fallbackText), FontSizeDelta: selloFontSizeDelta);
+            return;
+        }
+
+        if (partes.Count == 1)
+        {
+            var principal = partes[0];
+            SetSignature(
+                dict,
+                fieldId,
+                data,
+                FurOverlayPartyKey.For(principal.Rol, principal.Ordinal),
+                fallbackText,
+                selloFontSizeDelta);
+            return;
+        }
+
+        var stamps = new List<FurOverlaySignatureStamp>(partes.Count);
+        foreach (var p in partes)
+        {
+            var key = FurOverlayPartyKey.For(p.Rol, p.Ordinal);
+            var sello = IdentidadOrSello(data, key, [p.Rol]);
+            var texto = string.IsNullOrWhiteSpace(sello)
+                ? $"{(p.Nombre ?? "").Trim()} {p.Documento}".Trim()
+                : sello;
+            if (string.IsNullOrWhiteSpace(texto))
+                texto = fallbackText;
+            stamps.Add(BuildSignatureStamp(data, key, texto, selloFontSizeDelta));
+        }
+
+        dict[fieldId] = new FurFieldValue(null, SignatureStamps: stamps);
+    }
+
+    private static FurOverlaySignatureStamp BuildSignatureStamp(
+        FurDocumentData data,
+        string? rol,
+        string fallbackText,
+        double selloFontSizeDelta)
+    {
+        if (!string.IsNullOrWhiteSpace(rol)
+            && data.FirmaImagenes is not null
+            && TryGetFirmaImagen(data.FirmaImagenes, rol, out var image))
+        {
+            return new FurOverlaySignatureStamp(image, TryBuildFirmaBaulSidecar(data.FirmaBaulMetadatos, rol), null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(rol)
+            && data.FirmaIdentidadImagenes is not null
+            && TryGetFirmaImagen(data.FirmaIdentidadImagenes, rol, out var identidadPng)
+            && IdentitySignatureImageFormat.IsSupported(identidadPng))
+        {
+            var leyenda = data.SellosIdentidad is not null
+                && data.SellosIdentidad.TryGetValue(rol, out var sello)
+                && !string.IsNullOrWhiteSpace(sello)
+                    ? sello
+                    : fallbackText;
+            return new FurOverlaySignatureStamp(identidadPng, leyenda, null, selloFontSizeDelta);
+        }
+
+        var esSelloIdentidad = !string.IsNullOrWhiteSpace(rol)
+            && data.SellosIdentidad is not null
+            && data.SellosIdentidad.TryGetValue(rol, out var selloIdentidad)
+            && !string.IsNullOrWhiteSpace(selloIdentidad)
+            && string.Equals(selloIdentidad, fallbackText, StringComparison.Ordinal);
+
+        return new FurOverlaySignatureStamp(
+            null,
+            null,
+            Val(fallbackText),
+            esSelloIdentidad ? selloFontSizeDelta : CopropiedadFontDelta(2));
+    }
+
+    /// <summary>
     /// Sello de trazabilidad junto a la imagen de la firma del baúl. El texto lo arma
     /// <see cref="FlitFirmaBaulSello"/>, compartido con la compraventa, el mandato y la solicitud de
     /// trámite virtual (HU #11170): antes vivía aquí y por eso era el único documento que lo llevaba.
@@ -223,6 +312,12 @@ public static class FurFieldMapper
 
     private static bool TryGetFirmaImagen(IReadOnlyDictionary<string, byte[]> images, string rol, out byte[] bytes)
     {
+        if (images.TryGetValue(rol, out var exact) && exact.Length > 0)
+        {
+            bytes = exact;
+            return true;
+        }
+
         foreach (var key in FirmaRolKeys(rol))
         {
             if (images.TryGetValue(key, out var img) && img.Length > 0)
@@ -471,10 +566,12 @@ public static class FurFieldMapper
     /// </summary>
     private static string IdentidadOrSello(FurDocumentData data, string role, string[] fallbackPartes)
     {
-        if (data.SellosIdentidad is not null
-            && data.SellosIdentidad.TryGetValue(role, out var sello)
-            && !string.IsNullOrWhiteSpace(sello))
-            return sello;
+        if (data.SellosIdentidad is not null)
+        {
+            if (data.SellosIdentidad.TryGetValue(role, out var sello)
+                && !string.IsNullOrWhiteSpace(sello))
+                return sello;
+        }
 
         return SellosTexto(data.SellosFirma, fallbackPartes);
     }
@@ -493,37 +590,68 @@ public static class FurFieldMapper
         return "";
     }
 
+    private static void MarkDocTypes(
+        Dictionary<string, FurFieldValue> dict,
+        List<DocumentParte> partes,
+        string prefix)
+    {
+        foreach (var id in DocTypeCheckboxIds)
+            MarkCheckbox(dict, $"{prefix}_document_type_{id}", false);
+
+        if (partes.Count == 0)
+            return;
+
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var parte in partes)
+        {
+            var doc = parte.Documento?.Trim() ?? "";
+            if (doc.Length == 0)
+                continue;
+            var selected = ResolveDocTypeCheckbox(Norm(parte.DocumentType), doc);
+            if (selected is null)
+                continue;
+            counts[selected] = counts.GetValueOrDefault(selected) + 1;
+        }
+
+        foreach (var (id, repeat) in counts)
+            dict[$"{prefix}_document_type_{id}"] = new FurFieldValue("X", CheckboxRepeat: Math.Clamp(repeat, 1, 4));
+    }
+
     private static DocumentParte? ResolvePropietario(FurDocumentData data, bool esTraspaso)
     {
-        if (esTraspaso)
-        {
-            foreach (var p in data.Partes)
+        var list = ResolvePropietarios(data, esTraspaso);
+        return list.Count > 0 ? list[0] : null;
+    }
+
+    private static List<DocumentParte> ResolvePropietarios(FurDocumentData data, bool esTraspaso)
+    {
+        IEnumerable<DocumentParte> query = esTraspaso
+            ? data.Partes.Where(p =>
             {
                 var rol = Norm(p.Rol);
-                if (rol.Contains("VENDEDOR") || rol.Contains("PROPIETARIO"))
-                    return p;
-            }
-            return null;
-        }
-
-        foreach (var p in data.Partes)
-        {
-            var rol = Norm(p.Rol);
-            if (rol.Contains("COMPRADOR") || rol.Contains("PROPIETARIO"))
-                return p;
-        }
-
-        return data.Partes.Count > 0 ? data.Partes[0] : null;
+                return rol.Contains("VENDEDOR") || rol.Contains("PROPIETARIO");
+            })
+            : data.Partes.Where(p =>
+            {
+                var rol = Norm(p.Rol);
+                return rol.Contains("COMPRADOR") || rol.Contains("PROPIETARIO");
+            });
+        var list = query.OrderBy(p => p.Ordinal).ToList();
+        if (list.Count == 0 && !esTraspaso && data.Partes.Count > 0)
+            list.Add(data.Partes[0]);
+        return list;
     }
+
+    private static List<DocumentParte> ResolveCompradores(FurDocumentData data) =>
+        data.Partes
+            .Where(p => Norm(p.Rol).Contains("COMPRADOR"))
+            .OrderBy(p => p.Ordinal)
+            .ToList();
 
     private static DocumentParte? ResolveComprador(FurDocumentData data)
     {
-        foreach (var p in data.Partes)
-        {
-            if (Norm(p.Rol).Contains("COMPRADOR"))
-                return p;
-        }
-        return null;
+        var list = ResolveCompradores(data);
+        return list.Count > 0 ? list[0] : null;
     }
 
     /// <summary>
@@ -600,6 +728,44 @@ public static class FurFieldMapper
         if (parte is null)
             return ("", "", "");
         return parte.EsJuridica ? ("", "", parte.Nombre?.Trim() ?? "") : SplitName(parte.Nombre);
+    }
+
+    private static (string Ap1, string Ap2, string Nom) JoinNameColumns(List<DocumentParte> partes)
+    {
+        if (partes.Count == 0)
+            return ("", "", "");
+        if (partes.Count == 1 || partes.Any(p => p.EsJuridica))
+            return NameParts(partes[0]);
+
+        var slices = partes.Select(NameParts).ToList();
+        return (
+            JoinTokens(slices.Select(s => s.Ap1)),
+            JoinTokens(slices.Select(s => s.Ap2)),
+            JoinTokens(slices.Select(s => s.Nom)));
+    }
+
+    private static string JoinTokens(IEnumerable<string> tokens) =>
+        string.Join("\n", tokens.Where(t => !string.IsNullOrWhiteSpace(t)));
+
+    /// <summary>Cuerpo más chico cuando hay 2–4 renglones en la misma casilla del blank.</summary>
+    internal static double CopropiedadFontDelta(int count) => Math.Clamp(count, 1, 4) switch
+    {
+        1 => 0,
+        2 => -1.5,
+        3 => -2.5,
+        _ => -3.2,
+    };
+
+    private static FurFieldValue CopropiedadText(string? value, int count) =>
+        new(Val(value), FontSizeDelta: CopropiedadFontDelta(count));
+
+    private static string JoinDocumentos(List<DocumentParte> partes)
+    {
+        var docs = partes
+            .Select(p => p.Documento?.Trim())
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Select(d => d!);
+        return string.Join("\n", docs);
     }
 
     private static (string Ap1, string Ap2, string Nom) SplitName(string? full)

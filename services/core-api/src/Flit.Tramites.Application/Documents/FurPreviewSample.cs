@@ -180,10 +180,12 @@ public static class FurPreviewSample
         ProcedureTypeGateProfile? profile)
     {
         var requiresSeller = profile?.RequiresSeller ?? IsTraspaso(family, procedureCode);
+        var buyerCount = Math.Clamp(flags?.BuyerCount ?? 1, 1, 4);
+        var sellerCount = Math.Clamp(flags?.SellerCount ?? 1, 1, 4);
         var partes = new List<DocumentParte>();
         if (requiresSeller)
-            partes.Add(BuildParte("vendedor", sellerKind, esVendedor: true));
-        partes.Add(BuildParte("comprador", buyerKind, esVendedor: false));
+            partes.AddRange(BuildLado("vendedor", sellerKind, esVendedor: true, sellerCount));
+        partes.AddRange(BuildLado("comprador", buyerKind, esVendedor: false, buyerCount));
         if (IsLeasing(procedureCode))
             partes.Add(BuildLocatario());
 
@@ -273,13 +275,55 @@ public static class FurPreviewSample
     public static bool IsLeasing(string? code) =>
         string.Equals(code?.Trim(), "MATRICULA_LEASING", StringComparison.OrdinalIgnoreCase);
 
-    private static DocumentParte BuildParte(string rol, string kind, bool esVendedor)
+    private static List<DocumentParte> BuildLado(string rol, string kind, bool esVendedor, int count)
+    {
+        var n = Math.Clamp(count, 1, 4);
+        var percents = SplitPercents(n);
+        var list = new List<DocumentParte>(n);
+        for (var i = 0; i < n; i++)
+            list.Add(BuildParte(rol, kind, esVendedor, i + 1, n == 1 ? null : percents[i], unico: n == 1));
+        return list;
+    }
+
+    private static decimal[] SplitPercents(int n)
+    {
+        if (n <= 1)
+            return [100m];
+        var each = decimal.Round(100m / n, 2, MidpointRounding.AwayFromZero);
+        var arr = Enumerable.Repeat(each, n).ToArray();
+        arr[0] = 100m - each * (n - 1);
+        return arr;
+    }
+
+    private static readonly string[] PnCompradores =
+    [
+        "EUGENIA MARIA CARDENAS TORRES",
+        "JULIO MARIO FONNEGRA SUCERQUIA",
+        "ANA LUCIA PEREZ GOMEZ",
+        "CARLOS ANDRES RUIZ DIAZ",
+    ];
+
+    private static readonly string[] PnCompradorDocs = ["43623787", "98624794", "1020304050", "1122334455"];
+
+    private static readonly string[] PnVendedores =
+    [
+        "JORGE ENRIQUE ARIZA BERNAL",
+        "MONICA BERNAL BUENO",
+        "PEDRO JOSE RAMIREZ LOPEZ",
+        "LUISA FERNANDA CASTRO DIAZ",
+    ];
+
+    private static readonly string[] PnVendedorDocs = ["19494493", "31476772", "52988741", "1039442201"];
+
+    private static DocumentParte BuildParte(
+        string rol, string kind, bool esVendedor, int ordinal = 1, decimal? pct = null, bool unico = true)
     {
         if (kind == PersonJuridica)
         {
+            var suffix = ordinal <= 1 ? string.Empty : $" {ordinal}";
             return new DocumentParte(
                 rol,
-                esVendedor ? PhVendedorPj : PhCompradorPj,
+                (esVendedor ? PhVendedorPj : PhCompradorPj) + suffix,
                 esVendedor ? PhVendedorNit : PhCompradorNit,
                 null,
                 "NIT",
@@ -289,18 +333,30 @@ public static class FurPreviewSample
                 EsJuridica: true,
                 RepresentanteLegalNombre: PhRlNombre,
                 RepresentanteLegalTipoDoc: "CC",
-                RepresentanteLegalDocumento: PhRlDocumento);
+                RepresentanteLegalDocumento: PhRlDocumento,
+                Ordinal: ordinal,
+                OwnershipPercentage: pct);
         }
+
+        var idx = Math.Clamp(ordinal - 1, 0, 3);
+        var nombre = unico
+            ? (esVendedor ? PhVendedorPn : PhCompradorPn)
+            : (esVendedor ? PnVendedores[idx] : PnCompradores[idx]);
+        var doc = unico
+            ? (esVendedor ? PhVendedorPnDoc : PhCompradorPnDoc)
+            : (esVendedor ? PnVendedorDocs[idx] : PnCompradorDocs[idx]);
 
         return new DocumentParte(
             rol,
-            esVendedor ? PhVendedorPn : PhCompradorPn,
-            esVendedor ? PhVendedorPnDoc : PhCompradorPnDoc,
+            nombre,
+            doc,
             null,
             "CC",
-            null,
+            unico ? null : "3122191449",
             "[DIRECCIÓN SINTÉTICA]",
-            "Medellín");
+            "Medellín",
+            Ordinal: ordinal,
+            OwnershipPercentage: pct);
     }
 
     private static DocumentParte BuildLocatario() =>
@@ -354,6 +410,8 @@ public static class FurPreviewSample
         var automatico = FurPrendaObservation.Join(
             FurTramiteObservation.Compose(procedureCode, partes),
             FurPrendaObservation.Join(
+                FurCopropiedadObservation.Compose(partes),
+                FurPrendaObservation.Join(
                 FurPrendaObservation.Compose(prenda, PhAcreedor, PhAcreedorNit),
                 FurPrendaObservation.Join(
                     FurTransformationObservations.ComposeDeclaradas(
@@ -361,7 +419,7 @@ public static class FurPreviewSample
                         transformaciones.Color ? PhColorNuevo : "ROJO",
                         transformaciones.Combustible ? "DIESEL" : "GASOLINA",
                         transformaciones.Carroceria ? "PICKUP" : "SEDAN"),
-                    extra)));
+                    extra))));
 
         return FurObservacionesComposer.Componer(automatico, null);
     }
@@ -382,10 +440,11 @@ public static class FurPreviewSample
                 continue;
 
             var (doc, nombre, hash) = FirmaAuditoria(parte);
-            imagenes[parte.Rol] = string.Equals(parte.Rol, "vendedor", StringComparison.OrdinalIgnoreCase)
+            var key = FurOverlayPartyKey.For(parte.Rol, parte.Ordinal);
+            imagenes[key] = string.Equals(parte.Rol, "vendedor", StringComparison.OrdinalIgnoreCase)
                 ? FurPreviewSignatures.Vendedor
                 : FurPreviewSignatures.Comprador;
-            metadatos[parte.Rol] = new FirmaBaulMetadata(
+            metadatos[key] = new FirmaBaulMetadata(
                 doc,
                 nombre,
                 desde,
@@ -439,4 +498,6 @@ public sealed record FurPreviewFlags(
     bool? CambioCombustible = null,
     bool? CambioCarroceria = null,
     bool? Blindaje = null,
-    FurPrendaMarking? Prenda = null);
+    FurPrendaMarking? Prenda = null,
+    int BuyerCount = 1,
+    int SellerCount = 1);

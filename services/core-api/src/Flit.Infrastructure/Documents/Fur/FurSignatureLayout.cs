@@ -48,4 +48,25 @@ public static class FurSignatureLayout
         var sidecarW = Math.Max(0, fieldW - drawW - SidecarGap);
         return (imageY, sidecarX, sidecarW);
     }
+
+    /// <summary>
+    /// Fracción del ancho del campo reservada a la rúbrica. En columnas estrechas (copropiedad)
+    /// se deja más de la mitad para la estampa digital a la derecha.
+    /// </summary>
+    public static double ImageWidthCap(double fieldW, double maxImageW)
+    {
+        var fraction = fieldW < 140 ? 0.38 : 0.50;
+        return Math.Min(maxImageW, fieldW * fraction);
+    }
+
+    /// <summary>Reparte el recuadro de firma en columnas iguales (1–4 copropietarios).</summary>
+    public static (double X, double W)[] Columns(double fieldX, double fieldW, int count)
+    {
+        var n = Math.Clamp(count, 1, 4);
+        var w = fieldW / n;
+        var cols = new (double X, double W)[n];
+        for (var i = 0; i < n; i++)
+            cols[i] = (fieldX + i * w, w);
+        return cols;
+    }
 }

@@ -32,7 +32,30 @@ public sealed class FurPreviewSampleTests
     }
 
     [Fact]
-    public void Build_Matricula_OmitsSeller()
+    public void Build_TwoNaturalBuyers_MapsCopropiedadColumns()
+    {
+        var data = FurPreviewSample.Build(
+            "MATRICULA_NUEVA",
+            "MATRICULAS",
+            "natural",
+            "natural",
+            "carro",
+            new FurPreviewFlags(BuyerCount: 2));
+        data.Partes.Where(p => p.Rol == "comprador").Should().HaveCount(2);
+
+        var mapped = FurFieldMapper.Map(data);
+        mapped["vehicle_owner_first_last_name"].Text.Should().Be("CARDENAS\nFONNEGRA");
+        mapped["vehicle_owner_document_number"].Text.Should().Contain("43623787");
+        mapped["observations"].Text.Should().Contain("es el propietario del 50%");
+        var stamps = mapped["vehicle_owner_signature"].SignatureStamps;
+        stamps.Should().HaveCount(2);
+        stamps![0].ImageBytes.Should().NotBeNullOrEmpty();
+        stamps[0].ImageSidecarText.Should().Contain("Doc.");
+        stamps[1].ImageSidecarText.Should().Contain("Doc.");
+    }
+
+    [Fact]
+    public void Build_Matricula_IncludesBuyerNotSeller()
     {
         var data = FurPreviewSample.Build("MATRICULA_NUEVA", "MATRICULAS", "juridica", "natural", "carro");
         data.Partes.Should().ContainSingle(p => p.Rol == "comprador");
