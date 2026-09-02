@@ -113,7 +113,8 @@ async function renderPreloaded() {
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
   await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
   await screen.findByText('Empresa encontrada en RUES');
-  await screen.findByText('Precargado desde el directorio de la compañía');
+  // La tarjeta del directorio ya no se anuncia con un título propio: se reconoce por sus datos.
+  await screen.findByText('Representante:');
   return user;
 }
 
@@ -157,7 +158,10 @@ describe('ActorsForm — confirmación al cambiar el documento del RL', () => {
         documentType: 'CC',
         documentNumber: '79999999',
       });
-      expect(screen.getByText('Ya no se utilizará la precarga del directorio')).toBeInTheDocument();
+      // El aviso de abandono ya no lleva título: lo dice el propio párrafo de la tarjeta.
+      expect(
+        screen.getByText(/Consultaste otro representante no registrado/),
+      ).toBeInTheDocument();
       expect((document.getElementById('0-rl-email') as HTMLInputElement).value).toBe('');
       expect((document.getElementById('0-rl-telefono') as HTMLInputElement).value).toBe('');
       expect((document.getElementById('0-rl-nombre') as HTMLInputElement).value).toBe(
@@ -194,7 +198,7 @@ describe('ActorsForm — confirmación al cambiar el documento del RL', () => {
 
       expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
       expect(mocks.lookupLegalRepresentativeByNit).toHaveBeenCalledWith('900555666');
-      expect(screen.getByText('Precargado desde el directorio de la compañía')).toBeInTheDocument();
+      expect(screen.getByText('Representante:')).toBeInTheDocument();
       expect((document.getElementById('0-rl-email') as HTMLInputElement).value).toBe('juan@valle.co');
       expect((document.getElementById('0-rl-nombre') as HTMLInputElement).value).toMatch(/Juan/);
       expect(screen.getByRole('button', { name: 'Actualizar RUNT' })).toBeDisabled();

@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -24,6 +25,15 @@ public sealed record ProcedureInstanceListRequest
     public DateTimeOffset? CreatedTo { get; init; }
     public DateTimeOffset? UpdatedFrom { get; init; }
     public DateTimeOffset? UpdatedTo { get; init; }
+
+    /// <summary>Estados a incluir (OR). Vacío = todos.</summary>
+    public IReadOnlyList<string>? Estados { get; init; }
+    /// <summary>Familia del trámite (MATRICULAS / TRASPASO / OTROS).</summary>
+    public string? Modalidad { get; init; }
+    /// <summary>Nombre del organismo de tránsito, por subcadena.</summary>
+    public string? OrganismoTransito { get; init; }
+    /// <summary>Código del tipo concreto de trámite, no la familia.</summary>
+    public string? TipoCodigo { get; init; }
 
     public string? SortBy { get; init; }
     public bool SortDescending { get; init; } = true;
@@ -95,6 +105,10 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
             CreatedTo = request.CreatedTo,
             UpdatedFrom = request.UpdatedFrom,
             UpdatedTo = request.UpdatedTo,
+            Estados = request.Estados,
+            Modalidad = request.Modalidad,
+            OrganismoTransito = request.OrganismoTransito,
+            TipoCodigo = request.TipoCodigo,
         };
 
         var take = request.Take <= 0 || request.Take > ListProcedureInstancesHandler.MaxItems
@@ -130,5 +144,49 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
             .ToList();
 
         return (items, total);
+    }
+}
+
+/// <summary>
+/// Conteo por estado para la tira de KPIs del listado. Devuelve SIEMPRE las siete claves del
+/// vocabulario —con cero donde no hay filas— para que la tira pinte las siete tarjetas sin que el
+/// cliente tenga que rellenar huecos.
+/// </summary>
+public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRepository repo)
+{
+    public async Task<IReadOnlyDictionary<string, int>> HandleAsync(
+        ProcedureInstanceListRequest request, CancellationToken ct = default)
+    {
+        // `Estados` se ignora a propósito: las tarjetas dicen cuántos hay de CADA estado bajo el resto
+        // de criterios. Acotarlas al estado ya seleccionado dejaría las otras seis en cero y el gestor
+        // no podría ver a dónde moverse.
+        var filter = new ProcedureInstanceListFilter
+        {
+            Vin = request.Vin,
+            Placa = request.Placa,
+            Vendedor = request.Vendedor,
+            Comprador = request.Comprador,
+            Gestor = request.Gestor,
+            Firmado = request.Firmado,
+            CreatedFrom = request.CreatedFrom,
+            CreatedTo = request.CreatedTo,
+            UpdatedFrom = request.UpdatedFrom,
+            UpdatedTo = request.UpdatedTo,
+            Modalidad = request.Modalidad,
+            OrganismoTransito = request.OrganismoTransito,
+            TipoCodigo = request.TipoCodigo,
+        };
+
+        var conteos = await repo.CountByStatusFilteredAsync(request.TenantId, filter, ct);
+
+        // `Todos` MÁS `Subsanacion`: ese último es legado —la subsanación viva es un flag sobre
+        // `rechazado`— pero sigue habiendo filas migradas con ese status, y la tira del listado pinta
+        // su tarjeta. Omitirlo aquí la dejaría sin número en vez de en cero.
+        var resultado = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var estado in TramiteEstado.Todos)
+            resultado[estado] = conteos.GetValueOrDefault(estado);
+        resultado[TramiteEstado.Subsanacion] = conteos.GetValueOrDefault(TramiteEstado.Subsanacion);
+
+        return resultado;
     }
 }

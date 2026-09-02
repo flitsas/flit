@@ -47,6 +47,22 @@ describe('list-instances-query', () => {
     expect(q.get('skip')).toBe('0');
   });
 
+  // Estado, familia, organismo y tipo dejaron de filtrarse en el cliente: si no viajan en el query
+  // string, el backend devuelve el universo entero y la tabla vuelve a recortar una página.
+  it('serializa los filtros que resuelve el servidor (estado, familia, organismo, tipo)', () => {
+    const q = buildListInstancesSearchParams({
+      estado: 'borrador,preparado',
+      modalidad: 'TRASPASO',
+      organismoTransito: 'bogota',
+      tipoCodigo: 'TRASPASO_STANDARD',
+    });
+    // Varios estados viajan separados por coma: "todo lo que no está cerrado" son varios a la vez.
+    expect(q.get('estado')).toBe('borrador,preparado');
+    expect(q.get('modalidad')).toBe('TRASPASO');
+    expect(q.get('organismoTransito')).toBe('bogota');
+    expect(q.get('tipoCodigo')).toBe('TRASPASO_STANDARD');
+  });
+
   it('omite claves vacías', () => {
     const q = buildListInstancesSearchParams({ placa: '  ', sortBy: '' });
     expect(q.toString()).toBe('');

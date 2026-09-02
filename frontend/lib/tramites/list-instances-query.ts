@@ -28,6 +28,10 @@ export function buildListInstancesSearchParams(
   set('vendedor', params.vendedor?.trim());
   set('comprador', params.comprador?.trim());
   set('gestor', params.gestor?.trim());
+  set('estado', params.estado?.trim());
+  set('modalidad', params.modalidad?.trim());
+  set('organismoTransito', params.organismoTransito?.trim());
+  set('tipoCodigo', params.tipoCodigo?.trim());
   if (params.firmado !== undefined) set('firmado', params.firmado);
   if (params.createdFrom?.trim()) set('createdFrom', dayStartIso(params.createdFrom.trim()));
   if (params.createdTo?.trim()) set('createdTo', dayEndIso(params.createdTo.trim()));

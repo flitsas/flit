@@ -154,6 +154,14 @@ interface Props {
    */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
   /**
+   * Gate del paso: ¿están completos los campos OBLIGATORIOS de todas las partes que captura este
+   * paso? Lo consume la shell para deshabilitar "Continuar y guardar". Antes el botón estaba
+   * siempre activo y el bloqueo llegaba DESPUÉS del clic —`save()` devolvía false y marcaba los
+   * campos—: el gestor pulsaba, no pasaba nada visible en el pie y tenía que buscar por su cuenta
+   * qué faltaba.
+   */
+  onCamposRequeridosGateChange?: (ready: boolean) => void;
+  /**
    * Rótulo del catálogo para un rol concreto: el `label` que el tipo le dio al paso que lo captura.
    *
    * <p>El rol persistido no siempre se llama como la parte real. `TRASPASO_UNILATERAL` guarda al
@@ -739,6 +747,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     rnmcEnabled = false,
     onConsultationGateChange,
     onEscrituraRepresentanteGateChange,
+    onCamposRequeridosGateChange,
     rotuloPorRol,
   },
   ref,
@@ -1313,6 +1322,21 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   };
 
   const validation = validateActors(actors, modalidad);
+
+  /**
+   * Publica hacia la shell si el paso tiene ya todos los campos obligatorios. Es la MISMA
+   * validación que aplica `save()` (`validateActors`), no una segunda regla en paralelo: si
+   * divergieran, el botón podría habilitarse para un guardado que va a fallar.
+   */
+  useEffect(() => {
+    onCamposRequeridosGateChange?.(validation.valid);
+  }, [validation.valid, onCamposRequeridosGateChange]);
+
+  // NO se revelan los errores en vivo. Se intentó (para justificar el botón deshabilitado) y el
+  // resultado fue peor que el problema: `showErrors` es una bandera del FORMULARIO, no de cada
+  // parte, así que se encendía mientras se tecleaba el documento del primer actor y, al añadir un
+  // copropietario, su tarjeta recién creada nacía entera en rojo sin que nadie hubiera tocado nada.
+  // Los campos obligatorios ya se anuncian con su asterisco; el motivo del bloqueo lo dice el pie.
 
   /** Pestañas del lado `rol` para `OwnershipShareControl` — el ordinal=1 nunca es removible. */
   const ownershipItemsForRol = (rol: ActorRol): OwnershipShareItem[] => {
@@ -2135,16 +2159,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       const identidadVigente = rep?.identidadVigente ?? false;
       return (
         <div className="space-y-2" role="status" aria-live="polite">
+          {/* Tono informativo, no de éxito: la tarjeta muestra datos que no se consultaron a
+              RUES/RUNT, no algo que sea válido. Es el mismo azul del badge «Dato reutilizado». */}
           <div className="rounded-xl p-3 text-xs border" style={cardTone('info').card}>
-            {/* Tono informativo, no de éxito: el aviso dice de DÓNDE salió el dato (no se consultó
-                RUES/RUNT), no que algo sea válido. Es el mismo azul del badge «Dato reutilizado». */}
-            <p
-              className="font-semibold mb-2 flex items-center gap-1.5"
-              style={cardTone('info').title}
-            >
-              <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              Precargado desde el directorio de la compañía
-            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
               <div className="col-span-2">
                 <span className="opacity-60 font-normal">Razón social: </span>
@@ -2281,15 +2298,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           </div>
           {runtState.directory ? (
             <div className="rounded-xl p-3 text-xs border" style={cardTone('info').card}>
-              <p
-                className="font-semibold mb-2 flex items-center gap-1.5"
-                style={cardTone('info').title}
-              >
-                <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {directoryAbandoned[index]
-                  ? 'Ya no se utilizará la precarga del directorio'
-                  : 'Precargado desde el directorio de la compañía'}
-              </p>
               {directoryAbandoned[index] ? (
                 <p>
                   Consultaste otro representante no registrado. La firma e identidad del RL
@@ -2671,7 +2679,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           level="h4"
           subtitle={
             isPreloaded
-              ? 'Datos precargados desde el directorio / RUES. Puedes editarlos si es necesario.'
+              ? undefined
               : 'Persona natural que representa a la empresa. Puedes consultarla en el RUNT o registrarla manualmente.'
           }
         />
@@ -2734,37 +2742,21 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <button
               type="button"
               disabled
-              aria-describedby={`${index}-rl-runt-preloaded-hint`}
-              // Novedad 28 (AC1) — nace deshabilitado: los datos del RL vienen resueltos desde el
-              // directorio y no hace falta reconsultar. Secundario en navy y a plena opacidad (no
-              // atenuar el texto al 60%: ya hubo una corrección de contraste por eso en este mismo
-              // archivo — ver comentario histórico más abajo).
+              // Novedad 28 (AC1) — nace deshabilitado: los datos del RL ya vienen resueltos desde
+              // el directorio y no hace falta reconsultar. Secundario en navy y a plena opacidad
+              // (no atenuar el texto al 60%: ya hubo una corrección de contraste por eso en este
+              // mismo archivo — ver comentario histórico más abajo).
               className="h-[42px] shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-50"
               style={{ borderColor: '#162744', color: '#162744' }}
-              title="Datos ya precargados desde el directorio. Cambia el documento del representante para habilitar la consulta."
             >
               Actualizar RUNT
             </button>
           )}
           <div className="hidden lg:block" aria-hidden="true" />
-          {(isPreloaded ||
-            rlState.status === 'found' ||
+          {(rlState.status === 'found' ||
             rlState.status === 'not_found' ||
             rlState.status === 'error') && (
             <div className="lg:col-span-4">
-              {/* Novedad 28 (AC5) — motivo del deshabilitado, no solo opacidad. Mismo id que
-                  `aria-describedby` del botón de arriba. */}
-              {isPreloaded && (
-                <p
-                  id={`${index}-rl-runt-preloaded-hint`}
-                  className="text-xs opacity-70"
-                  role="status"
-                  aria-live="polite"
-                >
-                  Datos precargados desde el directorio. Cambia el tipo o número de documento del
-                  representante para habilitar la consulta RUNT.
-                </p>
-              )}
               {rlState.status === 'found' && (
                 <p className="text-xs" style={{ color: INLINE_ALERT_TONES.info.color }}>
                   Representante encontrado en RUNT.
@@ -2897,27 +2889,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         </p>
       );
     }
-    if (c.status === 'found') {
-      return (
-        <p
-          className="text-xs"
-          style={{ color: INLINE_ALERT_TONES.info.color }}
-          role="status"
-          aria-live="polite"
-        >
-          Contacto precargado desde un trámite anterior de esta persona en la compañía — puedes
-          editarlo.
-        </p>
-      );
-    }
-    if (c.status === 'error') {
-      return (
-        <p className="text-xs opacity-70" role="status" aria-live="polite">
-          No se pudo precargar el contacto conocido — completa los datos manualmente.
-        </p>
-      );
-    }
-    // idle/empty (AC4: sin antecedentes) — sin aviso, sin error; los campos siguen vacíos y editables.
+    // found/error/idle/empty — sin aviso; los campos quedan como estén y siguen editables.
     return null;
   };
 
@@ -2957,6 +2929,19 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // ni la identidad, ni el tipo de persona son suyos para cambiar. Cambiarlos no sería corregir un
     // dato, sería cambiar de persona — y cambiar de propietario es un traspaso, no una novedad.
     const esPropietarioInscrito = autoConsultRunt && actor.rol === rolDelPropietario;
+
+    /**
+     * Descripción de la tarjeta. `null` = no se pinta nada. El comprador NO tiene: el rótulo de la
+     * tarjeta y el nombre del paso ya dicen a quién se está capturando, y la frase solo lo repetía
+     * en prosa. Los otros tres sí aportan algo que no está en pantalla.
+     */
+    const descripcionDelActor: string | null = esPropietarioInscrito
+      ? 'Los datos son los del propietario inscrito en el RUNT y no se pueden editar. Si el vehículo debe quedar a nombre de otra persona, el trámite es un traspaso.'
+      : actor.rol === 'locatario'
+        ? 'Registra la persona natural o jurídica que tiene el vehículo en arrendamiento. No firma el trámite: quien autoriza es el propietario.'
+        : actor.rol === 'vendedor'
+          ? 'Registra la persona natural o jurídica que figura hoy como propietario del vehículo.'
+          : null;
     // Nombre / razón social: con la consulta resuelta el dato es el del registro. `razonLocked` solo
     // cubre la razón social que vino de RUES, y `isNameLockedByRunt` solo la persona natural, así
     // que una jurídica resuelta por otra vía quedaba editable — y ahí es donde se cambia de titular.
@@ -3015,15 +3000,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               hasPercentagePanel={hasPercentagePanel}
             />
           )}
-          <p className="text-xs opacity-70 mb-3">
-            {esPropietarioInscrito
-              ? 'Los datos son los del propietario inscrito en el RUNT y no se pueden editar. Si el vehículo debe quedar a nombre de otra persona, el trámite es un traspaso.'
-              : actor.rol === 'locatario'
-                ? 'Registra la persona natural o jurídica que tiene el vehículo en arrendamiento. No firma el trámite: quien autoriza es el propietario.'
-                : actor.rol === 'vendedor'
-                  ? 'Registra la persona natural o jurídica que figura hoy como propietario del vehículo.'
-                  : 'Registra la persona natural o jurídica que figurará como propietario del vehículo.'}
-          </p>
+          {/*
+            La descripción solo aparece cuando aclara algo que la pantalla no dice ya: el propietario
+            inscrito (por qué no se puede editar), el locatario (que no firma) y el vendedor (que es
+            el propietario de HOY, no el resultante). Para el comprador se retiró: el rótulo de la
+            tarjeta y el paso ya lo dicen, y la frase solo repetía en prosa lo evidente.
+          */}
+          {descripcionDelActor ? (
+            <p className="text-xs opacity-70 mb-3">{descripcionDelActor}</p>
+          ) : null}
           <div className="space-y-3">
             {/* Identificación en UNA fila: tipo | número | Consultar. El selector de tipo estuvo un
                 momento suelto en su propio renglón —era el hueco que dejó el interruptor PN/PJ al
@@ -4132,8 +4117,7 @@ function RlSwitchConfirmModal({
           {variant === 'preload' ? (
             <>
               <p>
-                Encontramos un representante legal registrado en esta compañía con ese documento. Al
-                continuar se precargará su información en el formulario.
+                Encontramos un representante legal registrado en esta compañía con ese documento.
               </p>
               <p>
                 La firma e identidad del representante anterior dejarán de apalancarse en este
@@ -4143,8 +4127,7 @@ function RlSwitchConfirmModal({
           ) : (
             <>
               <p>
-                Vas a consultar otro documento en <span className="font-semibold">RUNT</span>. La
-                firma e identidad del representante precargado ya no se apalancarán en este trámite.
+                Vas a consultar otro documento en <span className="font-semibold">RUNT</span>.
               </p>
               <p>Los datos básicos del representante anterior se reemplazarán por el resultado.</p>
             </>

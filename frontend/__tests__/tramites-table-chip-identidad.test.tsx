@@ -13,6 +13,8 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
+  // La tira de KPIs pide sus conteos al backend (no se derivan del array del listado).
+  listInstanceEstadoCounts: vi.fn().mockResolvedValue({}),
   setPriority: vi.fn(),
   getAttachments: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),

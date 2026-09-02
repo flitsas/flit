@@ -640,10 +640,16 @@ export function TramiteWizard(props: Props) {
   // Confirmación de "Anular trámite" (propuesta): salir pierde lo no guardado, y el botón vive
   // junto al de avance, donde un clic de más es fácil.
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // El motivo es OBLIGATORIO para anular: no es política de esta pantalla sino de la máquina de
+  // estados (RF05 — `ITramiteLifecycleService`), que rechaza la transición a `anulado` sin él.
+  const [motivoAnulacion, setMotivoAnulacion] = useState('');
+  const [anulando, setAnulando] = useState(false);
+  const [errorAnulacion, setErrorAnulacion] = useState<string | null>(null);
   // Confirmación de "Finalizar y enviar trámite" (propuesta, MatriculaInicial.tsx:1111-1121): la
   // acción terminal ya no radica al primer clic — abre "Confirmar radicación" y el radicado real
   // ocurre solo tras "Sí, radicar trámite".
   const [confirmRadicar, setConfirmRadicar] = useState(false);
+
   // Feature #11066 — estado informativo del paquete (FUR/certs/impronta). No bloquea Preparar.
   const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
     'idle' | 'loading' | 'ready' | 'error'
@@ -688,6 +694,12 @@ export function TramiteWizard(props: Props) {
    * nada que exigir, y `ActorsForm` lo corrige en cuanto resuelve el directorio.
    */
   const [escrituraRlGateOk, setEscrituraRlGateOk] = useState(true);
+  /**
+   * Campos obligatorios de las partes del paso de actores. Arranca en `false`: hasta que
+   * `ActorsForm` monte y diga lo contrario, lo correcto es no dejar avanzar — al revés, el botón
+   * quedaría habilitado en el instante en que el paso todavía no ha dicho nada.
+   */
+  const [actoresCamposGateOk, setActoresCamposGateOk] = useState(false);
   /**
    * Certificado de prenda: Continuar solo si no falta un adjunto obligatorio
    * (política compañía+OT + decisión que exige documento).
@@ -781,6 +793,52 @@ export function TramiteWizard(props: Props) {
   // Reportes2 HU-A — telemetría de uso del wizard (fire-and-forget; emite
   // wizard_step_view al cambiar activeStep?.key y expone los demás eventos).
   const telemetry = useWizardTelemetry(instanceId, activeStep?.key);
+
+  /**
+   * Anula el trámite DE VERDAD y solo entonces sale del asistente.
+   *
+   * Hasta ahora "Sí, anular" únicamente llamaba a `onExit()`: el trámite se quedaba en `borrador`
+   * y reaparecía intacto en el listado, así que el gestor creía haberlo anulado y no era cierto.
+   * Anular es una transición de estado (`borrador → anulado`, terminal), no una forma de salir.
+   *
+   * Dos caminos, y la diferencia importa:
+   *
+   * - CON `instanceId` — se pide la transición y el asistente NO se cierra si falla. Cerrarlo ante
+   *   un error reproduciría el mismo engaño que se está corrigiendo, esta vez en silencio.
+   * - SIN `instanceId` — creación diferida (CF-02): en el paso 1 el trámite todavía no existe en
+   *   el servidor, así que no hay nada que anular y salir es exactamente lo correcto. El diálogo
+   *   dice otra cosa en ese caso; ver el modal.
+   */
+  const handleAnular = useCallback(async () => {
+    if (anulando) return;
+    if (!instanceId) {
+      telemetry.trackAbandon();
+      onExit();
+      return;
+    }
+
+    const motivo = motivoAnulacion.trim();
+    if (!motivo) {
+      setErrorAnulacion('Indica el motivo de la anulación.');
+      return;
+    }
+
+    setAnulando(true);
+    setErrorAnulacion(null);
+    try {
+      await tramitesClient.transitionInstance(instanceId, 'anulado', motivo);
+      // La telemetría de abandono se mantiene: para Reportes2 sigue siendo una salida sin radicar.
+      telemetry.trackAbandon();
+      show('Trámite anulado.', 'success');
+      onExit();
+    } catch (err) {
+      setErrorAnulacion(
+        err instanceof Error ? err.message : 'No se pudo anular el trámite. Inténtalo de nuevo.',
+      );
+    } finally {
+      setAnulando(false);
+    }
+  }, [anulando, instanceId, motivoAnulacion, telemetry, show, onExit]);
 
   /**
    * Re-radicar (rechazado → entregado vía submit): acción TERMINAL de la subsanación. Vive junto a
@@ -1290,6 +1348,9 @@ export function TramiteWizard(props: Props) {
     // se pasa a Requisitos. El documento se carga en el propio paso, junto a los datos del
     // representante, y `ActorsForm` es quien decide si aplica.
     (isActorStep && !escrituraRlGateOk) ||
+    // Campos obligatorios de las partes sin completar: no Continuar. Es la misma validación que
+    // aplicaba `ActorsForm.save()` tras el clic, adelantada al estado del botón.
+    (isActorStep && !actoresCamposGateOk) ||
     // Certificado de prenda obligatorio sin adjuntar: no Continuar.
     (isPrendaStep && !prendaDocGateOk) ||
     // HU #11628 — dígito de preferencia de placa sin declarar (ni dígito ni "sin preferencia") con
@@ -1836,6 +1897,7 @@ export function TramiteWizard(props: Props) {
                 prendaFormRef={prendaFormRef}
                 onActorsConsultationGateChange={setActorsConsultationReady}
                 onEscrituraRepresentanteGateChange={setEscrituraRlGateOk}
+                onCamposRequeridosGateChange={setActoresCamposGateOk}
                 rotulosActores={rotulosDeActores(steps)}
                 onIrAActores={irAPasoActor}
                 identityOperable={draftFinalized}
@@ -1860,6 +1922,24 @@ export function TramiteWizard(props: Props) {
                 onMarkDirty={() => setHasUnsavedChanges(true)}
               />
             </div>
+          )}
+
+          {/*
+            Motivo del "Continuar y guardar" apagado en el paso de actores. Va en el CUERPO, justo
+            encima del pie y en el mismo sitio donde el asistente ya explica los bloqueos de envío:
+            metido en la fila de botones quedaba apretado contra la acción, como un pie de foto.
+            Es la alternativa a pintar el formulario de rojo antes de tiempo.
+          */}
+          {isActorStep && !actoresCamposGateOk && !fullReadOnly && (
+            <InlineAlert tone="info" className="mt-6">
+              <p>
+                Completa los campos obligatorios (marcados con{' '}
+                <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                  *
+                </span>
+                <span className="sr-only">asterisco</span>) para continuar.
+              </p>
+            </InlineAlert>
           )}
 
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
@@ -2056,29 +2136,82 @@ export function TramiteWizard(props: Props) {
         </section>
 
       {confirmCancel && (
-        <WizardModal title="Anular trámite" onClose={() => setConfirmCancel(false)}>
-          <p className="text-xs leading-relaxed opacity-80">
-            ¿Deseas anular el trámite en curso? Los datos no guardados se perderán.
-          </p>
+        <WizardModal
+          title="Anular trámite"
+          onClose={() => {
+            setConfirmCancel(false);
+            setErrorAnulacion(null);
+          }}
+        >
+          {instanceId ? (
+            <>
+              <p className="text-xs leading-relaxed opacity-80">
+                El trámite quedará <strong>anulado</strong>. Es un estado final: no se puede
+                reabrir ni editar después.
+              </p>
+              <label
+                htmlFor="wizard-motivo-anulacion"
+                className="mt-4 block text-xs font-semibold"
+              >
+                Motivo de la anulación
+              </label>
+              <textarea
+                id="wizard-motivo-anulacion"
+                value={motivoAnulacion}
+                onChange={(e) => {
+                  setMotivoAnulacion(e.target.value);
+                  if (errorAnulacion) setErrorAnulacion(null);
+                }}
+                rows={3}
+                disabled={anulando}
+                aria-describedby={errorAnulacion ? 'wizard-motivo-anulacion-err' : undefined}
+                placeholder="Por qué se anula este trámite"
+                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
+              />
+              <p className="mt-1 text-[11px] opacity-60">
+                Queda en la trazabilidad del trámite.
+              </p>
+            </>
+          ) : (
+            // Creación diferida (CF-02): en el paso 1 el trámite aún no existe en el servidor, así
+            // que aquí no hay nada que anular — solo se descarta lo capturado en pantalla.
+            <p className="text-xs leading-relaxed opacity-80">
+              Todavía no se ha creado el trámite. Al salir se descarta lo capturado y no queda nada
+              registrado.
+            </p>
+          )}
+
+          {errorAnulacion && (
+            <p
+              id="wizard-motivo-anulacion-err"
+              role="alert"
+              className="mt-3 text-xs font-medium"
+              style={{ color: '#C2410C' }}
+            >
+              {errorAnulacion}
+            </p>
+          )}
+
           <div className="mt-6 flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setConfirmCancel(false)}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              onClick={() => {
+                setConfirmCancel(false);
+                setErrorAnulacion(null);
+              }}
+              disabled={anulando}
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
             >
               Continuar editando
             </button>
             <button
               type="button"
-              onClick={() => {
-                // Reportes2 HU-A — salida sin radicar = wizard_abandon.
-                if (!fullReadOnly) telemetry.trackAbandon();
-                onExit();
-              }}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
+              onClick={() => void handleAnular()}
+              disabled={anulando}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2 disabled:opacity-50"
               style={{ background: '#FF4E00' }}
             >
-              Sí, anular
+              {anulando ? 'Anulando…' : instanceId ? 'Sí, anular' : 'Sí, salir'}
             </button>
           </div>
         </WizardModal>
@@ -4265,6 +4398,7 @@ function StepBody({
   prendaFormRef,
   onActorsConsultationGateChange,
   onEscrituraRepresentanteGateChange,
+  onCamposRequeridosGateChange,
   rotulosActores,
   onIrAActores,
   identityOperable = false,
@@ -4323,6 +4457,8 @@ function StepBody({
   onActorsConsultationGateChange?: (ready: boolean) => void;
   /** Gate Continuar: escritura del representante legal fuera del directorio ya adjunta (o no aplica). */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
+  /** Gate Continuar: campos obligatorios de las partes del paso de actores ya completos. */
+  onCamposRequeridosGateChange?: (ready: boolean) => void;
   /**
    * Cómo llama el catálogo a cada parte (`rotulosDeActores`). Lo calcula la shell, que es quien tiene
    * TODOS los pasos: el resumen necesita los rótulos de partes que su propio paso no captura.
@@ -4730,6 +4866,7 @@ function StepBody({
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
           onEscrituraRepresentanteGateChange={onEscrituraRepresentanteGateChange}
+          onCamposRequeridosGateChange={onCamposRequeridosGateChange}
           // Quien sabe cómo se llama la parte es el CATÁLOGO: en `TRASPASO_UNILATERAL` el rol
           // persistido es `comprador` pero el paso se llama «Locatario», que es la parte real del
           // leasing. El nombre del paso describe al rol que ese paso captura (`resolveActorRole`),

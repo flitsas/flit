@@ -62,7 +62,7 @@ beforeEach(() => {
 });
 
 function addButton(sideLabel: string) {
-  return screen.getByRole('button', { name: `Agregar copropietario de ${sideLabel}` });
+  return screen.getByRole('button', { name: `Agregar propietario de ${sideLabel}` });
 }
 
 // CAMBIO DE COMPORTAMIENTO (decisión del usuario, imagen de referencia): con un solo actor la fila
@@ -267,7 +267,7 @@ describe('ActorsForm — Múltiple Propietario, sin estado fantasma al desplazar
     // Agrega un 2do vendedor: se inserta EN el índice 1 (justo tras el vendedor#1), desplazando al
     // comprador de índice 1 → 2. Sin reindexar los mapas posicionales, la consulta RUNT del
     // vendedor#1 podría "saltar" al actor equivocado tras este desplazamiento.
-    await user.click(within(vendedorCard).getByRole('button', { name: 'Agregar copropietario de vendedor' }));
+    await user.click(within(vendedorCard).getByRole('button', { name: 'Agregar propietario de vendedor' }));
     await within(vendedorCard).findByRole('tablist');
 
     // Vuelve a la pestaña del vendedor#1: su consulta sigue siendo LA SUYA, no se perdió ni se
@@ -471,8 +471,8 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
 
     // Agrega un segundo en AMBOS lados — traspaso siempre es layout MULTI (sin salto de layout),
     // pero el comportamiento de reemplazo debe ser idéntico al de matrícula.
-    await user.click(within(vendedorCard).getByRole('button', { name: 'Agregar copropietario de vendedor' }));
-    await user.click(within(compradorCard).getByRole('button', { name: 'Agregar copropietario de comprador' }));
+    await user.click(within(vendedorCard).getByRole('button', { name: 'Agregar propietario de vendedor' }));
+    await user.click(within(compradorCard).getByRole('button', { name: 'Agregar propietario de comprador' }));
 
     // Cada lado quedó en su pestaña 2, vacía — sin heredar el dato del otro lado ni del propio
     // ordinal=1.
