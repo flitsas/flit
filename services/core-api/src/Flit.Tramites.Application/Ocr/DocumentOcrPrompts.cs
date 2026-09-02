@@ -39,6 +39,9 @@ public static class DocumentOcrPrompts
             // HU #11999 — inscripcion de prenda (garantia mobiliaria). Obligatoria en los tres tramites
             // de prenda de V2, y en V1 el 17 % de la casilla era un PDF en blanco reutilizado.
             "inscripcion_prenda",
+            // HU #12000 — comprobante de pago. En V1 la casilla contiene dos documentos distintos segun
+            // el tramite: el impuesto en matricula y los derechos de transito en traspaso y otros.
+            "comprobante_derechos",
             // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
             "mandato_config",
         };
@@ -57,6 +60,7 @@ public static class DocumentOcrPrompts
         "tarjeta_propiedad" => TarjetaPropiedad,
         "paz_salvo" => PazSalvo,
         "inscripcion_prenda" => InscripcionPrenda,
+        "comprobante_derechos" => ComprobanteDerechos,
         "mandato_config" => MandatoConfig,
         _ => null,
     };
@@ -823,6 +827,104 @@ EXTRAER:
 
 JSON valido sin markdown:
 {"tipo_documento":"contrato_garantia_mobiliaria","es_valido":true,"paginas_documento":[1],"total_paginas":1,"acreedor_nombre":"","acreedor_documento":"","acreedor_es_entidad_financiera":true,"garante_nombre":"","garante_documento":"","numero_registro":"","fecha_registro":"","fecha_contrato":"","cuantia_garantia":0,"vehiculo_placa":"","vehiculo_vin":"","vehiculo_chasis":"","vehiculo_motor":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","observaciones":""}
+""";
+
+    /// <summary>
+    /// HU #12000 — <b>Comprobante de pago</b> (<c>id_attached_payment_receipt</c> en V1, «Comprobante de
+    /// derechos» en el catálogo de V2).
+    /// <para><b>Una casilla, dos documentos.</b> El cruce entre la tabla de origen y el tipo detectado no
+    /// deja lugar a dudas: en <i>matrícula</i> 38 de 50 son la declaración o el pago del impuesto vehicular,
+    /// y en <i>traspaso</i> y <i>otros servicios</i> 14 de 16 son el recibo de derechos del organismo de
+    /// tránsito. No es que los usuarios se equivoquen: son dos requisitos distintos compartiendo un mismo
+    /// campo en V1. Por eso el prompt acepta las tres familias —recibo de derechos, comprobante electrónico
+    /// y declaración del impuesto— en vez de fijar un formato.</para>
+    /// <para><b>El criterio se INVIERTE respecto al Paz y Salvo, y hay que decirlo explícitamente.</b> Allí
+    /// un comprobante PSE se rechaza porque acredita una transacción y no un estado de cuenta; aquí un
+    /// comprobante PSE es exactamente lo que se pide. Y el recibo de caja de la secretaría, que el paz y
+    /// salvo rechaza, es aquí la familia mayoritaria del traspaso. El prompt lo advierte para no heredar el
+    /// criterio del prompt vecino.</para>
+    /// <para><b>El valor va siempre, el pago se informa aparte.</b> En la primera versión el campo se
+    /// llamaba <c>valor_pagado</c> y el modelo lo interpretó al pie de la letra: 15 de 63 documentos
+    /// aceptados salieron sin valor, y la correlación con «no pagado» era perfecta. No era un fallo de
+    /// lectura sino una ambigüedad del contrato de datos. Separado en <c>valor_total</c> (lo que el
+    /// documento liquida o cobra, esté pagado o no) y <c>hay_constancia_pago</c>, la extracción pasó a
+    /// 63 de 63. Una liquidación sin pagar sigue siendo el documento correcto: se informa, no se rechaza.</para>
+    /// <para><b>Medición (claude-haiku-4-5, max_tokens 2000, 66 documentos de 7 secretarías, dos corridas):</b>
+    /// placa correcta 96,8 % —la más alta de los cuatro documentos medidos, porque son PDFs de una página
+    /// generados por máquina—, decisión aceptar/rechazar IDÉNTICA entre corridas y <c>tipo_documento</c>
+    /// coincidente en 66/66. Falsos positivos y falsos rechazos: 0. Los tres rechazos son dos licencias de
+    /// tránsito cargadas en la casilla del pago —ninguna con capa de texto, identificadas por visión— y una
+    /// página en blanco.</para>
+    /// <para><b>Dependencia de configuración:</b> el tipo existe en <c>document_types</c> pero ningún
+    /// trámite lo pide todavía en <c>procedure_document_requirements</c>. Este prompt queda listo y no se
+    /// ejecutará hasta que se configure en qué trámites se solicita.</para>
+    /// </summary>
+    private const string ComprobanteDerechos =
+"""
+Analiza este documento. Determina si acredita el PAGO o la LIQUIDACION de un valor que hay que cubrir para tramitar un vehiculo en Colombia (lo que el tramite pide como "Comprobante de pago").
+
+QUE SE CONSIDERA VALIDO — LA CLAVE ES QUE HAYA DINERO LIQUIDADO O PAGADO:
+Este requisito NO tiene un formato unico. Se cubre con tres documentos distintos segun el tramite y el organismo, y los TRES sirven:
+1. RECIBO DE CAJA o LIQUIDACION DE DERECHOS de un organismo de transito o secretaria de movilidad: lleva el municipio y su NIT, la placa, y una tabla de CODIGO / CONCEPTO / VALOR con conceptos como "Derechos de Sistematizacion", "Facturacion Tramites", "Derechos RUNT", "Especie Venal", "Cancelacion Matricula" o "Semaforizacion". Suele llevar "NOMBRE Y FIRMA CAJERO".
+2. COMPROBANTE DE PAGO ELECTRONICO O BANCARIO: pago por PSE, ecollect, sucursal virtual o ventanilla, con numero de transaccion, numero de autorizacion o CUS, fecha y hora, y el nombre del recaudador (una gobernacion, un municipio, un organismo de transito o el banco que recauda por ellos).
+3. DECLARACION o LIQUIDACION DEL IMPUESTO SOBRE VEHICULOS AUTOMOTORES: el formulario departamental, con numero de formulario, placa, declarante y el valor a pagar. Sirve AUNQUE no tenga sello de pago: es la liquidacion oficial del valor.
+
+OJO — AQUI EL COMPROBANTE DE PAGO SI VALE:
+A diferencia de un paz y salvo, donde un comprobante de pago NO sirve porque no acredita el estado de cuenta, en ESTE documento el comprobante de pago es exactamente lo que se pide. Un "Pago PSE", un "Pago exitoso" o un numero CUS a favor de una gobernacion o de un organismo de transito es VALIDO.
+
+QUE NO ES VALIDO:
+1. Una PAGINA EN BLANCO, una plantilla vacia o un archivo cuyo unico contenido es un logo.
+2. Un ESTADO DE CUENTA o PAZ Y SALVO de impuestos: informa si el vehiculo adeuda, pero no liquida ni acredita el pago de este tramite. Va en otra casilla.
+3. Una LICENCIA DE TRANSITO o tarjeta de propiedad, un SOAT, una revision tecnico-mecanica, una impronta, un contrato de prenda o una cedula.
+4. La FACTURA DE VENTA del vehiculo: acredita la compra del carro, no el pago de derechos ni de impuestos.
+5. Una COTIZACION, una simulacion o una orden de pago sin valores.
+
+COMO DECIDIR — PROCEDE EN ESTE ORDEN:
+PASO 1. Busca DINERO: un valor liquidado, un total a pagar o un valor pagado. Si el documento no tiene ninguna cifra de dinero asociada al vehiculo o al tramite, NO es valido.
+PASO 2. Busca al RECAUDADOR o LIQUIDADOR: un organismo de transito, una secretaria de movilidad, una gobernacion, una unidad de rentas, o un banco o pasarela recaudando a nombre de ellos. Si quien cobra es un particular, un concesionario o un taller, NO es valido.
+PASO 3. Solo si los dos pasos anteriores dan positivo, es_valido = true.
+Que el documento no lleve sello, firma ni constancia de pago NO es motivo de rechazo: una liquidacion sin pagar sigue siendo el documento correcto. Eso se informa en hay_constancia_pago, no en es_valido.
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos (liquidacion + comprobante + otros), identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1] o [2,3]). Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro, NO lo invalida y NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
+LA CONSTANCIA DE PAGO — ES EL DATO MAS VALIOSO:
+Lo que el gestor necesita saber es si esto ya se pago o solo se liquido. Determina hay_constancia_pago asi:
+- true: el documento muestra el pago hecho — numero de transaccion, numero de autorizacion o CUS, "Pago exitoso", "Aprobada", sello de recaudo, fecha y hora de pago, o el sello del banco.
+- false: solo hay una liquidacion, un valor a pagar o un formulario diligenciado, sin ninguna huella de que el dinero se movio.
+NO deduzcas que esta pagado solo porque el documento existe. Un formulario de declaracion recien impreso NO esta pagado. Ante la duda, false.
+EL VALOR VA SIEMPRE, ESTE PAGADO O NO. En valor_total pon el TOTAL que el documento liquida o cobra —la suma de la tabla de conceptos, el "total a pagar" o el valor de la declaracion— en numeros, sin puntos ni simbolos. Ese campo NO depende de que el pago se haya hecho: un recibo sin cancelar igual trae su total, y hay que extraerlo. Solo dejalo en 0 si el documento realmente no muestra ninguna cifra.
+
+LA PLACA — DOS COMPROBACIONES OBLIGATORIAS:
+1. FORMATO: una placa colombiana es 3 LETRAS + 3 DIGITOS (automoviles) o 3 LETRAS + 2 DIGITOS + 1 LETRA (motos). SIEMPRE 6 caracteres, sin espacios ni guiones. Si lo que transcribiste no encaja, esta mal leido.
+   USA EL FORMATO PARA CORREGIRTE, POSICION POR POSICION: los caracteres 1, 2 y 3 son SIEMPRE LETRAS y los caracteres 4, 5 y 6 son SIEMPRE DIGITOS (salvo en motos, donde el 6 es letra). Por eso: un 0 en las tres primeras posiciones es en realidad una O; un 4 ahi es una A o una Y; un 1 es una I o una L; un 8 es una B. Y al reves, una O entre los tres ultimos es un 0, y una I o una L ahi es un 1. Corrige cada caracter que este en la posicion equivocada ANTES de responder.
+2. Las letras Q, O, G, D y C se confunden entre si en los escaneos: Q lleva colita, O es un ovalo limpio, G lleva barra horizontal, D tiene el lado izquierdo recto, C esta abierta. Mira cada una de las tres letras antes de darla por buena.
+Si el documento no trae placa, dejala VACIA. No la inventes ni la tomes de otro documento del archivo.
+
+EXTRAER:
+- tipo_documento: "recibo_derechos_transito" | "comprobante_pago_electronico" | "declaracion_impuesto" | "estado_cuenta" | "factura_venta" | "licencia_transito" | "documento_en_blanco" | "otro"
+- es_valido: true/false
+- paginas_documento: [paginas], total_paginas: numero
+- entidad_recaudadora: quien cobra o liquida, tal cual aparece
+- entidad_es_autoridad: true si es un organismo de transito, secretaria, gobernacion o unidad de rentas (o un banco recaudando por ellos); false si no
+- hay_constancia_pago: true/false
+- valor_total: total liquidado o cobrado, en numeros y sin puntos ni simbolos, este pagado o no; 0 solo si el documento no muestra ninguna cifra
+- fecha_pago (YYYY-MM-DD): la del pago si lo hubo, si no la de expedicion o liquidacion
+- numero_referencia: numero de recibo, de formulario, de transaccion, de autorizacion o CUS, el que traiga
+- conceptos: los conceptos cobrados separados por coma (ej: "Derechos de Sistematizacion, Derechos RUNT"); vacio si no los desglosa
+- vehiculo_placa
+- propietario_nombre, propietario_documento
+- municipio, departamento
+- observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
+
+JSON valido sin markdown:
+{"tipo_documento":"recibo_derechos_transito","es_valido":true,"paginas_documento":[1],"total_paginas":1,"entidad_recaudadora":"","entidad_es_autoridad":true,"hay_constancia_pago":false,"valor_total":0,"fecha_pago":"","numero_referencia":"","conceptos":"","vehiculo_placa":"","propietario_nombre":"","propietario_documento":"","municipio":"","departamento":"","observaciones":""}
 """;
 
     private const string MandatoConfig =

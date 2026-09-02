@@ -15,6 +15,7 @@ public sealed class DocumentOcrPromptsTests
     [InlineData("tarjeta_propiedad")] // HU #11996
     [InlineData("paz_salvo")] // HU #11998
     [InlineData("inscripcion_prenda")] // HU #11999
+    [InlineData("comprobante_derechos")] // HU #12000
     public void Tipos_soportados_tienen_prompt(string tipo)
     {
         DocumentOcrPrompts.IsSupported(tipo).Should().BeTrue();
@@ -443,6 +444,77 @@ public sealed class DocumentOcrPromptsTests
                      "acreedor_nombre", "acreedor_documento", "garante_nombre", "numero_registro",
                      "fecha_registro", "vehiculo_placa", "vehiculo_chasis", "vehiculo_vin",
                      "vehiculo_marca", "vehiculo_linea", "vehiculo_modelo",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #12000 — comprobante de pago ──────────────────────────────────────────────────────
+    // Una casilla con dos documentos dentro, y un criterio que se invierte respecto al paz y salvo.
+
+    [Fact]
+    public void Prompt_comprobante_derechos_acepta_las_tres_familias_de_la_casilla()
+    {
+        // Recibo de derechos del organismo (25 de 66), declaración del impuesto (33) y comprobante
+        // electrónico (5). En matrícula la casilla es del impuesto y en traspaso de los derechos.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("RECIBO DE CAJA");
+        prompt.Should().Contain("COMPROBANTE DE PAGO ELECTRONICO O BANCARIO");
+        prompt.Should().Contain("DECLARACION o LIQUIDACION DEL IMPUESTO");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_advierte_que_aqui_el_pago_PSE_si_vale()
+    {
+        // El paz y salvo rechaza el comprobante PSE porque acredita una transacción y no un estado
+        // de cuenta. Aquí es exactamente lo que se pide, y hay que decirlo para que el modelo no
+        // arrastre el criterio del documento vecino.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("AQUI EL COMPROBANTE DE PAGO SI VALE");
+        prompt.Should().Contain("A diferencia de un paz y salvo");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_no_rechaza_una_liquidacion_sin_pagar()
+    {
+        // El documento correcto sin cancelar sigue siendo el documento correcto. Eso se informa en
+        // hay_constancia_pago, no en es_valido.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("una liquidacion sin pagar sigue siendo el documento correcto");
+        prompt.Should().Contain("hay_constancia_pago");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_extrae_el_valor_este_pagado_o_no()
+    {
+        // Falla real del v1: el campo se llamaba valor_pagado y el modelo lo tomó al pie de la letra,
+        // dejando en 0 los 15 documentos aún no cancelados. Separar el valor del estado lo arregló.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("EL VALOR VA SIEMPRE, ESTE PAGADO O NO");
+        prompt.Should().Contain("valor_total");
+        prompt.Should().NotContain("valor_pagado");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_rechaza_el_paz_y_salvo_y_la_licencia()
+    {
+        // Los dos rechazos reales de la muestra fueron licencias de tránsito cargadas en esta casilla.
+        // El estado de cuenta se rechaza porque tiene casilla propia.
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        prompt.Should().Contain("ESTADO DE CUENTA o PAZ Y SALVO");
+        prompt.Should().Contain("LICENCIA DE TRANSITO");
+    }
+
+    [Fact]
+    public void Prompt_comprobante_derechos_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("comprobante_derechos")!;
+        foreach (var campo in new[]
+                 {
+                     "hay_constancia_pago", "valor_total", "entidad_recaudadora", "conceptos",
+                     "numero_referencia", "fecha_pago", "vehiculo_placa", "propietario_nombre",
+                     "municipio", "departamento",
                  })
         {
             prompt.Should().Contain(campo);

@@ -279,6 +279,20 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
     { label: 'Periodo certificado', value: (d) => pickStr(d, 'vigencia_certificada') },
     { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
   ],
+  // HU #12000 — comprobante de pago. El resumen antepone si YA ESTÁ PAGADO y el valor: es lo que el
+  // gestor necesita saber de un vistazo. Una liquidación sin pagar es válida, así que el estado se
+  // informa aparte del veredicto del OCR.
+  comprobante_derechos: [
+    { label: 'Estado', value: (d) => (d.hay_constancia_pago ? 'Pagado' : 'Liquidado, sin constancia de pago') },
+    { label: 'Valor', value: (d) => pickStr(d, 'valor_total') },
+    { label: 'Entidad', value: (d) => pickStr(d, 'entidad_recaudadora') },
+    { label: 'Conceptos', value: (d) => pickStr(d, 'conceptos') },
+    { label: 'Referencia', value: (d) => pickStr(d, 'numero_referencia') },
+    { label: 'Fecha', value: (d) => pickStr(d, 'fecha_pago') },
+    { label: 'Placa', value: (d) => pickStr(d, 'vehiculo_placa') },
+    { label: 'Propietario', value: (d) => pickStr(d, 'propietario_nombre') },
+    { label: 'Ubicación', value: (d) => joinFields(d, ['municipio', 'departamento'], ', ') },
+  ],
   // HU #11999 — inscripción de prenda. El resumen antepone el ACREEDOR porque es el dato por el que
   // se pide el documento: el gestor lo coteja contra el acreedor registrado en el trámite. La placa va
   // después y a menudo viene vacía, porque muchos contratos identifican el vehículo solo por chasis.
@@ -330,6 +344,7 @@ const TIPO_LABEL: Record<string, string> = {
   tarjeta_propiedad: 'Licencia de Tránsito',
   paz_salvo: 'Paz y Salvo de Impuestos',
   inscripcion_prenda: 'Inscripción de Prenda',
+  comprobante_derechos: 'Comprobante de pago',
 };
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */
