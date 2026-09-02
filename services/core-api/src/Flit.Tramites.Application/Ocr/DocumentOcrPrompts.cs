@@ -48,6 +48,9 @@ public static class DocumentOcrPrompts
             // HU #12030 — certificado de camara de comercio. Cubre a la PERSONA JURIDICA, que hoy no
             // valida nadie: la cedula de la persona natural ya la captura Kyverum.
             "camara_comercio",
+            // HU #12037 — Certificado CEPD. No es un documento propio: es la seccion EMISIONES de la
+            // ficha de homologacion. Depende del enderezado (HU #12036) para poder leerse.
+            "certificado_ambiental",
             // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
             "mandato_config",
         };
@@ -98,6 +101,7 @@ JSON valido sin markdown:
         "comprobante_derechos" => ComprobanteDerechos,
         "contrato_leasing" => ContratoLeasing,
         "camara_comercio" => CamaraComercio,
+        "certificado_ambiental" => CertificadoAmbiental,
         "mandato_config" => MandatoConfig,
         _ => null,
     };
@@ -1179,6 +1183,121 @@ EXTRAER:
 
 JSON valido sin markdown:
 {"tipo_documento":"certificado_camara_comercio","es_valido":true,"paginas_documento":[1],"total_paginas":1,"camara_emisora":"","razon_social":"","nit":"","matricula_mercantil":"","fecha_expedicion":"","ultimo_ano_renovado":"","estado_sociedad":"activa","representante_legal_nombre":"","representante_legal_documento":"","representante_legal_cargo":"","incluye_cedula_representante":false,"domicilio":"","codigo_verificacion":"","observaciones":""}
+""";
+
+    /// <summary>
+    /// HU #12037 — <b>Certificado CEPD</b> (<c>certificado_ambiental</c>, ya en el catálogo;
+    /// <c>id_attached_gas</c> en V1).
+    /// <para><b>El CEPD no es un documento: es una sección.</b> Buscar un papel llamado «CEPD» no da nada
+    /// —igual que ninguno de los 43 paz y salvo con texto decía «PAZ Y SALVO»—. Lo que acredita las
+    /// emisiones es la <b>Ficha Técnica de Homologación del Ministerio de Transporte</b> (FORMATO FTH-002,
+    /// «CARACTERÍSTICAS TÉCNICO-MECÁNICAS DE VEHÍCULOS», con un número tipo <c>A00201725</c>), en cuya
+    /// sección «EMISIONES» están el CO y los HC en prueba estática, el CO/HC/NOx en prueba dinámica y el
+    /// <c>% DE OPACIDAD</c> para diésel.</para>
+    /// <para><b>Lo que de verdad hay en la casilla,</b> medido sobre 277 adjuntos recientes de 7
+    /// secretarías: <b>58,8 % son listas de chequeo del concesionario</b>, 17,3 % son la ficha, y
+    /// certificados de emisiones sueltos, <b>cero</b>. Rechazar seis de cada diez cargas es, por sí solo,
+    /// el valor de este prompt.</para>
+    /// <para><b>Hicieron falta DOS muestras, y la primera engañaba.</b> Estratificada por secretaría, sus
+    /// 7 fichas resultaron ser 5 escaneos de UNA sola ficha de un solo camión: decir «marca 100 %» sobre
+    /// eso habría sido decir «lee bien este documento». Estratificando por VEHÍCULO aparecieron <b>19
+    /// fichas distintas</b> —Renault, VW, Ford, Chevrolet, Kia, Mercedes, International, JAC, RAM—, y sobre
+    /// ellas: marca 26/26, referencia 26/26, sección de emisiones detectada 26/26, con decisión y número de
+    /// ficha <b>idénticos entre dos corridas</b>.</para>
+    /// <para><b>El caso que solo enseña una muestra diversa:</b> un vehículo ELÉCTRICO deja la sección de
+    /// emisiones enteramente vacía, y el prompt lo rechazaba con un razonamiento impecable y una conclusión
+    /// falsa. Su ficha es exactamente el documento pedido: no quema combustible, luego no hay nada que
+    /// medir. Con la primera muestra —un camión diésel repetido— ese caso no habría aparecido nunca.</para>
+    /// <para><b>Depende de la HU #12036.</b> Sin el enderezado previo, este mismo prompt <i>inventaba</i>
+    /// sobre las fichas giradas: CHEVROLET CAVALIER y HYUNDAI ELANTRA para un FOTON, con tres números de
+    /// ficha distintos. Tras enderezar, el número salió <c>A00201725</c> en 7 de 7.</para>
+    /// <para><b>La cilindrada se extrae pero NO se pinta en el resumen.</b> 52-56 % literal, y desglosando:
+    /// 5 vinieron vacías, 3 son diferencia legítima de fuente (la ficha da el desplazamiento nominal
+    /// <c>3500</c> y V1 el exacto <c>3496</c>) y 4 son lecturas equivocadas — un 16 % de error real sobre
+    /// un dato que el trámite ya tiene. Misma decisión que con el NIT del arrendador en el leasing: un dato
+    /// que nadie ve no puede inducir a error.</para>
+    /// </summary>
+    private const string CertificadoAmbiental =
+"""
+Analiza este documento. Determina si acredita que el vehiculo CUMPLE LOS LIMITES DE EMISIONES contaminantes exigidos en Colombia (lo que el tramite pide como "Certificado CEPD", certificado de emisiones por prueba dinamica).
+
+QUE SE CONSIDERA VALIDO — LO QUE IMPORTA ES QUE CERTIFIQUE LAS EMISIONES:
+Este requisito NO se acredita con un documento de formato unico. En la practica llega de dos formas y las DOS sirven:
+1. LA FICHA TECNICA DE HOMOLOGACION del Ministerio de Transporte: "FORMATO FTH-002", encabezada por "MINISTERIO DE TRANSPORTE / DIRECCION DE TRANSPORTE Y TRANSITO / SUBDIRECCION DE TRANSPORTE" y titulada "CARACTERISTICAS TECNICO-MECANICAS DE VEHICULOS". Lleva un numero de ficha (por ejemplo A00201725 o P00114156) y esta dividida en secciones numeradas. Es VALIDA porque incluye la seccion "EMISIONES", que es exactamente lo que el tramite pide acreditar. Suele tener dos hojas: la seccion de emisiones esta en la HOJA No. 2.
+2. UN CERTIFICADO DE EMISIONES INDEPENDIENTE, si lo hubiera: cualquier documento cuyo objeto sea certificar las emisiones o la opacidad del vehiculo (prueba dinamica, gases de escape, maximos permisibles), emitido por el fabricante, el ensamblador, el importador o una autoridad.
+
+QUE NO ES VALIDO:
+1. Un CHECK LIST de concesionario. Es lo que mas se carga por error en esta casilla. Se reconoce por el titulo "CHECK LIST MATRICULAS INICIALES" o "CHECK LIST VEHICULOS", y por sus campos: "Proveedor", "Fecha de Recepcion", "Tipo de servicio", "# Orden de Compra", "Numero de Factura". Es un control interno del concesionario y NO certifica emisiones.
+2. Un CERTIFICADO DE CAMARA DE COMERCIO o de existencia y representacion legal.
+3. Una FACTURA de venta, una orden de compra o un RUT.
+4. Un contrato de PRENDA, una IMPRONTA, una cedula, una licencia de transito o una declaracion de importacion.
+5. Una PAGINA EN BLANCO o una plantilla vacia.
+
+COMO DECIDIR — PROCEDE EN ESTE ORDEN:
+PASO 1. Busca al emisor y el objeto: el Ministerio de Transporte con el formato FTH-002, o un documento que certifique emisiones. Si lo que tienes delante es un control de un concesionario, un banco o un proveedor, NO es valido.
+PASO 2. Busca la SECCION DE EMISIONES: un apartado titulado "EMISIONES" con monoxido de carbono, hidrocarburos, oxidos de nitrogeno u opacidad. En la ficha suele ser la seccion 9 u 11.
+PASO 3. Solo si los dos pasos anteriores dan positivo, es_valido = true.
+
+LO QUE NO DEBES EXIGIR — LEE ESTO ANTES DE RECHAZAR:
+1. NO exijas la PLACA ni el VIN ni el numero de chasis. La ficha homologa un MODELO, no un vehiculo concreto: es normal que en OBSERVACIONES ponga "NUMERO VIN: N/A". Su ausencia NO es motivo de rechazo, y no debes inventarlos ni tomarlos de otro documento del archivo.
+2. NO exijas que los recuadros de emisiones tengan numeros. Un vehiculo DIESEL deja vacios los campos de gasolina y solo rellena "% DE OPACIDAD"; uno de gasolina deja vacia la opacidad. Que la mitad de la tabla este en blanco es lo NORMAL y NO es motivo de rechazo: lo que se exige es que la SECCION EXISTA.
+3. UN VEHICULO ELECTRICO DEJA LA SECCION DE EMISIONES ENTERAMENTE VACIA, y eso es CORRECTO: no quema combustible, luego no hay CO, HC, NOx ni opacidad que medir. Lo reconoceras porque el combustible dice "ELECTRICO", la cilindrada es 0 o esta vacia, y a veces una observacion aclara que no tiene disposicion de cilindros. Su ficha es EXACTAMENTE el documento que el tramite pide y es_valido va en true. Rechazarla por no traer valores de emisiones seria rechazar el documento correcto. En ese caso pon combustible = "ELECTRICO" y deja los campos de emisiones vacios.
+4. NO exijas firmas ni sellos.
+
+DOCUMENTO ESCANEADO Y CASI SIEMPRE GIRADO:
+Estas fichas se escanean apaisadas y las paginas suelen venir GIRADAS 90 GRADOS. Leelas igual, girando la lectura; que la pagina este de lado NO es motivo de rechazo. La mayoria no trae capa de texto.
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos, identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1,2]). Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro, NO lo invalida y NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+LA PROPORCION NO CUENTA: una sola hoja con la ficha basta para que es_valido sea true.
+
+LAS EMISIONES — ES EL DATO POR EL QUE SE PIDE EL DOCUMENTO:
+Pon tiene_seccion_emisiones en true solo si VES el apartado de emisiones, aunque sus casillas esten vacias.
+Rellena los valores que encuentres, dejando vacios los que no aparezcan:
+- emisiones_co_ralenti: "% POR VOLUMEN DE MONOXIDO DE CARBONO" en prueba estatica o ralenti
+- emisiones_hc_ralenti: "PARTES POR MILLON DE HIDROCARBUROS" en prueba estatica o ralenti
+- emisiones_co_dinamica, emisiones_hc_dinamica, emisiones_nox_dinamica: los gr/km de la prueba dinamica
+- opacidad_diesel: el "% DE OPACIDAD" de los motores diesel (ACPM)
+- tiene_canister: true/false segun la casilla CANISTER; deja false si no aparece
+NO conviertas ni calcules nada: transcribe el numero tal cual.
+
+EL VEHICULO — CADA DATO EN SU CASILLA:
+La ficha reparte los datos del vehiculo en secciones numeradas, y confundirlas es el error mas facil:
+- vehiculo_marca sale de "MARCA" dentro de "CARACTERISTICAS GENERALES (CHASIS)". Es una marca de vehiculo (FOTON, HINO, KIA, CHEVROLET...). NUNCA pongas ahi la referencia ni un codigo alfanumerico: si lo que ibas a escribir lleva digitos y guiones, NO es la marca.
+- vehiculo_referencia sale de "REFERENCIA" en esa misma seccion, y es lo que el tramite llama linea: una cadena alfanumerica larga tipo "BJ1186VLPHN-5A" o "NHR55E". Copiala caracter a caracter, con sus guiones, sin corregirla ni completarla.
+- OJO: la ficha trae VARIAS marcas mas abajo —la del MOTOR, la de los EJES, la de la DIRECCION, la de los FRENOS, la de la CARROCERIA— y NO son la marca del vehiculo. Si lees CUMMINS, WABCO, ZF o similares, ese es un componente.
+
+LA CILINDRADA — LEELA DIGITO A DIGITO:
+El "DESPLAZAMIENTO" del motor, en cm3, es lo que el tramite llama cilindraje. Esta dentro de la seccion "MOTOR", no en la de la carroceria ni en la de los pesos, que estan llenas de numeros de cuatro cifras parecidos (capacidades en Kg, longitudes en mm).
+Estos escaneos son de mala calidad y el PRIMER digito es el que mas se pierde. Antes de darla por buena, mira el numero completo carácter a carácter y comprueba que el valor tiene sentido como cilindrada: los turismos y camionetas van de 1000 a 4000 cm3 y los camiones de 4000 a 13000. Si dudas de un digito, di el numero que ves; no lo redondees ni lo completes.
+
+EL MODELO de la ficha es el año homologado y puede NO coincidir con el año del vehiculo del tramite. Transcribe el que ves y no lo ajustes.
+
+EXTRAER:
+- tipo_documento: "ficha_homologacion" | "certificado_emisiones" | "check_list_concesionario" | "camara_comercio" | "factura" | "prenda" | "impronta" | "aduana" | "documento_en_blanco" | "otro"
+- es_valido: true/false
+- paginas_documento: [paginas], total_paginas: numero
+- numero_ficha: el numero de ficha (ej "A00201725"), vacio si no lo trae
+- fecha_ficha (YYYY-MM-DD)
+- tipo_homologacion: lo que diga el campo "TIPO DE HOMOLOGACION" (ej "CHASIS", "VEHICULO", "CARROCERIA")
+- clase_vehiculo, tipo_carroceria, servicio
+- vehiculo_marca, vehiculo_referencia, vehiculo_modelo
+- motor_marca, cilindrada, combustible, numero_ejes, numero_sillas
+- capacidad: la capacidad o carga util, en kg, solo digitos
+- tiene_seccion_emisiones: true/false
+- emisiones_co_ralenti, emisiones_hc_ralenti, emisiones_co_dinamica, emisiones_hc_dinamica, emisiones_nox_dinamica, opacidad_diesel
+- tiene_canister: true/false
+- certificado_por: quien firma que las caracteristicas coinciden (ensamblador, importador o carrozador)
+- observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
+
+JSON valido sin markdown:
+{"tipo_documento":"ficha_homologacion","es_valido":true,"paginas_documento":[1,2],"total_paginas":2,"numero_ficha":"","fecha_ficha":"","tipo_homologacion":"","clase_vehiculo":"","tipo_carroceria":"","servicio":"","vehiculo_marca":"","vehiculo_referencia":"","vehiculo_modelo":"","motor_marca":"","cilindrada":"","combustible":"","numero_ejes":"","numero_sillas":"","capacidad":"","tiene_seccion_emisiones":true,"emisiones_co_ralenti":"","emisiones_hc_ralenti":"","emisiones_co_dinamica":"","emisiones_hc_dinamica":"","emisiones_nox_dinamica":"","opacidad_diesel":"","tiene_canister":false,"certificado_por":"","observaciones":""}
 """;
 
     private const string MandatoConfig =

@@ -18,6 +18,7 @@ public sealed class DocumentOcrPromptsTests
     [InlineData("comprobante_derechos")] // HU #12000
     [InlineData("contrato_leasing")] // HU #12001
     [InlineData("camara_comercio")] // HU #12030
+    [InlineData("certificado_ambiental")] // HU #12037
     public void Tipos_soportados_tienen_prompt(string tipo)
     {
         DocumentOcrPrompts.IsSupported(tipo).Should().BeTrue();
@@ -708,6 +709,80 @@ public sealed class DocumentOcrPromptsTests
         {
             DocumentOcrPrompts.PromptFor(tipo).Should().NotBeNullOrWhiteSpace(
                 because: $"el frontend va a pedir el OCR de «{tipo}» en cuanto un trámite lo exija");
+        }
+    }
+
+    // ── HU #12037 — Certificado CEPD ─────────────────────────────────────────────────────────
+    // El CEPD no es un documento: es la sección EMISIONES de la ficha de homologación. Y el 58,8 %
+    // de esa casilla son listas de chequeo del concesionario, así que rechazar bien es medio trabajo.
+
+    [Fact]
+    public void Prompt_cepd_acepta_la_ficha_de_homologacion_por_su_seccion_de_emisiones()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("FORMATO FTH-002");
+        prompt.Should().Contain("EMISIONES");
+    }
+
+    [Fact]
+    public void Prompt_cepd_rechaza_el_check_list_del_concesionario()
+    {
+        // Es lo que más se carga por error: 163 de 277 adjuntos medidos.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("CHECK LIST MATRICULAS INICIALES");
+        prompt.Should().Contain("Orden de Compra");
+    }
+
+    [Fact]
+    public void Prompt_cepd_acepta_el_vehiculo_electrico_con_la_seccion_vacia()
+    {
+        // Falso rechazo real del v2, con un razonamiento impecable y una conclusión falsa: un
+        // eléctrico no quema combustible, luego no hay emisiones que medir. Su ficha es la correcta.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("UN VEHICULO ELECTRICO DEJA LA SECCION DE EMISIONES ENTERAMENTE VACIA");
+        prompt.Should().Contain("Rechazarla por no traer valores de emisiones seria rechazar el documento correcto");
+    }
+
+    [Fact]
+    public void Prompt_cepd_no_exige_valores_segun_el_combustible()
+    {
+        // Un diésel deja vacíos los campos de gasolina y solo rellena la opacidad, y al revés.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("NO exijas que los recuadros de emisiones tengan numeros");
+        prompt.Should().Contain("lo que se exige es que la SECCION EXISTA");
+    }
+
+    [Fact]
+    public void Prompt_cepd_no_confunde_la_marca_del_vehiculo_con_la_de_un_componente()
+    {
+        // La ficha trae la marca del motor, los ejes, la dirección, los frenos y la carrocería. En el
+        // v1 el modelo llegó a poner la referencia en el campo de la marca.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("CADA DATO EN SU CASILLA");
+        prompt.Should().Contain("ese es un componente");
+    }
+
+    [Fact]
+    public void Prompt_cepd_avisa_de_los_escaneos_girados()
+    {
+        // Depende de la HU #12036: sin enderezar, este mismo prompt inventaba marcas y números de ficha.
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        prompt.Should().Contain("GIRADAS 90 GRADOS");
+    }
+
+    [Fact]
+    public void Prompt_cepd_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("certificado_ambiental")!;
+        foreach (var campo in new[]
+                 {
+                     "combustible", "tiene_seccion_emisiones", "emisiones_co_dinamica",
+                     "emisiones_hc_dinamica", "emisiones_nox_dinamica", "opacidad_diesel",
+                     "numero_ficha", "tipo_homologacion", "vehiculo_marca", "vehiculo_referencia",
+                     "vehiculo_modelo", "clase_vehiculo", "tipo_carroceria", "certificado_por",
+                 })
+        {
+            prompt.Should().Contain(campo);
         }
     }
 }

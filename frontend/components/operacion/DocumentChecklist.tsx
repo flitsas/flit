@@ -292,6 +292,21 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
     { label: 'Periodo certificado', value: (d) => pickStr(d, 'vigencia_certificada') },
     { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
   ],
+  // HU #12037 — Certificado CEPD. El resumen antepone el combustible y las emisiones, que es por lo
+  // que se pide el documento, y luego el vehículo homologado para cotejarlo con el trámite.
+  // NO se muestra la cilindrada a propósito: se midió un 16 % de error real sobre un dato que el
+  // trámite ya tiene, y mostrarla mal invitaría a «corregir» el trámite con un valor peor.
+  certificado_ambiental: [
+    { label: 'Combustible', value: (d) => pickStr(d, 'combustible') },
+    { label: 'Emisiones', value: (d) => (d.tiene_seccion_emisiones ? 'Sección presente' : 'Sin sección de emisiones') },
+    { label: 'Prueba dinámica', value: (d) => joinFields(d, ['emisiones_co_dinamica', 'emisiones_hc_dinamica', 'emisiones_nox_dinamica'], ' · ') },
+    { label: 'Opacidad (diésel)', value: (d) => pickStr(d, 'opacidad_diesel') },
+    { label: 'N.º de ficha', value: (d) => pickStr(d, 'numero_ficha') },
+    { label: 'Homologación', value: (d) => pickStr(d, 'tipo_homologacion') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_referencia', 'vehiculo_modelo']) },
+    { label: 'Clase', value: (d) => joinFields(d, ['clase_vehiculo', 'tipo_carroceria'], ' — ') },
+    { label: 'Certifica', value: (d) => pickStr(d, 'certificado_por') },
+  ],
   // HU #12030 — certificado de cámara de comercio. El resumen antepone NIT y razón social, que es lo
   // que el gestor coteja contra la empresa que figura como parte, y después el representante legal,
   // que es quien puede firmar por ella. La vigencia se informa, nunca bloquea.
@@ -388,6 +403,7 @@ const TIPO_LABEL: Record<string, string> = {
   comprobante_derechos: 'Comprobante de pago',
   contrato_leasing: 'Contrato de Leasing',
   camara_comercio: 'Certificado de Cámara de Comercio',
+  certificado_ambiental: 'Certificado CEPD',
 };
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */
