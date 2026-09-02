@@ -560,7 +560,7 @@ public sealed class BiometricaHandlerTests
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
         // parte vacío → comprador (matrícula, única parte).
-        var (result, error) = await _simular.HandleAsync(id, tenant, parte: null, ct);
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: null, ct: ct);
 
         error.Should().BeNull();
         result!.Status.Should().Be(BiometricEstados.Aprobado);
@@ -598,7 +598,7 @@ public sealed class BiometricaHandlerTests
         });
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
-        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct);
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Status.Should().Be(BiometricEstados.Aprobado);
@@ -616,7 +616,7 @@ public sealed class BiometricaHandlerTests
         var instance = Instance(id, tenant); // sin actores
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
-        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct);
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct: ct);
 
         error.Should().Be("actor_requerido");
         result.Should().BeNull();
@@ -626,7 +626,7 @@ public sealed class BiometricaHandlerTests
     public async Task Simular_InvalidParte_ReturnsParteInvalida()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (result, error) = await _simular.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), parte: "tercero", ct);
+        var (result, error) = await _simular.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), parte: "tercero", ct: ct);
 
         error.Should().Be("parte_invalida");
         result.Should().BeNull();
@@ -639,7 +639,7 @@ public sealed class BiometricaHandlerTests
         _repo.GetByIdWithBiometricsAndActorsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct)
             .Returns((ProcedureInstance?)null);
 
-        var (result, error) = await _simular.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), parte: "comprador", ct);
+        var (result, error) = await _simular.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), parte: "comprador", ct: ct);
 
         error.Should().Be("instance_not_found");
         result.Should().BeNull();
@@ -669,7 +669,7 @@ public sealed class BiometricaHandlerTests
         instance.BiometricValidations.Add(rejected);
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
-        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct);
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Status.Should().Be(BiometricEstados.Aprobado);

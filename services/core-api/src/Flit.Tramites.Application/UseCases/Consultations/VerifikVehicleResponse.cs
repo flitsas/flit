@@ -32,6 +32,37 @@ public sealed class VerifikVehicleData
     // para no romper la deserialización (array-vs-objeto era la causa de la JsonException).
     [JsonPropertyName("garantiasMobiliarias")]
     public List<object>? GarantiasMobiliarias { get; set; }
+
+    /// <summary>
+    /// Bloque técnico del RUNT. En remolques/semirremolques ejes, dimensiones y llantas llegan aquí
+    /// y no en <see cref="InformacionGeneral"/> — si no se modela, System.Text.Json los descarta.
+    /// </summary>
+    [JsonPropertyName("datosTecnicos")]
+    public VerifikDatosTecnicos? DatosTecnicos { get; set; }
+}
+
+public sealed class VerifikDatosTecnicos
+{
+    [JsonPropertyName("alto")]
+    public string? Alto { get; set; }
+
+    [JsonPropertyName("ancho")]
+    public string? Ancho { get; set; }
+
+    [JsonPropertyName("largo")]
+    public string? Largo { get; set; }
+
+    [JsonPropertyName("noEjes")]
+    public string? NoEjes { get; set; }
+
+    [JsonPropertyName("noLlantas")]
+    public string? NoLlantas { get; set; }
+
+    [JsonPropertyName("pesoBrutoVehicular")]
+    public string? PesoBrutoVehicular { get; set; }
+
+    [JsonPropertyName("rodaje")]
+    public string? Rodaje { get; set; }
 }
 
 public sealed class VerifikInformacionGeneral

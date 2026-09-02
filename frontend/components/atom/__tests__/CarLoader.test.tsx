@@ -18,7 +18,7 @@ describe('CarLoader', () => {
 
   it.each([
     ['runt' as const, /RUNT/],
-    ['ocr' as const, /documentos con IA/],
+    ['ocr' as const, /Leyendo los documentos/],
     ['radicacion' as const, /organismo de tránsito/],
   ])('el modo %s nombra ante quién se espera', (mode, esperado) => {
     render(<CarLoader mode={mode} />);
@@ -28,7 +28,7 @@ describe('CarLoader', () => {
   it('un rótulo explícito manda sobre el mensaje del modo', () => {
     render(<CarLoader mode="ocr" label="Generando el FUR…" />);
     expect(screen.getByText('Generando el FUR…')).toBeInTheDocument();
-    expect(screen.queryByText(/documentos con IA/)).toBeNull();
+    expect(screen.queryByText(/Leyendo los documentos/)).toBeNull();
   });
 
   it('si los SVG no cargan, cae a la órbita dibujada y conserva el mensaje', () => {

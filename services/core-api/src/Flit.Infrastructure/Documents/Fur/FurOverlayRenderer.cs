@@ -3,6 +3,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace Flit.Infrastructure.Documents.Fur;
 
@@ -10,16 +13,13 @@ namespace Flit.Infrastructure.Documents.Fur;
 public static partial class FurOverlayRenderer
 {
     /// <summary>Ancho máximo de la imagen de firma del baúl dentro del campo (el resto es metadatos).</summary>
-    private const double SignatureImageMaxWidth = 115;
+    private const double SignatureImageMaxWidth = 145;
 
     /// <summary>
     /// HU #11016 — fracción del ALTO del campo que puede ocupar la firma. El resto es aire: una firma
     /// que llena el campo de borde a borde termina tocando (o pisando) las líneas vecinas del FUR.
     /// </summary>
-    private const double SignatureImageMaxHeightRatio = 0.8;
-
-    /// <summary>Separación entre imagen de firma y bloque de metadatos.</summary>
-    private const double SignatureSidecarGap = 6;
+    private const double SignatureImageMaxHeightRatio = 0.88;
 
     /// <summary>Tamaño de fuente del bloque de metadatos junto a la firma.</summary>
     private const double SignatureSidecarFontSize = 3;
@@ -207,26 +207,35 @@ public static partial class FurOverlayRenderer
     {
         var fieldH = field.H > 0 ? field.H : 36;
         var fieldW = field.W > 0 ? field.W : 120;
-        var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.38);
+        var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.50);
 
         // HU #11016 — la firma se dibujaba con el ALTO COMPLETO del campo y sin respetar la relación de
         // aspecto: un PNG apaisado se estiraba verticalmente y se salía del espacio de firma, pisando lo
         // que hubiera encima. Se encaja dentro de (imageW × fieldH * SignatureImageMaxHeightRatio)
         // conservando la proporción y se centra verticalmente en el campo.
-        var (drawW, drawH) = FitInBox(imageBytes, imageW, fieldH * SignatureImageMaxHeightRatio);
-        var imageY = field.Y + Math.Max(0, (fieldH - drawH) / 2);
-
-        DrawImage(gfx, field.X, imageY, drawW, drawH, imageBytes);
+        double drawW;
+        double drawH;
+        try
+        {
+            (drawW, drawH) = FitInBox(imageBytes, imageW, fieldH * SignatureImageMaxHeightRatio);
+            var (imageY, _, _) = FurSignatureLayout.Place(field.X, field.Y, fieldW, fieldH, drawW, drawH);
+            DrawImage(gfx, field.X, imageY, drawW, drawH, imageBytes);
+        }
+        catch (Exception)
+        {
+            if (!string.IsNullOrWhiteSpace(sidecarText))
+                DrawSidecarText(gfx, field.X, field.Y, fieldW, fieldH, sidecarText, field.Align);
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(sidecarText))
             return;
 
-        var sidecarX = field.X + imageW + SignatureSidecarGap;
-        var sidecarW = Math.Max(0, fieldW - imageW - SignatureSidecarGap);
+        var (_, sidecarX, sidecarW) = FurSignatureLayout.Place(field.X, field.Y, fieldW, fieldH, drawW, drawH);
         if (sidecarW <= 0)
             return;
 
-        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText);
+        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText, field.Align);
     }
 
     private static void DrawSidecarText(
@@ -235,23 +244,40 @@ public static partial class FurOverlayRenderer
         double y,
         double w,
         double h,
-        string text)
+        string text,
+        FurTextAlign align = FurTextAlign.Left)
     {
         var font = CreateFont(SignatureSidecarFontSize, bold: false);
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var lineHeight = SignatureSidecarFontSize * 1.15;
         var maxLines = Math.Max(1, (int)Math.Floor(h / lineHeight));
+        var visible = Math.Min(lines.Length, maxLines);
+        var inset = align == FurTextAlign.Center ? 2.0 : 0.0;
+        var boxX = x + inset;
+        var boxW = Math.Max(0, w - inset * 2);
+        var boxY = y + inset;
+        var boxH = Math.Max(0, h - inset * 2);
+        var blockH = visible * lineHeight;
+        if (align == FurTextAlign.Center && blockH < boxH)
+            boxY += (boxH - blockH) / 2;
 
-        for (var i = 0; i < Math.Min(lines.Length, maxLines); i++)
+        for (var i = 0; i < visible; i++)
         {
             var line = lines[i];
-            if (w > 0)
+            if (boxW > 0)
             {
-                line = TruncateToWidth(gfx, line, font, w);
+                line = TruncateToWidth(gfx, line, font, boxW);
             }
 
-            var yBaseline = y + i * lineHeight + SignatureSidecarFontSize * 0.82;
-            gfx.DrawString(line, font, XBrushes.Black, new XPoint(x, yBaseline));
+            var drawX = boxX;
+            if (align == FurTextAlign.Center && boxW > 0)
+            {
+                var size = gfx.MeasureString(line, font);
+                drawX = boxX + Math.Max(0, (boxW - size.Width) / 2);
+            }
+
+            var yBaseline = boxY + i * lineHeight + SignatureSidecarFontSize * 0.82;
+            gfx.DrawString(line, font, XBrushes.Black, new XPoint(drawX, yBaseline));
         }
     }
 
@@ -284,7 +310,7 @@ public static partial class FurOverlayRenderer
     {
         try
         {
-            using var ms = new MemoryStream(imageBytes);
+            using var ms = new MemoryStream(FlattenAlphaOntoWhite(imageBytes));
             using var img = XImage.FromStream(() => ms);
             return FurSignatureLayout.Fit(img.PixelWidth, img.PixelHeight, maxW, maxH);
         }
@@ -296,9 +322,60 @@ public static partial class FurOverlayRenderer
 
     private static void DrawImage(XGraphics gfx, double x, double y, double w, double h, byte[] imageBytes)
     {
-        using var ms = new MemoryStream(imageBytes);
+        var payload = FlattenAlphaOntoWhite(imageBytes);
+        using var ms = new MemoryStream(payload);
         using var img = XImage.FromStream(() => ms);
+        img.Interpolate = true;
         gfx.DrawImage(img, x, y, w, h);
+    }
+
+    /// <summary>
+    /// PdfSharpCore pinta mal (o tira) PNG con alpha. El recorte Kyverum va con fondo transparente;
+    /// se aplana sobre blanco, que es el color del recuadro del FUR.
+    /// </summary>
+    private static byte[] FlattenAlphaOntoWhite(byte[] imageBytes)
+    {
+        try
+        {
+            using var image = Image.Load<Rgba32>(imageBytes);
+            var hasAlpha = false;
+            for (var y = 0; y < image.Height && !hasAlpha; y++)
+            {
+                for (var x = 0; x < image.Width; x++)
+                {
+                    if (image[x, y].A < 255)
+                    {
+                        hasAlpha = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasAlpha)
+                return imageBytes;
+
+            for (var y = 0; y < image.Height; y++)
+            {
+                for (var x = 0; x < image.Width; x++)
+                {
+                    var p = image[x, y];
+                    var a = p.A / 255f;
+                    image[x, y] = new Rgba32(
+                        (byte)Math.Round(p.R * a + 255 * (1 - a)),
+                        (byte)Math.Round(p.G * a + 255 * (1 - a)),
+                        (byte)Math.Round(p.B * a + 255 * (1 - a)),
+                        255);
+                }
+            }
+
+            using var ms = new MemoryStream();
+            image.Save(ms, new PngEncoder { ColorType = PngColorType.Rgb });
+            return ms.ToArray();
+        }
+        catch (Exception)
+        {
+            return imageBytes;
+        }
     }
 
     private static XFont CreateFont(double size, bool bold)

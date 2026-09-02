@@ -7147,6 +7147,16 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("metadata")
                         .HasDefaultValueSql("'{}'");
 
+                    b.Property<int>("Ordinal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("ordinal");
+
+                    b.Property<decimal?>("OwnershipPercentage")
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("ownership_percentage");
+
                     b.Property<string>("PersonType")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
@@ -7178,9 +7188,9 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_procedure_instance_actors_tenant_id");
 
-                    b.HasIndex("ProcedureInstanceId", "ProcedureEntityId")
+                    b.HasIndex("ProcedureInstanceId", "ProcedureEntityId", "Ordinal")
                         .IsUnique()
-                        .HasDatabaseName("uq_procedure_instance_actors_instance_entity");
+                        .HasDatabaseName("uq_procedure_instance_actors_instance_entity_ordinal");
 
                     b.ToTable("procedure_instance_actors", "tramites", t =>
                         {

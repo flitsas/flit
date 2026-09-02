@@ -109,6 +109,10 @@ public static class DependencyInjection
         // que crear el trámite no repita la llamada al proveedor externo.
         services.AddSingleton<IPreflightPreviewStore, InMemoryPreflightPreviewStore>();
         services.AddScoped<RunPreflightPreviewHandler>();
+        // ADR-0051 Decisión 5 — sincroniza el actor "vendedor" desde las consultas del paso 1 (RUNT
+        // persona natural / RUES persona jurídica) cuando el tipo no lo captura por formulario
+        // (TRASPASO_UNILATERAL). Registrado ANTES de su consumidor.
+        services.AddScoped<SyncSellerActorFromConsultationsHandler>();
         services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
         // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
@@ -196,6 +200,7 @@ public static class DependencyInjection
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
         services.AddScoped<PreviewFurHandler>();
+        services.AddScoped<ListFurClassificationsHandler>();
         // ADR-0036 §D9 (HU #10916) — resolución del mandatario al aprobar (consumida por AdminOtEndpoints).
         services.AddScoped<MandatoApprovalHandler>();
         // HU #10860 (ADR-0032) — el consolidado del wizard regenera en cascada el FUR/documentos en
@@ -219,6 +224,8 @@ public static class DependencyInjection
         services.AddScoped<AdjuntarLicenciaTransitoHandler>();
         // Descarga on-demand del certificado (PDF) de la validación de identidad desde Kyverum.
         services.AddScoped<DescargarCertificadoIdentidadHandler>();
+        services.AddScoped<Identity.IdentitySignatureCapture>();
+        services.AddScoped<Identity.IIdentitySignatureCapture>(sp => sp.GetRequiredService<Identity.IdentitySignatureCapture>());
         // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).
         services.AddScoped<GetIdentityAuditHandler>();
         // CF-07 (Feature #11004, ADR-0036) — misma bitácora, sin depender de instanceId (standalone + trámite).

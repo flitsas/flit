@@ -225,7 +225,7 @@ public sealed class WizardBiometricaStateTests
         before!.Steps.Single(s => s.Index == 4).Status.Should().Be("incomplete");
 
         // Simular validación de identidad (mock, sin fotos).
-        var (sim, simError) = await _simular.HandleAsync(instance.Id, instance.TenantId, parte: null, ct);
+        var (sim, simError) = await _simular.HandleAsync(instance.Id, instance.TenantId, parte: null, ct: ct);
         simError.Should().BeNull();
         sim!.Status.Should().Be(BiometricEstados.Aprobado);
 

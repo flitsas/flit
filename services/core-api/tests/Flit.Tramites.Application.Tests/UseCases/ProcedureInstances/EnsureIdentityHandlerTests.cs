@@ -90,7 +90,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns(source);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.Reusada);
@@ -109,7 +109,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns((ProcedureInstanceBiometricValidation?)null);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -124,7 +124,7 @@ public sealed class EnsureIdentityHandlerTests
         instance.BiometricValidations.Add(Validation(BiometricEstados.Aprobado, DateTimeOffset.UtcNow, parte: "comprador"));
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.YaVigente);
@@ -141,7 +141,7 @@ public sealed class EnsureIdentityHandlerTests
         instance.BiometricValidations.Add(Validation(BiometricEstados.EnProceso, null, parte: "comprador"));
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.EnProceso);
@@ -160,7 +160,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns((ProcedureInstanceBiometricValidation?)null);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -180,7 +180,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns((ProcedureInstanceBiometricValidation?)null);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -198,7 +198,7 @@ public sealed class EnsureIdentityHandlerTests
         instance.BiometricValidations.Add(previa);
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.YaVigente);
@@ -209,20 +209,56 @@ public sealed class EnsureIdentityHandlerTests
     public async Task Handle_SinActorParaLaParte_SinActor()
     {
         var ct = TestContext.Current.CancellationToken;
-        var instance = MatriculaConComprador(); // solo tiene comprador
+        // La parte SÍ valida identidad en este tipo (matrícula declara `biometricActors:["BUYER"]`),
+        // pero todavía no hay actor capturado: ahí el desenlace sigue siendo «sin actor».
+        var instance = MatriculaConComprador();
+        instance.Actors.Clear();
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "vendedor", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.SinActor);
     }
 
     [Fact]
+    public async Task Handle_ParteQueElTipoNoSometeAValidacion_NoDisparaNada()
+    {
+        // ADR-0051 — el handler resolvía el actor y seguía adelante sin preguntar nunca si esa parte
+        // firma. En `TRASPASO_UNILATERAL` el locatario se persiste como `comprador` —no hay rol propio
+        // para una única parte entrante—, así que descartarlo por el NOMBRE del rol no lo atrapaba y
+        // le salía el correo de validación a quien no firma (art. 5.3.2.2). Aquí se usa la matrícula,
+        // que declara solo BUYER, porque el defecto es el mismo: la parte no declarada no se asegura.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConComprador();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "vendedor", ct: ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.ParteNoValidaIdentidad);
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
+    }
+
+    [Fact]
+    public async Task Handle_ParteDeclarada_SigueAsegurandose()
+    {
+        // La guarda es aditiva: la parte que el tipo SÍ declara sigue el camino de siempre.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConComprador();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().NotBe(EnsureIdentityOutcomes.ParteNoValidaIdentidad);
+    }
+
+    [Fact]
     public async Task Handle_ParteInvalida_Error()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), TenantId, "tercero", ct);
+        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), TenantId, "tercero", ct: ct);
         result.Should().BeNull();
         error.Should().Be("parte_invalida");
     }
@@ -234,7 +270,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.GetByIdWithBiometricsAndActorsAsync(Arg.Any<Guid>(), TenantId, ct)
             .Returns((ProcedureInstance?)null);
 
-        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), TenantId, "comprador", ct: ct);
 
         result.Should().BeNull();
         error.Should().Be("not_found");
@@ -254,7 +290,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(Match());
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);
@@ -277,7 +313,7 @@ public sealed class EnsureIdentityHandlerTests
             .Returns(Validation(BiometricEstados.Aprobado, DateTimeOffset.UtcNow.AddDays(-2)));
         var sut = new EnsureIdentityHandler(_repo, new FakeVaultPolicy(Match()));
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);
@@ -296,7 +332,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(null);
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -316,7 +352,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(Match());
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -335,7 +371,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(Match());
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.YaVigente);
@@ -361,7 +397,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns(standalone);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.Reusada);
@@ -385,7 +421,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns((ProcedureInstanceBiometricValidation?)null);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -452,7 +488,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(Match());
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -470,7 +506,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
         var sut = new EnsureIdentityHandler(_repo, new FakeVaultPolicy(Match()));
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);

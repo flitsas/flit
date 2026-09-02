@@ -47,7 +47,13 @@ public sealed record VehiculoDatos(
     string? TipoServicio = null,
     string? Capacidad = null,
     string? PesoBruto = null,
-    string? NumeroEjes = null);
+    string? NumeroEjes = null,
+    string? Alto = null,
+    string? Ancho = null,
+    string? Largo = null,
+    string? NumeroLlantas = null,
+    // Numeral 8 del FUR de maquinaria: datosTecnicos.rodaje (llantas / cilindros / orugas / resto → otros).
+    string? TipoTraccion = null);
 
 /// <summary>Organismo de tránsito seleccionado (de field_values transit_office_*).</summary>
 public sealed record OrganismoTransito(string? Codigo, string? Nombre, string? Ciudad);
@@ -101,6 +107,7 @@ public sealed record FurDocumentData(
     DateTime? FechaTramite = null,
     string? Observaciones = null,
     IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null,
+    IReadOnlyDictionary<string, byte[]>? FirmaIdentidadImagenes = null,
     IReadOnlyDictionary<string, FirmaBaulMetadata>? FirmaBaulMetadatos = null,
     // HU #10463 — false cuando NO hay validación de identidad aprobada+vigente: el FUR se pinta con
     // el sello "NO FIRMADO" en el espacio de firma. Por defecto true (comportamiento previo intacto).
@@ -122,6 +129,11 @@ public sealed record FurDocumentData(
     // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
     // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).
     FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor,
+    /// <summary>
+    /// Valor de <c>tramites.vehicle_classification_fur.field_to_fill</c>: casilla a marcar en el
+    /// numeral 4. Si es null, el mapper intenta el literal de <see cref="VehiculoDatos.Clase"/>.
+    /// </summary>
+    string? FieldToFill = null,
     // Casilla 19 "EMPRESA VINCULADORA" del FUR: solo aplica a servicio público (transporte vinculado a
     // una empresa habilitada); en particular/matrícula sin vinculación queda null y la casilla sale en
     // blanco (comportamiento por defecto, sin romper trámites existentes que no traen este dato).
@@ -145,7 +157,15 @@ public sealed record FurDocumentData(
     /// deducirlo por substring sobre la tipología o la modalidad, que daba por traspaso cualquier
     /// código que contuviera esa palabra.</para>
     /// </summary>
-    bool RequiereVendedor = false)
+    bool RequiereVendedor = false,
+    /// <summary>
+    /// ADR-0051 — roles que firman el FUR (<c>gate_profile.signatureActors</c>, ya resueltos a
+    /// actor_type: "comprador"/"vendedor"/"locatario"). <c>null</c> = sin restricción declarada (el
+    /// mapper no condiciona ningún bloque de firma por esta lista — comportamiento previo a esta
+    /// llave). <c>TRASPASO_UNILATERAL</c> es el primer tipo con <c>["vendedor"]</c>: hay parte
+    /// vendedora en el FUR (<see cref="RequiereVendedor"/>) pero solo ella firma, el comprador no.
+    /// </summary>
+    IReadOnlyList<string>? SignatureActors = null)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
@@ -202,6 +222,12 @@ public interface IFurDocumentGenerator
 {
     /// <summary>Genera el FUR (Formulario Único de Registro) con los datos del trámite.</summary>
     GeneratedDocument GenerateFur(FurDocumentData data);
+
+    /// <summary>
+    /// Preview de calibración: pinta todos los campos del manifiesto del formato indicado (por defecto
+    /// automotor). No usa tipología. Solo SuperAdmin preview.
+    /// </summary>
+    GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor);
 
     /// <summary>Genera el contrato de compraventa (solo traspaso) con los datos del trámite.</summary>
     GeneratedDocument GenerateCompraventa(FurDocumentData data);

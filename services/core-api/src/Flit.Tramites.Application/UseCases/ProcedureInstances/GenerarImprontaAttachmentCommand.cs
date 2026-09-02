@@ -1,7 +1,7 @@
 using Flit.Modules.Improntas.Domain;
 using Flit.Tramites.Domain.Repositories;
-using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -59,15 +59,22 @@ public sealed class GenerarImprontaAttachmentHandler(
         var placa = Get(fv, "plate");
         var vin = Get(fv, "vin");
 
-        var codigo = instance.TypeCode;
-        var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
+        // ADR-0051 — la identificación del vehículo y el propietario las decide el perfil de
+        // capacidades del tipo, no una igualdad exacta con TRASPASO_STANDARD: así TRASPASO_UNILATERAL
+        // (entryMode PLATE, requiresSeller true) queda cubierto con el mismo criterio, sin un `if`
+        // nuevo por tipo.
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        // Matrícula inicial (entryMode VIN): SIEMPRE por VIN (el radicador no conoce la placa aunque
+        // el RUNT ya tenga una asignada). Todo lo demás (PLATE/BOTH/ausente — vehículo ya matriculado,
+        // mismo default que OperatorChoosesTransitOffice): SIEMPRE por placa.
+        var usaPlaca = !string.Equals(
+            profile.EntryMode, ProcedureTypeGateProfile.EntryModeVin, StringComparison.OrdinalIgnoreCase);
 
-        // Matrícula inicial: SIEMPRE por VIN (el radicador no conoce la placa aunque el RUNT ya
-        // tenga una asignada). Traspaso: SIEMPRE por placa (vehículo ya matriculado).
-        if (esTraspaso ? string.IsNullOrWhiteSpace(placa) : string.IsNullOrWhiteSpace(vin))
+        if (usaPlaca ? string.IsNullOrWhiteSpace(placa) : string.IsNullOrWhiteSpace(vin))
             return (null, "identificador_vehiculo_requerido");
-        // Traspaso: SIEMPRE el vendedor (dueño actual al radicar), nunca el comprador.
-        var rolPropietario = esTraspaso ? "vendedor" : "comprador";
+        // Con parte vendedora (RequiresSeller): SIEMPRE el vendedor (dueño actual al radicar), nunca
+        // el comprador — cierto tanto en TRASPASO_STANDARD como en TRASPASO_UNILATERAL.
+        var rolPropietario = profile.RequiresSeller ? "vendedor" : "comprador";
         var propietario = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, rolPropietario, StringComparison.OrdinalIgnoreCase));
         if (propietario is null || string.IsNullOrWhiteSpace(propietario.DocumentNumber))
@@ -82,10 +89,10 @@ public sealed class GenerarImprontaAttachmentHandler(
         {
             providerResult = await externalClient.GenerarAsync(
                 new ImprontaExternalRequest(
-                    // Traspaso: se envía la placa (vehículo ya matriculado). Matrícula inicial:
-                    // NUNCA se envía placa (ni siquiera si el RUNT ya devolvió una en la consulta) —
-                    // ver nota de clase sobre por qué se prioriza siempre el VIN en ese caso.
-                    Placa: esTraspaso ? placa : null,
+                    // entryMode != VIN (vehículo ya matriculado): se envía la placa. entryMode VIN
+                    // (matrícula inicial): NUNCA se envía placa (ni siquiera si el RUNT ya devolvió una
+                    // en la consulta) — ver nota de clase sobre por qué se prioriza siempre el VIN.
+                    Placa: usaPlaca ? placa : null,
                     Documento: propietario.DocumentNumber.Trim(),
                     NumMotor: null,
                     NumChasis: null,
@@ -97,8 +104,9 @@ public sealed class GenerarImprontaAttachmentHandler(
                     OrgNit: null,
                     OrgCiudad: null,
                     Operador: operador.Trim(),
-                    // Matrícula inicial: siempre VIN. Traspaso: no se envía (se identifica por placa).
-                    Vin: esTraspaso ? null : vin),
+                    // Matrícula inicial (entryMode VIN): siempre VIN. Resto: no se envía (se
+                    // identifica por placa).
+                    Vin: usaPlaca ? null : vin),
                 ct).ConfigureAwait(false);
         }
         catch (ImprontaRuntException ex)

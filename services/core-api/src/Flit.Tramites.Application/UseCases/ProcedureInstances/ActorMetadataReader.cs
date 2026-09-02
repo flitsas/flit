@@ -4,6 +4,20 @@ using Flit.Tramites.Domain.Tramites.Enums;
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
+/// Origen del dato de un actor, cuando NO lo tecleó el gestor en el wizard (ADR-0051 Decisión 5).
+/// La ausencia de la marca significa captura por formulario, que es el caso normal y el que ya
+/// cuenta con consentimiento del titular recogido en ese mismo trámite.
+/// </summary>
+public static class ActorOrigenes
+{
+    /// <summary>Razón social resuelta desde RUES a partir del NIT del propietario.</summary>
+    public const string RuesSync = "rues_sync";
+
+    /// <summary>Nombre resuelto desde el RUNT (conductor) a partir del documento del propietario.</summary>
+    public const string RuntSync = "runt_sync";
+}
+
+/// <summary>
 /// Lectura robusta de <c>actor.metadata</c> (jsonb). Punto único para deserializar ciudad y demás
 /// campos embebidos sin duplicar parsers frágiles en infraestructura o FUR.
 /// </summary>
@@ -14,20 +28,48 @@ public static class ActorMetadataReader
     /// <summary>
     /// Serializa ciudad/dirección + representante legal al JSON de <c>actor.metadata</c>.
     /// Sin ningún dato → "{}".
+    ///
+    /// <para><paramref name="origen"/> (ADR-0051 Decisión 5) marca el dato que NO se capturó por
+    /// formulario. Es deliberado que sea un parámetro más y no un campo que se preserve solo: cuando
+    /// el gestor guarda al actor desde el wizard, <c>PutActorsHandler</c> reserializa sin origen y la
+    /// marca desaparece, que es justo lo que debe pasar — a partir de ese momento el dato SÍ viene de
+    /// una captura del trámite. La marca de tiempo del origen es el <c>CreatedAt</c> de la misma fila,
+    /// no se duplica aquí.</para>
     /// </summary>
     public static string Serialize(
         string? ciudad,
         string? direccion,
         ActorRepresentanteLegal? rl,
-        ActorMandante? mandante = null)
+        ActorMandante? mandante = null,
+        string? origen = null)
     {
         var c = string.IsNullOrWhiteSpace(ciudad) ? null : ciudad.Trim();
         var d = string.IsNullOrWhiteSpace(direccion) ? null : direccion.Trim();
         var repLegal = NormalizeRepresentanteLegal(rl);
         var mand = NormalizeMandante(mandante);
-        return c is null && d is null && repLegal is null && mand is null
+        var o = string.IsNullOrWhiteSpace(origen) ? null : origen.Trim();
+        return c is null && d is null && repLegal is null && mand is null && o is null
             ? "{}"
-            : JsonSerializer.Serialize(new ActorMetadata(c, d, repLegal, mand), MetadataJson);
+            : JsonSerializer.Serialize(new ActorMetadata(c, d, repLegal, mand, o), MetadataJson);
+    }
+
+    /// <summary>
+    /// Origen del dato del actor (<see cref="ActorOrigenes"/>) o <c>null</c> si se capturó por
+    /// formulario — el caso normal. Robusto ante null/"{}"/JSON inválido, igual que <see cref="Parse"/>.
+    /// </summary>
+    public static string? GetOrigen(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
+            return null;
+        try
+        {
+            var origen = JsonSerializer.Deserialize<ActorMetadata>(metadata, MetadataJson)?.Origen;
+            return string.IsNullOrWhiteSpace(origen) ? null : origen;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Ciudad del actor (sin dirección). <c>null</c> si ausente o JSON inválido.</summary>
@@ -91,5 +133,6 @@ public static class ActorMetadataReader
         string? Ciudad,
         string? Direccion,
         ActorRepresentanteLegal? RepresentanteLegal = null,
-        ActorMandante? Mandante = null);
+        ActorMandante? Mandante = null,
+        string? Origen = null);
 }

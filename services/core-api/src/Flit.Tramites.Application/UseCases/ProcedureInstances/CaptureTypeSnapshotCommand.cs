@@ -67,13 +67,32 @@ public static class ProcedureTypeSnapshotBuilder
         foreach (var step in type.Steps.OrderBy(s => s.SortOrder))
         {
             var sectionTypes = new JsonArray();
+            var sectionCodes = new JsonArray();
             foreach (var section in step.Sections.OrderBy(s => s.SortOrder))
+            {
                 sectionTypes.Add(section.SectionType);
+                sectionCodes.Add(section.Code);
+            }
 
+            // `stepTitle` y `sectionCodes` los LEE `WizardStateQuery.FromSnapshot`, pero nadie los
+            // escribía: el snapshot solo guardaba el código del paso y los tipos de sección. Dos
+            // consecuencias, y la segunda es un gate:
+            //
+            //  · Sin `stepTitle`, todo paso de un expediente con snapshot caía al respaldo genérico
+            //    (`SectionLabel`): «Actores» en vez de «Vendedor», «Comprador» o «Locatario». El
+            //    nombre que el catálogo le da a la parte no llegaba a la pantalla.
+            //  · Sin `sectionCodes`, `SectionCoversSeller(null)` devuelve TRUE por su primera
+            //    condición, así que el paso de actores exigía la parte vendedora en un tipo cuyo
+            //    recorrido no la tiene —el unilateral—: `RequiresSeller && true`.
+            //
+            // Los expedientes ya congelados no las traen y siguen cayendo al respaldo, que es el
+            // comportamiento que tenían: el snapshot es una copia por valor y no se reescribe.
             stepSectionTypes.Add(new JsonObject
             {
                 ["stepCode"] = step.Code,
+                ["stepTitle"] = step.Title,
                 ["sectionTypes"] = sectionTypes,
+                ["sectionCodes"] = sectionCodes,
             });
         }
 

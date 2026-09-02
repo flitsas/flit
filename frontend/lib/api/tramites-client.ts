@@ -9,6 +9,7 @@ import type {
   BiometricParte,
   BiometricValidation,
   BiometricValidationsResponse,
+  FirmaBaulActorCoberturaDto,
   ChecklistView,
   CommercialData,
   SuggestedCommercialValue,
@@ -863,12 +864,19 @@ export const tramitesClient = {
     );
     return {
       overall: result.overall,
+      // El mapeo enumera campo por campo, así que todo lo que el servidor añada al check se pierde
+      // aquí en silencio si no se agrega también. Le pasó a `datos` —el respaldo del proveedor:
+      // vencimiento del SOAT, póliza, aseguradora, CDA—: el backend lo mandaba y el panel no lo veía
+      // nunca, porque este `map` lo dejaba fuera. `details` llevaba el mismo tiempo perdido, y con él
+      // el listado de comparendos bajo la advertencia de multas.
       checks: result.checks.map((c) => ({
         key: c.key,
         label: c.label,
         status: c.status,
         source: c.source,
         message: c.message ?? '',
+        details: c.details ?? null,
+        datos: c.datos ?? null,
       })),
       createdAt: new Date().toISOString(),
       fromCache: result.fromCache ?? false,
@@ -1385,9 +1393,12 @@ export const tramitesClient = {
   // POST simular la validación biométrica de una parte (mock de esta iteración:
   // la biométrica real es una iteración futura). Devuelve la validación aprobada
   // (estado 'aprobado', score 95). Mismo DTO que listBiometric.
+  // ADR-0053 (Múltiple Propietario) — `documento` es opcional/aditivo: identifica a CUÁL de los
+  // 1..4 actores del rol se refiere la simulación (el backend ya lo resuelve así, ver
+  // SimularBiometriaRequest). Sin él (o con 1 solo actor en el rol), se comporta igual que siempre.
   simulateBiometric: (
     instanceId: string,
-    input: { parte: BiometricParte },
+    input: { parte: BiometricParte; documento?: string },
     tenantId?: string,
   ) =>
     request<BiometricValidation>(
@@ -1435,7 +1446,12 @@ export const tramitesClient = {
   listBiometricExpediente: async (
     instanceId: string,
     tenantId?: string,
-  ): Promise<{ validations: BiometricValidation[]; firmaBaulPartes: string[] }> => {
+  ): Promise<{
+    validations: BiometricValidation[];
+    firmaBaulPartes: string[];
+    /** ADR-0053 (Múltiple Propietario) — cobertura del baúl por actor (documento del RL + ordinal). */
+    firmaBaulActores: FirmaBaulActorCoberturaDto[];
+  }> => {
     const res = await request<BiometricValidationsResponse>(
       `/api/v1/tramites/instances/${instanceId}/biometric`,
       { headers: tenantHeader(tenantId) },
@@ -1443,6 +1459,7 @@ export const tramitesClient = {
     return {
       validations: res?.validations ?? [],
       firmaBaulPartes: res?.firmaBaulPartes ?? [],
+      firmaBaulActores: res?.firmaBaulActores ?? [],
     };
   },
 

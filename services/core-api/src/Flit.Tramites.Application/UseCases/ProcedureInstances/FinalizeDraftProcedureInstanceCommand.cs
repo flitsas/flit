@@ -1,10 +1,10 @@
 using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
-using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -31,12 +31,17 @@ public static class FinalizeDraftGate
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        var modalidad = instance.Family;
-        var esTraspaso = modalidad == ProcedureFamily.Traspaso;
+        // ADR-0051 — "hay parte vendedora que completar" lo dice el tipo (RequiresSeller), no la
+        // familia. Sigue exigiendo el actor vendedor COMPLETO (incluido FullName) cuando aplica: la
+        // sincronización best-effort desde RUNT/RUES (Fase 2) resuelve el nombre en el caso normal, y
+        // cuando no lo resuelve es precisamente cuando el formulario se revela (revealSellerForm) para
+        // que el gestor lo complete — relajar este gate dejaría radicar un FUR con la sección del
+        // propietario vacía.
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
 
         var errors = new List<string>(3);
 
-        if (!ActoresCompletos(instance, esTraspaso))
+        if (!ActoresCompletos(instance, profile.RequiresSeller))
             errors.Add(ActoresIncompletos);
         if (!(documentosCompletosOverride ?? SubmitGate.DocumentosObligatoriosCompletos(instance)))
             errors.Add(DocumentosIncompletos);
@@ -46,20 +51,31 @@ public static class FinalizeDraftGate
         return errors;
     }
 
-    /// <summary>Matrícula requiere comprador; traspaso requiere comprador + vendedor, con datos básicos.</summary>
-    private static bool ActoresCompletos(ProcedureInstance instance, bool esTraspaso)
+    /// <summary>
+    /// Siempre exige comprador; exige además vendedor completo cuando el tipo declara parte vendedora
+    /// (<see cref="ProcedureTypeGateProfile.RequiresSeller"/>) — sin distinguir si esa parte se captura
+    /// por formulario o se sincronizó (ADR-0051 Decisión 5): un vendedor sincronizado sin nombre resuelto
+    /// sigue incompleto para este gate, a propósito.
+    ///
+    /// <para><b>ADR-0053 (Múltiple Propietario)</b> — "completo" exige que TODOS los actores del lado
+    /// (1..4) estén completos, no solo uno: un lado con un copropietario sin nombre no puede finalizar
+    /// el borrador, aunque el principal (<c>ordinal=1</c>) sí lo esté. Con un solo actor por lado (caso
+    /// mayoritario), el comportamiento es idéntico al anterior.</para>
+    /// </summary>
+    private static bool ActoresCompletos(ProcedureInstance instance, bool requiresSeller)
     {
         bool Completo(string parte)
         {
-            var a = instance.Actors.FirstOrDefault(x =>
-                string.Equals(x.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-            return a is not null
-                && !string.IsNullOrWhiteSpace(a.FullName)
+            var actores = instance.Actors
+                .Where(x => string.Equals(x.ActorType, parte, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return actores.Count > 0 && actores.All(a =>
+                !string.IsNullOrWhiteSpace(a.FullName)
                 && !string.IsNullOrWhiteSpace(a.DocumentType)
-                && !string.IsNullOrWhiteSpace(a.DocumentNumber);
+                && !string.IsNullOrWhiteSpace(a.DocumentNumber));
         }
 
-        return esTraspaso
+        return requiresSeller
             ? Completo(BiometricRules.ParteComprador) && Completo(BiometricRules.ParteVendedor)
             : Completo(BiometricRules.ParteComprador);
     }

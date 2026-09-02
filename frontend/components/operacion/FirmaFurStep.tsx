@@ -31,6 +31,7 @@ import type {
   BiometricValidation,
   ChecklistItemView,
   FieldValue,
+  FirmaBaulActorCoberturaDto,
   InstanceStatus,
   Participant,
   ParticipantRol,
@@ -43,6 +44,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { actorsOrderedByOrdinal, identityStatusForActor } from '@/lib/tramites/ownership-share';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
 export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -61,6 +63,13 @@ interface Props {
   onPaqueteStatusChange?: (status: PaqueteDocsStatus) => void;
   /** HU #10646 — partes con firma del baúl (biométrica embebida en resumen). */
   vaultCoveredPartes?: BiometricParte[];
+  /**
+   * ADR-0051 — partes que el TIPO somete a validación de identidad (`biometricActors`). El resumen
+   * solo pinta el bloque de firma de estas. Ausente ⇒ las dos, que es el criterio previo.
+   */
+  partesBiometricas?: BiometricParte[];
+  /** Cómo llama el catálogo a cada parte en este tipo (ver `MatriculaResumen.rotulosPorRol`). */
+  rotulosPorRol?: Partial<Record<'comprador' | 'vendedor' | 'locatario', string>>;
   /** Borrador finalizado: biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
 }
@@ -153,6 +162,59 @@ function OrganismoInfoCard({ name }: { name: string }) {
   );
 }
 
+/**
+ * Múltiple Propietario (ADR-0053) — estado de identidad de CADA copropietario de un lado, ordenado
+ * por `ordinal`. Existe porque el resumen embebido (`MatriculaResumen`, más abajo) sigue mostrando
+ * solo al ordinal=1 de cada lado (captura + biométrica embebida no se rediseñaron para N actores en
+ * este PR — brecha conocida, ver handoff), y "el trámite no avanza hasta que TODOS validen y
+ * firmen" exige que el gestor pueda ver A QUIÉN LE FALTA, no solo un agregado por lado que puede
+ * decir "falta 1" con 3 pendientes. Solo se pinta cuando el lado tiene 2+ actores — con uno solo,
+ * el resumen embebido de abajo ya lo cubre por completo y esta lista no aporta nada nuevo (cero
+ * regresión: no se pinta en el caso mayoritario).
+ */
+export function CopropietariosEstadoSection({
+  titulo,
+  actores,
+  biometric,
+  firmaBaulActores,
+}: {
+  titulo: string;
+  actores: ProcedureActor[];
+  biometric: BiometricValidation[];
+  /** ADR-0053 — cobertura del baúl POR ACTOR (documento del RL + ordinal), no aproximada por lado. */
+  firmaBaulActores: FirmaBaulActorCoberturaDto[];
+}) {
+  const ordenados = actorsOrderedByOrdinal(actores);
+  if (ordenados.length < 2) return null;
+  return (
+    <div className={WIZARD_CARD}>
+      <WizardCardHeader title={`Copropietarios — ${titulo}`} />
+      <ul className="space-y-1.5" aria-label={`Estado de identidad por copropietario — ${titulo}`}>
+        {ordenados.map(({ item: actor, ordinal }) => {
+          const estado = identityStatusForActor(actor, ordinal, biometric, firmaBaulActores);
+          return (
+            <li
+              key={`${actor.rol}-${ordinal}`}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2.5"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-semibold">
+                  {titulo} {ordinal} · {actor.nombreCompleto || 'Sin nombre'}
+                </p>
+                <p className="text-xs opacity-70">
+                  {actor.tipoDocumento} {actor.numeroDocumento}
+                  {actor.porcentaje != null ? ` · ${actor.porcentaje}%` : ''}
+                </p>
+              </div>
+              <StatusBadge label={estado.label} tone={estado.tone} />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 const ROL_OPTIONS: { value: ParticipantRol; label: string }[] = [
   { value: 'comprador', label: 'Comprador' },
   { value: 'vendedor', label: 'Vendedor' },
@@ -231,6 +293,8 @@ export function FirmaFurStep({
   rnmcEnabled = false,
   onPaqueteStatusChange,
   vaultCoveredPartes = [],
+  partesBiometricas,
+  rotulosPorRol,
   biometricForceEditable = false,
 }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
@@ -255,6 +319,9 @@ export function FirmaFurStep({
   // HU #11014 — partes cubiertas por la firma del baúl: el expediente las rotula como firmadas desde
   // el baúl en vez de hablar del certificado de validación de identidad.
   const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
+  // ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR (documento del RL + ordinal),
+  // dato real que reemplaza la aproximación por lado para `CopropietariosEstadoSection`.
+  const [firmaBaulActores, setFirmaBaulActores] = useState<FirmaBaulActorCoberturaDto[]>([]);
   // Decisión de prenda/gravamen (si el gestor ya eligió una opción en el paso previo).
   const [prenda, setPrenda] = useState<PrendaData | null>(null);
   // HU #10988 — fecha del trámite en el resumen (estampa FUR y documentos).
@@ -348,6 +415,7 @@ export function FirmaFurStep({
       if (bio.status === 'fulfilled') {
         setBiometric(bio.value.validations);
         setFirmaBaulPartes(bio.value.firmaBaulPartes);
+        setFirmaBaulActores(bio.value.firmaBaulActores);
       }
       if (chk.status === 'fulfilled') setChecklist(chk.value.items);
     } catch {
@@ -400,6 +468,31 @@ export function FirmaFurStep({
   );
   const vendedorContact = useMemo(
     () => actorsContact.find((a) => a.rol === 'vendedor') ?? null,
+    [actorsContact],
+  );
+  // Locatario: parte propia de los tipos con leasing (`requiresLessee`, DDL 88). Existe en el
+  // expediente desde que se puede capturar, pero el resumen nunca lo armó: solo conocía comprador y
+  // vendedor, así que el arrendatario del vehículo no aparecía en la pantalla donde el gestor revisa
+  // el trámite antes de radicarlo. Null en los tipos que no lo tienen.
+  const locatario = useMemo(
+    () => detail?.actors.find((a) => a.actorType === 'locatario') ?? null,
+    [detail],
+  );
+  const locatarioContact = useMemo(
+    () => actorsContact.find((a) => a.rol === 'locatario') ?? null,
+    [actorsContact],
+  );
+
+  // Múltiple Propietario (ADR-0053) — TODOS los actores de cada lado (no solo el ordinal=1 que
+  // consumen `vendedor`/`comprador` arriba, para el resumen embebido que no cambia en este PR).
+  // `actorsContact` (GET .../actors) ya trae `ordinal`; `CopropietariosEstadoSection` los ordena y
+  // no pinta nada con un solo actor (cero regresión sobre el caso mayoritario).
+  const vendedoresContact = useMemo(
+    () => actorsContact.filter((a) => a.rol === 'vendedor'),
+    [actorsContact],
+  );
+  const compradoresContact = useMemo(
+    () => actorsContact.filter((a) => a.rol === 'comprador'),
     [actorsContact],
   );
 
@@ -602,6 +695,8 @@ export function FirmaFurStep({
     <div className="space-y-8">
       <MatriculaResumen
         modalidad={modalidad}
+        partesBiometricas={partesBiometricas}
+        rotulosPorRol={rotulosPorRol}
         status={detail?.status ?? 'borrador'}
         placa={fv('plate')}
         vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
@@ -616,6 +711,10 @@ export function FirmaFurStep({
           carroceria: fv('vehicle_body_type'),
           capacidad: fv('vehicle_passengers'),
           ejes: fv('vehicle_axles'),
+          alto: fv('vehicle_height'),
+          ancho: fv('vehicle_width'),
+          largo: fv('vehicle_length'),
+          llantas: fv('vehicle_tires'),
           estado: fv('vehicle_state'),
           motor: fv('vehicle_engine_number'),
           chasis: fv('vehicle_chassis'),
@@ -626,6 +725,15 @@ export function FirmaFurStep({
         }}
         vendedor={toResumenActor(vendedor, vendedorContact)}
         comprador={toResumenActor(comprador, compradorContact)}
+        locatario={toResumenActor(locatario, locatarioContact)}
+        // Múltiple Propietario (ADR-0053) — mismas listas que ya alimentan
+        // `CopropietariosEstadoSection` más abajo: el resumen embebido pinta una `ResumenCard` por
+        // copropietario cuando el lado tiene 2+ (aditivo — con 0-1, sigue la tarjeta única de
+        // siempre vía `vendedor`/`comprador`).
+        vendedorActores={vendedoresContact}
+        compradorActores={compradoresContact}
+        biometric={biometric}
+        firmaBaulActores={firmaBaulActores}
         archivosCount={attachments.length}
         identidadAprobada={identidadAprobada}
         firmaBaulPartes={firmaBaulPartes}
@@ -674,6 +782,22 @@ export function FirmaFurStep({
         prioritario={prioritario}
         onPrioritarioChange={instanceId ? handlePrioritarioChange : undefined}
         extrasSlot={organismoRow}
+      />
+
+      {/* Múltiple Propietario (ADR-0053) — visibilidad por copropietario, ver docstring de
+          `CopropietariosEstadoSection`. Cada lado es independiente: un traspaso puede tener 3
+          vendedores y 1 comprador, o viceversa. */}
+      <CopropietariosEstadoSection
+        titulo={rotulosPorRol?.vendedor?.trim() || 'Vendedor'}
+        actores={vendedoresContact}
+        biometric={biometric}
+        firmaBaulActores={firmaBaulActores}
+      />
+      <CopropietariosEstadoSection
+        titulo={rotulosPorRol?.comprador?.trim() || 'Comprador'}
+        actores={compradoresContact}
+        biometric={biometric}
+        firmaBaulActores={firmaBaulActores}
       />
 
       <ExpedienteVisor

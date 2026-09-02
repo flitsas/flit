@@ -21,11 +21,17 @@ import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { motivoDeParte, presentarMotivoNoEnvio } from './envio-validacion-motivos';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
+import {
+  actorsOrderedByOrdinal,
+  isCoveredByVaultForActor,
+  validationsForActor,
+} from '@/lib/tramites/ownership-share';
 import type {
   BiometricEstado,
   BiometricParte,
   BiometricValidation,
   EnvioValidacionMotivo,
+  FirmaBaulActorCoberturaDto,
   MecanismoFirma,
   ProcedureActor,
   WizardModalidad,
@@ -79,6 +85,14 @@ interface Props {
    * ofrece un botón que no podría navegar a ninguna parte.
    */
   onIrAActores?: (parte: BiometricParte) => void;
+  /**
+   * ADR-0053 (Múltiple Propietario) — filtra el/los `onlyPartes` a UN copropietario concreto por su
+   * `ordinal` (1..4). Extensión aditiva: ausente, el comportamiento es el de siempre (todos los
+   * actores del rol). Existe para `MatriculaResumen.tsx`: al mostrar una `ResumenCard` POR ACTOR (no
+   * ya una por parte), cada tarjeta embebe su propia biométrica y necesita quedarse solo con la fila
+   * de SU copropietario — sin esto, la tarjeta del actor 1 repetiría también la biométrica del 2.
+   */
+  onlyOwnerOrdinal?: number;
 }
 
 /**
@@ -91,6 +105,9 @@ interface Props {
 function partesFor(modalidad: WizardModalidad): BiometricParte[] {
   return modalidad === 'traspaso' ? ['vendedor', 'comprador'] : ['comprador'];
 }
+
+/** Orden de presentación de las partes: saliente antes que entrante (HU21). */
+const ORDEN_PARTES: BiometricParte[] = ['vendedor', 'comprador'];
 
 const PARTE_LABEL: Record<BiometricParte, string> = {
   comprador: 'Comprador',
@@ -201,6 +218,39 @@ function personaInfoFor(
   };
 }
 
+/** Override de sujeto de identidad enviado a `iniciarBiometric`/`simulateBiometric` (ADR-0053). */
+type IdentitySubject = { nombre?: string; tipoDoc?: string; documento?: string; email?: string };
+
+/**
+ * ADR-0053 (Múltiple Propietario) — datos del SUJETO de identidad de un actor concreto, para
+ * enviarlos como override explícito a `iniciarBiometric`/`simulateBiometric`: con 2+ actores del
+ * mismo rol, el backend necesita saber A CUÁL de los copropietarios se refiere el llamado, y lo
+ * resuelve por documento (`IdentitySubjectResolver.ActorPorDocumento`, verificado en el backend
+ * real — `BiometricaCommand.cs`/`BiometricaEndpoints.cs`). Persona jurídica: el sujeto es el
+ * REPRESENTANTE LEGAL (su documento, no el NIT de la compañía) — mismo criterio que
+ * `personaInfoFor`/`identityStatusForActor`, un solo lugar donde vive esa regla.
+ *
+ * Solo se invoca cuando el lado tiene 2+ actores (ver `ParteBlock`): con 1 solo actor el override
+ * es innecesario y NO se envía, para no arriesgar la regresión cero del caso mayoritario — el
+ * backend ya resolvía ese caso correctamente sin `documento`.
+ */
+function subjectForActor(actor: ProcedureActor): IdentitySubject {
+  const rep = actor.representanteLegal;
+  if (actor.personType === 'juridical' && rep?.nombreCompleto && rep.numeroDocumento) {
+    return {
+      nombre: rep.nombreCompleto,
+      tipoDoc: rep.tipoDocumento,
+      documento: rep.numeroDocumento,
+      email: actor.email,
+    };
+  }
+  return {
+    nombre: actor.nombreCompleto,
+    tipoDoc: actor.tipoDocumento,
+    documento: actor.numeroDocumento,
+    email: actor.email,
+  };
+}
 
 /**
  * Paso de validación de identidad. Es provider-aware (HU #10233): con `kyverum` el clic dispara la
@@ -220,9 +270,15 @@ export function BiometricStep({
   vaultCoveredPartes = [],
   embedded = false,
   onIrAActores,
+  onlyOwnerOrdinal,
 }: Props) {
+  // Con `onlyPartes` la lista de partes ES la que se recibe, ordenada canónicamente; sin ella, la
+  // que impone la modalidad. Antes se intersectaban las dos, y esa intersección podía vaciarse: el
+  // paso de identidad declara sus firmantes por tipo (`biometricActors`, ADR-0051) y una combinación
+  // que la modalidad heredada no contemplara —firma el propietario en un recorrido que la modalidad
+  // lee como matrícula— dejaba el paso sin ninguna tarjeta, sin decir por qué.
   const partes = onlyPartes?.length
-    ? partesFor(modalidad).filter((p) => onlyPartes.includes(p))
+    ? ORDEN_PARTES.filter((p) => onlyPartes.includes(p))
     : partesFor(modalidad);
   // Solo lectura (Track C): sin iniciar/simular validación.
   const readOnly = useWizardReadOnly();
@@ -232,6 +288,11 @@ export function BiometricStep({
   // Partes cubiertas por el baúl según el BACKEND. Se consulta en vez de depender solo de la prop
   // porque esta última solo existe durante el registro; al reabrir el trámite llegaba vacía.
   const [firmaBaulServidor, setFirmaBaulServidor] = useState<string[]>([]);
+  // ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR (documento del representante
+  // legal + ordinal). Aditivo a `firmaBaulServidor`: ese sigue siendo el único dato disponible con
+  // 1 solo actor por lado (regresión cero), pero es IMPRECISO A PROPÓSITO con 2+ actores del mismo
+  // rol — para esos casos la cobertura real de CADA copropietario sale de aquí.
+  const [firmaBaulActores, setFirmaBaulActores] = useState<FirmaBaulActorCoberturaDto[]>([]);
   // HU #11666 — motivos tipificados de NO envío por parte. El backend los calcula al vuelo, así que
   // llegan y desaparecen con cada refresco: nunca se acumulan en este estado.
   const [motivosNoEnvio, setMotivosNoEnvio] = useState<EnvioValidacionMotivo[]>([]);
@@ -268,6 +329,7 @@ export function BiometricStep({
       setValidations(state.validations);
       setProvider(state.provider);
       setFirmaBaulServidor(state.firmaBaulPartes ?? []);
+      setFirmaBaulActores(state.firmaBaulActores ?? []);
       setMotivosNoEnvio(state.motivosNoEnvio ?? []);
       setError(() => null);
       return state;
@@ -330,49 +392,107 @@ export function BiometricStep({
     // un acordeón desplegable separado con badge de estado en la cabecera.
     <div className="space-y-4">
       {partes.map((parte) => {
-        const matches = (validations ?? []).filter((v) =>
-          modalidad === 'traspaso'
-            ? v.partyRole === parte
-            : v.partyRole === null || v.partyRole === 'comprador',
-        );
-        const validation = matches.length > 0 ? matches[matches.length - 1] : null;
-        const actor = actors?.find((a) => a.rol === parte) ?? null;
-        const vaultCovered =
-          firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte);
-        const badge = parteBadge(validation, vaultCovered);
-
-        const inner = (
-          <ParteBlock
-            parte={parte}
-            instanceId={instanceId}
-            provider={provider}
-            validation={validation}
-            actor={actor}
-            historial={matches}
-            vaultCovered={vaultCovered}
-            motivoNoEnvio={motivoDeParte(motivosNoEnvio, parte)}
-            onIrAActores={onIrAActores}
-            onChanged={() => void handleRefresh()}
-          />
-        );
+        // ADR-0053 (Múltiple Propietario) — un lado puede traer 1..4 actores. `actorsOrderedByOrdinal`
+        // es la MISMA función que usan las pantallas de solo lectura (FirmaFurStep, TramiteDetalleActores):
+        // ordena por `ordinal` (ausente ⇒ 1), nunca asume que el backend ya viene ordenado.
+        // Sin `actors` cargado (o sin actor para esta parte) se cae a UNA entrada sintética
+        // `{ actor: null, ordinal: 1 }` — es EXACTAMENTE lo que hacía el código anterior
+        // (`actors?.find(...) ?? null`): la tarjeta se sigue pintando, solo que sin recuadro de
+        // identidad hasta que la validación o los actores traigan un nombre.
+        const actoresDelLado = actors?.filter((a) => a.rol === parte) ?? [];
+        const ordenados = actorsOrderedByOrdinal(actoresDelLado);
+        const entriesDelLado = ordenados.length > 0 ? ordenados : [{ item: null, ordinal: 1 }];
+        // Con 1 solo actor por lado (mayoritario) `multiple` es `false` y nada cambia de aspecto:
+        // mismo título, mismo `aria-label`, misma tarjeta única — regresión cero. Se calcula sobre
+        // el LADO completo, no sobre el recorte de `onlyOwnerOrdinal` de abajo — si el lado tiene
+        // 2+ actores pero aquí solo se pinta uno (MatriculaResumen embebiendo una tarjeta por
+        // actor), el override de sujeto de `StartAction` sigue haciendo falta igual.
+        const multiple = entriesDelLado.length > 1;
+        const motivoLado = motivoDeParte(motivosNoEnvio, parte);
+        // ADR-0053 — `onlyOwnerOrdinal` (aditivo): recorta a UN solo copropietario sin tocar
+        // `multiple` (arriba). Ausente, se pintan todos los actores del lado como siempre.
+        const entries =
+          onlyOwnerOrdinal != null
+            ? entriesDelLado.filter((e) => e.ordinal === onlyOwnerOrdinal)
+            : entriesDelLado;
 
         return (
-          <div
-            key={parte}
-            role="group"
-            aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
-          >
-            {!embedded ? (
-              <WizardAccordion
-                title={`Validación del ${PARTE_LABEL[parte]}`}
-                defaultOpen
-                badge={<StatusBadge label={badge.label} tone={badge.tone} />}
-              >
-                {inner}
-              </WizardAccordion>
-            ) : (
-              inner
-            )}
+          <div key={parte} role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`}>
+            <div className="space-y-4">
+              {/*
+               * HU #11666 — `motivosNoEnvio` es y sigue siendo POR LADO (el backend lo calcula así,
+               * `EnvioValidacionBloqueoRules` no distingue copropietarios dentro de un mismo rol —
+               * ver comentario de `EnvioValidacionMotivo`). Se pinta UNA sola vez por lado, no
+               * repetido por cada actor: repetirlo por actor sería mentir precisión que el dato no
+               * tiene. Vive fuera de cada acordeón de actor para que no dependa de cuál esté
+               * expandido.
+               */}
+              {motivoLado && (
+                <MotivoNoEnvioAviso parte={parte} motivo={motivoLado} onIrAActores={onIrAActores} />
+              )}
+              {entries.map(({ item: actor, ordinal }) => {
+                // Correlación por `ordinal` (fallback a documento en filas históricas sin ordinal) —
+                // misma regla que `identityStatusForActor`/`FirmaFurStep.tsx`: para persona jurídica
+                // el documento del SUJETO de identidad es el del representante legal, no el NIT.
+                //
+                // SIN actor resuelto (la consulta de actores es un refuerzo visual best-effort, ver
+                // el estado `actors` más arriba — su fallo/demora NUNCA bloquea el paso) no hay
+                // documento con qué correlacionar: se cae al filtro de siempre, por parte/modalidad
+                // a secas, exactamente igual que antes de esta HU — la validación trae su propio
+                // nombre/documento aunque `actors` esté vacío.
+                const matches = actor
+                  ? validationsForActor(validations ?? [], actor, ordinal)
+                  : (validations ?? []).filter((v) =>
+                      modalidad === 'traspaso'
+                        ? v.partyRole === parte
+                        : v.partyRole === null || v.partyRole === 'comprador',
+                    );
+                const validation = matches.length > 0 ? matches[matches.length - 1] : null;
+                // Cobertura de baúl: real por actor (`firmaBaulActores`) siempre; el dato POR LADO
+                // (`firmaBaulServidor`/`vaultCoveredPartes`) es IMPRECISO A PROPÓSITO con 2+ actores
+                // (ver doc de `firmaBaulActores`), así que solo se admite para el actor ordinal=1 —
+                // el mismo caso que ya cubría antes de esta HU (regresión cero).
+                const vaultCovered =
+                  isCoveredByVaultForActor(firmaBaulActores, parte, ordinal) ||
+                  (ordinal === 1 &&
+                    (firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)));
+                const badge = parteBadge(validation, vaultCovered);
+                const titulo = multiple
+                  ? `Validación del ${PARTE_LABEL[parte]} ${ordinal}`
+                  : `Validación del ${PARTE_LABEL[parte]}`;
+
+                const inner = (
+                  <ParteBlock
+                    parte={parte}
+                    instanceId={instanceId}
+                    provider={provider}
+                    validation={validation}
+                    actor={actor}
+                    ordinal={ordinal}
+                    multipleOwners={multiple}
+                    historial={matches}
+                    vaultCovered={vaultCovered}
+                    onChanged={() => void handleRefresh()}
+                  />
+                );
+
+                return (
+                  <div key={`${parte}-${ordinal}`}>
+                    {!embedded ? (
+                      <WizardAccordion
+                        title={titulo}
+                        defaultOpen
+                        badge={<StatusBadge label={badge.label} tone={badge.tone} />}
+                      >
+                        {inner}
+                      </WizardAccordion>
+                    ) : (
+                      inner
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
       })}
@@ -466,10 +586,10 @@ function ParteBlock({
   provider,
   validation,
   actor,
+  ordinal,
+  multipleOwners,
   historial,
   vaultCovered,
-  motivoNoEnvio,
-  onIrAActores,
   onChanged,
 }: {
   parte: BiometricParte;
@@ -477,10 +597,12 @@ function ParteBlock({
   provider: string;
   validation: BiometricValidation | null;
   actor: ProcedureActor | null;
+  /** Múltiple Propietario (ADR-0053) — posición 1..4 de este actor dentro del lado. */
+  ordinal: number;
+  /** El lado tiene 2+ actores: activa el sufijo de ordinal en textos y el override de sujeto. */
+  multipleOwners: boolean;
   historial: BiometricValidation[];
   vaultCovered: boolean;
-  motivoNoEnvio: EnvioValidacionMotivo | null;
-  onIrAActores?: (parte: BiometricParte) => void;
   onChanged: () => void;
 }) {
   const estado = validation?.status;
@@ -488,6 +610,9 @@ function ParteBlock({
   const sigBadge = signatureBadge(vaultCovered, mecanismoFirma);
   const bioBadge = biometricStateBadge(validation, vaultCovered);
   const info = personaInfoFor(validation, actor);
+  // Solo se envía cuando hace falta desambiguar (2+ actores): con 1 solo actor por lado el backend
+  // ya resolvía el sujeto correctamente sin `documento` — no se toca ese camino (regresión cero).
+  const subject = multipleOwners && actor ? subjectForActor(actor) : undefined;
 
   const sigDetalle = vaultCovered
     ? `${PARTE_LABEL[parte]} firmará con la firma electrónica precargada en el baúl.`
@@ -546,6 +671,7 @@ function ParteBlock({
         parte={parte}
         instanceId={instanceId}
         provider={provider}
+        subject={subject}
         onChanged={onChanged}
       />
     ) : estado === 'error_envio' ? (
@@ -554,6 +680,7 @@ function ParteBlock({
         parte={parte}
         instanceId={instanceId}
         provider={provider}
+        subject={subject}
         onChanged={onChanged}
       />
     ) : estado === 'enviado' || estado === 'pendiente_envio' || estado === 'en_proceso' ? (
@@ -562,10 +689,17 @@ function ParteBlock({
         parte={parte}
         instanceId={instanceId}
         provider={provider}
+        subject={subject}
         onChanged={onChanged}
       />
     ) : (
-      <StartAction parte={parte} instanceId={instanceId} provider={provider} onStarted={onChanged} />
+      <StartAction
+        parte={parte}
+        instanceId={instanceId}
+        provider={provider}
+        subject={subject}
+        onStarted={onChanged}
+      />
     );
 
   return (
@@ -577,6 +711,7 @@ function ParteBlock({
         <>
           <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
             {info.nombre} — {PARTE_LABEL[parte]}
+            {multipleOwners ? ` ${ordinal}` : ''}
           </p>
           <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
         </>
@@ -592,15 +727,6 @@ function ParteBlock({
           <StatusBadge label={bioBadge.label} tone={bioBadge.tone} />
         </div>
       </div>
-      {motivoNoEnvio && (
-        <div className="mt-3">
-          <MotivoNoEnvioAviso
-            parte={parte}
-            motivo={motivoNoEnvio}
-            onIrAActores={onIrAActores}
-          />
-        </div>
-      )}
       <div className="mt-3">{actionView}</div>
       <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
     </div>
@@ -1041,12 +1167,14 @@ function RejectedView({
   parte,
   instanceId,
   provider,
+  subject,
   onChanged,
 }: {
   validation: BiometricValidation;
   parte: BiometricParte;
   instanceId: string | null;
   provider: string;
+  subject?: IdentitySubject;
   onChanged: () => void;
 }) {
   const expirado = v.status === 'expirado' || v.expired;
@@ -1069,6 +1197,7 @@ function RejectedView({
         parte={parte}
         instanceId={instanceId}
         provider={provider}
+        subject={subject}
         onStarted={onChanged}
         // AC4: rechazo → "Reintentar validación". AC5: expiración → "Reiniciar validación".
         label={expirado ? 'Reiniciar validación' : 'Reintentar validación'}
@@ -1095,12 +1224,14 @@ function SentPendingView({
   parte,
   instanceId,
   provider,
+  subject,
   onChanged,
 }: {
   validation: BiometricValidation;
   parte: BiometricParte;
   instanceId: string | null;
   provider: string;
+  subject?: IdentitySubject;
   onChanged: () => void;
 }) {
   const SENT_STATE_TEXT: Partial<Record<BiometricEstado, string>> = {
@@ -1127,6 +1258,7 @@ function SentPendingView({
         parte={parte}
         instanceId={instanceId}
         provider={provider}
+        subject={subject}
         onStarted={onChanged}
         label="Reenviar validación"
         variant="secondary"
@@ -1146,12 +1278,14 @@ function SendFailedView({
   parte,
   instanceId,
   provider,
+  subject,
   onChanged,
 }: {
   validation: BiometricValidation;
   parte: BiometricParte;
   instanceId: string | null;
   provider: string;
+  subject?: IdentitySubject;
   onChanged: () => void;
 }) {
   return (
@@ -1163,6 +1297,7 @@ function SendFailedView({
         parte={parte}
         instanceId={instanceId}
         provider={provider}
+        subject={subject}
         onStarted={onChanged}
         label="Reintentar envío"
       />
@@ -1181,6 +1316,7 @@ function StartAction({
   onStarted,
   label,
   actorEmail,
+  subject,
   variant = 'primary',
 }: {
   parte: BiometricParte;
@@ -1190,6 +1326,13 @@ function StartAction({
   label?: string;
   /** HU #11267 AC3 — correo del destinatario mostrado en la confirmación. */
   actorEmail?: string | null;
+  /**
+   * ADR-0053 (Múltiple Propietario) — override del sujeto de identidad (nombre/tipoDoc/documento/
+   * email del copropietario CONCRETO), enviado solo cuando el lado tiene 2+ actores (ver
+   * `ParteBlock`/`subjectForActor`). `undefined` con 1 solo actor: el llamado queda idéntico al de
+   * antes de esta HU, `{ parte }` a secas — regresión cero.
+   */
+  subject?: IdentitySubject;
   /**
    * `secondary` = botón con borde (no relleno), para los reenvíos desde un estado "ya enviado,
    * esperando" (`SentPendingView`): nunca debe verse igual al botón primario del arranque, o el
@@ -1221,9 +1364,15 @@ function StartAction({
     setSubmitting(true);
     try {
       if (isKyverum) {
-        await tramitesClient.iniciarBiometric(instanceId, { parte });
+        await tramitesClient.iniciarBiometric(instanceId, {
+          parte,
+          nombre: subject?.nombre,
+          tipoDoc: subject?.tipoDoc,
+          documento: subject?.documento,
+          email: subject?.email,
+        });
       } else {
-        await tramitesClient.simulateBiometric(instanceId, { parte });
+        await tramitesClient.simulateBiometric(instanceId, { parte, documento: subject?.documento });
       }
       setConfirmOpen(false);
       onStarted();
@@ -1303,7 +1452,7 @@ function StartAction({
         >
           <p>
             Se enviará el enlace a{' '}
-            <strong>{actorEmail?.trim() || 'el correo registrado de la parte'}</strong>. ¿Continuar?
+            <strong>{actorEmail?.trim() || subject?.email?.trim() || 'el correo registrado de la parte'}</strong>. ¿Continuar?
           </p>
           <div className="mt-2 flex gap-2">
             <button type="button" className="rounded-lg border px-2 py-1" onClick={() => setConfirmOpen(false)} disabled={submitting}>

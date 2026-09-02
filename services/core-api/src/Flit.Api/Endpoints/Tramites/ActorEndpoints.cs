@@ -50,8 +50,17 @@ internal static class ActorEndpoints
                 "invalid_email" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "email inválido."),
                 "rol_not_allowed" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El rol no está permitido para la modalidad del trámite."),
                 "missing_required_rol" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Faltan partes obligatorias para la modalidad del trámite."),
+                // ADR-0053 (Múltiple Propietario): un rol admite ahora 1..4 actores; "duplicate_rol" se
+                // retira del contrato (ya no es alcanzable), pero se conserva el mapeo por si algún
+                // cliente legado aún lo produjera en tránsito.
                 "duplicate_rol" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Cada rol admite a lo sumo un actor."),
                 "partes_duplicadas" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El vendedor y el comprador no pueden compartir documento ni correo."),
+                // ADR-0053 (Múltiple Propietario, §4.4/§4.5/§7):
+                "actor_duplicado_mismo_lado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Dos actores del mismo lado no pueden compartir documento."),
+                "porcentajes_no_suman_100" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La suma de los porcentajes del lado debe ser exactamente 100."),
+                "porcentaje_en_cero" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Todos los propietarios deben tener un porcentaje mayor a 0."),
+                "ordinal_fuera_de_rango" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El ordinal debe estar entre 1 y 4 y ser único dentro del rol."),
+                "ordinal_principal_ausente" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El actor principal (ordinal=1) no se puede omitir ni eliminar."),
                 // Si el arrendatario fuera el propietario no habría leasing que registrar.
                 PutActorsHandler.LocatarioIgualAlPropietarioError => Results.Problem(statusCode: 409, title: PutActorsHandler.LocatarioIgualAlPropietarioError, detail: "El locatario no puede ser el mismo propietario del vehículo."),
                 "entity_catalog_missing" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El catálogo de entidades (procedure_entities) no está seedeado."),

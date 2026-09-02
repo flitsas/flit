@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
@@ -28,6 +29,18 @@ public static class EnsureIdentityOutcomes
 
     /// <summary>La parte aún no tiene actor con documento → no se puede evaluar la identidad todavía.</summary>
     public const string SinActor = "sin_actor";
+
+    /// <summary>
+    /// ADR-0051 — el TIPO no declara a esta parte entre las que validan identidad
+    /// (<c>biometricActors</c>): no hay nada que asegurar y no se le manda ninguna validación.
+    ///
+    /// <para>El caso real es <c>TRASPASO_UNILATERAL</c>: intervienen propietario y locatario, pero
+    /// solo firma el propietario (art. 5.3.2.2). El locatario se persiste con el rol
+    /// <c>comprador</c> —no hay rol propio para una única parte entrante— así que descartarlo por el
+    /// NOMBRE del rol no lo atrapaba, y al continuar el paso de actores le salía el correo de
+    /// validación a la persona que en este trámite no firma.</para>
+    /// </summary>
+    public const string ParteNoValidaIdentidad = "parte_no_valida_identidad";
 }
 
 /// <summary>Resultado de <see cref="EnsureIdentityHandler"/>: el desenlace y, si aplica, la validación resultante.</summary>
@@ -55,8 +68,14 @@ public sealed class EnsureIdentityHandler(
     // (NUNCA resuelve firma) cuando no se cablea, para no alterar los tests de identidad existentes.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
 
+    /// <param name="documento">
+    /// ADR-0053 (Múltiple Propietario) — documento del SUJETO de identidad al que se refiere esta
+    /// llamada, cuando el rol tiene 2+ actores (el cliente ya lo conoce: lo capturó/consultó en la
+    /// pestaña de ese actor). Opcional/aditivo: con 1 solo actor en el rol (caso mayoritario) es
+    /// irrelevante y se ignora — cero regresión.
+    /// </param>
     public async Task<(EnsureIdentityResult? Result, string? Error)> HandleAsync(
-        Guid id, Guid tenantId, string? parte, CancellationToken ct = default)
+        Guid id, Guid tenantId, string? parte, string? documento = null, CancellationToken ct = default)
     {
         var normalized = NormalizeParte(parte);
         if (normalized is null)
@@ -66,8 +85,27 @@ public sealed class EnsureIdentityHandler(
         if (instance is null)
             return (null, "not_found");
 
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, normalized, StringComparison.OrdinalIgnoreCase));
+        // ADR-0051 — quién valida identidad lo declara el TIPO. Sin esta guarda, cualquier llamada con
+        // una parte que el trámite no somete a validación creaba la validación igual y disparaba el
+        // correo del proveedor: el handler resolvía el actor y seguía adelante sin preguntar nunca si
+        // esa parte firma. Se resuelve con el traductor único (`PartesDeclaradas`), el mismo que usan
+        // el FUR, el listado biométrico y el paso de Identidad.
+        //
+        // Solo se aplica cuando el perfil DECLARA los firmantes. Con la llave ausente,
+        // `PartesDeclaradas` cae a un respaldo por `requiresSeller` que en una instancia sin perfil
+        // —las legadas, y las de los tests que no lo sirven— resolvería «solo comprador» y dejaría
+        // fuera al vendedor de un traspaso que sí lo valida. La guarda es aditiva: donde el tipo no
+        // declara nada, el handler se comporta exactamente como antes.
+        var perfil = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (perfil.BiometricActors.Count > 0
+            && !PartesDeclaradas.Identidad(perfil).Contains(normalized, StringComparer.OrdinalIgnoreCase))
+        {
+            return (new EnsureIdentityResult(EnsureIdentityOutcomes.ParteNoValidaIdentidad), null);
+        }
+
+        // ADR-0053 (Múltiple Propietario) — el actor se resuelve por el documento DECLARADO (con 1 solo
+        // actor en el rol, caso mayoritario, cae siempre a ese único actor: cero regresión).
+        var actor = IdentitySubjectResolver.ActorPorDocumento(instance, normalized, documento);
         // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN. Sin documento del
         // sujeto no hay identidad que asegurar (PJ sin RL con documento cae aquí, como el actor sin documento).
         var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
@@ -86,11 +124,25 @@ public sealed class EnsureIdentityHandler(
         // pertenecen a OTRA persona y dejan de aplicar: se marcan EXPIRADO para que el gate de identidad no
         // las cuente (bugfix HU #10350 — al cambiar el comprador/vendedor no debe quedar "verificada" la
         // identidad anterior). El gate ya excluye los estados no-aprobados, así no toca la lógica de gating.
+        //
+        // ADR-0053 (Múltiple Propietario) — GENERALIZADO a "documento distinto a TODOS los sujetos
+        // VIGENTES del rol", no solo al actor que se está procesando en esta llamada. Con 1 solo actor
+        // por rol ambos conjuntos coinciden (cero regresión); con 2+, una validación con el documento de
+        // OTRO copropietario del MISMO rol es legítima —pertenece a un actor que sigue ahí, no a "la
+        // persona anterior"— y expirarla habría tumbado la validación de un copropietario cada vez que
+        // se procesara a otro. Sin esta generalización, dos actores del mismo rol se pisaban las
+        // validaciones mutuamente en cada llamada.
+        var sujetosVigentesDelRol = instance.Actors
+            .Where(a => string.Equals(a.ActorType, normalized, StringComparison.OrdinalIgnoreCase))
+            .Select(IdentitySubjectResolver.For)
+            .Where(s => !string.IsNullOrWhiteSpace(s.NumeroDocumento) && !string.IsNullOrWhiteSpace(s.TipoDocumento))
+            .ToList();
+
         var changed = false;
         foreach (var v in instance.BiometricValidations.Where(v =>
                      string.Equals(v.PartyRole, normalized, StringComparison.OrdinalIgnoreCase)
                      && v.Status != BiometricEstados.Expirado
-                     && !DocCoincide(v, tipoActual, docActual)))
+                     && !sujetosVigentesDelRol.Exists(s => DocCoincide(v, s.TipoDocumento!, s.NumeroDocumento!))))
         {
             v.Status = BiometricEstados.Expirado;
             v.UpdatedAt = now;

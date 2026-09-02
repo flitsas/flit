@@ -33,6 +33,38 @@ public static class TramiteEstado
     public static readonly IReadOnlyList<string> Finales = [Aprobado, Anulado];
 
     /// <summary>
+    /// Estados en los que el trámite YA ESTÁ EN MANOS DEL ORGANISMO DE TRÁNSITO (HU #11945).
+    ///
+    /// <para>Un trámite en <see cref="Borrador"/> o <see cref="Preparado"/> todavía lo está redactando
+    /// la empresa cliente: no se ha enviado, no le ha llegado al organismo, y por tanto el organismo no
+    /// puede verlo. Exponerlo filtraría el trabajo en curso de la empresa a un tercero.</para>
+    ///
+    /// <para><see cref="Anulado"/> queda FUERA por decisión de producto, aun sabiendo que se puede
+    /// llegar a él desde <see cref="Rechazado"/> (es decir, después de haber sido entregado): un
+    /// trámite anulado ya no es accionable para el organismo. El precio es que el organismo pierde de
+    /// vista un trámite sobre el que sí decidió; si eso llega a molestar, la corrección no es añadir
+    /// <see cref="Anulado"/> a esta lista —eso dejaría entrar también los anulados desde
+    /// <see cref="Borrador"/>, que nunca llegaron— sino exigir además que exista un evento
+    /// <see cref="Entregado"/> en su historial.</para>
+    ///
+    /// <para><see cref="Subsanacion"/> SÍ entra pese a ser legado y no estar en <see cref="Todos"/>:
+    /// solo lo llevan filas migradas que provienen de un rechazo, así que esos trámites estuvieron
+    /// entregados. Dejarlo fuera escondería datos históricos que el organismo sí trabajó.</para>
+    ///
+    /// <para>Ojo al ampliar <see cref="Todos"/>: un estado nuevo NO es visible para el organismo hasta
+    /// que se añada aquí explícitamente. Es el lado seguro por defecto.</para>
+    /// </summary>
+    public static readonly IReadOnlyList<string> RecibidosPorOrganismo =
+        [Entregado, Aprobado, Rechazado, Subsanacion];
+
+    /// <summary>
+    /// ¿El trámite ya está en manos del organismo de tránsito? Ver
+    /// <see cref="RecibidosPorOrganismo"/>.
+    /// </summary>
+    public static bool EstaEnManosDelOrganismo(string? estado) =>
+        estado is not null && RecibidosPorOrganismo.Contains(estado, StringComparer.Ordinal);
+
+    /// <summary>
     /// Estados "en proceso" (CF-01, HU #10876): activan el bloqueo de duplicidad de trámite por
     /// familia. Los estados finales (<see cref="Aprobado"/>, <see cref="Rechazado"/>,
     /// <see cref="Anulado"/>) NO cuentan por sí solos. Un <see cref="Rechazado"/> con

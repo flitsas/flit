@@ -199,7 +199,8 @@ function consolidadoAvisoLabel(aviso: string): string {
  * documentos REQUERIDOS por la tipología del trámite con su estado (`satisfied`) — no los
  * `ProcedureAttachment[]` ya generados: esos, por definición, siempre están "Cargado" y no dejan ver
  * lo que falta. Cada ítem se empareja con su adjunto por `docTipo` ↔ `tipo` para la huella y el botón
- * «Ver PDF»; sin adjunto emparejado el documento sigue "Pendiente" y sin botón.
+ * «Ver PDF»; sin adjunto emparejado no hay botón, y el documento queda "Pendiente" si es obligatorio
+ * o "No cargado" si es opcional (ver {@link DocRow}).
  */
 function DocumentosCargadosCard({
   instanceId,
@@ -451,6 +452,21 @@ function DocRow({
   // dato correcto para el requisito, y cubre también los que no tienen adjunto que traer un `tipo`.
   const label = catalogDocumentTitle(item.docTipo ?? item.key, item.label);
   const validado = item.satisfied;
+  /**
+   * Un documento OPCIONAL que falta no es lo mismo que uno obligatorio que falta, y hasta ahora se
+   * pintaban idénticos: «Pendiente» en ámbar, con la barra en ámbar. Este paso es el último antes de
+   * radicar, así que ese ámbar se lee como deuda —«todavía tengo que anexarlo»— y el gestor no tenía
+   * cómo saber cuál de los dos era.
+   *
+   * `item.obligatorio` viene en el checklist desde siempre; simplemente no se estaba mirando. Con él,
+   * el COLOR hace el trabajo: ámbar es «tienes que», gris es «para tu información». Y «Pendiente»
+   * recupera su significado, que estaba diluido por usarse para todo.
+   *
+   * No se ocultan los opcionales que faltan: esta tarjeta es el inventario del expediente. Ocultarlos
+   * los haría aparecer y desaparecer según su estado —un opcional YA cargado tiene que seguir
+   * visible, porque va en el consolidado— y le quitaría al gestor el único sitio donde ve que falta.
+   */
+  const faltaObligatorio = !validado && item.obligatorio;
   // Truncado a 24 caracteres con elipsis (propuesta): la rejilla es un vistazo, no el detalle
   // forense. El hash completo sigue disponible en el `title` (tooltip nativo). Solo hay SHA cuando
   // hay adjunto emparejado.
@@ -484,8 +500,8 @@ function DocRow({
           <DocumentCatalogCaption nombre={item.label} codigo={item.docTipo ?? item.key} />
         </p>
         <StatusBadge
-          label={validado ? 'Validado' : 'Pendiente'}
-          tone={validado ? 'success' : 'warning'}
+          label={validado ? 'Validado' : faltaObligatorio ? 'Pendiente' : 'No cargado'}
+          tone={validado ? 'success' : faltaObligatorio ? 'warning' : 'neutral'}
           className="shrink-0"
         />
       </div>
@@ -494,10 +510,18 @@ function DocRow({
           SHA-256 {shaShort}
         </p>
       ) : null}
+      {/* La barra tiene que decir lo MISMO que el badge. Cambiar solo la palabra y dejarla en ámbar
+          seguiría comunicando urgencia: el color pesa más que el rótulo. */}
       <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#DFE5ED' }} aria-hidden="true">
         <div
           className="h-full w-full rounded-full"
-          style={{ background: validado ? '#8CC63F' : 'var(--badge-warning-fg)' }}
+          style={{
+            background: validado
+              ? '#8CC63F'
+              : faltaObligatorio
+                ? 'var(--badge-warning-fg)'
+                : '#94A3B8',
+          }}
         />
       </div>
       {/* Un solo botón (propuesta, Step5): «Ver PDF», no "Ver"/"Descargar". Sin adjunto emparejado

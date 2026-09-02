@@ -72,22 +72,27 @@ public sealed class FurManifestGuardTests
     /// se declara otra casilla sobre la misma celda, dos marcas se pisan y el formulario deja de decir
     /// qué trámite se solicitó—. El comentario del manifiesto de maquinaria ya advierte de ese riesgo.</para>
     /// </summary>
-    [Fact]
-    public void Manifest_NoDeclaraCasillasHuerfanas()
+    [Theory]
+    [InlineData(FurTemplateFormat.Automotor)]
+    [InlineData(FurTemplateFormat.Maquinaria)]
+    [InlineData(FurTemplateFormat.Remolques)]
+    public void Manifest_NoDeclaraCasillasHuerfanas(FurTemplateFormat format)
     {
+        var sample = SampleMatricula() with { TemplateFormat = format };
+        var traspaso = SampleTraspaso() with { TemplateFormat = format };
         var emitidos = new HashSet<string>(
-            FurFieldMapper.Map(SampleMatricula()).Keys.Concat(FurFieldMapper.Map(SampleTraspaso()).Keys),
+            FurFieldMapper.Map(sample).Keys.Concat(FurFieldMapper.Map(traspaso).Keys),
             StringComparer.OrdinalIgnoreCase);
 
-        var huerfanas = Manifest().Fields
+        var huerfanas = Manifest(format).Fields
             .Where(f => f.Type == FurFieldType.Checkbox && !emitidos.Contains(f.Id))
             .Select(f => f.Id)
             .Where(id => !HuerfanasConocidas.Contains(id))
             .ToList();
 
         huerfanas.Should().BeEmpty(
-            "toda casilla declarada debe tener quien la emita, o es configuración muerta: {0}",
-            string.Join(", ", huerfanas));
+            "toda casilla declarada en {0} debe tener quien la emita, o es configuración muerta: {1}",
+            format, string.Join(", ", huerfanas));
     }
 
     /// <summary>
@@ -392,14 +397,14 @@ public sealed class FurManifestGuardTests
     //
     // Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """
-        traffic_secretary_name=Text:525,64,175,11.9,6.5,Left,False,null
-        traffic_secretary_city=Text:500,89,50,11.9,6.5,Left,False,null
-        traffic_secretary_code=Text:551,89,48,11.8,6.5,Left,False,null
-        processing_day=Text:593.4,91,25.7,11.8,7.7,Center,False,null
-        processing_month=Text:619.4,89.8,27.3,12.2,7.8,Center,False,null
-        processing_year=Text:649.3,91.1,30.4,11.9,7.7,Center,False,null
-        plate_letter=Text:704.7,75.9,26.2,11.6,9.7,Center,False,null
-        plate_number=Text:734.1,76,23.7,11.8,9.7,Center,False,null
+        traffic_secretary_name=Text:512,64,188,11.9,5.5,Left,False,null
+        traffic_secretary_city=Text:488,89,58,11.9,5.5,Left,False,null
+        traffic_secretary_code=Text:540,89,55,11.8,5.5,Left,False,null
+        processing_day=Text:593.4,90.2,25.7,12.4,7.7,Center,False,null
+        processing_month=Text:619.4,90.2,27.3,12.4,7.7,Center,False,null
+        processing_year=Text:649.3,90.2,30.4,12.4,7.7,Center,False,null
+        plate_letter=Text:704.7,85.5,26.2,14,9.7,Center,False,null
+        plate_number=Text:734.1,85.5,23.7,14,9.7,Center,False,null
         requested_process_1=cb:71.3,119.2,9.9
         requested_process_2=cb:119.5,121.1,9.8
         requested_process_3=cb:167.7,121.1,10.1
@@ -415,15 +420,26 @@ public sealed class FurManifestGuardTests
         requested_process_13=cb:71.3,177,10.1
         requested_process_15=cb:167.7,177,10.1
         requested_process_16=cb:215.9,177,10.1
-        vehicle_class_1=cb:53.6,222.4,9.9
-        vehicle_class_5=cb:231.5,221.5,10
-        vehicle_class_9=cb:101.7,232.7,10
+        vehicle_class_AUTOMOVIL=cb:56.5,222.4,8
+        vehicle_class_BUS=cb:101.9,222.4,8
+        vehicle_class_BUSETA=cb:147.3,222.4,8
+        vehicle_class_CAMION=cb:189.2,222.4,8
+        vehicle_class_CAMIONETA=cb:234.5,221.5,8
+        vehicle_class_CAMPERO=cb:278.4,222.4,8
+        vehicle_class_MICROBUS=cb:333.3,222.4,8
+        vehicle_class_TRACTOCAMION=cb:52.2,244.9,8
+        vehicle_class_MOTOCICLETA=cb:101.2,244.9,8
+        vehicle_class_MOTOCARRO=cb:146.3,244.9,8
+        vehicle_class_MOTOTRICICLO=cb:188.9,244.9,8
+        vehicle_class_CUATRIMOTO=cb:230.2,244.9,8
+        vehicle_class_VOLQUETA=cb:276.8,244.9,8
+        vehicle_class_OTRO=cb:332.9,244.9,8
         vehicle_brand=Text:380.8,129.3,70.2,13.3,7.8,Left,False,null
         vehicle_line=Text:461.9,128.4,70,13,7.7,Left,False,null
         vehicle_colors=Text:380.5,157.5,229,13.7,7.5,Left,False,null
         vehicle_model=Text:624.7,156.7,49.9,14.2,7.6,Left,False,null
         vehicle_displacement=Text:683.9,155.5,65,14,7.6,Left,False,null
-        vehicle_capacity=Text:371.5,178.5,70.4,14,7.6,Center,False,null
+        vehicle_capacity=Text:378,178.5,70,14,7.6,Left,False,null
         vehicle_fuel_type_1=cb:551.8,130,8
         vehicle_fuel_type_2=cb:580.5,130,8
         vehicle_fuel_type_3=cb:607.4,130,8
@@ -432,8 +448,8 @@ public sealed class FurManifestGuardTests
         vehicle_fuel_type_6=cb:689.8,130,8
         vehicle_fuel_type_7=cb:716.6,130,8
         vehicle_fuel_type_8=cb:743.4,130,8
-        is_armored_vehicle_yes=cb:504,168,8
-        is_armored_vehicle_no=cb:536,168,8
+        is_armored_vehicle_yes=cb:515.7,170.3,5
+        is_armored_vehicle_no=cb:538,170.3,5
         is_dismantling_armor_no=cb:670,168,8
         vehicle_bodywork_type=Text:382.3,245,176.7,16.7,7.8,Left,False,null
         vehicle_engine_number=Text:572.7,226.3,134.4,13.2,7.8,Left,False,null
@@ -459,173 +475,193 @@ public sealed class FurManifestGuardTests
         alert_data_code_4=cb:489.5,411.5,8
         alert_data_code_5=Multiline:509.5,411.5,50,23,4.2,Left,True,3.4
         vehicle_owner_first_last_name=Text:30,303.8,128.4,14.3,7.7,Left,False,null
-        vehicle_owner_second_last_name=Text:158.9,304.3,113.6,14.4,7.8,Left,False,null
-        vehicle_owner_name=Text:276.4,303.6,93.5,14.4,7.7,Left,False,null
-        vehicle_owner_document_type_c=cb:34.7,336.9,9.9
-        vehicle_owner_document_type_nit=cb:63,338.2,10
-        vehicle_owner_document_type_nn=cb:90,337.6,9.9
-        vehicle_owner_document_type_p=cb:117.6,338.2,10
-        vehicle_owner_document_type_ce=cb:153.4,337.1,10
-        vehicle_owner_document_type_ti=cb:192.1,336,10
-        vehicle_owner_document_type_nuip=cb:236,338.1,10
-        vehicle_owner_document_type_cd=cb:278.9,336.8,9.9
+        vehicle_owner_second_last_name=Text:140,304.3,114,14.4,7.8,Left,False,null
+        vehicle_owner_name=Text:258,301,108,20,7,Left,False,5.5
+        vehicle_owner_document_type_c=cb:40.7,338.2,8
+        vehicle_owner_document_type_nit=cb:63,338.2,8
+        vehicle_owner_document_type_nn=cb:96,338.2,8
+        vehicle_owner_document_type_p=cb:125.6,338.2,8
+        vehicle_owner_document_type_ce=cb:161.4,338.2,8
+        vehicle_owner_document_type_ti=cb:200.1,338.2,8
+        vehicle_owner_document_type_nuip=cb:244,338.2,8
+        vehicle_owner_document_type_cd=cb:286.9,338.2,8
         vehicle_owner_document_number=Text:318,335.1,43,14.3,7.8,Left,False,null
-        vehicle_owner_address=Text:56.6,364.6,154.7,14,7.6,Left,False,null
-        vehicle_owner_city=Text:218.8,363.8,37,14,7.7,Left,False,null
+        vehicle_owner_address=Text:36,364.6,152,14,7.6,Left,False,null
+        vehicle_owner_city=Text:196,363.8,50,14,7.7,Left,False,null
         vehicle_owner_phone=Text:317,364.9,44.9,14.2,7.7,Left,False,null
-        vehicle_owner_signature=Multiline:34.4,385.6,331.1,35.2,6.5,Left,False,null
+        vehicle_owner_signature=Multiline:102,378,262,32,6.5,Left,False,null
         vehicle_buyer_first_last_name=Text:30.5,451.5,127.3,14,7.6,Left,False,null
-        vehicle_buyer_second_last_name=Text:159.5,451.2,112.7,14.1,7.7,Left,False,null
-        vehicle_buyer_name=Text:274.7,451.4,93.7,14.1,7.7,Left,False,null
-        vehicle_buyer_document_type_c=cb:33.2,486.5,9.9
-        vehicle_buyer_document_type_nit=cb:64.7,481.4,9.9
-        vehicle_buyer_document_type_nn=cb:91.6,486.4,9.9
-        vehicle_buyer_document_type_p=cb:121.2,486.5,9.9
-        vehicle_buyer_document_type_ce=cb:154.2,486.4,9.9
-        vehicle_buyer_document_type_ti=cb:190.1,486.3,9.9
-        vehicle_buyer_document_type_nuip=cb:231.5,486.5,9.9
-        vehicle_buyer_document_type_cd=cb:276.6,486.7,9.9
+        vehicle_buyer_second_last_name=Text:141,451.2,114,14.1,7.7,Left,False,null
+        vehicle_buyer_name=Text:258,449,108,20,7,Left,False,5.5
+        vehicle_buyer_document_type_c=cb:41.2,481.4,8
+        vehicle_buyer_document_type_nit=cb:64.7,481.4,8
+        vehicle_buyer_document_type_nn=cb:99.6,481.4,8
+        vehicle_buyer_document_type_p=cb:129.2,481.4,8
+        vehicle_buyer_document_type_ce=cb:162.2,481.4,8
+        vehicle_buyer_document_type_ti=cb:198.1,481.4,8
+        vehicle_buyer_document_type_nuip=cb:239.5,481.4,8
+        vehicle_buyer_document_type_cd=cb:284.6,481.4,8
         vehicle_buyer_document_number=Text:314.8,482,42.9,14.1,7.7,Left,False,null
-        vehicle_buyer_address=Text:52.5,508.7,158.1,14.1,7.7,Left,False,null
-        vehicle_buyer_city=Text:215.9,508.7,36.8,14.1,7.7,Left,False,null
+        vehicle_buyer_address=Text:36,508.7,152,14.1,7.7,Left,False,null
+        vehicle_buyer_city=Text:196,508.7,50,14.1,7.7,Left,False,null
         vehicle_buyer_phone=Text:314.8,509.3,44.9,14.1,7.7,Left,False,null
-        vehicle_buyer_signature=Multiline:33.2,529.7,341.6,35.3,8,Left,False,null
-        observations=Multiline:379.9,472.6,392,33,6.5,Left,True,null
+        vehicle_buyer_signature=Multiline:102,522,262,32,8,Left,False,null
+        observations=Multiline:382,470,365,35,6.5,Left,True,5
         """;
 
-    // Línea base congelada de la geometría del manifest MAQUINARIA (version 2026-07-24-maquinaria-v2-traspaso-calib,
-    // recalibrada para HU #11255 con el desplazamiento de `observations`). Regenerada 2026-08-04
-    // (HU #11256) tras añadir `AutoFit` a la huella `Canon`: solo `observations` cambia de valor
-    // (True); el resto queda en False, igual que hoy. Regenerada 2026-08-05 (HU #11257) tras añadir
-    // `requested_process_11`/`_12` (modalidad de prenda, H2): en MAQUINARIA los rótulos IMPRESOS de
-    // prenda son "10"/"11" (no "11"/"12" como en automotor/remolques — ver calibrate-prenda-boxes.py),
-    // pero los IDs internos del manifest siguen siendo `requested_process_11`(constitución)/
-    // `_12`(levantamiento) en los tres formatos: es un contrato semántico del mapper, no el número
-    // impreso. Medido por respaldo (offset desde `requested_process_1`/`_2`), no hay rectángulo
-    // vectorial que ancle la casilla en el blank. Regenerar SOLO de forma deliberada vía EmitBaseline
-    // tras recalibrar el manifest.
+    // Línea base MAQUINARIA. Regenerada 2026-09-01: alineación visual (OT, placa, trámite,
+    // clase, marca/línea/colores/modelo, motor/VIN, combustible, propietario/comprador).
+    // Los IDs `requested_process_11`/`_12` siguen siendo semánticos (constitución/levantamiento):
+    // en esta plantilla el rótulo impreso "10"/"11" es prenda, no el número del id.
     private const string BaselineMaquinaria = """
-        traffic_secretary_name=Text:665,44,280,10,7,Left,False,null
-        traffic_secretary_city=Text:648,66,62,10,7,Left,False,null
-        traffic_secretary_code=Text:715,66,55,10,7,Left,False,null
-        processing_day=Text:776,71,28,10,7,Center,False,null
-        processing_month=Text:808,71,28,10,7,Center,False,null
-        processing_year=Text:842,71,32,10,7,Center,False,null
-        plate_letter=Text:900,59,28,11,7,Center,False,null
-        plate_number=Text:935,59,30,11,7,Center,False,null
-        requested_process_1=cb:101,102,9
-        requested_process_2=cb:170,102,9
-        requested_process_11=cb:303.6,129,9
-        requested_process_12=cb:370,129,9
-        vehicle_brand=Text:508,95,66,12,7,Left,False,null
-        vehicle_line=Text:578,95,74,12,7,Left,False,null
-        vehicle_colors=Text:500,134,268,12,7,Left,False,null
-        vehicle_model=Text:778,134,62,12,7,Left,False,null
-        vehicle_fuel_type_1=cb:763,308,9
-        vehicle_fuel_type_2=cb:830,308,9
-        vehicle_fuel_type_5=cb:915,308,9
-        vehicle_fuel_type_3=cb:763,326,9
-        vehicle_fuel_type_4=cb:830,326,9
-        vehicle_engine_number=Text:736,204,150,11,7,Left,False,null
-        vehicle_vin_number=Text:736,227,240,12,7,Left,False,null
-        vehicle_owner_first_last_name=Text:90,297,150,12,7,Left,False,null
-        vehicle_owner_second_last_name=Text:245,297,150,12,7,Left,False,null
-        vehicle_owner_name=Text:400,297,120,12,7,Left,False,null
-        vehicle_owner_document_type_c=cb:94,323,9
-        vehicle_owner_document_type_nit=cb:127,323,9
-        vehicle_owner_document_type_nn=cb:159,323,9
-        vehicle_owner_document_type_p=cb:193,323,9
-        vehicle_owner_document_type_ce=cb:234,323,9
-        vehicle_owner_document_type_ti=cb:276,323,9
-        vehicle_owner_document_type_nuip=cb:322,323,9
-        vehicle_owner_document_type_cd=cb:380,323,9
-        vehicle_owner_document_number=Text:428,322,62,12,7,Left,False,null
-        vehicle_owner_address=Text:90,350,190,12,7,Left,False,null
-        vehicle_owner_city=Text:286,350,120,12,7,Left,False,null
-        vehicle_owner_phone=Text:418,350,70,12,7,Left,False,null
-        vehicle_owner_signature=Multiline:90,376,390,28,4,Left,False,null
-        vehicle_buyer_first_last_name=Text:90,448,150,12,7,Left,False,null
-        vehicle_buyer_second_last_name=Text:245,448,150,12,7,Left,False,null
-        vehicle_buyer_name=Text:400,448,120,12,7,Left,False,null
-        vehicle_buyer_document_type_c=cb:94,484,9
-        vehicle_buyer_document_type_nit=cb:127,484,9
-        vehicle_buyer_document_type_nn=cb:159,484,9
-        vehicle_buyer_document_type_p=cb:193,484,9
-        vehicle_buyer_document_type_ce=cb:234,484,9
-        vehicle_buyer_document_type_ti=cb:276,484,9
-        vehicle_buyer_document_type_nuip=cb:322,484,9
-        vehicle_buyer_document_type_cd=cb:380,484,9
-        vehicle_buyer_document_number=Text:428,483,62,12,7,Left,False,null
-        vehicle_buyer_address=Text:90,510,190,12,7,Left,False,null
-        vehicle_buyer_city=Text:286,510,120,12,7,Left,False,null
-        vehicle_buyer_phone=Text:418,510,70,12,7,Left,False,null
-        vehicle_buyer_signature=Multiline:90,537,390,28,4,Left,False,null
-        observations=Multiline:496,445,490,38,6.5,Left,True,null
+        traffic_secretary_name=Text:658,44,114,12,5.5,Left,False,null
+        traffic_secretary_city=Text:632,69,60,11,5.5,Left,False,null
+        traffic_secretary_code=Text:699,69,64,11,5.5,Left,False,null
+        processing_day=Text:769.5,71.5,27,7,7,Center,False,null
+        processing_month=Text:802.5,71.5,27,7,7,Center,False,null
+        processing_year=Text:835.5,71.5,29,7,7,Center,False,null
+        plate_letter=Text:900,60,28,12,9,Center,False,null
+        plate_number=Text:935,60,30,12,9,Center,False,null
+        requested_process_1=cb:120.8,101.9,8
+        requested_process_2=cb:182.6,101.9,8
+        requested_process_11=cb:325.6,125,8
+        requested_process_12=cb:389.6,125,8
+        vehicle_class_AGRICOLA=cb:98,207,8
+        vehicle_class_INDUSTRIAL=cb:195,207,8
+        vehicle_class_CONSTRUCCION=cb:315,207,8
+        vehicle_class_OTROS=cb:431,207,8
+        vehicle_brand=Text:498,105,58,12,7,Left,False,null
+        vehicle_line=Text:564,105,61,12,7,Left,False,null
+        vehicle_colors=Text:502,135,258,12,7,Left,False,null
+        vehicle_model=Text:780,135,60,12,7,Left,False,null
+        vehicle_length=Text:498,162,90,12,7,Left,False,null
+        vehicle_width=Text:595,162,130,12,7,Left,False,null
+        vehicle_height=Text:737,162,60,12,7,Left,False,null
+        vehicle_axles=Text:782,250,50,12,7,Left,False,null
+        vehicle_traction_llantas=cb:726.7,106.4,8
+        vehicle_traction_orugas=cb:795.2,106.4,8
+        vehicle_traction_cilindros=cb:861.5,106.4,8
+        vehicle_traction_otros=cb:930.1,106.4,8
+        vehicle_cabin_cerrada=cb:507.5,218.5,8
+        vehicle_cabin_parasol=cb:575.2,218.5,8
+        vehicle_cabin_sin=cb:640,218.5,8
+        vehicle_cabin_otros=cb:696.8,218.5,8
+        vehicle_fuel_maq_1=cb:751.1,292.3,8
+        vehicle_fuel_maq_2=cb:822.1,292.3,8
+        vehicle_fuel_maq_3=cb:901.9,292.3,8
+        vehicle_fuel_maq_4=cb:758.6,345.9,8
+        vehicle_fuel_maq_5=cb:823.1,345.9,8
+        vehicle_fuel_maq_6=cb:907.3,345.9,8
+        vehicle_engine_number=Text:738,205,148,12,7,Left,False,null
+        vehicle_vin_number=Text:738,228,228,12,7,Left,False,null
+        vehicle_owner_first_last_name=Text:88,294,150,14,7,Left,False,null
+        vehicle_owner_second_last_name=Text:242,294,148,14,7,Left,False,null
+        vehicle_owner_name=Text:394,292,92,20,7,Left,False,5.5
+        vehicle_owner_document_type_c=cb:93.5,321.5,8
+        vehicle_owner_document_type_nit=cb:126.5,321.5,8
+        vehicle_owner_document_type_nn=cb:158.5,321.5,8
+        vehicle_owner_document_type_p=cb:192,321.5,8
+        vehicle_owner_document_type_ce=cb:233,321.5,8
+        vehicle_owner_document_type_ti=cb:275,321.5,8
+        vehicle_owner_document_type_nuip=cb:321.5,321.5,8
+        vehicle_owner_document_type_cd=cb:379,321.5,8
+        vehicle_owner_document_number=Text:426,323,58,13,7,Left,False,null
+        vehicle_owner_address=Text:88,348,188,13,7,Left,False,null
+        vehicle_owner_city=Text:286,348,118,13,7,Left,False,null
+        vehicle_owner_phone=Text:418,348,66,13,7,Left,False,null
+        vehicle_owner_signature=Multiline:88,376,398,21,6.5,Center,False,null
+        vehicle_buyer_first_last_name=Text:88,445,150,14,7,Left,False,null
+        vehicle_buyer_second_last_name=Text:242,445,148,14,7,Left,False,null
+        vehicle_buyer_name=Text:394,443,92,20,7,Left,False,5.5
+        vehicle_buyer_document_type_c=cb:93.5,482,8
+        vehicle_buyer_document_type_nit=cb:126.5,482,8
+        vehicle_buyer_document_type_nn=cb:158.5,482,8
+        vehicle_buyer_document_type_p=cb:192,482,8
+        vehicle_buyer_document_type_ce=cb:233,482,8
+        vehicle_buyer_document_type_ti=cb:275,482,8
+        vehicle_buyer_document_type_nuip=cb:321.5,482,8
+        vehicle_buyer_document_type_cd=cb:379,482,8
+        vehicle_buyer_document_number=Text:426,484,58,13,7,Left,False,null
+        vehicle_buyer_address=Text:88,508,188,13,7,Left,False,null
+        vehicle_buyer_city=Text:286,508,118,13,7,Left,False,null
+        vehicle_buyer_phone=Text:418,508,66,13,7,Left,False,null
+        vehicle_buyer_signature=Multiline:88,536,398,23,6.5,Center,False,null
+        alert_data_code_1=cb:521.5,411.5,8
+        alert_data_code_2=cb:605,411.5,8
+        alert_data_code_3=cb:689,411.5,8
+        alert_data_code_4=cb:758,411.5,8
+        alert_data_code_5=Text:848,404,140,18,5.5,Left,False,4
+        observations=Multiline:498,453,468,40,6.5,Left,True,5
         """;
 
-    // Línea base congelada de la geometría del manifest REMOLQUES (version 2026-07-24-remolques-v1,
-    // recalibrada para HU #11255 con el desplazamiento de `observations` y `vehicle_serial_number`).
-    // Regenerada 2026-08-04 (HU #11256) tras añadir `AutoFit` a la huella `Canon`: solo `observations`
-    // cambia de valor (True); el resto queda en False, igual que hoy. Regenerada 2026-08-05
-    // (HU #11257) tras añadir `requested_process_10` (bonus, sin relación con prenda — "DUPLICADO
-    // TARJETA DE REGISTRO" impreso; medido en el mismo barrido para no repetir la calibración cuando
-    // una HU futura lo necesite, aún sin consumidor en el mapper) y `requested_process_11`/`_12`
-    // (modalidad de prenda, H2), medidas por respaldo (offset desde `requested_process_1`/`_2`; no hay
-    // rectángulo vectorial que ancle la casilla en el blank). Regenerar SOLO de forma deliberada vía
-    // EmitBaseline tras recalibrar el manifest.
+    // Línea base REMOLQUES. Regenerada 2026-09-01: misma tanda de alineación visual que
+    // maquinaria, coordenadas propias. Plantilla oficial intacta. Automotor no se toca.
     private const string BaselineRemolques = """
-        traffic_secretary_name=Text:668,44,280,10,7,Left,False,null
-        traffic_secretary_city=Text:650,64,62,10,7,Left,False,null
-        traffic_secretary_code=Text:718,64,55,10,7,Left,False,null
-        processing_day=Text:779,71,28,10,7,Center,False,null
-        processing_month=Text:811,71,28,10,7,Center,False,null
-        processing_year=Text:845,71,32,10,7,Center,False,null
-        plate_letter=Text:903,56,28,11,9,Center,False,null
-        plate_number=Text:936,56,30,11,9,Center,False,null
-        requested_process_1=cb:86,101,9
-        requested_process_2=cb:155,101,9
-        requested_process_10=cb:291.9,128,9
-        requested_process_11=cb:361.5,128,9
-        requested_process_12=cb:421.7,128,9
-        vehicle_brand=Text:498,96,160,12,7,Left,False,null
-        vehicle_line=Text:666,96,165,12,7,Left,False,null
-        vehicle_colors=Text:498,132,130,12,7,Left,False,null
-        vehicle_model=Text:633,132,60,12,7,Left,False,null
-        vehicle_serial_number=Text:736,199,240,12,7,Left,False,null
-        vehicle_vin_number=Text:736,228,240,12,7,Left,False,null
-        vehicle_owner_first_last_name=Text:90,297,150,12,7,Left,False,null
-        vehicle_owner_second_last_name=Text:245,297,150,12,7,Left,False,null
-        vehicle_owner_name=Text:400,297,120,12,7,Left,False,null
-        vehicle_owner_document_type_c=cb:94,321,9
-        vehicle_owner_document_type_nit=cb:127,321,9
-        vehicle_owner_document_type_nn=cb:159,321,9
-        vehicle_owner_document_type_p=cb:193,321,9
-        vehicle_owner_document_type_ce=cb:234,321,9
-        vehicle_owner_document_type_ti=cb:279,321,9
-        vehicle_owner_document_type_nuip=cb:329,321,9
-        vehicle_owner_document_type_cd=cb:385,321,9
-        vehicle_owner_document_number=Text:431,320,62,12,7,Left,False,null
-        vehicle_owner_address=Text:90,348,190,12,7,Left,False,null
-        vehicle_owner_city=Text:286,348,120,12,7,Left,False,null
-        vehicle_owner_phone=Text:418,348,70,12,7,Left,False,null
-        vehicle_owner_signature=Multiline:90,376,390,28,6,Left,False,null
-        vehicle_buyer_first_last_name=Text:90,448,150,12,7,Left,False,null
-        vehicle_buyer_second_last_name=Text:245,448,150,12,7,Left,False,null
-        vehicle_buyer_name=Text:400,448,120,12,7,Left,False,null
-        vehicle_buyer_document_type_c=cb:94,482,9
-        vehicle_buyer_document_type_nit=cb:127,482,9
-        vehicle_buyer_document_type_nn=cb:159,482,9
-        vehicle_buyer_document_type_p=cb:193,482,9
-        vehicle_buyer_document_type_ce=cb:234,482,9
-        vehicle_buyer_document_type_ti=cb:279,482,9
-        vehicle_buyer_document_type_nuip=cb:329,482,9
-        vehicle_buyer_document_type_cd=cb:385,482,9
-        vehicle_buyer_document_number=Text:431,481,62,12,7,Left,False,null
-        vehicle_buyer_address=Text:90,508,190,12,7,Left,False,null
-        vehicle_buyer_city=Text:286,508,120,12,7,Left,False,null
-        vehicle_buyer_phone=Text:418,508,70,12,7,Left,False,null
-        vehicle_buyer_signature=Multiline:90,537,390,28,6,Left,False,null
-        observations=Multiline:496,417,490,55,6.5,Left,True,null
+        traffic_secretary_name=Text:662,44,114,12,5.5,Left,False,null
+        traffic_secretary_city=Text:635,69,60,11,5.5,Left,False,null
+        traffic_secretary_code=Text:702,69,64,11,5.5,Left,False,null
+        processing_day=Text:772.5,71.5,27,7,7,Center,False,null
+        processing_month=Text:805.5,71.5,27,7,7,Center,False,null
+        processing_year=Text:838.5,71.5,29,7,7,Center,False,null
+        plate_letter=Text:903,58,28,12,9,Center,False,null
+        plate_number=Text:936,58,30,12,9,Center,False,null
+        requested_process_1=cb:120.8,101.9,8
+        requested_process_2=cb:182.6,101.9,8
+        requested_process_10=cb:332.1,120.9,8
+        requested_process_11=cb:394.4,125,8
+        requested_process_12=cb:460.1,128.9,8
+        vehicle_class_REMOLQUE=cb:96,207,8
+        vehicle_class_SEMIREMOLQUE=cb:186,207,8
+        vehicle_class_MULTIMODULAR=cb:317,207,8
+        vehicle_class_SIMILAR=cb:433,207,8
+        vehicle_brand=Text:502,99,154,12,7,Left,False,null
+        vehicle_line=Text:670,99,156,12,7,Left,False,null
+        vehicle_colors=Text:502,133,124,12,7,Left,False,null
+        vehicle_model=Text:637,133,58,12,7,Left,False,null
+        vehicle_axles=Text:838,99,80,12,7,Left,False,null
+        vehicle_height=Text:702,133,66,12,7,Left,False,null
+        vehicle_length=Text:772,133,96,12,7,Left,False,null
+        vehicle_width=Text:875,133,90,12,7,Left,False,null
+        vehicle_serial_number=Text:739,203,228,12,7,Left,False,null
+        vehicle_vin_number=Text:739,229,228,12,7,Left,False,null
+        vehicle_owner_first_last_name=Text:88,294,150,14,7,Left,False,null
+        vehicle_owner_second_last_name=Text:242,294,148,14,7,Left,False,null
+        vehicle_owner_name=Text:394,292,92,20,7,Left,False,5.5
+        vehicle_owner_document_type_c=cb:93.5,321.5,8
+        vehicle_owner_document_type_nit=cb:126.5,321.5,8
+        vehicle_owner_document_type_nn=cb:158.5,321.5,8
+        vehicle_owner_document_type_p=cb:192,321.5,8
+        vehicle_owner_document_type_ce=cb:233,321.5,8
+        vehicle_owner_document_type_ti=cb:278,321.5,8
+        vehicle_owner_document_type_nuip=cb:328,321.5,8
+        vehicle_owner_document_type_cd=cb:384,321.5,8
+        vehicle_owner_document_number=Text:428,322,58,13,7,Left,False,null
+        vehicle_owner_address=Text:88,349,188,13,7,Left,False,null
+        vehicle_owner_city=Text:286,349,118,13,7,Left,False,null
+        vehicle_owner_phone=Text:421,349,66,13,7,Left,False,null
+        vehicle_owner_signature=Multiline:90,376,398,21,6.5,Center,False,null
+        vehicle_buyer_first_last_name=Text:88,445,150,14,7,Left,False,null
+        vehicle_buyer_second_last_name=Text:242,445,148,14,7,Left,False,null
+        vehicle_buyer_name=Text:394,443,92,20,7,Left,False,5.5
+        vehicle_buyer_document_type_c=cb:93.5,482,8
+        vehicle_buyer_document_type_nit=cb:126.5,482,8
+        vehicle_buyer_document_type_nn=cb:158.5,482,8
+        vehicle_buyer_document_type_p=cb:192,482,8
+        vehicle_buyer_document_type_ce=cb:233,482,8
+        vehicle_buyer_document_type_ti=cb:278,482,8
+        vehicle_buyer_document_type_nuip=cb:328,482,8
+        vehicle_buyer_document_type_cd=cb:384,482,8
+        vehicle_buyer_document_number=Text:428,483,58,13,7,Left,False,null
+        vehicle_buyer_address=Text:88,509,188,13,7,Left,False,null
+        vehicle_buyer_city=Text:286,509,118,13,7,Left,False,null
+        vehicle_buyer_phone=Text:421,509,66,13,7,Left,False,null
+        vehicle_buyer_signature=Multiline:90,536,398,23,6.5,Center,False,null
+        alert_data_code_1=cb:524.5,370,8
+        alert_data_code_2=cb:608,370,8
+        alert_data_code_3=cb:692,370,8
+        alert_data_code_4=cb:761,370,8
+        alert_data_code_5=Text:850,362,140,18,5.5,Left,False,4
+        observations=Multiline:500,420,478,70,6.5,Left,True,5
         """;
 
     private static string BaselineFor(FurTemplateFormat format) => format switch

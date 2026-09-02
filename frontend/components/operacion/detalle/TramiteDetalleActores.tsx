@@ -18,6 +18,7 @@ import {
   type SeccionDetalleProps,
 } from './primitivos';
 import { DETALLE_GREEN, DETALLE_GOLD, DETALLE_RED, DETALLE_GREY } from './detalle-visual';
+import { actorsOrderedByOrdinal } from '@/lib/tramites/ownership-share';
 
 /**
  * Sección «Actores» del modal de detalle (Frente C, `ActorCard` + `Paso2` de la propuesta).
@@ -44,6 +45,15 @@ import { DETALLE_GREEN, DETALLE_GOLD, DETALLE_RED, DETALLE_GREY } from './detall
  * solo lo pinta en la rama de matrícula inicial (líneas 134-144); en traspaso no aparece, así que
  * aquí tampoco se pinta aunque el contrato lo traiga, para no introducir una composición que la
  * propuesta no define.
+ *
+ * Múltiple Propietario (ADR-0053) — un lado puede traer 2..4 actores (`ordinal` 1..4,
+ * `porcentaje` no nulo). Con un solo actor por lado el render es BYTE A BYTE el mismo de siempre
+ * (mismo título «Comprador»/«Propietario / vendedor», sin sufijo de ordinal, sin badge de
+ * porcentaje) — cero regresión, cubierto por `TramiteDetalleActores.test.tsx`. Con 2+, cada
+ * copropietario tiene su propia tarjeta («Comprador 1», «Comprador 2»…, ordenadas por `ordinal`)
+ * con su porcentaje. El estado de firma (`item.firmaVendedorEstado`/`firmaCompradorEstado`) sigue
+ * siendo un dato AGREGADO por lado (todavía no hay endpoint que lo desglose por actor — ver nota
+ * de datos faltantes en el handoff), así que se pinta una sola vez, en la tarjeta del ordinal=1.
  */
 
 
@@ -60,6 +70,23 @@ function FirmaEstadoSoft({ estado }: { estado: FirmaParteEstado | null | undefin
   return <DetalleBadgeSoft text={meta.label} color={meta.color} />;
 }
 
+/**
+ * Múltiple Propietario (ADR-0053) — actores de un `rol`, ordenados por `ordinal` (1 = principal,
+ * ausente ⇒ 1: compatibilidad con actores persistidos antes de esta funcionalidad), vía el mismo
+ * `actorsOrderedByOrdinal` que usa `FirmaFurStep.tsx`. Esta pantalla es de solo lectura: asume el
+ * invariante de `ActorsForm.tsx` (actores del mismo rol contiguos, `ordinal` único 1..4) tal cual
+ * llega del backend, no reordena ni corrige nada.
+ */
+function actoresDeRolOrdenados(
+  actors: ProcedureActor[],
+  rol: ProcedureActor['rol'],
+): { actor: ProcedureActor; ordinal: number }[] {
+  return actorsOrderedByOrdinal(actors.filter((a) => a.rol === rol)).map(({ item, ordinal }) => ({
+    actor: item,
+    ordinal,
+  }));
+}
+
 /** `${tipoDocumento} ${numeroDocumento}` — mismo formato que ya usa `BiometricStep`. */
 function documentoValor(tipo: string, numero: string): string | null {
   const partes = [tipo, numero].filter(Boolean);
@@ -71,21 +98,43 @@ const MECANISMO_FIRMA_LABEL: Record<string, string> = {
   identidad: 'Validación de identidad',
 };
 
-/** Tarjeta de una parte (vendedor/comprador): datos del actor + estado de firma al pie. */
+/** Porcentaje de propiedad (Múltiple Propietario) — solo se pinta con 2+ actores del mismo lado. */
+function PorcentajeSoft({ porcentaje }: { porcentaje: number }) {
+  return <DetalleBadgeSoft text={`${formatPorcentaje(porcentaje)}%`} color="#557EFF" />;
+}
+
+/** `33.33` en vez de `33.330000000000005` — mismo redondeo de 2 decimales que `ActorsForm.tsx`. */
+function formatPorcentaje(value: number): string {
+  return String(Math.round((value + Number.EPSILON) * 100) / 100);
+}
+
+/**
+ * Tarjeta de un actor (vendedor/comprador): datos + estado de firma (solo en `mostrarFirma`, el
+ * ordinal=1 del lado — el dato es agregado por lado, no por actor) + porcentaje (Múltiple
+ * Propietario, solo con 2+ actores en el lado).
+ */
 function ActorCard({
   titulo,
   actor,
   firmaEstado,
+  mostrarFirma,
 }: {
   titulo: string;
   actor: ProcedureActor;
   firmaEstado: FirmaParteEstado | null | undefined;
+  /** `false` en los copropietarios agregados (2..4): el badge de firma es un dato por lado. */
+  mostrarFirma: boolean;
 }) {
   return (
     <TarjetaDetalle
       titulo={titulo}
       tituloAzul
-      accion={<FirmaEstadoSoft estado={firmaEstado} />}
+      accion={
+        <div className="flex items-center gap-1.5">
+          {mostrarFirma ? <FirmaEstadoSoft estado={firmaEstado} /> : null}
+          {actor.porcentaje != null ? <PorcentajeSoft porcentaje={actor.porcentaje} /> : null}
+        </div>
+      }
     >
       <ListaCampos>
         <CampoValor campo="Nombre" valor={actor.nombreCompleto} />
@@ -171,8 +220,10 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
 
   // Solo la familia TRASPASO tiene parte vendedora; en las demás interviene un único titular.
   const esTraspaso = item.modalidad === 'TRASPASO';
-  const vendedor = esTraspaso ? actors.find((a) => a.rol === 'vendedor') : undefined;
-  const comprador = actors.find((a) => a.rol === 'comprador');
+  // Múltiple Propietario (ADR-0053) — un lado puede traer 2..4 actores; se ordenan por `ordinal`
+  // (ausente ⇒ 1, compatibilidad con actores persistidos antes de esta funcionalidad).
+  const vendedores = esTraspaso ? actoresDeRolOrdenados(actors, 'vendedor') : [];
+  const compradores = actoresDeRolOrdenados(actors, 'comprador');
 
   // El representante legal se pinta SIEMPRE que la parte lo traiga, sea cual sea la modalidad. La
   // propuesta solo lo dibuja en matrícula inicial, pero eso es un límite de su maqueta, no del
@@ -180,13 +231,20 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
   // firma es su representante. Ocultarlo por fidelidad a la maqueta escondería a un actor real
   // del trámite, que es peor que apartarse de ella.
   const representantes = [
-    { parte: 'Propietario / vendedor', actor: vendedor },
-    { parte: 'Comprador', actor: comprador },
-  ].flatMap(({ parte, actor }) =>
-    actor?.representanteLegal ? [{ parte, representante: actor.representanteLegal }] : [],
+    { parteBase: 'Propietario / vendedor', actores: vendedores },
+    { parteBase: 'Comprador', actores: compradores },
+  ].flatMap(({ parteBase, actores }) =>
+    actores
+      .filter((a) => a.actor.representanteLegal)
+      .map(({ actor, ordinal }) => ({
+        // Con un solo actor en el lado, el rótulo NO lleva ordinal (cero regresión). Con 2+, cada
+        // representante se distingue por el ordinal de SU actor («Comprador 1», «Comprador 2»…).
+        parte: actores.length > 1 ? `${parteBase} ${ordinal}` : parteBase,
+        representante: actor.representanteLegal!,
+      })),
   );
 
-  if (!vendedor && !comprador) {
+  if (vendedores.length === 0 && compradores.length === 0) {
     return (
       <TarjetaDetalle titulo="Actores del trámite">
         <SeccionVacia mensaje="Este trámite no tiene actores registrados." />
@@ -196,17 +254,29 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      {vendedor ? (
-        <ActorCard titulo="Propietario / vendedor" actor={vendedor} firmaEstado={item.firmaVendedorEstado} />
-      ) : null}
-      {comprador ? (
-        <ActorCard titulo="Comprador" actor={comprador} firmaEstado={item.firmaCompradorEstado} />
-      ) : null}
+      {vendedores.map(({ actor, ordinal }) => (
+        <ActorCard
+          key={`vendedor-${ordinal}`}
+          titulo={vendedores.length > 1 ? `Propietario / vendedor ${ordinal}` : 'Propietario / vendedor'}
+          actor={actor}
+          firmaEstado={item.firmaVendedorEstado}
+          mostrarFirma={ordinal === 1}
+        />
+      ))}
+      {compradores.map(({ actor, ordinal }) => (
+        <ActorCard
+          key={`comprador-${ordinal}`}
+          titulo={compradores.length > 1 ? `Comprador ${ordinal}` : 'Comprador'}
+          actor={actor}
+          firmaEstado={item.firmaCompradorEstado}
+          mostrarFirma={ordinal === 1}
+        />
+      ))}
       {representantes.map((r) => (
         <RepresentanteLegalCard
           key={r.parte}
           representante={r.representante}
-          parte={esTraspaso ? r.parte : undefined}
+          parte={esTraspaso || vendedores.length > 1 || compradores.length > 1 ? r.parte : undefined}
         />
       ))}
     </div>

@@ -35,6 +35,46 @@ function rangoPaginas(paginas: number[], total: number): string {
     : `págs. ${paginas.join(', ')} de ${total}`;
 }
 
+/**
+ * Lista de páginas comprimida en rangos: `4, 7, 12–15 y 20`.
+ *
+ * <p>El backend devuelve los números de página (`BatchUnrecognized.Paginas`) y hasta ahora la
+ * pantalla solo mostraba CUÁNTAS eran. Con un PDF de treinta páginas, «12 de 30 sin clasificar» deja
+ * al gestor abriendo el archivo entero para dar con las doce; el dato que lo resuelve ya venía en la
+ * respuesta, sin usar.</p>
+ *
+ * <p>Se comprime en rangos y no se vuelca la lista cruda porque en un expediente real las páginas
+ * sobrantes van seguidas (portadas, anexos), y cuarenta números separados por comas no se leen.</p>
+ */
+function comprimirPaginas(paginas: number[]): string {
+  if (paginas.length === 0) return '';
+  const orden = [...paginas].sort((a, b) => a - b);
+  const tramos: string[] = [];
+  let inicio = orden[0];
+  let previa = orden[0];
+
+  const cerrar = () => {
+    if (inicio === previa) tramos.push(String(inicio));
+    // Dos páginas seguidas se enumeran («7, 8»): un rango de dos no ahorra nada y se lee peor.
+    else if (previa - inicio === 1) tramos.push(`${inicio}, ${previa}`);
+    else tramos.push(`${inicio}–${previa}`);
+  };
+
+  for (const pagina of orden.slice(1)) {
+    if (pagina === previa + 1) {
+      previa = pagina;
+      continue;
+    }
+    cerrar();
+    inicio = pagina;
+    previa = pagina;
+  }
+  cerrar();
+
+  if (tramos.length === 1) return tramos[0];
+  return `${tramos.slice(0, -1).join(', ')} y ${tramos[tramos.length - 1]}`;
+}
+
 /** Tono semántico del `StatusBadge` para las etiquetas de esta pantalla (HU consolidación). */
 const CHIP_TONE: Record<'info' | 'warn' | 'muted', StatusTone> = {
   info: 'info',
@@ -149,12 +189,17 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
       style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.04)' }}
       aria-label="Revisión de la carga masiva"
     >
+      {/* Dos encabezados, no uno con el subtítulo cambiado. Cuando no se reconoció NADA, «Revisa
+          antes de adjuntar» pedía revisar lo que no había, y el botón primario ofrecía «Adjuntar 0
+          documentos» en gris: un callejón sin salida con forma de pantalla de revisión, que además
+          sugiere que el gestor hizo algo mal. Sin nada que revisar, la pantalla dice qué pasó y por
+          dónde seguir. */}
       <WizardCardHeader
-        title="Revisa antes de adjuntar"
+        title={nada ? 'No reconocimos ningún documento' : 'Revisa el reparto antes de adjuntar'}
         subtitle={
           nada
-            ? 'No pudimos identificar documentos en lo que cargaste.'
-            : `Encontramos ${items.length} documento${items.length === 1 ? '' : 's'}. Marca los que quieras adjuntar; nada se guarda hasta que confirmes.`
+            ? 'Ninguna de las páginas que cargaste corresponde a un requisito de este trámite. No se adjuntó nada.'
+            : `Reconocimos ${items.length} documento${items.length === 1 ? '' : 's'} y lo${items.length === 1 ? '' : 's'} ubicamos en su casilla. Desmarca lo${items.length === 1 ? '' : 's'} que no quieras adjuntar; nada se guarda hasta que confirmes.`
         }
         action={
           !nada ? (
@@ -179,25 +224,49 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
       )}
 
       {/* Páginas que no correspondían a ningún tipo. Se listan con la salida concreta, no como un
-          error: en un expediente real la mayoría de páginas son mandatos, cédulas y portadas. */}
+          error: en un expediente real la mayoría de páginas son mandatos, cédulas y portadas —el
+          propio flujo lo da por supuesto—, así que el rótulo es descriptivo y no lleva el ámbar de
+          advertencia, que hacía leer como avería lo que es lo esperado.
+
+          Cuando no se reconoció nada, el encabezado del panel YA dijo esto mismo: repetirlo en una
+          caja aparte es decir dos veces la única cosa que pasó. Ahí queda solo el detalle por
+          archivo. */}
       {noReconocidos.length > 0 && (
         <div className="mt-3 rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
-          <p className="flex items-center gap-1.5 text-xs font-semibold">
-            <FileWarning className="h-3.5 w-3.5" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
-            Páginas que no pudimos ubicar
-          </p>
-          <ul className="mt-1.5 space-y-1">
-            {noReconocidos.map((n) => (
-              <li key={n.sourceFilename} className="text-xs opacity-70">
-                <span className="font-medium">{n.sourceFilename}</span>{' '}
-                — {n.paginas.length} de {n.totalPaginas} página
-                {n.totalPaginas === 1 ? '' : 's'} sin clasificar.
-              </li>
-            ))}
+          {!nada && (
+            <p className="flex items-center gap-1.5 text-xs font-semibold">
+              <FileWarning className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
+              Páginas que no corresponden a ningún requisito
+            </p>
+          )}
+          <ul className={nada ? 'space-y-1' : 'mt-1.5 space-y-1'}>
+            {noReconocidos.map((n) => {
+              // Que sobren 3 de 16 y que sobren 16 de 16 no son la misma situación, y salían con el
+              // mismo texto. En la segunda no hay nada que revisar: el archivo entero queda fuera.
+              const todas = n.paginas.length >= n.totalPaginas;
+              return (
+                <li key={n.sourceFilename} className="text-xs opacity-70">
+                  <span className="font-medium">{n.sourceFilename}</span>{' '}
+                  {todas ? (
+                    <>
+                      — ninguna de sus {n.totalPaginas} página
+                      {n.totalPaginas === 1 ? '' : 's'} corresponde a un requisito de este trámite.
+                    </>
+                  ) : (
+                    <>
+                      — no se adjuntarán las páginas {comprimirPaginas(n.paginas)} ({n.paginas.length}{' '}
+                      de {n.totalPaginas}).
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
-          <p className="mt-1.5 text-xs opacity-60">
-            Si falta algún documento, cárgalo directamente en su casilla más abajo: ahí el análisis se
-            hace sabiendo qué tipo esperas y suele acertar donde el reparto automático no pudo.
+          {/* La salida sube a texto normal: era lo único accionable del bloque y estaba al 60% de
+              opacidad, más apagado que el problema que viene a resolver. */}
+          <p className="mt-2 text-xs">
+            Carga cada documento en su casilla, más abajo. Ahí el sistema ya sabe qué documento
+            espera, y lo reconoce mucho mejor que en el reparto automático.
           </p>
         </div>
       )}
@@ -221,27 +290,44 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
         </div>
       )}
 
+      {/* Sin nada reconocido no se ofrece adjuntar: un botón primario apagado que dice «Adjuntar 0
+          documentos» se lee como una acción que el gestor debería poder completar, y no la hay.
+          Queda un único botón que cierra el panel y lo devuelve a cargar por casillas, que es la
+          salida que el propio bloque acaba de indicarle. */}
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={subiendo}
-          className="rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
-          Descartar
-        </button>
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={subiendo || aceptadas.length === 0}
-          className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          style={{ background: WIZARD_CTA_GRADIENT }}
-        >
-          {subiendo
-            ? 'Adjuntando…'
-            : `Adjuntar ${aceptadas.length} documento${aceptadas.length === 1 ? '' : 's'}`}
-        </button>
+        {nada ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
+            style={{ background: WIZARD_CTA_GRADIENT }}
+          >
+            Entendido
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={subiendo}
+              className="rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ borderColor: 'var(--color-border)' }}
+            >
+              Descartar
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={subiendo || aceptadas.length === 0}
+              className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ background: WIZARD_CTA_GRADIENT }}
+            >
+              {subiendo
+                ? 'Adjuntando…'
+                : `Adjuntar ${aceptadas.length} documento${aceptadas.length === 1 ? '' : 's'}`}
+            </button>
+          </>
+        )}
       </div>
     </section>
   );

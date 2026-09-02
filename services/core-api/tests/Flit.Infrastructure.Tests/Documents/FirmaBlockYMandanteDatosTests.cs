@@ -14,6 +14,8 @@ namespace Flit.Infrastructure.Tests.Documents;
 public sealed class FirmaBlockYMandanteDatosTests
 {
     private static readonly byte[] FirmaBaul = [1, 2, 3];
+    private static readonly byte[] FirmaIdentidadPng =
+        [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     private const string Sello = "Validación biométrica de identidad\nCertificado ABC123";
 
     // ── HU #11046: qué se estampa sobre la línea ──────────────────────────────
@@ -26,9 +28,21 @@ public sealed class FirmaBlockYMandanteDatosTests
     }
 
     [Fact]
-    public void SinBaulPeroConIdentidadValidada_SeEstampaElSello()
+    public void ConImagenDeIdentidad_YSinBaul_SeEstampaLaImagen()
     {
-        FlitFirmaBlock.ResolverEstampa(null, Sello).Should().Be(FlitEstampa.SelloIdentidad);
+        FlitFirmaBlock.ResolverEstampa(null, FirmaIdentidadPng, Sello).Should().Be(FlitEstampa.ImagenIdentidad);
+    }
+
+    [Fact]
+    public void ConStreamCrudoEnVezDePng_CaeAlSelloDeIdentidad()
+    {
+        FlitFirmaBlock.ResolverEstampa(null, [9, 8, 7], Sello).Should().Be(FlitEstampa.SelloIdentidad);
+    }
+
+    [Fact]
+    public void ConBaulEImagenDeIdentidad_GanaElBaul()
+    {
+        FlitFirmaBlock.ResolverEstampa(FirmaBaul, FirmaIdentidadPng, Sello).Should().Be(FlitEstampa.Baul);
     }
 
     [Fact]

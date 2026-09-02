@@ -268,6 +268,95 @@ public sealed class IdentityValidationCompletedConsumerTests
         _repo.Received(1).Add(Arg.Is<ProcedureInstanceEvent>(e => e.Tipo == "firma_auto_solicitada"));
     }
 
+
+    /// <summary>
+    /// ADR-0051 — el encadenamiento lo decide `generatesSaleDocument`, no la familia. Un
+    /// TRASPASO_UNILATERAL es de familia TRASPASO y NO autogenera compraventa: con el criterio
+    /// anterior, este consumidor pedía la firma de un documento que `FurCommand` ya no genera, el
+    /// handler devolvía error y el borrador se quedaba SIN FUR, contado como `skipped`.
+    /// </summary>
+    [Fact]
+    public async Task Aprobado_TraspasoUnilateral_EncadenaFur_NoFirmaDeCompraventa()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        // En unilateral el que valida identidad es el PROPIETARIO, no el comprador.
+        AprobadaValidation(validationId, tenant, "vendedor");
+
+        var id = Guid.NewGuid();
+        _repo.ListDraftFinalizedByActorAsync(tenant, "vendedor", TipoDoc, Documento, ct)
+            .Returns(new List<ProcedureInstance> { LeanUnilateral(id, tenant) });
+        var full = StubUnilateralGraph(id, tenant);
+
+        var result = await _sut.HandleAsync(Event(validationId, tenant, "vendedor"), ct);
+
+        result.Processed.Should().Be(1);
+        result.Skipped.Should().BeEmpty();
+        full.Attachments.Should().Contain(a => a.Tipo == "fur");
+        full.Signatures.Should().BeEmpty();
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceSignature>());
+    }
+
+    /// <summary>Instancia "lean" de TRASPASO_UNILATERAL (familia TRASPASO, sin compraventa).</summary>
+    private static ProcedureInstance LeanUnilateral(Guid id, Guid tenant) =>
+        new()
+        {
+            ProcedureType = ProcedureTypeFixture.TraspasoUnilateral,
+            Id = id,
+            TenantId = tenant,
+            ProcedureTypeId = ProcedureTypeFixture.TraspasoUnilateral.Id,
+            ReferenceNumber = "TRM-2026-000077",
+            Status = TramiteEstado.Borrador,
+            DraftFinalizedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    /// <summary>Grafo apto para generar FUR: identidad del propietario aprobada y organismo resuelto.</summary>
+    private ProcedureInstance StubUnilateralGraph(Guid id, Guid tenant)
+    {
+        var i = LeanUnilateral(id, tenant);
+        i.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            ProcedureEntityId = Guid.NewGuid(),
+            ActorType = "vendedor",
+            DocumentType = TipoDoc,
+            DocumentNumber = Documento,
+            FullName = "Leasing S.A.",
+            Metadata = "{}",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            PartyRole = "vendedor",
+            Status = BiometricEstados.Aprobado,
+            Name = "Leasing S.A.",
+            DocumentType = TipoDoc,
+            DocumentNumber = Documento,
+            Email = "leasing@x.com",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "transit_office_code",
+            ValueText = "11001000",
+            Source = "user",
+        });
+        _repo.GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(i);
+        return i;
+    }
+
     [Fact]
     public async Task NotApproved_IsNoOp()
     {

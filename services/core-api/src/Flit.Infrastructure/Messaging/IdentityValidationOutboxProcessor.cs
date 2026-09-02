@@ -99,17 +99,19 @@ internal sealed class IdentityValidationOutboxProcessor(
         // consumidor porque son dos políticas distintas (aquel encadena borradores finalizados por actor;
         // este aplica marcas explícitas) y mezclarlas haría imposible saber cuál disparó qué.
         var deferred = scope.ServiceProvider.GetRequiredService<DeferredSignatureBatchConsumer>();
+        var signatureCapture = scope.ServiceProvider.GetRequiredService<IIdentitySignatureCapture>();
 
         // El DbContext usa EnableRetryOnFailure → la transacción manual debe ir dentro de la execution
         // strategy (reintenta el bloque completo ante fallos transitorios de BD).
         var strategy = db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () => await ProcessOneAsync(db, consumer, deferred, ct));
+        return await strategy.ExecuteAsync(async () => await ProcessOneAsync(db, consumer, deferred, signatureCapture, ct));
     }
 
     private async Task<bool> ProcessOneAsync(
         FlitDbContext db,
         IdentityValidationCompletedConsumer consumer,
         DeferredSignatureBatchConsumer deferred,
+        IIdentitySignatureCapture signatureCapture,
         CancellationToken ct)
     {
         db.ChangeTracker.Clear(); // estado limpio en cada (re)intento de la strategy
@@ -130,6 +132,9 @@ internal sealed class IdentityValidationOutboxProcessor(
             var evt = JsonSerializer.Deserialize<IdentityValidationCompleted>(row.Payload, JsonOptions);
             if (evt is not null)
             {
+                // ADR-0054 — recorte ANTES del auto-FUR. Retryable no aborta el ciclo ni el evento.
+                await signatureCapture.EnsureForValidationAsync(evt.ValidationId, ct);
+
                 var result = await consumer.HandleAsync(evt, ct);
                 OutboxProcessorLog.Dispatched(logger, row.ValidationId, result.Matched, result.Processed);
 

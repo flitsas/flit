@@ -18,7 +18,10 @@ allowBuilds:
 #   actualizó: la versión PARCHEADA es >=3.3.18 (3.3.17 SIGUE reportándose como vulnerable con el umbral
 #   `high` del workflow, que era lo que rompía `dependency-audit`). Se sube a 3.3.18. postcss pide
 #   ^3.3.16, así que 3.3.18 es compatible; verificar con build de producción del frontend.
+# next → styled-jsx → @babel/core → browserslist <=4.28.6 (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g).
+#   Parche >=4.28.7. Es transitiva; se fuerza aquí para que `dependency-audit --audit-level high` pase.
 overrides:
   sharp: 0.35.3
   postcss: 8.5.23
   nanoid: 3.3.18
+  browserslist: 4.28.7

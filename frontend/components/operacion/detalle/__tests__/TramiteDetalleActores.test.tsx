@@ -75,6 +75,36 @@ const COMPRADOR_JURIDICO: ProcedureActor = {
   },
 };
 
+// Múltiple Propietario (ADR-0053) — dos compradores del mismo lado, cada uno con su ordinal y
+// porcentaje. `COMPRADOR_2` llega PRIMERO en el array a propósito: la pantalla debe ordenar por
+// `ordinal`, no confiar en el orden de la respuesta.
+const COMPRADOR_MP_1: ProcedureActor = {
+  rol: 'comprador',
+  tipoDocumento: 'CC',
+  numeroDocumento: '111',
+  nombreCompleto: 'Copropietario Uno',
+  email: 'copro1@example.com',
+  ordinal: 1,
+  porcentaje: 60,
+};
+
+const COMPRADOR_MP_2: ProcedureActor = {
+  rol: 'comprador',
+  tipoDocumento: 'NIT',
+  numeroDocumento: '9019998887',
+  nombreCompleto: 'Copropietario Dos SAS',
+  email: 'copro2@example.com',
+  personType: 'juridical',
+  ordinal: 2,
+  porcentaje: 40,
+  representanteLegal: {
+    tipoDocumento: 'CC',
+    numeroDocumento: '80112233',
+    nombreCompleto: 'RL Copropietario Dos',
+    mecanismoFirma: 'identidad',
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -174,5 +204,62 @@ describe('TramiteDetalleActores', () => {
 
     const compradorCard = await screen.findByRole('region', { name: 'Comprador' });
     expect(within(compradorCard).getByText('Sin registrar')).toBeInTheDocument();
+  });
+
+  describe('Múltiple Propietario (ADR-0053)', () => {
+    it('con un solo actor por lado, el render es idéntico al de siempre (cero regresión: sin ordinal, sin % )', async () => {
+      mocks.getActors.mockResolvedValue([VENDEDOR, COMPRADOR]);
+
+      render(<TramiteDetalleActores instanceId="inst-1" item={BASE_ITEM} />);
+
+      expect(await screen.findByRole('region', { name: 'Propietario / vendedor' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Comprador' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: /Comprador 1/ })).not.toBeInTheDocument();
+      expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+    });
+
+    it('lista a los 2 copropietarios ordenados por ordinal, cada uno con su porcentaje', async () => {
+      // Respuesta deliberadamente desordenada (ordinal 2 primero).
+      mocks.getActors.mockResolvedValue([COMPRADOR_MP_2, COMPRADOR_MP_1]);
+
+      render(
+        <TramiteDetalleActores
+          instanceId="inst-mp-1"
+          item={{ ...BASE_ITEM, modalidad: 'MATRICULAS', firmaVendedorEstado: null }}
+        />,
+      );
+
+      const comprador1Card = await screen.findByRole('region', { name: 'Comprador 1' });
+      expect(within(comprador1Card).getByText('Copropietario Uno')).toBeInTheDocument();
+      expect(within(comprador1Card).getByText('60%')).toBeInTheDocument();
+      // El estado de firma (dato agregado por lado) se pinta en el ordinal=1…
+      expect(within(comprador1Card).getByText('Sin firma')).toBeInTheDocument();
+
+      const comprador2Card = screen.getByRole('region', { name: 'Comprador 2' });
+      expect(within(comprador2Card).getByText('Copropietario Dos SAS')).toBeInTheDocument();
+      expect(within(comprador2Card).getByText('40%')).toBeInTheDocument();
+      // …y NO se repite en los agregados (evita el "miente sobre el estado" al duplicar el dato).
+      expect(within(comprador2Card).queryByText('Sin firma')).not.toBeInTheDocument();
+      expect(within(comprador2Card).queryByText('Sin registrar')).not.toBeInTheDocument();
+
+      // Cada copropietario jurídico tiene su propia tarjeta de representante legal, distinguible.
+      expect(
+        screen.getByRole('region', { name: 'Representante legal · Comprador 2' }),
+      ).toBeInTheDocument();
+    });
+
+    it('no muestra tarjeta de vendedor cuando el lado no tiene actores (matrícula inicial)', async () => {
+      mocks.getActors.mockResolvedValue([COMPRADOR_MP_1, COMPRADOR_MP_2]);
+
+      render(
+        <TramiteDetalleActores
+          instanceId="inst-mp-2"
+          item={{ ...BASE_ITEM, modalidad: 'MATRICULAS', firmaVendedorEstado: null }}
+        />,
+      );
+
+      await screen.findByRole('region', { name: 'Comprador 1' });
+      expect(screen.queryByRole('region', { name: /vendedor/i })).not.toBeInTheDocument();
+    });
   });
 });

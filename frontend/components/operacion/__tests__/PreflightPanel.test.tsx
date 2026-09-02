@@ -2,7 +2,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PreflightPanel, checkRoleSuffix } from '../PreflightPanel';
+import {
+  PreflightPanel,
+  checkPillLabel,
+  checkRoleSuffix,
+  selloDeConsulta,
+} from '../PreflightPanel';
 import type {
   PreflightCheck,
   PreflightSnapshot,
@@ -26,6 +31,58 @@ const baseProps = {
   riesgoAceptado: false,
   onToggleRiesgo: vi.fn(),
 };
+
+describe('checkPillLabel — la pastilla es el semáforo, no el detalle', () => {
+  // El defecto: en `fail` la pastilla se tragaba el mensaje entero (hasta 42 caracteres). En una
+  // tarjeta de un cuarto de fila, «FALLA - VEHÍCULO NO ENCONTRADO EN RUNT» no cabe, y como no
+  // encoge ni parte, empujaba el título fuera de la caja y las letras quedaban encimadas.
+  // Que el mensaje ya no quepa en la pastilla lo garantiza el TIPO: `checkPillLabel` dejó de
+  // aceptar `message`. Lo que se comprueba aquí es la forma del rótulo; que el mensaje acabe bajo
+  // el título y no dentro de la pastilla se ejercita abajo, contra el componente.
+  it('en fail el rótulo es el estado y la fuente', () => {
+    expect(checkPillLabel({ status: 'fail', source: 'kyverum_runt' })).toBe('FALLA - RUNT');
+  });
+
+  it('todos los estados con fuente tienen la misma forma', () => {
+    expect(checkPillLabel({ status: 'ok', source: 'verifik' })).toBe('OK - RUNT');
+    expect(checkPillLabel({ status: 'warn', source: 'kyverum_fines' })).toBe('ADVERTENCIA - SIMIT');
+    expect(checkPillLabel({ status: 'error', source: 'verifik' })).toBe('ERROR - RUNT');
+  });
+
+  // `unknown` no es «no existe» (eso es `fail`): es «no se pudo averiguar», así que no hay fuente
+  // que atribuirle ni motivo para mandar al gestor a corregir un dato que está bien.
+  it('unknown va sola y se rotula SIN DATO', () => {
+    expect(checkPillLabel({ status: 'unknown', source: 'system' })).toBe('SIN DATO');
+  });
+});
+
+describe('PreflightPanel — vehículo no encontrado (tarjeta que se rompía)', () => {
+  it('el mensaje va bajo el título y NO dentro de la pastilla', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'red',
+          createdAt: '2026-07-07T00:00:00Z',
+          checks: [
+            {
+              key: 'vehiculo',
+              label: 'Vehículo RUNT',
+              status: 'fail',
+              source: 'kyverum_runt',
+              message: 'Vehículo no encontrado en RUNT',
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+
+    // La pastilla: estado y fuente, sin el mensaje dentro.
+    expect(screen.getByText('FALLA - RUNT')).toBeInTheDocument();
+    // Y el mensaje, una sola vez, en su línea.
+    expect(screen.getAllByText('Vehículo no encontrado en RUNT')).toHaveLength(1);
+  });
+});
 
 describe('checkRoleSuffix', () => {
   it('distingue comprador y vendedor por la clave RNMC', () => {
@@ -168,8 +225,8 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
     expect(
       screen.getByText('El organismo de tránsito no exige esta consulta.'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/NO ENCONTRADO/)).toBeInTheDocument();
-    // Prototipo: en unknown la pastilla es solo «NO ENCONTRADO»; el detalle queda debajo.
+    expect(screen.getByText(/SIN DATO/)).toBeInTheDocument();
+    // En unknown la pastilla es solo «SIN DATO»; el detalle queda debajo, nunca dentro.
   });
 });
 
@@ -197,7 +254,7 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
 
   it('lista los hallazgos warn y aclara que se puede continuar', () => {
     render(<PreflightPanel snapshot={warnSnap} {...baseProps} />);
-    const franja = screen.getByText('Advertencias del pre-vuelo').closest('div')!;
+    const franja = screen.getByText('Advertencias de la verificación').closest('div')!;
     expect(franja).toHaveAttribute('role', 'status');
     expect(franja).toHaveTextContent('Comparendos');
     expect(franja).toHaveTextContent('2 comparendos pendientes de pago.');
@@ -207,7 +264,7 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
   });
 
   // Corazón de la HU: en amarillo no hay bloqueo que levantar, así que no se pide asumir riesgo.
-  it('NO ofrece asumir el riesgo cuando el pre-vuelo está en amarillo', () => {
+  it('NO ofrece asumir el riesgo cuando la verificación está en amarillo', () => {
     render(<PreflightPanel snapshot={warnSnap} {...baseProps} />);
     expect(screen.queryByText(/Asumo el riesgo/)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
@@ -264,9 +321,9 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
     ).toBeInTheDocument();
   });
 
-  it('no muestra la franja de advertencias cuando el pre-vuelo está en verde', () => {
+  it('no muestra la franja de advertencias cuando la verificación está en verde', () => {
     render(<PreflightPanel snapshot={snap([])} {...baseProps} />);
-    expect(screen.queryByText('Advertencias del pre-vuelo')).not.toBeInTheDocument();
+    expect(screen.queryByText('Advertencias de la verificación')).not.toBeInTheDocument();
   });
 
   it('lista el detalle de cada comparendo bajo la advertencia de multas', () => {
@@ -367,5 +424,116 @@ describe('PreflightPanel — precarga con origen/fecha y forzar actualización (
 
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT y SIMIT' }));
     expect(onRun).toHaveBeenCalledWith(false);
+  });
+});
+
+describe('selloDeConsulta', () => {
+  // La fecha solo se mostraba cuando el resultado venía de caché. En una consulta fresca el panel no
+  // decía nada, que es cuando más vale decirlo: el respaldo de que el dato lo acaba de dar el RUNT.
+  it('nombra las fuentes que respondieron, sin repetirlas', () => {
+    const sello = selloDeConsulta(
+      [{ source: 'kyverum_runt' }, { source: 'verifik' }, { source: 'kyverum_fines' }],
+      '2026-08-31T20:42:00Z',
+    );
+
+    expect(sello).toMatch(/^Consultado en RUNT y SIMIT el /);
+  });
+
+  it('con una sola fuente no inventa las demás', () => {
+    expect(selloDeConsulta([{ source: 'kyverum_runt' }], '2026-08-31T20:42:00Z')).toMatch(
+      /^Consultado en RUNT el /,
+    );
+  });
+
+  // «Consultado en RUNT y FLIT» se lee como que nos consultamos a nosotros mismos, y arruina justo
+  // la credibilidad que el sello viene a dar. Las comprobaciones que deriva la plataforma no son una
+  // fuente consultada.
+  it('no cuenta como fuente lo que deriva la propia plataforma', () => {
+    const sello = selloDeConsulta(
+      [{ source: 'kyverum_runt' }, { source: 'system' }],
+      '2026-08-31T20:42:00Z',
+    );
+
+    expect(sello).toMatch(/^Consultado en RUNT el /);
+    expect(sello).not.toContain('FLIT');
+  });
+
+  // La cartera propia de comparendos SÍ es una consulta real: la fuente somos nosotros, pero el dato
+  // se consulta igual que el SIMIT.
+  it('la cartera propia de comparendos sí cuenta', () => {
+    expect(selloDeConsulta([{ source: 'flit_fines' }], '2026-08-31T20:42:00Z')).toMatch(
+      /Comparendos FLIT/,
+    );
+  });
+
+  // Nunca una frase a medias: sin fecha utilizable no se pinta nada.
+  it('sin fecha o con fecha inválida no devuelve sello', () => {
+    expect(selloDeConsulta([{ source: 'verifik' }], null)).toBeNull();
+    expect(selloDeConsulta([{ source: 'verifik' }], 'no-es-una-fecha')).toBeNull();
+  });
+});
+
+describe('PreflightPanel — respaldo de los checks en verde', () => {
+  // Antes la tarjeta en OK quedaba con la pastilla verde y el cuerpo vacío: decía «está bien» sin
+  // decir de dónde salía. Los mapeadores ahora mandan el respaldo del proveedor y aquí se muestra.
+  it('pinta los datos del proveedor como filas etiqueta/valor', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'green',
+          createdAt: '2026-08-31T20:42:00Z',
+          checks: [
+            {
+              key: 'soat',
+              label: 'SOAT',
+              status: 'ok',
+              source: 'kyverum_runt',
+              message: '',
+              datos: [
+                { etiqueta: 'Vigente hasta', valor: '2027/01/23' },
+                { etiqueta: 'Póliza', valor: '3506349600' },
+                { etiqueta: 'Aseguradora', valor: 'AXA COLPATRIA SEGUROS SA' },
+              ],
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+
+    // Cada dato con SU etiqueta: encadenados en una frase, el último quedaba sin ella y se leía como
+    // parte del anterior.
+    expect(screen.getByText('Vigente hasta')).toBeInTheDocument();
+    expect(screen.getByText('2027/01/23')).toBeInTheDocument();
+    expect(screen.getByText('Aseguradora')).toBeInTheDocument();
+    expect(screen.getByText('AXA COLPATRIA SEGUROS SA')).toBeInTheDocument();
+    expect(screen.getByText(/Consultado en RUNT el /)).toBeInTheDocument();
+  });
+
+  // Lo que no es un par etiqueta/valor sigue siendo un mensaje: «Sin gravámenes ni prendas
+  // registradas» es una afirmación, no un campo.
+  it('sin datos estructurados conserva el mensaje del check', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'green',
+          createdAt: '2026-08-31T20:42:00Z',
+          checks: [
+            {
+              key: 'gravamenes',
+              label: 'Gravámenes y limitaciones',
+              status: 'ok',
+              source: 'kyverum_runt',
+              message: 'Sin gravámenes ni prendas registradas en el RUNT',
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+
+    expect(
+      screen.getByText('Sin gravámenes ni prendas registradas en el RUNT'),
+    ).toBeInTheDocument();
   });
 });

@@ -26,7 +26,7 @@ public static class VerifikResultMapper
     private const string Red = "red";
 
     /// <summary>Versión del mapeo; se persiste con cada fila certificada (HU #11303, ADR-0041).</summary>
-    public const string MapperVersion = "verifik-v2";
+    public const string MapperVersion = "verifik-v4";
 
     private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
@@ -93,12 +93,16 @@ public static class VerifikResultMapper
             return new ConsultationCheck("estado_vehiculo", "Estado del vehículo", Unknown, Provider, "Sin información de estado");
 
         var isActivo = string.Equals(estado, "ACTIVO", StringComparison.OrdinalIgnoreCase);
+        var estadoDatos = ConsultationCheckDetail.Datos(("Estado", estado.Trim().ToUpperInvariant()));
         return new ConsultationCheck(
             "estado_vehiculo",
             "Estado del vehículo",
             isActivo ? Ok : Fail,
             Provider,
-            isActivo ? null : $"Estado: {estado}");
+            // El mensaje repite los datos en una línea: respaldo si el campo estructurado se pierde
+            // por el camino, y para los expedientes cuyo pre-vuelo se guardó antes de que existiera.
+            ConsultationCheckDetail.Resumen(estadoDatos),
+            Datos: estadoDatos);
     }
 
     private static ConsultationCheck MapSoat(List<VerifikSoat>? soat)
@@ -108,13 +112,22 @@ public static class VerifikResultMapper
         if (soat is null || soat.Count == 0)
             return new ConsultationCheck("soat", "SOAT", Unknown, Provider, "Sin SOAT registrado");
 
-        var vigente = soat.Any(s => string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase));
+        var poliza = soat.FirstOrDefault(s =>
+            string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase));
+        var vigente = poliza is not null;
+        var soatDatos = vigente
+            ? ConsultationCheckDetail.Datos(
+                ("Vigente hasta", ConsultationCheckDetail.Fecha(poliza?.FechaVencimiento)),
+                ("Póliza", poliza?.NoPoliza),
+                ("Aseguradora", poliza?.EntidadExpideSoat))
+            : null;
         return new ConsultationCheck(
             "soat",
             "SOAT",
             vigente ? Ok : Fail,
             Provider,
-            vigente ? null : "SOAT vencido o no vigente");
+            vigente ? ConsultationCheckDetail.Resumen(soatDatos) : "SOAT vencido o no vigente",
+            Datos: soatDatos);
     }
 
     private static ConsultationCheck MapTecnomecanica(List<VerifikTecnomecanica>? tecno)
@@ -124,8 +137,21 @@ public static class VerifikResultMapper
         if (tecno is null || tecno.Count == 0)
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "Sin información de tecnomecánica");
 
-        if (tecno.Any(t => string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase)))
-            return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Ok, Provider, null);
+        var revision = tecno.FirstOrDefault(t =>
+            string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase));
+        if (revision is not null)
+        {
+            var rtmDatos = ConsultationCheckDetail.Datos(
+                ("Vigente hasta", ConsultationCheckDetail.Fecha(revision.FechaVencimiento)),
+                ("CDA", revision.CdaExpide));
+            return new ConsultationCheck(
+                "tecnomecanica",
+                "Revisión técnico-mecánica",
+                Ok,
+                Provider,
+                ConsultationCheckDetail.Resumen(rtmDatos),
+                Datos: rtmDatos);
+        }
 
         if (tecno.All(t => string.Equals(t?.Vigente, "NO APLICA", StringComparison.OrdinalIgnoreCase)))
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "No aplica para este vehículo");
@@ -148,7 +174,11 @@ public static class VerifikResultMapper
         var sinPrendas = !IsSi(info.Prendas);
 
         if (sinGravamenes && sinPrendas)
-            return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
+        {
+            return new ConsultationCheck(
+                "gravamenes", "Gravámenes y limitaciones", Ok, Provider,
+                "Sin gravámenes ni prendas registradas en el RUNT");
+        }
 
         return new ConsultationCheck(
             "gravamenes",
@@ -223,11 +253,20 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(info.PasajerosSentados))
             fields.Add(new HydratedField("vehicle_passengers", info.PasajerosSentados, null));
 
-        if (!string.IsNullOrWhiteSpace(info.PesoBruto))
-            fields.Add(new HydratedField("vehicle_weight", info.PesoBruto, null));
+        var tec = data?.DatosTecnicos;
+        var peso = FirstNonEmpty(info.PesoBruto, tec?.PesoBrutoVehicular);
+        if (!string.IsNullOrWhiteSpace(peso))
+            fields.Add(new HydratedField("vehicle_weight", peso, null));
 
-        if (!string.IsNullOrWhiteSpace(info.NoEjes))
-            fields.Add(new HydratedField("vehicle_axles", info.NoEjes, null));
+        var ejes = FirstNonEmpty(info.NoEjes, tec?.NoEjes);
+        if (!string.IsNullOrWhiteSpace(ejes))
+            fields.Add(new HydratedField("vehicle_axles", ejes, null));
+
+        AddSiHay(fields, "vehicle_height", tec?.Alto);
+        AddSiHay(fields, "vehicle_width", tec?.Ancho);
+        AddSiHay(fields, "vehicle_length", tec?.Largo);
+        AddSiHay(fields, "vehicle_tires", tec?.NoLlantas);
+        AddSiHay(fields, "vehicle_traction", tec?.Rodaje);
 
         if (!string.IsNullOrWhiteSpace(info.FechaMatricula))
             fields.Add(new HydratedField("vehicle_registration_date", info.FechaMatricula, null));
@@ -305,6 +344,9 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(value))
             fields.Add(new HydratedField(key, value, null));
     }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
     private static string ComputeOverall(IReadOnlyList<ConsultationCheck> checks)
     {

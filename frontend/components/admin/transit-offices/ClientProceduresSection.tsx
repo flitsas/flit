@@ -28,22 +28,45 @@ import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
-import { Modal } from "@/components/atom/Modal";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
-import { ChevronDown, ChevronUp, FolderOpen } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
-import { ClientProcedureDetailPanel } from "./ClientProcedureDetailPanel";
+import {
+  ClientProcedureDetailModal,
+  type OtDetalleSeccionId,
+} from "./ClientProcedureDetailModal";
 import {
   assignPlateToProcedure,
   listPlateDetails,
   revokeProcedurePlate,
   type PlateDetail,
 } from "@/lib/api/admin-plate-ranges";
-import { OtDocumentosTab } from "./OtDocumentosTab";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 
 const PAGE_SIZE = 20;
+
+/**
+ * Estados que el organismo puede filtrar en su bandeja (HU #11946).
+ *
+ * Es el espejo en frontend de `TramiteEstado.RecibidosPorOrganismo` (backend, HU #11945): el
+ * organismo solo ve trámites que ya le fueron entregados, así que `borrador`, `preparado` y
+ * `anulado` no tienen sitio aquí. El backend es quien manda —la lista sale vacía aunque se pida
+ * un estado de fuera—; esta constante existe para que el desplegable y la precarga desde la URL
+ * no puedan discrepar entre sí.
+ */
+const FILTROS_ESTADO_OT = [
+  { value: "entregado", label: "Pendiente OT" },
+  { value: "aprobado", label: "Aprobado OT" },
+  { value: "rechazado", label: "Rechazado OT" },
+] as const;
+
+/** La bandeja abre por la cola de decisión: es el trabajo que el organismo tiene pendiente. */
+const ESTADO_POR_DEFECTO = "entregado";
+
+function esEstadoDeBandeja(valor: string): boolean {
+  return FILTROS_ESTADO_OT.some((f) => f.value === valor);
+}
 
 /** Extrae el motivo de fallo al asignar placa (ProblemDetails.detail o fallback legible). */
 export function readAssignPlateError(err: unknown): string {
@@ -82,7 +105,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
-  const [statusFilter, setStatusFilter] = useState("entregado");
+  const [statusFilter, setStatusFilter] = useState(ESTADO_POR_DEFECTO);
   const [typeFilter, setTypeFilter] = useState("");
   // Borradores del formulario; se aplican al listado solo con "Aplicar filtros".
   const [vinFilter, setVinFilter] = useState("");
@@ -130,7 +153,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [acting, setActing] = useState(false);
   const [profile, setProfile] = useState<OtProfile | null>(null);
   // HU #10705 — panel de documentos del expediente
-  const [documentosProcedure, setDocumentosProcedure] = useState<OtClientProcedure | null>(null);
+  // Sección con la que abre el modal de detalle: la bandeja tiene dos entradas al mismo trámite
+  // («ver detalle» y «ver documentos») y las dos llevan al mismo modal.
+  const [detailSection, setDetailSection] = useState<OtDetalleSeccionId>("vehiculo");
   // Panel lateral derecho — detalle del trámite
   const [detailProcedure, setDetailProcedure] = useState<OtClientProcedure | null>(null);
   // Previsualización inline del consolidado (sin forzar descarga).
@@ -192,7 +217,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       setVinFilter(vinParam);
       setAppliedVin(vinParam);
     }
-    if (statusParam) setStatusFilter(statusParam);
+    // Un estado fuera de la bandeja (p. ej. `?status=borrador`) se ignora en vez de sembrarse:
+    // el backend ya lo devuelve vacío, pero el <select> se quedaría en un valor sin <option> que
+    // lo represente — se vería en blanco junto a una lista vacía, y eso se lee como un fallo de
+    // carga en vez de como un filtro que no existe.
+    if (statusParam && esEstadoDeBandeja(statusParam)) setStatusFilter(statusParam);
     setFiltersOpen(true);
     setPage(1);
     /* eslint-enable react-hooks/set-state-in-effect */
@@ -690,10 +719,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="entregado">Pendiente OT</option>
-            <option value="aprobado">Aprobado OT</option>
-            <option value="rechazado">Rechazado OT</option>
-            <option value="">Todos</option>
+            {FILTROS_ESTADO_OT.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+            <option value="">Todos los recibidos</option>
           </select>
         </label>
         <label className="text-xs font-semibold text-foreground">
@@ -814,8 +845,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               : undefined
           }
           consolidadoActingId={consolidadoActingId}
-          onVerDocumentos={setDocumentosProcedure}
-          onVerDetalle={setDetailProcedure}
+          onVerDocumentos={(row) => {
+            setDetailSection("documentos");
+            setDetailProcedure(row);
+          }}
+          onVerDetalle={(row) => {
+            setDetailSection("vehiculo");
+            setDetailProcedure(row);
+          }}
         />
       </UiStateBoundary>
 
@@ -1176,39 +1213,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         </div>
       )}
 
-      {/* Panel lateral — detalle del trámite */}
-      <ClientProcedureDetailPanel
+      {/* HU #11930 — modal de detalle del trámite; la sección Documentos absorbió el antiguo
+          modal del expediente (HU #10705), que se abría encima de este. */}
+      <ClientProcedureDetailModal
         open={!!detailProcedure}
         procedure={detailProcedure}
         onClose={() => setDetailProcedure(null)}
         scope={scope}
-        onVerDocumentos={(row) => {
-          setDocumentosProcedure(row);
-        }}
-        onVerConsolidado={handleConsolidado}
-        consolidadoActing={
-          !!detailProcedure && consolidadoActingId === detailProcedure.id
-        }
+        readOnly={isReadOnly}
+        initialSection={detailSection}
       />
-
-      {/* HU #10705 — Modal de documentos del expediente */}
-      {documentosProcedure && (
-        <Modal
-          open
-          onClose={() => setDocumentosProcedure(null)}
-          title={`Documentos — ${documentosProcedure.referenceNumber}`}
-          icon={FolderOpen}
-          size="xl"
-          zClassName="z-[90]"
-        >
-          <OtDocumentosTab
-            procedureId={documentosProcedure.id}
-            referenceNumber={documentosProcedure.referenceNumber}
-            scope={transitOfficeId ? { transitOfficeId } : undefined}
-            readOnly={isReadOnly}
-          />
-        </Modal>
-      )}
 
       {/* Previsualización inline del consolidado (botón "Ver consolidado" de la tabla) */}
       <DocumentPreviewModal

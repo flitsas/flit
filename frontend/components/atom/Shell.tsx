@@ -596,6 +596,7 @@ export function Shell({
         {/* DR. FLIT — asistente conversacional (UI-only; sin APIs). */}
         <DrFlitAssistant
           displayName={currentUser?.displayName ?? currentUser?.email ?? null}
+          routeScope={`${pathname}|${active}`}
         />
 
         {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}

@@ -119,6 +119,33 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
         model.EsTraspaso.Should().BeTrue();
     }
 
+    /// <summary>
+    /// ADR-0051 — «¿hay parte vendedora que nombrar?» lo declara el tipo (`requiresSeller`), no su
+    /// familia. En TRASPASO_UNILATERAL el propietario no pasa por el wizard, pero SÍ es parte del
+    /// trámite y el correo tiene que nombrarlo.
+    /// </summary>
+    [Fact]
+    public void TraspasoUnilateral_NombraAlPropietarioAunqueNoSeCapturePorFormulario()
+    {
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.TraspasoUnilateral,
+            Plate = "ABC123",
+        };
+        var actors = new List<ProcedureInstanceActor>
+        {
+            new() { ActorType = "comprador", FullName = "Ana Locataria" },
+            new() { ActorType = "vendedor", FullName = "Leasing S.A." },
+        };
+
+        var model = TramiteCambioEstadoEmailProjector.Project(
+            instance, actors, new Dictionary<string, string?>(), "APROBADO");
+
+        model.EsTraspaso.Should().BeTrue();
+        model.VendedorNombre.Should().Be("Leasing S.A.");
+        model.CompradorNombre.Should().Be("Ana Locataria");
+    }
+
     [Fact]
     public void Rechazado_MapeaCausalesYObservacion()
     {

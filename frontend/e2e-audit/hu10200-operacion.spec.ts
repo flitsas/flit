@@ -112,12 +112,12 @@ test.describe('HU10200 — Tab Operación wizard dinámico', () => {
       await page.getByRole('button', { name: /Consultar RUNT y SIMIT/i }).click();
       await page.waitForTimeout(2000);
 
-      // panel "Pre-vuelo de requisitos"
-      await expect(page.getByText('Pre-vuelo de requisitos')).toBeVisible();
+      // panel "Verificación de requisitos"
+      await expect(page.getByText('Verificación de requisitos')).toBeVisible();
 
       // semáforo overall badge
       await expect(
-        page.getByText(/Pre-vuelo en verde|Pre-vuelo con advertencias|Pre-vuelo con bloqueos/i),
+        page.getByText(/Sin novedades|Con advertencias|Con bloqueos/i),
       ).toBeVisible();
 
       await page.waitForTimeout(3000);

@@ -69,4 +69,18 @@ public sealed class FurSignatureLayoutTests
         w.Should().Be(115);
         h.Should().Be(28.8);
     }
+
+    [Fact]
+    public void Place_SidecarUsaElAnchoReal_NoLaMitadReservadaDelCampo()
+    {
+        var (drawW, drawH) = FurSignatureLayout.Fit(646, 315, 145, 28.8);
+        var (imageY, sidecarX, sidecarW) = FurSignatureLayout.Place(
+            fieldX: 100, fieldY: 200, fieldW: 230, fieldH: 36, drawW, drawH);
+
+        sidecarX.Should().BeApproximately(100 + drawW + FurSignatureLayout.SidecarGap, 0.01);
+        sidecarX.Should().BeLessThan(100 + 145);
+        sidecarW.Should().BeApproximately(230 - drawW - FurSignatureLayout.SidecarGap, 0.01);
+        imageY.Should().BeApproximately(200 + Math.Max(0, (36 - drawH) / 2) - FurSignatureLayout.ImageLift, 0.01);
+        FurSignatureLayout.ImageLift.Should().Be(2);
+    }
 }

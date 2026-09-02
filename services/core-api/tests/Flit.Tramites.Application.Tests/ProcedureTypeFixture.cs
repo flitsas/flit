@@ -39,6 +39,24 @@ internal static class ProcedureTypeFixture
     public static ProcedureType Traspaso => TraspasoInstance;
 
     /// <summary>
+    /// ADR-0051 — traspaso unilateral de leasing: el locatario formaliza a su nombre y el
+    /// propietario NO comparece por formulario. El perfil espeja el seed de
+    /// <c>94-traspaso-unilateral-capacidades-declaradas.sql</c>: hay parte vendedora, pero solo ella
+    /// firma y valida identidad, no se captura tecleando datos, y no hay compraventa ni avalúo.
+    /// </summary>
+    public static ProcedureType TraspasoUnilateral => TraspasoUnilateralInstance;
+
+    private static readonly ProcedureType TraspasoUnilateralInstance = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000aa"),
+        Code = "TRASPASO_UNILATERAL",
+        Name = "Traspaso unilateral (leasing)",
+        Family = "TRASPASO",
+        GateProfile = """{"entryMode":"PLATE","requiresBuyer":true,"requiresSeller":true,"sellerCapturedViaForm":false,"signatureActors":["OWNER"],"requiresBiometrics":true,"biometricActors":["OWNER"],"generatesSaleDocument":false,"hasAppraisalBlock":false,"requiresSignature":true,"validateOtOperability":true,"simitMode":"INTERNAL"}""",
+        Steps = TraspasoSteps(),
+    };
+
+    /// <summary>
     /// Cancelación de matrícula: familia MATRICULAS —que acumula— con los complementarios apagados
     /// por TIPO (DDL 93). Acumular presupone un vehículo que sigue inscrito, y este trámite lo saca
     /// del registro.

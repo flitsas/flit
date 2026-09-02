@@ -6,6 +6,12 @@ namespace Flit.Infrastructure.Documents.Fur;
 /// </summary>
 public static class FurSignatureLayout
 {
+    /// <summary>Sube la rúbrica 2 pt para que no pise la línea inferior del recuadro.</summary>
+    public const double ImageLift = 2;
+
+    /// <summary>Aire mínimo entre el recorte y la estampa de validación.</summary>
+    public const double SidecarGap = 3;
+
     /// <summary>
     /// Encaja una imagen de <paramref name="imageWidth"/>×<paramref name="imageHeight"/> dentro de la
     /// caja <paramref name="maxWidth"/>×<paramref name="maxHeight"/> CONSERVANDO su relación de aspecto:
@@ -23,5 +29,23 @@ public static class FurSignatureLayout
 
         var scale = Math.Min(maxWidth / imageWidth, maxHeight / imageHeight);
         return (imageWidth * scale, imageHeight * scale);
+    }
+
+    /// <summary>
+    /// La estampa va pegada al ANCHO REAL de la imagen, no a la mitad reservada del campo: esa
+    /// reserva dejaba un hueco vacío entre la rúbrica y el sello.
+    /// </summary>
+    public static (double ImageY, double SidecarX, double SidecarW) Place(
+        double fieldX,
+        double fieldY,
+        double fieldW,
+        double fieldH,
+        double drawW,
+        double drawH)
+    {
+        var imageY = fieldY + Math.Max(0, (fieldH - drawH) / 2) - ImageLift;
+        var sidecarX = fieldX + drawW + SidecarGap;
+        var sidecarW = Math.Max(0, fieldW - drawW - SidecarGap);
+        return (imageY, sidecarX, sidecarW);
     }
 }

@@ -69,7 +69,18 @@ const STATUS_PILL_TONE: Record<PreflightCheckStatus, StatusTone> = {
   error: 'danger',
 };
 
-/** Palabra visible en la pastilla (UNKNOWN → NO ENCONTRADO). */
+/**
+ * Palabra visible en la pastilla.
+ *
+ * <p><c>unknown</c> se rotula «SIN DATO» y no «NO ENCONTRADO». Son cosas distintas y la etiqueta
+ * anterior decía la que no era: <c>fail</c> es «la fuente respondió y esto no existe» (el vehículo
+ * no está en el RUNT), mientras <c>unknown</c> es «no se pudo averiguar» — la consulta no se corrió
+ * porque el organismo no la exige, o faltaba el documento del actor. Decirle al gestor «no
+ * encontrado» de algo que nadie llegó a buscar lo manda a corregir un dato que está bien.</p>
+ *
+ * <p>De paso es cinco caracteres más corta, que en una pastilla que no encoge dentro de una tarjeta
+ * de un cuarto de fila no es un detalle cosmético.</p>
+ */
 export function statusPillWord(status: PreflightCheckStatus): string {
   switch (status) {
     case 'ok':
@@ -81,29 +92,32 @@ export function statusPillWord(status: PreflightCheckStatus): string {
     case 'error':
       return 'ERROR';
     case 'unknown':
-      return 'NO ENCONTRADO';
+      return 'SIN DATO';
   }
 }
 
 /**
- * Texto de la pastilla — formato del prototipo Lovable / PDF:
- * `OK - RUNT` · `ADVERTENCIA - RUNT` · `NO ENCONTRADO` (detalle debajo del título).
+ * Texto de la pastilla: `OK - RUNT` · `ADVERTENCIA - RUNT` · `FALLA - RUNT` · `SIN DATO`.
+ *
+ * <p><b>El mensaje ya no entra en la pastilla.</b> En los estados de fallo se metía el mensaje
+ * completo con un tope de 42 caracteres, y eso rompía la tarjeta: «FALLA - VEHÍCULO NO ENCONTRADO EN
+ * RUNT» son treinta y ocho caracteres en versalitas que, con `whitespace-nowrap` y `shrink-0`,
+ * reclaman más ancho del que tiene una tarjeta de un cuarto de fila. El título quedaba debajo de la
+ * pastilla, con las letras montadas.</p>
+ *
+ * <p>Y además lo decía dos veces: el mismo mensaje se pinta bajo el título, que es su sitio. La
+ * pastilla es el semáforo —estado y fuente—, no el detalle; ahora todos los estados tienen la misma
+ * forma y ninguno puede volver a crecer sin control.</p>
  */
 export function checkPillLabel(check: {
   status: PreflightCheckStatus;
   source?: string | null;
-  message?: string | null;
 }): string {
   const word = statusPillWord(check.status);
   const src = sourceLabel(check.source);
-  const msg = check.message?.trim() ?? '';
-  // Prototipo: OK / ADVERTENCIA llevan la fuente con guion; el detalle no va en la pastilla.
-  if (check.status === 'ok') return src ? `${word} - ${src}` : word;
-  if (check.status === 'warn') return src ? `${word} - ${src}` : word;
+  // `unknown` va sola: no se llegó a consultar, así que no hay fuente que atribuirle.
   if (check.status === 'unknown') return word;
-  if (msg && msg.length <= 42) return `${word} - ${msg}`;
-  if (src) return `${word} - ${src}`;
-  return word;
+  return src ? `${word} - ${src}` : word;
 }
 
 function checkPillTone(check: { status: PreflightCheckStatus; message?: string | null }): StatusTone {
@@ -137,11 +151,25 @@ export function preflightOverall(overall: string | null | undefined) {
   return overall ? (OVERALL[overall] ?? null) : null;
 }
 
-/** Chip semántico del semáforo global (HU consolidación de chips — `StatusBadge`). */
+/**
+ * Chip semántico del semáforo global (HU consolidación de chips — `StatusBadge`).
+ *
+ * <p><b>El chip ya no nombra la sección.</b> Decía «Pre-vuelo en verde» dentro de un panel titulado
+ * «Diagnóstico de Requisitos Previos»: dos nombres para lo mismo en la misma pantalla, y el que se
+ * leía era el peor. «Pre-vuelo» es <i>preflight</i> traducido literal —la metáfora del checklist de
+ * aviación, jerga de programación— y a un gestor de trámites no le dice nada; no hay ningún avión.</p>
+ *
+ * <p>Repetir el nombre de la sección en su propio chip tampoco aportaba: lo que el gestor busca ahí
+ * es el ESTADO. Así que el chip dice solo el estado, y de paso mide la mitad — que en la cabecera de
+ * un acordeón, donde este mismo chip se pinta junto al título, es lo que evita que lo desplace.</p>
+ *
+ * <p>«Sin novedades» y no «sin bloqueos»: el amarillo tampoco tiene bloqueos, así que ese rótulo no
+ * distinguiría el verde del ámbar.</p>
+ */
 const OVERALL: Record<string, { label: string; tone: StatusTone }> = {
-  green: { label: 'Pre-vuelo en verde', tone: 'success' },
-  yellow: { label: 'Pre-vuelo con advertencias', tone: 'warning' },
-  red: { label: 'Pre-vuelo con bloqueos', tone: 'danger' },
+  green: { label: 'Sin novedades', tone: 'success' },
+  yellow: { label: 'Con advertencias', tone: 'warning' },
+  red: { label: 'Con bloqueos', tone: 'danger' },
 };
 
 /**
@@ -168,6 +196,58 @@ const SOURCE_LABEL: Record<string, string> = {
 export function sourceLabel(source: string | null | undefined): string {
   if (!source) return '';
   return SOURCE_LABEL[source] ?? source.toUpperCase();
+}
+
+/**
+ * Sello de la consulta: qué fuentes respondieron y cuándo.
+ *
+ * <p>La fecha solo se mostraba cuando el resultado venía de CACHÉ («Dato reutilizado · Consultado
+ * el …»). En una consulta fresca el panel no decía nada, que es justo cuando más vale decirlo: lo
+ * que el gestor necesita saber es que esos datos los acaba de responder el RUNT, no que los dedujo
+ * la aplicación.</p>
+ *
+ * <p>Las fuentes salen de los propios checks, sin repetir: un panel con RUNT y SIMIT lo dice, y uno
+ * que solo consultó el RUNT no anuncia un SIMIT que nadie llamó. Sin fuentes reconocibles o sin
+ * fecha, devuelve `null` y no se pinta nada — nunca una frase a medias.</p>
+ */
+/**
+ * La comprobación no la respondió un tercero, la derivó FLIT. No cuenta como fuente consultada.
+ *
+ * <p>`flit_fines` NO entra aquí: es la cartera de comparendos de la compañía, un dato real que se
+ * consulta igual que el SIMIT, solo que la fuente somos nosotros.</p>
+ */
+function esFuenteInterna(source: string | null | undefined): boolean {
+  return (source ?? '').trim().toLowerCase() === 'system';
+}
+
+export function selloDeConsulta(
+  checks: readonly { source?: string | null }[],
+  fecha: string | null | undefined,
+): string | null {
+  if (!fecha) return null;
+  const cuando = new Date(fecha);
+  if (Number.isNaN(cuando.getTime())) return null;
+
+  // Solo fuentes EXTERNAS. El sello afirma «esto lo dijo el RUNT», así que una comprobación que
+  // deriva la propia plataforma (`system` → «FLIT»: el VIN ya matriculado, o una consulta que el
+  // organismo mandó omitir) no puede aparecer en la lista — «Consultado en RUNT y FLIT» se lee como
+  // que nos consultamos a nosotros mismos, y arruina justo la credibilidad que el sello viene a dar.
+  const fuentes = [
+    ...new Set(
+      checks
+        .filter((c) => !esFuenteInterna(c.source))
+        .map((c) => sourceLabel(c.source))
+        .filter(Boolean),
+    ),
+  ];
+  const origen =
+    fuentes.length === 0
+      ? ''
+      : fuentes.length === 1
+        ? ` en ${fuentes[0]}`
+        : ` en ${fuentes.slice(0, -1).join(', ')} y ${fuentes[fuentes.length - 1]}`;
+
+  return `Consultado${origen} el ${cuando.toLocaleString('es-CO')}`;
 }
 
 /**
@@ -268,6 +348,9 @@ export function PreflightPanel({
   // el gestor los vea de un vistazo. Se toman de `visibleChecks` para no repetir `vin_matricula`,
   // que ya tiene su propia tarjeta accionable arriba.
   const warnChecks = visibleChecks.filter((c) => c.status === 'warn');
+  // `queriedAt` solo lo completa la consulta con caché (ADR-0030); `createdAt` está siempre, así que
+  // es el que sostiene el sello en una consulta fresca — que es donde antes no se decía nada.
+  const sello = selloDeConsulta(checks, snapshot?.queriedAt ?? snapshot?.createdAt);
 
   return (
     <div className={bare ? '' : 'mt-4 rounded-2xl border bg-white p-4 dark:bg-[#162744]'}>
@@ -300,8 +383,17 @@ export function PreflightPanel({
 
       {/* Embebido en acordeón: el título lo pone el acordeón; aquí solo el subtítulo del prototipo. */}
       {bare && (
-        <p className="mb-4 text-[13px] leading-snug opacity-70">
+        <p className="mb-1.5 text-[13px] leading-snug opacity-70">
           Validación automática en fuentes RUNT, SIMIT y RNMC antes de radicar.
+        </p>
+      )}
+
+      {/* Sello de la consulta: la respalda diciendo qué fuentes contestaron y cuándo. Va debajo del
+          subtítulo en las dos variantes del panel (con cabecera propia o embebido en un acordeón),
+          porque la afirmación «esto lo dijo el RUNT» pertenece al resultado, no al encabezado. */}
+      {hasResult && sello && (
+        <p className="mb-4 text-xs opacity-70" role="status" aria-live="polite">
+          {sello}
         </p>
       )}
 
@@ -358,14 +450,22 @@ export function PreflightPanel({
 
       {hasResult && (
         <ul
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          // Cuatro columnas dejaban ~240px por tarjeta en un portátil, y ahí no caben un título de
+          // dos palabras y su pastilla en la misma línea. La cuarta se reserva para `xl`, que es
+          // donde hay ancho de verdad.
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           aria-label="Diagnóstico de requisitos previos"
         >
           {visibleChecks.map((c) => {
             const pill = checkPillLabel(c);
             const pillTone = checkPillTone(c);
+            const datos = c.datos ?? [];
             const msg = c.message?.trim() ?? '';
-            const showMessage = !!msg && c.status !== 'ok';
+            // También en OK. Antes se ocultaba, y la tarjeta quedaba con la pastilla verde y el
+            // cuerpo vacío: el gestor veía que «está bien» sin ver de dónde salía eso. Ahora los
+            // mapeadores mandan el respaldo del proveedor —vencimiento del SOAT, póliza, aseguradora,
+            // CDA de la revisión— y es justo el dato que puede contrastar si el organismo pregunta.
+            const showMessage = !!msg;
             const aria = `${c.label}: ${pill}`;
             return (
               <li
@@ -373,9 +473,15 @@ export function PreflightPanel({
                 className="flex flex-col gap-2 rounded-xl border bg-white p-4 shadow-sm dark:bg-[#162744]"
                 style={{ borderColor: '#E2E8F0' }}
               >
-                <div className="flex items-start justify-between gap-2">
+                {/* `flex-wrap`: la pastilla no encoge ni parte (`whitespace-nowrap` + `shrink-0`),
+                    así que cuando no cabe junto al título tiene que poder bajar a su propia línea.
+                    Sin esto empujaba al título fuera de la tarjeta. */}
+                <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                   <span
-                    className="min-w-0 text-[13px] font-semibold leading-tight"
+                    // `break-words`: un título largo («Medidas correctivas (Policía) (comprador)»)
+                    // debe partirse, no desbordar. `min-w-0` solo le permite encoger; sin una regla
+                    // de quiebre encogía la caja y dejaba el texto por fuera, encima de la pastilla.
+                    className="min-w-0 break-words text-[13px] font-semibold leading-tight"
                     style={{ color: '#162744' }}
                   >
                     {c.label}
@@ -392,6 +498,25 @@ export function PreflightPanel({
                     />
                   )}
                 </div>
+                {/* Los datos del proveedor, una fila por dato: la etiqueta arriba en versalitas y el
+                    valor debajo, como el resto del asistente presenta los datos del vehículo y de
+                    los actores. Encadenados en una frase se leían mal —el salto de línea partía el
+                    nombre de la aseguradora por la mitad— y el último campo quedaba sin etiqueta,
+                    como si formara parte del anterior. */}
+                {datos.length > 0 && (
+                  <dl className="space-y-1.5">
+                    {datos.map((d) => (
+                      <div key={`${d.etiqueta}-${d.valor}`}>
+                        <dt className="text-[10px] font-semibold uppercase tracking-wide opacity-55">
+                          {d.etiqueta}
+                        </dt>
+                        <dd className="text-[11.5px] leading-snug break-words">{d.valor}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {/* El mensaje se conserva para lo que NO es un par etiqueta/valor: «Sin gravámenes ni
+                    prendas registradas» es una afirmación, no un campo que etiquetar. */}
                 {showMessage && (
                   <p className="text-[11.5px] leading-snug opacity-70">{c.message}</p>
                 )}
@@ -457,7 +582,7 @@ export function PreflightPanel({
           aria-live="polite"
         >
           <p className="text-xs font-bold" style={{ color: 'var(--badge-warning-fg)' }}>
-            Advertencias del pre-vuelo
+            Advertencias de la verificación
           </p>
           <ul className="mt-1.5 space-y-2">
             {warnChecks.map((c) => (

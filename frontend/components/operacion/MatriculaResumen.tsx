@@ -5,10 +5,13 @@ import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'luc
 import type {
   BiometricParte,
   BiometricValidation,
+  FirmaBaulActorCoberturaDto,
   InstanceStatus,
+  ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { actorsOrderedByOrdinal, validationsForActor, isCoveredByVaultForActor } from '@/lib/tramites/ownership-share';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { formatDateOnly } from '@/lib/format/date-only';
@@ -47,6 +50,10 @@ export type ResumenEspecificaciones = {
   carroceria?: string;
   capacidad?: string;
   ejes?: string;
+  alto?: string;
+  ancho?: string;
+  largo?: string;
+  llantas?: string;
   estado?: string;
   motor?: string;
   chasis?: string;
@@ -68,13 +75,59 @@ export type ResumenActor = {
 
 interface Props {
   modalidad: WizardModalidad;
+  /**
+   * ADR-0051 — partes que el TIPO somete a validación de identidad (`biometricActors`), traducidas a
+   * los roles del asistente. El resumen pinta el bloque de firma SOLO de estas.
+   *
+   * <p>Antes se deducía: el del vendedor se condicionaba a `modalidad === 'traspaso'` y el del
+   * comprador no se condicionaba a nada. En `TRASPASO_UNILATERAL` firma únicamente el propietario
+   * (art. 5.3.2.2), así que el resumen le pedía al locatario —persistido como `comprador`— una
+   * validación que su trámite no exige.</p>
+   *
+   * <p>Ausente ⇒ las dos partes, que es el criterio previo: ningún otro tipo cambia.</p>
+   */
+  partesBiometricas?: BiometricParte[];
   status: InstanceStatus;
   placa: string;
   vehiculo: string;
   vin: string;
   especificaciones?: ResumenEspecificaciones;
   vendedor?: ResumenActor | null;
+  /**
+   * Arrendatario del vehículo, en los tipos que lo declaran (`requiresLessee`: matrícula leasing y
+   * cambio de locatario). El resumen solo conocía comprador y vendedor, así que el locatario —parte
+   * propia del expediente desde el DDL 88— no aparecía en la pantalla donde el gestor revisa el
+   * trámite antes de radicarlo. No firma: quien autoriza el leasing es el propietario.
+   */
+  locatario?: ResumenActor | null;
+  /**
+   * Cómo llama el CATÁLOGO a cada parte en este tipo. El rol persistido no siempre se llama como la
+   * parte real: en `TRASPASO_UNILATERAL` el locatario del leasing se guarda con el rol `comprador`,
+   * y la tarjeta lo anunciaba como «Comprador» en un trámite donde nadie compra. Sin entrada para un
+   * rol, se usa su nombre de siempre.
+   */
+  rotulosPorRol?: Partial<Record<'comprador' | 'vendedor' | 'locatario', string>>;
   comprador: ResumenActor | null;
+  /**
+   * Múltiple Propietario (ADR-0053) — TODOS los actores del lado (no solo el ordinal=1 que resuelven
+   * `vendedor`/`comprador` arriba), para pintar una `ResumenCard` POR COPROPIETARIO en vez de una
+   * sola por parte. Extensión aditiva: ausente o con 0-1 elemento, el resumen sigue exactamente el
+   * camino de siempre (la tarjeta única de `vendedor`/`comprador`) — regresión cero con el caso
+   * mayoritario. Con 2+, sustituye esa tarjeta única por N, ordenadas por `ordinal`.
+   */
+  vendedorActores?: ProcedureActor[];
+  compradorActores?: ProcedureActor[];
+  /**
+   * Múltiple Propietario (ADR-0053) — historial COMPLETO de validaciones (no solo la resuelta por
+   * `vendedorBio`/`compradorBio`, que toma una sola por parte). Necesario para correlacionar la
+   * validación de CADA copropietario vía `validationsForActor`. Ausente ⇒ `[]`: las tarjetas por
+   * actor no tienen de dónde leer su estado, pero el camino de 1 solo actor no lo necesita (usa
+   * `vendedorBio`/`compradorBio`, sin cambios).
+   */
+  biometric?: BiometricValidation[];
+  /** ADR-0053 — cobertura del baúl POR ACTOR (documento del RL + ordinal), para las tarjetas por
+   * copropietario. `firmaBaulPartes` (abajo) sigue siendo la fuente para el actor ordinal=1. */
+  firmaBaulActores?: FirmaBaulActorCoberturaDto[];
   archivosCount: number;
   identidadAprobada: boolean;
   firmaBaulPartes?: string[];
@@ -383,6 +436,8 @@ function ActorBlock({
   certCache,
   showRepresentante,
   hideValidacion = false,
+  noFirma = false,
+  porcentaje,
 }: {
   actor: ResumenActor;
   bio?: BiometricValidation | null;
@@ -390,6 +445,21 @@ function ActorBlock({
   certLabel: string;
   instanceId?: string | null;
   certCache: React.RefObject<Map<string, string>>;
+  /**
+   * Múltiple Propietario (ADR-0053) — porcentaje de propiedad de ESTE copropietario. Ausente/`null`
+   * con un solo actor por lado (nunca lo pasa ese camino): la grilla de datos queda igual que
+   * siempre, sin celda nueva — regresión cero.
+   */
+  porcentaje?: number | null;
+  /**
+   * Esta parte NO firma el trámite: en vez de la sección de validación de identidad, se dice que no
+   * le corresponde firmar. Es el locatario del leasing y del traspaso unilateral.
+   *
+   * <p>No es un relleno: sin esto la tarjeta terminaba en los datos de contacto y quedaba un hueco
+   * al lado de la parte que sí firma —las dos igualan altura—, y el gestor no tenía cómo saber si
+   * faltaba pedirle la firma o si de verdad no le tocaba.</p>
+   */
+  noFirma?: boolean;
   showRepresentante: boolean;
   /** Cuando la captura biométrica va embebida debajo, no repetir el campo Validación. */
   hideValidacion?: boolean;
@@ -407,6 +477,9 @@ function ActorBlock({
         <Field label="Teléfono" value={actor.telefono} />
         <Field label="Dirección" value={actor.direccion} />
         <Field label="Ciudad" value={actor.ciudad} />
+        {porcentaje != null ? (
+          <Field label="Porcentaje de propiedad" value={`${porcentaje}%`} />
+        ) : null}
       </div>
       {showRepresentante && bio && (
         <div>
@@ -421,7 +494,22 @@ function ActorBlock({
           </div>
         </div>
       )}
-      {!hideValidacion ? (
+      {noFirma ? (
+        // Misma anatomía que la sección de validación —título en versalitas y su contenido debajo—
+        // para que las dos tarjetas de la fila se lean como piezas del mismo tipo. Dice lo que el
+        // gestor necesita saber de esta parte: que no le toca firmar, y que aun así se le notifica.
+        <div className="space-y-2 border-t pt-3" style={{ borderColor: BORDER }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">Firma</p>
+          <p className="text-xs font-semibold" style={{ color: '#162744' }}>
+            No requiere firma
+          </p>
+          <p className="text-xs opacity-70">
+            Esta parte no firma el trámite: la validación de identidad y la firma corresponden al
+            propietario del vehículo.
+          </p>
+          <p className="text-xs opacity-70">Recibe los avisos de estado del trámite.</p>
+        </div>
+      ) : !hideValidacion ? (
         <div className="space-y-3 border-t pt-3" style={{ borderColor: BORDER }}>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
             Validación de identidad
@@ -547,6 +635,9 @@ function IdentityTrackingBlock({
 
 export default function MatriculaResumen({
   modalidad,
+  partesBiometricas,
+  locatario = null,
+  rotulosPorRol,
   status,
   placa,
   vehiculo,
@@ -554,6 +645,10 @@ export default function MatriculaResumen({
   especificaciones = {},
   comprador,
   vendedor,
+  vendedorActores = [],
+  compradorActores = [],
+  biometric = [],
+  firmaBaulActores = [],
   soat,
   transformaciones = [],
   prenda = null,
@@ -614,11 +709,53 @@ export default function MatriculaResumen({
     firmaBaulPartes.includes('vendedor') || vaultCoveredPartes.includes('vendedor');
   const compradorFirmaBaul =
     firmaBaulPartes.includes('comprador') || vaultCoveredPartes.includes('comprador');
+  // ADR-0051 — qué partes firman lo declara el TIPO. Ausente ⇒ el criterio previo (vendedor solo en
+  // traspaso, comprador siempre), así que ningún tipo ya en operación cambia.
+  const firma = (parte: BiometricParte): boolean =>
+    partesBiometricas
+      ? partesBiometricas.includes(parte)
+      : parte === 'comprador' || modalidad === 'traspaso';
   const showBioVendedor =
-    modalidad === 'traspaso' && !!instanceId && identidadPendiente(vendedorBio, vendedorFirmaBaul);
-  const showBioComprador = !!instanceId && identidadPendiente(compradorBio, compradorFirmaBaul);
+    firma('vendedor') && !!instanceId && identidadPendiente(vendedorBio, vendedorFirmaBaul);
+  const showBioComprador =
+    firma('comprador') && !!instanceId && identidadPendiente(compradorBio, compradorFirmaBaul);
+  // La parte que NO firma no lleva sección de «Validación de identidad»: ni la captura biométrica ni
+  // el banner de estado con su certificado. Sus DATOS sí se muestran —el resumen es el inventario del
+  // expediente y el locatario es parte del trámite—; lo que desaparece es la firma que no le toca.
+  //
+  // Va aparte de `showBio*`: aquel decide si se EMBEBE la captura (y solo la embebe mientras la
+  // identidad está pendiente), mientras que este oculta el bloque de validación entero. Colgarlo de
+  // `hideValidacion={showBio*}` hacía que, al quitarle la captura a quien no firma, apareciera en su
+  // lugar el banner de validación — cambiar una cosa que sobra por otra.
+  const ocultaValidacion = (parte: BiometricParte): boolean => !firma(parte);
 
-  const embedBiometric = (parte: BiometricParte) => {
+  /**
+   * ¿La pantalla muestra DOS partes? Gobierna el reparto de la rejilla: con dos, el vehículo ocupa
+   * su propia fila. Traspaso las tiene por el vendedor; la matrícula leasing, por el locatario.
+   */
+  const dosPartes = !!vendedor || !!locatario;
+  // Múltiple Propietario (ADR-0053) — ¿algún lado trae 2+ copropietarios AHORA MISMO (no memoria
+  // histórica: se calcula del array actual)? Con uno, el lado sigue como una sola tarjeta y no
+  // cuenta aquí — mismo criterio que ya usa `OwnershipTabsBar`/`hasPercentagePanel` en ActorsForm.
+  const vendedorMultiple = vendedorActores.length >= 2;
+  const compradorMultiple = compradorActores.length >= 2;
+  // Generaliza `dosPartes`: el vehículo ocupa las dos columnas cuando abajo hay 2+ tarjetas, sea
+  // porque hay dos partes (como siempre) o porque un lado tiene varios copropietarios (matrícula
+  // con 2+). Con una sola tarjeta debajo (el caso mayoritario, `dosPartes` false y ningún lado
+  // múltiple) el resultado es idéntico a `dosPartes` — regresión cero.
+  const vehiculoAncho = dosPartes || vendedorMultiple || compradorMultiple;
+
+  /** Nombre de la parte en pantalla: el del catálogo si lo hay, si no el de siempre. */
+  const rotulo = (rol: 'comprador' | 'vendedor' | 'locatario', porDefecto: string): string =>
+    rotulosPorRol?.[rol]?.trim() || porDefecto;
+
+  /**
+   * `ordinal` es aditivo (ver `onlyOwnerOrdinal` en `BiometricStep`): ausente, embebe TODOS los
+   * actores del rol — el camino de siempre, para la tarjeta única de 1 solo actor. Presente, filtra
+   * a ese copropietario concreto — lo que usa `renderCopropietarios` para que cada `ResumenCard` de
+   * abajo embeba solo la biométrica de SU actor, no la de los demás del mismo lado.
+   */
+  const embedBiometric = (parte: BiometricParte, ordinal?: number) => {
     const step = (
       <BiometricStep
         instanceId={instanceId}
@@ -626,6 +763,7 @@ export default function MatriculaResumen({
         onRefresh={onBiometricRefresh}
         hideIntro
         onlyPartes={[parte]}
+        onlyOwnerOrdinal={ordinal}
         vaultCoveredPartes={vaultCoveredPartes}
         embedded
       />
@@ -635,6 +773,66 @@ export default function MatriculaResumen({
     ) : (
       step
     );
+  };
+
+  /**
+   * Múltiple Propietario (ADR-0053) — una `ResumenCard` POR COPROPIETARIO del lado, ordenados por
+   * `ordinal`, reutilizando EXACTAMENTE la misma presentación que ya tenía la parte con un solo
+   * actor (`ActorBlock` + biométrica embebida, ver el bloque `vendedor`/`comprador` de abajo). Solo
+   * se invoca cuando el lado tiene 2+ actores — con 1 solo actor el caller sigue el camino de
+   * siempre, sin pasar por aquí (regresión cero).
+   *
+   * La validación de CADA actor se correlaciona por `ordinal` (`validationsForActor`), no por la
+   * parte a secas: antes de esta HU, `vendedorBio`/`compradorBio` resolvían la PRIMERA validación
+   * de la parte sin importar de cuál copropietario era — con 2+ actores eso mezclaba la biometría
+   * de uno con los datos de otro. Se toma la última (más reciente) como "vigente", mismo criterio
+   * que usa `BiometricStep` internamente.
+   */
+  const renderCopropietarios = (
+    rol: 'vendedor' | 'comprador',
+    actores: ProcedureActor[],
+    rotuloBase: string,
+  ) => {
+    const ordenados = actorsOrderedByOrdinal(actores);
+    return ordenados.map(({ item: actor, ordinal }) => {
+      const matches = validationsForActor(biometric, actor, ordinal);
+      const bio = matches.length > 0 ? matches[matches.length - 1] : null;
+      // Mismo criterio que `BiometricStep`: el dato POR LADO (`firmaBaulPartes`/`vaultCoveredPartes`)
+      // es impreciso a propósito con 2+ actores, así que solo se admite para el ordinal=1.
+      const firmaBaul =
+        isCoveredByVaultForActor(firmaBaulActores, rol, ordinal) ||
+        (ordinal === 1 && (firmaBaulPartes.includes(rol) || vaultCoveredPartes.includes(rol)));
+      const resumenActor: ResumenActor = {
+        nombre: actor.nombreCompleto,
+        documento: actor.numeroDocumento,
+        tipoDoc: actor.tipoDocumento,
+        email: actor.email,
+        telefono: actor.telefono,
+        direccion: actor.direccion,
+        ciudad: actor.ciudad,
+      };
+      const titulo = `${rotuloBase} ${ordinal}`;
+      const pendiente = firma(rol) && !!instanceId && identidadPendiente(bio, firmaBaul);
+      return (
+        <ResumenCard key={`${rol}-${ordinal}`} title={titulo}>
+          <div className="space-y-4">
+            <ActorBlock
+              actor={resumenActor}
+              bio={bio}
+              firmaBaul={firmaBaul}
+              certLabel={`Certificado ID · ${titulo}`}
+              instanceId={instanceId}
+              certCache={certCache}
+              showRepresentante={resumenActor.tipoDoc === 'NIT'}
+              porcentaje={actor.porcentaje ?? null}
+              hideValidacion={pendiente || ocultaValidacion(rol)}
+              noFirma={ocultaValidacion(rol)}
+            />
+            {pendiente ? embedBiometric(rol, ordinal) : null}
+          </div>
+        </ResumenCard>
+      );
+    });
   };
 
   // Casilla 19 del FUR: empresa vinculadora + NIT, solo con servicio Público o Especial. El código
@@ -664,6 +862,31 @@ export default function MatriculaResumen({
     { label: 'Carrocería', value: especificaciones.carroceria },
     { label: 'Capacidad', value: especificaciones.capacidad },
     { label: 'Ejes', value: especificaciones.ejes },
+    {
+      label: 'Alto',
+      value: especificaciones.alto
+        ? /^\d+$/.test(especificaciones.alto.trim())
+          ? `${especificaciones.alto.trim()} mm`
+          : especificaciones.alto
+        : undefined,
+    },
+    {
+      label: 'Ancho',
+      value: especificaciones.ancho
+        ? /^\d+$/.test(especificaciones.ancho.trim())
+          ? `${especificaciones.ancho.trim()} mm`
+          : especificaciones.ancho
+        : undefined,
+    },
+    {
+      label: 'Largo',
+      value: especificaciones.largo
+        ? /^\d+$/.test(especificaciones.largo.trim())
+          ? `${especificaciones.largo.trim()} mm`
+          : especificaciones.largo
+        : undefined,
+    },
+    { label: 'Llantas', value: especificaciones.llantas },
     { label: 'Estado', value: especificaciones.estado },
     { label: 'N. Motor', value: especificaciones.motor },
     { label: 'N. Chasis', value: especificaciones.chasis },
@@ -752,13 +975,18 @@ export default function MatriculaResumen({
         </div>
       ) : null}
 
-      {/* Vehículo + Vendedor + Comprador en la MISMA `grid lg:grid-cols-2`, en ese orden. El reparto
-          depende de cuántos actores hay: con dos (traspaso: vendedor y comprador) el vehículo se
-          lee solo, a fila completa, y debajo van vendedor y comprador uno al lado del otro; con un
-          solo actor (matrícula) vehículo y comprador comparten la primera fila, que es lo que cabe
-          sin dejar media rejilla vacía. */}
+      {/* Vehículo + partes en la MISMA `grid lg:grid-cols-2`, en ese orden. El reparto depende de
+          cuántas PARTES hay, no de cuál sea: con dos, el vehículo se lee solo a fila completa y las
+          dos partes van una al lado de la otra debajo; con una sola (matrícula), vehículo y parte
+          comparten la primera fila, que es lo que cabe sin dejar media rejilla vacía.
+
+          Antes la condición era literalmente `vendedor`, así que solo el traspaso conseguía ese
+          reparto. La matrícula leasing tiene también dos partes —propietario y locatario— y caía en
+          la rama de una: el vehículo compartía fila con el propietario y el locatario bajaba solo,
+          dejando el hueco al lado. Preguntar por el NÚMERO de partes le da a los dos el mismo trato
+          y no cambia nada donde solo hay una. */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch">
-        <ResumenCard title="Vehículo" className={vendedor ? 'lg:col-span-2' : ''}>
+        <ResumenCard title="Vehículo" className={vehiculoAncho ? 'lg:col-span-2' : ''}>
           {placa ? (
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
@@ -794,8 +1022,10 @@ export default function MatriculaResumen({
           ) : null}
         </ResumenCard>
 
-        {vendedor ? (
-          <ResumenCard title="Vendedor">
+        {vendedorMultiple ? (
+          renderCopropietarios('vendedor', vendedorActores, rotulo('vendedor', 'Vendedor'))
+        ) : vendedor ? (
+          <ResumenCard title={rotulo('vendedor', 'Vendedor')}>
             <div className="space-y-4">
               <ActorBlock
                 actor={vendedor}
@@ -805,18 +1035,21 @@ export default function MatriculaResumen({
                 instanceId={instanceId}
                 certCache={certCache}
                 showRepresentante={vendedor.tipoDoc === 'NIT'}
-                hideValidacion={showBioVendedor}
+                hideValidacion={showBioVendedor || ocultaValidacion('vendedor')}
+                noFirma={ocultaValidacion('vendedor')}
               />
               {showBioVendedor ? embedBiometric('vendedor') : null}
             </div>
           </ResumenCard>
         ) : null}
 
-        {/* Con vendedor, Comprador es su pareja en la segunda fila (el vehículo ya se llevó la
-            primera entera). Sin vendedor acompaña al vehículo en la única fila. En ninguno de los
-            dos casos necesita `col-span`. */}
-        {comprador || (!vendedor && partesTxt) ? (
-          <ResumenCard title="Comprador">
+        {/* Con otra parte en pantalla (vendedor en traspaso, locatario en leasing) esta es su pareja
+            en la segunda fila, porque el vehículo ya se llevó la primera entera. Sola, acompaña al
+            vehículo en la única fila. En ninguno de los dos casos necesita `col-span`. */}
+        {compradorMultiple ? (
+          renderCopropietarios('comprador', compradorActores, rotulo('comprador', 'Comprador'))
+        ) : comprador || (!vendedor && partesTxt) ? (
+          <ResumenCard title={rotulo('comprador', 'Comprador')}>
             {comprador ? (
               <div className="space-y-4">
                 <ActorBlock
@@ -827,7 +1060,8 @@ export default function MatriculaResumen({
                   instanceId={instanceId}
                   certCache={certCache}
                   showRepresentante={comprador.tipoDoc === 'NIT'}
-                  hideValidacion={showBioComprador}
+                  hideValidacion={showBioComprador || ocultaValidacion('comprador')}
+                  noFirma={ocultaValidacion('comprador')}
                 />
                 {showBioComprador ? embedBiometric('comprador') : null}
               </div>
@@ -837,6 +1071,29 @@ export default function MatriculaResumen({
                 {partesTxt}
               </p>
             )}
+          </ResumenCard>
+        ) : null}
+
+        {/* Locatario: los tipos con leasing lo declaran como parte propia (`requiresLessee`), pero el
+            resumen solo sabía de comprador y vendedor, así que el arrendatario del vehículo no salía
+            en la pantalla donde el gestor revisa el trámite antes de radicarlo.
+
+            No lleva bloque de validación ni captura biométrica: en el leasing quien firma es el
+            propietario, y el DDL 88 llega a abortar el arranque si alguien mete al locatario en
+            `biometricActors`. Se muestran sus datos, que es lo que el expediente necesita. */}
+        {locatario ? (
+          <ResumenCard title={rotulo('locatario', 'Locatario')}>
+            <ActorBlock
+              actor={locatario}
+              bio={null}
+              firmaBaul={false}
+              certLabel="Certificado ID · Locatario"
+              instanceId={instanceId}
+              certCache={certCache}
+              showRepresentante={locatario.tipoDoc === 'NIT'}
+              hideValidacion
+              noFirma
+            />
           </ResumenCard>
         ) : null}
       </div>

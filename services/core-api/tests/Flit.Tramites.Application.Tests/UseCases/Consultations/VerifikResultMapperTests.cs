@@ -424,4 +424,22 @@ public sealed class VerifikResultMapperTests
 
         response!.Data!.TecnoMecanica![0].CamposNoModelados.Should().ContainKey("campoNuevoDelProveedor");
     }
+
+    [Fact]
+    public void HydratedFields_DatosTecnicos_HidratanEjesDimensionesYLlantas()
+    {
+        var json = """
+            {"data":{"informacionGeneral":{"noPlaca":"S07249","noVin":"9F9CHJ3UMEP185065","claseVehiculo":"SEMIREMOLQUE","estadoDelVehiculo":"ACTIVO"},
+             "datosTecnicos":{"alto":"2000","ancho":"2980","largo":"15500","noEjes":"3","noLlantas":"12","rodaje":"ORUGAS"}}}
+            """;
+        var response = JsonSerializer.Deserialize<VerifikVehicleResponse>(json, WebJsonOptions)!;
+        var result = VerifikResultMapper.MapVehicle(response);
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_axles" && f.ValueText == "3");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_height" && f.ValueText == "2000");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_width" && f.ValueText == "2980");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_length" && f.ValueText == "15500");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_tires" && f.ValueText == "12");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_traction" && f.ValueText == "ORUGAS");
+    }
 }
