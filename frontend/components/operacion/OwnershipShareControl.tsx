@@ -8,13 +8,13 @@ import { WIZARD_LABEL } from './wizard-field-styles';
  * Frontend"). Fila de pestañas + control de porcentaje de un LADO del trámite (vendedor o
  * comprador) cuando ese lado tiene 2+ propietarios.
  *
- * Fidelidad visual: la estructura de pestañas, el color por participación (`colorDeParticipacion`)
- * y el bloque de porcentaje replican `Propietarios.tsx` del prototipo FLIT (repo `flit-2.0`,
- * `src/components/atom/modules/Propietarios.tsx`) — adaptados a los tokens de `flit` (sin copiar
- * hex del prototipo: los colores de participación usan las variables de `StatusBadge` ya definidas
- * en `globals.css`). La LÓGICA es la de `ownership-share.ts`, sin relación con la del prototipo
- * (que reparte con el residuo en el ÚLTIMO propietario, en enteros, y sin bloqueo — ninguna de las
- * tres aplica aquí).
+ * Fidelidad visual: pestañas en píldora, color por participación (`colorDeParticipacion`) y bloque
+ * de porcentaje replican la imagen de referencia del usuario, verificada contra `Propietarios.tsx`
+ * del prototipo FLIT (repo `flit-2.0`, `src/components/atom/modules/Propietarios.tsx`) — adaptados
+ * a los tokens de `flit` (sin copiar hex del prototipo: los colores de participación usan las
+ * variables de `StatusBadge` ya definidas en `globals.css`). La LÓGICA es la de
+ * `ownership-share.ts`, sin relación con la del prototipo (que reparte con el residuo en el
+ * ÚLTIMO propietario, en enteros, y sin bloqueo — ninguna de las tres aplica aquí).
  *
  * Componente de presentación puro: no conoce `ActorsForm.tsx` ni el estado de identidad de cada
  * actor — solo recibe la lista de pestañas de ESTE lado (`items`, ya resuelta por índice real en
@@ -134,8 +134,9 @@ export function OwnershipShareControl({
 
   return (
     <div className="mb-3 space-y-3 rounded-xl border p-3" style={{ borderColor: '#DFE5ED' }}>
-      {/* Fila de pestañas: rótulo + porcentaje inline (coloreado por participación), botón circular
-          "+" al final, etiqueta de copropiedad a la derecha — estructura de `Propietarios.tsx`. */}
+      {/* Fila de pestañas: píldoras redondeadas con rótulo + porcentaje (coloreado por
+          participación), la "×" dentro de la píldora activa al final, botón circular "+" al cierre
+          de la fila, etiqueta de copropiedad a la derecha con el máximo resaltado en azul. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div
           id={tablistId}
@@ -149,8 +150,8 @@ export function OwnershipShareControl({
             return (
               <div
                 key={item.index}
-                className={`flex h-9 items-center gap-1.5 rounded-xl border text-xs font-semibold transition ${
-                  showRemove ? 'pl-3 pr-1.5' : 'px-3'
+                className={`flex h-9 items-center gap-1.5 rounded-full border pl-3 text-xs font-semibold transition ${
+                  showRemove ? 'pr-2' : 'pr-3'
                 }`}
                 style={
                   isActive
@@ -177,7 +178,7 @@ export function OwnershipShareControl({
                     type="button"
                     onClick={() => onRemove(item.index)}
                     aria-label={`Quitar ${item.label}`}
-                    className="grid place-items-center rounded p-0.5 hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                    className="grid place-items-center rounded opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -197,7 +198,9 @@ export function OwnershipShareControl({
             <Plus className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        <span className="text-xs opacity-70 whitespace-nowrap">Copropiedad: hasta 4 propietarios</span>
+        <span className="text-xs opacity-70 whitespace-nowrap">
+          Copropiedad: hasta <span className="font-semibold" style={{ color: '#557EFF' }}>4</span> propietarios
+        </span>
       </div>
 
       {/* Control de porcentaje del actor de la pestaña activa. */}
@@ -206,7 +209,7 @@ export function OwnershipShareControl({
         role="tabpanel"
         aria-labelledby={`${idPrefix}-tab-${active.index}`}
         className="rounded-xl border p-3"
-        style={{ borderColor: '#DFE5ED', background: 'rgba(223,229,237,0.35)' }}
+        style={{ borderColor: 'rgba(223,229,237,0.6)', background: 'rgba(223,229,237,0.18)' }}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className={`${WIZARD_LABEL} text-[13px] font-bold`} style={{ color: '#162744' }}>
@@ -249,16 +252,16 @@ export function OwnershipShareControl({
             disabled={readOnly}
             aria-valuetext={`${formatPercent(active.percentage)}%`}
             onChange={(e) => onPercentageChange(active.index, Number(e.target.value))}
-            className="h-2 w-full appearance-none rounded-full outline-none transition disabled:opacity-70 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
+            className="h-1.5 w-full appearance-none rounded-full outline-none transition disabled:opacity-70 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[#59677D] [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[#59677D] [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-md"
             style={{
-              background: `linear-gradient(to right, ${activeColor} ${activeSliderValue}%, #DFE5ED ${activeSliderValue}%)`,
+              background: `linear-gradient(to right, ${activeColor} ${activeSliderValue}%, rgba(223,229,237,0.6) ${activeSliderValue}%)`,
               accentColor: activeColor,
-              borderColor: activeColor,
             }}
           />
         </div>
 
-        {/* Consolidado de todos los propietarios del lado, cada uno coloreado por participación. */}
+        {/* Consolidado de todos los propietarios del lado: cada uno en negrita y coloreado por
+            participación; el Total queda deliberadamente neutro (gris, sin negrita) salvo error. */}
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {items.map((item) => (
             <span
