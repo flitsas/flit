@@ -2977,28 +2977,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
        <fieldset disabled={readOnly} className="space-y-5 min-w-0 border-0 p-0 m-0">
         {errorBanner}
 
-        {/* Múltiple Propietario (ADR-0053) — solo matrícula inicial y traspaso, y solo sobre el
-            actor que SE captura por formulario (no el propietario inscrito de la familia OTROS,
-            cuya identidad viene fija del RUNT; no el locatario, fuera del alcance cerrado). SPLIT
-            conserva su presentación de siempre — secciones anchas, nunca rejilla de tarjetas — y
-            soporta 1..4 propietarios del mismo modo que MULTI: la fila de pestañas arriba, y el
-            cuerpo (más abajo) pinta los datos de la pestaña ACTIVA (`activeIndex`), reemplazándolos
-            al cambiar — nunca se apilan tarjetas. */}
-        {!esPropietarioInscrito && actor.rol !== 'locatario' && (
-          <OwnershipTabsBar
-            items={ownershipItems}
-            activeIndex={activeIndex}
-            onSelectTab={(i) => selectOwnershipTab(actor.rol, i)}
-            onAdd={() => addOwner(actor.rol)}
-            onRemove={removeOwner}
-            maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
-            readOnly={readOnly}
-            idPrefix={`actor-${actor.rol}-single`}
-            sideLabel={rotuloDelActor(actor.rol)}
-            hasPercentagePanel={hasPercentagePanel}
-          />
-        )}
-
         {/* Sección A — Identificación. Sin selector de tipo de documento en el actor:
             natural → CC por defecto (RUNT puede corregirlo); jurídica → NIT fijo.
             Rejilla: número (span 2) | Consultar (+ hint a lo ancho). */}
@@ -3015,6 +2993,28 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             />
           }
         >
+          {/* Múltiple Propietario (ADR-0053) — la fila de pestañas va DENTRO de la tarjeta, como
+              PRIMER elemento del cuerpo (el usuario lo pidió explícito: "va dentro de la tarjeta y
+              no por fuera"). Solo matrícula inicial y traspaso, y solo sobre el actor que SE captura
+              por formulario (no el propietario inscrito de la familia OTROS, cuya identidad viene
+              fija del RUNT; no el locatario, fuera del alcance cerrado). SPLIT conserva su
+              presentación de siempre — secciones anchas, nunca rejilla de tarjetas — y soporta 1..4
+              propietarios del mismo modo que MULTI: el cuerpo pinta los datos de la pestaña ACTIVA
+              (`activeIndex`), reemplazándolos al cambiar — nunca se apilan tarjetas. */}
+          {!esPropietarioInscrito && actor.rol !== 'locatario' && (
+            <OwnershipTabsBar
+              items={ownershipItems}
+              activeIndex={activeIndex}
+              onSelectTab={(i) => selectOwnershipTab(actor.rol, i)}
+              onAdd={() => addOwner(actor.rol)}
+              onRemove={removeOwner}
+              maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
+              readOnly={readOnly}
+              idPrefix={`actor-${actor.rol}-single`}
+              sideLabel={rotuloDelActor(actor.rol)}
+              hasPercentagePanel={hasPercentagePanel}
+            />
+          )}
           <p className="text-xs opacity-70 mb-3">
             {esPropietarioInscrito
               ? 'Los datos son los del propietario inscrito en el RUNT y no se pueden editar. Si el vehículo debe quedar a nombre de otra persona, el trámite es un traspaso.'
@@ -3535,20 +3535,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               aria-label={rotulo}
               className="flex h-full flex-col"
             >
-            {mostrarOwnership && (
-              <OwnershipTabsBar
-                items={ownershipItems}
-                activeIndex={index}
-                onSelectTab={(i) => selectOwnershipTab(actor.rol, i)}
-                onAdd={() => addOwner(actor.rol)}
-                onRemove={removeOwner}
-                maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
-                readOnly={readOnly}
-                idPrefix={`actor-${actor.rol}`}
-                sideLabel={rotuloDelActor(actor.rol)}
-                hasPercentagePanel={hasPercentagePanel}
-              />
-            )}
             <WizardAccordion
               title={rotulo}
               level="h3"
@@ -3576,6 +3562,24 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 )
               }
             >
+              {/* Múltiple Propietario (ADR-0053) — la fila de pestañas va DENTRO de la tarjeta,
+                  como PRIMER elemento del cuerpo (el usuario lo pidió explícito: "va dentro de la
+                  tarjeta y no por fuera") — antes vivía como hermana del `WizardAccordion`, flotando
+                  por encima de la tarjeta en vez de pertenecer a ella. */}
+              {mostrarOwnership && (
+                <OwnershipTabsBar
+                  items={ownershipItems}
+                  activeIndex={index}
+                  onSelectTab={(i) => selectOwnershipTab(actor.rol, i)}
+                  onAdd={() => addOwner(actor.rol)}
+                  onRemove={removeOwner}
+                  maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
+                  readOnly={readOnly}
+                  idPrefix={`actor-${actor.rol}`}
+                  sideLabel={rotuloDelActor(actor.rol)}
+                  hasPercentagePanel={hasPercentagePanel}
+                />
+              )}
               <div className="space-y-4">
 
                 {/* ADR-0051 — vendedor sincronizado por el backend (revelado por excepción): la

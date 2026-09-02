@@ -122,11 +122,23 @@ export function OwnershipTabsBar({
   const allPct = items.map((i) => i.percentage);
 
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    // Dos renglones dentro de la tarjeta (maqueta de referencia): la etiqueta de copropiedad
+    // arriba, alineada a la derecha (en la maqueta acompaña al título de la tarjeta, en la MISMA
+    // línea — aquí no hay título propio: `OwnershipTabsBar` se monta COMO PRIMER elemento del
+    // cuerpo del `WizardAccordion`, así que su propio renglón alineado a la derecha es el sustituto
+    // más fiel sin invadir la cabecera del acordeón — ni desplazar el badge de Persona
+    // Natural/Jurídica que ya vive ahí, ni arriesgar que el título se comprima en tarjetas
+    // angostas). Las píldoras van SIEMPRE debajo, en su propio renglón, alineadas a la izquierda.
+    <div className="mb-4">
+      <div className="flex justify-end">
+        <span className="text-xs opacity-70 whitespace-nowrap">
+          Copropiedad: hasta <span className="font-semibold" style={{ color: '#557EFF' }}>4</span> propietarios
+        </span>
+      </div>
       <div
         role="tablist"
         aria-label={`Copropietarios — ${sideLabel}`}
-        className="flex flex-wrap items-center gap-1.5"
+        className="mt-3 flex flex-wrap items-center gap-1.5"
       >
         {items.map((item) => {
           const isActive = item.index === activeIndex;
@@ -185,9 +197,6 @@ export function OwnershipTabsBar({
           <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      <span className="text-xs opacity-70 whitespace-nowrap">
-        Copropiedad: hasta <span className="font-semibold" style={{ color: '#557EFF' }}>4</span> propietarios
-      </span>
     </div>
   );
 }

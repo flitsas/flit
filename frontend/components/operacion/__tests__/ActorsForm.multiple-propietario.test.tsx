@@ -492,3 +492,35 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
     expect((within(compradorCard).getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('');
   });
 });
+
+describe('ActorsForm — Múltiple Propietario, la fila de pestañas vive DENTRO de la tarjeta', () => {
+  it('matrícula inicial: la fila de pestañas está dentro de la región "Datos del comprador", con la etiqueta de copropiedad ANTES en el DOM', async () => {
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByLabelText(/Número de documento/);
+
+    const tarjeta = screen.getByRole('region', { name: /Datos del comprador/i });
+    const tablist = within(tarjeta).getByRole('tablist');
+    const etiqueta = within(tarjeta).getByText(/Copropiedad: hasta/);
+
+    // La etiqueta va en su propio renglón, ANTES que las píldoras (mismo orden que la maqueta:
+    // encabezado arriba, píldoras debajo).
+    expect(etiqueta.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('traspaso: la fila de pestañas está dentro de la tarjeta de cada lado (Vendedor y Comprador), no flotando por fuera', async () => {
+    render(<ActorsForm instanceId={INSTANCE} modalidad="traspaso" />);
+    const vendedorCard = await screen.findByRole('group', { name: 'Vendedor' });
+    const compradorCard = screen.getByRole('group', { name: 'Comprador' });
+
+    // La región accesible del acordeón ("Vendedor"/"Comprador") ahora CONTIENE la pestaña — antes
+    // vivía fuera, como hermana del acordeón dentro del mismo `role="group"`.
+    const vendedorRegion = within(vendedorCard).getByRole('region', { name: 'Vendedor' });
+    const compradorRegion = within(compradorCard).getByRole('region', { name: 'Comprador' });
+    expect(within(vendedorRegion).getByRole('tablist')).toBeInTheDocument();
+    expect(within(compradorRegion).getByRole('tablist')).toBeInTheDocument();
+
+    const etiquetaVendedor = within(vendedorRegion).getByText(/Copropiedad: hasta/);
+    const tablistVendedor = within(vendedorRegion).getByRole('tablist');
+    expect(etiquetaVendedor.compareDocumentPosition(tablistVendedor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
