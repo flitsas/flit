@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useProcedureBatchUpload } from '@/hooks/useProcedureBatchUpload';
+import { resetTiposOcrCache } from '@/hooks/useProcedureDocuments';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   BatchOcrPiece,
@@ -15,6 +16,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
     uploadAttachment: vi.fn(),
     deleteAttachment: vi.fn(),
     persistOcrFields: vi.fn(),
+    // HU #12034 — qué tipos tienen OCR lo declara el backend.
+    listOcrTipos: vi.fn(),
   },
 }));
 
@@ -62,6 +65,10 @@ async function enRevision(piezas: BatchOcrPiece[], attachments: ProcedureAttachm
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // La lista de tipos con OCR se cachea por módulo: sin resetear, el primer test fijaría la de
+  // todos los demás.
+  resetTiposOcrCache();
+  client.listOcrTipos.mockResolvedValue(['soat', 'impronta', 'rtm', 'factura']);
   client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
   client.uploadAttachment.mockResolvedValue(undefined as never);
   client.deleteAttachment.mockResolvedValue(undefined as never);
@@ -69,11 +76,37 @@ beforeEach(() => {
 });
 
 describe('useProcedureBatchUpload — análisis', () => {
-  it('sólo pide clasificar los tipos que el checklist muestra', async () => {
+  it('sólo pide clasificar los tipos que el checklist muestra y tienen OCR', async () => {
+    await enRevision([pieza()]);
+
+    // HU #12034 — el orden ya no lo fija una lista hardcodeada sino el propio checklist, que viene
+    // ordenado por `default_sort_order` del trámite. Es igual de determinista y además significativo.
+    expect(client.analyzeBatch).toHaveBeenCalledWith(
+      ['soat', 'impronta'],
+      expect.any(Array),
+      undefined,
+    );
+  });
+
+  it('descarta del lote los tipos visibles que NO tienen OCR', async () => {
+    client.listOcrTipos.mockResolvedValue(['soat']);
+    resetTiposOcrCache();
+
+    await enRevision([pieza()]);
+
+    expect(client.analyzeBatch).toHaveBeenCalledWith(['soat'], expect.any(Array), undefined);
+  });
+
+  it('si no se puede consultar qué tipos tienen OCR, propone todos los visibles', async () => {
+    // Falla ABIERTO: el backend descarta los que no tengan prompt. Mandar una lista corta en
+    // silencio dejaría documentos sin analizar sin que nadie se entere.
+    client.listOcrTipos.mockRejectedValue(new Error('backend caído'));
+    resetTiposOcrCache();
+
     await enRevision([pieza()]);
 
     expect(client.analyzeBatch).toHaveBeenCalledWith(
-      ['impronta', 'soat'],
+      ['soat', 'impronta'],
       expect.any(Array),
       undefined,
     );
@@ -108,7 +141,7 @@ describe('useProcedureBatchUpload — análisis', () => {
 
     expect(client.analyzeBatch).toHaveBeenCalledTimes(3);
     for (const file of files) {
-      expect(client.analyzeBatch).toHaveBeenCalledWith(['impronta', 'soat'], [file], undefined);
+      expect(client.analyzeBatch).toHaveBeenCalledWith(['soat', 'impronta'], [file], undefined);
     }
   });
 

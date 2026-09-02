@@ -55,6 +55,18 @@ public static class DocumentOcrPrompts
     /// <summary>true si <paramref name="tipo"/> tiene prompt OCR asociado.</summary>
     public static bool IsSupported(string? tipo) => tipo is not null && SupportedTipos.Contains(tipo);
 
+    /// <summary>
+    /// HU #12034 — los tipos DOCUMENTALES de trámite con OCR, que es <see cref="SupportedTipos"/> sin
+    /// <c>mandato_config</c>: ese no es un documento del expediente sino el extractor de plantillas de
+    /// Plataforma → Mandatos, y ofrecérselo al wizard sería ofrecer una casilla que no existe.
+    /// <para>Es la fuente de verdad que consume el frontend por <c>GET /api/v1/tramites/ocr/tipos</c>,
+    /// en lugar de la lista por modalidad que mantenía a mano. Antes, encender el OCR de un documento
+    /// exigía tocar cuatro sitios y desplegar, y si alguien lo asignaba a un trámite de la modalidad
+    /// «equivocada» el análisis no corría y no había error en ninguna parte.</para>
+    /// </summary>
+    public static IReadOnlyCollection<string> TiposDocumentales { get; } =
+        SupportedTipos.Where(t => t != "mandato_config").OrderBy(t => t, StringComparer.Ordinal).ToArray();
+
     /// <summary>Devuelve el prompt del tipo, o null si el tipo no está soportado.</summary>
     public static string? PromptFor(string tipo) => tipo switch
     {

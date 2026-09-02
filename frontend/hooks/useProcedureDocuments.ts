@@ -7,40 +7,68 @@ import type {
   ChecklistView,
   DocumentOcrResult,
   ProcedureAttachment,
-  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
 // ── OCR de documentos ────────────────────────────────────────────────
-// Tipos que pasan por OCR semántico antes de subir al expediente, por modalidad.
-// Matrícula: factura + aduana + impronta + soat. Traspaso: sólo impronta + soat.
-// HU #10977 (Feature #10972) — se añade `rtm` en AMBAS modalidades: el certificado de vigencia
-// SOAT y RTM pide número, entidad, expedición y vigencia de la revisión, y esos tres últimos no
-// los entrega ningún proveedor de consulta. Salen del propio certificado del CDA.
-// HU #11996 — se añade `tarjeta_propiedad` (licencia de tránsito) en AMBAS modalidades: es el
-// documento más cargado de la plataforma (72.813 cargas medidas en V1) y hasta ahora no tenía
-// ninguna validación. Va también en `traspaso` porque `modalidadPorEntrada` mapea a esa modalidad
-// TODO lo que entra por placa, familia OTROS incluida — y es justo en otros servicios donde la
-// licencia es requisito de entrada (17 asignaciones en `procedure_document_requirements`).
-export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
-  matricula_inicial: ['factura', 'aduana', 'impronta', 'soat', 'rtm', 'tarjeta_propiedad', 'paz_salvo', 'comprobante_derechos', 'contrato_leasing', 'camara_comercio'],
-  traspaso: ['impronta', 'soat', 'rtm', 'tarjeta_propiedad', 'paz_salvo', 'inscripcion_prenda', 'comprobante_derechos', 'camara_comercio'],
-};
+/**
+ * HU #12034 — QUÉ documentos pasan por OCR lo dice el backend, no esta capa.
+ *
+ * Antes había aquí un `OCR_TIPOS` indexado por modalidad que se mantenía a mano. Duplicaba lo que ya
+ * sabe la base —`procedure_document_requirements` cruzado con el `entryMode` del tipo de trámite— y el
+ * cargue masivo ya lo intersectaba con los documentos visibles del checklist, así que era un filtro
+ * redundante sobre el que sí funciona. Su coste era real: si alguien asignaba un documento a un trámite
+ * de la modalidad «equivocada», el análisis no corría y **no aparecía ningún error en ninguna parte**.
+ *
+ * Ahora el prompt y su disponibilidad se resuelven por el CÓDIGO del documento, que es como funcionaba
+ * el backend desde el principio (`DocumentOcrPrompts.PromptFor(tipo)`). Asignar el documento a un
+ * trámite basta; no hay una segunda lista que actualizar.
+ */
+let tiposOcrPromesa: Promise<ReadonlySet<string> | null> | null = null;
+
+/**
+ * Los tipos con OCR, cacheados en el módulo: se piden una sola vez por sesión de navegador.
+ * Devuelve `null` si no se pudieron averiguar — ver `esTipoOcr` para qué se hace con ese null.
+ */
+export function cargarTiposOcr(): Promise<ReadonlySet<string> | null> {
+  // El `Promise.resolve().then` no es adorno: convierte en rechazo cualquier excepción SÍNCRONA del
+  // cliente (por ejemplo si el método no existiera). Sin él, `cargarTiposOcr` lanzaría en vez de
+  // devolver null y tumbaría la subida entera — justo lo contrario de lo que promete esta función.
+  tiposOcrPromesa ??= Promise.resolve()
+    .then(() => tramitesClient.listOcrTipos())
+    .then((tipos) => new Set(tipos.map((t) => t.toLowerCase())) as ReadonlySet<string>)
+    .catch(() => {
+      // No se cachea el fallo: la siguiente subida vuelve a intentarlo.
+      tiposOcrPromesa = null;
+      return null;
+    });
+  return tiposOcrPromesa;
+}
+
+/** Solo para tests: olvida la lista cacheada. */
+export function resetTiposOcrCache(): void {
+  tiposOcrPromesa = null;
+}
+
+/**
+ * ¿Este tipo pasa por OCR? Con `tipos` en `null` —no se pudo consultar el backend— responde que SÍ, a
+ * propósito: el análisis se intenta, y si el tipo no tuviera prompt el backend lo rechaza y el fallo se
+ * traga sin bloquear la carga. Se falla ABIERTO porque el defecto que esta HU cierra es justamente el
+ * contrario: que un documento con OCR se subiera en silencio sin analizar.
+ */
+export function esTipoOcr(tipos: ReadonlySet<string> | null, tipo: string): boolean {
+  return tipos === null || tipos.has(tipo.toLowerCase());
+}
 
 /**
  * HU #10975 — tipos cuyo JSON de OCR se PERSISTE en `field_values` además de analizarse.
- * Es un subconjunto de OCR_TIPOS: factura/aduana/impronta se analizan para validar el documento,
- * pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente al
- * RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
+ * Es un subconjunto de los tipos con OCR: factura/aduana/impronta se analizan para validar el
+ * documento, pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente
+ * al RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
  */
 export const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
 
 /** Límite del OCR (10 MB, el del endpoint). Archivos mayores (≤20 MB) se suben sin analizar. */
 export const OCR_MAX_BYTES = 10 * 1024 * 1024;
-
-export function isOcrTipo(modalidad: WizardModalidad, tipo: string): boolean {
-  const t = tipo.toLowerCase();
-  return OCR_TIPOS[modalidad].some((x) => x.toLowerCase() === t);
-}
 
 /** Estado OCR por tipo que consume la UI del checklist. */
 export type OcrStatus = 'verified' | 'rejected' | 'skipped';
@@ -220,7 +248,6 @@ export function ocrResultForTipo(
 
 export interface UseProcedureDocumentsOptions {
   /** Modalidad del trámite: decide qué tipos pasan por OCR. */
-  modalidad?: WizardModalidad;
   tenantId?: string;
 }
 
@@ -235,7 +262,7 @@ export interface UseProcedureDocumentsOptions {
 export function useProcedureDocuments(
   instanceId: string | null,
   // Sin default hardcodeado de tenant: lo resuelve `tenantHeader` (tenant activo del `?t=` → JWT).
-  { modalidad = 'matricula_inicial', tenantId }: UseProcedureDocumentsOptions = {},
+  { tenantId }: UseProcedureDocumentsOptions = {},
 ) {
   const [state, setState] = useState<ProcedureDocumentsState>(INITIAL_STATE);
 
@@ -320,7 +347,7 @@ export function useProcedureDocuments(
       if (!instanceId) return false;
 
       let fileToUpload = file;
-      const usaOcr = isOcrTipo(modalidad, tipo);
+      const usaOcr = esTipoOcr(await cargarTiposOcr(), tipo);
       const analizaAhora = usaOcr && file.size <= OCR_MAX_BYTES;
 
       // Reemplazo: la marca es del archivo anterior. Se apaga al instante (no al terminar el OCR)
@@ -429,7 +456,7 @@ export function useProcedureDocuments(
         return false;
       }
     },
-    [instanceId, tenantId, modalidad, refresh],
+    [instanceId, tenantId, refresh],
   );
 
   const remove = useCallback(

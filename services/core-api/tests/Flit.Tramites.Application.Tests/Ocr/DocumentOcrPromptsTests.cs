@@ -680,4 +680,34 @@ public sealed class DocumentOcrPromptsTests
             prompt.Should().Contain(campo);
         }
     }
+
+    // ── HU #12034 — los tipos documentales que consume el frontend ───────────────────────────
+
+    [Fact]
+    public void TiposDocumentales_excluye_el_extractor_de_mandatos()
+    {
+        // `mandato_config` no es un documento del expediente: es el extractor de plantillas de
+        // Plataforma → Mandatos. Ofrecérselo al wizard sería ofrecer una casilla que no existe.
+        DocumentOcrPrompts.TiposDocumentales.Should().NotContain("mandato_config");
+        DocumentOcrPrompts.SupportedTipos.Should().Contain("mandato_config");
+    }
+
+    [Fact]
+    public void TiposDocumentales_son_exactamente_los_soportados_menos_el_extractor()
+    {
+        // Si algún día se añade un tipo a SupportedTipos y no aparece aquí, el frontend nunca lo
+        // analizaría. Esta aserción hace que ese olvido rompa un test en vez de pasar en silencio.
+        DocumentOcrPrompts.TiposDocumentales.Should()
+            .BeEquivalentTo(DocumentOcrPrompts.SupportedTipos.Where(t => t != "mandato_config"));
+    }
+
+    [Fact]
+    public void TiposDocumentales_todos_tienen_prompt()
+    {
+        foreach (var tipo in DocumentOcrPrompts.TiposDocumentales)
+        {
+            DocumentOcrPrompts.PromptFor(tipo).Should().NotBeNullOrWhiteSpace(
+                because: $"el frontend va a pedir el OCR de «{tipo}» en cuanto un trámite lo exija");
+        }
+    }
 }

@@ -3,7 +3,7 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   base64ToPdfFile,
   evaluateOcr,
-  isOcrTipo,
+  esTipoOcr,
   normalizeVin,
   resumirVins,
   vinsDelDocumento,
@@ -239,13 +239,25 @@ describe('evaluateOcr / helpers OCR', () => {
     expect(normalizeVin(null)).toBe('');
   });
 
-  it('isOcrTipo respeta los tipos por modalidad', () => {
-    expect(isOcrTipo('matricula_inicial', 'factura')).toBe(true);
-    expect(isOcrTipo('matricula_inicial', 'aduana')).toBe(true);
-    expect(isOcrTipo('matricula_inicial', 'otro')).toBe(false);
-    expect(isOcrTipo('traspaso', 'impronta')).toBe(true);
-    expect(isOcrTipo('traspaso', 'factura')).toBe(false);
-    expect(isOcrTipo('matricula_inicial', 'SOAT')).toBe(true);
+  // HU #12034 — el OCR de un documento ya no depende de la modalidad del trámite, sino de que el
+  // backend declare que ese tipo tiene prompt.
+  it('esTipoOcr resuelve por el código del documento, sin importar la modalidad', () => {
+    const tipos = new Set(['factura', 'aduana', 'impronta']);
+
+    expect(esTipoOcr(tipos, 'factura')).toBe(true);
+    expect(esTipoOcr(tipos, 'aduana')).toBe(true);
+    expect(esTipoOcr(tipos, 'otro')).toBe(false);
+  });
+
+  it('esTipoOcr no distingue mayúsculas', () => {
+    expect(esTipoOcr(new Set(['soat']), 'SOAT')).toBe(true);
+  });
+
+  it('esTipoOcr falla ABIERTO cuando no se pudo consultar el backend', () => {
+    // Devolver false dejaría el documento sin analizar y sin ningún error visible: es exactamente
+    // el fallo silencioso que esta HU elimina. Se intenta, y si el tipo no tiene prompt el backend
+    // lo rechaza sin bloquear la carga.
+    expect(esTipoOcr(null, 'cualquier_cosa')).toBe(true);
   });
 
   it('base64ToPdfFile produce un File PDF con nombre .pdf', () => {

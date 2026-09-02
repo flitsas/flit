@@ -857,10 +857,7 @@ export function DocumentChecklist({
   hideModeToggle = false,
   permiteGenerarImprontaAutomatica = true,
 }: Props) {
-  const { state, refresh, upload, remove, clearError } = useProcedureDocuments(
-    instanceId,
-    { modalidad },
-  );
+  const { state, refresh, upload, remove, clearError } = useProcedureDocuments(instanceId);
   const { checklist, attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults } =
     state;
 

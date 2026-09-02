@@ -61,27 +61,48 @@ function file(name: string, size: number): File {
 // ── Qué tipos se mandan a clasificar ─────────────────────────────────────────
 
 describe('tiposDelLote', () => {
+  // HU #12034 — los tipos con OCR los declara el backend y se inyectan; ya no dependen de la
+  // modalidad del trámite. El mismo documento sirve en matrícula y en traspaso sin tocar código.
+  const CON_OCR = new Set(['factura', 'aduana', 'impronta', 'soat', 'rtm']);
+
   it('solo propone tipos que el checklist realmente muestra', () => {
     // El checklist es configurable por tenant: proponer un tipo oculto sería ofrecer un campo
     // que el operador no tiene dónde llenar.
     const items = [item('factura'), item('soat'), item('cedulas')];
 
-    expect(tiposDelLote('matricula_inicial', items)).toEqual(['factura', 'soat']);
+    expect(tiposDelLote(CON_OCR, items)).toEqual(['factura', 'soat']);
   });
 
-  it('respeta los tipos de la modalidad', () => {
+  it('no depende de la modalidad: el mismo tipo sirve en cualquier trámite', () => {
     const items = [item('factura'), item('aduana'), item('impronta'), item('soat'), item('rtm')];
 
-    // Traspaso no lleva factura ni aduana aunque el checklist las muestre.
-    expect(tiposDelLote('traspaso', items)).toEqual(['impronta', 'soat', 'rtm']);
+    // Antes, `factura` y `aduana` se caían en traspaso por estar fuera de la lista de esa
+    // modalidad. Ahora manda el catálogo: si el trámite lo pide y tiene prompt, se analiza.
+    expect(tiposDelLote(CON_OCR, items)).toEqual([
+      'factura',
+      'aduana',
+      'impronta',
+      'soat',
+      'rtm',
+    ]);
+  });
+
+  it('descarta los tipos que no tienen OCR', () => {
+    expect(tiposDelLote(CON_OCR, [item('factura'), item('cedulas')])).toEqual(['factura']);
   });
 
   it('resuelve el tipo por docTipo cuando difiere de la clave', () => {
-    expect(tiposDelLote('traspaso', [item('doc_soat_vigente', 'soat')])).toEqual(['soat']);
+    expect(tiposDelLote(CON_OCR, [item('doc_soat_vigente', 'soat')])).toEqual(['soat']);
   });
 
   it('sin ítems compatibles devuelve vacío', () => {
-    expect(tiposDelLote('matricula_inicial', [item('cedulas')])).toEqual([]);
+    expect(tiposDelLote(CON_OCR, [item('cedulas')])).toEqual([]);
+  });
+
+  it('si no se pudo consultar el backend propone todos los visibles, no ninguno', () => {
+    // Falla ABIERTO a propósito: el backend descarta los que no tengan prompt. Repartir de menos
+    // en silencio es justo el defecto que esta HU cierra.
+    expect(tiposDelLote(null, [item('factura'), item('cedulas')])).toEqual(['factura', 'cedulas']);
   });
 });
 
