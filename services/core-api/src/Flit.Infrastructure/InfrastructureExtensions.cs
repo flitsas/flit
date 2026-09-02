@@ -1164,6 +1164,7 @@ public static class InfrastructureExtensions
         });
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
         services.AddScoped<AnthropicDocumentBatchClassifier>();
+        services.AddScoped<AnthropicOrientationProbe>();
 
         // Recorte de páginas de PDFs multi-documento (PdfSharpCore). Stateless ⇒ singleton. El handler
         // (Application) lo usa tras el análisis para devolver sólo el subconjunto de páginas del tipo.
@@ -1177,6 +1178,11 @@ public static class InfrastructureExtensions
         {
             services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<AnthropicDocumentOcrAnalyzer>());
             services.AddScoped<IDocumentBatchClassifier>(sp => sp.GetRequiredService<AnthropicDocumentBatchClassifier>());
+
+            // HU #12036 — el enderezado SOLO se registra con el proveedor real: con el mock no hay a
+            // quién preguntarle si la página está derecha, y el handler lo trata como opcional.
+            services.AddScoped<IDocumentOrientationProbe>(sp => sp.GetRequiredService<AnthropicOrientationProbe>());
+            services.AddScoped<PdfOrientationNormalizer>();
         }
         else
         {

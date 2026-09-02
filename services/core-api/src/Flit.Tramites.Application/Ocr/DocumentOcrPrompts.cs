@@ -67,6 +67,23 @@ public static class DocumentOcrPrompts
     public static IReadOnlyCollection<string> TiposDocumentales { get; } =
         SupportedTipos.Where(t => t != "mandato_config").OrderBy(t => t, StringComparer.Ordinal).ToArray();
 
+    /// <summary>
+    /// HU #12036 — sonda de orientación. Deliberadamente NO pide leer nada: solo mirar. Y pide un
+    /// binario, no una dirección, porque preguntar hacia qué lado estaba girada acertó 3 de 4 veces
+    /// mientras que «¿está derecha?» sale fiable. Quien corrige prueba los giros y vuelve a preguntar.
+    /// No entra en <see cref="SupportedTipos"/> ni en <see cref="PromptFor"/>: no es un documento.
+    /// </summary>
+    public const string OrientationProbePrompt =
+"""
+Mira esta pagina. NO extraigas datos, NO la transcribas y NO intentes leer su contenido.
+Lo unico que tienes que decidir es si el texto esta DERECHO: es decir, si se lee en horizontal de
+izquierda a derecha tal como te la estoy mostrando, SIN necesidad de girar la pagina.
+Si para leerla habria que girarla —en cualquier sentido, 90 o 180 grados— entonces NO esta derecha.
+Una pagina sin texto, o en la que no distingas ninguna palabra, cuenta como derecha.
+JSON valido sin markdown:
+{"derecha":true}
+""";
+
     /// <summary>Devuelve el prompt del tipo, o null si el tipo no está soportado.</summary>
     public static string? PromptFor(string tipo) => tipo switch
     {

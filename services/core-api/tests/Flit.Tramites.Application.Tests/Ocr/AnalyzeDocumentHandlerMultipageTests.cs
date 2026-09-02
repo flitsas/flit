@@ -131,6 +131,9 @@ public sealed class AnalyzeDocumentHandlerMultipageTests
             return Result;
         }
 
+        // Estos tests no ejercen el enderezado (el handler recibe el normalizador en null).
+        public byte[]? Rotate(ReadOnlyMemory<byte> pdf, int quarterTurns) => pdf.ToArray();
+
         // El cargue campo a campo no cuenta páginas: el total lo reporta el propio análisis.
         public int? CountPages(ReadOnlyMemory<byte> pdf) => null;
     }
