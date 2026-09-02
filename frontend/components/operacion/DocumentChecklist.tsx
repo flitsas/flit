@@ -279,6 +279,20 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
     { label: 'Periodo certificado', value: (d) => pickStr(d, 'vigencia_certificada') },
     { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
   ],
+  // HU #12001 — contrato de leasing. El resumen antepone las dos partes, que es lo que define el
+  // trámite: el vehículo quedará a nombre del arrendador y el locatario se registra aparte.
+  // NO se muestra el NIT del arrendador a propósito: la carátula no lo trae —trae la cédula del
+  // representante— y en la medición el modelo lo inventaba. Un dato que nadie ve no induce a error.
+  contrato_leasing: [
+    { label: 'Arrendador', value: (d) => pickStr(d, 'arrendador_nombre') },
+    { label: 'Locatario', value: (d) => pickStr(d, 'locatario_nombre') },
+    { label: 'N.º de contrato', value: (d) => pickStr(d, 'numero_contrato') },
+    { label: 'Fecha', value: (d) => pickStr(d, 'fecha_contrato') },
+    { label: 'Bien', value: (d) => pickStr(d, 'vehiculo_descripcion') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin') },
+    { label: 'Proveedor', value: (d) => pickStr(d, 'proveedor_nombre') },
+  ],
   // HU #12000 — comprobante de pago. El resumen antepone si YA ESTÁ PAGADO y el valor: es lo que el
   // gestor necesita saber de un vistazo. Una liquidación sin pagar es válida, así que el estado se
   // informa aparte del veredicto del OCR.
@@ -345,6 +359,7 @@ const TIPO_LABEL: Record<string, string> = {
   paz_salvo: 'Paz y Salvo de Impuestos',
   inscripcion_prenda: 'Inscripción de Prenda',
   comprobante_derechos: 'Comprobante de pago',
+  contrato_leasing: 'Contrato de Leasing',
 };
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */

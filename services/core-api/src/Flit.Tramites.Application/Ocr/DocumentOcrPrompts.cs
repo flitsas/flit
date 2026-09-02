@@ -42,6 +42,9 @@ public static class DocumentOcrPrompts
             // HU #12000 — comprobante de pago. En V1 la casilla contiene dos documentos distintos segun
             // el tramite: el impuesto en matricula y los derechos de transito en traspaso y otros.
             "comprobante_derechos",
+            // HU #12001 — contrato de leasing. Solo lo pide MATRICULA_LEASING, que entra por VIN: por eso
+            // el vehiculo aun no tiene placa y el prompt tiene prohibido exigirla.
+            "contrato_leasing",
             // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
             "mandato_config",
         };
@@ -61,6 +64,7 @@ public static class DocumentOcrPrompts
         "paz_salvo" => PazSalvo,
         "inscripcion_prenda" => InscripcionPrenda,
         "comprobante_derechos" => ComprobanteDerechos,
+        "contrato_leasing" => ContratoLeasing,
         "mandato_config" => MandatoConfig,
         _ => null,
     };
@@ -925,6 +929,119 @@ EXTRAER:
 
 JSON valido sin markdown:
 {"tipo_documento":"recibo_derechos_transito","es_valido":true,"paginas_documento":[1],"total_paginas":1,"entidad_recaudadora":"","entidad_es_autoridad":true,"hay_constancia_pago":false,"valor_total":0,"fecha_pago":"","numero_referencia":"","conceptos":"","vehiculo_placa":"","propietario_nombre":"","propietario_documento":"","municipio":"","departamento":"","observaciones":""}
+""";
+
+    /// <summary>
+    /// HU #12001 — <b>Contrato de Leasing</b> (<c>id_attached_leasing_contract</c> en V1). Lo pide un solo
+    /// trámite, <c>MATRICULA_LEASING</c>, como obligatorio y en primer lugar.
+    /// <para><b>El vehículo todavía no tiene placa, y eso condiciona todo el prompt.</b> Ese trámite entra
+    /// por VIN —es una matrícula—, así que el contrato ampara un vehículo aún sin matricular. Medido: la
+    /// placa aparece en <b>1 de 52</b> documentos. Un prompt que la exigiera rechazaría la muestra entera,
+    /// de modo que la regla «no exijas la placa» es aquí más terminante que en la inscripción de prenda.</para>
+    /// <para><b>Las dos partes son el dato de valor.</b> En el leasing el vehículo queda a nombre del
+    /// ARRENDADOR y el LOCATARIO es una parte distinta que V2 registra aparte (ver
+    /// <c>88-locatario-parte-propia.sql</c>). El prompt los separa explícitamente y prohíbe confundir al
+    /// arrendador con el proveedor del vehículo o con el representante que firma.</para>
+    /// <para><b>Riesgo tratado: un NIT inventado.</b> La carátula de estos contratos NO trae el NIT de la
+    /// entidad; trae el nombre del arrendador y debajo la <i>cédula del representante</i>. En la primera
+    /// versión el modelo rellenó el NIT en los 50 documentos aceptados y <b>los 50 estaban mal</b> — en la
+    /// corrida de control quedaron tres, y eran tres números distintos para la misma entidad, ninguno el
+    /// real. Se corrigió por dos vías: el prompt solo rellena el campo si hay un número rotulado como NIT
+    /// del arrendador, y <b>el resumen del checklist no muestra ese campo</b>, para que el riesgo no dependa
+    /// de que el prompt acierte siempre.</para>
+    /// <para><b>Medición (claude-haiku-4-5, max_tokens 2000, 52 documentos, dos corridas):</b> arrendador
+    /// correcto 49/49; 51 de 52 decisiones iguales entre corridas y <c>tipo_documento</c> coincidente en
+    /// 52/52. Es el primer documento cuya decisión no sale idéntica, y el que oscila es justamente el caso
+    /// frontera: un anexo de iniciación del plazo que nombra al arrendador pero no al locatario.</para>
+    /// <para><b>Sin dilución, y el contraste importa.</b> 34 de los 52 documentos tienen entre 20 y 25
+    /// páginas y los 34 se aceptan, al revés que el expediente de 37 páginas de la prenda. La diferencia no
+    /// es la longitud sino qué hay en las páginas de más: aquí son el clausulado del MISMO documento, allí
+    /// eran OTRO documento ahogando al válido. Lo que confunde al modelo no es un documento largo, es un
+    /// documento distinto dentro del archivo.</para>
+    /// <para><b>Coste:</b> ≈26.500 tokens de entrada por documento —unas cuatro veces los demás— porque son
+    /// escaneos de 20 a 25 páginas: solo 1 de 52 traía capa de texto.</para>
+    /// </summary>
+    private const string ContratoLeasing =
+"""
+Analiza este documento. Determina si es un CONTRATO DE LEASING sobre un vehiculo, es decir un contrato de ARRENDAMIENTO FINANCIERO entre una compañia de leasing o entidad financiera (el ARRENDADOR, que sera el propietario del vehiculo) y un LOCATARIO (quien lo usa y puede comprarlo al final).
+
+QUE SE CONSIDERA VALIDO:
+Un contrato de arrendamiento financiero, leasing o "leasing financiero" en el que se identifiquen:
+- El ARRENDADOR: una compañia de leasing, banco o entidad financiera vigilada. Aparece como "Leasing Bancolombia", "Datos de <entidad> S.A.", "el Arrendador", "la Compañia" o "el Banco".
+- El LOCATARIO: la persona natural o juridica que recibe el bien. Aparece como "LOCATARIO", "DATOS DE EL(LOS) LOCATARIO(S)" o "el Arrendatario".
+- Al menos un BIEN objeto del contrato que sea un vehiculo automotor, remolque o semirremolque.
+Sirve tambien el anexo o acta de entrega del contrato, siempre que identifique arrendador, locatario y bien.
+
+QUE NO ES VALIDO:
+1. Una PAGINA EN BLANCO, una plantilla vacia, un archivo cuyo unico contenido es la palabra "OTROS ANEXOS" o un logo.
+2. Una FACTURA de venta del vehiculo, una cotizacion o una orden de compra al proveedor.
+3. Un CONTRATO DE GARANTIA MOBILIARIA o de prenda: ahi el banco es acreedor, no arrendador, y el vehiculo es del deudor. En el leasing el vehiculo es DEL ARRENDADOR.
+4. Un PAGARE, una carta de aprobacion de credito o una poliza de seguro.
+5. Un CERTIFICADO DE CAMARA DE COMERCIO o de existencia y representacion legal.
+6. Un SOAT, una revision tecnico-mecanica, una licencia de transito, una impronta o una cedula.
+
+COMO DECIDIR — PROCEDE EN ESTE ORDEN:
+PASO 1. Busca la figura: arrendamiento financiero o leasing. Si lo que hay es una compraventa, una prenda o un credito, NO es valido.
+PASO 2. Busca las DOS partes: arrendador (entidad) y locatario. Si falta cualquiera de las dos, NO es valido.
+PASO 3. Busca el BIEN: debe ser un vehiculo, remolque o semirremolque, aunque solo se describa por marca, linea y modelo. Un leasing de inmuebles o de maquinaria que no rueda NO sirve.
+PASO 4. Solo si los tres pasos dan positivo, es_valido = true.
+
+LO QUE NO DEBES EXIGIR — LEE ESTO ANTES DE RECHAZAR:
+1. NO exijas la PLACA. Este contrato sustenta una MATRICULA INICIAL: el vehiculo todavia NO tiene placa. Que no aparezca es lo normal y NO es motivo de rechazo. Lo mismo vale para el VIN, el chasis y el motor: pueden estar en un anexo o no estar.
+2. NO exijas firmas, sellos, huellas ni autenticacion notarial.
+3. NO exijas que el contrato este completo: basta con la caratula o la seccion de datos generales.
+4. NO rechaces por la calidad del escaneo.
+
+DOCUMENTO LARGO, ESCANEADO Y A VECES ROTADO:
+Casi ninguno de estos archivos trae capa de texto: son escaneos, y muchas paginas vienen GIRADAS 90 GRADOS. Leelas igual, girando la lectura; que la pagina este de lado NO es motivo de rechazo.
+Suelen tener entre 20 y 25 paginas, de las cuales solo las primeras traen los datos. MIRA LA PAGINA 1, luego la 2 y la 3 ANTES que el resto: ahi estan casi siempre la caratula, el numero de contrato, el arrendador, el locatario y la lista de bienes. El resto son clausulas repetidas y anexos. No dejes que el volumen de clausulado decida por ti.
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos (contrato + factura + poliza + otros), identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1] o [1,2,3]). Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro, NO lo invalida y NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+LA PROPORCION NO CUENTA. UNA SOLA pagina con la caratula del contrato basta para que es_valido sea true.
+
+LAS DOS PARTES — ES EL DATO MAS VALIOSO:
+En el leasing el vehiculo queda a nombre del ARRENDADOR, y el LOCATARIO es una parte distinta que el tramite registra aparte. Por eso hay que separarlos bien:
+- arrendador_nombre: la razon social de la compañia de leasing o entidad financiera, completa y tal como aparece ("Leasing Bancolombia S.A.", "Banco Davivienda S.A."). NO es el proveedor del vehiculo, ni el concesionario, ni el representante que firma. Si el encabezado nombra la marca de leasing y el pie la sociedad matriz, usa la que encabeza el contrato.
+- locatario_nombre: la denominacion del locatario, bajo el rotulo "LOCATARIO", "DATOS DE EL(LOS) LOCATARIO(S)" o "Arrendatario". Buscalo tambien cuando la caratula este girada o el escaneo sea pobre: es un dato obligatorio del contrato y casi siempre esta en la primera pagina. Si son varios, pon el primero y cuenta los demas en numero_locatarios.
+- NUNCA pongas el mismo nombre en los dos campos.
+EL NIT — SOLO SI ESTA ROTULADO COMO DE ESA PARTE, NUNCA DEDUCIDO:
+La caratula de estos contratos casi nunca trae el NIT del arrendador: trae el nombre de la entidad y, debajo, el nombre y la CEDULA DEL REPRESENTANTE que firma por ella. Esa cedula NO es el NIT del arrendador. Tampoco lo es el NIT del proveedor del vehiculo ni el del locatario.
+Pon arrendador_documento SOLO si en el documento hay un numero rotulado expresamente como NIT o identificacion DEL ARRENDADOR o de la entidad. Si no lo ves asi rotulado, dejalo VACIO. Vacio es la respuesta correcta y esperada; un numero inventado o tomado de otra parte es un error grave.
+La misma regla vale para locatario_documento: solo el numero rotulado como documento del locatario.
+Cuando pongas un numero, ponlo solo con digitos, sin puntos, sin guion y SIN el digito de verificacion.
+
+UN CONTRATO PUEDE CUBRIR VARIOS BIENES:
+Es normal que un mismo contrato ampare varios vehiculos (un camion, un semirremolque, un tractocamion...). En numero_bienes pon cuantos bienes distintos enumera. En los campos del vehiculo describe el PRIMERO, y si hay mas de uno dilo en observaciones.
+
+LA PLACA — SI Y SOLO SI APARECE:
+Una placa colombiana es 3 LETRAS + 3 DIGITOS (automoviles) o 3 LETRAS + 2 DIGITOS + 1 LETRA (motos). SIEMPRE 6 caracteres, sin espacios ni guiones.
+USA EL FORMATO PARA CORREGIRTE, POSICION POR POSICION: los caracteres 1, 2 y 3 son SIEMPRE LETRAS y los caracteres 4, 5 y 6 son SIEMPRE DIGITOS (salvo en motos, donde el 6 es letra). Por eso un 0 en las tres primeras posiciones es en realidad una O; un 4 ahi es una A o una Y; un 1 es una I o una L. Corrige cada caracter que este en la posicion equivocada ANTES de responder.
+Si el documento no trae placa, dejala VACIA. No la inventes. Repito: la placa vacia es lo NORMAL en este documento.
+
+EXTRAER:
+- tipo_documento: "contrato_leasing" | "contrato_garantia_mobiliaria" | "factura_venta" | "poliza" | "certificado_camara_comercio" | "documento_en_blanco" | "otro"
+- es_valido: true/false
+- paginas_documento: [paginas], total_paginas: numero
+- arrendador_nombre, arrendador_documento
+- locatario_nombre, locatario_documento, numero_locatarios
+- numero_contrato: el numero del contrato de leasing, si lo trae
+- fecha_contrato (YYYY-MM-DD)
+- numero_bienes: cuantos bienes distintos ampara el contrato
+- vehiculo_descripcion: la descripcion del primer bien, tal como aparece
+- vehiculo_placa, vehiculo_vin, vehiculo_chasis, vehiculo_motor
+- vehiculo_marca, vehiculo_linea, vehiculo_modelo
+- proveedor_nombre: el proveedor o concesionario del bien, si aparece
+- observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve; si es valido y hay mas de un bien, dilo aqui
+
+JSON valido sin markdown:
+{"tipo_documento":"contrato_leasing","es_valido":true,"paginas_documento":[1],"total_paginas":1,"arrendador_nombre":"","arrendador_documento":"","locatario_nombre":"","locatario_documento":"","numero_locatarios":1,"numero_contrato":"","fecha_contrato":"","numero_bienes":1,"vehiculo_descripcion":"","vehiculo_placa":"","vehiculo_vin":"","vehiculo_chasis":"","vehiculo_motor":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","proveedor_nombre":"","observaciones":""}
 """;
 
     private const string MandatoConfig =

@@ -16,6 +16,7 @@ public sealed class DocumentOcrPromptsTests
     [InlineData("paz_salvo")] // HU #11998
     [InlineData("inscripcion_prenda")] // HU #11999
     [InlineData("comprobante_derechos")] // HU #12000
+    [InlineData("contrato_leasing")] // HU #12001
     public void Tipos_soportados_tienen_prompt(string tipo)
     {
         DocumentOcrPrompts.IsSupported(tipo).Should().BeTrue();
@@ -515,6 +516,81 @@ public sealed class DocumentOcrPromptsTests
                      "hay_constancia_pago", "valor_total", "entidad_recaudadora", "conceptos",
                      "numero_referencia", "fecha_pago", "vehiculo_placa", "propietario_nombre",
                      "municipio", "departamento",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #12001 — contrato de leasing ──────────────────────────────────────────────────────
+    // El documento donde el vehículo todavía no tiene placa, y donde un campo mal especificado
+    // hizo que el modelo inventara el NIT del arrendador en los 50 documentos aceptados.
+
+    [Fact]
+    public void Prompt_contrato_leasing_prohibe_exigir_la_placa()
+    {
+        // La Matrícula Leasing es la que asigna la placa: el contrato es anterior. Medido, la placa
+        // aparece en 1 de 52 documentos, así que exigirla rechazaría la muestra entera.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("NO exijas la PLACA");
+        prompt.Should().Contain("todavia NO tiene placa");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_separa_al_arrendador_del_locatario()
+    {
+        // El vehículo queda a nombre del arrendador y el locatario es una parte distinta que V2
+        // registra aparte. Confundirlos rompería el FUR.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("LAS DOS PARTES");
+        prompt.Should().Contain("NUNCA pongas el mismo nombre en los dos campos");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_prefiere_el_NIT_vacio_a_un_NIT_deducido()
+    {
+        // La carátula no trae el NIT de la entidad, trae la cédula del REPRESENTANTE. En la primera
+        // versión el modelo rellenó el campo en los 50 aceptados y los 50 estaban mal.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("SOLO SI ESTA ROTULADO COMO DE ESA PARTE, NUNCA DEDUCIDO");
+        prompt.Should().Contain("Vacio es la respuesta correcta y esperada");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_avisa_de_los_escaneos_girados()
+    {
+        // Solo 1 de 52 ejemplares trae capa de texto y muchas carátulas vienen de lado.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("GIRADAS 90 GRADOS");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_contempla_que_un_contrato_ampare_varios_bienes()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("UN CONTRATO PUEDE CUBRIR VARIOS BIENES");
+        prompt.Should().Contain("numero_bienes");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_distingue_el_leasing_de_la_prenda()
+    {
+        // En la prenda el vehículo es del deudor y el banco es acreedor; en el leasing el vehículo es
+        // del arrendador. Es la confusión más plausible entre los dos documentos de esta Feature.
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        prompt.Should().Contain("CONTRATO DE GARANTIA MOBILIARIA");
+        prompt.Should().Contain("En el leasing el vehiculo es DEL ARRENDADOR");
+    }
+
+    [Fact]
+    public void Prompt_contrato_leasing_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("contrato_leasing")!;
+        foreach (var campo in new[]
+                 {
+                     "arrendador_nombre", "locatario_nombre", "numero_contrato", "fecha_contrato",
+                     "vehiculo_descripcion", "vehiculo_marca", "vehiculo_linea", "vehiculo_modelo",
+                     "vehiculo_vin", "proveedor_nombre",
                  })
         {
             prompt.Should().Contain(campo);
