@@ -230,12 +230,16 @@ export function OwnershipPercentagePanel({
   const activeSliderValue = clampDisplay(active.percentage);
 
   return (
+    // Mismo tratamiento que la caja anidada "Datos de contacto" de ActorsForm.tsx (borde sólido
+    // #DFE5ED, fondo blanco/navy — NO un tinte gris translúcido): son dos secciones hermanas de la
+    // misma tarjeta, no una tenue y otra sólida. Corrección explícita del usuario sobre un ajuste
+    // de una ronda anterior que se pasó de sutil.
     <div
       id={panelId}
       role="tabpanel"
       aria-labelledby={`${idPrefix}-tab-${active.index}`}
-      className="mt-4 rounded-xl border p-3"
-      style={{ borderColor: 'rgba(223,229,237,0.6)', background: 'rgba(223,229,237,0.18)' }}
+      className="mt-4 rounded-xl border bg-white p-4 dark:bg-[#162744]"
+      style={{ borderColor: '#DFE5ED' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className={`${WIZARD_LABEL} text-[13px] font-bold`} style={{ color: '#162744' }}>
