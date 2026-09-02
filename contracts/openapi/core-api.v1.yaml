@@ -4371,6 +4371,85 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/biometric/simulate:
+    post:
+      operationId: simulateProcedureInstanceBiometric
+      tags: [Tramites, Identidad]
+      summary: Simular la validación biométrica de una parte (mock de esta iteración)
+      description: >
+        Endpoint SOLO del proveedor `mock` (`Biometrics:Provider=mock`): simula una validación
+        biométrica aprobada (score 95) sin pasar por un proveedor externo — es lo que el botón
+        "Simular validación de identidad" dispara en desarrollo/pruebas, equivalente al desenlace
+        que produciría Kyverum tras una captura exitosa. No estaba documentado en el contrato
+        (brecha preexistente, endpoint de mock); se añade junto con la ampliación de Múltiple
+        Propietario porque `documento` (ADR-0053) es parte directa de ese cierre.
+
+        ADR-0053 (Múltiple Propietario) — `documento` es opcional/aditivo: identifica a CUÁL de los
+        1..4 actores del rol se refiere la simulación (persona natural: su propio documento; persona
+        jurídica: el de su representante legal — mismo criterio que `identity/ensure`). Sin él (o con
+        1 solo actor en el rol, caso mayoritario), simula sobre el actor principal/único, como
+        siempre.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parte]
+              properties:
+                parte:
+                  type: string
+                  enum: [comprador, vendedor]
+                  nullable: true
+                  description: Parte del trámite (vacío/null en matrícula inicial).
+                documento:
+                  type: string
+                  nullable: true
+                  description: >
+                    ADR-0053 (Múltiple Propietario) — documento del sujeto de identidad al que se
+                    refiere la simulación, cuando `parte` tiene 2..4 actores.
+      responses:
+        "200":
+          description: >
+            Validación simulada, ya en estado `aprobado`. Código de estado documentado por
+            convención del wrapper `request<T>` del cliente (acepta cualquier 2xx); no verificado
+            línea a línea contra el atributo HTTP del controlador — si difiere, es un detalle de
+            documentación, no de comportamiento (el body/schema sí está confirmado contra
+            `BiometricaEndpoints.cs`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiometricValidationDto"
+        "400":
+          description: Datos incompletos, parte inválida, o el proveedor configurado no es `mock`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Instancia no encontrada, o no se encontró un actor para `parte`/`documento`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La instancia no está en draft o ya existe una validación activa para la parte.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado:
     get:
       operationId: descargarCertificadoIdentidad

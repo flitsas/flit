@@ -1393,9 +1393,12 @@ export const tramitesClient = {
   // POST simular la validación biométrica de una parte (mock de esta iteración:
   // la biométrica real es una iteración futura). Devuelve la validación aprobada
   // (estado 'aprobado', score 95). Mismo DTO que listBiometric.
+  // ADR-0053 (Múltiple Propietario) — `documento` es opcional/aditivo: identifica a CUÁL de los
+  // 1..4 actores del rol se refiere la simulación (el backend ya lo resuelve así, ver
+  // SimularBiometriaRequest). Sin él (o con 1 solo actor en el rol), se comporta igual que siempre.
   simulateBiometric: (
     instanceId: string,
-    input: { parte: BiometricParte },
+    input: { parte: BiometricParte; documento?: string },
     tenantId?: string,
   ) =>
     request<BiometricValidation>(
