@@ -30,6 +30,9 @@ public static class DocumentOcrPrompts
         new HashSet<string>(StringComparer.Ordinal)
         {
             "factura", "aduana", "impronta", "soat", "rtm",
+            // HU #11996 — la licencia de transito (tarjeta de propiedad). Es el documento MAS cargado
+            // de la plataforma (72.813 cargas medidas en V1) y hasta ahora no tenia ninguna validacion.
+            "tarjeta_propiedad",
             // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
             "mandato_config",
         };
@@ -45,6 +48,7 @@ public static class DocumentOcrPrompts
         "impronta" => Impronta,
         "soat" => Soat,
         "rtm" => Rtm,
+        "tarjeta_propiedad" => TarjetaPropiedad,
         "mandato_config" => MandatoConfig,
         _ => null,
     };
@@ -503,6 +507,124 @@ JSON valido sin markdown:
     /// Extract de config de mandato para Plataforma → Mandatos. NO se usa en el lote de trámites.
     /// El PDF subido solo aporta datos; el documento oficial se regenera con diseño FLIT.
     /// </summary>
+    /// <summary>
+    /// HU #11996 — licencia de transito (tarjeta de propiedad). Calibrado sobre 55 licencias reales de
+    /// las 8 secretarias que expiden el documento, mas 9 documentos basura como prueba negativa.
+    /// <para><b>El documento es un escaneo:</b> 61 de 64 ejemplares no traen capa de texto, asi que el
+    /// trabajo es 100 % de vision. Se llega en tres disposiciones distintas —reverso primero, anverso
+    /// primero, o ambas caras en una sola pagina— y por eso el prompt prohibe explicitamente suponer
+    /// que la pagina 1 es el anverso.</para>
+    /// <para><b>Tres reglas salieron de fallos medidos, no de intuicion.</b> (1) Enunciar "el VIN tiene
+    /// 17 caracteres" no bastaba: 7 de 11 VIN erroneos tenian otra longitud, asi que la regla se
+    /// convirtio en un procedimiento —"CUENTALOS uno por uno"—. (2) Lo mismo con la placa, que subio de
+    /// 88,7 % a 92,7 % al pedir contar caracteres y verificar el patron en vez de solo describirlo; su
+    /// error dominante es confundir Q/O/G/D. (3) Endurecer el rechazo de recibos rompio la regla de
+    /// alcance y aparecieron 2 falsos rechazos de expedientes que SI traian la tarjeta, asi que la
+    /// reconciliacion entre ambas reglas va explicita y en dos pasos.</para>
+    /// <para><b>Asteriscos.</b> Un campo con solo asteriscos significa SIN DATO y debe salir vacio
+    /// (tipico del motor y la cilindrada en electricos), pero un asterisco dentro del valor es parte
+    /// del troquelado y se conserva: "L4F*242904046*" es un numero de motor completo. La BD de V1 ya
+    /// fija esa convencion.</para>
+    /// <para><b>Medicion (claude-haiku-4-5, max_tokens 2000, con recorte previo):</b> placa 92,7 %,
+    /// VIN 92,7 %, chasis 94,5 %, 0 falsos rechazos, 0 falsos positivos sobre los 9 documentos basura,
+    /// 0 errores de parseo. Sin el recorte el VIN cae a 75,5 %: ver PdfContentCropper.</para>
+    /// </summary>
+    private const string TarjetaPropiedad =
+"""
+Analiza este documento. Determina si contiene una LICENCIA DE TRANSITO (tarjeta de propiedad) de Colombia, expedida por el Ministerio de Transporte.
+
+COMO ES EL DOCUMENTO:
+Es una tarjeta plastica del tamano de una cedula, con DOS CARAS, casi siempre ESCANEADA o FOTOGRAFIADA (no tiene texto seleccionable).
+- ANVERSO: encabezado "REPUBLICA DE COLOMBIA / MINISTERIO DE TRANSPORTE / LICENCIA DE TRANSITO No." con el escudo a la izquierda y el logo del Ministerio a la derecha. Trae placa, marca, linea, modelo, cilindrada, color, clase, carroceria, combustible, servicio, capacidad, motor, VIN, serie, chasis y propietario.
+- REVERSO: restriccion movilidad, blindaje, potencia HP, declaracion de importacion, fecha de importacion, puertas, limitacion a la propiedad, fecha de matricula, fecha de expedicion de la licencia, fecha de vencimiento, ORGANISMO DE TRANSITO, una huella dactilar, un codigo de barras y un serial que empieza por "LT".
+
+VALIDACIONES:
+1. DEBE ser la licencia de transito / tarjeta de propiedad del vehiculo. Basta con que aparezca UNA de las dos caras para que sea valida.
+2. NO es valido si es: un recibo de pago o factura de derechos de una secretaria de transito (aunque mencione "Especie Venal Lic.Tto.", "COSTO LAMINA LICENCIA DE TRANSITO" o "Licencia de Transito" en el detalle de conceptos, y aunque traiga la placa), el Comprobante Unico de Pago y Liquidacion del RUNT, un FUR, un certificado de improntas, una poliza SOAT, un certificado de revision tecnico-mecanica, una declaracion de importacion, un contrato de compraventa, una cedula, ni una hoja en blanco.
+   OJO: que un recibo diga "Licencia de Transito" en la lista de conceptos cobrados NO lo convierte en la licencia. La licencia real es la TARJETA con el encabezado "REPUBLICA DE COLOMBIA / MINISTERIO DE TRANSPORTE" y el numero de 11 digitos.
+   PERO ESTO NO SIGNIFICA RECHAZAR EL ARCHIVO. Solo significa que esas paginas de recibo NO van en paginas_documento. Si en ALGUNA OTRA pagina del archivo aparece la tarjeta, el documento ES VALIDO: pon solo las paginas de la tarjeta y sigue adelante. Rechaza unicamente cuando la tarjeta NO este en NINGUNA pagina.
+3. Una PAGINA EN BLANCO o un archivo cuyo unico contenido es un logo o la palabra "FLIT" NO es una licencia: es_valido en false.
+
+DISPOSICION DE LAS CARAS — NO ASUMAS EL ORDEN:
+Las dos caras aparecen en cualquiera de estas formas, y todas son validas:
+- Reverso en la pagina 1 y anverso en la pagina 2 (ES FRECUENTE: no supongas que la pagina 1 es el anverso).
+- Anverso en la pagina 1 y reverso en la pagina 2.
+- LAS DOS CARAS EN UNA MISMA PAGINA, una encima de la otra.
+- Una sola cara, sin la otra.
+Identifica cada cara por su CONTENIDO, nunca por su posicion.
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos (recibos de pago + comprobante RUNT + licencia + etc.), identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta la licencia (ej: [4,5] o [1,2] o [1]). Base 1. Incluye AMBAS caras cuando esten en paginas distintas.
+- total_paginas: total de paginas del PDF
+Si la licencia NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA, PROCEDE EN ESTE ORDEN:
+PASO 1. Recorre TODAS las paginas UNA POR UNA y pregunta de cada una: "en ESTA pagina, ¿hay una tarjeta con el encabezado REPUBLICA DE COLOMBIA / MINISTERIO DE TRANSPORTE / LICENCIA DE TRANSITO No.?". Anota los numeros de las paginas donde la respuesta sea SI.
+PASO 2. Si anotaste AL MENOS UNA pagina, entonces es_valido = true, paginas_documento = esas paginas, y extrae los datos de ellas. El hecho de que las DEMAS paginas sean recibos, comprobantes del RUNT, FUR o cualquier otra cosa es IRRELEVANTE: no las mires y no dejes que influyan en tu decision. Un expediente de 5 paginas con 3 recibos y la tarjeta en las paginas 4 y 5 es VALIDO, con paginas_documento [4,5].
+Solo si NO anotaste NINGUNA pagina en el paso 1, es_valido = false.
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro, NO lo invalida y NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste en paginas_documento, NUNCA al archivo entero.
+NUNCA rechaces un archivo por lo que contienen las paginas que NO son la licencia. Ese es el error mas grave que puedes cometer aqui.
+
+ASTERISCOS — REGLA CRITICA, TIENEN DOS SIGNIFICADOS DISTINTOS:
+a) Un campo cuyo valor son SOLO asteriscos ("*****", "******") significa SIN DATO / NO APLICA. Devuelve CADENA VACIA "" en ese campo, NUNCA los asteriscos. Es lo normal en Cilindrada y Numero de Motor de vehiculos ELECTRICOS, y en Restriccion Movilidad, Blindaje, Limitacion a la Propiedad y Fecha de Vencimiento.
+b) Un asterisco DENTRO de un valor alfanumerico es parte del troquelado y SI se conserva: "L4F*242904046*" y "LJO*18R62820141*" son numeros de motor completos, copialos tal cual con sus asteriscos, incluido el asterisco final si lo lleva.
+
+DOS NUMEROS QUE SE CONFUNDEN — NO LOS MEZCLES:
+- numero_licencia: el que sigue a "LICENCIA DE TRANSITO No." en el ANVERSO, arriba a la derecha. Son 11 digitos, empieza por 100 (ej: 10039604989).
+- serial_especie_venal: el del REVERSO, debajo del codigo de barras, empieza por las letras "LT" (ej: LT10001101673).
+
+CONFUSION DE CARACTERES — CRITICO PARA VIN, CHASIS, SERIE Y MOTOR:
+Estos codigos se leen mal con facilidad, y un solo caracter equivocado invalida el cruce con el tramite. Transcribe caracter por caracter y presta especial atencion a: 0 vs O vs D vs Q, 1 vs I vs L, 5 vs S, 8 vs B, 2 vs Z, 6 vs G, U vs V, 7 vs T.
+
+EL VIN — TRES COMPROBACIONES OBLIGATORIAS ANTES DE RESPONDER:
+1. LONGITUD: un VIN tiene EXACTAMENTE 17 caracteres. CUENTALOS uno por uno sobre lo que transcribiste. Si te salen 16, vuelve a mirar: te comiste un caracter. Si te salen 18, duplicaste uno. NO entregues nunca un VIN que no tenga 17.
+2. ALFABETO: un VIN NUNCA contiene las letras I, O ni Q. Si crees leer una I es un 1; si crees leer una O o una Q es un 0.
+3. COHERENCIA: en la licencia colombiana el VIN, el NUMERO DE SERIE y el NUMERO DE CHASIS son EL MISMO codigo impreso en tres sitios distintos de la tarjeta. Leelos por separado en sus tres casillas y comparalos. Si no te salen identicos, NO elijas uno al azar: vuelve a mirar los tres y quedate con la lectura que cumpla las comprobaciones 1 y 2.
+Si tras las tres comprobaciones un codigo sigue sin leerse con seguridad, dejalo VACIO. Es preferible un campo vacio a un valor inventado: un VIN plausible y falso hace pasar un documento que no corresponde al vehiculo.
+
+LA PLACA — TRES COMPROBACIONES OBLIGATORIAS ANTES DE RESPONDER:
+1. DE DONDE SALE: del ANVERSO, arriba a la izquierda, en el recuadro rotulado "PLACA". De ningun otro sitio.
+2. LONGITUD Y FORMATO: CUENTA los caracteres. Son SIEMPRE EXACTAMENTE 6, sin espacios ni guiones, y con uno de estos dos patrones:
+   - automoviles: 3 LETRAS + 3 DIGITOS   (QOU860, NZT090, PRP780)
+   - motos:       3 LETRAS + 2 DIGITOS + 1 LETRA
+   Si lo que transcribiste tiene 7, 9 o 10 caracteres, o empieza por "LT", o mezcla letras y digitos de otra forma, ESTA MAL: no es la placa. Vuelve a mirar el recuadro "PLACA" del anverso. "LT10099922" y "LIT000992" son el serial del reverso, NO placas.
+3. LAS TRES PRIMERAS SON LETRAS, LAS ULTIMAS SON DIGITOS. En estos escaneos las letras Q, O, G, D y C se confunden entre si de forma constante, y es el error MAS FRECUENTE de todos. Antes de dar la placa por buena, mira cada una de las tres letras y decide:
+   - Q lleva una colita o rabito que sale del circulo por abajo a la derecha.
+   - O es un ovalo cerrado y limpio, sin nada que sobresalga.
+   - G lleva una barra horizontal hacia dentro en el lado derecho.
+   - D tiene el lado izquierdo COMPLETAMENTE RECTO.
+   - C esta abierta por la derecha.
+   Si dudas entre Q y O, fijate solo en si hay algo por debajo del circulo.
+
+EXTRAER:
+- tipo_documento: "licencia_transito" | "recibo_pago" | "comprobante_runt" | "otro"
+- es_valido: true/false
+- paginas_documento: [paginas], total_paginas: numero
+- caras_presentes: "anverso" | "reverso" | "ambas"
+- numero_licencia: los 11 digitos que siguen a "LICENCIA DE TRANSITO No."
+- vehiculo_placa: la placa (3 letras + 3 digitos, o 3 letras + 2 digitos + 1 letra en motos)
+- vehiculo_marca, vehiculo_linea, vehiculo_modelo (ano, 4 digitos)
+- vehiculo_cilindrada, vehiculo_color, vehiculo_clase, vehiculo_carroceria, vehiculo_combustible
+- vehiculo_servicio: "PARTICULAR" | "PUBLICO" | "OFICIAL" | "DIPLOMATICO" | ""
+- vehiculo_capacidad
+- vehiculo_motor: numero de motor (con asteriscos si los lleva troquelados; vacio si son solo asteriscos)
+- vehiculo_vin: 17 caracteres
+- vehiculo_serie, vehiculo_chasis
+- regrabado_motor, regrabado_serie, regrabado_chasis: "S" | "N" | "" (la casilla REG junto a cada numero)
+- propietario_nombre, propietario_tipo_documento ("CC" | "NIT" | "CE" | "PA" | ""), propietario_documento
+- potencia_hp, puertas
+- declaracion_importacion, fecha_importacion (YYYY-MM-DD)
+- fecha_matricula, fecha_expedicion, fecha_vencimiento (YYYY-MM-DD; vacia si son asteriscos)
+- organismo_transito: el que aparece bajo "ORGANISMO DE TRANSITO" en el reverso, tal cual
+- serial_especie_venal: el codigo que empieza por "LT" bajo el codigo de barras
+- restriccion_movilidad, blindaje, limitacion_propiedad (vacios si son asteriscos)
+- observaciones: si es_valido es false, explica en una frase QUE es el documento
+
+JSON valido sin markdown:
+{"tipo_documento":"licencia_transito","es_valido":true,"paginas_documento":[1],"total_paginas":1,"caras_presentes":"ambas","numero_licencia":"","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_cilindrada":"","vehiculo_color":"","vehiculo_clase":"","vehiculo_carroceria":"","vehiculo_combustible":"","vehiculo_servicio":"","vehiculo_capacidad":"","vehiculo_motor":"","vehiculo_vin":"","vehiculo_serie":"","vehiculo_chasis":"","regrabado_motor":"","regrabado_serie":"","regrabado_chasis":"","propietario_nombre":"","propietario_tipo_documento":"","propietario_documento":"","potencia_hp":"","puertas":"","declaracion_importacion":"","fecha_importacion":"","fecha_matricula":"","fecha_expedicion":"","fecha_vencimiento":"","organismo_transito":"","serial_especie_venal":"","restriccion_movilidad":"","blindaje":"","limitacion_propiedad":"","observaciones":""}
+""";
+
     private const string MandatoConfig =
 """
 Analiza este documento. Debe ser un CONTRATO PRIVADO DE MANDATO, poder o autorizacion a un apoderado

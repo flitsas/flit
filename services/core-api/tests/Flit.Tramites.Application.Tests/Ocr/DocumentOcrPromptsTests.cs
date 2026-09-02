@@ -12,6 +12,7 @@ public sealed class DocumentOcrPromptsTests
     [InlineData("impronta")]
     [InlineData("soat")]
     [InlineData("rtm")] // HU #10977
+    [InlineData("tarjeta_propiedad")] // HU #11996
     public void Tipos_soportados_tienen_prompt(string tipo)
     {
         DocumentOcrPrompts.IsSupported(tipo).Should().BeTrue();
@@ -219,5 +220,86 @@ public sealed class DocumentOcrPromptsTests
         // Los vehículos ensamblados en Colombia (Sofasa) no traen Declaración de Importación.
         DocumentOcrPrompts.ClassificationPrompt(["aduana"])
             .Should().Contain("ENSAMBLADO en Colombia");
+    }
+
+    // ── HU #11996 — prompt de la licencia de tránsito ────────────────────────
+    //
+    // Cada aserción de aquí abajo corresponde a un fallo REAL observado al calibrar contra 55
+    // licencias de las 8 secretarías. No son comprobaciones de estilo: si una se cae, vuelve un
+    // fallo que ya costó una iteración de prompt.
+
+    [Fact]
+    public void Prompt_licencia_prohibe_suponer_el_orden_de_las_caras()
+    {
+        // Medellín y Envigado traen el REVERSO en la página 1; Funza y Palmira el anverso; Sabaneta
+        // mete las dos caras en una sola página. Suponer el orden se traduce en campos vacíos.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("NO ASUMAS EL ORDEN");
+        prompt.Should().Contain("LAS DOS CARAS EN UNA MISMA PAGINA");
+    }
+
+    [Fact]
+    public void Prompt_licencia_distingue_los_dos_significados_del_asterisco()
+    {
+        // "*****" a solas es SIN DATO (motor y cilindrada de los eléctricos) y debe salir vacío;
+        // el asterisco dentro del valor es troquelado y se conserva ("L4F*242904046*"). La BD de V1
+        // guarda esa misma convención, así que confundirlas rompe el cruce.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("ASTERISCOS");
+        prompt.Should().Contain("L4F*242904046*");
+        prompt.Should().Contain("CADENA VACIA");
+    }
+
+    [Fact]
+    public void Prompt_licencia_obliga_a_contar_los_caracteres_del_vin_y_de_la_placa()
+    {
+        // Enunciar "el VIN tiene 17 caracteres" no bastó: 7 de 11 VIN erróneos tenían otra longitud.
+        // Lo que funcionó fue ordenar el acto de contar. Igual con la placa, que subió de 88,7 % a
+        // 92,7 % al pedir contar y verificar el patrón en vez de solo describirlo.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("CUENTALOS");
+        prompt.Should().Contain("EXACTAMENTE 17 caracteres");
+        prompt.Should().Contain("CUENTA los caracteres");
+    }
+
+    [Fact]
+    public void Prompt_licencia_no_confunde_la_placa_con_el_serial_del_reverso()
+    {
+        // El escaneo de Medellín hizo que el modelo devolviera "LT10099922" como placa: es el serial
+        // de la especie venal del reverso.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("serial_especie_venal");
+        // Los dos valores reales que el modelo devolvió como placa antes de la corrección.
+        prompt.Should().Contain("LT10099922");
+        prompt.Should().Contain("son el serial del reverso, NO placas");
+    }
+
+    [Fact]
+    public void Prompt_licencia_rechaza_el_recibo_sin_rechazar_el_expediente_que_la_contiene()
+    {
+        // Las dos reglas se contradicen si no se reconcilian: al endurecer el rechazo de recibos
+        // aparecieron 2 falsos rechazos de expedientes que SÍ traían la tarjeta en páginas posteriores.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        prompt.Should().Contain("Especie Venal Lic.Tto.");
+        prompt.Should().Contain("ESTO NO SIGNIFICA RECHAZAR EL ARCHIVO");
+        prompt.Should().Contain("NUNCA rechaces un archivo por lo que contienen las paginas que NO son la licencia");
+    }
+
+    [Fact]
+    public void Prompt_licencia_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        // Contrato implícito con OCR_RESUMEN_FIELDS del front: si un nombre cambia aquí, la tarjeta
+        // del checklist se queda con la fila en blanco y nadie se entera hasta producción.
+        var prompt = DocumentOcrPrompts.PromptFor("tarjeta_propiedad")!;
+        foreach (var campo in new[]
+                 {
+                     "vehiculo_placa", "numero_licencia", "vehiculo_marca", "vehiculo_linea",
+                     "vehiculo_modelo", "vehiculo_color", "vehiculo_servicio", "vehiculo_motor",
+                     "propietario_nombre", "propietario_tipo_documento", "propietario_documento",
+                     "organismo_transito", "fecha_expedicion", "vehiculo_vin",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
     }
 }

@@ -253,6 +253,22 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
   ],
   // El prompt de `rtm` llegó en HU #10977 pero su resumen nunca se añadió aquí, así que el panel salía
   // con el encabezado y la grilla vacía. Los campos son los que pide el certificado de vigencia.
+  // HU #11996 — licencia de tránsito. El resumen prioriza lo que el gestor coteja de un vistazo
+  // contra el trámite: placa y VIN primero, y el organismo que la expidió, que es lo que distingue
+  // una licencia legítima de un recibo de la misma secretaría.
+  tarjeta_propiedad: [
+    { label: 'Placa', value: (d) => pickStr(d, 'vehiculo_placa') },
+    { label: 'N.º licencia', value: (d) => pickStr(d, 'numero_licencia') },
+    { label: 'Vehículo', value: (d) => joinFields(d, ['vehiculo_marca', 'vehiculo_linea', 'vehiculo_modelo']) },
+    { label: 'Color', value: (d) => pickStr(d, 'vehiculo_color') },
+    { label: 'Servicio', value: (d) => pickStr(d, 'vehiculo_servicio') },
+    { label: 'Motor', value: (d) => pickStr(d, 'vehiculo_motor') },
+    { label: 'Propietario', value: (d) => pickStr(d, 'propietario_nombre') },
+    { label: 'Identificación', value: (d) => joinFields(d, ['propietario_tipo_documento', 'propietario_documento'], ' ') },
+    { label: 'Organismo', value: (d) => pickStr(d, 'organismo_transito') },
+    { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin'), vin: true },
+  ],
   rtm: [
     { label: 'N.º certificado', value: (d) => pickStr(d, 'numero_certificado') },
     { label: 'CDA', value: (d) => pickStr(d, 'cda_expide') },
@@ -271,6 +287,7 @@ const TIPO_LABEL: Record<string, string> = {
   impronta: 'Impronta',
   soat: 'SOAT',
   rtm: 'RTM',
+  tarjeta_propiedad: 'Licencia de Tránsito',
 };
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */
