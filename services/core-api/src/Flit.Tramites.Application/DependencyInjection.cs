@@ -224,6 +224,8 @@ public static class DependencyInjection
         services.AddScoped<AdjuntarLicenciaTransitoHandler>();
         // Descarga on-demand del certificado (PDF) de la validación de identidad desde Kyverum.
         services.AddScoped<DescargarCertificadoIdentidadHandler>();
+        services.AddScoped<Identity.IdentitySignatureCapture>();
+        services.AddScoped<Identity.IIdentitySignatureCapture>(sp => sp.GetRequiredService<Identity.IdentitySignatureCapture>());
         // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).
         services.AddScoped<GetIdentityAuditHandler>();
         // CF-07 (Feature #11004, ADR-0036) — misma bitácora, sin depender de instanceId (standalone + trámite).

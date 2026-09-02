@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -203,9 +204,20 @@ public static class FurCompraventaDocumentGenerator
                 ? imagen
                 : null;
 
+        var firmaIdentidad =
+            firmaBaul is null
+            && data.FirmaIdentidadImagenes is not null
+            && data.FirmaIdentidadImagenes.TryGetValue(rol, out var recorte)
+            && recorte.Length > 0
+            && IdentitySignatureImageFormat.IsSupported(recorte)
+                ? recorte
+                : null;
+
         var hueco = col.Item().PaddingTop(2).Height(FirmaEstampaAlto);
         if (firmaBaul is not null)
             hueco.Image(firmaBaul).FitHeight();
+        else if (firmaIdentidad is not null)
+            hueco.Image(firmaIdentidad).FitHeight();
 
         if (parte is null)
             return;

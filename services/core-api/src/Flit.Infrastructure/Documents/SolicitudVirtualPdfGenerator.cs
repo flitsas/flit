@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using QuestPDF;
@@ -101,7 +102,8 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
                             // HU #11170 — vigencia y hash de la firma del baúl, como en el FUR: sin
                             // ellos la imagen queda sin nada que permita verificarla.
                             selloBaul: FlitFirmaBaulSello.Resolve(
-                                data.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false)));
+                                data.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false),
+                            firmaIdentidad: FirmaIdentidadDe(data, parte?.Rol)));
                 });
             });
         }).GeneratePdf();
@@ -210,6 +212,15 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
         && data.FirmaImagenes is not null
         && data.FirmaImagenes.TryGetValue(rol, out var imagen)
         && imagen.Length > 0
+            ? imagen
+            : null;
+
+    /// <summary>PNG recortado del certificado Kyverum, o <c>null</c>.</summary>
+    private static byte[]? FirmaIdentidadDe(FurDocumentData data, string? rol) =>
+        rol is not null
+        && data.FirmaIdentidadImagenes is not null
+        && data.FirmaIdentidadImagenes.TryGetValue(rol, out var imagen)
+        && IdentitySignatureImageFormat.IsSupported(imagen)
             ? imagen
             : null;
 

@@ -1,6 +1,7 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using Flit.Tramites.Application.Identity;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -41,6 +42,9 @@ internal enum FlitEstampa
     /// <summary>Imagen de la firma del baúl (gana sobre el sello, HU #11031).</summary>
     Baul,
 
+    /// <summary>Imagen recortada del certificado Kyverum (ADR-0054).</summary>
+    ImagenIdentidad,
+
     /// <summary>Sello de la validación biométrica de identidad.</summary>
     SelloIdentidad,
 
@@ -56,10 +60,15 @@ internal static class FlitFirmaBlock
     /// validación de identidad NO se añade (pintar ambos dejaba el documento como si la parte hubiera
     /// firmado de dos maneras distintas).
     /// </summary>
-    internal static FlitEstampa ResolverEstampa(byte[]? firmaBaul, string? selloIdentidad)
+    internal static FlitEstampa ResolverEstampa(byte[]? firmaBaul, string? selloIdentidad) =>
+        ResolverEstampa(firmaBaul, firmaIdentidad: null, selloIdentidad);
+
+    internal static FlitEstampa ResolverEstampa(byte[]? firmaBaul, byte[]? firmaIdentidad, string? selloIdentidad)
     {
         if (firmaBaul is { Length: > 0 })
             return FlitEstampa.Baul;
+        if (firmaIdentidad is { Length: > 0 } && IdentitySignatureImageFormat.IsSupported(firmaIdentidad))
+            return FlitEstampa.ImagenIdentidad;
         return string.IsNullOrWhiteSpace(selloIdentidad) ? FlitEstampa.Ninguna : FlitEstampa.SelloIdentidad;
     }
 
@@ -94,20 +103,26 @@ internal static class FlitFirmaBlock
         float selloFontSize = 6.5f,
         bool datosBold = false,
         string? selloBaul = null,
-        string? etiquetaSinEstampa = null)
+        string? etiquetaSinEstampa = null,
+        byte[]? firmaIdentidad = null)
     {
         ArgumentNullException.ThrowIfNull(col);
         ArgumentNullException.ThrowIfNull(datos);
 
         // 1. Estampa SOBRE la línea. Sin firma ni sello se deja el aire para la firma manuscrita, de modo
         //    que la línea no suba y el bloque conserve su altura en cualquier caso.
-        switch (ResolverEstampa(firmaBaul, selloIdentidad))
+        switch (ResolverEstampa(firmaBaul, firmaIdentidad, selloIdentidad))
         {
             case FlitEstampa.Baul:
                 col.Item().Height(ImagenAlto).Image(firmaBaul!).FitHeight();
                 // La trazabilidad de la firma custodiada acompaña a la imagen, no a los datos del
                 // firmante: si el documento se lee sin ella, la imagen no se puede verificar.
                 RenderSello(col, selloBaul, selloFontSize);
+                break;
+
+            case FlitEstampa.ImagenIdentidad:
+                col.Item().Height(ImagenAlto).Image(firmaIdentidad!).FitHeight();
+                RenderSello(col, selloIdentidad, selloFontSize);
                 break;
 
             case FlitEstampa.SelloIdentidad:

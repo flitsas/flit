@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using QuestPDF;
@@ -685,7 +686,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             MandanteIdentificacion(parte, esJuridica),
             FlitFirmaLinea.Underscores,
             selloBaul: FlitFirmaBaulSello.Resolve(tramite.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false),
-            etiquetaSinEstampa: "Sin firmar");
+            etiquetaSinEstampa: "Sin firmar",
+            firmaIdentidad: FirmaIdentidadDe(tramite, parte?.Rol));
     }
 
     /// <summary>
@@ -704,6 +706,15 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         && tramite.FirmaImagenes is not null
         && tramite.FirmaImagenes.TryGetValue(rol, out var imagen)
         && imagen.Length > 0
+            ? imagen
+            : null;
+
+    /// <summary>PNG recortado del certificado Kyverum, o <c>null</c>.</summary>
+    private static byte[]? FirmaIdentidadDe(FurDocumentData tramite, string? rol) =>
+        rol is not null
+        && tramite.FirmaIdentidadImagenes is not null
+        && tramite.FirmaIdentidadImagenes.TryGetValue(rol, out var imagen)
+        && IdentitySignatureImageFormat.IsSupported(imagen)
             ? imagen
             : null;
 
