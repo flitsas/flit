@@ -722,6 +722,14 @@ export function FirmaFurStep({
         vendedor={toResumenActor(vendedor, vendedorContact)}
         comprador={toResumenActor(comprador, compradorContact)}
         locatario={toResumenActor(locatario, locatarioContact)}
+        // Múltiple Propietario (ADR-0053) — mismas listas que ya alimentan
+        // `CopropietariosEstadoSection` más abajo: el resumen embebido pinta una `ResumenCard` por
+        // copropietario cuando el lado tiene 2+ (aditivo — con 0-1, sigue la tarjeta única de
+        // siempre vía `vendedor`/`comprador`).
+        vendedorActores={vendedoresContact}
+        compradorActores={compradoresContact}
+        biometric={biometric}
+        firmaBaulActores={firmaBaulActores}
         archivosCount={attachments.length}
         identidadAprobada={identidadAprobada}
         firmaBaulPartes={firmaBaulPartes}

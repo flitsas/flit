@@ -85,6 +85,14 @@ interface Props {
    * ofrece un botón que no podría navegar a ninguna parte.
    */
   onIrAActores?: (parte: BiometricParte) => void;
+  /**
+   * ADR-0053 (Múltiple Propietario) — filtra el/los `onlyPartes` a UN copropietario concreto por su
+   * `ordinal` (1..4). Extensión aditiva: ausente, el comportamiento es el de siempre (todos los
+   * actores del rol). Existe para `MatriculaResumen.tsx`: al mostrar una `ResumenCard` POR ACTOR (no
+   * ya una por parte), cada tarjeta embebe su propia biométrica y necesita quedarse solo con la fila
+   * de SU copropietario — sin esto, la tarjeta del actor 1 repetiría también la biométrica del 2.
+   */
+  onlyOwnerOrdinal?: number;
 }
 
 /**
@@ -262,6 +270,7 @@ export function BiometricStep({
   vaultCoveredPartes = [],
   embedded = false,
   onIrAActores,
+  onlyOwnerOrdinal,
 }: Props) {
   // Con `onlyPartes` la lista de partes ES la que se recibe, ordenada canónicamente; sin ella, la
   // que impone la modalidad. Antes se intersectaban las dos, y esa intersección podía vaciarse: el
@@ -392,11 +401,20 @@ export function BiometricStep({
         // identidad hasta que la validación o los actores traigan un nombre.
         const actoresDelLado = actors?.filter((a) => a.rol === parte) ?? [];
         const ordenados = actorsOrderedByOrdinal(actoresDelLado);
-        const entries = ordenados.length > 0 ? ordenados : [{ item: null, ordinal: 1 }];
+        const entriesDelLado = ordenados.length > 0 ? ordenados : [{ item: null, ordinal: 1 }];
         // Con 1 solo actor por lado (mayoritario) `multiple` es `false` y nada cambia de aspecto:
-        // mismo título, mismo `aria-label`, misma tarjeta única — regresión cero.
-        const multiple = entries.length > 1;
+        // mismo título, mismo `aria-label`, misma tarjeta única — regresión cero. Se calcula sobre
+        // el LADO completo, no sobre el recorte de `onlyOwnerOrdinal` de abajo — si el lado tiene
+        // 2+ actores pero aquí solo se pinta uno (MatriculaResumen embebiendo una tarjeta por
+        // actor), el override de sujeto de `StartAction` sigue haciendo falta igual.
+        const multiple = entriesDelLado.length > 1;
         const motivoLado = motivoDeParte(motivosNoEnvio, parte);
+        // ADR-0053 — `onlyOwnerOrdinal` (aditivo): recorta a UN solo copropietario sin tocar
+        // `multiple` (arriba). Ausente, se pintan todos los actores del lado como siempre.
+        const entries =
+          onlyOwnerOrdinal != null
+            ? entriesDelLado.filter((e) => e.ordinal === onlyOwnerOrdinal)
+            : entriesDelLado;
 
         return (
           <div key={parte} role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`}>
