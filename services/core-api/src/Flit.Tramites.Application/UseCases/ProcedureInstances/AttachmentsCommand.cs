@@ -194,8 +194,17 @@ public sealed class UploadAttachmentHandler(
         // quedaba con el documento corregido Y con el que se quiso corregir, el consolidado los metía los
         // dos (ordena por tipo y luego por fecha, sin deduplicar) y la pantalla enseñaba el PRIMERO, o sea
         // el viejo. Misma semántica que ya tenían el FUR y la Licencia de Tránsito.
+        // Y reemplaza SOLO lo que es del mismo dueño que la carga. Un documento que generó el sistema
+        // (FUR, mandato, certificado de identidad…) o que personalizó la compañía tiene su propio ciclo
+        // de vida y no puede desaparecer porque el gestor suba un archivo en la misma casilla: `rtm`,
+        // `soat` y otros trece tipos están marcados `is_system_generated` Y son cargables a mano, así
+        // que la colisión es real. Es el mismo principio que `AttachmentCleanup` aplica en la dirección
+        // contraria —al limpiar lo generado, respeta lo cargado— y que motivó el Bug #11310.
         var previos = AttachmentRules.ReemplazaAlSubir(tipo)
-            ? instance.Attachments.Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)).ToList()
+            ? instance.Attachments
+                .Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
+                            && !EsDeOtroDueno(a))
+                .ToList()
             : [];
 
         var stored = await storage.SaveAsync(id, tipo, input.Filename ?? "file", input.Content, ct);
@@ -238,6 +247,14 @@ public sealed class UploadAttachmentHandler(
 
         return (ToDto(attachment), null);
     }
+
+    /// <summary>
+    /// ¿Este adjunto lo puso alguien que no es el gestor que ahora sube? Lo generado por el sistema y lo
+    /// personalizado por la compañía se retiran por sus propias vías, nunca de rebote por una carga.
+    /// </summary>
+    private static bool EsDeOtroDueno(ProcedureInstanceAttachment a) =>
+        string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase);
 
     internal static AttachmentDto ToDto(ProcedureInstanceAttachment a) =>
         new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt);

@@ -923,4 +923,53 @@ public sealed class AttachmentsHandlerTests
         AttachmentRules.ReemplazaAlSubir("otro").Should().BeFalse();
         AttachmentRules.ReemplazaAlSubir("factura").Should().BeTrue();
     }
+
+    /// <summary>
+    /// Trece tipos del catálogo están marcados <c>is_system_generated</c> Y son cargables a mano —entre
+    /// ellos <c>rtm</c> y <c>soat</c>, que además tienen OCR—. Si subir en esa casilla retirase lo que
+    /// generó el sistema, una carga del gestor destruiría en silencio un documento del expediente. Es el
+    /// principio que `AttachmentCleanup` aplica en la dirección contraria y que motivó el Bug #11310.
+    /// </summary>
+    [Theory]
+    [InlineData("system")]
+    [InlineData("company")]
+    public async Task Upload_NoRetiraLoQueGeneroElSistemaNiLaCompania(string source)
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            Tipo = "rtm",
+            Filename = "rtm-generado.pdf",
+            Mimetype = "application/pdf",
+            SizeBytes = 10,
+            Sha256 = "x",
+            StoragePath = "p/rtm-generado.pdf",
+            Source = source,
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "rtm", name: "rtm-del-gestor.pdf"), null, ct);
+
+        instance.Attachments.Should().HaveCount(2);
+        _storage.Deleted.Should().BeEmpty();
+    }
+
+    /// <summary>La carga del gestor sí retira la carga anterior del gestor: ese es el reemplazo.</summary>
+    [Fact]
+    public async Task Upload_SiRetiraLaCargaAnteriorDelMismoOrigen()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "rtm", name: "viejo.pdf"), null, ct);
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "rtm", name: "nuevo.pdf"), null, ct);
+
+        instance.Attachments.Should().ContainSingle().Which.Filename.Should().Be("nuevo.pdf");
+    }
 }
