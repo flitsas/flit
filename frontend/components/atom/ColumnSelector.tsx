@@ -33,7 +33,21 @@ export interface ColumnSelectorProps {
   /** Deshabilita el disparador (p. ej. mientras se persiste un cambio). */
   disabled?: boolean;
   className?: string;
+  /**
+   * Clases del BOTÓN disparador. El átomo no impone el estilo de ninguna pantalla: antes traía un
+   * borde y un texto azules cableados en un `style` inline, así que se veía "activo" siempre —
+   * justo el color con el que la fila de filtros marca lo que sí tiene algo aplicado.
+   */
+  buttonClassName?: string;
 }
+
+/** Neutro y con la misma geometría que cualquier otro control: 36px de alto, 12px semibold. */
+const DEFAULT_BUTTON_CLS =
+  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border ' +
+  'border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#1E293B] transition ' +
+  'hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] ' +
+  'focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ' +
+  'dark:border-white/15 dark:bg-[#0B0F14] dark:text-white';
 
 export function ColumnSelector({
   columns,
@@ -42,6 +56,7 @@ export function ColumnSelector({
   label = 'Columnas',
   disabled = false,
   className = '',
+  buttonClassName = DEFAULT_BUTTON_CLS,
 }: ColumnSelectorProps) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -101,8 +116,7 @@ export function ColumnSelector({
         aria-label={`${label}: elegir columnas visibles`}
         onClick={() => setOpen((o) => !o)}
         disabled={disabled}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-4 py-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
-        style={{ borderColor: '#557EFF', color: '#557EFF' }}
+        className={buttonClassName}
       >
         <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
         {label}

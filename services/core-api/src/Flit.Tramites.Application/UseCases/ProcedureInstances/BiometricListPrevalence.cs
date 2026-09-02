@@ -44,17 +44,21 @@ internal static class BiometricListPrevalence
     /// </summary>
     /// <param name="dtos">Listado ya compuesto (filas propias + identidad referenciada).</param>
     /// <param name="prevalecientePorParte">
-    /// Id de la validación APROBADA Y VIGENTE que representa a cada parte (propia o referenciada).
-    /// Una parte sin identidad vigente simplemente no aparece en el mapa.
+    /// Id de la validación APROBADA Y VIGENTE que representa a cada CLAVE (propia o referenciada). Una
+    /// clave sin identidad vigente simplemente no aparece en el mapa.
+    /// <para>ADR-0053 (Múltiple Propietario) — la clave es el rol puro cuando ese rol tiene UN SOLO
+    /// actor (histórico, comportamiento idéntico al anterior), o <c>"{rol}#{ordinal}"</c> cuando el rol
+    /// tiene 2+ actores, para no mezclar la prevalencia de un copropietario con la de otro.</para>
     /// </param>
     /// <param name="vigentesPorParte">
-    /// Ids que, además del prevaleciente, están aprobados y vigentes para esa misma parte: se conservan
+    /// Ids que, además del prevaleciente, están aprobados y vigentes para esa misma clave: se conservan
     /// en la lista (no contradicen el estado) pero después del prevaleciente.
     /// </param>
     /// <param name="documentoPorParte">
-    /// Documento del sujeto de identidad de cada parte. Es lo que evita relegar el intento de OTRA
+    /// Documento del sujeto de identidad de cada clave. Es lo que evita relegar el intento de OTRA
     /// persona: en matrícula la parte "comprador" recoge también las filas históricas sin rol, y sin
     /// comparar documento un rechazo ajeno salía de <c>validations</c> y quedaba oculto para el gestor.
+    /// Con clave compuesta (rol con 2+ actores) también discrimina entre copropietarios del mismo rol.
     /// </param>
     /// <param name="esTraspaso">
     /// Determina el emparejamiento rol↔entrada igual que los consumidores: en traspaso el rol debe
@@ -80,13 +84,13 @@ internal static class BiometricListPrevalence
         var relegadosIds = new HashSet<Guid>();
         var relegados = new List<BiometricValidationDto>();
 
-        foreach (var (parte, prevalecienteId) in prevalecientePorParte)
+        foreach (var (clave, prevalecienteId) in prevalecientePorParte)
         {
-            var vigentes = vigentesPorParte.TryGetValue(parte, out var v) ? v : (IReadOnlySet<Guid>)new HashSet<Guid>();
-            var documento = documentoPorParte.TryGetValue(parte, out var d) ? d : default;
+            var vigentes = vigentesPorParte.TryGetValue(clave, out var v) ? v : (IReadOnlySet<Guid>)new HashSet<Guid>();
+            var documento = documentoPorParte.TryGetValue(clave, out var d) ? d : default;
             foreach (var dto in dtos)
             {
-                if (!Pertenece(dto, parte, documento, esTraspaso))
+                if (!Pertenece(dto, clave, documento, esTraspaso))
                     continue;
                 if (dto.Id == prevalecienteId || vigentes.Contains(dto.Id))
                     continue;
@@ -115,7 +119,7 @@ internal static class BiometricListPrevalence
     }
 
     /// <summary>
-    /// ¿La entrada representa a esta parte? Réplica del emparejamiento que hacen los consumidores del
+    /// ¿La entrada representa a esta CLAVE? Réplica del emparejamiento que hacen los consumidores del
     /// listado: en traspaso por rol; en matrícula, "comprador" recoge también las filas históricas sin
     /// rol (<c>partyRole = null</c>).
     ///
@@ -124,12 +128,23 @@ internal static class BiometricListPrevalence
     /// salía de <c>validations</c> hacia <c>supersededValidations</c> y el gestor dejaba de ver ese
     /// rechazo en la vista principal. Si no se conoce el documento de la parte, la fila sin rol se deja
     /// donde está (no relegar es siempre la opción conservadora: no oculta información).</para>
+    ///
+    /// <para><b>ADR-0053 (Múltiple Propietario)</b> — <paramref name="clave"/> puede venir en dos
+    /// formas: el ROL puro (rol con un solo actor, forma histórica — comportamiento idéntico al
+    /// anterior) o <c>"{rol}#{ordinal}"</c> (rol con 2+ actores). En la forma compuesta, el rol solo YA
+    /// NO basta para decidir pertenencia (dos copropietarios comparten <c>PartyRole</c>): se exige
+    /// ADEMÁS el documento del sujeto de ESE actor — sin este refinamiento, los intentos rechazados de
+    /// un copropietario se mezclaban con la prevalencia del otro.</para>
     /// </summary>
     private static bool Pertenece(
-        BiometricValidationDto dto, string parte, ParteDocumento documento, bool esTraspaso)
+        BiometricValidationDto dto, string clave, ParteDocumento documento, bool esTraspaso)
     {
+        var separador = clave.IndexOf('#', StringComparison.Ordinal);
+        var multiActor = separador >= 0;
+        var parte = multiActor ? clave[..separador] : clave;
+
         if (string.Equals(dto.PartyRole, parte, StringComparison.OrdinalIgnoreCase))
-            return true;
+            return !multiActor || DocumentoCoincide(dto, documento);
 
         if (esTraspaso || dto.PartyRole is not null)
             return false;

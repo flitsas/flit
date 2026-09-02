@@ -27,6 +27,24 @@ public sealed class ProcedureInstanceActor
     /// </summary>
     public bool EsRepresentanteLegal { get; set; }
 
+    /// <summary>
+    /// Posición del actor dentro de su rol/lado (ADR-0053, Múltiple Propietario): 1 = principal
+    /// (el "solidario" que absorbe el residuo de porcentaje y el único que existía antes de
+    /// ADR-0053), 2..4 = copropietarios agregados. Junto con <see cref="ProcedureInstanceId"/> y
+    /// <see cref="ProcedureEntityId"/> forma la unicidad del actor (ver
+    /// <c>uq_procedure_instance_actors_instance_entity_ordinal</c>).
+    /// </summary>
+    public int Ordinal { get; set; } = 1;
+
+    /// <summary>
+    /// Porcentaje de propiedad del actor sobre el lado (2 decimales). <c>NULL</c> cuando el rol
+    /// tiene un solo actor (comportamiento previo a ADR-0053, sin bloque de reparto en la UI).
+    /// Con 2+ actores por lado, la suma de los porcentajes efectivos debe ser exactamente 100 —
+    /// invariante que se valida en <c>Flit.Tramites.Application</c>, no en un CHECK de fila
+    /// (ver ADR-0053, Tradeoff aceptado).
+    /// </summary>
+    public decimal? OwnershipPercentage { get; set; }
+
     public string Metadata { get; set; } = "{}";
     public DateTimeOffset CreatedAt { get; set; }
 

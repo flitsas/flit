@@ -59,6 +59,199 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         CreatedAt = Base,
     };
 
+    // -- Filtros que dejaron de resolverse en el cliente ----------------------------------
+    //
+    // Estado, familia, organismo y tipo se filtraban sobre las filas YA traidas (max. `MaxItems`).
+    // Con un tenant que no cupiera en esa ventana, "los borradores" eran en realidad "los borradores
+    // que cupieron", sin que nada avisara. Estas pruebas fijan que ahora el WHERE va en la consulta.
+
+    [Fact]
+    public async Task FiltraPorEstado_UnoSolo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("estado-uno");
+        db.ProcedureInstances.AddRange(
+            EnEstado(TenantId, "R1", TramiteEstado.Borrador),
+            EnEstado(TenantId, "R2", TramiteEstado.Entregado),
+            EnEstado(TenantId, "R3", TramiteEstado.Borrador));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, total) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20,
+            new ProcedureInstanceListFilter { Estados = [TramiteEstado.Borrador] },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+
+        total.Should().Be(2);
+        items.Should().OnlyContain(i => i.Status == TramiteEstado.Borrador);
+    }
+
+    [Fact]
+    public async Task FiltraPorEstado_VariosEnOr()
+    {
+        // "Todo lo que no esta cerrado" es la consulta natural del gestor: varios estados a la vez.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("estado-varios");
+        db.ProcedureInstances.AddRange(
+            EnEstado(TenantId, "R1", TramiteEstado.Borrador),
+            EnEstado(TenantId, "R2", TramiteEstado.Preparado),
+            EnEstado(TenantId, "R3", TramiteEstado.Aprobado));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, total) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20,
+            new ProcedureInstanceListFilter { Estados = [TramiteEstado.Borrador, TramiteEstado.Preparado] },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+
+        total.Should().Be(2);
+        items.Select(i => i.ReferenceNumber).Should().BeEquivalentTo("R1", "R2");
+    }
+
+    [Fact]
+    public async Task FiltraPorEstado_IgnoraLaCajaDelTexto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("estado-caja");
+        db.ProcedureInstances.Add(EnEstado(TenantId, "R1", TramiteEstado.Borrador));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (_, total) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20,
+            new ProcedureInstanceListFilter { Estados = ["BORRADOR"] },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+
+        total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task FiltraPorModalidad()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("modalidad");
+        db.ProcedureInstances.AddRange(
+            Instancia(TenantId, "R1", modalidad: "traspaso"),
+            Instancia(TenantId, "R2", modalidad: "matricula"),
+            Instancia(TenantId, "R3", modalidad: "traspaso"));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, total) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20,
+            new ProcedureInstanceListFilter { Modalidad = "TRASPASO" },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+
+        total.Should().Be(2);
+        items.Select(i => i.ReferenceNumber).Should().BeEquivalentTo("R1", "R3");
+    }
+
+    [Fact]
+    public async Task FiltraPorTipoCodigo_DistingueDentroDeLaMismaFamilia()
+    {
+        // Es la razon de ser del filtro: la familia no basta para separar los tipos que agrupa.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("tipo-codigo");
+        db.ProcedureInstances.AddRange(
+            Instancia(TenantId, "R1", modalidad: "traspaso"),
+            Instancia(TenantId, "R2", modalidad: "matricula"));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, total) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20,
+            new ProcedureInstanceListFilter { TipoCodigo = "traspaso_standard" },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+
+        total.Should().Be(1);
+        items.Single().ReferenceNumber.Should().Be("R1");
+    }
+
+    [Fact]
+    public async Task FiltraPorOrganismoTransito_PorSubcadenaDelFieldValue()
+    {
+        // El nombre del OT no es columna de la instancia: vive como `field_value`.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("organismo");
+        var conOt = Instancia(TenantId, "R1");
+        conOt.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            FieldKey = "transit_office_name",
+            ValueText = "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA",
+        });
+        var otroOt = Instancia(TenantId, "R2");
+        otroOt.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            FieldKey = "transit_office_name",
+            ValueText = "STRIA TTOyTTE MCPAL SABANETA",
+        });
+        db.ProcedureInstances.AddRange(conOt, otroOt, Instancia(TenantId, "R3"));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, total) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20,
+            new ProcedureInstanceListFilter { OrganismoTransito = "bogota" },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+
+        total.Should().Be(1);
+        items.Single().ReferenceNumber.Should().Be("R1");
+    }
+
+    // -- Conteo por estado para la tira de KPIs --------------------------------------------
+
+    [Fact]
+    public async Task CuentaPorEstado_SobreTodoElUniverso_NoSobreUnaPagina()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("conteo-universo");
+        db.ProcedureInstances.AddRange(
+            EnEstado(TenantId, "R1", TramiteEstado.Borrador),
+            EnEstado(TenantId, "R2", TramiteEstado.Borrador),
+            EnEstado(TenantId, "R3", TramiteEstado.Entregado),
+            EnEstado(OtherTenantId, "R4", TramiteEstado.Borrador));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var conteos = await repo.CountByStatusFilteredAsync(
+            TenantId, new ProcedureInstanceListFilter(), ct);
+
+        conteos[TramiteEstado.Borrador].Should().Be(2);
+        conteos[TramiteEstado.Entregado].Should().Be(1);
+        // El tramite del otro tenant no se cuela: el aislamiento va en la misma consulta.
+        conteos.Values.Sum().Should().Be(3);
+    }
+
+    [Fact]
+    public async Task CuentaPorEstado_RespetaElRestoDeFiltros()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("conteo-filtrado");
+        db.ProcedureInstances.AddRange(
+            EnEstado(TenantId, "R1", TramiteEstado.Borrador, modalidad: "traspaso"),
+            EnEstado(TenantId, "R2", TramiteEstado.Borrador, modalidad: "matricula"),
+            EnEstado(TenantId, "R3", TramiteEstado.Entregado, modalidad: "traspaso"));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var conteos = await repo.CountByStatusFilteredAsync(
+            TenantId, new ProcedureInstanceListFilter { Modalidad = "TRASPASO" }, ct);
+
+        conteos[TramiteEstado.Borrador].Should().Be(1);
+        conteos[TramiteEstado.Entregado].Should().Be(1);
+    }
+
+    /// <summary>Instancia con un estado concreto - el resto de campos no interviene en estos casos.</summary>
+    private static ProcedureInstance EnEstado(
+        Guid tenantId, string reference, string estado, string modalidad = "traspaso")
+    {
+        var instancia = Instancia(tenantId, reference, modalidad: modalidad);
+        instancia.Status = estado;
+        return instancia;
+    }
+
     // ── sortBy: cada campo permitido, ASC y DESC ──────────────────────────────────────────
 
     [Theory]

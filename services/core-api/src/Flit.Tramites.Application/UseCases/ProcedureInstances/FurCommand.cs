@@ -59,7 +59,9 @@ public sealed class GenerarFurHandler(
     Certifications.ICertificationReader? certificationReader = null,
     IPersonalizedDocumentResolver? personalizedDocumentResolver = null,
     IMandateCustomTemplateBlobReader? mandateTemplateBlobReader = null,
-    ITransitOfficeResolver? transitOfficeResolver = null)
+    ITransitOfficeResolver? transitOfficeResolver = null,
+    IIdentitySignatureCapture? identitySignatureCapture = null,
+    IIdentitySignatureExtractor? identitySignatureExtractor = null)
     : IExpedienteHotDocumentsRegenerator
 {
     // Bug #11613 — respaldo del gate de organismo: resuelve el OT habilitado por id para rellenar los
@@ -293,6 +295,20 @@ public sealed class GenerarFurHandler(
                 sellosIdentidad.Remove(role);
         }
 
+        // La rúbrica hay que extraerla ANTES de GenerateFur: el certificado Kyverum se adjuntaba
+        // después y esta generación salía siempre con sello de texto (el PNG quedaba para la siguiente).
+        if (identidadValidada && identitySignatureCapture is not null)
+        {
+            foreach (var role in signatureRoles)
+            {
+                if (!sellosIdentidad.ContainsKey(role))
+                    continue;
+                await TryCaptureIdentitySignatureAsync(instance, role, ct);
+            }
+        }
+
+        var firmaIdentidadImagenes = await ResolveIdentitySignatureImagesAsync(instance, signatureRoles, sellosIdentidad, ct);
+
         // HU #10920 — plantilla + casilla numeral 4 según vehicle_class. Sin resolver → AUTOMOTOR, sin X.
         var classification = _templateResolver is not null
             ? await _templateResolver.ResolveMatchAsync(Get(fv, "vehicle_class"), ct)
@@ -303,7 +319,7 @@ public sealed class GenerarFurHandler(
         // una función pura y síncrona.
         var nombresRlDirectorio = await ResolverNombresDelDirectorioAsync(instance, signatureRoles, ct);
 
-        var data = AssembleData(instance, codigo, profile, signatureRoles, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento, firmaImagenes, firmaBaulMetadatos, classification.Format, nombresRlDirectorio, classification.FieldToFill);
+        var data = AssembleData(instance, codigo, profile, signatureRoles, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento, firmaImagenes, firmaBaulMetadatos, classification.Format, nombresRlDirectorio, classification.FieldToFill, firmaIdentidadImagenes);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -720,7 +736,8 @@ public sealed class GenerarFurHandler(
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
         FurTemplateFormat templateFormat,
         IReadOnlyDictionary<string, string>? nombresRlDirectorio = null,
-        string? fieldToFill = null)
+        string? fieldToFill = null,
+        IReadOnlyDictionary<string, byte[]>? firmaIdentidadImagenes = null)
     {
         var partes = new List<DocumentParte>(3);
         AddParte(partes, instance, "comprador", nombresRlDirectorio);
@@ -838,6 +855,7 @@ public sealed class GenerarFurHandler(
                 transformaciones,
                 blindajeOpcion),
             FirmaImagenes: firmaImagenes,
+            FirmaIdentidadImagenes: firmaIdentidadImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
@@ -1022,6 +1040,54 @@ public sealed class GenerarFurHandler(
         }
 
         return (images, metadata);
+    }
+
+    /// <summary>
+    /// PNG de la rúbrica Kyverum por parte que aún firma por identidad (sello no retirado por el baúl).
+    /// Best-effort: si el path no se puede leer, esa parte queda con sello de texto.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, byte[]>?> ResolveIdentitySignatureImagesAsync(
+        ProcedureInstance instance,
+        string[] roles,
+        Dictionary<string, string> sellosIdentidad,
+        CancellationToken ct)
+    {
+        Dictionary<string, byte[]>? images = null;
+        foreach (var role in roles)
+        {
+            if (!sellosIdentidad.ContainsKey(role))
+                continue;
+
+            var val = await ResolveApprovedValidationAsync(instance, role, DateTimeOffset.UtcNow, ct);
+            if (val is null || string.IsNullOrWhiteSpace(val.SignatureImagePath))
+                continue;
+
+            try
+            {
+                var stream = await storage.OpenReadAsync(val.SignatureImagePath, ct);
+                if (stream is null)
+                    continue;
+                await using (stream.ConfigureAwait(false))
+                {
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms, ct);
+                    if (ms.Length == 0)
+                        continue;
+                    var bytes = ms.ToArray();
+                    if (!IdentitySignatureImageFormat.IsSupported(bytes))
+                        continue;
+                    if (identitySignatureExtractor is not null && !identitySignatureExtractor.IsUsableInk(bytes))
+                        continue;
+                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[role] = bytes;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                GenerarFurLog.FirmaBaulNoDisponible(logger, ex, instance.Id);
+            }
+        }
+
+        return images;
     }
 
     /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
@@ -1597,14 +1663,33 @@ public sealed class GenerarFurHandler(
     };
 
     /// <summary>
-    /// Descarga best-effort el certificado (PDF) de la validación de identidad de una PARTE
-    /// (<paramref name="role"/> = comprador | vendedor) desde Kyverum. El adjunto del comprador conserva
-    /// el tipo <c>certificado_identidad</c> (retrocompatible); el del vendedor usa
-    /// <c>certificado_identidad_vendedor</c>, de modo que ambos coexistan en el expediente.
-    /// Devuelve null (sin bloquear el FUR) si no hay validación Kyverum con id, si Kyverum no tiene
-    /// certificado, o si la descarga falla — en los dos últimos casos registra un warning.
+    /// Extrae y persiste la rúbrica del certificado Kyverum de una parte antes de pintar el FUR.
+    /// Best-effort: no bloquea la generación.
     /// </summary>
-    private async Task<GeneratedDocument?> TryDownloadIdentityCertificateAsync(
+    private async Task TryCaptureIdentitySignatureAsync(
+        ProcedureInstance instance, string role, CancellationToken ct)
+    {
+        if (identitySignatureCapture is null)
+            return;
+
+        var bio = await ResolveKyverumBioForRoleAsync(instance, role, ct);
+        if (bio is null)
+            return;
+
+        try
+        {
+            var cert = await certClient.DownloadCertificateAsync(bio.KyverumVerificationId!, ct);
+            if (cert is null || cert.Content.Length == 0)
+                return;
+            await identitySignatureCapture.EnsureFromPdfAsync(bio, cert.Content, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            GenerarFurLog.CertificadoDescargaFallo(logger, ex, instance.Id);
+        }
+    }
+
+    private async Task<ProcedureInstanceBiometricValidation?> ResolveKyverumBioForRoleAsync(
         ProcedureInstance instance, string role, CancellationToken ct)
     {
         static bool EsKyverumConId(ProcedureInstanceBiometricValidation v) =>
@@ -1615,23 +1700,33 @@ public sealed class GenerarFurHandler(
         var bio = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
 
-        // Sin fila propia (identidad REFERENCIADA de otro trámite de la persona): se busca la validación
-        // vigente de la parte por documento para tomar su certificado Kyverum (HU #10350, sin clonar).
-        if (bio is null)
-        {
-            var actor = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
-            var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
-            if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-            {
-                var source = await repo.FindVigenteApprovedByDocumentAsync(
-                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), DateTimeOffset.UtcNow, ct);
-                if (source is not null && EsKyverumConId(source))
-                    bio = source;
-            }
-        }
+        if (bio is not null)
+            return bio;
 
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
+        if (subject is null
+            || string.IsNullOrWhiteSpace(subject.TipoDocumento)
+            || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+            return null;
+
+        var source = await repo.FindVigenteApprovedByDocumentAsync(
+            instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), DateTimeOffset.UtcNow, ct);
+        return source is not null && EsKyverumConId(source) ? source : null;
+    }
+
+    /// <summary>
+    /// (<paramref name="role"/> = comprador | vendedor) desde Kyverum. El adjunto del comprador conserva
+    /// el tipo <c>certificado_identidad</c> (retrocompatible); el del vendedor usa
+    /// <c>certificado_identidad_vendedor</c>, de modo que ambos coexistan en el expediente.
+    /// Devuelve null (sin bloquear el FUR) si no hay validación Kyverum con id, si Kyverum no tiene
+    /// certificado, o si la descarga falla — en los dos últimos casos registra un warning.
+    /// </summary>
+    private async Task<GeneratedDocument?> TryDownloadIdentityCertificateAsync(
+        ProcedureInstance instance, string role, CancellationToken ct)
+    {
+        var bio = await ResolveKyverumBioForRoleAsync(instance, role, ct);
         if (bio is null)
             return null; // provider mock o sin id de Kyverum: no hay certificado externo que descargar.
 
@@ -1643,6 +1738,9 @@ public sealed class GenerarFurHandler(
                 GenerarFurLog.CertificadoNoDisponible(logger, bio.Id, instance.Id);
                 return null;
             }
+
+            if (identitySignatureCapture is not null)
+                await identitySignatureCapture.EnsureFromPdfAsync(bio, cert.Content, ct).ConfigureAwait(false);
 
             // Comprador: certificado_identidad (retrocompatible). Otras partes: sufijo de rol.
             var tipo = string.Equals(role, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase)

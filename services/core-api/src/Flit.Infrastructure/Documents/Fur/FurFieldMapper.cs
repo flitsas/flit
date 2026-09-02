@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Infrastructure.Documents.Fur;
@@ -179,6 +180,20 @@ public static class FurFieldMapper
         {
             var sidecar = TryBuildFirmaBaulSidecar(data.FirmaBaulMetadatos, rol);
             dict[fieldId] = new FurFieldValue(null, image, sidecar);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(rol)
+            && data.FirmaIdentidadImagenes is not null
+            && TryGetFirmaImagen(data.FirmaIdentidadImagenes, rol, out var identidadPng)
+            && IdentitySignatureImageFormat.IsSupported(identidadPng))
+        {
+            var leyenda = data.SellosIdentidad is not null
+                && data.SellosIdentidad.TryGetValue(rol, out var sello)
+                && !string.IsNullOrWhiteSpace(sello)
+                    ? sello
+                    : fallbackText;
+            dict[fieldId] = new FurFieldValue(null, identidadPng, leyenda, FontSizeDelta: selloFontSizeDelta);
             return;
         }
 

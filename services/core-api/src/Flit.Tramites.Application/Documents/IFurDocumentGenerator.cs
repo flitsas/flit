@@ -107,6 +107,7 @@ public sealed record FurDocumentData(
     DateTime? FechaTramite = null,
     string? Observaciones = null,
     IReadOnlyDictionary<string, byte[]>? FirmaImagenes = null,
+    IReadOnlyDictionary<string, byte[]>? FirmaIdentidadImagenes = null,
     IReadOnlyDictionary<string, FirmaBaulMetadata>? FirmaBaulMetadatos = null,
     // HU #10463 — false cuando NO hay validación de identidad aprobada+vigente: el FUR se pinta con
     // el sello "NO FIRMADO" en el espacio de firma. Por defecto true (comportamiento previo intacto).

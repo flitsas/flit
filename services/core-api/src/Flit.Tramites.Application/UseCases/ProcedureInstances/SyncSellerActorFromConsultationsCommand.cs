@@ -97,7 +97,16 @@ public sealed class SyncSellerActorFromConsultationsHandler(
 
         // Idempotente: ya hay vendedor (ejecución previa, migración, o -en un tipo futuro que combine
         // esta pieza con captura por formulario- el gestor ya lo guardó a mano).
-        if (instance.Actors.Any(a => string.Equals(a.ActorType, VendedorActorType, StringComparison.OrdinalIgnoreCase)))
+        //
+        // ADR-0053 (Múltiple Propietario) — la guarda se acota a `Ordinal == 1` (el principal, el
+        // único que esta pieza puede escribir) a propósito: sin esta condición, un vendedor con
+        // copropietarios agregados a mano (`ordinal` 2..4) por otra vía haría que esta sincronización
+        // best-effort SIEMPRE se considerara "ya hecha" — hoy es equivalente (esta pieza es el único
+        // origen del vendedor en su journey, `TRASPASO_UNILATERAL`, que no admite captura manual del
+        // mismo rol), pero deja la guarda correcta si el journey evoluciona.
+        if (instance.Actors.Any(a =>
+                string.Equals(a.ActorType, VendedorActorType, StringComparison.OrdinalIgnoreCase)
+                && a.Ordinal == 1))
             return;
 
         var entity = await catalogRepo.GetProcedureEntityByCodeAsync(VendedorEntityCode, ct);

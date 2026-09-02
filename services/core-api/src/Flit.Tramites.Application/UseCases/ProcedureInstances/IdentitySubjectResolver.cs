@@ -67,6 +67,46 @@ public static class IdentitySubjectResolver
             actor.FullName, actor.DocumentType, actor.DocumentNumber, actor.Email, EsRepresentanteLegal: false);
     }
 
+    /// <summary>
+    /// ADR-0053 (Múltiple Propietario) — resuelve CUÁL de los 1..4 actores de un rol corresponde a una
+    /// solicitud que declara el documento del SUJETO de identidad (persona natural: su propio documento;
+    /// persona jurídica: el de su representante legal — nunca el NIT de la empresa).
+    ///
+    /// <para><b>Por qué existe.</b> Antes de este ADR cada rol tenía un solo actor y <c>FirstOrDefault</c>
+    /// bastaba. Con 2..4 actores por rol, los endpoints que operan "sobre la parte" (iniciar biométrica,
+    /// asegurar identidad, firma a posteriori) deben saber a CUÁL copropietario se refieren — el cliente
+    /// ya conoce ese documento porque lo capturó/consultó al abrir la pestaña de ese actor en el
+    /// formulario, así que viajarlo en la solicitud (parámetro opcional, aditivo) es la única forma de
+    /// discriminar sin inventar un identificador nuevo.</para>
+    ///
+    /// <para><b>Regresión cero.</b> Con 1 solo actor en el rol (caso mayoritario, sin cambios de
+    /// contrato) el documento es irrelevante para elegir: siempre se devuelve ese único actor, sea cual
+    /// sea <paramref name="documentoSolicitado"/> (incluso null/vacío, el caso legado). Con 2+ actores y
+    /// documento provisto, empareja por el documento del SUJETO (no el <c>DocumentNumber</c> crudo del
+    /// actor, que en persona jurídica es el NIT de la empresa, no el documento validable del RL). Sin
+    /// coincidencia exacta (dato inconsistente o solicitud legada sin documento) cae al principal
+    /// (<c>ordinal=1</c>) para no romper el flujo — nunca lanza ni devuelve null si el rol tiene actores.</para>
+    /// </summary>
+    public static ProcedureInstanceActor? ActorPorDocumento(
+        ProcedureInstance instance, string? parte, string? documentoSolicitado)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var actores = instance.Actors
+            .Where(a => string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(a => a.Ordinal)
+            .ToList();
+        if (actores.Count == 0)
+            return null;
+        if (actores.Count == 1 || string.IsNullOrWhiteSpace(documentoSolicitado))
+            return actores[0];
+
+        var doc = documentoSolicitado.Trim();
+        var match = actores.FirstOrDefault(a =>
+            string.Equals(For(a).NumeroDocumento?.Trim(), doc, StringComparison.OrdinalIgnoreCase));
+        return match ?? actores[0];
+    }
+
     /// <summary>Lee el representante legal embebido en <c>actor.metadata</c>. Robusto ante null/"{}"/JSON inválido.</summary>
     /// <remarks>
     /// HU #11462 — visibilidad <c>internal</c> para reutilizarlo en

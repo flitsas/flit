@@ -285,13 +285,11 @@ describe('ActorsForm — AC5 (HU #10956) estados de UI del lookup de contacto', 
     });
 
     await waitFor(() => expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Barranquilla'));
+    // Al resolver no queda ningún aviso: el dato aterrizó en el campo y eso es todo lo que se dice.
     expect(screen.queryByText(/Buscando datos de contacto conocidos/i)).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/Contacto precargado desde un trámite anterior/i),
-    ).toBeInTheDocument();
   });
 
-  it('si el lookup de contacto falla, avisa sin bloquear la captura manual (degradación silenciosa)', async () => {
+  it('si el lookup de contacto falla, no bloquea la captura manual (degradación silenciosa)', async () => {
     const user = userEvent.setup();
     mocks.runtPersonLookup.mockResolvedValue({
       found: true,
@@ -314,9 +312,10 @@ describe('ActorsForm — AC5 (HU #10956) estados de UI del lookup de contacto', 
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
 
-    expect(
-      await screen.findByText(/No se pudo precargar el contacto conocido/i),
-    ).toBeInTheDocument();
+    // El fallo no se anuncia: el aviso de carga se retira y los campos quedan como estaban.
+    await waitFor(() =>
+      expect(screen.queryByText(/Buscando datos de contacto conocidos/i)).not.toBeInTheDocument(),
+    );
 
     // Nunca bloquea: el operador completa el contacto a mano sin problema.
     const ciudadInput = screen.getByLabelText(/^Ciudad/);

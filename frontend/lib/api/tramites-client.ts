@@ -9,6 +9,7 @@ import type {
   BiometricParte,
   BiometricValidation,
   BiometricValidationsResponse,
+  FirmaBaulActorCoberturaDto,
   ChecklistView,
   CommercialData,
   SuggestedCommercialValue,
@@ -39,6 +40,7 @@ import type {
   PrendaData,
   PrendaInput,
   InstanceSummary,
+  InstanceEstadoCountsResponse,
   InstancesResponse,
   ListInstancesParams,
   FirmaPosteriorEstado,
@@ -536,6 +538,45 @@ export const tramitesClient = {
       firmaCompradorEstado: item.firmaCompradorEstado ?? null,
       consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
     }));
+  },
+
+  /**
+   * Conteo por estado para la tira de KPIs del listado, sobre el UNIVERSO que matchea los filtros
+   * —no sobre la página que trae `listInstances`—.
+   *
+   * `estado` se ignora aunque venga en `params`: las tarjetas dicen cuántos hay de CADA estado bajo
+   * el resto de criterios, así que acotarlas al estado ya seleccionado dejaría las otras seis en
+   * cero. Se descarta aquí y no en cada llamador para que no se pueda olvidar en uno.
+   *
+   * Si el backend todavía no expone la ruta, devuelve un objeto vacío en vez de propagar: la tabla
+   * es lo que el gestor necesita, y unas tarjetas en blanco son mejor que una pantalla de error.
+   */
+  listInstanceEstadoCounts: async (
+    params: ListInstancesParams = {},
+  ): Promise<Record<string, number>> => {
+    const headers: Record<string, string> = {};
+    if (params.filterTenantId) headers['X-Tenant-Id'] = params.filterTenantId;
+
+    const {
+      filterTenantId: _tenant,
+      estado: _estado,
+      sortBy: _sortBy,
+      sortDir: _sortDir,
+      skip: _skip,
+      take: _take,
+      ...query
+    } = params;
+    const qs = buildListInstancesSearchParams(query).toString();
+    const path = qs
+      ? `/api/v1/tramites/instances/estado-counts?${qs}`
+      : '/api/v1/tramites/instances/estado-counts';
+
+    try {
+      const res = await request<InstanceEstadoCountsResponse>(path, { headers });
+      return res?.counts ?? {};
+    } catch {
+      return {};
+    }
   },
 
   // HU #10536 — marca/desmarca el trámite como prioritario (el OT lo revisa con primacía).
@@ -1406,9 +1447,12 @@ export const tramitesClient = {
   // POST simular la validación biométrica de una parte (mock de esta iteración:
   // la biométrica real es una iteración futura). Devuelve la validación aprobada
   // (estado 'aprobado', score 95). Mismo DTO que listBiometric.
+  // ADR-0053 (Múltiple Propietario) — `documento` es opcional/aditivo: identifica a CUÁL de los
+  // 1..4 actores del rol se refiere la simulación (el backend ya lo resuelve así, ver
+  // SimularBiometriaRequest). Sin él (o con 1 solo actor en el rol), se comporta igual que siempre.
   simulateBiometric: (
     instanceId: string,
-    input: { parte: BiometricParte },
+    input: { parte: BiometricParte; documento?: string },
     tenantId?: string,
   ) =>
     request<BiometricValidation>(
@@ -1456,7 +1500,12 @@ export const tramitesClient = {
   listBiometricExpediente: async (
     instanceId: string,
     tenantId?: string,
-  ): Promise<{ validations: BiometricValidation[]; firmaBaulPartes: string[] }> => {
+  ): Promise<{
+    validations: BiometricValidation[];
+    firmaBaulPartes: string[];
+    /** ADR-0053 (Múltiple Propietario) — cobertura del baúl por actor (documento del RL + ordinal). */
+    firmaBaulActores: FirmaBaulActorCoberturaDto[];
+  }> => {
     const res = await request<BiometricValidationsResponse>(
       `/api/v1/tramites/instances/${instanceId}/biometric`,
       { headers: tenantHeader(tenantId) },
@@ -1464,6 +1513,7 @@ export const tramitesClient = {
     return {
       validations: res?.validations ?? [],
       firmaBaulPartes: res?.firmaBaulPartes ?? [],
+      firmaBaulActores: res?.firmaBaulActores ?? [],
     };
   },
 

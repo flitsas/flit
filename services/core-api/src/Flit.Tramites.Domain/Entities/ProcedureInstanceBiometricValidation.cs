@@ -97,6 +97,15 @@ public sealed class ProcedureInstanceBiometricValidation
     public string? IdFrontPhotoPath { get; set; }
     public string? IdBackPhotoPath { get; set; }
 
+    /// <summary>
+    /// Path opaco en storage del PNG recortado de la rúbrica del certificado Kyverum (ADR-0054).
+    /// Null hasta extraerse o si el recorte no aplica (mock, PDF sin imagen). PII alta.
+    /// </summary>
+    public string? SignatureImagePath { get; set; }
+
+    /// <summary>SHA-256 (hex minúsculas) del PNG de <see cref="SignatureImagePath"/>. Null si no hay path.</summary>
+    public string? SignatureImageSha256 { get; set; }
+
     public DateTimeOffset? ValidatedAt { get; set; }
 
     /// <summary>

@@ -649,6 +649,8 @@ public static class InfrastructureExtensions
             c.BaseAddress = new Uri(o.BaseUrl);
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
+        services.AddSingleton<IIdentitySignatureExtractor, Documents.IdentitySignatureExtractor>();
+        services.AddScoped<IIdentitySignatureArtifactStorage, Storage.IdentitySignatureArtifactStorage>();
 
         // Cifrado del secreto del webhook (AC2/seguridad): Data Protection API.
         // El keyring se persiste en Postgres (tabla data_protection_keys vía FlitDbContext) y se

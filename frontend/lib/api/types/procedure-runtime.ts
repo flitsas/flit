@@ -258,6 +258,20 @@ export interface ListInstancesParams {
    * No es el chip de identidad/baúl de la columna de actores.
    */
   firmado?: boolean;
+  /**
+   * Estados del ciclo de vida a incluir, separados por coma (`'borrador,preparado'`). Vacío = todos.
+   *
+   * Dejó de filtrarse en el cliente: el listado trae como mucho 200 filas, así que aplicar el
+   * estado sobre lo ya traído respondía "los borradores que cupieron en la ventana" en vez de "los
+   * borradores del tenant" — una respuesta distinta, y silenciosamente incompleta.
+   */
+  estado?: string;
+  /** Familia del trámite (MATRICULAS | TRASPASO | OTROS). Misma razón que `estado`. */
+  modalidad?: string;
+  /** Subcadena sobre el nombre del organismo de tránsito elegido en el trámite. */
+  organismoTransito?: string;
+  /** Código del TIPO concreto, no la familia: "OTROS" agrupa quince tipos distintos. */
+  tipoCodigo?: string;
   /** ISO-8601 / fecha `YYYY-MM-DD` (el cliente normaliza a inicio/fin de día). */
   createdFrom?: string;
   createdTo?: string;
@@ -274,6 +288,18 @@ export interface ListInstancesParams {
 export interface InstancesResponse {
   items: InstanceSummary[];
   total?: number;
+}
+
+/**
+ * Respuesta de GET /instances/estado-counts: cuántos trámites hay de cada estado bajo los filtros
+ * activos, sobre el UNIVERSO completo y no sobre la página que trae la tabla.
+ *
+ * Endpoint aparte del listado porque los conteos se piden con un juego de filtros DISTINTO —sin
+ * `estado`—: las tarjetas dicen a dónde puede moverse el gestor, y acotarlas al estado ya elegido
+ * dejaría las otras seis en cero.
+ */
+export interface InstanceEstadoCountsResponse {
+  counts: Record<string, number>;
 }
 
 /** Organismo de tránsito habilitado para la empresa (catálogo + grant). */
@@ -479,6 +505,20 @@ export interface ProcedureActor {
    * lo descarta explícitamente antes de cada guardado — nunca vuelve a viajar en el PUT.
    */
   autorizaReutilizacionDatos?: boolean;
+  /**
+   * Múltiple Propietario (ADR-0053). Posición del actor dentro de su `rol`, 1..4. `1` es el
+   * actor PRINCIPAL/solidario (el que ya existía antes de esta funcionalidad: siembra del
+   * documento del paso 1, consulta RUNT automática, no se elimina). `2`..`4` son propietarios
+   * AGREGADOS. Ausente/`1` ⇒ comportamiento idéntico al contrato previo (un solo actor por rol).
+   */
+  ordinal?: number;
+  /**
+   * Múltiple Propietario (ADR-0053). Porcentaje de propiedad, 2 decimales. `null`/ausente cuando
+   * el `rol` tiene un solo actor (sin pestañas de reparto, sin bloque de porcentaje — comportamiento
+   * previo sin cambios). Con 2+ actores del mismo `rol`, todos traen valor y la suma del lado debe
+   * ser exactamente 100 (validado autoritativamente en backend; el frontend valida para UX).
+   */
+  porcentaje?: number | null;
 }
 
 // ── Precarga de datos de CONTACTO ya conocidos (HU #10956, revierte parcialmente HU #10885) ──────
@@ -1317,6 +1357,15 @@ export interface BiometricValidation {
   linkedProcedures?: LinkedProcedureRef[] | null;
   /** Fecha de registro (historial por persona: más reciente → más antigua). */
   createdAt?: string | null;
+  /**
+   * ADR-0053 (Múltiple Propietario) — posición (1..4) del actor de `partyRole` al que pertenece
+   * esta validación (1 = principal/solidario). Permite emparejar la fila con el actor SIN comparar
+   * documentos — necesario para persona jurídica, donde `documentNumber` es el del representante
+   * legal (el sujeto de identidad), no el NIT de la compañía: comparar contra `actor.numeroDocumento`
+   * ahí daría un falso negativo. `null` cuando no se pudo atribuir a un actor concreto (validación
+   * histórica/huérfana) — con 1 solo actor por lado (caso mayoritario) siempre trae `1`.
+   */
+  ordinal?: number | null;
 }
 
 /**
@@ -1398,6 +1447,26 @@ export interface BiometricValidationsResponse {
    * gestor corrige el dato. `null`/ausente cuando no hay ningún motivo que reportar.
    */
   motivosNoEnvio?: EnvioValidacionMotivo[] | null;
+  /**
+   * ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR específico (documento del
+   * representante legal + ordinal), aditivo a `firmaBaulPartes`. `firmaBaulPartes` sigue existiendo
+   * intacto pero es IMPRECISO A PROPÓSITO con 2+ actores del mismo rol (rol presente si AL MENOS un
+   * actor está cubierto) — usar `firmaBaulActores` para la cobertura exacta por actor. Null cuando
+   * ningún actor está cubierto por el baúl.
+   */
+  firmaBaulActores?: FirmaBaulActorCoberturaDto[] | null;
+}
+
+/**
+ * ADR-0053 (Múltiple Propietario) — cobertura del baúl de UN actor específico dentro de su rol.
+ * `documentNumber` es el documento del SUJETO de identidad (el representante legal — el baúl solo
+ * aplica a persona jurídica), NO el NIT de la compañía. `ordinal` es la clave de correlación
+ * recomendada: evita depender de esa distinción documento-de-actor vs. documento-del-RL.
+ */
+export interface FirmaBaulActorCoberturaDto {
+  parte: BiometricParte;
+  documentNumber: string;
+  ordinal: number;
 }
 
 /**

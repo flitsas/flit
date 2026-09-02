@@ -34,25 +34,31 @@ public sealed class TramiteNotificationRecipientResolver : ITramiteNotificationR
         var recipients = new List<TramiteEmailRecipient>();
         var gaps = new List<TramiteRecipientGap>();
 
+        // ADR-0053 (Múltiple Propietario, §5 #16) — CONFIRMADO: todos los copropietarios de un lado
+        // reciben las notificaciones, no solo el principal. `Where(...).OrderBy(Ordinal)` en vez de
+        // `FirstOrDefault`: con un solo actor por lado (caso mayoritario) itera una sola vez, mismo
+        // destinatario que antes.
         foreach (var role in RolesToNotify(policy))
         {
-            var actor = actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            if (actor is null)
-            {
-                continue;
-            }
+            var actoresDelRol = actors
+                .Where(a => string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(a => a.Ordinal);
 
+            // El participante del portal (invitación) es POR ROL, no por actor individual: se aplica
+            // igual a cada copropietario de ese rol (no hay hoy un participante por copropietario).
             var participant = participants.FirstOrDefault(p =>
                 string.Equals(p.Rol, role, StringComparison.OrdinalIgnoreCase));
 
-            if (TreatAsJuridical(actor))
+            foreach (var actor in actoresDelRol)
             {
-                ResolveJuridical(role, actor, recipients, gaps);
-            }
-            else
-            {
-                ResolveNatural(role, actor, participant, recipients, gaps);
+                if (TreatAsJuridical(actor))
+                {
+                    ResolveJuridical(role, actor, recipients, gaps);
+                }
+                else
+                {
+                    ResolveNatural(role, actor, participant, recipients, gaps);
+                }
             }
         }
 

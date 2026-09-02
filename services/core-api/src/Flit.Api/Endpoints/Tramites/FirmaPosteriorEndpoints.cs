@@ -23,6 +23,9 @@ internal static class FirmaPosteriorEndpoints
         group.MapGet("/instances/{id:guid}/deferred-signature", async (
             Guid id,
             [FromQuery] string? parte,
+            // ADR-0053 (Múltiple Propietario) — opcional/aditivo: documento del representante legal al
+            // que se refiere la consulta cuando el rol tiene 2+ actores jurídicos.
+            [FromQuery] string? documento,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             MarcarFirmaPosteriorHandler handler,
             CancellationToken ct) =>
@@ -30,7 +33,7 @@ internal static class FirmaPosteriorEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.ConsultarAsync(id, tenantId.Value, parte, ct);
+            var (result, error) = await handler.ConsultarAsync(id, tenantId.Value, parte, documento, ct);
             return error switch
             {
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor|mandatario)."),
@@ -50,7 +53,7 @@ internal static class FirmaPosteriorEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, ct);
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, body?.Documento, ct);
             return error switch
             {
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor|mandatario)."),
@@ -68,6 +71,11 @@ internal static class FirmaPosteriorEndpoints
         return app;
     }
 
+    /// <remarks>
+    /// ADR-0053 (Múltiple Propietario) — <c>Documento</c> es opcional/aditivo: identifica a CUÁL de los
+    /// 1..4 actores del rol (representante legal) se refiere la marca. Con un solo actor en el rol
+    /// (caso mayoritario, contrato anterior) se ignora — cero regresión.
+    /// </remarks>
     /// <summary>Cuerpo de la marca: la parte cuya firma se difiere.</summary>
-    internal sealed record DeferredSignatureBody(string? Parte);
+    internal sealed record DeferredSignatureBody(string? Parte, string? Documento = null);
 }

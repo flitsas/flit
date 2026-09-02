@@ -70,8 +70,14 @@ public sealed class IniciarKyverumVerifyHandler(
 
         // Datos del sujeto ANTES de la precedencia de envío / guard por parte: el body puede
         // sobreescribir; si vienen vacíos, se resuelven desde el SUJETO DE IDENTIDAD (HU #10688).
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        //
+        // ADR-0053 (Múltiple Propietario) — se resuelve por el documento CRUDO del body (antes de
+        // aplicar el fallback al sujeto, que todavía no existe): con 2+ actores del mismo rol, el
+        // documento que trae la solicitud es la única forma de saber a cuál copropietario se refiere.
+        // Con un documento vacío (legado) o un solo actor en el rol, cae al principal — cero regresión.
+        var actoresDelRol = instance.Actors
+            .Count(a => string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        var actor = IdentitySubjectResolver.ActorPorDocumento(instance, parte, input.Documento);
         var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
         var nombre = FirstNonEmpty(input.Nombre, subject?.Nombre);
         var tipoDoc = FirstNonEmpty(input.TipoDoc, subject?.TipoDocumento);
@@ -91,8 +97,14 @@ public sealed class IniciarKyverumVerifyHandler(
         if (!continueStart)
             return (null, sendError, sendConflict);
 
+        // ADR-0053 (Múltiple Propietario) — idempotencia por parte; con 2+ actores del mismo rol se
+        // exige ADEMÁS el documento (ver el mismo cambio y razonamiento en IniciarBiometriaHandler,
+        // BiometricaCommand.cs). Sin el filtro, el segundo actor jurídico de un rol recibía
+        // `biometria_activa` contra la validación del primero y nunca llegaba a tener la suya propia.
+        // Con 1 solo actor por rol NO se exige documento: cero regresión.
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+            && (actoresDelRol <= 1 || BiometricRules.DocumentoCoincide(v, tipoDoc, documento))
             && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso
                 or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio);
         if (existing is not null)

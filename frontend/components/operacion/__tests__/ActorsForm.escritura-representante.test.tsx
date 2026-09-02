@@ -140,7 +140,8 @@ async function renderConDirectorio(onGate?: (ok: boolean) => void) {
   await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'NIT');
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), NIT);
   await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
-  await screen.findByText('Precargado desde el directorio de la compañía');
+  // La tarjeta del directorio ya no se anuncia con un título propio: se reconoce por sus datos.
+  await screen.findByText('Representante:');
   return user;
 }
 
