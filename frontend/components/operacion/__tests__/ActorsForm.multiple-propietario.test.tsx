@@ -65,22 +65,34 @@ function addButton(sideLabel: string) {
   return screen.getByRole('button', { name: `Agregar copropietario de ${sideLabel}` });
 }
 
+// CAMBIO DE COMPORTAMIENTO (decisión del usuario, imagen de referencia): con un solo actor la fila
+// de pestañas SÍ se ve — una sola píldora "Comprador 1  100%" activa, sin ×, más el botón "+". Lo
+// que sigue sin verse con un solo actor es el BLOQUE de porcentaje (slider/casilla/consolidado):
+// eso solo aparece desde el segundo propietario (`revealed`, sin cambios). Antes de este ajuste la
+// fila de pestañas completa estaba detrás de `revealed` (una fila punteada "¿Hay más de un
+// propietario?" hacía de disparador); esa fila punteada no existe en el diseño y se retiró.
 describe('ActorsForm — Múltiple Propietario, un solo actor (regresión, caso mayoritario)', () => {
-  it('matrícula inicial con un comprador: sin pestañas, sin bloque de porcentaje', async () => {
+  it('matrícula inicial con un comprador: pestaña única al 100%, sin bloque de porcentaje', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     await screen.findByLabelText(/Número de documento/);
 
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.getByRole('tablist')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Comprador 1 100%' })).toBeInTheDocument();
+    // El ordinal=1 nunca se elimina: sin botón "×" con un solo propietario.
+    expect(screen.queryByRole('button', { name: 'Quitar Comprador 1' })).toBeNull();
+    // El bloque de porcentaje (slider/casilla/consolidado) sigue sin verse hasta el segundo.
     expect(screen.queryByText(/Porcentaje de propiedad/)).toBeNull();
-    // El disparador para agregar SÍ está disponible (punto de entrada — decisión de UI, ver handoff).
     expect(addButton('comprador')).toBeInTheDocument();
   });
 
-  it('traspaso con un vendedor y un comprador: ningún lado muestra pestañas', async () => {
+  it('traspaso con un vendedor y un comprador: ambos lados muestran su pestaña única al 100%', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('group', { name: 'Vendedor' });
+    const vendedorCard = await screen.findByRole('group', { name: 'Vendedor' });
+    const compradorCard = screen.getByRole('group', { name: 'Comprador' });
 
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(within(vendedorCard).getByRole('tab', { name: 'Vendedor 1 100%' })).toBeInTheDocument();
+    expect(within(compradorCard).getByRole('tab', { name: 'Comprador 1 100%' })).toBeInTheDocument();
+    expect(screen.queryByText(/Porcentaje de propiedad/)).toBeNull();
     expect(addButton('vendedor')).toBeInTheDocument();
     expect(addButton('comprador')).toBeInTheDocument();
   });

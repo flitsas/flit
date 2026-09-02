@@ -1315,14 +1315,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const validation = validateActors(actors, modalidad);
 
   /** Pestañas del lado `rol` para `OwnershipShareControl` — el ordinal=1 nunca es removible. */
-  const ownershipItemsForRol = (rol: ActorRol): OwnershipShareItem[] =>
-    indicesForRol(actors, rol).map((index, i) => ({
+  const ownershipItemsForRol = (rol: ActorRol): OwnershipShareItem[] => {
+    const idxs = indicesForRol(actors, rol);
+    // Con un solo actor `porcentaje` es `null` a propósito (regla de negocio: el backend lo exige
+    // así, sin cambios). Mostrar "0%" en la píldora sería visualmente incorrecto — el único
+    // propietario es, conceptualmente, dueño del 100% — así que el 100% es SOLO el valor de
+    // RESPALDO para pintar la pestaña; no se persiste ni participa en la validación (eso sigue
+    // gobernado por `actor.porcentaje` real vía `normalizeActors`/`validateOwnershipShares`).
+    const soloUno = idxs.length === 1;
+    return idxs.map((index, i) => ({
       index,
       ordinal: i + 1,
       label: rotuloDelActor(rol, i + 1),
-      percentage: actors[index]?.porcentaje ?? 0,
+      percentage: actors[index]?.porcentaje ?? (soloUno ? 100 : 0),
       removable: i > 0,
     }));
+  };
 
   const setRuntFor = (index: number, value: LookupState) =>
     setRunt((prev) => {

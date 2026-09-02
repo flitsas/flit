@@ -5,8 +5,8 @@ import { WIZARD_LABEL } from './wizard-field-styles';
 
 /**
  * Múltiple Propietario (ADR-0053, docs/design/MULTIPLE-PROPIETARIO-diseno-tecnico.md §8 "PR 2 —
- * Frontend"). Fila de pestañas + control de porcentaje de un LADO del trámite (vendedor o
- * comprador) cuando ese lado tiene 2+ propietarios.
+ * Frontend"). Fila de pestañas (SIEMPRE visible, 1..4 propietarios) + control de porcentaje de un
+ * LADO del trámite (vendedor o comprador) — este último solo desde el segundo propietario.
  *
  * Fidelidad visual: pestañas en píldora, color por participación (`colorDeParticipacion`) y bloque
  * de porcentaje replican la imagen de referencia del usuario, verificada contra `Propietarios.tsx`
@@ -22,10 +22,12 @@ import { WIZARD_LABEL } from './wizard-field-styles';
  * Toda la lógica de reparto (auto-absorción del solidario, redistribución al eliminar, validación
  * de suma=100) vive en `frontend/lib/tramites/ownership-share.ts`, testeada aparte sin RTL.
  *
- * Con un solo propietario (`revealed=false`) el flujo NO se toca (encargo cerrado): no hay
- * pestañas ni bloque de porcentaje, solo el disparador para agregar un copropietario — el punto de
- * entrada que el diseño no especifica explícitamente (decisión de UI del frontend-agent, ver
- * handoff). Una vez `revealed`, el bloque no vuelve a ocultarse aunque quede un solo propietario.
+ * `revealed` gobierna SOLO el bloque "Porcentaje de propiedad" (tarjeta con slider, casilla y
+ * consolidado), no la fila de pestañas: la imagen de referencia del usuario confirma que con un
+ * solo propietario la fila de pestañas se ve igual que con 2+ (una sola píldora activa al 100%,
+ * en verde, sin `×`, más el botón `+`) — lo único que cambia es que el bloque de porcentaje no
+ * aparece hasta el segundo propietario. Una vez `revealed`, ese bloque no vuelve a ocultarse
+ * aunque quede un solo propietario (encargo cerrado).
  */
 
 export interface OwnershipShareItem {
@@ -102,26 +104,6 @@ export function OwnershipShareControl({
   sideLabel,
   showErrors = false,
 }: OwnershipShareControlProps) {
-  if (!revealed) {
-    return (
-      <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-dashed p-2.5" style={{ borderColor: '#DFE5ED' }}>
-        <p className="text-xs opacity-70">
-          ¿Hay más de un propietario? Puedes agregar hasta 3 copropietarios más.
-        </p>
-        <button
-          type="button"
-          onClick={onAdd}
-          disabled={readOnly}
-          aria-label={`Agregar copropietario de ${sideLabel.toLowerCase()}`}
-          className={ADD_BUTTON_CLASS}
-          style={{ backgroundColor: '#557EFF' }}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-    );
-  }
-
   const active = items.find((i) => i.index === activeIndex) ?? items[0];
   const allPct = items.map((i) => i.percentage);
   const total = allPct.reduce((s, p) => s + p, 0);
@@ -164,7 +146,7 @@ export function OwnershipShareControl({
                   role="tab"
                   id={`${idPrefix}-tab-${item.index}`}
                   aria-selected={isActive}
-                  aria-controls={panelId}
+                  aria-controls={revealed ? panelId : undefined}
                   onClick={() => onSelectTab(item.index)}
                   className="flex items-center gap-1.5 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
                 >
@@ -203,7 +185,10 @@ export function OwnershipShareControl({
         </span>
       </div>
 
-      {/* Control de porcentaje del actor de la pestaña activa. */}
+      {/* Control de porcentaje del actor de la pestaña activa — SOLO desde el segundo
+          propietario (encargo cerrado): con uno solo, la fila de pestañas de arriba ya lo cubre
+          por completo y este bloque no aporta nada nuevo. */}
+      {revealed && (
       <div
         id={panelId}
         role="tabpanel"
@@ -284,6 +269,7 @@ export function OwnershipShareControl({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
