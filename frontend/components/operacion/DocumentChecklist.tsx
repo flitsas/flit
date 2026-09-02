@@ -209,6 +209,19 @@ const ESTADO_DEUDA: Record<string, string> = {
   no_determinado: 'No se puede determinar',
 };
 
+/**
+ * HU #12030 — estado de la sociedad en el certificado de cámara de comercio. Una sociedad disuelta o
+ * en liquidación no invalida el documento: el certificado sigue siendo el correcto y lo que cambia es
+ * lo que el gestor debe saber antes de radicar. Por eso se informa aquí y no en el veredicto del OCR.
+ */
+const ESTADO_SOCIEDAD: Record<string, string> = {
+  activa: 'Activa',
+  disuelta: 'Disuelta',
+  en_liquidacion: 'En liquidación',
+  cancelada: 'Matrícula cancelada',
+  no_determinado: 'No se puede determinar',
+};
+
 /** Descriptor de un campo del resumen OCR. */
 interface OcrField {
   label: string;
@@ -278,6 +291,20 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
     { label: 'Ubicación', value: (d) => joinFields(d, ['municipio', 'departamento'], ', ') },
     { label: 'Periodo certificado', value: (d) => pickStr(d, 'vigencia_certificada') },
     { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
+  ],
+  // HU #12030 — certificado de cámara de comercio. El resumen antepone NIT y razón social, que es lo
+  // que el gestor coteja contra la empresa que figura como parte, y después el representante legal,
+  // que es quien puede firmar por ella. La vigencia se informa, nunca bloquea.
+  camara_comercio: [
+    { label: 'NIT', value: (d) => pickStr(d, 'nit') },
+    { label: 'Razón social', value: (d) => pickStr(d, 'razon_social') },
+    { label: 'Representante legal', value: (d) => joinFields(d, ['representante_legal_nombre', 'representante_legal_cargo'], ' — ') },
+    { label: 'Estado', value: (d) => ESTADO_SOCIEDAD[pickStr(d, 'estado_sociedad')] ?? pickStr(d, 'estado_sociedad') },
+    { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
+    { label: 'Último año renovado', value: (d) => pickStr(d, 'ultimo_ano_renovado') },
+    { label: 'Matrícula mercantil', value: (d) => pickStr(d, 'matricula_mercantil') },
+    { label: 'Cámara', value: (d) => pickStr(d, 'camara_emisora') },
+    { label: 'Domicilio', value: (d) => pickStr(d, 'domicilio') },
   ],
   // HU #12001 — contrato de leasing. El resumen antepone las dos partes, que es lo que define el
   // trámite: el vehículo quedará a nombre del arrendador y el locatario se registra aparte.
@@ -360,6 +387,7 @@ const TIPO_LABEL: Record<string, string> = {
   inscripcion_prenda: 'Inscripción de Prenda',
   comprobante_derechos: 'Comprobante de pago',
   contrato_leasing: 'Contrato de Leasing',
+  camara_comercio: 'Certificado de Cámara de Comercio',
 };
 
 /** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */

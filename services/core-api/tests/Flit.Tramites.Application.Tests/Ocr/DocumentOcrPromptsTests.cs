@@ -17,6 +17,7 @@ public sealed class DocumentOcrPromptsTests
     [InlineData("inscripcion_prenda")] // HU #11999
     [InlineData("comprobante_derechos")] // HU #12000
     [InlineData("contrato_leasing")] // HU #12001
+    [InlineData("camara_comercio")] // HU #12030
     public void Tipos_soportados_tienen_prompt(string tipo)
     {
         DocumentOcrPrompts.IsSupported(tipo).Should().BeTrue();
@@ -591,6 +592,89 @@ public sealed class DocumentOcrPromptsTests
                      "arrendador_nombre", "locatario_nombre", "numero_contrato", "fecha_contrato",
                      "vehiculo_descripcion", "vehiculo_marca", "vehiculo_linea", "vehiculo_modelo",
                      "vehiculo_vin", "proveedor_nombre",
+                 })
+        {
+            prompt.Should().Contain(campo);
+        }
+    }
+
+    // ── HU #12030 — certificado de cámara de comercio ────────────────────────────────────────
+    // Cubre a la persona jurídica, que hoy no valida nadie. La cédula de la persona natural queda
+    // fuera a propósito: Kyverum ya la captura y valida mejor de lo que podría hacerlo un OCR.
+
+    [Fact]
+    public void Prompt_camara_comercio_pide_el_NIT_sin_digito_de_verificacion()
+    {
+        // El NIT es el dato que se coteja contra la empresa que figura como parte del trámite, y el
+        // dígito de verificación lo rompería. Medido: 54/54 correctos en dos corridas.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("SIN EL DIGITO DE VERIFICACION");
+        prompt.Should().Contain("900485418");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_no_confunde_el_NIT_con_la_matricula_ni_el_recibo()
+    {
+        // En la carátula del certificado conviven cuatro números largos: NIT, matrícula mercantil,
+        // número de recibo y código de verificación.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("NO confundas el NIT con la MATRICULA MERCANTIL");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_rechaza_la_ficha_de_homologacion()
+    {
+        // Falso positivo real del v1: una ficha FTH-002 cargada en esta casilla se aceptó como
+        // certificado en 3 de sus 4 ejemplares, devolviendo «MINISTERIO DE TRANSPORTE» como razón
+        // social. Se parece de lejos — entidad oficial, números largos, muchos campos.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("FICHA TECNICA DE HOMOLOGACION");
+        prompt.Should().Contain("El emisor manda sobre cualquier otra señal");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_rechaza_el_RUT_que_es_el_otro_confusable()
+    {
+        // El RUT acredita la inscripción tributaria, no la existencia ni quién representa.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("REGISTRO UNICO TRIBUTARIO");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_no_exige_la_cedula_del_representante()
+    {
+        // Suele cargarse aparte: en la muestra solo 22 de 54 la traían en el mismo archivo.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("NO exijas que venga la CEDULA DEL REPRESENTANTE");
+        prompt.Should().Contain("incluye_cedula_representante");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_informa_la_vigencia_en_vez_de_bloquear()
+    {
+        // Un certificado viejo o una matrícula sin renovar son información para el gestor, no motivo
+        // de rechazo: el documento sigue siendo el correcto.
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("INFORMA, NO BLOQUEA");
+        prompt.Should().Contain("ultimo_ano_renovado");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_toma_al_representante_principal_y_no_al_suplente()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        prompt.Should().Contain("representante legal PRINCIPAL, no al suplente");
+    }
+
+    [Fact]
+    public void Prompt_camara_comercio_pide_los_campos_que_pinta_el_resumen_del_checklist()
+    {
+        var prompt = DocumentOcrPrompts.PromptFor("camara_comercio")!;
+        foreach (var campo in new[]
+                 {
+                     "nit", "razon_social", "representante_legal_nombre", "representante_legal_cargo",
+                     "estado_sociedad", "fecha_expedicion", "ultimo_ano_renovado",
+                     "matricula_mercantil", "camara_emisora", "domicilio",
                  })
         {
             prompt.Should().Contain(campo);

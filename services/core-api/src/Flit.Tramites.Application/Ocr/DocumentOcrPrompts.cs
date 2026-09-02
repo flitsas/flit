@@ -45,6 +45,9 @@ public static class DocumentOcrPrompts
             // HU #12001 — contrato de leasing. Solo lo pide MATRICULA_LEASING, que entra por VIN: por eso
             // el vehiculo aun no tiene placa y el prompt tiene prohibido exigirla.
             "contrato_leasing",
+            // HU #12030 — certificado de camara de comercio. Cubre a la PERSONA JURIDICA, que hoy no
+            // valida nadie: la cedula de la persona natural ya la captura Kyverum.
+            "camara_comercio",
             // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
             "mandato_config",
         };
@@ -65,6 +68,7 @@ public static class DocumentOcrPrompts
         "inscripcion_prenda" => InscripcionPrenda,
         "comprobante_derechos" => ComprobanteDerechos,
         "contrato_leasing" => ContratoLeasing,
+        "camara_comercio" => CamaraComercio,
         "mandato_config" => MandatoConfig,
         _ => null,
     };
@@ -1042,6 +1046,110 @@ EXTRAER:
 
 JSON valido sin markdown:
 {"tipo_documento":"contrato_leasing","es_valido":true,"paginas_documento":[1],"total_paginas":1,"arrendador_nombre":"","arrendador_documento":"","locatario_nombre":"","locatario_documento":"","numero_locatarios":1,"numero_contrato":"","fecha_contrato":"","numero_bienes":1,"vehiculo_descripcion":"","vehiculo_placa":"","vehiculo_vin":"","vehiculo_chasis":"","vehiculo_motor":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","proveedor_nombre":"","observaciones":""}
+""";
+
+    /// <summary>
+    /// HU #12030 — <b>Certificado de Cámara de Comercio</b> (`camara_comercio`, ya existente en
+    /// <c>document_types</c>). En V1 se cargaba en <c>id_attached_buyer_id</c> y <c>id_attached_owner_id</c>.
+    /// <para><b>Sustituye a la idea de hacer OCR del «documento de identidad», y conviene dejar dicho por
+    /// qué.</b> Esa casilla no es un documento: son dos caminos según el tipo de persona. Para la persona
+    /// natural, Kyverum ya valida la identidad con rostro contra documento en vivo y guarda la cédula por
+    /// frente y reverso (<c>BiometricaCommand.cs:642-646</c>): un OCR sobre una copia subida a mano sería un
+    /// control estrictamente peor. Para la persona jurídica, la biometría valida al representante legal como
+    /// persona pero <b>a la empresa no la valida nadie</b>. Ese es el hueco, y es el mayoritario: dos de cada
+    /// tres cargas recientes de esas casillas son NIT.</para>
+    /// <para><b>El mejor ground truth que hemos tenido.</b> El actor jurídico del trámite ES la empresa del
+    /// certificado, así que V1 da la respuesta correcta sin etiquetar nada: NIT y razón social al 100 %
+    /// (68/68). De ahí que las cifras de abajo sean tan exigentes.</para>
+    /// <para><b>Medición (claude-haiku-4-5, max_tokens 2000, 68 documentos de 10 secretarías, dos corridas):</b>
+    /// <b>NIT correcto 54/54 en ambas</b>, razón social 51/54, decisión aceptar/rechazar idéntica, y
+    /// <c>tipo_documento</c> y NIT coincidentes en 68/68. Es el resultado más estable de los seis documentos.
+    /// Las 3 diferencias de razón social son datos desactualizados de V1 —«AUTONAL Y CIA» frente al «&amp;» del
+    /// certificado, una LTDA transformada en S.A.S.—, no fallos de lectura.</para>
+    /// <para><b>El confusable, y ya es el tercero de la misma clase.</b> Una ficha de homologación del
+    /// Ministerio de Transporte cargada por error en esta casilla se aceptó como certificado en 3 de sus 4
+    /// ejemplares, devolviendo «MINISTERIO DE TRANSPORTE» como razón social y un NIT inventado. Se parece de
+    /// lejos: entidad oficial, números largos, muchos campos. El prompt la nombra para descartarla y fija que
+    /// <b>el emisor manda sobre cualquier otra señal</b>; el NIT subió de 94,7 % a 100 %.</para>
+    /// <para><b>Sin riesgo de rotación:</b> 68 de 68 declaran <c>Page rot: 0</c>, así que este documento está
+    /// libre del fallo que bloquea al CEPD. Se comprobó ANTES de fiarse de ninguna medición.</para>
+    /// <para><b>Dato de negocio:</b> 10 de los 68 (15 %) eran <c>no aplica documento.pdf</c>, los diez el mismo
+    /// archivo — el mismo relleno que ya apareció en el paz y salvo.</para>
+    /// <para><b>Dependencia:</b> ningún trámite pide todavía este documento en
+    /// <c>procedure_document_requirements</c>. El prompt queda listo; configurarlo es decisión de negocio.</para>
+    /// </summary>
+    private const string CamaraComercio =
+"""
+Analiza este documento. Determina si es un CERTIFICADO DE EXISTENCIA Y REPRESENTACION LEGAL expedido por una CAMARA DE COMERCIO en Colombia, que es lo que acredita a una PERSONA JURIDICA como parte de un tramite de transito.
+
+QUE SE CONSIDERA VALIDO:
+Un certificado expedido por una Camara de Comercio que acredite la existencia de la sociedad y quien la representa. Se reconoce por:
+- El encabezado con el nombre de la camara ("Camara de Comercio de Medellin para Antioquia", "Camara de Comercio de Bogota", "Camara de Comercio Aburra Sur"...).
+- El titulo "CERTIFICADO DE EXISTENCIA Y REPRESENTACION LEGAL", a veces con "Y/O DE INSCRIPCION DE DOCUMENTOS".
+- Una fecha de expedicion, un numero de recibo y casi siempre un codigo de verificacion.
+- Los apartados de NOMBRE E IDENTIFICACION (razon social y NIT), MATRICULA, CONSTITUCION, OBJETO SOCIAL, REPRESENTACION LEGAL, FACULTADES DEL REPRESENTANTE LEGAL y NOMBRAMIENTOS.
+Tambien es VALIDO el certificado de un ESTABLECIMIENTO DE COMERCIO o de una ENTIDAD SIN ANIMO DE LUCRO expedido por la misma camara, con la misma estructura.
+
+QUE NO ES VALIDO:
+1. El REGISTRO UNICO TRIBUTARIO (RUT) de la DIAN. Acredita la inscripcion tributaria, NO la existencia ni quien representa a la sociedad. Se reconoce por el encabezado de la DIAN y por el "Numero de formulario".
+2. Una CEDULA DE CIUDADANIA suelta, sin el certificado.
+3. Un CERTIFICADO RUES impreso del portal, sin ser el certificado de la camara.
+4. La FICHA TECNICA DE HOMOLOGACION del Ministerio de Transporte ("FORMATO FTH-002", "CARACTERISTICAS TECNICO-MECANICAS DE VEHICULOS", con un numero de ficha tipo A00049538). Describe un modelo de vehiculo y NO tiene nada que ver con la existencia de una sociedad. Ojo: la emite un ministerio y lleva numeros largos, asi que se parece de lejos a un certificado; miralo bien antes de aceptarlo. Si el emisor es el MINISTERIO DE TRANSPORTE y no una camara de comercio, es_valido va en false.
+5. Una FACTURA, una licencia de transito, un SOAT, una impronta, un contrato de prenda o una declaracion de importacion.
+6. Una PAGINA EN BLANCO o una plantilla vacia, incluido el archivo tipo "no aplica documento".
+
+COMO DECIDIR — PROCEDE EN ESTE ORDEN:
+PASO 1. Busca al emisor: una CAMARA DE COMERCIO. Si el emisor es la DIAN, el MINISTERIO DE TRANSPORTE, un banco o un concesionario, NO es valido. El emisor manda sobre cualquier otra señal.
+PASO 2. Busca el objeto: debe certificar la EXISTENCIA de una persona juridica y decir QUIEN la representa. Un documento de la camara que solo certifique una inscripcion de un acto suelto, sin razon social ni representante, NO sirve.
+PASO 3. Solo si los dos pasos anteriores dan positivo, es_valido = true.
+
+LO QUE NO DEBES EXIGIR — LEE ESTO ANTES DE RECHAZAR:
+1. NO exijas que venga la CEDULA DEL REPRESENTANTE. Suele cargarse aparte. Si aparece, dilo en incluye_cedula_representante; su ausencia NO es motivo de rechazo.
+2. NO exijas firma manuscrita ni sello humedo: estos certificados se expiden en linea y se validan con el codigo de verificacion.
+3. NO exijas que el certificado sea reciente. Si esta vencido para el tramite, eso se informa con la fecha, no se rechaza el documento.
+4. NO rechaces por la longitud: estos certificados tienen entre 1 y 25 paginas y el grueso es objeto social y facultades.
+
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos (certificado + cedula + RUT + otros), identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el certificado de la camara. Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
+ALCANCE DE LAS VALIDACIONES — REGLA CRITICA:
+Que el archivo sea un EXPEDIENTE COMPLETO de tramite, con otros documentos dentro, NO lo invalida y NO es motivo de rechazo. Las VALIDACIONES del principio se aplican SOLO a las paginas que pusiste en paginas_documento, NUNCA al archivo entero. Si localizas el documento solicitado dentro del expediente, es_valido va en true aunque el resto del archivo sea otra cosa. Devuelve es_valido en false unicamente cuando el documento solicitado NO aparece en ninguna pagina del archivo.
+
+EL NIT Y LA RAZON SOCIAL — SON LOS DATOS POR LOS QUE SE PIDE EL DOCUMENTO:
+El tramite los compara con los de la empresa que figura como parte, asi que hay que leerlos exactos.
+- razon_social: la que aparece bajo "NOMBRE, IDENTIFICACION Y DOMICILIO" o "RAZON SOCIAL", completa y con su sufijo (S.A.S., LTDA., S.A., y C.I. o similares si los lleva).
+- nit: SOLO DIGITOS, sin puntos, sin guion y SIN EL DIGITO DE VERIFICACION. Si ves "900.485.418-1", pon "900485418".
+- NO confundas el NIT con la MATRICULA MERCANTIL ni con el NUMERO DE RECIBO ni con el codigo de verificacion: son numeros distintos que aparecen cerca. La matricula va en su propio campo.
+
+LA VIGENCIA — INFORMA, NO BLOQUEA:
+- fecha_expedicion: la del CERTIFICADO ("Fecha de expedicion" o "Fecha Expedicion"), NO la de matricula ni la de renovacion.
+- ultimo_ano_renovado: el año que diga "Ultimo año renovado". Si la sociedad no ha renovado la matricula del año en curso, el certificado lo dice y es un dato relevante.
+- estado_sociedad: "activa" si nada indica lo contrario; "disuelta", "en_liquidacion" o "cancelada" si el certificado lo declara; "no_determinado" si no se puede saber.
+
+EL REPRESENTANTE LEGAL:
+Busca el apartado de NOMBRAMIENTOS o REPRESENTACION LEGAL y toma al representante legal PRINCIPAL, no al suplente. Si solo hay suplente, ponlo e indicalo en el cargo. Copia su documento si aparece.
+
+EXTRAER:
+- tipo_documento: "certificado_camara_comercio" | "rut" | "cedula" | "certificado_rues" | "ficha_homologacion" | "documento_en_blanco" | "otro"
+- es_valido: true/false
+- paginas_documento: [paginas], total_paginas: numero
+- camara_emisora: la camara que lo expide, tal cual aparece
+- razon_social, nit
+- matricula_mercantil: el numero de matricula, si aparece
+- fecha_expedicion (YYYY-MM-DD)
+- ultimo_ano_renovado
+- estado_sociedad: "activa" | "disuelta" | "en_liquidacion" | "cancelada" | "no_determinado"
+- representante_legal_nombre, representante_legal_documento, representante_legal_cargo
+- incluye_cedula_representante: true/false
+- domicilio: ciudad del domicilio principal
+- codigo_verificacion: si aparece
+- observaciones: si es_valido es false, explica en una frase QUE es el documento y por que no sirve
+
+JSON valido sin markdown:
+{"tipo_documento":"certificado_camara_comercio","es_valido":true,"paginas_documento":[1],"total_paginas":1,"camara_emisora":"","razon_social":"","nit":"","matricula_mercantil":"","fecha_expedicion":"","ultimo_ano_renovado":"","estado_sociedad":"activa","representante_legal_nombre":"","representante_legal_documento":"","representante_legal_cargo":"","incluye_cedula_representante":false,"domicilio":"","codigo_verificacion":"","observaciones":""}
 """;
 
     private const string MandatoConfig =
