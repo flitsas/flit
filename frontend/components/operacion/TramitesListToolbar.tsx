@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { RefreshCw, Star } from 'lucide-react';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { FAMILIA_OPCIONES } from '@/lib/api/types/familia-labels';
+import { TRAMITES_CONTROL_CLS } from './tramites-control-styles';
 
 /**
  * Barra de tipo de trámite del listado (`flit-tramites-chrome`). Tabs con subrayado
@@ -30,8 +31,6 @@ const MODALIDAD_TABS: { value: '' | ProcedureFamily; label: string }[] = [
   ...FAMILIA_OPCIONES,
 ];
 
-const CONTROL_CLS =
-  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white';
 
 export function TramitesListToolbar({
   modalidad,
@@ -90,7 +89,9 @@ export function TramitesListToolbar({
             aria-pressed={soloPrioritarios}
             aria-label="Mostrar solo trámites prioritarios"
             title={soloPrioritarios ? 'Mostrando solo prioritarios' : 'Mostrar solo prioritarios'}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#DFE5ED] bg-white transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14]"
+            // Cuadrado (solo icono) pero con el MISMO borde, alto y foco que el resto: la
+            // estrella conserva su amarillo, que ahí no es "activo" genérico sino prioritario.
+            className={`${TRAMITES_CONTROL_CLS} w-9 justify-center px-0`}
           >
             <Star
               className="h-4 w-4"
@@ -108,7 +109,7 @@ export function TramitesListToolbar({
             disabled={loading}
             aria-label="Actualizar listado de trámites"
             title="Actualizar"
-            className={`${CONTROL_CLS} disabled:cursor-not-allowed disabled:opacity-50`}
+            className={TRAMITES_CONTROL_CLS}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
             Actualizar

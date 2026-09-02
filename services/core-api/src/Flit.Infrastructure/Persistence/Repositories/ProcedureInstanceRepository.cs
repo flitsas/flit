@@ -1729,6 +1729,39 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     /// término automáticamente) como por el proveedor InMemory usado en los tests de este repositorio —
     /// <c>EF.Functions.ILike</c> es específico de Npgsql y no se puede ejercitar con InMemory.
     /// </summary>
+    public async Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
+        var query = db.ProcedureInstances.AsNoTracking().Where(x => x.DeletedAt == null);
+        if (tenantId is { } tid)
+            query = query.Where(x => x.TenantId == tid);
+
+        query = ApplyListFilters(query, filter);
+
+        // GROUP BY en SQL: se traen tantas filas como estados existan (siete), no los expedientes.
+        var conteos = await query
+            .GroupBy(x => x.Status)
+            .Select(g => new { Estado = g.Key, Total = g.Count() })
+            .ToListAsync(ct);
+
+        // Clave normalizada a minúsculas: el vocabulario persistido lo es, pero un dato histórico con
+        // otra caja no debe abrir una segunda entrada para el mismo estado.
+        var resultado = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in conteos)
+        {
+            var clave = (c.Estado ?? string.Empty).ToLowerInvariant();
+            resultado[clave] = resultado.GetValueOrDefault(clave) + c.Total;
+        }
+
+        return resultado;
+    }
+
+    /// <summary>Clave del `field_value` con el nombre del organismo de tránsito elegido — la misma que
+    /// proyecta <c>ListProcedureInstancesQuery</c> en <c>OrganismoTransito</c>.</summary>
+    private const string TransitOfficeNameFieldKey = "transit_office_name";
+
     private IQueryable<ProcedureInstance> ApplyListFilters(
         IQueryable<ProcedureInstance> query, ProcedureInstanceListFilter filter)
     {
@@ -1775,6 +1808,45 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                         || x.Signatures.Any(s => s.Parte == SignatureRules.ParteVendedor
                             && s.DocTipo == SignatureDocTipos.Compraventa && s.Estado == SignatureEstados.Firmada)))
                 == firmadoCompleto);
+        }
+
+        if (filter.Estados is { Count: > 0 } estados)
+        {
+            // OR entre estados: "todo lo que no está cerrado" es la consulta natural del gestor y son
+            // varios a la vez. Se normaliza a minúsculas porque el vocabulario persistido es minúscula
+            // (TramiteEstado.*) pero el query string lo teclea el cliente.
+            var normalizados = estados
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e.Trim().ToLowerInvariant())
+                .Distinct()
+                .ToList();
+            if (normalizados.Count > 0)
+                query = query.Where(x => normalizados.Contains(x.Status.ToLower()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Modalidad))
+        {
+            // La familia vive en el TIPO (ADR-0050), no en la instancia: se compara contra la
+            // navegación, igual que hace el filtro de `Firmado` para distinguir el traspaso.
+            var familia = filter.Modalidad.Trim().ToUpperInvariant();
+            query = query.Where(x => x.ProcedureType != null && x.ProcedureType.Family.ToUpper() == familia);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.TipoCodigo))
+        {
+            var codigo = filter.TipoCodigo.Trim().ToUpperInvariant();
+            query = query.Where(x => x.ProcedureType != null && x.ProcedureType.Code.ToUpper() == codigo);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.OrganismoTransito))
+        {
+            // El nombre del OT no es columna de la instancia: es el `field_value` que proyecta el
+            // listado. Subcadena en minúsculas, mismo criterio que vendedor/comprador/gestor.
+            var ot = filter.OrganismoTransito.Trim().ToLowerInvariant();
+            query = query.Where(x => x.FieldValues.Any(fv =>
+                fv.FieldKey == TransitOfficeNameFieldKey
+                && fv.ValueText != null
+                && fv.ValueText.ToLower().Contains(ot)));
         }
 
         if (filter.CreatedFrom is { } createdFrom)

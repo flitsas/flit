@@ -23,45 +23,67 @@ describe('buildTramitesGridLayout', () => {
   it('incluye lo operativo y deja opcionales fuera del default', () => {
     expect(DEFAULT_TRAMITES_VISIBLE_COLUMNS).toEqual([
       'radicado',
-      'vin',
       'placa',
       'propietario',
       'comprador',
-      'firmado',
       'tramite',
       'secretaria',
-      'gestor',
-      'fuente',
     ]);
     // Fuera del default porque su dato viaja apilado dentro de `radicado` (fechas), `placa`
     // (vehículo) y `tramite` (estado, paso). Siguen existiendo en el catálogo: activarlas desde
     // el selector MUEVE el dato a su columna, no lo duplica.
-    for (const compuesta of ['vehiculo', 'paso', 'estado', 'fechaCreacion', 'fechaActualizacion']) {
+    for (const compuesta of [
+      'vin',
+      'vehiculo',
+      'paso',
+      'estado',
+      'fechaCreacion',
+      'fechaActualizacion',
+    ]) {
       expect(DEFAULT_TRAMITES_VISIBLE_COLUMNS).not.toContain(compuesta);
       expect(TRAMITES_COLUMNS.map((c) => c.key)).toContain(compuesta);
     }
-    // La acreditación por parte va dentro de la celda del actor, nunca como columna propia.
-    expect(TRAMITES_COLUMNS.map((c) => c.key)).not.toContain('firmaVendedor');
-    expect(TRAMITES_COLUMNS.map((c) => c.key)).not.toContain('firmaComprador');
+    // Fuera del default por decisión de producto, no por estar apiladas: se activan desde el
+    // selector y la preferencia del gestor manda a partir de ahí.
+    for (const opcional of ['gestor', 'fuente']) {
+      expect(DEFAULT_TRAMITES_VISIBLE_COLUMNS).not.toContain(opcional);
+      expect(TRAMITES_COLUMNS.map((c) => c.key)).toContain(opcional);
+    }
+    // La acreditación va DENTRO de la celda de su actor: ni una columna por parte ni una columna
+    // única que las agrupe. `firmado` era esa columna única y dejó de existir.
+    for (const inexistente of ['firmado', 'firmaVendedor', 'firmaComprador']) {
+      expect(TRAMITES_COLUMNS.map((c) => c.key)).not.toContain(inexistente);
+    }
+    // VIN y marca/modelo se leen apilados dentro de `placa`, pero siguen teniendo su columna de
+    // desglose: encenderla MUEVE el dato, no lo duplica.
+    for (const desglose of ['vin', 'vehiculo']) {
+      expect(TRAMITES_COLUMNS.find((c) => c.key === desglose)?.group).toBe('Desglose adicional');
+    }
+    // Y ninguna de las dos puede rotularse "Vehículo": ese rótulo es el de la columna fundida.
+    expect(TRAMITES_COLUMNS.filter((c) => c.label === 'Vehículo').map((c) => c.key)).toEqual([
+      'placa',
+    ]);
   });
 
   it('el orden del catálogo es el orden real de la tabla: primero el listado, luego los desgloses', () => {
     const keys = TRAMITES_COLUMNS.map((c) => c.key);
-    // Las 10 del listado van al frente, en el orden en que se leen de izquierda a derecha.
-    expect(keys.slice(0, 10)).toEqual([
+    // Las 8 del listado van al frente, en el orden en que se leen de izquierda a derecha.
+    expect(keys.slice(0, 8)).toEqual([
       'radicado',
-      'vin',
       'placa',
       'propietario',
       'comprador',
-      'firmado',
       'tramite',
       'secretaria',
       'gestor',
       'fuente',
     ]);
-    // Y son exactamente las visibles por defecto: la tabla en reposo == el grupo "Listado".
-    expect(keys.slice(0, 10)).toEqual([...DEFAULT_TRAMITES_VISIBLE_COLUMNS]);
+    // Las visibles por defecto son un SUBCONJUNTO del grupo "Listado" —no todo el grupo— y se
+    // leen en el mismo orden: es lo que garantiza que la cabecera no se reordene al ocultar una.
+    const listado = keys.slice(0, 8);
+    expect(listado.filter((k) => DEFAULT_TRAMITES_VISIBLE_COLUMNS.includes(k))).toEqual([
+      ...DEFAULT_TRAMITES_VISIBLE_COLUMNS,
+    ]);
   });
 
   it('cada columna declara su grupo para el desplegable, sin mezclar los dos bloques', () => {
@@ -117,14 +139,35 @@ describe('buildTramitesGridLayout', () => {
 /**
  * `buildTramitesColWidths` es la contraparte de `buildTramitesGridLayout` para `<colgroup>`
  * (que no admite `fr`): reparte los mismos pesos de TRAMITES_COLUMNS como porcentaje, en el
- * mismo orden canónico, salvo la pista de Selección que es de ancho fijo.
+ * mismo orden canónico. Las pistas fijas —Selección, las columnas `fixed` y Acciones— salen en su
+ * propia unidad y el resto les cede su parte proporcional con `calc()`.
  */
 describe('buildTramitesColWidths', () => {
-  /** Suma solo las pistas en porcentaje (la de Selección, si aparece, va en rem y no cuenta). */
+  /**
+   * Porcentaje de una pista flexible, siempre de la forma `calc(12.3456% - 40.50px - 0.2778rem)`
+   * (el descuento en `rem` solo aparece con pista de Selección). `null` en una pista fija, que no
+   * lleva porcentaje: `150px` o `2.25rem`.
+   */
+  function percentOf(width: string): number | null {
+    const match = /(-?\d+(?:\.\d+)?)%/.exec(width);
+    return match ? parseFloat(match[1]) : null;
+  }
+
+  /** Descuento en `px` de una pista `calc(...)`; 0 si no descuenta nada. */
+  function pxDiscountOf(width: string): number {
+    const match = /-\s*(\d+(?:\.\d+)?)px/.exec(width);
+    return match ? parseFloat(match[1]) : 0;
+  }
+
+  /** Descuento en `rem` de una pista `calc(...)`; 0 si no descuenta nada. */
+  function remDiscountOf(width: string): number {
+    const match = /-\s*(\d+(?:\.\d+)?)rem/.exec(width);
+    return match ? parseFloat(match[1]) : 0;
+  }
+
+  /** Suma el porcentaje de las pistas flexibles (las fijas no llevan y no cuentan). */
   function sumPercent(widths: string[]): number {
-    return widths
-      .filter((w) => w.endsWith('%'))
-      .reduce((sum, w) => sum + parseFloat(w), 0);
+    return widths.reduce((sum, w) => sum + (percentOf(w) ?? 0), 0);
   }
 
   it('la suma de los porcentajes da 100% dentro de tolerancia', () => {
@@ -138,7 +181,7 @@ describe('buildTramitesColWidths', () => {
     expect(shuffled).toEqual(canonical);
   });
 
-  it('la pista de Selección solo aparece cuando se pide, es fija (no en %) y no altera el 100% del resto', () => {
+  it('la pista de Selección solo aparece cuando se pide, es fija (no en %) y el resto le cede su parte proporcional', () => {
     const without = buildTramitesColWidths(['radicado', 'placa']);
     const withSelect = buildTramitesColWidths(['radicado', 'placa'], {
       includeSelectColumn: true,
@@ -151,8 +194,50 @@ describe('buildTramitesColWidths', () => {
     expect(withSelect[0].endsWith('%')).toBe(false);
     // El resto (sin la pista fija) sigue sumando 100%.
     expect(sumPercent(withSelect)).toBeCloseTo(100, 1);
-    // Y son proporcionalmente iguales a la versión sin Selección (mismos pesos fr, mismo total).
-    expect(withSelect.slice(1)).toEqual(without);
+    // Mismos pesos fr → mismos porcentajes que la versión sin Selección.
+    expect(withSelect.slice(1).map(percentOf)).toEqual(without.map(percentOf));
+    // La tabla va a `width: 100%`: si el 100% se repartiera íntegro entre estas pistas, la fila
+    // desbordaría el ancho fijo de la pista de Selección. Por eso cada una descuenta su parte
+    // proporcional y los descuentos suman EXACTAMENTE esa pista.
+    // Solo las flexibles ceden: Acciones es una pista fija en px y no descuenta nada.
+    const descuentos = withSelect.filter((w) => percentOf(w) !== null).map(remDiscountOf);
+    expect(descuentos.every((d) => d > 0)).toBe(true);
+    expect(descuentos.reduce((sum, d) => sum + d, 0)).toBeCloseTo(2.25, 2);
+    // Sin pista de Selección no hay rem que ceder, pero sí el ancho de Acciones: las flexibles
+    // siguen siendo `calc()` con descuento en px y ninguna descuenta rem.
+    expect(without.map(remDiscountOf).every((d) => d === 0)).toBe(true);
+  });
+
+  it('las columnas de dato atómico son de ancho FIJO: no crecen y el resto les cede su parte', () => {
+    // El default no trae ninguna fija, así que se mide sobre él MÁS `fuente` (etiqueta corta y
+    // conocida), que es de las que no ganan nada con más espacio.
+    const visibles = [...DEFAULT_TRAMITES_VISIBLE_COLUMNS, 'fuente'];
+    const widths = buildTramitesColWidths(visibles);
+    const orden = TRAMITES_COLUMNS.filter((c) => visibles.includes(c.key)).map((c) => c.key);
+    const porClave = new Map(orden.map((key, index) => [key, widths[index]]));
+    const defPorClave = new Map(TRAMITES_COLUMNS.map((c) => [c.key, c]));
+
+    // Fuente sale en px exactos (su `minPx`), sin porcentaje: no absorbe el sobrante.
+    expect(porClave.get('fuente')).toBe(`${defPorClave.get('fuente')!.minPx}px`);
+    expect(percentOf(porClave.get('fuente')!)).toBeNull();
+    // Acciones (estructural, no está en la preferencia) va última y también es fija.
+    expect(widths[widths.length - 1]).toMatch(/^\d+px$/);
+    // Las de texto sí reparten el 100% y descuentan, entre todas, exactamente lo que ocupa lo
+    // fijo: la columna fija visible + Acciones.
+    const flexibles = widths.filter((w) => percentOf(w) !== null);
+    const fijoEsperado =
+      defPorClave.get('fuente')!.minPx + parseFloat(widths[widths.length - 1]);
+    expect(flexibles.reduce((sum, w) => sum + pxDiscountOf(w), 0)).toBeCloseTo(fijoEsperado, 0);
+  });
+
+  it('el peso de una columna flexible es su piso: reparte en proporción a lo que necesita', () => {
+    // `secretaria` (piso 190) crece más que `gestor` (piso 160) en la misma proporción que sus
+    // pisos. Es lo que garantiza que ninguna caiga por debajo de su mínimo al comprimir la tabla.
+    const widths = buildTramitesColWidths(['secretaria', 'gestor']);
+    const [secretaria, gestor] = widths.map((w) => percentOf(w));
+    expect(secretaria).not.toBeNull();
+    expect(gestor).not.toBeNull();
+    expect(secretaria! / gestor!).toBeCloseTo(190 / 160, 3);
   });
 
   it('cae a TODAS las columnas si `visibleKeys` no casa con ninguna conocida (mismo fallback que buildTramitesGridLayout)', () => {

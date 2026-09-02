@@ -160,7 +160,7 @@ describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', ()
     await waitFor(() => expect(mocks.ruesPreview).toHaveBeenCalled());
     const razonSocial = await screen.findByLabelText('Razón social');
     expect(razonSocial).toHaveTextContent(/^TRANSPORTES SAS$/);
-    expect(screen.queryByText(/Precargado desde el directorio/i)).toBeNull();
+    expect(screen.queryByText('Representante:')).toBeNull();
     await waitFor(() => expect(gateVigente(onGate)).toBe(true));
   });
 

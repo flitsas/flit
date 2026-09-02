@@ -123,7 +123,8 @@ async function renderPreloadedJuridicalBuyer() {
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
   await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
   await screen.findByText('Empresa encontrada en RUES');
-  await screen.findByText('Precargado desde el directorio de la compañía');
+  // La tarjeta del directorio ya no se anuncia con un título propio: se reconoce por sus datos.
+  await screen.findByText('Representante:');
   return user;
 }
 
@@ -135,11 +136,11 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
 
       const boton = screen.getByRole('button', { name: 'Actualizar RUNT' });
       expect(boton).toBeDisabled();
-      // AC5 — el motivo no depende solo de la opacidad: hay un texto accesible asociado.
-      expect(boton).toHaveAttribute('aria-describedby', '0-rl-runt-preloaded-hint');
-      expect(
-        screen.getByText(/Cambia el tipo o número de documento del/i),
-      ).toBeInTheDocument();
+      // El texto que explicaba el motivo del deshabilitado se retiró de la pantalla, y con él la
+      // descripción accesible del botón (AC5 de la novedad 28). Queda fijado aquí para que no
+      // vuelva por accidente: hoy el botón se deshabilita sin decir por qué.
+      expect(boton).not.toHaveAttribute('aria-describedby');
+      expect(screen.queryByText(/Cambia el tipo o número de documento del/i)).toBeNull();
     },
     25000,
   );
@@ -298,7 +299,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
       await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
       await screen.findByText('Empresa encontrada en RUES');
-      await screen.findByText('Precargado desde el directorio de la compañía');
+      await screen.findByText('Representante:');
 
       const mecanismo = document.getElementById('0-mecanismo-firma') as HTMLSelectElement;
       await user.selectOptions(mecanismo, 'identidad');

@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ChevronDown, Search, X } from 'lucide-react';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { controlCls } from './tramites-control-styles';
 
 /**
  * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
@@ -30,8 +31,15 @@ export const PERIODOS = [
 ] as const;
 export type Periodo = (typeof PERIODOS)[number];
 
-/** Los 5 filtros específicos que YA existen hoy: ninguno desaparece, solo se mudan al popover. */
-export type FiltroEspecificoKey = 'placa' | 'vendedor' | 'comprador' | 'gestor' | 'firmado';
+/** Filtros específicos disponibles en el popover "+ Filtro". */
+export type FiltroEspecificoKey =
+  | 'placa'
+  | 'vendedor'
+  | 'comprador'
+  | 'gestor'
+  | 'firmado'
+  | 'organismo'
+  | 'tipo';
 
 const FILTROS_ESPECIFICOS_GRUPOS: {
   grupo: string;
@@ -48,6 +56,10 @@ const FILTROS_ESPECIFICOS_GRUPOS: {
   {
     grupo: 'TRÁMITE',
     items: [
+      // El organismo es por dónde trabaja un gestor, y el TIPO concreto es lo único que separa los
+      // quince trámites que la familia "Otros" agrupa bajo una sola pestaña.
+      { key: 'organismo', label: 'Organismo de tránsito' },
+      { key: 'tipo', label: 'Tipo de trámite' },
       { key: 'gestor', label: 'Gestor' },
       { key: 'firmado', label: 'Firmado' },
     ],
@@ -68,11 +80,6 @@ const INPUT_CLS =
 const POPOVER_SURFACE_CLS =
   'rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#162744]';
 
-const FILTRO_BTN_CLS =
-  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#557EFF] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14]';
-
-const COLS_BTN_CLS =
-  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white';
 
 /**
  * Calcula el rango de fechas (local, `yyyy-mm-dd`) que corresponde a un periodo predefinido.
@@ -221,7 +228,7 @@ function PeriodoPopover({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        className={activo ? `${COLS_BTN_CLS} border-[#557EFF] text-[#3B4FD6]` : COLS_BTN_CLS}
+        className={controlCls(activo)}
       >
         {activo ? periodo : 'Periodo'}
         <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -325,6 +332,10 @@ interface FiltroEspecificoPopoverProps {
   onGestorChange: (v: string) => void;
   firmado: '' | 'true' | 'false';
   onFirmadoChange: (v: '' | 'true' | 'false') => void;
+  organismo: string;
+  onOrganismoChange: (v: string) => void;
+  tipo: string;
+  onTipoChange: (v: string) => void;
   onAplicar: () => void;
   onEmpezarDeCero: () => void;
   empezarDeCeroDisabled: boolean;
@@ -348,6 +359,10 @@ function FiltroEspecificoPopover({
   onGestorChange,
   firmado,
   onFirmadoChange,
+  organismo,
+  onOrganismoChange,
+  tipo,
+  onTipoChange,
   onAplicar,
   onEmpezarDeCero,
   empezarDeCeroDisabled,
@@ -381,7 +396,9 @@ function FiltroEspecificoPopover({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        className={FILTRO_BTN_CLS}
+        // Marcado en azul cuando hay filtros aplicados, igual que "Periodo": antes el contador
+        // era la única señal, y el azul del texto estaba puesto en reposo, sin significar nada.
+        className={controlCls(count > 0)}
       >
         {count > 0 ? `+ Filtro (${count})` : '+ Filtro'}
         <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -481,6 +498,27 @@ function FiltroEspecificoPopover({
                           className={`${INPUT_CLS} w-full`}
                         />
                       ) : null}
+                      {item.key === 'organismo' ? (
+                        <input
+                          type="search"
+                          aria-label="Filtrar por organismo de tránsito"
+                          value={organismo}
+                          onChange={(e) => onOrganismoChange(e.target.value)}
+                          placeholder="Nombre o parte del nombre"
+                          className={`${INPUT_CLS} w-full`}
+                        />
+                      ) : null}
+                      {item.key === 'tipo' ? (
+                        <input
+                          type="search"
+                          aria-label="Filtrar por tipo de trámite"
+                          value={tipo}
+                          onChange={(e) => onTipoChange(e.target.value)}
+                          placeholder="Código del tipo"
+                          title="Código exacto del tipo de trámite (p. ej. TRASPASO_STANDARD)"
+                          className={`${INPUT_CLS} w-full`}
+                        />
+                      ) : null}
                       {item.key === 'firmado' ? (
                         <select
                           aria-label="Filtrar por firma de compraventa"
@@ -548,6 +586,10 @@ export interface TramitesFiltrosBarProps {
   onGestorChange: (v: string) => void;
   firmado: '' | 'true' | 'false';
   onFirmadoChange: (v: '' | 'true' | 'false') => void;
+  organismo: string;
+  onOrganismoChange: (v: string) => void;
+  tipo: string;
+  onTipoChange: (v: string) => void;
 
   search: string;
   onSearchChange: (v: string) => void;
@@ -593,6 +635,10 @@ export function TramitesFiltrosBar({
   onGestorChange,
   firmado,
   onFirmadoChange,
+  organismo,
+  onOrganismoChange,
+  tipo,
+  onTipoChange,
   search,
   onSearchChange,
   onAplicar,
@@ -647,6 +693,10 @@ export function TramitesFiltrosBar({
         onGestorChange={onGestorChange}
         firmado={firmado}
         onFirmadoChange={onFirmadoChange}
+        organismo={organismo}
+        onOrganismoChange={onOrganismoChange}
+        tipo={tipo}
+        onTipoChange={onTipoChange}
         onAplicar={onAplicar}
         onEmpezarDeCero={onEmpezarDeCero}
         empezarDeCeroDisabled={empezarDeCeroDisabled}
@@ -674,6 +724,8 @@ export interface TramitesFiltrosChipsProps {
   appliedComprador: string;
   appliedGestor: string;
   appliedFirmado: '' | 'true' | 'false';
+  appliedOrganismo: string;
+  appliedTipo: string;
 }
 
 /**
@@ -691,6 +743,8 @@ export function TramitesFiltrosChips({
   appliedComprador,
   appliedGestor,
   appliedFirmado,
+  appliedOrganismo,
+  appliedTipo,
 }: TramitesFiltrosChipsProps) {
   const activosOrdenados = FILTROS_ESPECIFICOS_ORDEN.filter((k) => filtrosEspecificos.has(k));
   const periodoActivo = periodo !== 'Sin periodo';
@@ -707,6 +761,10 @@ export function TramitesFiltrosChips({
         return appliedGestor;
       case 'firmado':
         return appliedFirmado === 'true' ? 'Firmado' : appliedFirmado === 'false' ? 'Pendiente' : '';
+      case 'organismo':
+        return appliedOrganismo;
+      case 'tipo':
+        return appliedTipo;
       default:
         return '';
     }

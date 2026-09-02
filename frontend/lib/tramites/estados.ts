@@ -52,57 +52,78 @@ export interface EstadoChipStyle {
 
 /**
  * Paleta de estados del diseño de la pantalla de trámites. Cada estado tiene su propio tono —
- * gris, azul, violeta, verde, cian, naranja y vino — en vez de reutilizar una escala de cinco.
+ * gris pizarra, azul, verde azulado, verde lima, naranja, rojo y vino— en vez de reutilizar una
+ * escala de cinco.
  *
- * `accent` es el tono exacto del diseño; `color` es ese mismo tono oscurecido lo justo para que
- * el texto del chip llegue a 4.5:1. Varios de los tonos puros se quedan cortos como texto
- * (#557EFF ≈ 3.7:1, #16A34A ≈ 3.1:1, #FF4E00 ≈ 3.5:1, #00DBD5 muy por debajo), así que se
- * conserva la identidad cromática y se ajusta solo la luminosidad, que es lo que corresponde
- * cuando un color del prototipo no cumple contraste en un uso concreto.
+ * El tono lo MANDA EL ICONO. Los siete iconos de estado (`public/assets/estados/*.svg`) traen su
+ * círculo de color pintado dentro, así que `accent` es exactamente ese color: si el chip usara
+ * otro, el mismo estado se vería de dos colores distintos en la misma pantalla —la tira de KPIs
+ * y el chip de la fila— y un tono acabaría significando dos estados según dónde se mirara.
+ *
+ * `color` es ese mismo tono oscurecido lo justo para que el TEXTO del chip llegue a 4.5:1 sobre
+ * `bg`. Casi ninguno de los tonos puros lo cumple como texto (#557EFF ≈ 3.7:1, #8CC63F ≈ 1.9:1,
+ * #FF4E00 ≈ 3.5:1, #00A99D ≈ 2.7:1), así que se conserva la identidad cromática y se ajusta solo
+ * la luminosidad, que es lo que corresponde cuando un color del prototipo no cumple contraste en
+ * un uso concreto. `borrador` y `anulado` ya cumplen y se usan tal cual.
  */
 export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
   borrador: {
-    bg: 'rgba(148,163,184,0.16)',
-    color: '#64748B',
-    border: 'rgba(148,163,184,0.35)',
-    accent: '#94A3B8',
+    bg: 'rgba(94,106,123,0.14)',
+    color: '#5E6A7B',
+    border: 'rgba(94,106,123,0.35)',
+    accent: '#5E6A7B',
   },
   preparado: {
     bg: 'rgba(85,126,255,0.14)',
-    color: '#3B4FD6',
+    color: '#4465CC',
     border: 'rgba(85,126,255,0.35)',
     accent: '#557EFF',
   },
   entregado: {
-    bg: 'rgba(139,92,246,0.14)',
-    color: '#6D28D9',
-    border: 'rgba(139,92,246,0.35)',
-    accent: '#7C3AED',
+    bg: 'rgba(0,169,157,0.14)',
+    color: '#007A71',
+    border: 'rgba(0,169,157,0.35)',
+    accent: '#00A99D',
   },
   aprobado: {
-    bg: 'rgba(34,197,94,0.14)',
-    color: '#15803D',
-    border: 'rgba(34,197,94,0.35)',
-    accent: '#16A34A',
+    bg: 'rgba(140,198,63,0.14)',
+    color: '#557926',
+    border: 'rgba(140,198,63,0.35)',
+    accent: '#8CC63F',
   },
   rechazado: {
-    bg: 'rgba(255,78,0,0.14)',
-    color: '#C2410C',
-    border: 'rgba(255,78,0,0.32)',
-    accent: '#FF4E00',
+    bg: 'rgba(255,0,0,0.14)',
+    color: '#CC0000',
+    border: 'rgba(255,0,0,0.35)',
+    accent: '#FF0000',
   },
   anulado: {
-    bg: 'rgba(153,27,27,0.14)',
-    color: '#991B1B',
-    border: 'rgba(153,27,27,0.32)',
-    accent: '#991B1B',
+    bg: 'rgba(193,39,45,0.14)',
+    color: '#C1272D',
+    border: 'rgba(193,39,45,0.35)',
+    accent: '#C1272D',
   },
   subsanacion: {
-    bg: 'rgba(0,219,213,0.16)',
-    color: '#0F766E',
-    border: 'rgba(0,219,213,0.35)',
-    accent: '#00DBD5',
+    bg: 'rgba(255,78,0,0.14)',
+    color: '#BF3B00',
+    border: 'rgba(255,78,0,0.35)',
+    accent: '#FF4E00',
   },
+};
+
+/**
+ * Icono de cada estado: el SVG de la línea gráfica, servido desde `public/`. Trae el círculo de
+ * color dentro (el mismo `accent` de arriba), así que se pinta tal cual — sin pastilla tintada
+ * alrededor y sin recolorear por CSS.
+ */
+export const ESTADO_ICONO: Record<EstadoTramite, string> = {
+  borrador: '/assets/estados/borrador.svg',
+  anulado: '/assets/estados/anulado.svg',
+  preparado: '/assets/estados/preparado.svg',
+  entregado: '/assets/estados/entregado.svg',
+  aprobado: '/assets/estados/aprobado.svg',
+  rechazado: '/assets/estados/rechazado.svg',
+  subsanacion: '/assets/estados/subsanacion.svg',
 };
 
 function esEstadoTramite(value: string): value is EstadoTramite {

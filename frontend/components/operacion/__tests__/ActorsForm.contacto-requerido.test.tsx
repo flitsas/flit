@@ -68,6 +68,62 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 
+describe('ActorsForm — gate de campos obligatorios hacia la shell', () => {
+  // El pie del asistente deshabilita "Continuar y guardar" con esta señal. Antes el botón estaba
+  // siempre activo y el bloqueo llegaba tras el clic: el gestor pulsaba y no pasaba nada visible.
+  it('reporta false mientras falten campos y true en cuanto se completan', async () => {
+    const user = userEvent.setup();
+    const onGate = vi.fn();
+    render(
+      <ActorsForm
+        instanceId={INSTANCE}
+        modalidad="matricula_inicial"
+        onCamposRequeridosGateChange={onGate}
+      />,
+    );
+
+    await waitFor(() => expect(onGate).toHaveBeenCalled());
+    // Paso recién abierto: nada capturado, nada que dejar avanzar.
+    expect(onGate).toHaveBeenLastCalledWith(false);
+
+    await user.type(await screen.findByLabelText(/Número de documento/), '12345');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await screen.findByText(/Persona encontrada en RUNT/i);
+    // Con la consulta hecha pero el contacto a medias sigue bloqueado.
+    expect(onGate).toHaveBeenLastCalledWith(false);
+
+    await user.type(screen.getByLabelText(/Correo electrónico/), 'juan@example.com');
+    await user.type(screen.getByLabelText(/^Teléfono/), '3001234567');
+    await user.type(screen.getByLabelText(/^Ciudad/), 'Bogota');
+    await user.type(screen.getByLabelText(/^Dirección/), 'Calle 1 # 2-3');
+
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(true));
+  });
+
+  // El gate NO puede traer consigo el marcado en rojo: `showErrors` es del formulario entero, así
+  // que encenderlo mientras se teclea el documento pintaba también las tarjetas de copropietarios
+  // recién añadidas, vacías y sin tocar. El motivo del bloqueo lo dice el pie del asistente.
+  it('no marca ningún campo mientras el gestor está capturando', async () => {
+    const user = userEvent.setup();
+    render(
+      <ActorsForm
+        instanceId={INSTANCE}
+        modalidad="matricula_inicial"
+        onCamposRequeridosGateChange={vi.fn()}
+      />,
+    );
+
+    await user.type(await screen.findByLabelText(/Número de documento/), '12345');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await screen.findByText(/Persona encontrada en RUNT/i);
+
+    // Contacto a medias, pero sin haber pulsado guardar: ni un solo campo en rojo.
+    expect(screen.queryByText('Teléfono requerido')).toBeNull();
+    expect(screen.queryByText('Ciudad requerida')).toBeNull();
+    expect(screen.queryByText('Dirección requerida')).toBeNull();
+  });
+});
+
 describe('ActorsForm — contacto requerido (HU #11595)', () => {
   // Escenario: actor con contacto completo permite continuar.
   it('AC1: comprador con nombre, documento, email, ciudad, dirección y teléfono permite guardar', async () => {
