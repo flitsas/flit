@@ -313,19 +313,56 @@ export function identityStatusForActor(
   biometric: readonly Pick<BiometricValidation, 'documentNumber' | 'partyRole' | 'status' | 'ordinal'>[],
   firmaBaulActores: readonly Pick<FirmaBaulActorCoberturaDto, 'parte' | 'ordinal'>[] = [],
 ): ActorIdentityStatus {
-  const numero = actor.numeroDocumento.trim();
-  const mismaParte = (partyRole: string | null) => partyRole === actor.rol || partyRole === null;
-  const bio = biometric.find((b) => {
-    if (!mismaParte(b.partyRole)) return false;
-    if (b.ordinal != null) return b.ordinal === ordinal;
-    return numero ? b.documentNumber.trim() === numero : false;
-  });
+  const bio = biometric.find((b) => biometricValidationMatchesActor(b, actor, ordinal));
   if (bio) {
     return BIOMETRIC_ESTADO_STATUS[bio.status] ?? { label: bio.status, tone: 'neutral' };
   }
-  const cubiertoPorBaul = firmaBaulActores.some((c) => c.parte === actor.rol && c.ordinal === ordinal);
-  if (cubiertoPorBaul) {
+  if (isCoveredByVaultForActor(firmaBaulActores, actor.rol, ordinal)) {
     return { label: 'Firma del baúl', tone: 'info' };
   }
   return { label: 'Pendiente', tone: 'warning' };
+}
+
+/**
+ * Predicado de correlación actor↔validación biométrica — la pieza compartida entre
+ * `identityStatusForActor` (solo el estado/tono) y `BiometricStep.tsx` (necesita la fila COMPLETA:
+ * score, captureUrl, intentos, certificado…, no solo un label). Un solo lugar donde vive la regla
+ * de correlación evita que las dos pantallas de solo lectura terminen divergiendo.
+ *
+ * Prioridad: `ordinal` (ADR-0053, evita comparar documentos — para persona jurídica el documento
+ * del sujeto de identidad es el del representante legal, no el NIT del actor); fallback por
+ * documento SOLO para filas históricas sin `ordinal` (anteriores a ADR-0053).
+ */
+export function biometricValidationMatchesActor(
+  validation: Pick<BiometricValidation, 'documentNumber' | 'partyRole' | 'ordinal'>,
+  actor: Pick<ProcedureActor, 'rol' | 'numeroDocumento'>,
+  ordinal: number,
+): boolean {
+  const mismaParte = validation.partyRole === actor.rol || validation.partyRole === null;
+  if (!mismaParte) return false;
+  if (validation.ordinal != null) return validation.ordinal === ordinal;
+  const numero = actor.numeroDocumento.trim();
+  return numero ? validation.documentNumber.trim() === numero : false;
+}
+
+/**
+ * TODAS las validaciones (historial completo, no solo la vigente) que corresponden a UN actor
+ * específico — `BiometricStep.tsx` las necesita para su propio "Historial de validaciones (N)" por
+ * actor, no por lado. Mismo predicado que `identityStatusForActor`, sin filtrar por estado.
+ */
+export function validationsForActor<T extends Pick<BiometricValidation, 'documentNumber' | 'partyRole' | 'ordinal'>>(
+  validations: readonly T[],
+  actor: Pick<ProcedureActor, 'rol' | 'numeroDocumento'>,
+  ordinal: number,
+): T[] {
+  return validations.filter((v) => biometricValidationMatchesActor(v, actor, ordinal));
+}
+
+/** Cobertura del baúl de UN actor específico (ordinal dentro de su rol) — nunca por lado. */
+export function isCoveredByVaultForActor(
+  firmaBaulActores: readonly Pick<FirmaBaulActorCoberturaDto, 'parte' | 'ordinal'>[],
+  rol: ActorRol,
+  ordinal: number,
+): boolean {
+  return firmaBaulActores.some((c) => c.parte === rol && c.ordinal === ordinal);
 }

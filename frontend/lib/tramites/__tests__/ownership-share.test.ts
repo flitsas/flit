@@ -7,17 +7,20 @@ import {
   OWNERSHIP_SUM_MESSAGE,
   OWNERSHIP_ZERO_MESSAGE,
   applySolidarioAbsorption,
+  biometricValidationMatchesActor,
   computeOrdinals,
   defaultPercentageForNewActor,
   duplicateDocumentIndicesWithinSide,
   identityStatusForActor,
   indicesForRol,
+  isCoveredByVaultForActor,
   isFirstOfRol,
   redistributeAfterRemoval,
   round2,
   shiftIndexMapOnInsert,
   shiftIndexMapOnRemove,
   validateOwnershipShares,
+  validationsForActor,
   withOwnershipFields,
 } from '../ownership-share';
 
@@ -465,5 +468,35 @@ describe('identityStatusForActor', () => {
       { documentNumber: '', partyRole: 'comprador' as const, status: 'aprobado' as const, ordinal: null },
     ];
     expect(identityStatusForActor(sinDocumento, 1, biometric).label).toBe('Pendiente');
+  });
+});
+
+describe('biometricValidationMatchesActor / validationsForActor (BiometricStep.tsx)', () => {
+  const comprador2 = { rol: 'comprador' as const, numeroDocumento: '900222333' };
+
+  it('correlaciona por ordinal, no por documento del actor (persona juridica: el documento de la fila es el del RL)', () => {
+    const validacionDelRl = {
+      documentNumber: '80112233',
+      partyRole: 'comprador' as const,
+      ordinal: 2,
+    };
+    expect(biometricValidationMatchesActor(validacionDelRl, comprador2, 2)).toBe(true);
+    expect(biometricValidationMatchesActor(validacionDelRl, comprador2, 1)).toBe(false);
+  });
+
+  it('validationsForActor trae el historial de UN actor, no el de todo el lado', () => {
+    const validations = [
+      { documentNumber: '111', partyRole: 'comprador' as const, ordinal: 1 },
+      { documentNumber: '80112233', partyRole: 'comprador' as const, ordinal: 2 },
+      { documentNumber: '80112233', partyRole: 'comprador' as const, ordinal: 2 },
+    ];
+    expect(validationsForActor(validations, comprador2, 2)).toHaveLength(2);
+    expect(validationsForActor(validations, { rol: 'comprador', numeroDocumento: '111' }, 1)).toHaveLength(1);
+  });
+
+  it('isCoveredByVaultForActor solo cubre al ordinal exacto, no a todo el lado', () => {
+    const firmaBaulActores = [{ parte: 'comprador' as const, ordinal: 1 }];
+    expect(isCoveredByVaultForActor(firmaBaulActores, 'comprador', 1)).toBe(true);
+    expect(isCoveredByVaultForActor(firmaBaulActores, 'comprador', 2)).toBe(false);
   });
 });
