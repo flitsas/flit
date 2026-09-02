@@ -5,6 +5,7 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using System.Text;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -137,6 +138,11 @@ public sealed class AdjuntarLicenciaTransitoHandler(
                     : null,
                 ocr_placa = ocrResultado?.Data?["vehiculo_placa"]?.GetValue<string>(),
                 ocr_vin = ocrResultado?.Data?["vehiculo_vin"]?.GetValue<string>(),
+                // HU #12043 — deja constancia de si la licencia era de ESTE vehículo. Sin esto un
+                // expediente podía cerrarse con `ocr_verificada: true` y la licencia de otro carro:
+                // el documento era una licencia legítima, solo que no la del trámite.
+                ocr_vin_coincide = Coincide(ocrResultado?.Data?["vehiculo_vin"]?.GetValue<string>(), instance.Vin),
+                ocr_placa_coincide = Coincide(ocrResultado?.Data?["vehiculo_placa"]?.GetValue<string>(), instance.Plate),
             }),
             CreatedAt = now,
             CreatedBy = resolvedUploadedBy,
@@ -154,6 +160,30 @@ public sealed class AdjuntarLicenciaTransitoHandler(
     /// no se pudo hacer —proveedor caído, sin API key, archivo mayor de 10 MB o formato no
     /// soportado—, que la pantalla presenta como «no analizado», no como rechazo.
     /// </summary>
+    /// <summary>
+    /// Compara un identificador leído por el OCR contra el del trámite, ignorando espacios, guiones
+    /// y mayúsculas. Devuelve <c>null</c> cuando falta cualquiera de los dos lados: sin las dos
+    /// mitades no hay nada que afirmar, y un <c>false</c> ahí sería una acusación inventada.
+    /// </summary>
+    private static bool? Coincide(string? leido, string? esperado)
+    {
+        var a = Normalizar(leido);
+        var b = Normalizar(esperado);
+        if (a.Length == 0 || b.Length == 0) return null;
+        return string.Equals(a, b, StringComparison.Ordinal);
+    }
+
+    private static string Normalizar(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor)) return string.Empty;
+        var sb = new StringBuilder(valor.Length);
+        foreach (var c in valor)
+        {
+            if (char.IsLetterOrDigit(c)) sb.Append(char.ToUpperInvariant(c));
+        }
+        return sb.ToString();
+    }
+
     private async Task<DocumentOcrResponse?> AnalizarSinBloquearAsync(byte[] bytes, CancellationToken ct)
     {
         if (ocr is null)

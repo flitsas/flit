@@ -143,6 +143,91 @@ function evaluarLtOcr(data: Record<string, unknown> | null | undefined): LtOcrEs
   return { fase: "listo", data, valido, motivo };
 }
 
+/**
+ * Pares de caracteres que el OCR confunde de forma sistemática al leer placas y VIN sobre un
+ * escaneo. Existen para no gritar «otro vehículo» por un solo carácter mal leído: un VIN que
+ * difiere en un `0` donde debía ir una `O` casi siempre es el mismo vehículo y una lectura
+ * imperfecta, mientras que uno que difiere en seis caracteres es, sin ambigüedad, otro carro.
+ */
+const CARACTERES_CONFUNDIBLES: ReadonlyArray<string> = ["0O", "1I", "1L", "5S", "8B", "2Z", "6G", "4A"];
+
+/** Deja el identificador comparable: sin espacios, guiones ni minúsculas. */
+export function normalizarIdentificador(valor: string): string {
+  return valor.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export type CotejoResultado = "coincide" | "posible_lectura" | "difiere";
+
+/**
+ * Compara lo que el OCR leyó contra lo que el trámite dice. Devuelve `null` cuando falta cualquiera
+ * de los dos lados: sin las dos mitades no hay nada que afirmar, y callar es mejor que inventar.
+ */
+export function compararIdentificador(leido: string, esperado: string): CotejoResultado | null {
+  const a = normalizarIdentificador(leido);
+  const b = normalizarIdentificador(esperado);
+  if (!a || !b) return null;
+  if (a === b) return "coincide";
+  if (a.length !== b.length) return "difiere";
+  let distintos = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] === b[i]) continue;
+    distintos += 1;
+    const par = `${a[i]}${b[i]}`;
+    const confundible = CARACTERES_CONFUNDIBLES.some(
+      (c) => c === par || c === `${par[1]}${par[0]}`,
+    );
+    if (!confundible) return "difiere";
+  }
+  return distintos <= 1 ? "posible_lectura" : "difiere";
+}
+
+export interface CotejoCampo {
+  label: string;
+  leido: string;
+  esperado: string;
+  resultado: CotejoResultado;
+}
+
+export interface CotejoVehiculo {
+  campos: CotejoCampo[];
+  /** Al menos un identificador es de otro vehículo: el aviso fuerte. */
+  difiere: boolean;
+  /** Todo cuadra salvo un carácter confundible: aviso suave, probablemente sea el mismo vehículo. */
+  dudas: boolean;
+}
+
+/**
+ * HU #12043 — coteja la licencia contra el vehículo del trámite.
+ *
+ * El defecto que corrige: el panel enseñaba la placa y el VIN leídos y esperaba que el OT los
+ * comparara de memoria contra un trámite que ni siquiera tenía delante. En la prueba se adjuntó una
+ * licencia legítima de un vehículo distinto —VIN 9F8HJD49RM640413 sobre un trámite de
+ * LRWYGCEK7TC769623— y el sistema, teniendo los dos números, la dio por buena.
+ *
+ * Sigue sin bloquear: el OT puede adjuntarla igual. La diferencia es que ahora se le dice.
+ */
+export function cotejarVehiculo(
+  data: Record<string, unknown>,
+  tramite: { vin?: string | null; placa?: string | null } | null | undefined,
+): CotejoVehiculo {
+  const campos: CotejoCampo[] = [];
+  const pares: ReadonlyArray<{ label: string; clave: string; esperado?: string | null }> = [
+    { label: "VIN", clave: "vehiculo_vin", esperado: tramite?.vin },
+    { label: "Placa", clave: "vehiculo_placa", esperado: tramite?.placa },
+  ];
+  for (const par of pares) {
+    const leido = campoOcr(data, par.clave);
+    const esperado = (par.esperado ?? "").trim();
+    const resultado = compararIdentificador(leido, esperado);
+    if (resultado) campos.push({ label: par.label, leido, esperado, resultado });
+  }
+  return {
+    campos,
+    difiere: campos.some((c) => c.resultado === "difiere"),
+    dudas: campos.some((c) => c.resultado === "posible_lectura"),
+  };
+}
+
 /** Los campos con los que el OT coteja la licencia contra el trámite de un vistazo. */
 const LT_OCR_CAMPOS: ReadonlyArray<{ label: string; clave: string }> = [
   { label: "Placa", clave: "vehiculo_placa" },
@@ -154,7 +239,13 @@ const LT_OCR_CAMPOS: ReadonlyArray<{ label: string; clave: string }> = [
 ];
 
 /** Panel del veredicto dentro de la modal. Informa; nunca deshabilita el botón de confirmar. */
-function LtOcrPanel({ estado }: { estado: LtOcrEstado | null }) {
+function LtOcrPanel({
+  estado,
+  tramite,
+}: {
+  estado: LtOcrEstado | null;
+  tramite: { vin?: string | null; placa?: string | null } | null;
+}) {
   if (!estado) return null;
 
   if (estado.fase === "analizando") {
@@ -174,9 +265,13 @@ function LtOcrPanel({ estado }: { estado: LtOcrEstado | null }) {
   const campos = LT_OCR_CAMPOS.map((c) => ({ ...c, valor: campoOcr(estado.data, c.clave) })).filter(
     (c) => c.valor !== "",
   );
-  const tono = estado.valido
-    ? { borde: "#3B8A00", texto: "#3B8A00", titulo: "Parece una Licencia de Tránsito" }
-    : { borde: "#C81E1E", texto: "#C81E1E", titulo: "El documento NO parece una Licencia de Tránsito" };
+  const cotejo = cotejarVehiculo(estado.data, tramite);
+  // Una licencia de otro vehículo es tan grave como un documento equivocado: manda el rojo.
+  const tono = !estado.valido
+    ? { borde: "#C81E1E", texto: "#C81E1E", titulo: "El documento NO parece una Licencia de Tránsito" }
+    : cotejo.difiere
+      ? { borde: "#C81E1E", texto: "#C81E1E", titulo: "Esta licencia es de OTRO vehículo" }
+      : { borde: "#3B8A00", texto: "#3B8A00", titulo: "Parece una Licencia de Tránsito" };
 
   return (
     <div className="mt-3 rounded-xl border px-3 py-2" style={{ borderColor: tono.borde }}>
@@ -185,6 +280,28 @@ function LtOcrPanel({ estado }: { estado: LtOcrEstado | null }) {
       </p>
       {!estado.valido && estado.motivo && (
         <p className="mt-1 text-[11px] opacity-80">{estado.motivo.slice(0, 220)}</p>
+      )}
+      {cotejo.difiere && (
+        <div className="mt-2 rounded-lg px-2 py-1.5" style={{ backgroundColor: "#FDECEC" }}>
+          {cotejo.campos
+            .filter((c) => c.resultado === "difiere")
+            .map((c) => (
+              <p key={c.label} className="text-[11px] leading-relaxed" style={{ color: "#C81E1E" }}>
+                <span className="font-semibold">{c.label}</span> — el trámite es{" "}
+                <span className="font-semibold">{c.esperado}</span> y la licencia dice{" "}
+                <span className="font-semibold">{c.leido}</span>
+              </p>
+            ))}
+          <p className="mt-1 text-[11px]" style={{ color: "#C81E1E" }}>
+            Revisa que sea la licencia de este trámite antes de continuar.
+          </p>
+        </div>
+      )}
+      {!cotejo.difiere && cotejo.dudas && (
+        <p className="mt-1 text-[11px] font-medium" style={{ color: "#B77900" }}>
+          La placa o el VIN coinciden salvo un carácter: puede ser un error de lectura, pero
+          compruébalo.
+        </p>
       )}
       {campoOcr(estado.data, "legibilidad") !== "" &&
         campoOcr(estado.data, "legibilidad") !== "buena" && (
@@ -1026,7 +1143,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 Se adjunta al expediente del trámite y entra al consolidado al generarlo o regenerarlo.
               </span>
             </label>
-            <LtOcrPanel estado={ltOcr} />
+            <LtOcrPanel estado={ltOcr} tramite={approveTarget} />
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
@@ -1337,7 +1454,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <p className="mt-1 text-[11px] opacity-60">
               Reemplaza la LT previa si existe; regenera el consolidado para incluirla.
             </p>
-            <LtOcrPanel estado={ltOcr} />
+            <LtOcrPanel estado={ltOcr} tramite={ltTarget} />
             <div className="mt-5 flex gap-3">
               <button
                 type="button"

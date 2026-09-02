@@ -3,7 +3,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
-import { ClientProceduresSection } from "../ClientProceduresSection";
+import {
+  ClientProceduresSection,
+  compararIdentificador,
+  normalizarIdentificador,
+} from "../ClientProceduresSection";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 
 vi.mock("@/lib/api/admin-ot", () => ({
@@ -451,4 +455,116 @@ describe("ClientProceduresSection — HU #10220", () => {
     expect(screen.getByRole("button", { name: /Confirmar$/i })).toBeEnabled();
   });
 
+});
+
+// ── HU #12043 — la licencia tiene que ser de ESTE vehículo ─────────────────
+// El defecto que corrige: en la prueba manual se adjuntó una licencia auténtica de otro carro (VIN
+// 9F8HJD49RM640413 sobre un trámite de LRWYGCEK7TC769623) y el panel la pintó en verde. Teníamos
+// los dos números delante y no los comparamos.
+
+describe("cotejo del vehículo — HU #12043", () => {
+  it("ignora espacios, guiones y mayúsculas al comparar", () => {
+    expect(normalizarIdentificador(" abc-123 ")).toBe("ABC123");
+    expect(compararIdentificador("abc 123", "ABC-123")).toBe("coincide");
+  });
+
+  it("marca como otro vehículo un VIN distinto", () => {
+    expect(compararIdentificador("9F8HJD49RM640413", "LRWYGCEK7TC769623")).toBe("difiere");
+  });
+
+  it("no grita por un solo carácter confundible: eso es una lectura imperfecta", () => {
+    // El OCR lee `0` donde el VIN trae `O`. Es el mismo vehículo con una lectura dudosa, no otro.
+    expect(compararIdentificador("LRWYGCEK7TC7696O3", "LRWYGCEK7TC769603")).toBe("posible_lectura");
+  });
+
+  it("dos caracteres distintos ya no son una confusión de lectura", () => {
+    expect(compararIdentificador("AB0123", "ABO124")).toBe("difiere");
+  });
+
+  it("calla cuando falta cualquiera de los dos lados", () => {
+    // Un trámite sin placa asignada todavía no permite afirmar nada; inventar un fallo sería peor.
+    expect(compararIdentificador("ABC123", "")).toBeNull();
+    expect(compararIdentificador("", "ABC123")).toBeNull();
+  });
+});
+
+describe("ClientProceduresSection — cotejo en la modal (HU #12043)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSuperAdmin = false;
+    vi.mocked(fetchOtProfile).mockResolvedValue({
+      operationMode: "dashboard",
+      quipuxReadOnly: false,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      featureFlags: [],
+    });
+    vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
+      transitOfficeResolved: true,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      deliveredTotal: 1,
+      deliveredWithGrant: 1,
+      deliveredWithoutGrant: 0,
+      hasDeliveredWithoutGrant: false,
+    });
+    vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+      data: [{ ...procedure, vin: "LRWYGCEK7TC769623", placa: "OCR001" }],
+      totalCount: 1,
+      page: 1,
+      pageSize: 20,
+    });
+  });
+
+  it("avisa que la licencia es de otro vehículo, y aun así deja adjuntarla", async () => {
+    vi.mocked(tramitesClient.analyzeDocument).mockResolvedValue({
+      ok: true,
+      tipo: "tarjeta_propiedad",
+      data: {
+        es_valido: true,
+        vehiculo_vin: "9F8HJD49RM640413",
+        vehiculo_placa: "LRT863",
+      },
+    } as never);
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await user.upload(
+      screen.getByLabelText(/Licencia de Tránsito \(LT\)/i),
+      new File(["%PDF"], "lt-de-otro.pdf", { type: "application/pdf" }),
+    );
+
+    const aviso = await screen.findByText(/Esta licencia es de OTRO vehículo/i);
+    // Muestra los dos lados: el OT no tiene que recordar el VIN del trámite. Se mira dentro del
+    // panel porque la fila de la bandeja, detrás de la modal, también pinta la placa y el VIN.
+    const panel = aviso.closest("div")!;
+    expect(panel.textContent).toContain("LRWYGCEK7TC769623");
+    expect(panel.textContent).toContain("9F8HJD49RM640413");
+    expect(panel.textContent).toContain("OCR001");
+    expect(panel.textContent).toContain("LRT863");
+    // Sigue sin bloquear: el OCR informa, decide la persona.
+    expect(screen.getByRole("button", { name: /Confirmar$/i })).toBeEnabled();
+  });
+
+  it("no avisa nada cuando la licencia sí es la del trámite", async () => {
+    vi.mocked(tramitesClient.analyzeDocument).mockResolvedValue({
+      ok: true,
+      tipo: "tarjeta_propiedad",
+      data: {
+        es_valido: true,
+        vehiculo_vin: "LRWYGCEK7TC769623",
+        vehiculo_placa: "OCR-001",
+      },
+    } as never);
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await user.upload(
+      screen.getByLabelText(/Licencia de Tránsito \(LT\)/i),
+      new File(["%PDF"], "lt.pdf", { type: "application/pdf" }),
+    );
+
+    expect(await screen.findByText(/Parece una Licencia de Tránsito/i)).toBeInTheDocument();
+    expect(screen.queryByText(/es de OTRO vehículo/i)).not.toBeInTheDocument();
+  });
 });

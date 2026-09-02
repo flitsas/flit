@@ -522,4 +522,80 @@ public sealed class LicenciaTransitoHandlerTests
         espia.Llamadas.Should().Be(1);
         ocr!.Data!["vehiculo_vin"]!.GetValue<string>().Should().Be("OTRO_VIN");
     }
+
+    // ── HU #12043 — la licencia tiene que ser de ESTE vehículo ──────────────────────────────
+
+    /// <summary>
+    /// El cotejo se guarda en la bitácora, no solo se pinta en pantalla: un expediente cerrado con la
+    /// licencia de otro carro tiene que poder explicarse después. En la prueba en vivo el evento
+    /// quedó con <c>ocr_verificada: true</c> y el VIN de otro vehículo, sin nada que lo delatara.
+    /// </summary>
+    [Fact]
+    public async Task Registra_que_la_licencia_es_de_otro_vehiculo()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        instance.Vin = "LRWYGCEK7TC769623";
+        instance.Plate = "OCR001";
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage, new AnalyzeDocumentHandler(new AnalizadorEspia()));
+        var yaVisto = new JsonObject
+        {
+            ["es_valido"] = true,
+            ["vehiculo_vin"] = "9F8HJD49RM640413",
+            ["vehiculo_placa"] = "LRT863",
+        };
+
+        var (_, error, _) = await handler.HandleAsync(id, tenantId, LtPdf(), null, yaVisto, ct);
+
+        error.Should().BeNull();
+        var payload = JsonNode.Parse(instance.Events.Single(e => e.Tipo == "lt_adjuntada").Payload)!;
+        payload["ocr_vin_coincide"]!.GetValue<bool>().Should().BeFalse();
+        payload["ocr_placa_coincide"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Registra_la_coincidencia_ignorando_guiones_y_mayusculas()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        instance.Vin = "LRWYGCEK7TC769623";
+        instance.Plate = "OCR001";
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage, new AnalyzeDocumentHandler(new AnalizadorEspia()));
+        var yaVisto = new JsonObject
+        {
+            ["es_valido"] = true,
+            ["vehiculo_vin"] = "lrwygcek7tc769623",
+            ["vehiculo_placa"] = "OCR-001",
+        };
+
+        await handler.HandleAsync(id, tenantId, LtPdf(), null, yaVisto, ct);
+
+        var payload = JsonNode.Parse(instance.Events.Single(e => e.Tipo == "lt_adjuntada").Payload)!;
+        payload["ocr_vin_coincide"]!.GetValue<bool>().Should().BeTrue();
+        payload["ocr_placa_coincide"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Un trámite sin placa asignada todavía no permite afirmar nada. Un <c>false</c> ahí sería una
+    /// acusación inventada, así que se registra <c>null</c>.
+    /// </summary>
+    [Fact]
+    public async Task Sin_placa_en_el_tramite_no_afirma_nada_sobre_la_placa()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        instance.Vin = "LRWYGCEK7TC769623";
+        instance.Plate = null;
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        var handler = new AdjuntarLicenciaTransitoHandler(_repo, _storage, new AnalyzeDocumentHandler(new AnalizadorEspia()));
+        var yaVisto = new JsonObject { ["vehiculo_vin"] = "LRWYGCEK7TC769623", ["vehiculo_placa"] = "LRT863" };
+
+        await handler.HandleAsync(id, tenantId, LtPdf(), null, yaVisto, ct);
+
+        var payload = JsonNode.Parse(instance.Events.Single(e => e.Tipo == "lt_adjuntada").Payload)!;
+        payload["ocr_vin_coincide"]!.GetValue<bool>().Should().BeTrue();
+        payload["ocr_placa_coincide"].Should().BeNull();
+    }
 }
