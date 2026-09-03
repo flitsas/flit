@@ -10,6 +10,7 @@ import {
   type AdjuntarLtResult,
   approveOtClientProcedure,
   fetchOtAttachmentPreviewUrl,
+  fetchOtBandejaCounters,
   fetchOtBandejaHealth,
   fetchOtClientProcedures,
   fetchOtDocuments,
@@ -18,6 +19,7 @@ import {
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
 import type {
+  OtBandejaCounters,
   OtBandejaHealth,
   OtClientProcedure,
   OtProfile,
@@ -30,7 +32,7 @@ import { getToken } from "@/lib/api/client";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import {
   ClientProcedureDetailModal,
@@ -42,7 +44,12 @@ import {
   revokeProcedurePlate,
   type PlateDetail,
 } from "@/lib/api/admin-plate-ranges";
-import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
+import { OT_FILTER_FORM_CLS, OT_FILTER_LABEL_CLS, OT_INPUT_CLS } from "./ot-form-styles";
+import {
+  OtBandejaCountersStrip,
+  filtrosDeContador,
+  type OtCounterKey,
+} from "./OtBandejaCounters";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 
 const PAGE_SIZE = 20;
@@ -334,6 +341,10 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [page, setPage] = useState(1);
   // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
   const [statusFilter, setStatusFilter] = useState(ESTADO_POR_DEFECTO);
+  /** Sub-estado de placa; lo fijan las tarjetas de la cabecera, no el panel de búsqueda. */
+  const [plateFlowFilter, setPlateFlowFilter] = useState("");
+  const [counters, setCounters] = useState<OtBandejaCounters | null>(null);
+  const [contadorActivo, setContadorActivo] = useState<OtCounterKey | "">("");
   const [typeFilter, setTypeFilter] = useState("");
   // Borradores del formulario; se aplican al listado solo con "Aplicar filtros".
   const [vinFilter, setVinFilter] = useState("");
@@ -485,6 +496,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         const result = await fetchOtClientProcedures(
           {
             status: statusFilter || undefined,
+            plateFlowStatus: plateFlowFilter || undefined,
             procedureTypeId: typeFilter || undefined,
             vin: appliedVin.trim() || undefined,
             placa: appliedPlaca.trim() || undefined,
@@ -504,19 +516,33 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         setTotalCount(result.totalCount);
         setPage(result.page);
         setStatus(result.data.length === 0 ? "empty" : "ready");
-        // Diagnóstico de bandeja (R09) — se refresca junto con la lista; nunca la bloquea.
-        fetchOtBandejaHealth(signal, transitOfficeId ? { transitOfficeId } : undefined)
-          .then((h) => {
-            if (!signal?.aborted) setHealth(h);
-          })
-          .catch(() => {
-            /* el diagnóstico es informativo: su fallo no afecta la bandeja */
-          });
+        // Diagnóstico (R09) y contadores de la cabecera: acompañan a la lista y NUNCA la bloquean.
+        // Van en su propio `try` y no solo con `.catch`, porque un fallo SÍNCRONO —el módulo sin
+        // esa función— caería en el catch de abajo y dejaría la bandeja en estado de error por no
+        // haber podido pintar una decoración.
+        try {
+          fetchOtBandejaHealth(signal, transitOfficeId ? { transitOfficeId } : undefined)
+            .then((h) => {
+              if (!signal?.aborted) setHealth(h);
+            })
+            .catch(() => {
+              /* el diagnóstico es informativo: su fallo no afecta la bandeja */
+            });
+          fetchOtBandejaCounters(signal, transitOfficeId ? { transitOfficeId } : undefined)
+            .then((c) => {
+              if (!signal?.aborted) setCounters(c);
+            })
+            .catch(() => {
+              /* la tira es orientativa: su fallo la deja con guiones, no tumba la bandeja */
+            });
+        } catch {
+          /* idem: ni el diagnóstico ni los contadores pueden romper el listado */
+        }
       } catch {
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [statusFilter, typeFilter, appliedVin, appliedPlaca, appliedVendedor, appliedComprador, appliedGestor, sortBy, sortDir, page, transitOfficeId],
+    [statusFilter, plateFlowFilter, typeFilter, appliedVin, appliedPlaca, appliedVendedor, appliedComprador, appliedGestor, sortBy, sortDir, page, transitOfficeId],
   );
 
   useEffect(() => {
@@ -544,7 +570,22 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     typeFilter !== "" ||
     statusFilter !== "entregado";
 
+  /**
+   * Pulsar una tarjeta fija SU juego de filtros y suelta el de la anterior. El panel de búsqueda no
+   * se toca: son dos formas de acotar que conviven, y la tarjeta manda sobre el estado porque es la
+   * que el operador acaba de pulsar.
+   */
+  const handleContadorSelect = (key: OtCounterKey | "") => {
+    const { status, plateFlowStatus } = filtrosDeContador(key);
+    setContadorActivo(key);
+    setStatusFilter(key === "" ? ESTADO_POR_DEFECTO : status);
+    setPlateFlowFilter(plateFlowStatus);
+    setPage(1);
+  };
+
   const clearFilters = () => {
+    setContadorActivo("");
+    setPlateFlowFilter("");
     setStatusFilter("entregado");
     setTypeFilter("");
     setVinFilter("");
@@ -931,38 +972,64 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aprobarlos.
         </div>
       )}
+      {/*
+        Cabecera de trabajo: la tira de contadores ocupa el ancho y "Búsqueda avanzada" va a su
+        derecha, del mismo alto, como en el diseño. Buscar es la acción con la que el organismo
+        empieza, no un ajuste secundario escondido en un enlace.
+      */}
+      <div className="flex items-stretch gap-3">
+        <div className="min-w-0 flex-1">
+          <OtBandejaCountersStrip
+            counters={counters}
+            selected={contadorActivo}
+            onSelect={handleContadorSelect}
+            loading={status === "loading"}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+          aria-controls="ot-filtros-panel"
+          // El rótulo se parte en dos líneas para caber en el bloque, y eso deja el nombre
+          // accesible pegado ("Búsquedaavanzada"). Se declara explícito para que lectores de
+          // pantalla y dictado por voz oigan lo que se ve.
+          aria-label="Búsqueda avanzada"
+          className="flex w-28 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          style={{ background: "linear-gradient(135deg, #00D2FE 0%, #557EFF 100%)" }}
+        >
+          <Search className="h-4 w-4" aria-hidden="true" />
+          <span aria-hidden="true">Búsqueda</span>
+          <span aria-hidden="true">avanzada</span>
+        </button>
+      </div>
+
       <div className="rounded-2xl border bg-white dark:bg-[#0B0F14]">
-        <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((o) => !o)}
-            aria-expanded={filtersOpen}
-            aria-controls="ot-filtros-panel"
-            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-[#557EFF]/10"
-          >
-            {filtersOpen ? (
-              <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            Filtros
+        {hasAdvancedFilters || filtersOpen ? (
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((o) => !o)}
+              aria-controls="ot-filtros-panel"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#557EFF]"
+            >
+              {filtersOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {filtersOpen ? "Ocultar filtros" : "Ver filtros"}
+            </button>
             {hasAdvancedFilters ? (
-              <span className="ml-0.5 rounded-full bg-[#557EFF]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#557EFF]">
-                activos
+              <span
+                className="rounded-full bg-[#557EFF]/15 px-2 py-0.5 text-[10px] font-bold text-[#557EFF]"
+                role="status"
+              >
+                Filtros activos
               </span>
             ) : null}
-          </button>
-          <button
-            type="button"
-            onClick={clearFilters}
-            disabled={!hasAdvancedFilters && sortBy === "createdAt" && sortDir === "desc"}
-            className="rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ borderColor: "#557EFF", color: "#557EFF" }}
-            aria-label="Limpiar filtros de trámites OT"
-          >
-            Limpiar filtros
-          </button>
-        </div>
+          </div>
+        ) : null}
         {filtersOpen ? (
       <form
         id="ot-filtros-panel"
@@ -973,13 +1040,19 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         }}
         aria-label="Filtros de trámites de clientes"
       >
-        <label className="text-xs font-semibold text-foreground">
+        <label className={OT_FILTER_LABEL_CLS}>
           Estado
           <select
             aria-label="Filtrar por estado"
             className={`mt-1 ${OT_INPUT_CLS}`}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              // Elegir el estado a mano deshace la selección de la tarjeta: si no, quedaría una
+              // marcada mientras la lista muestra otra cosa.
+              setContadorActivo("");
+              setPlateFlowFilter("");
+            }}
           >
             {FILTROS_ESTADO_OT.map((f) => (
               <option key={f.value} value={f.value}>
@@ -989,7 +1062,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <option value="">Todos los recibidos</option>
           </select>
         </label>
-        <label className="text-xs font-semibold text-foreground">
+        <label className={OT_FILTER_LABEL_CLS}>
           Tipo de trámite
           <select
             aria-label="Filtrar por tipo de trámite"
@@ -1005,7 +1078,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             ))}
           </select>
         </label>
-        <label className="text-xs font-semibold text-foreground">
+        <label className={OT_FILTER_LABEL_CLS}>
           VIN
           <input
             type="search"
@@ -1016,7 +1089,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             placeholder="Buscar VIN"
           />
         </label>
-        <label className="text-xs font-semibold text-foreground">
+        <label className={OT_FILTER_LABEL_CLS}>
           Placa
           <input
             type="search"
@@ -1027,7 +1100,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             placeholder="Buscar placa"
           />
         </label>
-        <label className="text-xs font-semibold text-foreground">
+        <label className={OT_FILTER_LABEL_CLS}>
           Propietario / vendedor
           <input
             type="search"
@@ -1038,7 +1111,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             placeholder="Buscar propietario"
           />
         </label>
-        <label className="text-xs font-semibold text-foreground">
+        <label className={OT_FILTER_LABEL_CLS}>
           Comprador
           <input
             type="search"
@@ -1049,7 +1122,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             placeholder="Buscar comprador"
           />
         </label>
-        <label className="text-xs font-semibold text-foreground">
+        <label className={OT_FILTER_LABEL_CLS}>
           Gestor
           <input
             type="search"
@@ -1062,11 +1135,21 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         </label>
         <div className="flex items-end gap-2">
           <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!hasAdvancedFilters && sortBy === "createdAt" && sortDir === "desc"}
+            className="h-9 flex-1 rounded-xl border text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ borderColor: "#DFE5ED" }}
+            aria-label="Limpiar filtros de trámites OT"
+          >
+            Limpiar
+          </button>
+          <button
             type="submit"
-            className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
+            className="h-9 flex-1 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
             style={{ background: "#557EFF" }}
           >
-            Aplicar filtros
+            Buscar
           </button>
         </div>
       </form>

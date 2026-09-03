@@ -5,6 +5,20 @@ public sealed class OtClientProcedureFilter
 {
     public string? Status { get; init; }
 
+    /// <summary>
+    /// Sub-estado de la ruta de placa. Acepta varios separados por coma
+    /// (<c>asignado,terminado</c>) y el valor especial <c>sin_ruta</c> para los trámites que NO
+    /// están en ruta de placa (columna nula).
+    ///
+    /// <para>
+    /// Existe porque las tarjetas de la cabecera se pulsan para filtrar, y tres de ellas —"Sin
+    /// asignar placa", "Con placa asignada" y "Sin gestión"— no son estados del ciclo de vida sino
+    /// del sub-flujo de placa. Sin este filtro, pulsarlas habría llevado a una lista que no era la
+    /// que la tarjeta acababa de contar.
+    /// </para>
+    /// </summary>
+    public string? PlateFlowStatus { get; init; }
+
     public Guid? ProcedureTypeId { get; init; }
 
     /// <summary>Filtro parcial por VIN (case-insensitive).</summary>

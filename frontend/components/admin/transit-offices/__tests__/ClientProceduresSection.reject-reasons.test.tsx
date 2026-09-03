@@ -90,7 +90,9 @@ async function openRejectModal() {
   const user = userEvent.setup();
   renderSection();
   await screen.findByText("RAD-2026-101");
-  await user.click(await screen.findByRole("button", { name: /rechazar/i }));
+  // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+  await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+  await user.click(await screen.findByRole("menuitem", { name: /^Rechazar$/i }));
   await screen.findByRole("dialog", { name: /rechazar trámite/i });
   return user;
 }

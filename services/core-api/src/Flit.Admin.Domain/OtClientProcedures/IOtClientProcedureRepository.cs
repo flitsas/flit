@@ -30,6 +30,18 @@ public interface IOtClientProcedureRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Contadores de la cabecera de la bandeja (ver <see cref="OtBandejaCounters"/>): cuánto trabajo
+    /// hay de cada clase en el organismo. Cuenta en SQL sobre el universo accesible —el mismo
+    /// alcance de <see cref="ListAsync"/>, con grant vigente— y no sobre una página, porque la
+    /// bandeja está paginada y contar la página respondería otra pregunta.
+    /// <para>Devuelve <c>null</c> cuando el tenant no resuelve ningún organismo de tránsito.</para>
+    /// </summary>
+    Task<OtBandejaCounters?> GetBandejaCountersAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Variante con override de organismo para SuperAdmin (mismo contrato que
     /// <see cref="ListAsync"/>): si <paramref name="transitOfficeIdOverride"/> viene, el acceso
     /// se resuelve contra esa oficina del catálogo en lugar del perfil OT del tenant.

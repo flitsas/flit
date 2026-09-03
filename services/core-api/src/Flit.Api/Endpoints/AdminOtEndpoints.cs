@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using Flit.Admin.Application.OtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.GetOtBandejaCounters;
 using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
@@ -158,6 +159,13 @@ public static class AdminOtEndpoints
         group.MapGet("/client-procedures/health", GetClientProceduresHealthAsync)
             .WithName("AdminOtClientProceduresHealth")
             .WithSummary("Diagnóstico de la bandeja OT: trámites entregados con/sin grant vigente (R09)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/client-procedures/counters", GetClientProceduresCountersAsync)
+            .WithName("AdminOtGetClientProceduresCounters")
+            .WithSummary("Contadores de la cabecera de la bandeja OT (carga por clase de trabajo)")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -784,6 +792,7 @@ public static class AdminOtEndpoints
         ListOtClientProceduresHandler handler,
         ITransitOfficeCatalog transitOfficeCatalog,
         string? status,
+        string? plateFlowStatus,
         Guid? procedureTypeId,
         string? vin,
         string? placa,
@@ -820,6 +829,7 @@ public static class AdminOtEndpoints
             OtTenantId = tenantId,
             TransitOfficeId = scopedOfficeId,
             Status = status,
+            PlateFlowStatus = plateFlowStatus,
             ProcedureTypeId = procedureTypeId,
             Vin = vin,
             Placa = placa,
@@ -866,6 +876,39 @@ public static class AdminOtEndpoints
         }
 
         var result = await handler.HandleAsync(new GetOtBandejaHealthQuery
+        {
+            OtTenantId = tenantId,
+            TransitOfficeId = scopedOfficeId,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetClientProceduresCountersAsync(
+        HttpContext httpContext,
+        GetOtBandejaCountersHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new GetOtBandejaCountersQuery
         {
             OtTenantId = tenantId,
             TransitOfficeId = scopedOfficeId,

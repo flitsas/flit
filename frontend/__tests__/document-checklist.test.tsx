@@ -87,7 +87,7 @@ describe('DocumentChecklist — render guiado por checklist', () => {
     expect(await screen.findByText(/Cédula del comprador/)).toBeInTheDocument();
     expect(screen.getByText('(CEDULA)')).toBeInTheDocument();
     expect(screen.getByText('(SOAT)')).toBeInTheDocument();
-    expect(screen.getByText('* Obligatorio')).toBeInTheDocument();
+    expect(screen.getByText('Por cargar')).toBeInTheDocument();
     expect(screen.getByText('Opcional')).toBeInTheDocument();
   });
 
@@ -323,7 +323,7 @@ const SOAT_ATT: ProcedureAttachment = {
 };
 
 describe('DocumentChecklist — OCR en el buzón', () => {
-  it('un documento que no es del buzón no dice Validado', async () => {
+  it('un documento que no es del buzón no dice Cargado', async () => {
     const user = userEvent.setup();
     mocks.analyzeDocument.mockResolvedValue({
       ok: true,
@@ -341,7 +341,7 @@ describe('DocumentChecklist — OCR en el buzón', () => {
 
     expect(await screen.findByText('No coincide')).toBeInTheDocument();
     expect(await screen.findByLabelText(/OCR SOAT: Rechazado/)).toBeInTheDocument();
-    expect(screen.queryByText('Validado')).toBeNull();
+    expect(screen.queryByText('Cargado')).toBeNull();
   });
 
   it('reemplazar con el documento correcto cambia la marca, no deja la anterior', async () => {
@@ -364,7 +364,7 @@ describe('DocumentChecklist — OCR en el buzón', () => {
     expect(await screen.findByText('No coincide')).toBeInTheDocument();
 
     await user.upload(screen.getByLabelText(/Subir SOAT vigente/), pngFile('soat.png'));
-    expect(await screen.findByText('Validado')).toBeInTheDocument();
+    expect(await screen.findByText('Cargado')).toBeInTheDocument();
     expect(await screen.findByLabelText(/OCR SOAT: Verificado/)).toBeInTheDocument();
     expect(screen.queryByText('No coincide')).toBeNull();
     expect(screen.queryByLabelText(/OCR SOAT: Rechazado/)).toBeNull();

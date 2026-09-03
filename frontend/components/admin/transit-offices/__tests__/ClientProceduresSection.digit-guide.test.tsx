@@ -110,7 +110,9 @@ describe("ClientProceduresSection — guía de dígito de preferencia (HU #10805
     renderSection();
 
     await screen.findByText("RAD-2026-777");
-    await user.click(await screen.findByRole("button", { name: /Asignar placa/i }));
+    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Asignar placa/i }));
 
     // Guía visible (solo guía, no obliga).
     expect(await screen.findByText(/termina en 5/i)).toBeInTheDocument();

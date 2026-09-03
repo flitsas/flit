@@ -8,6 +8,9 @@ public sealed class ListOtClientProceduresQuery
 
     public string? Status { get; init; }
 
+    /// <summary>Sub-estado de placa; varios por coma y `sin_ruta` para los que no la tienen.</summary>
+    public string? PlateFlowStatus { get; init; }
+
     public Guid? ProcedureTypeId { get; init; }
 
     public string? Vin { get; init; }

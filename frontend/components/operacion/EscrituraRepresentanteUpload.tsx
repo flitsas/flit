@@ -138,12 +138,14 @@ export function EscrituraRepresentanteUpload({
       style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.06)' }}
       aria-label="Escritura del representante legal"
     >
+      {/* Copy Flit 2.0 · S2 — alerta de representante no autorizado. */}
       <p className="text-xs font-semibold" style={{ color: '#B45309' }}>
-        Este representante no está registrado en la compañía
+        Nuevo representante legal detectado
       </p>
       <p className="text-xs opacity-80">
-        Adjunta la escritura o el poder que lo acredita. Sin este documento no puedes continuar al
-        siguiente paso.
+        El representante legal o apoderado ingresado aún no cuenta con autorización en el sistema.
+        Para continuar, por favor adjunta la Escritura Pública correspondiente que certifique su
+        nombramiento.
       </p>
       {error && (
         <p className="text-xs" style={{ color: '#FF4E00' }} role="alert">

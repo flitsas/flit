@@ -46,6 +46,12 @@ import {
 import { useUiPreferences } from '@/hooks/useUiPreferences';
 import { controlCls } from './tramites-control-styles';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from '@/components/atom/table-styles';
 import { PageNav } from '@/components/atom/PageNav';
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -1575,8 +1581,8 @@ function TableBody({
               {gridLayout.includeSelectColumn ? (
                 <th
                   scope="col"
-                  className="rounded-l-xl px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wider"
-                  style={{ background: '#DFE5ED', color: '#162744' }}
+                  className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                 >
                   {/* Nombre real, no `aria-hidden`: ocultar una cabecera desalinea el recuento de
                       columnas del lector de pantalla respecto a las celdas de cada fila. */}
@@ -1587,10 +1593,10 @@ function TableBody({
                 <th
                   key={col.key}
                   scope="col"
-                  className={`px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wider ${
+                  className={`${TABLA_HEADER_CELL_CLS} ${
                     !gridLayout.includeSelectColumn && index === 0 ? 'rounded-l-xl' : ''
                   }`}
-                  style={{ background: '#DFE5ED', color: '#162744' }}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                 >
                   <SortableHeaderCell
                     column={col}
@@ -1602,8 +1608,8 @@ function TableBody({
               ))}
               <th
                 scope="col"
-                className="rounded-r-xl px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wider"
-                style={{ background: '#DFE5ED', color: '#162744' }}
+                className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
               >
                 Acciones
               </th>
@@ -1948,12 +1954,12 @@ function TramiteRow({
           </button>
         </span>
         {!shows('fechaCreacion') ? (
-          <span className="block truncate text-xs text-[#162744]/60 dark:text-white/50">
+          <span className="block truncate text-[10px] opacity-55">
             Creación: {shortDate(item.createdAt)}
           </span>
         ) : null}
         {!shows('fechaActualizacion') && item.updatedAt ? (
-          <span className="block truncate text-xs text-[#162744]/60 dark:text-white/50">
+          <span className="block truncate text-[10px] opacity-55">
             Actualización: {shortDate(item.updatedAt)}
           </span>
         ) : null}
@@ -1979,7 +1985,7 @@ function TramiteRow({
             vehículo es. */}
         {!shows('vehiculo') ? (
           <span
-            className="block break-words leading-snug text-xs text-[#162744]/60 dark:text-white/50"
+            className="block break-words leading-snug text-[10px] opacity-55"
             title={vehiculo(item)}
           >
             {vehiculo(item)}
@@ -2008,7 +2014,7 @@ function TramiteRow({
           {tramiteLabel(item)}
         </span>
         {!shows('paso') ? (
-          <span className="flex min-w-0 items-start gap-1 text-xs text-[#162744]/60 dark:text-white/50">
+          <span className="flex min-w-0 items-start gap-1 text-[10px] opacity-55">
             <span className="shrink-0 font-mono tabular-nums">
               {item.pasoActual}/{item.totalPasos}
             </span>
@@ -2055,7 +2061,7 @@ function TramiteRow({
         <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
           {item.pasoActual}/{item.totalPasos}
         </span>
-        <span className="block truncate text-xs text-[#162744]/60 dark:text-white/50">
+        <span className="block truncate text-[10px] opacity-55">
           {stepLabel(item)}
         </span>
       </span>
@@ -2219,7 +2225,7 @@ function TramiteRow({
           {item.companiaNombre ?? '—'}
         </span>
         <span
-          className="block break-words leading-snug text-xs text-[#162744]/60 dark:text-white/50"
+          className="block break-words leading-snug text-[10px] opacity-55"
           title={item.gestorNombre ?? undefined}
         >
           {item.gestorNombre ?? '—'}
@@ -2250,12 +2256,15 @@ function TramiteRow({
   // un <tr role="button"> rompería la semántica de tabla. El acceso por teclado/lector de pantalla
   // vive en el botón del radicado (ver cellsByKey.radicado), con el mismo aria-label de antes.
   return (
-    <tr onClick={handleOpen} className="group cursor-pointer bg-white text-xs transition dark:bg-[#162744]">
+    <tr
+      onClick={handleOpen}
+      className={`group cursor-pointer bg-white text-xs dark:bg-[#162744] ${TABLA_ROW_HOVER_CLS}`}
+    >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
       {includeSelectColumn ? (
         <td
-          className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle group-hover:border-[#557EFF]/40 dark:border-white/10"
+          className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle dark:border-white/10"
           onClick={(e) => e.stopPropagation()}
         >
           {isIctDraft ? (
@@ -2275,7 +2284,7 @@ function TramiteRow({
       {visibleColumns.map((key, index) => (
         <td
           key={key}
-          className={`border-y border-[#DFE5ED] px-4 py-3 align-middle text-xs group-hover:border-[#557EFF]/40 dark:border-white/10 ${
+          className={`border-y border-[#DFE5ED] px-4 py-3 align-middle text-xs dark:border-white/10 ${
             !includeSelectColumn && index === 0 ? 'border-l rounded-l-xl' : ''
           }`}
         >
@@ -2288,7 +2297,7 @@ function TramiteRow({
           de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
           botones en la misma celda. */}
       <td
-        className="rounded-r-xl border-y border-r border-[#DFE5ED] px-4 py-3 text-right align-middle group-hover:border-[#557EFF]/40 dark:border-white/10"
+        className="rounded-r-xl border-y border-r border-[#DFE5ED] px-4 py-3 text-right align-middle dark:border-white/10"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >

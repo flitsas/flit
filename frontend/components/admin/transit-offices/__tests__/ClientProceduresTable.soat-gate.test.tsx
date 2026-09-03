@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ClientProceduresTable } from "../ClientProceduresTable";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
@@ -30,56 +31,66 @@ const baseProps = {
   onRevoke: vi.fn(),
 };
 
+/** Abre el menú de acciones de la primera fila: la decisión del OT vive ahí. */
+async function abrirAcciones() {
+  await userEvent.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+}
+
 describe("ClientProceduresTable — gate visual Terminado", () => {
-  it("muestra Aprobar y Rechazar en Terminado", () => {
+  it("muestra Aprobar y Rechazar en Terminado", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}
         rows={[row({ plateFlowStatus: "terminado", soatPagado: true })]}
       />,
     );
-    expect(screen.getByRole("button", { name: /aprobar/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
+    await abrirAcciones();
+    expect(screen.getByRole("menuitem", { name: /aprobar/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /rechazar/i })).toBeInTheDocument();
+    // El sello de SOAT y el aviso de proceso NO son acciones: siguen a la vista en la fila.
     expect(screen.getByText("SOAT")).toBeInTheDocument();
     expect(screen.queryByText(/esperando proceso del gestor/i)).not.toBeInTheDocument();
   });
 
-  it("oculta acciones y muestra aviso en Asignado", () => {
+  it("oculta acciones y muestra aviso en Asignado", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}
         rows={[row({ plateFlowStatus: "asignado" })]}
       />,
     );
-    expect(screen.queryByRole("button", { name: /aprobar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /rechazar/i })).not.toBeInTheDocument();
+    await abrirAcciones();
+    expect(screen.queryByRole("menuitem", { name: /aprobar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /rechazar/i })).not.toBeInTheDocument();
     expect(screen.getByText(/esperando proceso del gestor/i)).toBeInTheDocument();
   });
 
-  it("oculta Aprobar/Rechazar en Sin asignar (preasignado) sin aviso de gestor", () => {
+  it("oculta Aprobar/Rechazar en Sin asignar (preasignado) sin aviso de gestor", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}
         rows={[row({ plateFlowStatus: "preasignado" })]}
       />,
     );
-    expect(screen.queryByRole("button", { name: /aprobar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /rechazar/i })).not.toBeInTheDocument();
+    await abrirAcciones();
+    expect(screen.queryByRole("menuitem", { name: /aprobar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /rechazar/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/esperando proceso del gestor/i)).not.toBeInTheDocument();
   });
 
-  it("muestra Aprobar y Rechazar en la ruta estándar", () => {
+  it("muestra Aprobar y Rechazar en la ruta estándar", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}
         rows={[row({ plateFlowStatus: null })]}
       />,
     );
-    expect(screen.getByRole("button", { name: /aprobar/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
+    await abrirAcciones();
+    expect(screen.getByRole("menuitem", { name: /aprobar/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /rechazar/i })).toBeInTheDocument();
   });
 
-  it("no muestra badges SOAT/Impuesto fuera de Terminado", () => {
+  it("no muestra badges SOAT/Impuesto fuera de Terminado", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}
@@ -92,7 +103,7 @@ describe("ClientProceduresTable — gate visual Terminado", () => {
 });
 
 describe("ClientProceduresTable — columnas VIN/placa/actores/gestor", () => {
-  it("renderiza las nuevas columnas con los valores del listado", () => {
+  it("renderiza las nuevas columnas con los valores del listado", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}

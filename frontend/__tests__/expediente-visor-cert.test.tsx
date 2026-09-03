@@ -104,7 +104,8 @@ describe('MatriculaResumen — certificado de identidad (HU #10861)', () => {
   it('con identidad aprobada muestra el banner de verificada en el actor', () => {
     renderResumen(bio('aprobado'));
     expect(screen.getByTestId('identidad-verificada')).toBeInTheDocument();
-    expect(screen.getByText(/Identidad verificada — 95\/100/i)).toBeInTheDocument();
+    // Copy Flit 2.0 · S4: el sello ya no lleva el puntaje.
+    expect(screen.getByText(/Identidad verificada\./i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Certificado ID · Comprador/i })).toBeInTheDocument();
   });
 

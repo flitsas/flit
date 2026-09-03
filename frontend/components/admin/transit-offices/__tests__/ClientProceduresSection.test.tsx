@@ -124,15 +124,18 @@ describe("ClientProceduresSection — HU #10220", () => {
     renderSection();
     expect(await screen.findByText("RAD-2026-001")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Matrícula inicial" })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Flota Andina S.A.S." })).toBeInTheDocument();
+    // Empresa y gestor comparten celda, así que el nombre accesible de la celda los lleva a los
+    // dos: se comprueba el texto de la empresa, que es lo que la columna promete.
+    expect(screen.getByText("Flota Andina S.A.S.")).toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Estado: Pendiente OT" })).toBeInTheDocument();
   });
 
   it("AC2 aprobar con confirmación actualiza fila optimistamente", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole("button", { name: /Aprobar/i });
-    await user.click(screen.getByRole("button", { name: /Aprobar/i }));
+    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Aprobar/i }));
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
     await waitFor(() => expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1", undefined));
     expect(screen.getByRole("status", { name: "Estado: Aprobado OT" })).toBeInTheDocument();
@@ -162,8 +165,9 @@ describe("ClientProceduresSection — HU #10220", () => {
       .mockResolvedValueOnce({ ...procedure, status: "aprobado" });
 
     renderSection();
-    await screen.findByRole("button", { name: /Aprobar/i });
-    await user.click(screen.getByRole("button", { name: /Aprobar/i }));
+    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Aprobar/i }));
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
 
     // Aparece el diálogo de selección de mandatario (varios sin cotejo).
@@ -179,8 +183,9 @@ describe("ClientProceduresSection — HU #10220", () => {
   it("AC3 rechazar deshabilita confirmar sin motivo", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole("button", { name: /Rechazar/i });
-    await user.click(screen.getByRole("button", { name: /Rechazar/i }));
+    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /^Rechazar$/i }));
     const confirm = screen.getByRole("button", { name: /Confirmar rechazo/i });
     expect(confirm).toBeDisabled();
     await user.type(screen.getByRole("textbox"), "Documentación incompleta");
@@ -203,9 +208,9 @@ describe("ClientProceduresSection — HU #10220", () => {
         undefined,
       ),
     );
-    await user.click(screen.getByRole("button", { name: /^Filtros/i }));
+    await user.click(screen.getByRole("button", { name: /Búsqueda avanzada/i }));
     await user.selectOptions(screen.getByLabelText(/Filtrar por tipo de trámite/i), "matricula_inicial-type-id");
-    await user.click(screen.getByRole("button", { name: /Aplicar filtros/i }));
+    await user.click(screen.getByRole("button", { name: /^Buscar$/i }));
     await waitFor(() =>
       expect(fetchOtClientProcedures).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -264,7 +269,9 @@ describe("ClientProceduresSection — HU #10220", () => {
     renderSection();
     // No hay botón "Generar consolidado" separado: el único botón es "Ver consolidado".
     expect(screen.queryByRole("button", { name: /Generar consolidado/i })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /Ver consolidado/i }));
+    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Ver consolidado/i }));
     // Asegura el consolidado (idempotente) y luego lo previsualiza inline con el id devuelto.
     // Tercer argumento `force`: en false por el camino normal —el backend decide si regenera por la
     // marca de vigencia. El "Actualizar consolidado" de la sección Documentos lo manda en true.
@@ -295,7 +302,9 @@ describe("ClientProceduresSection — HU #10220", () => {
     const user = userEvent.setup();
     renderSection();
     // RowActions expone la acción como botón-icono con aria-label "Aprobar tramite {ref}".
-    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /^Aprobar$/i }));
     const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
@@ -331,7 +340,9 @@ describe("ClientProceduresSection — HU #10220", () => {
     });
     const user = userEvent.setup();
     renderSection();
-    await user.click(await screen.findByRole("button", { name: /Adjuntar LT/i }));
+    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Adjuntar LT/i }));
     const dialog = screen.getByRole("dialog", { name: /Adjuntar Licencia de Tránsito/i });
     const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
     await user.upload(within(dialog).getByLabelText(/Archivo de la Licencia de Tránsito/i), file);

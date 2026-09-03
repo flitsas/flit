@@ -191,6 +191,107 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             },
             cancellationToken);
 
+    /// <summary>Valor público para pedir los trámites que NO están en ruta de placa.</summary>
+    public const string PlateFlowSinRuta = "sin_ruta";
+
+    public Task<OtBandejaCounters?> GetBandejaCountersAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            async transitOfficeId =>
+            {
+                var grantedClientTenantIds = await ListGrantedClientTenantIdsAsync(
+                    transitOfficeId,
+                    cancellationToken).ConfigureAwait(false);
+
+                // Sin grants no hay bandeja que contar: todo cero, y sin pegarle a la base.
+                if (grantedClientTenantIds.Count == 0)
+                {
+                    return (OtBandejaCounters?)new OtBandejaCounters(0, 0, 0, 0, 0);
+                }
+
+                return await ExecuteCrossTenantReadAsync(
+                    async () =>
+                    {
+                        // Mismo universo que la bandeja: dirigidos a este organismo y con grant
+                        // vigente. Si el conteo mirara más ancho que el listado, las tarjetas
+                        // prometerían filas que al pulsar no aparecerían.
+                        var accesibles = _context.ProcedureInstances
+                            .AsNoTracking()
+                            .Where(p => p.DeletedAt == null
+                                && p.TransitOfficeId == transitOfficeId
+                                && grantedClientTenantIds.Contains(p.TenantId));
+
+                        // UNA consulta agrupada en vez de cinco COUNT: la bandeja los pide juntos y
+                        // cinco viajes a la base para pintar una tira de cabecera no se justifican.
+                        var porClase = await accesibles
+                            .GroupBy(p => new { p.Status, p.PlateFlowStatus })
+                            .Select(g => new
+                            {
+                                g.Key.Status,
+                                g.Key.PlateFlowStatus,
+                                Total = g.Count(),
+                            })
+                            .ToListAsync(cancellationToken)
+                            .ConfigureAwait(false);
+
+                        var sinAsignarPlaca = 0;
+                        var conPlacaAsignada = 0;
+                        var aprobados = 0;
+                        var rechazados = 0;
+                        var sinGestion = 0;
+
+                        foreach (var fila in porClase)
+                        {
+                            var entregado = string.Equals(
+                                fila.Status, TramiteEstado.Entregado, StringComparison.Ordinal);
+
+                            if (entregado && fila.PlateFlowStatus == PlateFlowStatus.Preasignado)
+                            {
+                                sinAsignarPlaca += fila.Total;
+                            }
+
+                            if (entregado
+                                && (fila.PlateFlowStatus == PlateFlowStatus.Asignado
+                                    || fila.PlateFlowStatus == PlateFlowStatus.Terminado))
+                            {
+                                conPlacaAsignada += fila.Total;
+                            }
+
+                            // Sin gestión: entregado y fuera de la ruta de placa. Un trámite ya
+                            // preasignado SÍ se está gestionando —el organismo tiene que ponerle
+                            // placa—, así que contarlo aquí inflaría la tarjeta que dice "nadie ha
+                            // empezado esto".
+                            if (entregado && fila.PlateFlowStatus is null)
+                            {
+                                sinGestion += fila.Total;
+                            }
+
+                            if (string.Equals(fila.Status, TramiteEstado.Aprobado, StringComparison.Ordinal))
+                            {
+                                aprobados += fila.Total;
+                            }
+
+                            if (string.Equals(fila.Status, TramiteEstado.Rechazado, StringComparison.Ordinal))
+                            {
+                                rechazados += fila.Total;
+                            }
+                        }
+
+                        return (OtBandejaCounters?)new OtBandejaCounters(
+                            sinAsignarPlaca,
+                            conPlacaAsignada,
+                            aprobados,
+                            rechazados,
+                            sinGestion);
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            },
+            cancellationToken);
+
     public Task<OtClientProcedure?> ApproveAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -1155,6 +1256,33 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
             query = query.Where(p => p.Status == filter.Status.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.PlateFlowStatus))
+        {
+            var valores = filter.PlateFlowStatus
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(v => v.ToLowerInvariant())
+                .ToList();
+
+            // `sin_ruta` no es un valor de la columna: es la AUSENCIA de ruta de placa (null). Se
+            // trata aparte para poder pedirlo junto a valores reales sin escribir dos consultas.
+            var incluirSinRuta = valores.Remove(PlateFlowSinRuta);
+
+            if (incluirSinRuta && valores.Count > 0)
+            {
+                query = query.Where(p =>
+                    p.PlateFlowStatus == null || valores.Contains(p.PlateFlowStatus));
+            }
+            else if (incluirSinRuta)
+            {
+                query = query.Where(p => p.PlateFlowStatus == null);
+            }
+            else if (valores.Count > 0)
+            {
+                query = query.Where(p =>
+                    p.PlateFlowStatus != null && valores.Contains(p.PlateFlowStatus));
+            }
         }
 
         if (filter.ProcedureTypeId is not null)

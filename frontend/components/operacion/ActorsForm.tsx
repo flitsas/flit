@@ -2212,11 +2212,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div className="mt-2 flex flex-wrap gap-2">
               <StatusBadge
                 tone={firmaVigente ? 'success' : 'neutral'}
-                label={firmaVigente ? 'Firma vigente' : 'Sin firma vigente'}
+                label={firmaVigente ? 'Cuenta con firma digital vigente.' : 'Sin firma vigente'}
               />
               <StatusBadge
                 tone={identidadVigente ? 'success' : 'neutral'}
-                label={identidadVigente ? 'Identidad vigente' : 'Sin identidad vigente'}
+                label={identidadVigente ? 'Identidad vigente' : 'Validación de identidad pendiente (Kyverum).'}
               />
             </div>
             {/* HU #11061 — con los DOS mecanismos vigentes el gestor elige con cuál se registra el
@@ -2349,11 +2349,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div className="mt-2 flex flex-wrap gap-2">
                       <StatusBadge
                         tone={firmaVigente ? 'success' : 'neutral'}
-                        label={firmaVigente ? 'Firma vigente' : 'Sin firma vigente'}
+                        label={firmaVigente ? 'Cuenta con firma digital vigente.' : 'Sin firma vigente'}
                       />
                       <StatusBadge
                         tone={identidadVigente ? 'success' : 'neutral'}
-                        label={identidadVigente ? 'Identidad vigente' : 'Sin identidad vigente'}
+                        label={identidadVigente ? 'Identidad vigente' : 'Validación de identidad pendiente (Kyverum).'}
                       />
                     </div>
                     {firmaVigente && identidadVigente && (

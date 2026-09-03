@@ -71,8 +71,9 @@ async function abrirFiltros() {
   const yaAbierto = screen.queryByRole("combobox", { name: "Filtrar por estado" });
   if (yaAbierto) return yaAbierto;
 
-  // Nombre exacto: con filtros aplicados el botón pasa a llamarse "Filtros activos".
-  await userEvent.click(await screen.findByRole("button", { name: /^Filtros/ }));
+  // El panel lo abre "Búsqueda avanzada"; el aviso de filtros aplicados es ahora una etiqueta
+  // aparte, no parte del nombre del botón.
+  await userEvent.click(await screen.findByRole("button", { name: /Búsqueda avanzada/ }));
   return screen.getByRole("combobox", { name: "Filtrar por estado" });
 }
 

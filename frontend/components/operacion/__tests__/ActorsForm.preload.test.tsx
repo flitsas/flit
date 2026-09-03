@@ -156,8 +156,10 @@ describe('ActorsForm — precarga RUES + directorio RL', () => {
     expect(screen.queryByDisplayValue('Comercializadora del Valle SAS')).toBeNull();
     expect(screen.getByDisplayValue('Carlos Ramírez Núñez')).toBeInTheDocument();
     expect(screen.getByDisplayValue('carlos@valle.co')).toBeInTheDocument();
-    expect(screen.getByText('Firma vigente')).toBeInTheDocument();
-    expect(screen.getByText('Sin identidad vigente')).toBeInTheDocument();
+    expect(screen.getByText('Cuenta con firma digital vigente.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Validación de identidad pendiente (Kyverum).'),
+    ).toBeInTheDocument();
   });
 
   it('con un solo representante: NO muestra selector (auto-seleccionado)', async () => {
@@ -185,8 +187,10 @@ describe('ActorsForm — precarga RUES + directorio RL', () => {
     const select = await screen.findByLabelText('Representante legal que firma');
     expect(select).toBeInTheDocument();
     expect(screen.getByDisplayValue('Carlos Ramírez Núñez')).toBeInTheDocument();
-    expect(screen.getByText('Firma vigente')).toBeInTheDocument();
-    expect(screen.getByText('Sin identidad vigente')).toBeInTheDocument();
+    expect(screen.getByText('Cuenta con firma digital vigente.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Validación de identidad pendiente (Kyverum).'),
+    ).toBeInTheDocument();
 
     // Elegir el segundo representante (Ana): precarga sus datos y sus banderas (firma no, identidad sí).
     await user.selectOptions(select, '1');
