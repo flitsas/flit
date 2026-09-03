@@ -46,7 +46,7 @@ public sealed class PlateAssignmentEmailDispatchProcessorTests
     }
 
     [Fact]
-    public async Task VarianteCuerpo_SigueMarcaPorNit()
+    public async Task VarianteCuerpo_SigueMarcaPorCanal()
     {
         var dbName = NewDbName();
         await SeedInstanceAsync(dbName, plate: "XYZ789");
