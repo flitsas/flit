@@ -809,11 +809,13 @@ export function DocumentSlot({
       {/* HU #12067 — qué debe cargar el gestor aquí. El texto lo escribe el administrador en el
           módulo documental; sin instrucción configurada no se pinta nada (ni hueco ni relleno). */}
       {instruccion && (
-        <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug opacity-70">
-          {/* EXPERIMENTO UI — ícono (i) delante del copy, a evaluar. `shrink-0` + `mt-px` para que
-              no se deforme ni se despegue de la primera línea cuando el texto envuelve. */}
-          <Info className="mt-px h-3 w-3 shrink-0" aria-hidden />
-          <span>{instruccion}</span>
+        <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
+          {/* El ícono marca el texto como ayuda. Va en el azul plano de la app (#557EFF, el mismo
+              de «Ver» y del foco), no en el degradado de marca, y a plena opacidad: el `opacity-70`
+              vive en el texto para que el color no salga lavado. `shrink-0` + `mt-px` evitan que se
+              deforme o se despegue de la primera línea cuando el texto envuelve. */}
+          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: '#557EFF' }} aria-hidden />
+          <span className="opacity-70">{instruccion}</span>
         </p>
       )}
       <p className="mt-1 text-[11px] opacity-70">{limitsCaption}</p>
