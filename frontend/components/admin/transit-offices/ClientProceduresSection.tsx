@@ -651,6 +651,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       const traiaLt = ltFile !== null;
       setApproveTarget(null);
+      // Si la decisión se tomó desde el detalle, ese modal quedaría enseñando el estado anterior:
+      // se cierra con la acción resuelta (HU #12062).
+      setDetailProcedure(null);
       setMandatarioTarget(null);
       setLtFile(null);
       setLtOcr(null);
@@ -920,6 +923,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       });
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setRejectTarget(null);
+      setDetailProcedure(null);
       setRejectReason("");
       setRejectReasonIds([]);
       show("Trámite rechazado.", "success");
@@ -1203,7 +1207,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {approveTarget && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Confirmar aprobación"
@@ -1256,7 +1260,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {mandatarioTarget && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Elegir mandatario del mandato"
@@ -1327,7 +1331,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {assignTarget && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Asignar placa"
@@ -1412,7 +1416,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {revokeTarget && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Revocar preasignación"
@@ -1438,7 +1442,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {rejectTarget && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Rechazar trámite"
@@ -1517,7 +1521,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {ltTarget && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Adjuntar Licencia de Tránsito"
@@ -1574,6 +1578,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         scope={scope}
         readOnly={isReadOnly}
         initialSection={detailSection}
+        // HU #12062 — LOS MISMOS manejadores que recibe la tabla: decidir desde el detalle abre el
+        // mismo diálogo que decidir desde la fila, sin una segunda vía de aprobación.
+        onApprove={(row) => {
+          setLtFile(null);
+          setLtOcr(null);
+          setApproveTarget(row);
+        }}
+        onReject={(row) => void openReject(row)}
+        onAssignPlate={!isReadOnly && !superAdmin ? openAssignPlate : undefined}
+        showApprovalActions={!isReadOnly && !superAdmin}
       />
 
       {/* Previsualización inline del consolidado (botón "Ver consolidado" de la tabla) */}

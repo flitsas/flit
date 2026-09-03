@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
@@ -10,6 +10,7 @@ import {
   type OtProcedureAttachment,
 } from "@/lib/api/admin-ot";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
+import { puedeDecidirOt } from "@/lib/tramites/estados";
 import { OtDetalleAcordeon } from "./detalle/OtDetalleAcordeon";
 import { OtDetalleActores } from "./detalle/OtDetalleActores";
 import { OtDetalleShell } from "./detalle/OtDetalleShell";
@@ -18,9 +19,11 @@ import { OtDetalleDocumentos } from "./detalle/OtDetalleDocumentos";
 import { OtCargando } from "./detalle/OtDetallePrimitivos";
 import { pendientesDelTramite } from "./detalle/ot-detalle-pendientes";
 import {
+  OT_APROBAR_GRADIENTE,
   OT_BLUE,
   OT_BORDER,
   OT_NAVY,
+  OT_ORANGE,
   OT_WARN,
   OT_WARN_TEXT,
 } from "./detalle/ot-detalle-visual";
@@ -51,6 +54,18 @@ export interface ClientProcedureDetailModalProps {
    * «ver documentos»— y ambas llevan a este modal: la segunda simplemente abre el suyo.
    */
   initialSection?: OtDetalleSeccionId;
+  /**
+   * Decisión del organismo desde el pie del modal (HU #12062). Son LOS MISMOS manejadores que ya
+   * recibe la tabla de la bandeja: el modal es hermano suyo dentro de `ClientProceduresSection`, así
+   * que aprobar desde aquí abre exactamente el mismo diálogo que aprobar desde la fila. No hay una
+   * segunda vía de aprobación ni reglas duplicadas.
+   */
+  onApprove?: (procedure: OtClientProcedure) => void;
+  onReject?: (procedure: OtClientProcedure) => void;
+  /** Feature #10587 — asignar placa a un trámite en preasignado; desbloquea la decisión. */
+  onAssignPlate?: (procedure: OtClientProcedure) => void;
+  /** A false —solo lectura o SuperAdmin supervisando— el pie de decisión no se pinta. */
+  showApprovalActions?: boolean;
 }
 
 /**
@@ -74,7 +89,13 @@ export function ClientProcedureDetailModal({
   scope,
   readOnly = false,
   initialSection = "vehiculo",
+  onApprove,
+  onReject,
+  onAssignPlate,
+  showApprovalActions = false,
 }: ClientProcedureDetailModalProps) {
+  /** La banda de aviso explica por qué el pie está deshabilitado; los botones la referencian. */
+  const avisosId = useId();
   const [detail, setDetail] = useState<OtClientProcedure | null>(procedure);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -135,7 +156,23 @@ export function ClientProcedureDetailModal({
   const alternar = (id: OtDetalleSeccionId) =>
     setAbiertos((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  const pendientes = pendientesDelTramite(row, docs.length);
+  /**
+   * Un trámite fuera de `entregado` ya fue resuelto (o nunca llegó): el organismo no decide sobre
+   * él. Es un bloqueo distinto de los pendientes —que sí se pueden subsanar— y por eso se nombra
+   * aparte antes de mezclarlo con ellos en la banda de aviso.
+   */
+  const bloqueo =
+    row.status === "entregado"
+      ? null
+      : `El trámite está en «${formatOtProcedureStatus(row.status)}»: el organismo solo decide sobre los que tiene entregados.`;
+
+  const decidible = bloqueo === null && puedeDecidirOt(row.plateFlowStatus, row.soatEstado);
+  const puedeAsignarPlaca = Boolean(onAssignPlate) && row.plateFlowStatus === "preasignado";
+  const hayPie = showApprovalActions && Boolean(onApprove || onReject || puedeAsignarPlaca);
+
+  const avisos = [bloqueo, ...pendientesDelTramite(row, docs.length)].filter(
+    (a): a is string => a !== null,
+  );
   const titulo = "Gestión y Aprobación del Trámite";
 
   const header = ({ titleId }: { titleId: string }) => (
@@ -175,11 +212,12 @@ export function ClientProcedureDetailModal({
       {/* Banda de aviso del prototipo. Los pendientes (Bug #11585) viven AQUÍ y no dentro de un
           acordeón: son la razón por la que el trámite todavía no se puede resolver, y plegados
           dejarían de avisar justo cuando hacen falta. */}
-      {pendientes.length > 0 ? (
+      {avisos.length > 0 ? (
         <div
           className="mt-3 flex w-full items-start gap-2 rounded-xl px-3 py-2.5"
           style={{ background: `${OT_WARN}1A`, border: `1px solid ${OT_WARN}55` }}
           role="status"
+          id={avisosId}
         >
           <AlertTriangle
             className="mt-0.5 h-4 w-4 shrink-0"
@@ -189,7 +227,7 @@ export function ClientProcedureDetailModal({
           <div className="text-[11.5px] font-medium" style={{ color: OT_WARN_TEXT }}>
             <strong>Pendientes antes de decidir:</strong>
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
-              {pendientes.map((aviso) => (
+              {avisos.map((aviso) => (
                 <li key={aviso}>{aviso}</li>
               ))}
             </ul>
@@ -215,8 +253,51 @@ export function ClientProcedureDetailModal({
     );
   };
 
+  /**
+   * Pie de decisión del prototipo. NO ejecuta la decisión: delega en los manejadores que ya usaba la
+   * bandeja, que son los que abren el diálogo de motivos de rechazo o el de adjuntar la licencia de
+   * tránsito. Esos diálogos viven en `ClientProceduresSection` y se pintan POR ENCIMA de este modal.
+   */
+  const footer = hayPie ? (
+    <div className="flex flex-wrap items-center justify-center gap-3">
+      {puedeAsignarPlaca ? (
+        <button
+          type="button"
+          onClick={() => onAssignPlate?.(row)}
+          className="h-11 min-w-[160px] rounded-xl border px-6 text-[13px] font-semibold transition hover:bg-[#557EFF]/10"
+          style={{ borderColor: OT_BLUE, color: OT_BLUE }}
+        >
+          Asignar placa
+        </button>
+      ) : null}
+      {onReject ? (
+        <button
+          type="button"
+          onClick={() => onReject(row)}
+          disabled={!decidible}
+          aria-describedby={!decidible && avisos.length > 0 ? avisosId : undefined}
+          className="h-11 min-w-[200px] rounded-xl px-6 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          style={{ background: OT_ORANGE }}
+        >
+          Rechazar trámite
+        </button>
+      ) : null}
+      {onApprove ? (
+        <button
+          type="button"
+          onClick={() => onApprove(row)}
+          disabled={!decidible}
+          aria-describedby={!decidible && avisos.length > 0 ? avisosId : undefined}
+          className={`h-11 min-w-[200px] rounded-xl px-6 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${OT_APROBAR_GRADIENTE}`}
+        >
+          Aprobar trámite
+        </button>
+      ) : null}
+    </div>
+  ) : undefined;
+
   return (
-    <OtDetalleShell open onClose={onClose} title={titulo} header={header}>
+    <OtDetalleShell open onClose={onClose} title={titulo} header={header} footer={footer}>
       {detailError ? (
         <p className="m-0 text-[11px]" style={{ color: "#B45309" }} role="alert">
           {detailError}
