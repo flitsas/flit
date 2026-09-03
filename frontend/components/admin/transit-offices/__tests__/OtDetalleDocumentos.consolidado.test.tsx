@@ -4,12 +4,14 @@
 // quedarse sin forma de comprobarlo.
 //
 // La cobertura vivía en ClientProcedureDetailPanel.regenerar.test.tsx; con la HU #11930 la acción
-// dejó de estar en el pie del detalle y quedó solo aquí, dentro de la sección Documentos.
+// dejó de estar en el pie del detalle y quedó solo aquí, dentro de la sección Documentos. Con la
+// HU #12061 la sección adoptó la rejilla del prototipo y las dos acciones pasaron a ser botones de
+// icono sobre la tarjeta azul del consolidado: cambia la forma, no el contrato.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
-import { OtDocumentosTab } from "../OtDocumentosTab";
+import { OtDetalleDocumentos } from "../detalle/OtDetalleDocumentos";
 
 const fetchOtDocuments = vi.fn();
 const generarOtConsolidadoMaestro = vi.fn();
@@ -36,12 +38,12 @@ const CONSOLIDADO = {
 function renderTab(readOnly = false) {
   render(
     <ToastProvider>
-      <OtDocumentosTab procedureId="proc-1" referenceNumber="RAD-0001" readOnly={readOnly} />
+      <OtDetalleDocumentos procedureId="proc-1" readOnly={readOnly} />
     </ToastProvider>,
   );
 }
 
-describe("OtDocumentosTab — consolidado del expediente", () => {
+describe("OtDetalleDocumentos — consolidado del expediente", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchOtDocuments.mockResolvedValue({ data: [] });
@@ -81,8 +83,7 @@ describe("OtDocumentosTab — consolidado del expediente", () => {
     await waitFor(() => expect(fetchOtDocuments).toHaveBeenCalled());
 
     const accion = screen.getByRole("button", { name: /Actualizar el consolidado del expediente/i });
-    // El texto visible y el nombre accesible dicen lo mismo: el PDF ya existe y se reconstruye.
-    expect(accion).toHaveTextContent("Actualizar consolidado");
+    // El nombre accesible y el rótulo emergente dicen lo mismo: el PDF ya existe y se reconstruye.
     expect(accion).toHaveAttribute(
       "title",
       "Reconstruye el expediente consolidado con el contenido actual del trámite",

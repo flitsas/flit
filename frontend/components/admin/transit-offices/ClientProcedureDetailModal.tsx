@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   fetchOtClientProcedure,
@@ -14,9 +14,16 @@ import { OtDetalleAcordeon } from "./detalle/OtDetalleAcordeon";
 import { OtDetalleActores } from "./detalle/OtDetalleActores";
 import { OtDetalleShell } from "./detalle/OtDetalleShell";
 import { OtDetalleTramiteVehiculo } from "./detalle/OtDetalleTramiteVehiculo";
+import { OtDetalleDocumentos } from "./detalle/OtDetalleDocumentos";
 import { OtCargando } from "./detalle/OtDetallePrimitivos";
-import { OT_BLUE, OT_BORDER, OT_NAVY } from "./detalle/ot-detalle-visual";
-import { OtDocumentosTab } from "./OtDocumentosTab";
+import { pendientesDelTramite } from "./detalle/ot-detalle-pendientes";
+import {
+  OT_BLUE,
+  OT_BORDER,
+  OT_NAVY,
+  OT_WARN,
+  OT_WARN_TEXT,
+} from "./detalle/ot-detalle-visual";
 import { formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
 
 /**
@@ -128,6 +135,7 @@ export function ClientProcedureDetailModal({
   const alternar = (id: OtDetalleSeccionId) =>
     setAbiertos((prev) => ({ ...prev, [id]: !prev[id] }));
 
+  const pendientes = pendientesDelTramite(row, docs.length);
   const titulo = "Gestión y Aprobación del Trámite";
 
   const header = ({ titleId }: { titleId: string }) => (
@@ -163,6 +171,31 @@ export function ClientProcedureDetailModal({
       >
         <X className="h-4 w-4" aria-hidden="true" />
       </button>
+
+      {/* Banda de aviso del prototipo. Los pendientes (Bug #11585) viven AQUÍ y no dentro de un
+          acordeón: son la razón por la que el trámite todavía no se puede resolver, y plegados
+          dejarían de avisar justo cuando hacen falta. */}
+      {pendientes.length > 0 ? (
+        <div
+          className="mt-3 flex w-full items-start gap-2 rounded-xl px-3 py-2.5"
+          style={{ background: `${OT_WARN}1A`, border: `1px solid ${OT_WARN}55` }}
+          role="status"
+        >
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0"
+            style={{ color: OT_WARN }}
+            aria-hidden="true"
+          />
+          <div className="text-[11.5px] font-medium" style={{ color: OT_WARN_TEXT }}>
+            <strong>Pendientes antes de decidir:</strong>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {pendientes.map((aviso) => (
+                <li key={aviso}>{aviso}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -171,19 +204,14 @@ export function ClientProcedureDetailModal({
       return detailLoading ? (
         <OtCargando etiqueta="Cargando el detalle del trámite" filas={5} />
       ) : (
-        <OtDetalleTramiteVehiculo procedure={row} totalDocumentos={docs.length} />
+        <OtDetalleTramiteVehiculo procedure={row} />
       );
     }
     if (id === "actores") {
       return <OtDetalleActores procedure={row} />;
     }
     return (
-      <OtDocumentosTab
-        procedureId={row.id}
-        referenceNumber={row.referenceNumber}
-        scope={scope}
-        readOnly={readOnly}
-      />
+      <OtDetalleDocumentos procedureId={row.id} scope={scope} readOnly={readOnly} />
     );
   };
 

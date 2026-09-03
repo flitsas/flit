@@ -1,42 +1,69 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { OtCampo, OtListaCampos, OtTarjeta, OtVacio } from "./OtDetallePrimitivos";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { plateFlowChipStyle, plateFlowLabel } from "@/lib/tramites/estados";
 import type { TransformacionTipo } from "@/lib/tramites/transformaciones-vehiculo";
+import { OtFichaCampos, OtRejilla, OtVacio } from "./OtDetallePrimitivos";
 import {
   OtDetalleTransformaciones,
   transformacionesDelTramite,
 } from "./OtDetalleTransformaciones";
-import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "../ot-utils";
+import { soatEstadoLabel } from "./ot-detalle-pendientes";
+import { formatOtDate } from "../ot-utils";
 
-/** Etiqueta legible del estado del SOAT en el RUNT. */
-function soatEstadoLabel(value: string | null | undefined): string {
-  if (!value) return "—";
-  if (value === "vigente") return "Vigente";
-  if (value === "vencido") return "Vencido";
-  if (value === "unknown") return "Desconocido";
-  return value;
+/**
+ * Catálogo cerrado de decisiones de prenda, el mismo que captura el gestor.
+ *
+ * Llega aquí desde la desaparecida sección «Datos comerciales»: el prototipo pone la prenda en la
+ * ficha del vehículo —es un gravamen sobre el bien, no una condición de la compraventa— y ese es
+ * también el único dato de aquella sección que el organismo necesita para decidir.
+ */
+const PRENDA_DECISION_LABELS: Record<string, string> = {
+  solicitar: "Solicitar constitución de prenda",
+  registrar: "Registrar prenda",
+  levantar: "Levantar gravamen",
+  omitir: "Continuar sin gestionar (riesgo asumido)",
+  sin_prenda: "Sin prenda",
+};
+
+function prendaTexto(procedure: OtClientProcedure): string {
+  const prenda = procedure.prenda;
+  if (!prenda?.decision) return "";
+  const decision = PRENDA_DECISION_LABELS[prenda.decision] ?? prenda.decision;
+  // El acreedor solo se nombra si lo hay: en `sin_prenda` y `levantar` puede no existir.
+  return [decision, prenda.acreedorNombre?.trim()].filter(Boolean).join(" · ");
 }
 
 /**
- * Especificaciones técnicas del vehículo, en el mismo orden que el detalle del gestor.
+ * Campos del vehículo, en el orden del prototipo (VIN · Placa · Marca · Línea, luego Clase · Color…).
  *
- * Un atributo que el trámite transforma se OMITE aquí: su sitio es el bloque de transformaciones,
- * donde se ve junto al valor del RUNT. Mostrarlo además como valor suelto lo haría pasar por el
- * dato oficial del vehículo, que es justo la confusión que se está corrigiendo (HU #11931).
+ * Dos reglas gobiernan qué entra:
+ *
+ *  - **Lo que no tenemos, no se pone.** «Peso» sale en el prototipo pero no existe en
+ *    `OtClientProcedure`, así que no se pinta ni con un guion: un hueco rotulado sugiere un dato
+ *    que se perdió, y aquí simplemente no lo hay. Igual con cualquier campo vacío del trámite.
+ *  - **Un atributo que el trámite transforma se OMITE.** Su sitio es el bloque de transformaciones,
+ *    donde se ve junto al valor del RUNT. Repetirlo suelto lo haría pasar por el dato oficial del
+ *    vehículo, que es justo la confusión que se corrigió en la HU #11931.
  */
-function especificaciones(
+function camposVehiculo(
   procedure: OtClientProcedure,
   transformados: Set<TransformacionTipo>,
 ): { campo: string; valor: string }[] {
   const cilindraje = procedure.cilindraje?.trim() ?? "";
 
   return [
+    { campo: "VIN", valor: procedure.vin },
+    { campo: "Placa", valor: procedure.placa },
+    { campo: "Marca", valor: procedure.marca },
+    { campo: "Línea", valor: procedure.linea },
     { campo: "Clase", valor: procedure.clase },
-    { campo: "Servicio", valor: procedure.servicio },
     { campo: "Color", valor: transformados.has("color") ? "" : procedure.color },
+    { campo: "Prenda", valor: prendaTexto(procedure) },
+    { campo: "Servicio", valor: procedure.servicio },
+    { campo: "Modelo", valor: procedure.modelo },
     { campo: "Combustible", valor: transformados.has("combustible") ? "" : procedure.combustible },
     { campo: "Carrocería", valor: transformados.has("carroceria") ? "" : procedure.carroceria },
     {
@@ -49,138 +76,114 @@ function especificaciones(
     { campo: "N. Motor", valor: procedure.numeroMotor },
     { campo: "N. Chasis", valor: procedure.numeroChasis },
     { campo: "N. Serie", valor: procedure.numeroSerie },
-    // Una clave que el trámite no capturó se OMITE; nunca se rellena con el valor de otra.
   ]
     .map((s) => ({ campo: s.campo, valor: s.valor?.trim() ?? "" }))
     .filter((s) => s.valor !== "");
 }
 
-/** Pendientes que el OT debe tener a la vista antes de decidir (Bug #11585: solo si hay alguno). */
-function pendientes(procedure: OtClientProcedure, totalDocumentos: number): string[] {
-  const items: string[] = [];
+/** Empresa responsable y persona con la que hablar, en la misma celda que el prototipo. */
+function empresaGestor(procedure: OtClientProcedure): string {
+  return [procedure.clientTenantName ?? procedure.clientTenantId, procedure.gestorNombre?.trim()]
+    .filter(Boolean)
+    .join(" · ");
+}
 
-  if (procedure.plateFlowStatus === "preasignado") {
-    items.push("Pendiente asignar placa por el OT.");
-  }
-  if (procedure.plateFlowStatus === "asignado") {
-    items.push("Pendiente proceso del gestor (Asignado → Terminado) antes de decidir.");
-  }
-  if (procedure.soatEstado && procedure.soatEstado !== "vigente") {
-    items.push(`SOAT RUNT no vigente (${soatEstadoLabel(procedure.soatEstado)}).`);
-  }
-  if (totalDocumentos === 0) {
-    items.push("El expediente aún no tiene documentos.");
-  }
+/** Sellos que acompañan al estado: sub-estado de placa, prioridad y pagos declarados. */
+function EstadoDelTramite({ procedure }: { procedure: OtClientProcedure }): ReactNode {
+  const plateChip = plateFlowChipStyle(procedure.plateFlowStatus);
 
-  return items;
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {plateChip ? (
+        <span
+          className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+          style={{
+            background: plateChip.bg,
+            color: plateChip.color,
+            border: `1px solid ${plateChip.border}`,
+          }}
+        >
+          {plateFlowLabel(procedure.plateFlowStatus)}
+        </span>
+      ) : null}
+      {procedure.prioritario ? <StatusBadge label="Prioritario" tone="warning" /> : null}
+      <StatusBadge
+        label={`SOAT ${procedure.soatPagado ? "pagado" : "pendiente"}`}
+        tone={procedure.soatPagado ? "success" : "neutral"}
+      />
+      <StatusBadge
+        label={`Impuesto ${procedure.impuestoDepartamentalPagado ? "pagado" : "pendiente"}`}
+        tone={procedure.impuestoDepartamentalPagado ? "info" : "neutral"}
+      />
+    </span>
+  );
 }
 
 /**
- * Sección «Trámite y vehículo» del modal de detalle del OT: la ficha del radicado y las
- * especificaciones técnicas del vehículo, más los pendientes que condicionan la decisión.
+ * Acordeón «Detalles del trámite y vehículo» (HU #12061).
+ *
+ * Rejillas del prototipo en vez de las dos tarjetas de campo/valor: la ficha del radicado, la del
+ * estado y las características del vehículo. El bloque de transformaciones RUNT-vs-nuevo (HU
+ * #11931) cierra la sección, porque es lo único de aquí que no es un dato sino una comparación.
  *
  * Todo sale del detalle que ya trae el modal: la sección no pide red por su cuenta.
  */
 export function OtDetalleTramiteVehiculo({
   procedure,
-  totalDocumentos,
 }: {
   procedure: OtClientProcedure;
-  /** Documentos del expediente ya cargados por el modal; alimenta el pendiente «sin documentos». */
-  totalDocumentos: number;
 }) {
-  const transformados = new Set(transformacionesDelTramite(procedure).map((t) => t.tipo));
-  const specs = especificaciones(procedure, transformados);
-  const avisos = pendientes(procedure, totalDocumentos);
-  const plateChip = plateFlowChipStyle(procedure.plateFlowStatus);
+  const transformaciones = transformacionesDelTramite(procedure);
+  const transformados = new Set(transformaciones.map((t) => t.tipo));
+  const campos = camposVehiculo(procedure, transformados);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <OtTarjeta titulo="Datos del trámite">
-        <OtListaCampos>
-          <OtCampo campo="Radicado" valor={procedure.referenceNumber} />
-          <OtCampo campo="Tipo" valor={procedure.procedureTypeName ?? procedure.procedureTypeId} />
-          <OtCampo campo="Empresa" valor={procedure.clientTenantName ?? procedure.clientTenantId} />
-          <OtCampo
-            campo="Estado"
-            valor={
-              <span className="flex flex-wrap items-center gap-1.5">
-                <StatusBadge
-                  label={formatOtProcedureStatus(procedure.status)}
-                  tone={procedureStatusTone(procedure.status)}
-                />
-                {plateChip ? (
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                    style={{
-                      background: plateChip.bg,
-                      color: plateChip.color,
-                      border: `1px solid ${plateChip.border}`,
-                    }}
-                  >
-                    {plateFlowLabel(procedure.plateFlowStatus)}
-                  </span>
-                ) : null}
-                {procedure.prioritario ? (
-                  <StatusBadge label="Prioritario" tone="warning" />
-                ) : null}
-              </span>
-            }
-          />
-          <OtCampo campo="Radicación" valor={formatOtDate(procedure.createdAt)} />
-          <OtCampo
-            campo="Entrega"
-            valor={procedure.submittedAt ? formatOtDate(procedure.submittedAt) : ""}
-          />
-          <OtCampo campo="SOAT RUNT" valor={soatEstadoLabel(procedure.soatEstado)} />
-          <OtCampo
-            campo="Pagos"
-            valor={
-              <span className="flex flex-wrap gap-1.5">
-                <StatusBadge
-                  label={`SOAT ${procedure.soatPagado ? "pagado" : "pendiente"}`}
-                  tone={procedure.soatPagado ? "success" : "neutral"}
-                />
-                <StatusBadge
-                  label={`Impuesto ${procedure.impuestoDepartamentalPagado ? "pagado" : "pendiente"}`}
-                  tone={procedure.impuestoDepartamentalPagado ? "info" : "neutral"}
-                />
-              </span>
-            }
-          />
-          <OtCampo campo="Dígito placa" valor={procedure.platePreferredLastDigit} />
-        </OtListaCampos>
+    <div className="space-y-4">
+      <OtRejilla
+        etiqueta="Datos del trámite"
+        columnas={[
+          "Radicado",
+          "Fecha radicación",
+          "Empresa / Gestor",
+          "Tipo trámite solicitado",
+          "Transformaciones solicitadas",
+        ]}
+        filas={[
+          [
+            procedure.referenceNumber,
+            formatOtDate(procedure.createdAt),
+            empresaGestor(procedure),
+            procedure.procedureTypeName ?? procedure.procedureTypeId,
+            // «Cambio de color», no «Color» a secas: en esta celda el rótulo nombra la
+            // transformación pedida, y usar el mismo literal que la especificación del vehículo
+            // haría pasar una por la otra (HU #11931).
+            transformaciones.length > 0
+              ? transformaciones.map((t) => `Cambio de ${t.label.toLocaleLowerCase("es")}`).join(" · ")
+              : "Ninguna",
+          ],
+        ]}
+      />
 
-        {avisos.length > 0 ? (
-          <div className="mt-4 border-t pt-3 border-[#DFE5ED] dark:border-white/10">
-            <h5 className="text-xs font-semibold text-[#162744] dark:text-white">
-              Pendientes antes de decidir
-            </h5>
-            <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-[#162744]/80 dark:text-white/80">
-              {avisos.map((aviso) => (
-                <li key={aviso}>{aviso}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </OtTarjeta>
+      <OtRejilla
+        etiqueta="Estado del trámite"
+        columnas={["Estado", "SOAT RUNT", "Entrega al organismo", "Dígito de placa preferido"]}
+        filas={[
+          [
+            <EstadoDelTramite key="estado" procedure={procedure} />,
+            soatEstadoLabel(procedure.soatEstado),
+            procedure.submittedAt ? formatOtDate(procedure.submittedAt) : "Sin entregar",
+            procedure.platePreferredLastDigit?.trim() || "Sin preferencia",
+          ],
+        ]}
+      />
 
-      <OtTarjeta titulo="Especificaciones del vehículo">
-        {specs.length === 0 && transformados.size === 0 ? (
-          <OtVacio mensaje="Este trámite no tiene especificaciones técnicas del vehículo registradas todavía." />
-        ) : (
-          <>
-            {specs.length > 0 ? (
-              <OtListaCampos>
-                {specs.map((s) => (
-                  <OtCampo key={s.campo} campo={s.campo} valor={s.valor} />
-                ))}
-              </OtListaCampos>
-            ) : null}
-            <OtDetalleTransformaciones procedure={procedure} />
-          </>
-        )}
-      </OtTarjeta>
+      {campos.length === 0 ? (
+        <OtVacio mensaje="Este trámite no tiene especificaciones técnicas del vehículo registradas todavía." />
+      ) : (
+        <OtFichaCampos etiqueta="Especificaciones del vehículo" campos={campos} />
+      )}
+
+      <OtDetalleTransformaciones procedure={procedure} />
     </div>
   );
 }

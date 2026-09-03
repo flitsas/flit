@@ -138,7 +138,7 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
     await user.click(acordeon(ACORDEONES[0]!));
     expect(acordeon(ACORDEONES[0]!)).toHaveAttribute("aria-expanded", "false");
     expect(acordeon(ACORDEONES[1]!)).toHaveAttribute("aria-expanded", "true");
-    expect(screen.queryByText("Datos del trámite")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Datos del trámite" })).not.toBeInTheDocument();
   });
 
   it("se presenta como diálogo con radicado, tipo, placa y estado en el encabezado", async () => {
@@ -157,7 +157,10 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
   it("muestra las especificaciones técnicas y omite las que el trámite no tiene", async () => {
     renderModal();
 
-    expect(await screen.findByText("Especificaciones del vehículo")).toBeInTheDocument();
+    // La ficha se reparte en tandas de cuatro columnas; basta con que exista.
+    expect(
+      (await screen.findAllByRole("table", { name: /^Especificaciones del vehículo/ })).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("1600 cc")).toBeInTheDocument();
     expect(screen.getByText("MOT-1")).toBeInTheDocument();
     // Sin número de chasis capturado, la fila no se pinta (no se inventa ni se rellena con otra).
@@ -187,7 +190,7 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
       </ToastProvider>,
     );
 
-    expect(await screen.findByTestId("ot-documentos-tab")).toBeInTheDocument();
+    expect(await screen.findByTestId("ot-detalle-documentos")).toBeInTheDocument();
     await waitFor(() => expect(acordeon(ACORDEONES[2]!)).toHaveAttribute("aria-expanded", "true"));
     expect(acordeon(ACORDEONES[0]!)).toHaveAttribute("aria-expanded", "false");
   });
@@ -195,8 +198,8 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
   it("Bug #11585 — sin pendientes no monta el bloque de pendientes", async () => {
     renderModal();
 
-    await screen.findByText("Datos del trámite");
-    expect(screen.queryByText("Pendientes antes de decidir")).not.toBeInTheDocument();
+    await screen.findByRole("table", { name: "Datos del trámite" });
+    expect(screen.queryByText(/Pendientes antes de decidir/)).not.toBeInTheDocument();
   });
 
   it("Bug #11585 — con expediente vacío y SOAT no vigente sí los enumera", async () => {
@@ -205,7 +208,7 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
     fetchOtDocuments.mockResolvedValue({ data: [] });
     renderModal(conPendientes);
 
-    expect(await screen.findByText("Pendientes antes de decidir")).toBeInTheDocument();
+    expect(await screen.findByText(/Pendientes antes de decidir/)).toBeInTheDocument();
     expect(screen.getByText(/SOAT RUNT no vigente/i)).toBeInTheDocument();
     expect(screen.getByText(/expediente aún no tiene documentos/i)).toBeInTheDocument();
   });
