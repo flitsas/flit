@@ -79,10 +79,17 @@ function prepararBandeja(row: OtClientProcedure) {
   vi.mocked(fetchOtClientProcedure).mockResolvedValue(row);
 }
 
-function renderSection() {
+const OT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+/**
+ * `transitOfficeId` NO es decorativo en las pruebas de recarga: sin él, `scope` vale `undefined`
+ * en todos los renders y la identidad del objeto —que es justo lo que se está probando— nunca
+ * cambia. La ruta real del organismo SÍ lo lleva.
+ */
+function renderSection(transitOfficeId?: string) {
   return render(
     <ToastProvider>
-      <ClientProceduresSection />
+      <ClientProceduresSection transitOfficeId={transitOfficeId} />
     </ToastProvider>,
   );
 }
@@ -245,6 +252,60 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     await waitFor(() => expect(fetchOtProfile).toHaveBeenCalled());
     const dialog = await abrirDetalle(user, "RAD-2026-101");
     expect(within(dialog).queryByRole("button", { name: "Aprobar trámite" })).not.toBeInTheDocument();
+  });
+
+  it("escribir el motivo de rechazo NO recarga el detalle de detrás", async () => {
+    // El detalle se quedaba abierto detrás del diálogo y saltaba con cada tecla: `scope` era un
+    // objeto literal creado en cada render, así que cambiaba de identidad con cada pulsación y
+    // relanzaba el efecto que trae el trámite, replegando los acordeones a media escritura.
+    const user = userEvent.setup();
+    renderSection(OT_ID);
+
+    const dialog = await abrirDetalle(user, "RAD-2026-101");
+    await waitFor(() => expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1));
+    const acordeon = within(dialog).getByRole("button", {
+      name: "Detalles del trámite y vehículo",
+    });
+    expect(acordeon).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(within(dialog).getByRole("button", { name: "Rechazar trámite" }));
+    const motivos = await screen.findByRole("dialog", { name: "Rechazar trámite" });
+    await user.type(within(motivos).getByRole("textbox"), "Faltan improntas legibles");
+
+    // Ni una recarga más, y el acordeón sigue como estaba.
+    expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1);
+    expect(fetchOtDocuments).toHaveBeenCalledTimes(1);
+    expect(acordeon).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("escribir la placa a asignar tampoco recarga el detalle", async () => {
+    prepararBandeja({ ...ENTREGADO, plateFlowStatus: "preasignado", placa: null });
+    const user = userEvent.setup();
+    renderSection(OT_ID);
+
+    const dialog = await abrirDetalle(user, "RAD-2026-101");
+    await waitFor(() => expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1));
+
+    await user.click(within(dialog).getByRole("button", { name: "Asignar placa" }));
+    const placas = await screen.findByRole("dialog", { name: "Asignar placa" });
+    await user.type(within(placas).getAllByRole("textbox")[0]!, "ABC123");
+
+    expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1);
+  });
+
+  it("la bandeja se actualiza con un botón, sin recargar la página", async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByText("RAD-2026-101");
+    const llamadasIniciales = vi.mocked(fetchOtClientProcedures).mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: "Actualizar la bandeja de trámites" }));
+    await waitFor(() =>
+      expect(vi.mocked(fetchOtClientProcedures).mock.calls.length).toBeGreaterThan(
+        llamadasIniciales,
+      ),
+    );
   });
 
   it("la placa sin preasignar se resuelve desde su propia celda del vehículo", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { tramitesClient } from "@/lib/api/tramites-client";
@@ -32,7 +32,7 @@ import { getToken } from "@/lib/api/client";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw, Search } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import {
   ClientProcedureDetailModal,
@@ -431,7 +431,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // Diagnóstico de bandeja (R09): entregados hacia el OT que no aparecen por falta de grant.
   const [health, setHealth] = useState<OtBandejaHealth | null>(null);
 
-  const scope = transitOfficeId ? { transitOfficeId } : undefined;
+  /**
+   * Objeto estable, y NO un literal en el cuerpo del render.
+   *
+   * `scope` viaja como prop al modal de detalle y de ahí a los efectos que traen el trámite y su
+   * expediente. Creado en cada render, cambiaba de identidad con CADA pulsación de tecla en los
+   * diálogos de rechazo o de placa —que viven en este mismo componente—, así que el detalle de
+   * detrás recargaba y replegaba sus acordeones a cada letra: eso era el salto que se veía.
+   */
+  const scope = useMemo(
+    () => (transitOfficeId ? { transitOfficeId } : undefined),
+    [transitOfficeId],
+  );
 
   // El SuperAdmin supervisa la cola pero la decisión aprobar/rechazar es del OT admin
   // (los endpoints approve/reject YA soportan el override de organismo del SuperAdmin vía
@@ -990,6 +1001,24 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             loading={status === "loading"}
           />
         </div>
+        {/* Actualizar, el mismo gesto que el listado del gestor: la bandeja cambia por lo que
+            hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
+            perder los filtros puestos. */}
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={status === "loading"}
+          aria-label="Actualizar la bandeja de trámites"
+          title="Actualizar"
+          className="flex w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl border text-sm font-semibold leading-tight transition hover:bg-[#557EFF]/10 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${status === "loading" ? "animate-spin" : ""}`}
+            aria-hidden="true"
+          />
+          <span aria-hidden="true">Actualizar</span>
+        </button>
         <button
           type="button"
           onClick={() => setFiltersOpen((o) => !o)}
@@ -1244,14 +1273,21 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               >
                 Cancelar
               </button>
+              {/* HU #12042 — el veredicto del OCR existe para que el OT decida CON él, no a pesar
+                  de él: mientras se analiza, confirmar queda cerrado. En cuanto termina —diga lo
+                  que diga, incluso si no se pudo analizar— se abre: el análisis informa, no veta. */}
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
                 style={{ background: "#557EFF" }}
-                disabled={acting}
+                disabled={acting || ltOcr?.fase === "analizando"}
                 onClick={() => void confirmApprove()}
               >
-                {acting ? "Procesando…" : "Confirmar"}
+                {acting
+                  ? "Procesando…"
+                  : ltOcr?.fase === "analizando"
+                    ? "Analizando la LT…"
+                    : "Confirmar"}
               </button>
             </div>
           </div>
@@ -1559,10 +1595,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
                 style={{ background: "#557EFF" }}
-                disabled={acting || !ltFile}
+                disabled={acting || !ltFile || ltOcr?.fase === "analizando"}
                 onClick={() => void confirmAdjuntarLt()}
               >
-                {acting ? "Adjuntando…" : "Adjuntar LT"}
+                {acting
+                  ? "Adjuntando…"
+                  : ltOcr?.fase === "analizando"
+                    ? "Analizando la LT…"
+                    : "Adjuntar LT"}
               </button>
             </div>
           </div>
