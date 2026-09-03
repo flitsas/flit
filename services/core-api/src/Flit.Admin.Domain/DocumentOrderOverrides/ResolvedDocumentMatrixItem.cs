@@ -33,6 +33,12 @@ public sealed class ResolvedDocumentMatrixItem
     public bool EsGeneradoSistema { get; init; }
 
     /// <summary>
+    /// Instrucción de cargue del catálogo (HU #12065) — <c>document_types.upload_instructions</c>:
+    /// qué debe subir el gestor en esta casilla. <c>null</c> ⇒ el tipo no tiene texto configurado.
+    /// </summary>
+    public string? InstruccionCargue { get; init; }
+
+    /// <summary>
     /// Nivel que determinó el orden: <see cref="DocumentOrderScope.Cliente"/>,
     /// <see cref="DocumentOrderScope.Ot"/> o <see cref="DocumentOrderScope.Default"/>.
     /// </summary>

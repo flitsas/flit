@@ -8,7 +8,10 @@ namespace Flit.Tramites.Domain.Tramites.Catalog;
 public sealed record DocumentTypeRule(
     string Code,
     IReadOnlyList<string> MimeTypesAllowed,
-    long MaxSizeBytes);
+    long MaxSizeBytes,
+    // HU #12065/#12066 — instrucción de cargue parametrizada por el admin. null ⇒ el tipo no tiene
+    // texto configurado y la tarjeta del paso Requisitos no muestra ninguno.
+    string? UploadInstructions = null);
 
 /// <summary>
 /// Puerto de solo lectura del catálogo de tipos de documento, usado por la validación de

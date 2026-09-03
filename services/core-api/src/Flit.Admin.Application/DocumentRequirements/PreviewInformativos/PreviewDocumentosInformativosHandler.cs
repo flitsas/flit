@@ -84,7 +84,8 @@ public sealed class PreviewDocumentosInformativosHandler
                 m.Nombre,
                 m.Obligatorio,
                 m.OrdenResuelto,
-                Descripcion: null))
+                Descripcion: null,
+                InstruccionCargue: m.InstruccionCargue))
             .ToList();
 
         return PreviewDocumentosInformativosResult.Resolved(procedureCode, procedureType.Id, items);
