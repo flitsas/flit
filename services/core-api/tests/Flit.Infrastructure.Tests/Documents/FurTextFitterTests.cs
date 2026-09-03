@@ -102,6 +102,44 @@ public sealed class FurTextFitterTests
         (fit.Lines.Count * fit.FontSize * 1.25).Should().BeLessThanOrEqualTo(CampoH);
     }
 
+    [Fact]
+    public void NombreDeOrganismoTipico_CabeEnUnaLineaConElAnchoDelRecuadro()
+    {
+        // Sección 1: el recuadro de maquinaria/remolques deja ~230 pt hasta la placa. Con el ancho
+        // viejo (114) el fitter partía nombres de secretaría y la segunda línea se salía de la celda.
+        const double organismoW = 230;
+        const double organismoH = 22;
+        const double organismoFont = 5.5;
+        var fit = FurTextFitter.Fit(
+            "INSTITUTO DE TRANSITO Y TRANSPORTE DE SANTANDER",
+            organismoW,
+            organismoH,
+            organismoFont,
+            Measure);
+
+        fit.Lines.Should().HaveCount(1);
+        fit.FontSize.Should().Be(organismoFont);
+        Measure(fit.Lines[0], fit.FontSize).Should().BeLessThanOrEqualTo(organismoW);
+    }
+
+    [Fact]
+    public void NombreDeOrganismoMuyLargo_ParteDentroDelAltoDelRecuadro()
+    {
+        const double organismoW = 230;
+        const double organismoH = 22;
+        const double organismoFont = 5.5;
+        var fit = FurTextFitter.Fit(
+            "SECRETARIA DE MOVILIDAD Y TRANSPORTE DEL DISTRITO ESPECIAL INDUSTRIAL Y PORTUARIO DE BARRANQUILLA",
+            organismoW,
+            organismoH,
+            organismoFont,
+            Measure);
+
+        fit.Lines.Count.Should().BeGreaterThan(1);
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= organismoW);
+        (fit.Lines.Count * fit.FontSize * 1.25).Should().BeLessThanOrEqualTo(organismoH);
+    }
+
     // HU sin ADO 2026-08-11 (tercera tanda) — piso ABSOLUTO opcional (Plan B de la casilla 19
     // "EMPRESA VINCULADORA" del FUR): un texto que necesitaría bajar del piso por defecto
     // (65% × cuerpo) para caber se trunca en su lugar, en vez de seguir encogiendo hasta casi

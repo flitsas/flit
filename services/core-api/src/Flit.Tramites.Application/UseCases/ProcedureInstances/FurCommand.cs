@@ -788,11 +788,13 @@ public sealed class GenerarFurHandler(
         // todos los tipos coincide con el canónico; en un radicado de cuenta no, porque ahí el
         // canónico es el DESTINO —quien aprueba— y el actual vive en las claves descriptivas. La
         // caída deja intactos los tipos que no las escriben.
+        var organismoNombre = Get(fv, TransitOfficeFieldKeys.ActualName) ?? Get(fv, TransitOfficeFieldKeys.Name);
         var organismo = new OrganismoTransito(
             Codigo: Get(fv, TransitOfficeFieldKeys.ActualCode) ?? Get(fv, TransitOfficeFieldKeys.Code),
-            Nombre: Get(fv, TransitOfficeFieldKeys.ActualName) ?? Get(fv, TransitOfficeFieldKeys.Name),
-            Ciudad: TransitOfficeCity.Legible(
-                Get(fv, TransitOfficeFieldKeys.ActualCity) ?? Get(fv, TransitOfficeFieldKeys.City)));
+            Nombre: organismoNombre,
+            Ciudad: TransitOfficeCity.ForDocuments(
+                Get(fv, TransitOfficeFieldKeys.ActualCity) ?? Get(fv, TransitOfficeFieldKeys.City),
+                organismoNombre));
 
         // ADR-0050 — en la familia OTROS solo entra la transformación que ES el trámite. Las banderas
         // y el diff RUNT↔efectivo son las dos vías por las que una transformación complementaria se
@@ -1196,12 +1198,13 @@ public sealed class GenerarFurHandler(
 
         // El FUR puede encabezar con el OT “actual” (RUNT). El mandato se emite para el OT canónico
         // al que va el trámite; si se usa el actual, Bogotá pintaba redacción de Bello.
+        var nombreMandato = transitOfficeName ?? data.Organismo.Nombre;
         data = data with
         {
             Organismo = new OrganismoTransito(
                 transitOfficeCode,
-                transitOfficeName ?? data.Organismo.Nombre,
-                TransitOfficeCity.Legible(transitOfficeCity) ?? data.Organismo.Ciudad),
+                nombreMandato,
+                TransitOfficeCity.ForDocuments(transitOfficeCity, nombreMandato) ?? data.Organismo.Ciudad),
         };
 
         // El ORGANISMO se llavea por id cuando el trámite lo tiene, y solo si no, por el código. El

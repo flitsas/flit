@@ -16,21 +16,18 @@ public sealed class FurPrendaObservationTests
     // ── Constitución ───────────────────────────────────────────────────────
 
     [Fact]
-    public void Compose_Constitucion_ConAcreedorYDocumento_DeclaraElBeneficiario()
+    public void Compose_Constitucion_ConAcreedorYDocumento_DeclaraBeneficiarioYDocumento()
     {
         var texto = FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "BANCO XYZ S.A.", "890900608");
 
-        texto.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
+        texto.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     [Fact]
-    public void Compose_Constitucion_IgnoraNit_SoloNombre()
+    public void Compose_Constitucion_SinDocumento_SoloNombre()
     {
-        var conNit = FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "FONDEICON", "890900608");
-        var sinNit = FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "FONDEICON", null);
-
-        conNit.Should().Be("Inscripción de prenda a favor de FONDEICON");
-        sinNit.Should().Be(conNit);
+        FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "FONDEICON", null)
+            .Should().Be("Inscripción de prenda a favor de FONDEICON");
     }
 
     [Theory]
@@ -46,11 +43,11 @@ public sealed class FurPrendaObservationTests
     // ── Levantamiento (CF11, HU #11257) ───────────────────────────────────
 
     [Fact]
-    public void Compose_Levantamiento_ConAcreedorYDocumento_DeclaraElBeneficiario()
+    public void Compose_Levantamiento_ConAcreedorYDocumento_DeclaraBeneficiarioYDocumento()
     {
         var texto = FurPrendaObservation.Compose(FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", "890900608");
 
-        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A.");
+        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     [Fact]
@@ -94,20 +91,20 @@ public sealed class FurPrendaObservationTests
     public void Compose_RecortaLosEspaciosDelCaptura()
     {
         FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "  BANCO XYZ S.A.  ", "  890900608  ")
-            .Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
+            .Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     // ── Join: el gravamen se antepone al resto del recuadro ──────────────────
 
     [Fact]
-    public void Join_AnteponeElGravamenAlRestoDeObservaciones()
+    public void Join_AnteponeElGravamenAlRestoDeObservaciones_SeparadoPorComa()
     {
         var resultado = FurPrendaObservation.Join(
-            "Inscripción de prenda a favor de BANCO XYZ S.A.",
-            "Vehículo con platón adaptado. Color nuevo(NUEVO COLOR: ROJO)");
+            "Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608",
+            "Color nuevo(NUEVO COLOR: ROJO)");
 
         resultado.Should().Be(
-            "Inscripción de prenda a favor de BANCO XYZ S.A. Vehículo con platón adaptado. Color nuevo(NUEVO COLOR: ROJO)");
+            "Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608, Color nuevo(NUEVO COLOR: ROJO)");
     }
 
     [Fact]
@@ -134,12 +131,13 @@ public sealed class FurPrendaObservationTests
     }
 
     [Fact]
-    public void Compose_Ambos_UneLevantamientoYConstitucion()
+    public void Compose_Ambos_UneLevantamientoYConstitucionConComa()
     {
         var texto = FurPrendaObservation.Compose(FurPrendaMarking.Ambos, "BANCO XYZ S.A.", "890900608");
         texto.Should().StartWith(FurPrendaObservation.EtiquetaLevantamiento);
         texto.Should().Contain(FurPrendaObservation.Etiqueta);
-        texto.Should().NotContain("NIT");
+        texto.Should().Contain(", ");
+        texto.Should().Contain("número de documento 890900608");
     }
 
     // ── Levantamiento con entidad: el trámite dedicado declara DÓNDE se hizo ─────────────────────
@@ -166,7 +164,7 @@ public sealed class FurPrendaObservationTests
         var texto = FurPrendaObservation.Compose(
             FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", "890900608", entidad);
 
-        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A.");
+        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     [Fact]
@@ -186,6 +184,6 @@ public sealed class FurPrendaObservationTests
             FurPrendaMarking.Ambos, "BANCO XYZ S.A.", "890900608", "NOTARÍA 15 DE MEDELLÍN");
 
         texto.Should().StartWith("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
-        texto.Should().Contain("Inscripción de prenda a favor de BANCO XYZ S.A.");
+        texto.Should().Contain("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 }

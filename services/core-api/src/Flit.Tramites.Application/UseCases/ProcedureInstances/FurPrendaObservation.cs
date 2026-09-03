@@ -32,14 +32,18 @@ public static class FurPrendaObservation
     /// </summary>
     public const string EtiquetaLevantamientoEntidad = "Levantamiento de prenda ante";
 
+    /// <summary>Sufijo del número de documento del acreedor (tras el nombre).</summary>
+    public const string SufijoDocumento = " identificado con número de documento";
+
     /// <summary>
     /// Devuelve el bloque de gravamen, o <c>null</c> si no hay nada que declarar.
     /// <para>Devuelve null cuando la marca es <see cref="FurPrendaMarking.Ninguna"/> o cuando no se
     /// capturó el nombre del acreedor: <b>no se inventa contenido</b>. La casilla del FUR se marca igual
     /// por su propia vía (<c>requested_process_11</c>/<c>_12</c>); lo que se omite aquí es solo el
     /// texto.</para>
-    /// <para>Si hay nombre pero no documento se imprime solo el nombre, sin guiones ni separadores
-    /// sueltos que delaten un campo vacío.</para>
+    /// <para>Si hay nombre y documento: <c>{etiqueta} {nombre} identificado con número de documento {doc}</c>. Si hay
+    /// nombre pero no documento se imprime solo el nombre, sin guiones ni el sufijo de documento
+    /// vacío.</para>
     /// </summary>
     /// <param name="levantamientoEntidad">
     /// Entidad ante la que se extinguió el gravamen. Cuando viene, el bloque de levantamiento declara
@@ -81,13 +85,16 @@ public static class FurPrendaObservation
         if (string.IsNullOrEmpty(nombre))
             return null;
 
-        return $"{etiqueta} {nombre}";
+        var documento = acreedorDocumento?.Trim();
+        return string.IsNullOrEmpty(documento)
+            ? $"{etiqueta} {nombre}"
+            : $"{etiqueta} {nombre}{SufijoDocumento} {documento}";
     }
 
     /// <summary>
-    /// Une el bloque de gravamen con el resto de observaciones (manuales + automáticas de ADR-0029),
-    /// anteponiéndolo. Cualquiera de los dos puede faltar; si faltan ambos devuelve <c>null</c> para
-    /// que el recuadro quede exactamente como estaba antes de esta HU.
+    /// Une el bloque de gravamen con el resto de observaciones (manuales + automáticas), anteponiéndolo.
+    /// Los bloques automáticos se separan con coma; cualquiera de los dos puede faltar. Si faltan ambos
+    /// devuelve <c>null</c> para que el recuadro quede exactamente como estaba antes de esta HU.
     /// </summary>
     public static string? Join(string? bloqueGravamen, string? resto)
     {
@@ -97,6 +104,6 @@ public static class FurPrendaObservation
         if (a is null)
             return b;
 
-        return b is null ? a : $"{a} {b}";
+        return b is null ? a : $"{a}, {b}";
     }
 }

@@ -49,7 +49,11 @@ export interface ClientProceduresTableProps {
   consolidadoActingId?: string | null;
   /** Abre el panel de documentos del expediente para el trámite. */
   onVerDocumentos?: (row: OtClientProcedure) => void;
-  /** Abre el panel lateral con el detalle del trámite. */
+  /**
+   * Abre el detalle del trámite. Lo disparan DOS cosas: la acción del menú y la fila entera —el
+   * detalle es a lo que se entra el 90% de las veces, y obligar a pasar por un menú de ocho
+   * opciones para llegar a él era peaje puro (prototipo del Feature #12059).
+   */
   onVerDetalle?: (row: OtClientProcedure) => void;
   /** sortBy actual del API (vin, placa, vendedor, …). */
   sortBy?: string;
@@ -288,7 +292,27 @@ export function ClientProceduresTable({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
+            <tr
+              key={row.id}
+              className={`bg-card ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
+              onClick={onVerDetalle ? () => onVerDetalle(row) : undefined}
+              // La fila no es un `<button>`: sigue siendo una fila de tabla, así que el teclado
+              // necesita su propia puerta. Enter y Espacio hacen lo mismo que el clic, y el menú
+              // de acciones sigue siendo el camino accesible de siempre para el resto.
+              tabIndex={onVerDetalle ? 0 : undefined}
+              role={onVerDetalle ? "button" : undefined}
+              aria-label={onVerDetalle ? `Ver el detalle del trámite ${row.referenceNumber}` : undefined}
+              onKeyDown={
+                onVerDetalle
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onVerDetalle(row);
+                      }
+                    }
+                  : undefined
+              }
+            >
               <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
                 <span className="flex items-center gap-1.5">
                   {row.prioritario && (
@@ -361,7 +385,12 @@ export function ClientProceduresTable({
                 sellos de SOAT/Impuesto—: no son cosas que el operador pueda ejecutar, y escondidas
                 tras un clic dejarían de avisar, que es justo para lo que están.
               */}
-              <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
+              {/* Las acciones cortan la propagación: pulsar «Aprobar» abriría además el detalle. */}
+              <td
+                className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
                 <div className="flex items-center justify-end gap-2">
                   {row.status === "entregado" &&
                     esperandoProcesoDelGestor(row.plateFlowStatus) &&
