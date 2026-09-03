@@ -9,7 +9,7 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// entre el snapshot RUNT (<c>*_runt</c>) y el valor efectivo, pero SOLO se imprime el valor NUEVO
 /// (efectivo): en el FUR los campos del vehículo conservan el dato original del RUNT, así que la
 /// observación solo debe declarar a qué se transformó. Se anexa (append) a las observaciones manuales sin
-/// borrarlas. Ejemplo: <c>Color nuevo(NUEVO COLOR: ROJO) COMBUSTIBLE_NUEVO: DIESEL</c>.
+/// borrarlas. Ejemplo: <c>Color nuevo(NUEVO COLOR: ROJO), COMBUSTIBLE_NUEVO: DIESEL</c>.
 /// </summary>
 public static class FurTransformationObservations
 {
@@ -59,7 +59,7 @@ public static class FurTransformationObservations
         if (HasChanged(fuelRunt, fuelEfectivo))
             segments.Add(CombustibleNuevo(fuelEfectivo));
 
-        return segments.Count == 0 ? null : string.Join(" ", segments);
+        return segments.Count == 0 ? null : string.Join(", ", segments);
     }
 
     /// <summary>
@@ -80,7 +80,7 @@ public static class FurTransformationObservations
         if (declaradas.Combustible && !string.IsNullOrWhiteSpace(combustibleNuevo))
             segments.Add(CombustibleNuevo(combustibleNuevo));
 
-        return segments.Count == 0 ? null : string.Join(" ", segments);
+        return segments.Count == 0 ? null : string.Join(", ", segments);
     }
 
     public static string ColorNuevo(string? valor) =>
