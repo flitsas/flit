@@ -137,6 +137,7 @@ import {
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
+import { NuevoTramiteSelector } from './NuevoTramiteSelector';
 import { estadoLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -2843,6 +2844,7 @@ function TramiteSimultaneosField({
   hideHeader = false,
   onCompletenessChange,
   soloSubtramite = null,
+  modalidad,
 }: {
   instanceId: string | null;
   hideHeader?: boolean;
@@ -2853,6 +2855,8 @@ function TramiteSimultaneosField({
    * nuevo y su soporte se conservan intactas, que es lo que el FUR necesita imprimir.
    */
   soloSubtramite?: 'color' | 'combustible' | 'carroceria' | null;
+  /** Decide la nota informativa del soporte de color (concesionario vs. propietario). */
+  modalidad?: WizardModalidad;
 }) {
   const readOnly = useWizardReadOnly();
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
@@ -2905,6 +2909,7 @@ function TramiteSimultaneosField({
       instanceId={instanceId}
       onCompletenessChange={onCompletenessChange}
       soloSubtramite={soloSubtramite}
+      modalidad={modalidad}
     />
   );
 }
@@ -4346,35 +4351,31 @@ function ConsultaStep({
         </WizardAccordion>
       )}
 
-      {/* Confirmación de cambio de tipo de trámite (propuesta: modal "Cambiar tipo de trámite").
-          B5/B6 (guardián de diseño) — migrado a `WizardModal`: overlay opaco de marca (antes
-          `bg-[#162744]/40 backdrop-blur-sm`, uno de los cuatro overlays distintos del asistente) y
-          trampa de foco + retorno de foco + Escape, en vez de un `<div role="dialog">` a mano. */}
-      {pendingTipo && (
-        <WizardModal title="Cambiar tipo de trámite" onClose={() => setPendingTipo(null)}>
-          <p className="text-xs leading-relaxed opacity-80">
-            ¿Deseas elegir otro tipo de trámite? Se actualizarán las validaciones y los documentos
-            requeridos, y se perderá lo capturado en este paso.
-          </p>
-          <div className="mt-5 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setPendingTipo(null)}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/tramites/nuevo')}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-            >
-              Sí, elegir otro
-            </button>
-          </div>
-        </WizardModal>
-      )}
+      {/* Cambio de tipo de trámite: el MISMO modal selector que abre "Nuevo trámite" en /tramites
+          (`Modal` atom + `NuevoTramiteSelector`, con los veintiún tipos del catálogo), no una
+          confirmación de texto que navega a una vista aparte. Antes "Sí, elegir otro" hacía
+          `router.push('/tramites/nuevo')` — eso SÍ deja el wizard y aterriza en una pantalla propia
+          (título, contenedor, todo distinto), que es justo lo que se veía como "otra vista" en vez
+          de un modal. Elegir un tipo aquí sigue navegando —no hay trámite persistido del que
+          migrar (`deferred`), así que el destino es un borrador nuevo del tipo elegido— pero el
+          selector se ve exactamente igual que en el resto del producto. */}
+      <Modal
+        open={!!pendingTipo}
+        onClose={() => setPendingTipo(null)}
+        title="Nuevo trámite"
+        titleClassName="text-[22px] font-bold text-[#557EFF] dark:text-[#557EFF]"
+        description="Se actualizarán las validaciones y los documentos requeridos, y se perderá lo capturado en este paso."
+        size="xl"
+      >
+        <NuevoTramiteSelector
+          tituloEnContenedor
+          onElegir={(code) => {
+            setPendingTipo(null);
+            router.push(`/tramites/nuevo/${encodeURIComponent(code)}`);
+          }}
+          onCancelar={() => setPendingTipo(null)}
+        />
+      </Modal>
     </div>
   );
 }
@@ -4743,6 +4744,7 @@ function StepBody({
                 instanceId={instanceId}
                 hideHeader
                 onCompletenessChange={onSimultaneosGateChange}
+                modalidad={modalidadUi}
               />
             </WizardAccordion>
           ) : (
@@ -4768,6 +4770,7 @@ function StepBody({
                     hideHeader
                     onCompletenessChange={onSimultaneosGateChange}
                     soloSubtramite={cambioBase}
+                    modalidad={modalidadUi}
                   />
                 </WizardAccordion>
               );

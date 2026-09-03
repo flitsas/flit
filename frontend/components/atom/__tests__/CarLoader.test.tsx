@@ -33,13 +33,14 @@ describe('CarLoader', () => {
 
   it('si los SVG no cargan, cae a la órbita dibujada y conserva el mensaje', () => {
     const { container } = render(<CarLoader mode="radicacion" />);
-    // Las tres capas son decorativas: se localizan por su etiqueta, no por rol.
-    const capas = container.querySelectorAll('img');
+    // Las tres capas son `<image>` dentro de un único SVG (mismo sistema de coordenadas del
+    // loader de pestaña nueva), no `<img>` sueltas — se localizan por su etiqueta, no por rol.
+    const capas = container.querySelectorAll('image');
     expect(capas.length).toBe(3);
 
     fireEvent.error(capas[0]);
 
-    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(container.querySelectorAll('image')).toHaveLength(0);
     expect(container.querySelector('.flit-loader')).not.toBeNull();
     expect(screen.getByText(/organismo de tránsito/)).toBeInTheDocument();
   });

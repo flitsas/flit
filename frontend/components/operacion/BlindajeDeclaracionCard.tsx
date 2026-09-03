@@ -19,6 +19,48 @@ import {
 } from '@/lib/catalogs/blindaje';
 import { WIZARD_INPUT, WIZARD_LABEL } from './wizard-field-styles';
 
+interface DocumentoSugerido {
+  /** Nombre legible del documento a adjuntar. NO es el nombre de archivo del cargue. */
+  titulo: string;
+  descripcion: string;
+}
+
+/**
+ * Nota informativa de qué acredita el certificado de blindaje, según la opción declarada. Los
+ * niveles 1 y 2 (blindaje civil) comparten trámite ante la SVSP; el nivel 3 (oficial/militar) lo
+ * autoriza la entidad estatal competente, no la SVSP; el desmonte también se acredita —retirar un
+ * blindaje se declara igual que instalarlo—.
+ */
+const NOTA_BLINDAJE_CIVIL: DocumentoSugerido = {
+  titulo: 'Resolución SVSP y certificado de blindaje',
+  descripcion:
+    'Resolución de autorización de blindaje expedida por la Superintendencia de Vigilancia y Seguridad Privada, junto con el certificado de la empresa blindadora autorizada indicando el nivel de blindaje.',
+};
+
+const NOTA_BLINDAJE_OFICIAL: DocumentoSugerido = {
+  titulo: 'Resolución oficial y certificado de blindaje',
+  descripcion:
+    'Resolución o autorización oficial de la entidad estatal competente, junto con el certificado de blindaje de la empresa contratada.',
+};
+
+const NOTA_DESMONTE_BLINDAJE: DocumentoSugerido = {
+  titulo: 'Certificado y resolución de desmonte de blindaje',
+  descripcion:
+    'Certificado de desmonte expedido por la empresa blindadora autorizada, junto con la resolución de la SVSP que autoriza el retiro del blindaje.',
+};
+
+function notaBlindaje(opcion: BlindajeOpcion): DocumentoSugerido {
+  switch (opcion) {
+    case 'NIVEL_1':
+    case 'NIVEL_2':
+      return NOTA_BLINDAJE_CIVIL;
+    case 'NIVEL_3':
+      return NOTA_BLINDAJE_OFICIAL;
+    case 'DESMONTE':
+      return NOTA_DESMONTE_BLINDAJE;
+  }
+}
+
 /**
  * Declaración de blindaje del tipo `BLINDAJE` (familia OTROS): qué se hace —instalar un nivel o
  * retirar el blindaje— y el certificado que lo acredita.
@@ -225,6 +267,22 @@ export function BlindajeDeclaracionCard({
             </p>
           )}
         </div>
+
+        {/* Nota informativa: cuál documento acredita la opción elegida. Sin opción declarada aún
+            no hay nada que sugerir —los tres grupos piden documentos distintos—. Pegada al botón
+            que activa, es la que responde «qué adjunto aquí». */}
+        {opcion && (
+          <div
+            className="mt-3 rounded-lg px-2.5 py-2 text-[11px] leading-snug"
+            style={{ background: '#F8FAFC' }}
+          >
+            <p className="font-semibold" style={{ color: '#162744' }}>
+              <span className="font-normal opacity-70">Debes adjuntar: </span>
+              {notaBlindaje(opcion).titulo}
+            </p>
+            <p className="mt-0.5 opacity-70">{notaBlindaje(opcion).descripcion}</p>
+          </div>
+        )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
           {instanceId && !readOnly ? (

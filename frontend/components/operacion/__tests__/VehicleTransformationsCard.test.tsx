@@ -126,8 +126,8 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos"', () =
       'true',
     );
     expect(screen.getAllByText('Cambio de Color').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Soporte de cambio de color/)).toBeInTheDocument();
-    expect(screen.getByText('(soporte_cambio_color)')).toBeInTheDocument();
+    // Nota informativa junto al botón de adjuntar: sin modalidad pasada, usa el texto de traspaso.
+    expect(screen.getByText('Declaración de color del propietario')).toBeInTheDocument();
     expect(screen.getByLabelText(/Nuevo color/)).toHaveTextContent('NEGRO');
     expect(screen.getByText(/RUNT: PLATA/)).toBeInTheDocument();
     expect(screen.getByText(/Se registrará en el FUR — Color: NEGRO/)).toBeInTheDocument();
