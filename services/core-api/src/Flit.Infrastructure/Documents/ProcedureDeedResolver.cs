@@ -75,11 +75,13 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
             }
 
             var subject = IdentitySubjectResolver.For(actor);
-            var subjectHasDocument = !string.IsNullOrWhiteSpace(subject.TipoDocumento)
-                && !string.IsNullOrWhiteSpace(subject.NumeroDocumento);
             Guid? representativeId = null;
-            if (subjectHasDocument)
+            if (subject.EsRepresentanteLegal)
             {
+                // Solo buscamos en el directorio cuando el sujeto es de verdad un representante
+                // legal capturado con documento; en cualquier otro caso (PJ sin RL en metadata,
+                // persona natural) el sujeto es un fallback al propio actor y no tiene sentido
+                // buscar un representante por ese documento.
                 var representative = await _representativeReader
                     .FindActiveByDocumentAsync(
                         tenantId, subject.TipoDocumento!.Trim(), subject.NumeroDocumento!.Trim(), ct)
@@ -94,23 +96,22 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                     .FindActiveCompanyForRepresentativeAsync(tenantId, rid, actor.DocumentNumber.Trim(), ct)
                     .ConfigureAwait(false);
             }
-            else if (subjectHasDocument)
+            else if (subject.EsRepresentanteLegal)
             {
-                // El RL SÍ tiene documento capturado pero no es un representante activo de la
-                // compañía (el gestor lo cambió por otro que no está en el directorio). Caer al NIT
-                // aquí adjuntaba la escritura de OTRO representante de la misma empresa —cualquier
-                // escritura de la compañía autoriza a la persona que ahí figura, no a la que se
-                // acaba de capturar—, y el consolidado terminaba con dos escrituras: la de sistema
-                // (de quien ya no es el RL) y la que el gestor sube a mano para el RL vigente
-                // (`EscrituraRepresentanteUpload`). Sin representante resuelto y con documento
-                // capturado, no hay escritura de sistema que le corresponda: se omite.
+                // El gestor capturó un representante legal con documento pero ese documento no figura
+                // en el directorio como representante activo de la compañía. Caer al NIT aquí
+                // adjuntaría la escritura de OTRO representante que sí está registrado —esa escritura
+                // lo autoriza a él, no al RL recién capturado—, y el consolidado terminaría con dos
+                // escrituras: la de sistema y la que el gestor sube a mano (EscrituraRepresentanteUpload).
+                // Sin representante resuelto y con RL capturado, no existe escritura de sistema que
+                // le corresponda: se omite.
                 continue;
             }
             else
             {
-                // Sin RL capturado todavía no hay con qué decidir a quién pertenece la escritura,
-                // así que se cae al NIT (comportamiento previo — el trámite apenas está abriendo el
-                // paso de actores).
+                // Sin RL capturado (persona jurídica sin datos de RL en metadata, o persona cuyo
+                // tipo no está definido): se cae al NIT para mantener el comportamiento previo
+                // durante la apertura del trámite.
                 company = await _representativeReader
                     .FindRepresentedCompanyByNitAsync(tenantId, actor.DocumentNumber.Trim(), ct)
                     .ConfigureAwait(false);
