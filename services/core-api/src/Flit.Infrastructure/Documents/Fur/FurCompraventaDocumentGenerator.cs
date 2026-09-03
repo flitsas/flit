@@ -21,8 +21,12 @@ public static class FurCompraventaDocumentGenerator
     private static readonly string[] MesesEs =
         ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
-    private const float CellGapCm = 0.1f;
-    private const int VbCell = FlitRoundedCells.VbCell;
+    private const float CellGapCm = 0.07f;
+    /// <summary>
+    /// Un poco más bajo que el chip SOAT/RTM (18): gana ~una línea para que el sello
+    /// «Aprob · Vence» del comprador no salte de hoja.
+    /// </summary>
+    private const int VbCell = 15;
 
     /// <summary>
     /// Alto reservado para la estampa (baúl o, más adelante, imagen de firma). ~2–3 líneas a 9 pt,
@@ -70,18 +74,21 @@ public static class FurCompraventaDocumentGenerator
                         cuerpo.Item().AlignCenter().Text("Contrato de Compraventa")
                             .Bold().FontSize(14).FontColor(FlitDocumentTheme.DarkNavy);
 
-                        cuerpo.Item().PaddingTop(copropiedad ? 4 : 6).Text(t =>
+                        cuerpo.Item().PaddingTop(copropiedad ? 4 : 6).Column(meta =>
                         {
-                            t.Span("Fecha: ");
-                            t.Span(FechaLarga(data.FechaTramite));
-                        });
-
-                        cuerpo.Item().Text(t =>
-                        {
-                            t.Span("Ref. ");
-                            t.Span($"PLACA: {Val(data.Placa)}")
-                                .Bold()
-                                .FontColor(FlitDocumentTheme.PrimaryBlue);
+                            meta.Spacing(2);
+                            meta.Item().Text(t =>
+                            {
+                                t.Span("Fecha: ");
+                                t.Span(FechaLarga(data.FechaTramite));
+                            });
+                            meta.Item().Text(t =>
+                            {
+                                t.Span("Ref. ");
+                                t.Span($"PLACA: {Val(data.Placa)}")
+                                    .Bold()
+                                    .FontColor(FlitDocumentTheme.PrimaryBlue);
+                            });
                         });
 
                         cuerpo.Item().PaddingTop(copropiedad ? 4 : 6).Text(
@@ -150,7 +157,7 @@ public static class FurCompraventaDocumentGenerator
     // Grilla 2×3 tipo chip (cabecera azul + valor claro), mismo patrón que SOAT/RTM.
     private static void TablaVehiculo(ColumnDescriptor col, FurDocumentData data)
     {
-        col.Item().PaddingTop(8).AlignCenter().Text("DESCRIPCIÓN DEL VEHICULO")
+        col.Item().PaddingTop(4).AlignCenter().Text("DESCRIPCIÓN DEL VEHICULO")
             .Bold().FontSize(10).FontColor(FlitDocumentTheme.DarkNavy);
 
         col.Item().Column(tabla =>
