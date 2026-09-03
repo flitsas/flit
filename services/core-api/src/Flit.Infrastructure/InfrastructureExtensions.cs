@@ -704,7 +704,7 @@ public static class InfrastructureExtensions
         // HU #11485 (Feature #11482, ADR-0046) — sink post-asignación de placa (Flujo B).
         services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailEnqueuer,
             PlateAssignmentEmailEnqueuer>();
-        // HU #11486 — proyección del modelo y marca FLIT/Renting por NIT (worker #11487).
+        // Proyección del modelo y marca FLIT/Renting por canal del tenant (worker plate-assignment).
         services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentBrandResolver,
             PlateAssignmentBrandResolver>();
         services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailModelProjector,

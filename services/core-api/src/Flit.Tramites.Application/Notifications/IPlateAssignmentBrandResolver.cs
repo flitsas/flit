@@ -1,16 +1,14 @@
 namespace Flit.Tramites.Application.Notifications;
 
 /// <summary>
-/// HU #11486 (ADR-0046) — resuelve la variante FLIT/Renting del correo de asignación de placa
-/// por NIT del tenant cliente, no por canal.
+/// Resuelve la variante FLIT/Renting del correo de asignación de placa según el canal de
+/// notificaciones del tenant cliente (<c>flit_smtp</c> → FLIT, <c>tenant_api</c> → Renting),
+/// alineado con ADR-0045 (aprobado/rechazado).
 /// </summary>
 public interface IPlateAssignmentBrandResolver
 {
-    /// <summary>Marca a partir del <c>tax_id</c> del tenant (normalizado).</summary>
-    PlateAssignmentEmailBrand ResolveFromTaxId(string? taxId);
-
     /// <summary>
-    /// Carga el tenant cliente, resuelve marca por NIT y registra warning si difiere del canal.
+    /// Resuelve la marca del cuerpo a partir de <c>notification_channel</c> del tenant cliente.
     /// </summary>
     Task<PlateAssignmentEmailBrand> ResolveForClientTenantAsync(
         Guid clientTenantId,

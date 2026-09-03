@@ -7,9 +7,9 @@ namespace Flit.Infrastructure.Notifications.Tramites;
 /// Datos de la plantilla <c>tramites.asignacion-placa</c> (banco de pruebas).
 /// </summary>
 /// <remarks>
-/// En productivo la variante Renting aplica cuando
-/// <c>companyRegistered == 811011779</c>; la FLIT genérica en el resto. En el banco de pruebas
-/// la variante se elige por canal (<c>FLIT_SMTP</c> / <c>TENANT_API</c>).
+/// La variante (FLIT vs Renting) se elige por el canal de notificaciones del tenant cliente
+/// (<c>FLIT_SMTP</c> → ComposeFlit, <c>TENANT_API</c> → ComposeRenting), en productivo y en el
+/// banco de pruebas.
 /// </remarks>
 public sealed record AsignacionPlacaEmailModel(
     string ClienteNombre,
@@ -25,9 +25,6 @@ public sealed record AsignacionPlacaEmailModel(
 public static class AsignacionPlacaEmailComposer
 {
     public const string TemplateId = "tramites.asignacion-placa";
-
-    /// <summary>NIT de Renting Colombia que selecciona la variante Renting en productivo.</summary>
-    public const string RentingCompanyRegisteredNit = "811011779";
 
     private const string Ink = "#1A1A1A";
     private const string Muted = "#4A4A4A";
