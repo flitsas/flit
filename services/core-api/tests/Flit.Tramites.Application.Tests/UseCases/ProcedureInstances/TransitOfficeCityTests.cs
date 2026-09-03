@@ -43,4 +43,28 @@ public sealed class TransitOfficeCityTests
     {
         TransitOfficeCity.Legible(valor).Should().BeNull();
     }
+
+    [Theory]
+    [InlineData("Secretaría de Movilidad de Medellín", "Medellín")]
+    [InlineData("Tránsito de Envigado", "Envigado")]
+    [InlineData("SECRETARIA DE MOVILIDAD DE CHIA", "CHIA")]
+    [InlineData("Medellín — Secretaría de Movilidad", "Medellín")]
+    [InlineData("Cali - STTMP", "Cali")]
+    public void ForDocuments_ConCodigoDivipola_InfiereCiudadDelNombreDelOt(string nombreOt, string ciudad)
+    {
+        TransitOfficeCity.ForDocuments("05001", nombreOt).Should().Be(ciudad);
+    }
+
+    [Fact]
+    public void ForDocuments_ConNombreLegible_NoPisaConInferencia()
+    {
+        TransitOfficeCity.ForDocuments("Bogotá D.C.", "Secretaría de Movilidad de Medellín")
+            .Should().Be("Bogotá D.C.");
+    }
+
+    [Fact]
+    public void ForDocuments_SinCiudadEnNombre_NoInventa()
+    {
+        TransitOfficeCity.ForDocuments("25286", "STRIA TTEyTTO MCPAL").Should().BeNull();
+    }
 }

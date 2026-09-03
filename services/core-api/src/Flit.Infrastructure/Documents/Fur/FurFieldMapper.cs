@@ -28,7 +28,8 @@ public static class FurFieldMapper
         var dict = new Dictionary<string, FurFieldValue>(StringComparer.OrdinalIgnoreCase)
         {
             ["traffic_secretary_name"] = Text(Upper(data.Organismo.Nombre)),
-            ["traffic_secretary_city"] = Text(data.Organismo.Ciudad),
+            // Misma mayúscula que el nombre: el blank del OT espera ciudad legible (no código DIVIPOLA).
+            ["traffic_secretary_city"] = Text(Upper(data.Organismo.Ciudad)),
             ["traffic_secretary_code"] = Text(data.Organismo.Codigo),
             ["processing_day"] = Text(fecha.Day.ToString("00", CultureInfo.InvariantCulture)),
             ["processing_month"] = Text(fecha.Month.ToString("00", CultureInfo.InvariantCulture)),
