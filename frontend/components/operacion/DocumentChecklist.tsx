@@ -170,6 +170,35 @@ export function validateFile(file: File, limits?: FileTypeLimits): string | null
   return null;
 }
 
+/** Etiqueta corta por MIME para la leyenda de la tarjeta. Sin entrada → el subtipo en mayúscula. */
+const MIME_SHORT_LABEL: Record<string, string> = {
+  'application/pdf': 'PDF',
+  'image/jpeg': 'JPG',
+  'image/png': 'PNG',
+  'image/webp': 'WEBP',
+};
+
+function mimeShortLabel(mime: string): string {
+  const known = MIME_SHORT_LABEL[mime];
+  if (known) return known;
+  const subtype = mime.split('/')[1] ?? mime;
+  return subtype.toUpperCase();
+}
+
+/**
+ * Leyenda de formatos y peso de una casilla — "PDF, JPG · hasta 20 MB" (HU #12067). Sale de los
+ * límites que el catálogo entrega por tipo (RF08/09); sin ellos cae a los globales, que son los
+ * mismos que aplica {@link validateFile}. Antes era un literal fijo que además mentía (5 MB).
+ */
+export function formatUploadLimits(limits?: FileTypeLimits): string {
+  const mimes =
+    limits?.allowedMimes && limits.allowedMimes.length > 0 ? limits.allowedMimes : ALLOWED_MIME;
+  const maxSize = limits?.maxSizeBytes && limits.maxSizeBytes > 0 ? limits.maxSizeBytes : MAX_SIZE_BYTES;
+  // Deduplica manteniendo el orden del catálogo (jpeg/jpg distintos comparten etiqueta).
+  const formatos = [...new Set(mimes.map(mimeShortLabel))].join(', ');
+  return `${formatos} · hasta ${formatSize(maxSize)}`;
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -698,6 +727,11 @@ export function DocumentSlot({
   const isImpronta = tipo.toLowerCase() === 'impronta';
   const ocrRejected = ocr?.status === 'rejected';
   const showValidado = done && !ocrRejected;
+  const instruccion = item.instruccionCargue?.trim() || null;
+  const limitsCaption = formatUploadLimits({
+    allowedMimes: item.mimeTypesAllowed,
+    maxSizeBytes: item.maxSizeBytes,
+  });
   const canGenerate =
     isImpronta &&
     permiteGenerarImprontaAutomatica &&
@@ -772,7 +806,12 @@ export function DocumentSlot({
       {isAuto && (
         <p className="mt-0.5 text-[11px] opacity-70">Autogenerado por el sistema</p>
       )}
-      <p className="mt-1 text-[11px] opacity-70">PDF, JPG hasta 5MB</p>
+      {/* HU #12067 — qué debe cargar el gestor aquí. El texto lo escribe el administrador en el
+          módulo documental; sin instrucción configurada no se pinta nada (ni hueco ni relleno). */}
+      {instruccion && (
+        <p className="mt-1 text-[11px] leading-snug opacity-70">{instruccion}</p>
+      )}
+      <p className="mt-1 text-[11px] opacity-70">{limitsCaption}</p>
       {attachment && !isAuto && (
         <p className="mt-1 truncate text-[11px] opacity-60">
           {attachment.filename} · {formatSize(attachment.sizeBytes)}

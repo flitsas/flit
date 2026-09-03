@@ -102,6 +102,11 @@ function GrupoDocumentos({
               {doc.descripcion && (
                 <p className="text-xs leading-snug opacity-70">{doc.descripcion}</p>
               )}
+              {/* HU #12066 — la misma instrucción de cargue que el gestor verá en Requisitos, para
+                  que la guía y la casilla digan lo mismo. */}
+              {doc.instruccionCargue && (
+                <p className="text-xs leading-snug opacity-70">{doc.instruccionCargue}</p>
+              )}
             </div>
           </li>
         ))}

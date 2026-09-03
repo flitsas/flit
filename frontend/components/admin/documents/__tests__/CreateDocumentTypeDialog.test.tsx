@@ -47,6 +47,7 @@ describe("CreateDocumentTypeDialog (AC1)", () => {
         mimeTypesAllowed: null,
         maxSizeBytes: null,
         esAutogenerado: false,
+        instruccionCargue: null,
       }),
     );
     expect(onSaved).toHaveBeenCalledWith(saved, "create");
@@ -95,6 +96,67 @@ describe("CreateDocumentTypeDialog (AC1)", () => {
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ esAutogenerado: true }),
+      ),
+    );
+  });
+
+  // HU #12067 AC5/AC6 — la instrucción de cargue (el texto que lee el gestor en Requisitos) se
+  // administra desde este diálogo. Sin este campo el copy solo se podría cambiar por despliegue.
+
+  it("envía la instrucción de cargue escrita por el administrador", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(saved);
+    render(<CreateDocumentTypeDialog open onClose={vi.fn()} onSubmit={onSubmit} onSaved={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/^nombre$/i), "Paz y Salvo de Impuestos");
+    await user.type(
+      screen.getByLabelText(/instrucción de cargue/i),
+      "Sube el Paz y Salvo de impuestos vehiculares.",
+    );
+    await user.click(screen.getByRole("button", { name: /crear documento/i }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instruccionCargue: "Sube el Paz y Salvo de impuestos vehiculares.",
+        }),
+      ),
+    );
+  });
+
+  it("dice que la instrucción es lo que verá el gestor", () => {
+    render(<CreateDocumentTypeDialog open onClose={vi.fn()} onSubmit={vi.fn()} onSaved={vi.fn()} />);
+
+    // El admin tiene que poder distinguir este campo de la descripción interna de al lado.
+    expect(screen.getByText(/es el texto que ve el gestor/i)).toBeInTheDocument();
+  });
+
+  it("precarga la instrucción existente al editar", () => {
+    render(
+      <CreateDocumentTypeDialog
+        open
+        editing={{ ...saved, instruccionCargue: "Texto ya configurado." }}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/instrucción de cargue/i)).toHaveValue("Texto ya configurado.");
+  });
+
+  it("no envía instrucción cuando el administrador la deja vacía", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(saved);
+    render(<CreateDocumentTypeDialog open onClose={vi.fn()} onSubmit={onSubmit} onSaved={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/^nombre$/i), "Otro documento");
+    await user.type(screen.getByLabelText(/instrucción de cargue/i), "   ");
+    await user.click(screen.getByRole("button", { name: /crear documento/i }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ instruccionCargue: null }),
       ),
     );
   });
