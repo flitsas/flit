@@ -28,11 +28,51 @@ export function escrituraRepresentanteTipo(rol: ActorRol): string {
   return rol === 'comprador' ? 'escritura_representante' : `escritura_representante_${rol}`;
 }
 
+/**
+ * field_value donde se persiste la identidad (tipo:número) del RL para el que la escritura del
+ * rol quedó satisfecha (mismo patrón que `{rol}_document_issue_date`).
+ *
+ * <p>Sin esto, el gate solo miraba «¿hay un adjunto con este DocTipo?» — el adjunto se reemplaza
+ * por tipo (no por identidad), así que la escritura de un representante ya reemplazado en el
+ * trámite seguía "satisfaciendo" al que vino después de él, sin pedir nada nuevo. Comparar contra
+ * la identidad vigente es lo que evita ese apalancamiento.</p>
+ */
+export function escrituraRepresentanteRlDocFieldKey(rol: ActorRol): string {
+  return rol === 'comprador'
+    ? 'escritura_representante_rl_doc'
+    : `escritura_representante_rl_doc_${rol}`;
+}
+
+/** Identidad comparable del RL (tipo:número, sin espacios). Vacía si aún no tiene documento. */
+export function representanteDocIdentity(
+  tipoDocumento: string | null | undefined,
+  numeroDocumento: string | null | undefined,
+): string {
+  const tipo = (tipoDocumento ?? '').trim().toUpperCase();
+  const numero = (numeroDocumento ?? '').trim();
+  return tipo && numero ? `${tipo}:${numero}` : '';
+}
+
 interface Props {
   instanceId: string | null;
   /** Rol de la parte jurídica cuyo representante hay que acreditar. */
   rol: ActorRol;
-  /** Notifica si el adjunto está presente (alimenta el gate de "Continuar" del paso). */
+  /** Identidad (`representanteDocIdentity`) del RL vigente en el formulario. */
+  rlDocIdentity: string;
+  /**
+   * Identidad para la que la escritura EN ARCHIVO quedó confirmada, leída de
+   * `escrituraRepresentanteRlDocFieldKey`. `undefined` mientras el padre todavía no la ha leído.
+   */
+  savedRlDocIdentity: string | undefined;
+  /** La lectura de `savedRlDocIdentity` ya se completó (aunque no hubiera nada que leer). Sin esto
+   *  no se puede distinguir "todavía cargando" de "nunca se guardó nada" — lo primero no debe
+   *  disparar el auto-sane de abajo. */
+  rlDocIdentitySeeded: boolean;
+  /** La identidad quedó confirmada (cargue nuevo, o auto-sane de un trámite anterior a esta
+   *  HU) — el padre debe reflejarla ya en su caché, sin esperar a releer la instancia. */
+  onRlDocSaved?: (identity: string) => void;
+  /** Notifica si el adjunto está presente Y corresponde al RL vigente (alimenta el gate de
+   *  "Continuar" del paso). */
   onSatisfiedChange?: (satisfied: boolean) => void;
   onChanged?: () => void;
 }
@@ -51,25 +91,51 @@ interface Props {
 export function EscrituraRepresentanteUpload({
   instanceId,
   rol,
+  rlDocIdentity,
+  savedRlDocIdentity,
+  rlDocIdentitySeeded,
+  onRlDocSaved,
   onSatisfiedChange,
   onChanged,
 }: Props) {
   const docTipo = escrituraRepresentanteTipo(rol);
+  const rlDocFieldKey = escrituraRepresentanteRlDocFieldKey(rol);
   const { state, upload, remove } = useProcedureDocuments(instanceId);
   const { attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults, error } = state;
 
   const attachment = attachments.find((a) => a.tipo.toLowerCase() === docTipo.toLowerCase());
 
+  // El adjunto SOLO satisface al RL vigente: uno que quedó de un representante anterior no cuenta,
+  // aunque el archivo siga ahí (el cargue reemplaza por TIPO, no por identidad).
+  const satisfied = !!attachment && !!rlDocIdentity && savedRlDocIdentity === rlDocIdentity;
+
   useEffect(() => {
-    onSatisfiedChange?.(!!attachment);
-  }, [attachment, onSatisfiedChange]);
+    onSatisfiedChange?.(satisfied);
+  }, [satisfied, onSatisfiedChange]);
+
+  // Auto-sane: trámites cargados antes de esta HU tienen el adjunto pero nunca registraron para
+  // qué RL quedó. Sin este efecto, todo trámite en curso con escritura ya satisfecha volvería a
+  // pedirla de la nada. Solo adopta la identidad vigente cuando NUNCA se guardó nada para este
+  // adjunto (`savedRlDocIdentity` vacío tras terminar de leer, no mientras todavía carga) — si hay
+  // una identidad distinta guardada, es un cambio de RL real y no se toca.
+  useEffect(() => {
+    if (!instanceId || !attachment || !rlDocIdentity || !rlDocIdentitySeeded) return;
+    if (savedRlDocIdentity) return;
+    void tramitesClient
+      .patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: rlDocFieldKey, valueText: rlDocIdentity, valueJson: null },
+      ])
+      .then(() => onRlDocSaved?.(rlDocIdentity))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceId, attachment, rlDocIdentity, rlDocIdentitySeeded, savedRlDocIdentity]);
 
   const item: ChecklistItemView = {
     key: docTipo,
     label: 'Escritura o poder del representante legal',
     obligatorio: true,
     docTipo,
-    satisfied: !!attachment,
+    satisfied,
   };
 
   const [previewAttachment, setPreviewAttachment] = useState<ProcedureAttachment | null>(null);
@@ -172,7 +238,24 @@ export function EscrituraRepresentanteUpload({
           ocr={ocrResultForTipo(ocrResults, docTipo)}
           onUpload={(file) =>
             void upload(docTipo, file).then((ok) => {
-              if (ok) onChanged?.();
+              if (!ok) return;
+              onChanged?.();
+              // Cargue deliberado: registra para QUÉ RL quedó esta escritura. Sin esto, reemplazar
+              // el archivo del RL anterior por el del nuevo no movía la identidad guardada y el
+              // gate se hubiera quedado abierto con la identidad vieja.
+              if (instanceId && rlDocIdentity) {
+                void tramitesClient
+                  .patchFieldValues(instanceId, [
+                    {
+                      formFieldId: null,
+                      fieldKey: rlDocFieldKey,
+                      valueText: rlDocIdentity,
+                      valueJson: null,
+                    },
+                  ])
+                  .then(() => onRlDocSaved?.(rlDocIdentity))
+                  .catch(() => {});
+              }
             })
           }
           onRemove={(id) =>

@@ -210,7 +210,7 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /asociar empresas de ana gómez ruiz/i }));
     expect(
-      await screen.findByRole("dialog", { name: /asociar empresas y escrituras/i }),
+      await screen.findByRole("dialog", { name: /empresas y escrituras/i }),
     ).toBeInTheDocument();
 
     await userEvent.click(await screen.findByRole("button", { name: /agregar empresa/i }));
@@ -249,7 +249,7 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     await userEvent.click(screen.getByRole("button", { name: /editar persona y firma de ana gómez ruiz/i }));
 
     expect(
-      await screen.findByRole("dialog", { name: /editar representante legal/i }),
+      await screen.findByRole("dialog", { name: /editar persona, firma y trámites/i }),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(fetchLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1", expect.anything()),
@@ -275,7 +275,7 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     });
     expect(vi.mocked(createLegalRepresentative).mock.calls[0][1].companies).toEqual([]);
     await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: /registrar representante legal/i })).not.toBeInTheDocument(),
+      expect(screen.queryByRole("dialog", { name: /nuevo representante legal/i })).not.toBeInTheDocument(),
     );
   }, 15000);
 });

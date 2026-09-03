@@ -53,7 +53,11 @@ import {
   WIZARD_CTA_GRADIENT,
   WIZARD_BTN_SOLID,
 } from './wizard-field-styles';
-import { EscrituraRepresentanteUpload } from './EscrituraRepresentanteUpload';
+import {
+  EscrituraRepresentanteUpload,
+  escrituraRepresentanteRlDocFieldKey,
+  representanteDocIdentity,
+} from './EscrituraRepresentanteUpload';
 import { WizardCardHeader } from './wizard-atoms';
 import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
@@ -1014,13 +1018,26 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   /** El representante de esta parte hay que acreditarlo con escritura (no está en el directorio). */
   const exigeEscrituraRl = (index: number): boolean => rlDirectorio[index] === 'no_registrado';
 
-  /** Escritura del representante ya adjunta, por índice de actor. */
+  /** Escritura del representante ya adjunta Y correspondiente al RL vigente, por índice de actor. */
   const [escrituraRlAdjunta, setEscrituraRlAdjunta] = useState<Record<number, boolean>>({});
   const marcarEscrituraRl = useCallback((index: number, satisfied: boolean) => {
     // Se compara antes de escribir: el hijo reporta en cada render y sin esto el ciclo no cerraría.
     setEscrituraRlAdjunta((prev) =>
       prev[index] === satisfied ? prev : { ...prev, [index]: satisfied },
     );
+  }, []);
+  /**
+   * Identidad (`representanteDocIdentity`) del RL para la que la escritura EN ARCHIVO quedó
+   * confirmada, por índice de actor — leída de `escrituraRepresentanteRlDocFieldKey`. Comparada
+   * contra el RL vigente en `EscrituraRepresentanteUpload` para no apalancar la escritura de un
+   * representante ya reemplazado.
+   */
+  const [rlDocIdentitySaved, setRlDocIdentitySaved] = useState<Record<number, string>>({});
+  /** La lectura de `rlDocIdentitySaved` ya corrió al menos una vez (aunque no hubiera nada que
+   *  leer) — gobierna si el auto-sane de trámites anteriores a esta HU puede correr. */
+  const [rlDocIdentitySeeded, setRlDocIdentitySeeded] = useState(false);
+  const marcarRlDocIdentity = useCallback((index: number, identity: string) => {
+    setRlDocIdentitySaved((prev) => (prev[index] === identity ? prev : { ...prev, [index]: identity }));
   }, []);
 
   /** Gate del paso: ninguna parte que deba acreditar a su representante se quedó sin escritura. */
@@ -1270,6 +1287,39 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         if (Object.keys(seed).length > 0) setIssueDates((prev) => ({ ...seed, ...prev }));
       })
       .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId, roles]);
+
+  // Siembra la identidad del RL para la que la escritura EN ARCHIVO quedó confirmada
+  // (`escrituraRepresentanteRlDocFieldKey`), para que `EscrituraRepresentanteUpload` no apalanque
+  // la de un representante ya reemplazado. Sin `instanceId` no hay nada que leer, pero igual se
+  // marca "sembrado" — de lo contrario el auto-sane de esa tarjeta se quedaría esperando para
+  // siempre en un borrador que aún no persiste.
+  useEffect(() => {
+    if (!instanceId) {
+      setRlDocIdentitySeeded(true);
+      return;
+    }
+    let active = true;
+    tramitesClient
+      .getInstance(instanceId)
+      .then((detail) => {
+        if (!active) return;
+        const seed: Record<number, string> = {};
+        roles.forEach((rol, i) => {
+          const value = detail?.fieldValues?.find(
+            (f) => f.fieldKey === escrituraRepresentanteRlDocFieldKey(rol),
+          )?.valueText?.trim();
+          if (value) seed[i] = value;
+        });
+        setRlDocIdentitySaved((prev) => ({ ...seed, ...prev }));
+        setRlDocIdentitySeeded(true);
+      })
+      .catch(() => {
+        if (active) setRlDocIdentitySeeded(true);
+      });
     return () => {
       active = false;
     };
@@ -2832,6 +2882,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <EscrituraRepresentanteUpload
                 instanceId={instanceId}
                 rol={actor.rol}
+                rlDocIdentity={representanteDocIdentity(rl.tipoDocumento, rl.numeroDocumento)}
+                savedRlDocIdentity={rlDocIdentitySaved[index]}
+                rlDocIdentitySeeded={rlDocIdentitySeeded}
+                onRlDocSaved={(identity) => marcarRlDocIdentity(index, identity)}
                 onSatisfiedChange={(satisfied) => marcarEscrituraRl(index, satisfied)}
               />
             </div>

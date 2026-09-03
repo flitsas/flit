@@ -107,7 +107,7 @@ Define `tramites.procedure_types.family` + `code`. Sin prenda ni transformacione
 | Familia | Código | Tipo | Debe marcar (numeral 3) | Observación |
 |---------|--------|------|-------------------------|-------------|
 | Matrículas | `MATRICULA_NUEVA` | Matrícula inicial | **1** Matrícula / Registro | No hay bloque automático. Solo `fur_observations` si el gestor escribe. |
-| Matrículas | `MATRICULA_LEASING` | Matrícula Leasing | **1** | Obligatoria: `Matrícula con locatario por Leasing de {PROPIETARIO} a LOCATARIO TIPO DE DOCUMENTO {TIPO_DOC_LOCATARIO}, NÚMERO DE DOCUMENTO {NUMERO_LOCATARIO}`. Propietario y locatario son partes distintas. |
+| Matrículas | `MATRICULA_LEASING` | Matrícula Leasing | **1** | Obligatoria: `Matrícula con locatario por Leasing de {PROPIETARIO} a {NOMBRE_LOCATARIO} TIPO DE DOCUMENTO {TIPO_DOC_LOCATARIO}, NÚMERO DE DOCUMENTO {NUMERO_LOCATARIO}`. Propietario y locatario son partes distintas. |
 | Matrículas | `CANCELACION_MATRICULA` | Cancelación de matrícula | **13** Cancelación matrícula / registro | Obligatoria: la **causal** declarada (tabla 5). Sin causal declarada: sí casilla, no texto. |
 | Matrículas | `REMATRICULA` | Rematrícula *(inactivo)* | **16** Rematrícula | Sin bloque automático. |
 | Traspaso | `TRASPASO_STANDARD` | Traspaso | **2** Traspaso | Sin bloque automático. |

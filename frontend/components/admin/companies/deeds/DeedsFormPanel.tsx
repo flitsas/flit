@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Building2, FileText, Loader2, UploadCloud } from "lucide-react";
-import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
+import { Modal } from "@/components/atom/Modal";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
 import type { DeedFormInput, DeedSaved } from "@/lib/api/admin-deeds";
+import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "../legal-representatives/rl-flit-styles";
 
 /** Compañía fija (de contexto) para la que se crea/edita la escritura. Se muestra como dato de solo lectura. */
 export interface DeedFormCompany {
@@ -175,8 +176,8 @@ export function DeedsFormPanel({
       type="button"
       disabled={!canSubmit}
       onClick={() => void handleSubmit()}
-      className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-      style={{ background: "#557EFF" }}
+      className={`w-full ${rlPrimaryCtaClass} py-2.5`}
+      style={rlPrimaryCtaStyle}
     >
       {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
       {editing ? "Guardar cambios" : "Registrar escritura"}
@@ -187,13 +188,12 @@ export function DeedsFormPanel({
     fieldErrors[field] ? { borderColor: "#FF4E00" } : undefined;
 
   return (
-    <OtSidePanel
+    <Modal
       open={open}
-      title={editing ? "Editar escritura" : "Nueva escritura"}
-      ariaLabel={editing ? "Editar escritura" : "Registrar escritura"}
       onClose={onClose}
-      disabled={submitting}
-      footer={footer}
+      title={editing ? "Editar escritura" : "Nueva escritura"}
+      titleClassName="text-base font-bold text-[#557EFF]"
+      busy={submitting}
       zClassName={zClassName}
     >
       <div className="space-y-5">
@@ -337,7 +337,10 @@ export function DeedsFormPanel({
           </Field>
         </div>
       </div>
-    </OtSidePanel>
+      <div className="mt-5 border-t pt-4" style={{ borderColor: "#DFE5ED" }}>
+        {footer}
+      </div>
+    </Modal>
   );
 }
 

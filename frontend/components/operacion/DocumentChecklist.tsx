@@ -736,7 +736,20 @@ export function DocumentSlot({
   return (
     <li
       className={
-        'relative flex h-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] ' +
+        // Filas del checklist (`DocumentChecklist`): `basis` fija el mismo tope de columnas que
+        // antes (1 / 2 / 4 / 6 según viewport) y `grow` es lo que falta para que una fila
+        // incompleta —p. ej. 3 documentos en un checklist con hueco para 6— reparta el espacio
+        // sobrante entre las tarjetas reales en vez de dejarlo en blanco. En los contenedores que
+        // reutilizan `DocumentSlot` dentro de un `<ul className="grid grid-cols-1">` (escritura del
+        // representante, prenda) estas clases de flex no aplican: no hay flex container que las lea.
+        //
+        // SIN `h-full`: con el `<ul>` en `flex-wrap` (no `grid`), su alto es automático —lo fija el
+        // contenido— y un hijo con `height:100%` no tiene contra qué resolverse, así que el navegador
+        // termina colapsándolo a su propio contenido. Es lo que igualaba mal la altura: la tarjeta
+        // «Certificado de Aduana» (sin nombre de archivo ni barra de progreso) quedaba más baja que
+        // sus vecinas. Quitar la altura explícita deja actuar el `align-items: stretch` por defecto
+        // del flex container, que sí iguala cada tarjeta a la más alta de su misma fila.
+        'relative flex grow shrink-0 basis-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] md:basis-[calc(50%-0.5rem)] xl:basis-[calc(25%-0.75rem)] 2xl:basis-[calc(16.6667%-0.8333rem)] ' +
         (isAuto || (done && !ocrRejected)
           ? 'border'
           : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]')
@@ -1187,7 +1200,7 @@ export function DocumentChecklist({
         </p>
       ) : (
         <ul
-          className="mt-1 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6"
+          className="mt-1 flex flex-wrap gap-4"
           aria-label="Checklist de documentos"
         >
           {[...items]

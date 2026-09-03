@@ -109,7 +109,7 @@ public sealed class LocatarioPartePropiaTests
         locatario.FullName.Should().Be("Marta Peñaloza");
 
         // Y sigue siendo una parte DISTINTA del propietario, que es lo que el FUR necesita para
-        // imprimir «de {propietario} a LOCATARIO …» en vez de «de X a X».
+        // imprimir «de {propietario} a {locatario}» en vez de «de X a X».
         instance.Actors.Should().ContainSingle(a => a.ActorType == "comprador");
     }
 
