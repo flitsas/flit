@@ -45,11 +45,15 @@ export function CarLoader({ mode = 'runt', label }: { mode?: CarLoaderMode; labe
       aria-live="polite"
       aria-busy="true"
     >
-      {/* `<img>` y no `next/image`: son tres SVG decorativos que suman menos de 3 KB, se sirven
-          desde /public sin transformación posible, y aquí lo que importa es el `onError` — la
-          espera tiene que seguir comunicándose aunque los recursos no estén. El optimizador no
-          aporta nada a eso y sí complica el fallback. */}
-      {/* eslint-disable @next/next/no-img-element */}
+      {/* Un solo SVG con el MISMO sistema de coordenadas que el loader de pestaña nueva
+          (`open-document-tab.ts`, `viewBox="0 0 300 300"`) — no tres `<img>` sueltas colocadas a
+          ojo con `top-%`. Con `top-%` la línea terminaba orbitando SOBRE la pista, igual que el
+          vehículo; en la pestaña nueva la línea orbita POR FUERA del aro (radio ≈105% del borde
+          exterior) y el vehículo va SOBRE la pista (radio ≈89%) — son dos radios distintos, y la
+          única forma de calcarlos sin ir a ojo es reusar las mismas coordenadas. Los tres SVG
+          siguen siendo `<image>` externas (no `<path>` inline) para no duplicar el dibujo del
+          carro, y conservan `onError` — la espera se sigue comunicando aunque falten los recursos
+          estáticos. */}
       <div className="relative flex h-32 w-32 items-center justify-center">
         {sinRecursos ? (
           <div className="flit-loader">
@@ -58,39 +62,52 @@ export function CarLoader({ mode = 'runt', label }: { mode?: CarLoaderMode; labe
             </div>
           </div>
         ) : (
-          <>
-            {/* Capa 1 — la pista, fija. */}
-            <img
-              src={`${BASE}/circulo.svg`}
-              alt=""
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+          <svg
+            viewBox="0 0 300 300"
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            aria-hidden="true"
+          >
+            {/* Capa 1 — la pista, fija. Ocupa el 75% del lienzo (225/300), igual que en la pestaña
+                nueva: el margen que deja alrededor es justo el espacio donde orbita la línea. */}
+            <image
+              href={`${BASE}/circulo.svg`}
+              x={37.5}
+              y={37.5}
+              width={225}
+              height={225}
               onError={() => setSinRecursos(true)}
             />
-            {/* Capa 2 — la órbita exterior, en sentido antihorario. */}
-            <div className="flit-escena-orbita absolute inset-0">
-              <img
-                src={`${BASE}/linea.svg`}
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute left-1/2 top-[5%] h-auto w-20 -translate-x-1/2 object-contain"
+            {/* Capa 2 — la órbita exterior, en sentido antihorario, por fuera del aro. */}
+            <g
+              className="flit-escena-orbita"
+              style={{ transformBox: 'view-box', transformOrigin: '50% 50%' }}
+            >
+              <image
+                href={`${BASE}/linea.svg`}
+                x={115.6}
+                y={264}
+                width={68.8}
+                height={8.88}
                 onError={() => setSinRecursos(true)}
               />
-            </div>
+            </g>
             {/* Capa 3 — el vehículo sobre la pista, en sentido horario. */}
-            <div className="flit-escena-vehiculo absolute inset-0">
-              <img
-                src={`${BASE}/carro.svg`}
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute left-1/2 top-[10%] h-auto w-10 -translate-x-1/2 object-contain"
+            <g
+              className="flit-escena-vehiculo"
+              style={{ transformBox: 'view-box', transformOrigin: '50% 50%' }}
+            >
+              <image
+                href={`${BASE}/carro.svg`}
+                x={126.8}
+                y={238.3}
+                width={46.41}
+                height={23.42}
                 onError={() => setSinRecursos(true)}
               />
-            </div>
-          </>
+            </g>
+          </svg>
         )}
       </div>
-      {/* eslint-enable @next/next/no-img-element */}
 
       {/* El mensaje ES el título. Antes iba «Cargando…» en negrita y el mensaje debajo, en pequeño y
           atenuado: el rótulo genérico se llevaba toda la jerarquía sin decir nada, y lo único que

@@ -355,15 +355,18 @@
     color: #00dbd5;
   }
 
-  /* Escena del CarLoader de la propuesta: la pista queda fija, la línea orbita en contra y el
-     vehículo gira a favor. Las dos velocidades son distintas a propósito — con la misma cadencia
-     los dos elementos parecen una sola pieza rígida y la escena deja de leerse como movimiento. */
+  /* Escena del CarLoader, calcada del loader de pestaña nueva (`open-document-tab.ts`): la pista
+     queda fija, la línea orbita en contra y el vehículo gira a favor, LA MISMA cadencia de 2s para
+     los dos. Antes iban a 2.5s/3.5s a propósito para no leerse como una sola pieza rígida, pero esa
+     diferencia de velocidad es precisamente lo que hacía que esta escena se viera distinta de la
+     de la pestaña —el mismo dibujo, con otro ritmo—; sincronizada a 2s/2s, gira igual en los dos
+     sitios y se sigue leyendo como movimiento porque las dos capas giran en sentido contrario. */
   .flit-escena-orbita {
-    animation: flit-counter 2.5s linear infinite;
+    animation: flit-counter 2s linear infinite;
   }
 
   .flit-escena-vehiculo {
-    animation: flit-orbit 3.5s linear infinite;
+    animation: flit-orbit 2s linear infinite;
   }
 
   /* Respeta a quien pidió menos movimiento: la escena se queda quieta y el mensaje sigue

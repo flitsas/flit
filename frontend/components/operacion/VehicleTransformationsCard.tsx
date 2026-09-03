@@ -2,7 +2,11 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { ArrowRight, Paperclip } from 'lucide-react';
-import type { FieldValue, ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
+import type {
+  FieldValue,
+  ProcedureAttachment,
+  WizardModalidad,
+} from '@/lib/api/types/procedure-runtime';
 import { cn } from '@/lib/utils';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
@@ -29,6 +33,53 @@ const SOPORTE_HINT: Record<SubtramiteKey, string> = {
   combustible: 'Soporte de conversión de combustible',
   carroceria: 'Factura de carrocería',
 };
+
+interface DocumentoSugerido {
+  /** Nombre legible del documento a adjuntar. NO es el nombre de archivo del cargue. */
+  titulo: string;
+  descripcion: string;
+}
+
+/**
+ * Nota informativa de qué documento adjuntar en cada transformación (no había ninguna: el gestor
+ * solo veía el DocTipo del catálogo, que dice CÓMO se llama el requisito, no QUÉ pide). Combustible
+ * y carrocería tienen un único documento; color depende de la modalidad porque quien lo declara
+ * cambia (concesionario en matrícula inicial, propietario en los demás trámites).
+ */
+const NOTA_COMBUSTIBLE: DocumentoSugerido = {
+  titulo: 'Certificado de conversión de combustible',
+  descripcion:
+    'Certificado de conversión emitido por un taller autorizado por el Ministerio de Minas y Energía, con sello y número de resolución.',
+};
+
+const NOTA_CARROCERIA: DocumentoSugerido = {
+  titulo: 'Factura y homologación de carrocería',
+  descripcion:
+    'Factura de compra de la nueva carrocería y ficha técnica de homologación, expedida por el fabricante o importador autorizado.',
+};
+
+const NOTA_COLOR_MATRICULA_INICIAL: DocumentoSugerido = {
+  titulo: 'Declaración de color del concesionario',
+  descripcion:
+    'Declaración escrita del color del vehículo, expedida por el concesionario al momento de la matrícula inicial, con firma respectiva.',
+};
+
+const NOTA_COLOR_TRASPASO: DocumentoSugerido = {
+  titulo: 'Declaración de color del propietario',
+  descripcion:
+    'Declaración escrita del cambio de color expedida por el propietario, indicando color anterior y nuevo, con firma respectiva.',
+};
+
+function notaDoc(key: SubtramiteKey, modalidad: WizardModalidad | undefined): DocumentoSugerido {
+  switch (key) {
+    case 'combustible':
+      return NOTA_COMBUSTIBLE;
+    case 'carroceria':
+      return NOTA_CARROCERIA;
+    case 'color':
+      return modalidad === 'matricula_inicial' ? NOTA_COLOR_MATRICULA_INICIAL : NOTA_COLOR_TRASPASO;
+  }
+}
 
 function soporteDoc(key: SubtramiteKey): { codigo: string; nombre: string; title: string } {
   const codigo = DOC_TIPO_BY_KEY[key];
@@ -64,6 +115,7 @@ export function VehicleTransformationsCard({
   onDocumentsChanged,
   onCompletenessChange,
   soloSubtramite = null,
+  modalidad,
 }: {
   fieldValues: FieldValue[];
   readOnly: boolean;
@@ -81,6 +133,13 @@ export function VehicleTransformationsCard({
    * `null` (default) = acumulador de simultáneos, el comportamiento de matrícula y traspaso.
    */
   soloSubtramite?: SubtramiteKey | null;
+  /**
+   * Gobierna la nota informativa de «cambio de color»: quién declara el color no es el mismo actor
+   * en matrícula inicial (concesionario) que en el resto de trámites (propietario). Sin dato, se usa
+   * el texto de traspaso — es el que ya existía antes de que esta nota se pudiera distinguir por
+   * modalidad.
+   */
+  modalidad?: WizardModalidad;
 }) {
   const headingId = useId();
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
@@ -198,6 +257,7 @@ export function VehicleTransformationsCard({
       effectiveValue: colorEff,
       active: colorActive,
       colorCatalog: true,
+      nota: notaDoc('color', modalidad),
       onToggle: (on) => void setColor(on),
       onSelect: pickColor,
     },
@@ -209,6 +269,7 @@ export function VehicleTransformationsCard({
       effectiveValue: fuelEff,
       active: fuelActive,
       options: VEHICLE_FUEL_CATALOG,
+      nota: notaDoc('combustible', modalidad),
       onToggle: (on) => void setFuel(on),
       onSelect: pickFuel,
     },
@@ -218,6 +279,7 @@ export function VehicleTransformationsCard({
       valueLabel: 'Nueva carrocería',
       runtValue: bodyworkRunt,
       effectiveValue: bodyworkEff,
+      nota: notaDoc('carroceria', modalidad),
       active: bodyworkActive,
       bodyworkCatalog: true,
       vehicleClass: vehicleClassRaw,
@@ -370,6 +432,8 @@ interface SubtramiteItem {
   bodyworkCatalog?: boolean;
   vehicleClass?: string;
   emptyMessage?: string;
+  /** Qué documento adjuntar y por qué (HU nota informativa de transformaciones). */
+  nota: DocumentoSugerido;
   onToggle: (on: boolean) => void;
   onSelect: (value: string) => void;
 }
@@ -447,12 +511,8 @@ function SubtramiteDocCard({
           item.optionLabel
         )}
       </p>
-      {!esTipoBase && (
-        <p className="mt-0.5 text-[11px] font-normal leading-tight">
-          <DocumentCatalogCaption nombre={soporte.nombre} codigo={soporte.codigo} />
-        </p>
-      )}
       <p className="mt-1 text-[11px] opacity-70">PDF, JPG hasta 5MB · Opcional</p>
+
       {attachment && (
         <p className="mt-1 truncate text-[11px] opacity-60">{attachment.filename}</p>
       )}
@@ -524,6 +584,22 @@ function SubtramiteDocCard({
             <span className="font-semibold">{up(item.effectiveValue)}</span>
           </p>
         )}
+      </div>
+
+      {/* Nota informativa: qué documento sirve como soporte, con nombre sugerido y qué debe
+          contener. Pegada al botón que activa —es la que responde «qué adjunto aquí»—, y sin
+          repetir el nombre técnico del DocTipo, que ya dice el heading de la tarjeta. El nombre
+          sugerido es el título con el que se identifica, no el nombre del archivo que suba el
+          gestor. */}
+      <div
+        className="mt-3 rounded-lg px-2.5 py-2 text-[11px] leading-snug"
+        style={{ background: '#F8FAFC' }}
+      >
+        <p className="font-semibold" style={{ color: '#162744' }}>
+          <span className="font-normal opacity-70">Debes adjuntar: </span>
+          {item.nota.titulo}
+        </p>
+        <p className="mt-0.5 opacity-70">{item.nota.descripcion}</p>
       </div>
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
