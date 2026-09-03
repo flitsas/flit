@@ -311,9 +311,13 @@ function IdentidadStatusBanner({
           <Check className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
+          {/* Copy Flit 2.0 · S4. El puntaje se retira por decisión de producto: el número no le
+              dice nada al gestor y la frase ya afirma que la validación fue exitosa. */}
           <p className="text-xs font-bold" style={{ color: 'var(--flit-success-ink)' }}>
-            {/* Nunca un puntaje inventado: si el proveedor no lo trae, no se muestra número. */}
-            {bio.score != null ? `Identidad verificada — ${bio.score}/100` : 'Identidad verificada'}
+            Identidad verificada.
+          </p>
+          <p className="text-xs opacity-70">
+            La identidad del vendedor fue validada con éxito a través del sistema biométrico.
           </p>
           {bio.name ? <p className="text-xs opacity-70">{bio.name}</p> : null}
         </div>
@@ -340,8 +344,12 @@ function IdentidadStatusBanner({
         <Clock className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
+        {/* Copy Flit 2.0 · S4. */}
         <p className="text-xs font-bold" style={{ color: '#59677D' }}>
-          Validación de identidad pendiente
+          Validación de identidad pendiente.
+        </p>
+        <p className="text-xs opacity-70">
+          El vendedor aún no ha completado el proceso de verificación biométrica.
         </p>
         {bio?.status === 'rechazado' || bio?.status === 'expirado' ? (
           <p className="text-xs opacity-70">

@@ -126,7 +126,7 @@ beforeEach(() => {
   });
 });
 
-const AVISO = 'Este representante no está registrado en la compañía';
+const AVISO = 'Nuevo representante legal detectado';
 
 async function renderConDirectorio(onGate?: (ok: boolean) => void) {
   const user = userEvent.setup({ delay: null });

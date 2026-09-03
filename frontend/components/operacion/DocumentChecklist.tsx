@@ -750,13 +750,13 @@ export function DocumentSlot({
             className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
             style={{ background: '#8CC63F' }}
           >
-            Validado
+            Cargado
           </span>
         ) : ocrRejected ? (
           <StatusBadge tone="danger" label="No coincide" />
         ) : item.obligatorio ? (
           <span className="whitespace-nowrap rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
-            * Obligatorio
+            Por cargar
           </span>
         ) : (
           <span className="text-xs font-medium opacity-60">Opcional</span>

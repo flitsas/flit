@@ -11,6 +11,7 @@ import type {
   OtBandejaHealth,
   OtClientProcedure,
   OtClientProcedurePagedResult,
+  OtBandejaCounters,
   OtClientProceduresParams,
   OtDocumentPrecedenceListResult,
   OtDocumentTag,
@@ -89,6 +90,20 @@ export function fetchOtClientProcedures(
       ...params,
       ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
     },
+    signal,
+  });
+}
+
+/**
+ * Contadores de la cabecera (GET /client-procedures/counters). Van en su propia llamada y no en la
+ * respuesta del listado porque cuentan el UNIVERSO, mientras que el listado trae una página.
+ */
+export function fetchOtBandejaCounters(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtBandejaCounters> {
+  return apiFetch<OtBandejaCounters>(`${base}/client-procedures/counters`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
 }

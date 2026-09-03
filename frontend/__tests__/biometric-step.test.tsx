@@ -326,7 +326,7 @@ describe('BiometricStep — resultado verificado', () => {
       <BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />,
     );
     expect(
-      await screen.findByText('Aprobado — 95/100'),
+      await screen.findByText('Aprobado'),
     ).toBeInTheDocument();
     // El nombre aparece tanto en la columna de identidad como en el canvas de firma.
     expect(screen.getAllByText(/Ana Comprador/).length).toBeGreaterThan(0);
@@ -441,7 +441,7 @@ describe('BiometricStep — CF-08 (Feature #11004, HU #11009): historial complet
     mocks.getBiometricState.mockResolvedValue({ validations: [APROBADA], provider: 'mock' });
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    await screen.findByText('Aprobado — 95/100');
+    await screen.findByText('Aprobado');
     expect(screen.queryByText(/Historial de validaciones/)).not.toBeInTheDocument();
   });
 });

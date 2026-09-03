@@ -328,7 +328,8 @@ describe('BiometricStep — inventario: resultados de la validación', () => {
     await renderPaso('matricula_inicial');
 
     const comprador = await screen.findByRole('group', { name: 'Biométrica Comprador' });
-    expect(within(comprador).getByText('Aprobado — 95/100')).toBeInTheDocument();
+    // Copy Flit 2.0 · S4: la insignia ya no lleva el puntaje.
+    expect(within(comprador).getByText('Aprobado')).toBeInTheDocument();
     // El nombre aparece tanto en la columna de identidad como en el canvas de firma.
     expect(within(comprador).getAllByText(/Ana Compradora/).length).toBeGreaterThan(0);
     // Resuelta: ya no se ofrece iniciar ni simular nada.
@@ -349,7 +350,7 @@ describe('BiometricStep — inventario: resultados de la validación', () => {
     });
     await renderPaso('matricula_inicial');
 
-    await screen.findByText('Aprobado — 95/100');
+    await screen.findByText('Aprobado');
     expect(screen.queryByRole('button', { name: /Certificado/i })).toBeNull();
   });
 

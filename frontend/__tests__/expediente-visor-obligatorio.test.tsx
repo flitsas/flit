@@ -64,7 +64,7 @@ describe('ExpedienteVisor — obligatorio vs opcional en «Documentos cargados»
     expect(within(opcional).queryByText('Pendiente')).toBeNull();
   });
 
-  it('lo cargado dice «Validado», sea obligatorio u opcional', () => {
+  it('lo cargado dice «Cargado», sea obligatorio u opcional', () => {
     render(<ExpedienteVisor instanceId="inst-1" attachments={[]} checklist={CHECKLIST} />);
     expect(within(ficha('soat')).getByText('Validado')).toBeInTheDocument();
     expect(within(ficha('cert_tradicion')).getByText('Validado')).toBeInTheDocument();

@@ -163,13 +163,10 @@ function parteBadge(
     return { label: ESTADO_LABEL.expirado, tone: ESTADO_TONE.expirado };
   }
   if (validation.status === 'aprobado') {
-    return {
-      label:
-        validation.score != null
-          ? `${ESTADO_LABEL.aprobado} — ${validation.score}/100`
-          : ESTADO_LABEL.aprobado,
-      tone: ESTADO_TONE.aprobado,
-    };
+    // El puntaje sale de la insignia por decisión de producto (Copy Flit 2.0 · S4): el número no
+    // le dice nada al gestor, y la etiqueta ya afirma que la validación fue aprobada. Sigue
+    // disponible en el HISTORIAL de validaciones, que es donde se audita cada intento.
+    return { label: ESTADO_LABEL.aprobado, tone: ESTADO_TONE.aprobado };
   }
   return { label: ESTADO_LABEL[validation.status], tone: ESTADO_TONE[validation.status] };
 }
@@ -972,7 +969,7 @@ function VaultCoveredView() {
   );
 }
 
-/** Tarjeta verde "Identidad verificada — {score}/100" con el nombre de la parte. */
+/** Fecha de la validación aprobada; el estado lo dice la insignia de la cabecera. */
 function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
   /*
    * Aprobada NO pinta bloque propio: el estado y el puntaje viven en el badge de la cabecera y el

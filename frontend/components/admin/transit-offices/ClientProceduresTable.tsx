@@ -2,8 +2,15 @@
 
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, FolderOpen, Star, X } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import {
+  TABLA_CELDA_SECUNDARIA_CLS,
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { OtTablePagination } from "./OtTablePagination";
-import { RowActions } from "@/components/atom/RowActions";
+import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
 import {
@@ -52,6 +59,7 @@ export interface ClientProceduresTableProps {
 
 function SortableTh({
   label,
+  sortLabel,
   columnKey,
   sortBy,
   sortDir,
@@ -59,6 +67,8 @@ function SortableTh({
   className = "",
 }: {
   label: string;
+  /** Por qué ordena, si no es lo que dice el rótulo (ver `sortLabel` en el catálogo). */
+  sortLabel?: string;
   columnKey: string;
   sortBy?: string;
   sortDir?: "asc" | "desc";
@@ -70,16 +80,23 @@ function SortableTh({
   const nextDir: "asc" | "desc" = active && sortDir === "asc" ? "desc" : "asc";
   const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
 
+  const cls = `${TABLA_HEADER_CELL_CLS} ${className}`.trim();
+  const style = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG };
+
   if (!onSortChange) {
-    return <th className={`px-4 py-2.5 bg-muted ${className}`.trim()}>{label}</th>;
+    return (
+      <th className={cls} style={style}>
+        {label}
+      </th>
+    );
   }
 
   return (
-    <th className={`px-4 py-2.5 bg-muted ${className}`.trim()}>
+    <th className={cls} style={style}>
       <button
         type="button"
         className="inline-flex items-center gap-1 uppercase hover:opacity-80"
-        aria-label={`Ordenar por ${label}${active ? ` (${sortDir === "asc" ? "ascendente" : "descendente"})` : ""}`}
+        aria-label={`Ordenar por ${sortLabel ?? label}${active ? ` (${sortDir === "asc" ? "ascendente" : "descendente"})` : ""}`}
         onClick={() => onSortChange(apiKey, nextDir)}
       >
         {label}
@@ -112,12 +129,91 @@ export function ClientProceduresTable({
 }: ClientProceduresTableProps) {
   const col = (key: string) => OT_PROCEDURES_COLUMNS.find((c) => c.key === key)!;
 
+  /**
+   * Acciones disponibles para una fila, en el orden en que el operador las necesita: primero
+   * decidir, luego la placa, luego consultar. Cada una aparece bajo la MISMA condición con la que
+   * se pintaba su botón — el menú cambia dónde viven, no cuándo existen.
+   */
+  const buildRowActions = (row: OtClientProcedure): ActionsMenuItem[] => {
+    const items: ActionsMenuItem[] = [];
+    const decidible =
+      row.status === "entregado" &&
+      puedeDecidirOt(row.plateFlowStatus, row.soatEstado) &&
+      showApprovalActions;
+
+    if (decidible) {
+      items.push({
+        key: "aprobar",
+        label: "Aprobar",
+        icon: Check,
+        onSelect: () => onApprove(row),
+      });
+      items.push({
+        key: "rechazar",
+        label: "Rechazar",
+        icon: X,
+        onSelect: () => onReject(row),
+      });
+    }
+
+    if (row.plateFlowStatus === "preasignado" && showApprovalActions && onAssignPlate) {
+      items.push({
+        key: "asignar-placa",
+        label: "Asignar placa",
+        onSelect: () => onAssignPlate(row),
+      });
+    }
+
+    if (
+      (row.plateFlowStatus === "preasignado" || row.plateFlowStatus === "asignado") &&
+      showApprovalActions &&
+      onRevoke
+    ) {
+      items.push({ key: "revocar", label: "Revocar", onSelect: () => onRevoke(row) });
+    }
+
+    if (row.status === "aprobado" && onAdjuntarLt) {
+      items.push({ key: "adjuntar-lt", label: "Adjuntar LT", onSelect: () => onAdjuntarLt(row) });
+    }
+
+    if ((row.status === "entregado" || row.status === "aprobado") && onConsolidado) {
+      items.push({
+        key: "consolidado",
+        label: consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado",
+        // Se deshabilita mientras se abre: el consolidado puede tener que generarse, y un segundo
+        // clic dispararía una segunda generación del mismo expediente.
+        disabled: consolidadoActingId === row.id,
+        disabledReason: "Abriendo el consolidado…",
+        onSelect: () => onConsolidado(row),
+      });
+    }
+
+    if (onVerDocumentos) {
+      items.push({
+        key: "documentos",
+        label: "Ver documentos",
+        icon: FolderOpen,
+        onSelect: () => onVerDocumentos(row),
+      });
+    }
+
+    if (onVerDetalle) {
+      items.push({
+        key: "detalle",
+        label: "Detalle del trámite",
+        onSelect: () => onVerDetalle(row),
+      });
+    }
+
+    return items;
+  };
+
   return (
     <div className="flex flex-1 flex-col">
       <div className="overflow-x-auto">
       <table className="w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>
-          <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
+          <tr>
             <SortableTh
               label={col("radicado").label}
               columnKey="radicado"
@@ -154,15 +250,20 @@ export function ClientProceduresTable({
               sortDir={sortDir}
               onSortChange={onSortChange}
             />
+            <th
+              className={TABLA_HEADER_CELL_CLS}
+              style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+            >
+              {col("tipoTramite").label}
+            </th>
             <SortableTh
-              label={col("gestor").label}
-              columnKey="gestor"
+              label={col("empresaGestor").label}
+              sortLabel={col("empresaGestor").sortLabel}
+              columnKey="empresaGestor"
               sortBy={sortBy}
               sortDir={sortDir}
               onSortChange={onSortChange}
             />
-            <th className="px-4 py-2.5 bg-muted">{col("tipoTramite").label}</th>
-            <th className="px-4 py-2.5 bg-muted">{col("empresaCliente").label}</th>
             <SortableTh
               label={col("estado").label}
               columnKey="estado"
@@ -177,14 +278,17 @@ export function ClientProceduresTable({
               sortDir={sortDir}
               onSortChange={onSortChange}
             />
-            <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
+            <th
+              className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+              style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+            >
               Acciones
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="bg-card">
+            <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
               <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
                 <span className="flex items-center gap-1.5">
                   {row.prioritario && (
@@ -210,13 +314,19 @@ export function ClientProceduresTable({
                 {row.compradorNombre?.trim() || "—"}
               </td>
               <td className="border-y px-4 py-3">
-                {row.gestorNombre?.trim() || "—"}
-              </td>
-              <td className="border-y px-4 py-3">
                 {row.procedureTypeName ?? row.procedureTypeId}
               </td>
+              {/* Empresa arriba, gestor debajo y atenuado: la empresa es la responsable del
+                  trámite; el gestor, la persona concreta con la que hablar. */}
               <td className="border-y px-4 py-3">
-                {row.clientTenantName ?? row.clientTenantId}
+                <span className="block min-w-0">
+                  <span className="block truncate font-semibold">
+                    {row.clientTenantName ?? row.clientTenantId}
+                  </span>
+                  <span className={`block truncate ${TABLA_CELDA_SECUNDARIA_CLS}`}>
+                    {row.gestorNombre?.trim() || "—"}
+                  </span>
+                </span>
               </td>
               <td className="border-y px-4 py-3">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -242,51 +352,28 @@ export function ClientProceduresTable({
               <td className="border-y px-4 py-3 opacity-70">
                 {formatOtDate(row.createdAt)}
               </td>
+              {/*
+                Las ACCIONES van en un menú (`ActionsMenu`, el mismo del listado del gestor). Sueltas
+                eran hasta ocho botones condicionales en una celda: la columna crecía o encogía según
+                el estado de cada fila y la tabla nunca tenía el mismo ancho dos filas seguidas.
+
+                Lo que NO entra en el menú es lo INFORMATIVO —"Esperando proceso del gestor" y los
+                sellos de SOAT/Impuesto—: no son cosas que el operador pueda ejecutar, y escondidas
+                tras un clic dejarían de avisar, que es justo para lo que están.
+              */}
               <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
-                  {onVerDocumentos && (
-                    <button
-                      type="button"
-                      className="rounded-lg border p-1.5"
-                      style={{ color: "#557EFF" }}
-                      aria-label={`Ver documentos del trámite ${row.referenceNumber}`}
-                      title="Ver documentos del expediente"
-                      onClick={() => onVerDocumentos(row)}
-                    >
-                      <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  )}
-                  {row.status === "entregado" &&
-                    puedeDecidirOt(row.plateFlowStatus, row.soatEstado) &&
-                    showApprovalActions && (
-                    <RowActions
-                      actions={[
-                        {
-                          icon: Check,
-                          label: `Aprobar tramite ${row.referenceNumber}`,
-                          onClick: () => onApprove(row),
-                          tone: "primary",
-                        },
-                        {
-                          icon: X,
-                          label: `Rechazar tramite ${row.referenceNumber}`,
-                          onClick: () => onReject(row),
-                          tone: "danger",
-                        },
-                      ]}
-                    />
-                  )}
                   {row.status === "entregado" &&
                     esperandoProcesoDelGestor(row.plateFlowStatus) &&
                     showApprovalActions && (
-                    <span
-                      className="text-[10px] font-medium italic"
-                      style={{ color: "#b45309" }}
-                      title="El gestor debe procesar el trámite (Asignado → Terminado) antes de que el OT apruebe o rechace."
-                    >
-                      Esperando proceso del gestor
-                    </span>
-                  )}
+                      <span
+                        className="text-[10px] font-medium italic"
+                        style={{ color: "#b45309" }}
+                        title="El gestor debe procesar el trámite (Asignado → Terminado) antes de que el OT apruebe o rechace."
+                      >
+                        Esperando proceso del gestor
+                      </span>
+                    )}
                   {row.plateFlowStatus === "terminado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
@@ -301,60 +388,10 @@ export function ClientProceduresTable({
                       )}
                     </span>
                   )}
-                  {row.plateFlowStatus === "preasignado" && showApprovalActions && onAssignPlate && (
-                    <button
-                      type="button"
-                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
-                      style={{ borderColor: "#557EFF", color: "#557EFF" }}
-                      onClick={() => onAssignPlate(row)}
-                    >
-                      Asignar placa
-                    </button>
-                  )}
-                  {(row.plateFlowStatus === "preasignado" || row.plateFlowStatus === "asignado") &&
-                    showApprovalActions &&
-                    onRevoke && (
-                      <button
-                        type="button"
-                        className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
-                        style={{ borderColor: "#fca5a5", color: "#b91c1c" }}
-                        onClick={() => onRevoke(row)}
-                      >
-                        Revocar
-                      </button>
-                    )}
-                  {row.status === "aprobado" && onAdjuntarLt && (
-                    <button
-                      type="button"
-                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
-                      style={{ borderColor: "#557EFF", color: "#557EFF" }}
-                      onClick={() => onAdjuntarLt(row)}
-                    >
-                      Adjuntar LT
-                    </button>
-                  )}
-                  {(row.status === "entregado" || row.status === "aprobado") && onConsolidado && (
-                    <button
-                      type="button"
-                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50 text-foreground"
-                      disabled={consolidadoActingId === row.id}
-                      title="Muestra el consolidado del expediente; lo genera si aún no está o si cambió el trámite"
-                      onClick={() => onConsolidado(row)}
-                    >
-                      {consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado"}
-                    </button>
-                  )}
-                  {onVerDetalle && (
-                    <button
-                      type="button"
-                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold text-foreground"
-                      aria-label={`Ver detalle del trámite ${row.referenceNumber}`}
-                      title="Ver detalle del trámite"
-                      onClick={() => onVerDetalle(row)}
-                    >
-                      Detalle
-                    </button>
-                  )}
+                  <ActionsMenu
+                    ariaLabel={`Acciones del trámite ${row.referenceNumber}`}
+                    items={buildRowActions(row)}
+                  />
                 </div>
               </td>
             </tr>

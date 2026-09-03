@@ -184,7 +184,7 @@ describe('MatriculaResumen — Múltiple Propietario, 2+ copropietarios', () => 
     // Estados distintos: Ana (ordinal 1) ya validó — su tarjeta lo dice y NO ofrece iniciar/simular
     // de nuevo.
     expect(
-      await within(tarjetaUno).findByText('Identidad verificada — 95/100'),
+      await within(tarjetaUno).findByText('Identidad verificada.'),
     ).toBeInTheDocument();
     expect(
       within(tarjetaUno).queryByRole('button', { name: /simular validación de identidad/i }),

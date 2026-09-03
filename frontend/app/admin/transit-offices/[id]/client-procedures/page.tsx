@@ -20,7 +20,12 @@ function OtClientProceduresPageInner() {
     <OtHubLayout
       transitOfficeId={params.id}
       activeTab="client-procedures"
-      moduleTitle="Administración OT — Trámites"
+      moduleTitle="Trámites OT"
+      // Sin la tarjeta del hub: en el diseño la pantalla es una PILA de bloques sobre el fondo
+      // claro —cabecera, contadores, filtros, tabla—, cada uno con su propia superficie. Metidos
+      // dentro de un contenedor blanco, las filas blancas de la tabla dejaban de leerse como
+      // tarjetas porque se apoyaban sobre otro blanco.
+      surface="plano"
     >
       <ClientProceduresSection transitOfficeId={params.id} />
     </OtHubLayout>

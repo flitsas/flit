@@ -159,6 +159,14 @@ export interface OtClientProcedurePagedResult {
 
 export interface OtClientProceduresParams {
   status?: string;
+  /**
+   * Sub-estado de la ruta de placa. Varios separados por coma (`asignado,terminado`) y el valor
+   * especial `sin_ruta` para los trámites que no están en ruta de placa.
+   *
+   * Lo usan las tarjetas de la cabecera al pulsarse: tres de ellas cuentan por sub-estado de placa,
+   * no por estado del ciclo de vida, y sin esto llevarían a una lista distinta de la que contaron.
+   */
+  plateFlowStatus?: string;
   procedureTypeId?: string;
   vin?: string;
   placa?: string;
@@ -174,6 +182,22 @@ export interface OtClientProceduresParams {
 }
 
 /** Diagnóstico de la bandeja OT (HU #10540/#10541 — R09): entregados con/sin grant vigente. */
+/**
+ * Contadores de la cabecera de la bandeja OT: cuánto trabajo hay de cada clase, sobre TODO lo
+ * accesible y no sobre la página cargada.
+ *
+ * Las clases NO son excluyentes ni suman el total: las dos de placa miran el sub-estado y las tres
+ * de decisión miran el estado del trámite. Un entregado con placa asignada cuenta en dos.
+ */
+export interface OtBandejaCounters {
+  transitOfficeResolved: boolean;
+  sinAsignarPlaca: number;
+  conPlacaAsignada: number;
+  aprobados: number;
+  rechazados: number;
+  sinGestion: number;
+}
+
 export interface OtBandejaHealth {
   transitOfficeResolved: boolean;
   transitOfficeId: string | null;

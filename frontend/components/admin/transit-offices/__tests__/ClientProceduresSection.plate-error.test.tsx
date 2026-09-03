@@ -74,7 +74,9 @@ function renderSection() {
 /** Abre el modal y confirma la asignación de la primera placa del rango. */
 async function intentarAsignar(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText("RAD-2026-777");
-  await user.click(await screen.findByRole("button", { name: /Asignar placa/i }));
+  // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+  await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+  await user.click(await screen.findByRole("menuitem", { name: /Asignar placa/i }));
   const select = await screen.findByLabelText(/Placa del rango/i);
   await user.selectOptions(select, "ABC105");
   const confirmar = await screen.findByRole("button", { name: /^Asignar$/i });
@@ -178,7 +180,9 @@ describe("ClientProceduresSection — error al asignar placa", () => {
 
     renderSection();
     await screen.findByText("RAD-2026-777");
-    await user.click(await screen.findByRole("button", { name: /Asignar placa/i }));
+    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Asignar placa/i }));
     const input = await screen.findByLabelText(/Placa fuera de rango/i);
     await user.clear(input);
     await user.type(input, "QXU030");
