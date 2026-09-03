@@ -21,4 +21,7 @@ public sealed record CreateDocumentTypeRequest(
     IReadOnlyList<string>? MimeTypesAllowed = null,
     long? MaxSizeBytes = null,
     // True = autogenerado (consolidado / sistema). False u omitido = cargue en Requisitos.
-    bool? EsAutogenerado = null);
+    bool? EsAutogenerado = null,
+    // HU #12065 — instrucción que lee el gestor en la tarjeta del paso Requisitos. Opcional:
+    // omitida/vacía ⇒ la tarjeta no muestra instrucción.
+    string? InstruccionCargue = null);

@@ -6,7 +6,9 @@ namespace Flit.Admin.Application.DocumentTypes;
 /// Respuesta pública de un tipo de documento (HU #10193). Serializada en camelCase:
 /// <c>{ id, codigo, nombre, descripcion, estado, fechaCreacion }</c>. <c>estado</c>
 /// traduce <c>is_active</c> a <c>"activo"</c> / <c>"inactivo"</c> (mapeo del handoff).
-/// <c>esAutogenerado</c> mapea <c>is_system_generated</c>.
+/// <c>esAutogenerado</c> mapea <c>is_system_generated</c>. <c>instruccionCargue</c> mapea
+/// <c>upload_instructions</c>: el texto que lee el gestor al cargar (HU #12065), distinto de
+/// <c>descripcion</c>, que es la nota interna del administrador.
 /// </summary>
 public sealed record DocumentTypeResponse(
     Guid Id,
@@ -17,7 +19,8 @@ public sealed record DocumentTypeResponse(
     DateTimeOffset FechaCreacion,
     IReadOnlyList<string> MimeTypesAllowed,
     long MaxSizeBytes,
-    bool EsAutogenerado)
+    bool EsAutogenerado,
+    string? InstruccionCargue)
 {
     public const string EstadoActivo = "activo";
     public const string EstadoInactivo = "inactivo";
@@ -35,6 +38,7 @@ public sealed record DocumentTypeResponse(
             item.CreatedAt,
             item.MimeTypesAllowed,
             item.MaxSizeBytes,
-            item.IsSystemGenerated);
+            item.IsSystemGenerated,
+            item.UploadInstructions);
     }
 }

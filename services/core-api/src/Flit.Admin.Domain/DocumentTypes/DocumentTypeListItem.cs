@@ -19,6 +19,13 @@ public sealed class DocumentTypeListItem
     /// <summary>Descripción — <c>tramites.document_types.description</c>. Opcional.</summary>
     public string? Description { get; init; }
 
+    /// <summary>
+    /// Instrucción de cargue (HU #12065) — <c>tramites.document_types.upload_instructions</c>.
+    /// Es el texto que el gestor lee en la tarjeta del paso Requisitos, no la nota interna del
+    /// administrador (<see cref="Description"/>). Opcional.
+    /// </summary>
+    public string? UploadInstructions { get; init; }
+
     /// <summary>Estado activo — <c>tramites.document_types.is_active</c> (false = inactivo).</summary>
     public bool IsActive { get; init; }
 

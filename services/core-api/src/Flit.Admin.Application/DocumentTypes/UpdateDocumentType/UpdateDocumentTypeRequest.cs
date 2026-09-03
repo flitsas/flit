@@ -12,4 +12,7 @@ public sealed record UpdateDocumentTypeRequest(
     IReadOnlyList<string>? MimeTypesAllowed = null,
     long? MaxSizeBytes = null,
     // Null ⇒ conserva el origen. True = autogenerado; false = cargue.
-    bool? EsAutogenerado = null);
+    bool? EsAutogenerado = null,
+    // HU #12065 — instrucción que lee el gestor. Igual que `descripcion`: el PUT manda el texto
+    // completo, así que vaciarla la borra.
+    string? InstruccionCargue = null);

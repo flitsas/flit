@@ -29,6 +29,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
         bool isSystemGenerated = false,
+        string? uploadInstructions = null,
         CancellationToken cancellationToken = default)
     {
         var entity = new DocumentType
@@ -37,6 +38,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             Code = code,
             Name = name,
             Description = description,
+            UploadInstructions = uploadInstructions,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = createdBy,
@@ -101,6 +103,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
                 Code = d.Code,
                 Name = d.Name,
                 Description = d.Description,
+                UploadInstructions = d.UploadInstructions,
                 IsActive = d.IsActive,
                 CreatedAt = d.CreatedAt,
                 MimeTypesAllowed = d.MimeTypesAllowed,
@@ -134,6 +137,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
         bool? isSystemGenerated = null,
+        string? uploadInstructions = null,
         CancellationToken cancellationToken = default)
     {
         var entity = await _context.DocumentTypes
@@ -148,6 +152,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         entity.Code = code;
         entity.Name = name;
         entity.Description = description;
+        entity.UploadInstructions = uploadInstructions;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.UpdatedBy = updatedBy;
         // RF08/09: solo se tocan los límites si el request los envía (null ⇒ conserva lo existente).
@@ -288,6 +293,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         Code = entity.Code,
         Name = entity.Name,
         Description = entity.Description,
+        UploadInstructions = entity.UploadInstructions,
         IsActive = entity.IsActive,
         CreatedAt = entity.CreatedAt,
         MimeTypesAllowed = entity.MimeTypesAllowed,

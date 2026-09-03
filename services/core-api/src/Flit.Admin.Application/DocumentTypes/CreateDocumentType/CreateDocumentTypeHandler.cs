@@ -29,7 +29,11 @@ public sealed class CreateDocumentTypeHandler
             ? null
             : command.Request.Descripcion.Trim();
 
-        var error = DocumentTypeValidator.ValidateNameAndDescription(name, description);
+        var uploadInstructions = string.IsNullOrWhiteSpace(command.Request.InstruccionCargue)
+            ? null
+            : command.Request.InstruccionCargue.Trim();
+
+        var error = DocumentTypeValidator.ValidateNameAndDescription(name, description, uploadInstructions);
         if (error is not null)
         {
             return CreateDocumentTypeResult.Invalid(error);
@@ -46,7 +50,7 @@ public sealed class CreateDocumentTypeHandler
             .CreateAsync(
                 code, name, description, command.CreatedBy,
                 command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes,
-                command.Request.EsAutogenerado == true, cancellationToken)
+                command.Request.EsAutogenerado == true, uploadInstructions, cancellationToken)
             .ConfigureAwait(false);
 
         return CreateDocumentTypeResult.Success(DocumentTypeResponse.From(created));
