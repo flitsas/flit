@@ -1,29 +1,51 @@
+using Flit.Admin.Domain.Companies.Settings;
+using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Tramites.Application.Notifications;
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Notifications.Tramites;
 
-/// <summary>HU #11486 — marca FLIT/Renting por NIT (AC3, AC4).</summary>
+/// <summary>Marca FLIT/Renting del correo de asignación de placa = canal del tenant.</summary>
 public sealed class PlateAssignmentBrandResolverTests
 {
-    private static PlateAssignmentBrandResolver CreateSut() =>
-        new(null!, null!, NullLogger<PlateAssignmentBrandResolver>.Instance);
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task CanalTenantApi_ResuelveMarcaRenting()
+    {
+        var channels = Substitute.For<INotificationChannelResolver>();
+        channels.ResolveAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(NotificationChannel.TenantApi);
+
+        var sut = new PlateAssignmentBrandResolver(channels);
+        var brand = await sut.ResolveForClientTenantAsync(Guid.NewGuid(), Ct);
+
+        brand.Should().Be(PlateAssignmentEmailBrand.Renting);
+    }
 
     [Theory]
-    [InlineData("811011779", PlateAssignmentEmailBrand.Renting)]
-    [InlineData("811011779-1", PlateAssignmentEmailBrand.Renting)]
-    [InlineData("811.011.779", PlateAssignmentEmailBrand.Renting)]
-    public void NitRenting_ResuelveMarcaRenting(string taxId, PlateAssignmentEmailBrand expected) =>
-        CreateSut().ResolveFromTaxId(taxId).Should().Be(expected);
+    [InlineData(NotificationChannel.FlitSmtp)]
+    public async Task CanalFlitSmtp_ResuelveMarcaFlit(NotificationChannel channel)
+    {
+        var channels = Substitute.For<INotificationChannelResolver>();
+        channels.ResolveAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(channel);
 
-    [Theory]
-    [InlineData("900123456-7")]
-    [InlineData("123456789")]
-    [InlineData(null)]
-    [InlineData("")]
-    public void OtroNit_ResuelveMarcaFlit(string? taxId) =>
-        CreateSut().ResolveFromTaxId(taxId).Should().Be(PlateAssignmentEmailBrand.Flit);
+        var sut = new PlateAssignmentBrandResolver(channels);
+        var brand = await sut.ResolveForClientTenantAsync(Guid.NewGuid(), Ct);
+
+        brand.Should().Be(PlateAssignmentEmailBrand.Flit);
+    }
+
+    [Fact]
+    public void BrandFromChannel_MapeaTenantApiARentingYRestoAFlit()
+    {
+        PlateAssignmentBrandResolver.BrandFromChannel(NotificationChannel.TenantApi)
+            .Should().Be(PlateAssignmentEmailBrand.Renting);
+        PlateAssignmentBrandResolver.BrandFromChannel(NotificationChannel.FlitSmtp)
+            .Should().Be(PlateAssignmentEmailBrand.Flit);
+    }
 }

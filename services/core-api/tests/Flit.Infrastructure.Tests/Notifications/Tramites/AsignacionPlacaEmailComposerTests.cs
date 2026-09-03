@@ -82,12 +82,6 @@ public class AsignacionPlacaEmailComposerTests
         flit.Html.Should().NotBe(renting.Html);
     }
 
-    [Fact]
-    public void RentingCompanyRegisteredNit_DocumentaReglaProductiva()
-    {
-        AsignacionPlacaEmailComposer.RentingCompanyRegisteredNit.Should().Be("811011779");
-    }
-
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
