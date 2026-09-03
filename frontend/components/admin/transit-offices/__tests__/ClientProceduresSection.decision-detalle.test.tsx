@@ -247,16 +247,47 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     expect(within(dialog).queryByRole("button", { name: "Aprobar trámite" })).not.toBeInTheDocument();
   });
 
-  it("un trámite en preasignado ofrece asignar la placa desde el propio detalle", async () => {
-    prepararBandeja({ ...ENTREGADO, plateFlowStatus: "preasignado", placa: null });
+  it("la placa sin preasignar se resuelve desde su propia celda del vehículo", async () => {
+    // El prototipo pone la preasignación EN la celda de la placa, no en el pie: es la celda que
+    // reporta el problema, así que es donde se espera el remedio.
+    prepararBandeja({
+      ...ENTREGADO,
+      plateFlowStatus: "preasignado",
+      placa: null,
+      platePreferredLastDigit: "3",
+    });
     const user = userEvent.setup();
     renderSection();
 
     const dialog = await abrirDetalle(user, "RAD-2026-101");
+    expect(within(dialog).getByText("Sin preasignar")).toBeInTheDocument();
+    expect(within(dialog).getByText("Dígito preferido: 3")).toBeInTheDocument();
     // Sigue sin poder decidirse, pero desde aquí se desbloquea.
     expect(within(dialog).getByRole("button", { name: "Aprobar trámite" })).toBeDisabled();
-    await user.click(within(dialog).getByRole("button", { name: "Asignar placa" }));
 
+    await user.click(within(dialog).getByRole("button", { name: "Asignar placa" }));
     expect(await screen.findByRole("dialog", { name: "Asignar placa" })).toBeInTheDocument();
+  });
+
+  it("la fila entera abre el detalle, y el menú de acciones no lo dispara", async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    // Pulsar cualquier celda de la fila lleva al detalle: es a donde se entra casi siempre.
+    await user.click(await screen.findByText("RAD-2026-101"));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Gestión y Aprobación del Trámite");
+  });
+
+  it("pulsar el menú de acciones NO abre además el detalle", async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByText("RAD-2026-101");
+    await user.click(screen.getByRole("button", { name: "Acciones del trámite RAD-2026-101" }));
+
+    // El menú se abre y el detalle NO: si la fila se tragara el clic, elegir «Aprobar» dejaría el
+    // detalle abierto por debajo del diálogo.
+    expect(await screen.findByRole("menuitem", { name: "Aprobar" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

@@ -137,6 +137,16 @@ describe("Detalle OT — presentación con las rejillas del prototipo (HU #12061
     expect(screen.queryByText("Peso")).not.toBeInTheDocument();
   });
 
+  it("la ficha de estado/SOAT/pagos no existe: el prototipo no la tiene", async () => {
+    abrir();
+
+    await screen.findByRole("table", { name: "Datos del trámite" });
+    expect(screen.queryByRole("table", { name: "Estado del trámite" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Entrega al organismo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^SOAT (pagado|pendiente)$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Impuesto (pagado|pendiente)$/i)).not.toBeInTheDocument();
+  });
+
   it("AC4 — los actores se presentan en una tabla de tres columnas", async () => {
     abrir();
     const user = userEvent.setup();

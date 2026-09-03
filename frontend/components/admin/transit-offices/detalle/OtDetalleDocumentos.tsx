@@ -300,9 +300,7 @@ export function OtDetalleDocumentos({
             {/* El consolidado no es un adjunto más: es el expediente entero en un PDF, y por eso el
                 prototipo lo destaca en azul al final de la rejilla. */}
             <li
-              // Ocupa la fila entera. En el prototipo cabe en una celda porque su rotulo es corto;
-              // aquí, junto a nombres de fichero reales, se truncaba a «Consolidado de docu…».
-              className="flex items-center gap-2 rounded-xl border px-3 py-2 sm:col-span-2 lg:col-span-3"
+              className="flex items-center gap-2 rounded-xl border px-3 py-2"
               style={{ background: OT_BLUE, borderColor: OT_BLUE }}
             >
               <span className="h-5 w-5 shrink-0" aria-hidden="true" />

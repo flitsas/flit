@@ -167,8 +167,9 @@ export function ClientProcedureDetailModal({
       : `El trámite está en «${formatOtProcedureStatus(row.status)}»: el organismo solo decide sobre los que tiene entregados.`;
 
   const decidible = bloqueo === null && puedeDecidirOt(row.plateFlowStatus, row.soatEstado);
-  const puedeAsignarPlaca = Boolean(onAssignPlate) && row.plateFlowStatus === "preasignado";
-  const hayPie = showApprovalActions && Boolean(onApprove || onReject || puedeAsignarPlaca);
+  const puedeAsignarPlaca =
+    showApprovalActions && Boolean(onAssignPlate) && row.plateFlowStatus === "preasignado";
+  const hayPie = showApprovalActions && Boolean(onApprove || onReject);
 
   const avisos = [bloqueo, ...pendientesDelTramite(row, docs.length)].filter(
     (a): a is string => a !== null,
@@ -242,7 +243,10 @@ export function ClientProcedureDetailModal({
       return detailLoading ? (
         <OtCargando etiqueta="Cargando el detalle del trámite" filas={5} />
       ) : (
-        <OtDetalleTramiteVehiculo procedure={row} />
+        <OtDetalleTramiteVehiculo
+          procedure={row}
+          onAssignPlate={puedeAsignarPlaca ? onAssignPlate : undefined}
+        />
       );
     }
     if (id === "actores") {
@@ -260,16 +264,6 @@ export function ClientProcedureDetailModal({
    */
   const footer = hayPie ? (
     <div className="flex flex-wrap items-center justify-center gap-3">
-      {puedeAsignarPlaca ? (
-        <button
-          type="button"
-          onClick={() => onAssignPlate?.(row)}
-          className="h-11 min-w-[160px] rounded-xl border px-6 text-[13px] font-semibold transition hover:bg-[#557EFF]/10"
-          style={{ borderColor: OT_BLUE, color: OT_BLUE }}
-        >
-          Asignar placa
-        </button>
-      ) : null}
       {onReject ? (
         <button
           type="button"

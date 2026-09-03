@@ -1,11 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
-import { plateFlowChipStyle, plateFlowLabel } from "@/lib/tramites/estados";
 import type { TransformacionTipo } from "@/lib/tramites/transformaciones-vehiculo";
-import { OtFichaCampos, OtRejilla, OtVacio } from "./OtDetallePrimitivos";
+import { OtFichaCampos, OtRejilla, OtSello, OtVacio } from "./OtDetallePrimitivos";
+import { OT_BLUE, OT_ORANGE } from "./ot-detalle-visual";
 import {
   OtDetalleTransformaciones,
   transformacionesDelTramite,
@@ -55,30 +54,43 @@ function camposVehiculo(
   const cilindraje = procedure.cilindraje?.trim() ?? "";
 
   return [
+    // Primera banda del prototipo, tal cual.
     { campo: "VIN", valor: procedure.vin },
     { campo: "Placa", valor: procedure.placa },
     { campo: "Marca", valor: procedure.marca },
     { campo: "Línea", valor: procedure.linea },
+    // Segunda banda: el prototipo pone «Peso», que no existe en el contrato del OT; su hueco lo
+    // ocupa «Modelo», el dato del mismo orden de importancia que sí tenemos.
     { campo: "Clase", valor: procedure.clase },
     { campo: "Color", valor: transformados.has("color") ? "" : procedure.color },
-    { campo: "Prenda", valor: prendaTexto(procedure) },
-    { campo: "Servicio", valor: procedure.servicio },
     { campo: "Modelo", valor: procedure.modelo },
+    { campo: "Prenda", valor: prendaTexto(procedure) },
+    // De aquí en adelante, lo que el detalle anterior ya mostraba y el organismo usa para decidir.
+    { campo: "Servicio", valor: procedure.servicio },
     { campo: "Combustible", valor: transformados.has("combustible") ? "" : procedure.combustible },
     { campo: "Carrocería", valor: transformados.has("carroceria") ? "" : procedure.carroceria },
     {
       campo: "Cilindraje",
-      valor: cilindraje && !cilindraje.includes("cc") ? `${cilindraje} cc` : cilindraje,
+      // Un eléctrico llega con cilindraje 0: eso no es un dato del vehículo, es un «no aplica»
+      // que el RUNT guarda como cero. Pintarlo como «0 cc» solo ensucia la ficha.
+      valor:
+        !cilindraje || Number(cilindraje.replace(/\D/g, "")) === 0
+          ? ""
+          : cilindraje.includes("cc")
+            ? cilindraje
+            : `${cilindraje} cc`,
     },
     { campo: "Capacidad", valor: procedure.capacidad },
     { campo: "Ejes", valor: procedure.ejes },
     { campo: "Estado", valor: procedure.estadoVehiculo },
+    { campo: "SOAT RUNT", valor: soatEstadoLabel(procedure.soatEstado) },
     { campo: "N. Motor", valor: procedure.numeroMotor },
     { campo: "N. Chasis", valor: procedure.numeroChasis },
     { campo: "N. Serie", valor: procedure.numeroSerie },
   ]
     .map((s) => ({ campo: s.campo, valor: s.valor?.trim() ?? "" }))
-    .filter((s) => s.valor !== "");
+    // El guion no es un valor: un campo sin dato se va, no se pinta vacío.
+    .filter((s) => s.valor !== "" && s.valor !== "—");
 }
 
 /** Empresa responsable y persona con la que hablar, en la misma celda que el prototipo. */
@@ -88,33 +100,46 @@ function empresaGestor(procedure: OtClientProcedure): string {
     .join(" · ");
 }
 
-/** Sellos que acompañan al estado: sub-estado de placa, prioridad y pagos declarados. */
-function EstadoDelTramite({ procedure }: { procedure: OtClientProcedure }): ReactNode {
-  const plateChip = plateFlowChipStyle(procedure.plateFlowStatus);
+/**
+ * Celda «Placa» de la ficha del vehículo.
+ *
+ * Es la única celda con acción, y el prototipo la pone justo aquí: un trámite puede llegar al
+ * organismo SIN placa —radicado con dígito de preferencia— y asignarla es lo primero que hay que
+ * hacer con él. Tenerlo en la misma celda que lo reporta ahorra ir a buscar el botón a otro sitio.
+ *
+ * No inventa flujo: pulsa el mismo manejador que la acción «Asignar placa» de la bandeja, que abre
+ * el diálogo con las placas disponibles del rango de la compañía.
+ */
+function CeldaPlaca({
+  procedure,
+  onAssignPlate,
+}: {
+  procedure: OtClientProcedure;
+  onAssignPlate?: (procedure: OtClientProcedure) => void;
+}) {
+  const placa = procedure.placa?.trim();
+  if (placa) {
+    return <span className="font-semibold tracking-wider">{placa}</span>;
+  }
+
+  const digito = procedure.platePreferredLastDigit?.trim();
 
   return (
-    <span className="flex flex-wrap items-center gap-1.5">
-      {plateChip ? (
-        <span
-          className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-          style={{
-            background: plateChip.bg,
-            color: plateChip.color,
-            border: `1px solid ${plateChip.border}`,
-          }}
+    <span className="flex flex-col items-start gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: OT_ORANGE }}>
+        Sin preasignar
+      </span>
+      {digito ? <OtSello texto={`Dígito preferido: ${digito}`} color={OT_BLUE} soft /> : null}
+      {onAssignPlate ? (
+        <button
+          type="button"
+          onClick={() => onAssignPlate(procedure)}
+          className="rounded-lg border px-2 py-1 text-[11px] font-semibold transition hover:bg-[#557EFF]/10"
+          style={{ borderColor: OT_BLUE, color: OT_BLUE }}
         >
-          {plateFlowLabel(procedure.plateFlowStatus)}
-        </span>
+          Asignar placa
+        </button>
       ) : null}
-      {procedure.prioritario ? <StatusBadge label="Prioritario" tone="warning" /> : null}
-      <StatusBadge
-        label={`SOAT ${procedure.soatPagado ? "pagado" : "pendiente"}`}
-        tone={procedure.soatPagado ? "success" : "neutral"}
-      />
-      <StatusBadge
-        label={`Impuesto ${procedure.impuestoDepartamentalPagado ? "pagado" : "pendiente"}`}
-        tone={procedure.impuestoDepartamentalPagado ? "info" : "neutral"}
-      />
     </span>
   );
 }
@@ -130,12 +155,28 @@ function EstadoDelTramite({ procedure }: { procedure: OtClientProcedure }): Reac
  */
 export function OtDetalleTramiteVehiculo({
   procedure,
+  onAssignPlate,
 }: {
   procedure: OtClientProcedure;
+  /**
+   * Asignar la placa desde la propia celda, como en el prototipo. Ausente cuando la sesión no
+   * decide (SuperAdmin supervisando, Quipux de solo lectura): entonces la celda solo informa.
+   */
+  onAssignPlate?: (procedure: OtClientProcedure) => void;
 }) {
   const transformaciones = transformacionesDelTramite(procedure);
   const transformados = new Set(transformaciones.map((t) => t.tipo));
-  const campos = camposVehiculo(procedure, transformados);
+  const celdaPlaca: { campo: string; valor: ReactNode } = {
+    campo: "Placa",
+    valor: <CeldaPlaca procedure={procedure} onAssignPlate={onAssignPlate} />,
+  };
+
+  // «Placa» NUNCA se filtra por estar vacía: sin placa es cuando más falta hace la celda, porque
+  // es la que lleva la preasignación. Por eso se inserta aquí y no se deja pasar por el filtro.
+  const campos: { campo: string; valor: ReactNode }[] = camposVehiculo(procedure, transformados)
+    .filter((c) => c.campo !== "Placa")
+    .map((c) => ({ campo: c.campo, valor: c.valor as ReactNode }));
+  const camposConPlaca = [...campos.slice(0, 1), celdaPlaca, ...campos.slice(1)];
 
   return (
     <div className="space-y-4">
@@ -164,24 +205,13 @@ export function OtDetalleTramiteVehiculo({
         ]}
       />
 
-      <OtRejilla
-        etiqueta="Estado del trámite"
-        columnas={["Estado", "SOAT RUNT", "Entrega al organismo", "Dígito de placa preferido"]}
-        filas={[
-          [
-            <EstadoDelTramite key="estado" procedure={procedure} />,
-            soatEstadoLabel(procedure.soatEstado),
-            procedure.submittedAt ? formatOtDate(procedure.submittedAt) : "Sin entregar",
-            procedure.platePreferredLastDigit?.trim() || "Sin preferencia",
-          ],
-        ]}
-      />
-
+      {/* La ficha se pinta SIEMPRE, aunque el trámite no traiga ni una especificación: la celda de
+          la placa es la que lleva la preasignación, y esconderla justo cuando no hay datos del
+          vehículo dejaría sin salida al trámite que más la necesita. El aviso de vacío acompaña. */}
       {campos.length === 0 ? (
         <OtVacio mensaje="Este trámite no tiene especificaciones técnicas del vehículo registradas todavía." />
-      ) : (
-        <OtFichaCampos etiqueta="Especificaciones del vehículo" campos={campos} />
-      )}
+      ) : null}
+      <OtFichaCampos etiqueta="Especificaciones del vehículo" campos={camposConPlaca} />
 
       <OtDetalleTransformaciones procedure={procedure} />
     </div>
