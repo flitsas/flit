@@ -220,6 +220,39 @@ public sealed class ProcedureDeedResolverTests
         result.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Resolve_RlConDocumento_NoRegistradoEnDirectorio_NoCaeAlNit_Skips()
+    {
+        // Bug reportado en trámite bc92f2ea-40fd-479f-bc17-ae93fad6a304 — el gestor cambió el RL del
+        // comprador (Bancolombia) por una persona que NO está en el directorio: el trámite pedía la
+        // escritura manualmente (`EscrituraRepresentanteUpload`) Y el consolidado igual adjuntaba la
+        // escritura de SISTEMA de la compañía (de OTRO representante), duplicando el documento. Con
+        // documento de RL capturado pero sin match en el directorio, el fallback por NIT NO debe
+        // aplicar: no hay escritura de sistema que le corresponda a un representante que no está
+        // registrado, la acredita el gestor a mano.
+        var co = Guid.NewGuid();
+        var repRegistrado = Guid.NewGuid();
+        // Escritura vigente de la compañía, pero de OTRO representante (el que sí está en el
+        // directorio) — antes del fix, el filtro `representativeId is null || ...` la dejaba pasar
+        // igual porque `representativeId` (del RL SIN match) quedaba en null.
+        var deed = Deed(Guid.NewGuid(), "path/otro-rep.pdf", new DateOnly(2026, 12, 31), [co], repRegistrado);
+
+        var reader = new FakeDeedReader([deed]);
+        var reps = new FakeRepReader(
+            new() { ["900555666"] = Company(co, "900555666") },
+            new() { ["111"] = Representative(repRegistrado, "CC", "111") }); // "111" SÍ está en el directorio
+
+        var resolver = new ProcedureDeedResolver(
+            reader, reps, new FakeStorage(new()), TimeProvider.System);
+
+        // El RL vigente del trámite es "79999999" — TIENE documento, pero no es "111": no matchea
+        // ningún representante del directorio.
+        var result = await resolver.ResolveForActorsAsync(
+            Tenant, [JuridicalActor("comprador", "900555666", "CC", "79999999")], CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
     // ── Fakes (convención del repo: sin Moq) ──────────────────────────────────────
 
     private sealed class FakeDeedReader(IReadOnlyList<DeedItem> vigentes) : IDeedReader

@@ -259,6 +259,16 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// el flag <c>signature_vault_enabled</c> del tenant. Filtrarlo aquí exigiría una consulta de
     /// configuración por tenant en la ruta de lote; la corrección pertenece al origen de las claves, que
     /// sirve a la columna y al chip a la vez.</para>
+    ///
+    /// <para><b>Reporte 2026-09-03 — el rechazo NO puede sobrevivir a un cambio de persona.</b> El chequeo
+    /// de rechazo miraba <c>PartyRole</c> con <c>Any(...)</c> sobre TODO el historial: al reemplazar al
+    /// representante legal de la parte (correo distinto → HU #10880 expira la validación previa y reenvía
+    /// una nueva), la fila vieja del representante ANTERIOR seguía teniendo <c>PartyRole = parte</c> y
+    /// <c>Expirado</c>, así que seguía marcando «Rechazado» al representante NUEVO aunque a este nunca se
+    /// le hubiera enviado nada — mientras el wizard, que sí correlaciona por actor/documento, mostraba
+    /// «Pendiente de validación». Ahora se mira solo la fila MÁS RECIENTE que corresponda al documento del
+    /// sujeto ACTUAL (<see cref="BiometricRules.DocumentoCoincide"/>, la misma defensa que ya usaba el gate
+    /// de identidad para este mismo problema), no cualquier fila histórica del rol.</para>
     /// </summary>
     private static string? DeriveFirmaParte(
         ProcedureInstance e,
@@ -277,32 +287,37 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         var actor = e.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
 
-        // Firma del baúl de la PERSONA que acredita a esta parte (el representante legal cuando el
-        // actor es jurídico), resuelta con la misma llave que la identidad. Bug #11670: solo se mira si
-        // el baúl PROCEDE para este actor —actor jurídico y mecanismo de firma compatible—, el mismo
-        // predicado que usan el gate de radicación, el chip del listado y el FUR.
+        // Sujeto de identidad ACTUAL de esta parte (el representante legal cuando el actor es jurídico).
+        // Se resuelve una sola vez y se reusa para el baúl y para filtrar las validaciones propias: ambos
+        // deben acreditar/rechazar a la persona que hoy ocupa el rol, no a quien lo ocupó antes.
+        var subject = actor is not null ? IdentitySubjectResolver.For(actor) : null;
+
+        // Firma del baúl de la PERSONA que acredita a esta parte, resuelta con la misma llave que la
+        // identidad. Bug #11670: solo se mira si el baúl PROCEDE para este actor —actor jurídico y
+        // mecanismo de firma compatible—, el mismo predicado que usan el gate de radicación, el chip del
+        // listado y el FUR.
         bool? baulVigente = null;
-        if (FirmaBaulCobertura.Aplica(actor))
+        if (FirmaBaulCobertura.Aplica(actor)
+            && !string.IsNullOrWhiteSpace(subject?.TipoDocumento)
+            && !string.IsNullOrWhiteSpace(subject?.NumeroDocumento))
         {
-            // Aplica() ya descartó el actor nulo.
-            var subject = IdentitySubjectResolver.For(actor!);
-            if (!string.IsNullOrWhiteSpace(subject.TipoDocumento)
-                && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-            {
-                var key = BiometricRules.IdentidadKey(
-                    e.TenantId, subject.TipoDocumento, subject.NumeroDocumento);
-                if (firmaBaulPorPersona.TryGetValue(key, out var vigente))
-                    baulVigente = vigente;
-            }
+            var key = BiometricRules.IdentidadKey(
+                e.TenantId, subject!.TipoDocumento, subject.NumeroDocumento);
+            if (firmaBaulPorPersona.TryGetValue(key, out var vigente))
+                baulVigente = vigente;
         }
 
         if (identidadAprobadaPartes.Contains(parte) || baulVigente == true)
             return FirmaParteEstados.Firmado;
 
-        // Rechazo explícito de la identidad de ESTA parte (las filas propias del trámite), o baúl caducado.
-        var rechazada = e.BiometricValidations.Any(v =>
-            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-            && v.Status is BiometricEstados.Rechazado or BiometricEstados.Expirado);
+        // Rechazo explícito de la identidad de ESTA parte: la fila MÁS RECIENTE cuyo rol y documento
+        // correspondan al sujeto actual (no cualquier fila histórica de quien ocupó el rol antes).
+        var ultimaPropia = e.BiometricValidations
+            .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                && BiometricRules.DocumentoCoincide(v, subject?.TipoDocumento, subject?.NumeroDocumento))
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefault();
+        var rechazada = ultimaPropia?.Status is BiometricEstados.Rechazado or BiometricEstados.Expirado;
 
         return rechazada || baulVigente == false
             ? FirmaParteEstados.Rechazado

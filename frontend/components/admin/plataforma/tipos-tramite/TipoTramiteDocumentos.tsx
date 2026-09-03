@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { fetchDocumentTypes } from '@/lib/api/admin-document-types';
 import type { DocumentType } from '@/lib/api/types-documents';
@@ -171,7 +171,6 @@ export function TipoTramiteDocumentos({
           className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold border-[#DFE5ED] disabled:opacity-40 dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
           style={{ color: '#557EFF' }}
         >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           Añadir
         </button>
       </div>

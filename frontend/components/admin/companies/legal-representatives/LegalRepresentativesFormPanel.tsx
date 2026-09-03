@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
+import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { ApiValidationError } from "@/lib/api/types";
 import type {
@@ -490,18 +490,19 @@ export function LegalRepresentativesFormPanel({
   }
 
   return (
-    <OtSidePanel
+    <Modal
       open={open}
-      title={title}
-      ariaLabel={ariaLabel}
       onClose={onClose}
-      disabled={submitting}
-      footer={footer}
-      width="2xl"
-      surface="modal"
+      title={title}
+      titleClassName="text-base font-bold text-[#557EFF]"
+      size="xl"
+      busy={submitting}
     >
       {mode === "companies" ? renderCompaniesForm() : renderPersonForm()}
-    </OtSidePanel>
+      <div className="mt-5 border-t pt-4" style={{ borderColor: RL_COLOR.border }}>
+        {footer}
+      </div>
+    </Modal>
   );
 
   // ── Vista de consulta (modo view) ────────────────────────────────────────────

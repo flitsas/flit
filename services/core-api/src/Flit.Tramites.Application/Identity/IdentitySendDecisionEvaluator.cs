@@ -67,8 +67,8 @@ public sealed record IdentitySendDecisionContext(
 /// Precedencia (ADR-0039 / CF-01):
 /// 1. Cobertura baúl (<see cref="UseCases.ProcedureInstances.FirmaBaulCobertura.Aplica"/> + firma vigente)
 /// 2. Identidad aprobada y vigente (por documento normalizado)
-/// 3. Validación en vuelo con enlace no vencido
-/// 4. Validación en vuelo con enlace vencido → encauzar reenvío (no crear fila)
+/// 3. Validación en vuelo con enlace no vencido — SOLO si es la fila MÁS RECIENTE de la persona.
+/// 4. Validación en vuelo con enlace vencido → encauzar reenvío (no crear fila) — misma condición.
 /// 5. Enviar
 /// </summary>
 public static class IdentitySendDecisionEvaluator
@@ -115,11 +115,22 @@ public static class IdentitySendDecisionEvaluator
                 Origen: OrigenDe(vigente));
         }
 
-        // 3–4) En vuelo (enviado / en_proceso / pendiente_envio)
-        var enVuelo = candidates
-            .Where(v => EstadosEnVuelo.Contains(v.Status))
-            .OrderByDescending(v => v.UpdatedAt)
+        // 3–4) En vuelo (enviado / en_proceso / pendiente_envio) — SOLO cuenta si es la fila MÁS
+        // RECIENTE de la persona (mismo criterio que el módulo de Identidad:
+        // IdentityVigenciaPorDocumentoResolver, CreatedAt desc). Reporte 2026-09-03 — antes se tomaba
+        // CUALQUIER fila en vuelo entre TODAS las candidatas (esta instancia + en-vuelo cross-trámite),
+        // así que una fila HUÉRFANA (un intento viejo que nunca se resolvió y quedó "enviado" sin que
+        // nada la terminalizara) podía bloquear el envío para siempre, incluso después de que un intento
+        // POSTERIOR ya hubiera concluido (expirado/rechazado): el módulo de Identidad mostraba
+        // «Expirada» sobre la fila nueva, mientras el guard seguía viendo bloqueado por la vieja. Al
+        // restringir a la fila más reciente, las dos superficies vuelven a hablar de la MISMA fila.
+        var masReciente = candidates
+            .OrderByDescending(v => v.CreatedAt)
+            .ThenByDescending(v => v.Id)
             .FirstOrDefault();
+        var enVuelo = masReciente is not null && EstadosEnVuelo.Contains(masReciente.Status)
+            ? masReciente
+            : null;
         if (enVuelo is not null)
         {
             if (enVuelo.ExpiresAt > ctx.Now)

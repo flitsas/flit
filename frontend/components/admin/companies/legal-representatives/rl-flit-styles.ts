@@ -75,5 +75,26 @@ export const rlDangerGhostStyle = {
   borderColor: RL_COLOR.dangerBorder,
 } as const;
 
+/**
+ * Botón secundario con borde e icono — patrón del módulo de trámites (VehicleTransformationsCard,
+ * DocumentChecklist: «Adjuntar archivo»): borde y texto de marca, fondo blanco con tinte de hover al
+ * pasar el mouse, altura fija. Usar para acciones tipo «Agregar», «Ver», «Editar» dentro de tarjetas.
+ */
+export const rlOutlinedActionClass =
+  "inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent";
+
+export const rlOutlinedActionStyle = {
+  borderColor: RL_COLOR.brand,
+  color: RL_COLOR.brand,
+} as const;
+
+/** Acción destructiva de texto plano — patrón «Borrar» del módulo de trámites: sin borde ni icono. */
+export const rlTextDangerActionClass =
+  "text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50";
+
+export const rlTextDangerActionStyle = {
+  color: RL_COLOR.danger,
+} as const;
+
 export const RL_INPUT_CLS =
   "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] border-[#DDE5F0]";

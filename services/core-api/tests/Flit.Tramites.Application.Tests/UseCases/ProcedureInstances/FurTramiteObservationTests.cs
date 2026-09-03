@@ -17,7 +17,7 @@ public sealed class FurTramiteObservationTests
         ]);
 
         texto.Should().Be(
-            "Matrícula con locatario por Leasing de BANCO LEASING S.A. a LOCATARIO TIPO DE DOCUMENTO CC, NÚMERO DE DOCUMENTO 10203040");
+            "Matrícula con locatario por Leasing de BANCO LEASING S.A. a ANA LOCATARIA TIPO DE DOCUMENTO CC, NÚMERO DE DOCUMENTO 10203040");
     }
 
     [Fact]

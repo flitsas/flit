@@ -14,6 +14,7 @@ import {
   type NuevoTramiteTipoUi,
 } from '@/lib/tramites/nuevo-tramite-resolver';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { OperacionLoadingState } from './states';
 
 const BLUE = '#557EFF';
 const BORDER = '#DFE5ED';
@@ -295,7 +296,7 @@ export function NuevoTramiteModalContent({
   };
 
   if (status === 'loading') {
-    return <p className="text-xs opacity-70">Cargando tipos de trámite…</p>;
+    return <OperacionLoadingState />;
   }
 
   if (status === 'error') {
