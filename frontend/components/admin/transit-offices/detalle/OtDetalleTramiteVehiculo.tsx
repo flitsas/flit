@@ -1,12 +1,7 @@
 "use client";
 
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import {
-  CampoValor,
-  ListaCampos,
-  SeccionVacia,
-  TarjetaDetalle,
-} from "@/components/operacion/detalle/primitivos";
+import { OtCampo, OtListaCampos, OtTarjeta, OtVacio } from "./OtDetallePrimitivos";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { plateFlowChipStyle, plateFlowLabel } from "@/lib/tramites/estados";
 import type { TransformacionTipo } from "@/lib/tramites/transformaciones-vehiculo";
@@ -101,12 +96,12 @@ export function OtDetalleTramiteVehiculo({
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <TarjetaDetalle titulo="Datos del trámite">
-        <ListaCampos>
-          <CampoValor campo="Radicado" valor={procedure.referenceNumber} />
-          <CampoValor campo="Tipo" valor={procedure.procedureTypeName ?? procedure.procedureTypeId} />
-          <CampoValor campo="Empresa" valor={procedure.clientTenantName ?? procedure.clientTenantId} />
-          <CampoValor
+      <OtTarjeta titulo="Datos del trámite">
+        <OtListaCampos>
+          <OtCampo campo="Radicado" valor={procedure.referenceNumber} />
+          <OtCampo campo="Tipo" valor={procedure.procedureTypeName ?? procedure.procedureTypeId} />
+          <OtCampo campo="Empresa" valor={procedure.clientTenantName ?? procedure.clientTenantId} />
+          <OtCampo
             campo="Estado"
             valor={
               <span className="flex flex-wrap items-center gap-1.5">
@@ -132,13 +127,13 @@ export function OtDetalleTramiteVehiculo({
               </span>
             }
           />
-          <CampoValor campo="Radicación" valor={formatOtDate(procedure.createdAt)} />
-          <CampoValor
+          <OtCampo campo="Radicación" valor={formatOtDate(procedure.createdAt)} />
+          <OtCampo
             campo="Entrega"
             valor={procedure.submittedAt ? formatOtDate(procedure.submittedAt) : ""}
           />
-          <CampoValor campo="SOAT RUNT" valor={soatEstadoLabel(procedure.soatEstado)} />
-          <CampoValor
+          <OtCampo campo="SOAT RUNT" valor={soatEstadoLabel(procedure.soatEstado)} />
+          <OtCampo
             campo="Pagos"
             valor={
               <span className="flex flex-wrap gap-1.5">
@@ -153,8 +148,8 @@ export function OtDetalleTramiteVehiculo({
               </span>
             }
           />
-          <CampoValor campo="Dígito placa" valor={procedure.platePreferredLastDigit} />
-        </ListaCampos>
+          <OtCampo campo="Dígito placa" valor={procedure.platePreferredLastDigit} />
+        </OtListaCampos>
 
         {avisos.length > 0 ? (
           <div className="mt-4 border-t pt-3 border-[#DFE5ED] dark:border-white/10">
@@ -168,24 +163,24 @@ export function OtDetalleTramiteVehiculo({
             </ul>
           </div>
         ) : null}
-      </TarjetaDetalle>
+      </OtTarjeta>
 
-      <TarjetaDetalle titulo="Especificaciones del vehículo">
+      <OtTarjeta titulo="Especificaciones del vehículo">
         {specs.length === 0 && transformados.size === 0 ? (
-          <SeccionVacia mensaje="Este trámite no tiene especificaciones técnicas del vehículo registradas todavía." />
+          <OtVacio mensaje="Este trámite no tiene especificaciones técnicas del vehículo registradas todavía." />
         ) : (
           <>
             {specs.length > 0 ? (
-              <ListaCampos>
+              <OtListaCampos>
                 {specs.map((s) => (
-                  <CampoValor key={s.campo} campo={s.campo} valor={s.valor} />
+                  <OtCampo key={s.campo} campo={s.campo} valor={s.valor} />
                 ))}
-              </ListaCampos>
+              </OtListaCampos>
             ) : null}
             <OtDetalleTransformaciones procedure={procedure} />
           </>
         )}
-      </TarjetaDetalle>
+      </OtTarjeta>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
-import { DETALLE_BLUE } from "@/components/operacion/detalle/detalle-visual";
+import { OT_BLUE } from "./ot-detalle-visual";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import {
   transformacionesDeclaradas,
@@ -61,7 +61,7 @@ export function OtDetalleTransformaciones({ procedure }: { procedure: OtClientPr
 
   return (
     <section className="mt-4 border-t pt-3 border-[#DFE5ED] dark:border-white/10">
-      <h5 className="text-xs font-semibold" style={{ color: DETALLE_BLUE }}>
+      <h5 className="text-xs font-semibold" style={{ color: OT_BLUE }}>
         Transformaciones declaradas frente al RUNT
       </h5>
       <ul className="mt-2 flex list-none flex-col gap-2 p-0">
@@ -82,7 +82,7 @@ export function OtDetalleTransformaciones({ procedure }: { procedure: OtClientPr
               </span>
               <ArrowRight
                 className="h-3.5 w-3.5 shrink-0"
-                style={{ color: DETALLE_BLUE }}
+                style={{ color: OT_BLUE }}
                 aria-label="cambia a"
               />
               <span className="flex flex-col">

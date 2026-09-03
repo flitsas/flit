@@ -1,8 +1,10 @@
-// HU #11930 — el detalle del trámite del OT es un modal con secciones, no un panel lateral, y es
-// de solo lectura. Sustituye a ClientProcedureDetailPanel.{regenerar,observaciones}.test.tsx: la
-// acción de consolidado se mudó a la sección Documentos (ver OtDocumentosTab.consolidado.test.tsx).
+// HU #11930 — el detalle del trámite del OT es un modal, no un panel lateral.
+// HU #12060 — y su cuerpo pasa a ser TRES acordeones independientes, con armazón propia: se fueron
+// la navegación por pasos, la tarjeta lateral del vehículo y la sección «Datos comerciales».
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { ClientProcedureDetailModal } from "../ClientProcedureDetailModal";
@@ -43,49 +45,116 @@ const PROCEDURE: OtClientProcedure = {
   comercial: { valorVenta: 45000000, causal: "COMPRAVENTA", metodoPago: "TRANSFERENCIA" },
 };
 
+const ACORDEONES = [
+  "Detalles del trámite y vehículo",
+  "Actores del Trámite",
+  "Documentos del Trámite",
+];
+
 function renderModal(procedure: OtClientProcedure = PROCEDURE, onClose = vi.fn()) {
-  render(<ClientProcedureDetailModal open procedure={procedure} onClose={onClose} />);
+  render(
+    // El acordeón de documentos emite avisos (toast) al abrir el consolidado.
+    <ToastProvider>
+      <ClientProcedureDetailModal open procedure={procedure} onClose={onClose} />
+    </ToastProvider>,
+  );
   return { onClose };
 }
 
-describe("ClientProcedureDetailModal (HU #11930)", () => {
+/** Botón que despliega un acordeón, buscado por su rótulo exacto. */
+function acordeon(titulo: string) {
+  return screen.getByRole("button", { name: titulo });
+}
+
+describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchOtClientProcedure.mockResolvedValue(PROCEDURE);
     fetchOtDocuments.mockResolvedValue({ data: [{ id: "d1", tipo: "fur", filename: "fur.pdf" }] });
   });
 
-  it("AC1 — se presenta como diálogo con radicado, placa y estado en el encabezado", async () => {
-    renderModal();
+  it("AC1 — ninguna pieza del detalle del OT importa del detalle del gestor", () => {
+    // Guarda de aislamiento: el valor de este rediseño es que el gestor NO se mueva cuando se mueva
+    // el OT, y eso solo se sostiene si no queda ni un import cruzado. Se comprueba sobre el código
+    // fuente porque es una propiedad del módulo, no algo observable en el DOM.
+    const raiz = join(__dirname, "..");
+    const ficheros = [
+      join(raiz, "ClientProcedureDetailModal.tsx"),
+      ...readdirSync(join(raiz, "detalle"))
+        .filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"))
+        .map((f) => join(raiz, "detalle", f)),
+    ];
 
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog).toBeInTheDocument();
-    // El radicado sale dos veces: en el encabezado y en la ficha del trámite.
-    expect(screen.getAllByText("RAD-0001").length).toBeGreaterThan(0);
-    expect(dialog).toHaveTextContent("ABC123");
-    // El estado también sale dos veces: chip del encabezado y campo de la ficha.
-    expect(screen.getAllByText("Pendiente OT").length).toBeGreaterThan(0);
+    const culpables = ficheros.filter((f) =>
+      /from\s+["']@?[./\w-]*operacion\/detalle/.test(readFileSync(f, "utf8")),
+    );
+    expect(culpables).toEqual([]);
   });
 
-  it("AC2 — recorre las secciones sin cerrar el modal", async () => {
+  it("AC3 — el cuerpo son los tres acordeones del prototipo", async () => {
+    renderModal();
+
+    await screen.findByRole("dialog");
+    for (const titulo of ACORDEONES) {
+      expect(acordeon(titulo)).toBeInTheDocument();
+    }
+  });
+
+  it("AC4 — no queda navegación por pasos ni tarjeta lateral del vehículo", async () => {
+    renderModal();
+
+    await screen.findByRole("dialog");
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.queryAllByRole("tablist")).toHaveLength(0);
+    expect(screen.queryByRole("complementary", { name: /vehículo/i })).not.toBeInTheDocument();
+  });
+
+  it("AC5 — la sección «Datos comerciales» desapareció del detalle", async () => {
+    renderModal();
+
+    await screen.findByRole("dialog");
+    // El trámite de la prueba SÍ trae datos comerciales: si la sección existiera, se vería.
+    expect(screen.queryByText(/datos comerciales/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/operación comercial/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Compraventa")).not.toBeInTheDocument();
+  });
+
+  it("AC6 — cada acordeón se abre y cierra sin afectar a los otros dos", async () => {
     renderModal();
     const user = userEvent.setup();
 
-    // Arranca en «Trámite y vehículo».
-    expect(await screen.findByText("Datos del trámite")).toBeInTheDocument();
+    // Se entró por el detalle: abre el primero y solo el primero.
+    await waitFor(() => expect(acordeon(ACORDEONES[0]!)).toHaveAttribute("aria-expanded", "true"));
+    expect(acordeon(ACORDEONES[1]!)).toHaveAttribute("aria-expanded", "false");
+    expect(acordeon(ACORDEONES[2]!)).toHaveAttribute("aria-expanded", "false");
 
-    await user.click(screen.getByRole("tab", { name: /Actores/i }));
-    expect(await screen.findByText("Ana Compradora")).toBeInTheDocument();
-    expect(screen.getByText("Beto Vendedor")).toBeInTheDocument();
+    // Abrir el de actores no cierra el de vehículo: se pueden cotejar a la vez.
+    await user.click(acordeon(ACORDEONES[1]!));
+    expect(acordeon(ACORDEONES[0]!)).toHaveAttribute("aria-expanded", "true");
+    expect(acordeon(ACORDEONES[1]!)).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Ana Compradora")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /Datos comerciales/i }));
-    expect(await screen.findByText("Operación comercial")).toBeInTheDocument();
-    expect(screen.getByText("Compraventa")).toBeInTheDocument();
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // Y cerrar el primero deja al segundo abierto.
+    await user.click(acordeon(ACORDEONES[0]!));
+    expect(acordeon(ACORDEONES[0]!)).toHaveAttribute("aria-expanded", "false");
+    expect(acordeon(ACORDEONES[1]!)).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByText("Datos del trámite")).not.toBeInTheDocument();
   });
 
-  it("AC2 — muestra las especificaciones técnicas y omite las que el trámite no tiene", async () => {
+  it("se presenta como diálogo con radicado, tipo, placa y estado en el encabezado", async () => {
+    renderModal();
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { level: 2 })).toHaveTextContent(
+      "Gestión y Aprobación del Trámite",
+    );
+    expect(screen.getAllByText("RAD-0001").length).toBeGreaterThan(0);
+    expect(dialog).toHaveTextContent("ABC123");
+    expect(dialog).toHaveTextContent("VIN-9");
+    expect(screen.getAllByText("Pendiente OT").length).toBeGreaterThan(0);
+  });
+
+  it("muestra las especificaciones técnicas y omite las que el trámite no tiene", async () => {
     renderModal();
 
     expect(await screen.findByText("Especificaciones del vehículo")).toBeInTheDocument();
@@ -95,15 +164,7 @@ describe("ClientProcedureDetailModal (HU #11930)", () => {
     expect(screen.queryByText("N. Chasis")).not.toBeInTheDocument();
   });
 
-  it("AC4 — no ofrece ninguna acción de captura o edición del trámite", async () => {
-    renderModal();
-
-    await screen.findByText("Datos del trámite");
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /guardar|editar|aprobar|rechazar/i })).not.toBeInTheDocument();
-  });
-
-  it("AC5 — cierra con el control de cierre y con Escape", async () => {
+  it("cierra con el control de cierre y con Escape", async () => {
     const { onClose } = renderModal();
     const user = userEvent.setup();
 
@@ -114,22 +175,8 @@ describe("ClientProcedureDetailModal (HU #11930)", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it("AC6 — una sección sin datos muestra su vacío, no un error", async () => {
-    const sinComercial = { ...PROCEDURE, comercial: null, prenda: null };
-    fetchOtClientProcedure.mockResolvedValue(sinComercial);
-    renderModal(sinComercial);
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole("tab", { name: /Datos comerciales/i }));
-    expect(
-      await screen.findByText(/no tiene datos comerciales ni decisión de prenda/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it("abre en la sección Documentos cuando se entra por «ver documentos»", async () => {
+  it("abre el acordeón de documentos cuando se entra por «ver documentos»", async () => {
     render(
-      // La sección Documentos emite avisos (toast) al actualizar el consolidado.
       <ToastProvider>
         <ClientProcedureDetailModal
           open
@@ -141,6 +188,8 @@ describe("ClientProcedureDetailModal (HU #11930)", () => {
     );
 
     expect(await screen.findByTestId("ot-documentos-tab")).toBeInTheDocument();
+    await waitFor(() => expect(acordeon(ACORDEONES[2]!)).toHaveAttribute("aria-expanded", "true"));
+    expect(acordeon(ACORDEONES[0]!)).toHaveAttribute("aria-expanded", "false");
   });
 
   it("Bug #11585 — sin pendientes no monta el bloque de pendientes", async () => {

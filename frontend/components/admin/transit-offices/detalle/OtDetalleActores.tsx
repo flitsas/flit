@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  CampoValor,
-  ListaCampos,
-  SeccionVacia,
-  TarjetaDetalle,
-} from "@/components/operacion/detalle/primitivos";
+import { OtCampo, OtListaCampos, OtTarjeta, OtVacio } from "./OtDetallePrimitivos";
 import type { OtClientProcedure, OtClientProcedureActor } from "@/lib/api/types-ot";
 
 const ACTOR_TYPE_LABELS: Record<string, string> = {
@@ -44,15 +39,15 @@ function ActorCard({ actor }: { actor: OtClientProcedureActor }) {
   const documento = [actor.documentType, actor.documentNumber].filter(Boolean).join(" ");
 
   return (
-    <TarjetaDetalle titulo={actorTypeLabel(actor.actorType)} tituloAzul>
-      <ListaCampos>
-        <CampoValor campo="Nombre" valor={actor.fullName} />
-        <CampoValor campo="Documento" valor={documento} />
-        <CampoValor campo="Persona" valor={personTypeLabel(actor.personType)} />
-        <CampoValor campo="Correo" valor={actor.email} />
-        <CampoValor campo="Teléfono" valor={actor.phone} />
-      </ListaCampos>
-    </TarjetaDetalle>
+    <OtTarjeta titulo={actorTypeLabel(actor.actorType)}>
+      <OtListaCampos>
+        <OtCampo campo="Nombre" valor={actor.fullName} />
+        <OtCampo campo="Documento" valor={documento} />
+        <OtCampo campo="Persona" valor={personTypeLabel(actor.personType)} />
+        <OtCampo campo="Correo" valor={actor.email} />
+        <OtCampo campo="Teléfono" valor={actor.phone} />
+      </OtListaCampos>
+    </OtTarjeta>
   );
 }
 
@@ -67,7 +62,7 @@ export function OtDetalleActores({ procedure }: { procedure: OtClientProcedure }
 
   if (actors.length === 0) {
     return (
-      <SeccionVacia
+      <OtVacio
         mensaje={
           faltantes.length > 0
             ? `Este trámite no tiene actores registrados. Se esperan: ${faltantes.map(actorTypeLabel).join(", ")}.`
