@@ -921,6 +921,8 @@ public static class AdminOtEndpoints
         Guid id,
         HttpContext httpContext,
         GetOtClientProcedureHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -930,10 +932,26 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        // El detalle era el ÚNICO de la familia que no aceptaba el organismo supervisado: la lista,
+        // el diagnóstico, los contadores, aprobar, rechazar y la placa sí. El resultado era que al
+        // SuperAdmin le salía la fila en la bandeja y un 404 al abrirla, así que su detalle se
+        // quedaba sin actores ni especificaciones del vehículo. Para el ot_admin no cambia nada:
+        // el resolutor descarta el override de quien no es SuperAdmin.
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
         var result = await handler.HandleAsync(new GetOtClientProcedureQuery
         {
             OtTenantId = tenantId,
             ProcedureInstanceId = id,
+            TransitOfficeId = scopedOfficeId,
         }, cancellationToken).ConfigureAwait(false);
 
         return result.Status switch

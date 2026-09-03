@@ -34,7 +34,7 @@ const BASE: OtClientProcedure = {
 async function renderConDetalle(procedure: OtClientProcedure) {
   fetchOtClientProcedure.mockResolvedValue(procedure);
   render(<ClientProcedureDetailModal open procedure={BASE} onClose={vi.fn()} />);
-  return screen.findByText("Especificaciones del vehículo");
+  return screen.findByRole("table", { name: "Datos del trámite" });
 }
 
 const BLOQUE = "Transformaciones declaradas frente al RUNT";
@@ -61,6 +61,8 @@ describe("Detalle OT — transformaciones del vehículo (HU #11931)", () => {
     // «Color» aparece UNA sola vez, como rótulo de la transformación. No se repite además como
     // especificación suelta: ahí el valor nuevo parecería el dato oficial del vehículo.
     expect(screen.getAllByText("Color")).toHaveLength(1);
+    // Y la ficha del trámite la anuncia como lo que es: un cambio pedido, no un dato del vehículo.
+    expect(screen.getByText("Cambio de color")).toBeInTheDocument();
   });
 
   it("AC2 — combustible y carrocería reciben el mismo tratamiento", async () => {

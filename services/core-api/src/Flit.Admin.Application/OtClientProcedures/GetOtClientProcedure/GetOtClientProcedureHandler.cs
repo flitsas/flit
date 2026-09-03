@@ -19,7 +19,11 @@ public sealed class GetOtClientProcedureHandler
         ArgumentNullException.ThrowIfNull(query);
 
         var procedure = await _repository
-            .GetByIdAsync(query.OtTenantId, query.ProcedureInstanceId, cancellationToken)
+            .GetByIdAsync(
+                query.OtTenantId,
+                query.ProcedureInstanceId,
+                query.TransitOfficeId,
+                cancellationToken)
             .ConfigureAwait(false);
 
         return procedure is null

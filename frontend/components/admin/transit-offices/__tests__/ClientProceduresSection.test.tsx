@@ -85,6 +85,18 @@ function renderSection(transitOfficeId?: string) {
   );
 }
 
+/**
+ * Abre el diálogo de aprobación desde el menú de acciones de la fila.
+ *
+ * Las seis pruebas del OCR de la LT buscaban un botón suelto `Aprobar tramite {ref}` que dejó de
+ * existir cuando las acciones se mudaron a un menú: llevaban rotas desde entonces, y con ellas la
+ * única cobertura del análisis de la licencia.
+ */
+async function abrirAprobar(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+  await user.click(await screen.findByRole("menuitem", { name: /^Aprobar$/i }));
+}
+
 describe("ClientProceduresSection — HU #10220", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -386,6 +398,53 @@ describe("ClientProceduresSection — HU #10220", () => {
   // El defecto que corrige: el OCR corría DESPUÉS de aprobar y se anunciaba en un toast efímero, así
   // que el OT decidía a ciegas. Ahora se analiza al seleccionar y el resultado vive en la modal.
 
+  it("no deja confirmar mientras el OCR de la LT sigue analizando", async () => {
+    // El veredicto existe para que el OT decida CON él. Si confirmar sigue abierto mientras se
+    // analiza, se aprueba sin haberlo leído y el análisis pasa a ser decorativo.
+    let resolver: (v: unknown) => void = () => {};
+    vi.mocked(tramitesClient.analyzeDocument).mockReturnValue(
+      new Promise((r) => {
+        resolver = r;
+      }) as never,
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    await abrirAprobar(user);
+    const confirmar = screen.getByRole("button", { name: /Confirmar|Analizando/i });
+    // Sin archivo no hay análisis: confirmar está abierto (la LT es opcional).
+    expect(confirmar).toBeEnabled();
+
+    const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Analizando la LT/i })).toBeDisabled(),
+    );
+
+    // Terminado el análisis —diga lo que diga— se vuelve a abrir: informa, no veta.
+    resolver({ ok: true, tipo: "tarjeta_propiedad", data: { es_valido: false } });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Confirmar$/i })).toBeEnabled(),
+    );
+  });
+
+  it("un análisis que falla tampoco deja el confirmar bloqueado", async () => {
+    // Proveedor caído o archivo demasiado grande: el OT no puede hacer nada al respecto, así que
+    // dejarle el botón cerrado sería convertir una avería nuestra en un bloqueo suyo.
+    vi.mocked(tramitesClient.analyzeDocument).mockRejectedValue(new Error("proveedor caído"));
+    const user = userEvent.setup();
+    renderSection();
+
+    await abrirAprobar(user);
+    const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Confirmar$/i })).toBeEnabled(),
+    );
+  });
+
   it("analiza la LT al seleccionarla, sin esperar a que el OT confirme", async () => {
     vi.mocked(tramitesClient.analyzeDocument).mockResolvedValue({
       ok: true,
@@ -395,7 +454,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     const user = userEvent.setup();
     renderSection();
 
-    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await abrirAprobar(user);
     const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
 
@@ -415,7 +474,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     const user = userEvent.setup();
     renderSection();
 
-    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await abrirAprobar(user);
     await user.upload(
       screen.getByLabelText(/Licencia de Tránsito \(LT\)/i),
       new File(["%PDF"], "recibo.pdf", { type: "application/pdf" }),
@@ -440,7 +499,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     const user = userEvent.setup();
     renderSection();
 
-    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await abrirAprobar(user);
     const file = new File(["%PDF-lt"], "lt.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/Licencia de Tránsito \(LT\)/i), file);
     await screen.findByText(/Parece una Licencia de Tránsito/i);
@@ -456,7 +515,7 @@ describe("ClientProceduresSection — HU #10220", () => {
     const user = userEvent.setup();
     renderSection();
 
-    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await abrirAprobar(user);
     await user.upload(
       screen.getByLabelText(/Licencia de Tránsito \(LT\)/i),
       new File(["%PDF"], "lt.pdf", { type: "application/pdf" }),
@@ -538,7 +597,7 @@ describe("ClientProceduresSection — cotejo en la modal (HU #12043)", () => {
     const user = userEvent.setup();
     renderSection();
 
-    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await abrirAprobar(user);
     await user.upload(
       screen.getByLabelText(/Licencia de Tránsito \(LT\)/i),
       new File(["%PDF"], "lt-de-otro.pdf", { type: "application/pdf" }),
@@ -569,7 +628,7 @@ describe("ClientProceduresSection — cotejo en la modal (HU #12043)", () => {
     const user = userEvent.setup();
     renderSection();
 
-    await user.click(await screen.findByRole("button", { name: /^Aprobar tramite/i }));
+    await abrirAprobar(user);
     await user.upload(
       screen.getByLabelText(/Licencia de Tránsito \(LT\)/i),
       new File(["%PDF"], "lt.pdf", { type: "application/pdf" }),
