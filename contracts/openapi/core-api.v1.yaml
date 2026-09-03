@@ -7338,6 +7338,13 @@ components:
           nullable: true
           items: { type: string }
           description: Formatos MIME permitidos por tipo (RF08). null/vacío ⇒ formatos globales.
+        instruccionCargue:
+          type: string
+          nullable: true
+          description: >
+            Instrucción de cargue del catálogo (HU #12066): qué debe subir el gestor en esta
+            casilla. Sale de `document_types.upload_instructions`, que administra el módulo
+            documental. null ⇒ el tipo no tiene texto configurado y la tarjeta no lo muestra.
     ChecklistResponse:
       type: object
       properties:
@@ -8607,6 +8614,14 @@ components:
           description: >
             True = documento autogenerado (consolidado / sistema). No se pide ni se exige
             en Requisitos ni en radicación. False = cargue del gestor.
+        instruccionCargue:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: >
+            Instrucción de cargue que lee el GESTOR en la tarjeta del paso Requisitos
+            (HU #12065), distinta de `descripcion`, que es la nota interna del
+            administrador. Null/omitida ⇒ la tarjeta no muestra instrucción.
       required: [id, codigo, nombre, estado, fechaCreacion, esAutogenerado]
 
     DocumentTypePagedResult:
@@ -8653,6 +8668,14 @@ components:
           nullable: true
           description: >
             True = autogenerado. False u omitido = cargue. Por defecto cargue.
+        instruccionCargue:
+          type: string
+          nullable: true
+          maxLength: 500
+          pattern: "^[^<>]*$"
+          description: >
+            Opcional. Texto que el gestor lee al cargar el documento (HU #12065).
+            No permite los caracteres < ni >. Vaciarlo borra la instrucción.
       required: [nombre]
 
     UpdateDocumentTypeRequest:
@@ -8680,6 +8703,14 @@ components:
           type: boolean
           nullable: true
           description: Null conserva el origen actual. True = autogenerado; false = cargue.
+        instruccionCargue:
+          type: string
+          nullable: true
+          maxLength: 500
+          pattern: "^[^<>]*$"
+          description: >
+            Opcional. Texto que el gestor lee al cargar el documento (HU #12065).
+            No permite los caracteres < ni >. Vaciarlo borra la instrucción.
       required: [nombre]
 
     DocumentRef:

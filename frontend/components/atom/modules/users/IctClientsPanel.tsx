@@ -5,7 +5,7 @@
 // cualquier compañía (selector); un admin no-super, solo la suya. El SECRETO lo genera el sistema y se
 // muestra UNA sola vez (no se puede recuperar) — se regenera con "Regenerar secreto".
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, KeyRound, Plus, RotateCcw, X } from "lucide-react";
+import { Check, Copy, KeyRound, RotateCcw, X } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ApiError } from "@/lib/api/types";
 import {
@@ -178,7 +178,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
           className="inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold text-white"
           style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >
-          <Plus className="h-4 w-4" /> Nuevo cliente
+          Nuevo cliente
         </button>
       </div>
 

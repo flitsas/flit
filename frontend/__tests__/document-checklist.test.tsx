@@ -37,6 +37,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
 import {
   DocumentChecklist,
   validateFile,
+  formatUploadLimits,
   MAX_SIZE_BYTES,
 } from '@/components/operacion/DocumentChecklist';
 
@@ -488,5 +489,94 @@ describe('DocumentChecklist — generar impronta en el slot', () => {
     expect(
       await screen.findByText(/organismo de tránsito antes de generar la impronta/i),
     ).toBeInTheDocument();
+  });
+});
+
+// ── HU #12067 — instrucción de cargue y límites reales en la tarjeta ─────────
+
+describe('DocumentChecklist — instrucción de cargue (HU #12067)', () => {
+  const INSTRUCCION =
+    'Sube el Paz y Salvo de impuestos vehiculares expedido por la Secretaría de Hacienda.';
+
+  it('muestra la instrucción que el administrador configuró para el documento', async () => {
+    mocks.getChecklist.mockResolvedValue({
+      ...CHECKLIST,
+      items: [{ ...CHECKLIST.items[0]!, instruccionCargue: INSTRUCCION }],
+    });
+
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    expect(await screen.findByText(INSTRUCCION)).toBeInTheDocument();
+  });
+
+  it('no inventa texto cuando el documento no tiene instrucción configurada', async () => {
+    // El checklist base no trae `instruccionCargue`: la tarjeta debe quedar como estaba.
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    expect(await screen.findByText(/Cédula del comprador/)).toBeInTheDocument();
+    expect(screen.queryByText(INSTRUCCION)).toBeNull();
+  });
+
+  it('la instrucción es por documento y no se contagia entre tarjetas', async () => {
+    mocks.getChecklist.mockResolvedValue({
+      ...CHECKLIST,
+      items: [
+        { ...CHECKLIST.items[0]!, instruccionCargue: 'Instrucción de la cédula.' },
+        { ...CHECKLIST.items[1]!, instruccionCargue: 'Instrucción del SOAT.' },
+      ],
+    });
+
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    expect(await screen.findByText('Instrucción de la cédula.')).toBeInTheDocument();
+    expect(screen.getByText('Instrucción del SOAT.')).toBeInTheDocument();
+  });
+
+  it('pinta los formatos y el peso reales del tipo, no un texto fijo', async () => {
+    mocks.getChecklist.mockResolvedValue({
+      ...CHECKLIST,
+      items: [
+        {
+          ...CHECKLIST.items[0]!,
+          mimeTypesAllowed: ['application/pdf'],
+          maxSizeBytes: 20 * 1024 * 1024,
+        },
+      ],
+    });
+
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    expect(await screen.findByText('PDF · hasta 20.0 MB')).toBeInTheDocument();
+    // El literal viejo mentía: decía 5 MB cuando el límite del catálogo son 20 MB.
+    expect(screen.queryByText(/hasta 5MB/)).toBeNull();
+  });
+
+  it('sin límites por tipo cae a los globales', async () => {
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    const leyendas = await screen.findAllByText('PDF, JPG, PNG, WEBP · hasta 20.0 MB');
+    expect(leyendas).toHaveLength(CHECKLIST.items.length);
+  });
+});
+
+describe('formatUploadLimits', () => {
+  it('sin límites usa los globales', () => {
+    expect(formatUploadLimits()).toBe('PDF, JPG, PNG, WEBP · hasta 20.0 MB');
+  });
+
+  it('usa los límites del catálogo cuando existen', () => {
+    expect(
+      formatUploadLimits({ allowedMimes: ['application/pdf'], maxSizeBytes: 5 * 1024 * 1024 }),
+    ).toBe('PDF · hasta 5.0 MB');
+  });
+
+  it('una lista vacía o un tamaño en cero significan "usa los globales"', () => {
+    expect(formatUploadLimits({ allowedMimes: [], maxSizeBytes: 0 })).toBe(
+      'PDF, JPG, PNG, WEBP · hasta 20.0 MB',
+    );
+  });
+
+  it('un MIME desconocido se muestra por su subtipo en vez de romper la leyenda', () => {
+    expect(formatUploadLimits({ allowedMimes: ['image/tiff'] })).toBe('TIFF · hasta 20.0 MB');
   });
 });

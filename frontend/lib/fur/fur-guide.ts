@@ -93,7 +93,7 @@ export function buildFurGuide(input: FurGuideInput): FurGuideResult {
   const observaciones: string[] = [];
   if (code === "MATRICULA_LEASING") {
     observaciones.push(
-      "Matrícula con locatario por Leasing de {PROPIETARIO} a LOCATARIO TIPO DE DOCUMENTO {TIPO}, NÚMERO DE DOCUMENTO {NUMERO}",
+      "Matrícula con locatario por Leasing de {PROPIETARIO} a {NOMBRE LOCATARIO} TIPO DE DOCUMENTO {TIPO}, NÚMERO DE DOCUMENTO {NUMERO}",
     );
   }
   if (code === "TRASPASO_UNILATERAL") {

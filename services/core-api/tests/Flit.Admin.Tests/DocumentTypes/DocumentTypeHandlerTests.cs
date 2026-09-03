@@ -500,6 +500,171 @@ public sealed class DocumentTypeHandlerTests
         result.Outcome.Should().Be(ReactivateDocumentTypeOutcome.NotFound);
     }
 
+    // ---------- HU #12065: instrucción de cargue ----------
+
+    /// <summary>AC1 — el alta persiste la instrucción y la devuelve en la respuesta.</summary>
+    [Fact]
+    public async Task HU12065_Create_PersistsUploadInstructions()
+    {
+        var db = NewDbName();
+        const string Instruccion =
+            "Sube el Paz y Salvo de impuestos vehiculares expedido por la Secretaría de Hacienda.";
+
+        DocumentTypeResponse created;
+        await using (var act = NewContext(db))
+        {
+            var handler = new CreateDocumentTypeHandler(new DocumentTypeRepository(act));
+            var result = await handler.HandleAsync(new CreateDocumentTypeCommand
+            {
+                CreatedBy = Actor,
+                Request = new CreateDocumentTypeRequest(
+                    "PAZ", "Paz y Salvo de Impuestos", "Paz y salvo de impuestos del vehículo", null,
+                    InstruccionCargue: Instruccion),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            created = result.Document!;
+            created.InstruccionCargue.Should().Be(Instruccion);
+            // La nota interna del admin y el texto del gestor son campos distintos.
+            created.Descripcion.Should().Be("Paz y salvo de impuestos del vehículo");
+        }
+
+        await using var verify = NewContext(db);
+        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == created.Id, cancellationToken: TestContext.Current.CancellationToken);
+        row.UploadInstructions.Should().Be(Instruccion);
+    }
+
+    /// <summary>AC3 — la instrucción es opcional: sin texto el tipo se crea igual, en null.</summary>
+    [Fact]
+    public async Task HU12065_Create_WithoutUploadInstructions_LeavesItNull()
+    {
+        var db = NewDbName();
+
+        await using var act = NewContext(db);
+        var handler = new CreateDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(new CreateDocumentTypeCommand
+        {
+            Request = new CreateDocumentTypeRequest("OTRO", "Otro documento", null, null),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeTrue();
+        result.Document!.InstruccionCargue.Should().BeNull();
+    }
+
+    /// <summary>AC2 — editar la instrucción no toca la descripción interna.</summary>
+    [Fact]
+    public async Task HU12065_Update_ReplacesUploadInstructions_AndKeepsDescription()
+    {
+        var db = NewDbName();
+        var id = Guid.NewGuid();
+        await SeedAsync(db, new DocumentType
+        {
+            Id = id,
+            Code = "paz_salvo",
+            Name = "Paz y Salvo de Impuestos",
+            Description = "Nota interna del administrador",
+            UploadInstructions = "Texto viejo.",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateDocumentTypeHandler(new DocumentTypeRepository(act));
+            var result = await handler.HandleAsync(new UpdateDocumentTypeCommand
+            {
+                Id = id,
+                UpdatedBy = Actor,
+                Request = new UpdateDocumentTypeRequest(
+                    null, "Paz y Salvo de Impuestos", "Nota interna del administrador",
+                    InstruccionCargue: "Texto nuevo del gestor."),
+            }, TestContext.Current.CancellationToken);
+
+            result.Outcome.Should().Be(UpdateDocumentTypeOutcome.Updated);
+            result.Document!.InstruccionCargue.Should().Be("Texto nuevo del gestor.");
+        }
+
+        await using var verify = NewContext(db);
+        var row = await verify.DocumentTypes.SingleAsync(d => d.Id == id, cancellationToken: TestContext.Current.CancellationToken);
+        row.UploadInstructions.Should().Be("Texto nuevo del gestor.");
+        row.Description.Should().Be("Nota interna del administrador");
+    }
+
+    /// <summary>
+    /// Vaciar el campo borra el texto: el PUT manda el estado completo, igual que con la
+    /// descripción. Sin esto el admin no podría quitar una instrucción una vez escrita.
+    /// </summary>
+    [Fact]
+    public async Task HU12065_Update_WithBlankUploadInstructions_ClearsIt()
+    {
+        var db = NewDbName();
+        var id = Guid.NewGuid();
+        await SeedAsync(db, new DocumentType
+        {
+            Id = id,
+            Code = "paz_salvo",
+            Name = "Paz y Salvo de Impuestos",
+            UploadInstructions = "Texto que el admin quiere quitar.",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await using var act = NewContext(db);
+        var handler = new UpdateDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(new UpdateDocumentTypeCommand
+        {
+            Id = id,
+            Request = new UpdateDocumentTypeRequest(
+                null, "Paz y Salvo de Impuestos", null, InstruccionCargue: "   "),
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(UpdateDocumentTypeOutcome.Updated);
+        result.Document!.InstruccionCargue.Should().BeNull();
+    }
+
+    /// <summary>AC4/AC5 — el texto inválido se rechaza y nada se persiste.</summary>
+    [Fact]
+    public async Task HU12065_Create_WithInvalidUploadInstructions_IsRejected()
+    {
+        var db = NewDbName();
+
+        await using var act = NewContext(db);
+        var handler = new CreateDocumentTypeHandler(new DocumentTypeRepository(act));
+        var result = await handler.HandleAsync(new CreateDocumentTypeCommand
+        {
+            Request = new CreateDocumentTypeRequest(
+                "PAZ", "Paz y Salvo", null, null,
+                InstruccionCargue: new string('a', DocumentTypeValidator.UploadInstructionsMaxLength + 1)),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Error.Should().Contain("instrucción de cargue");
+        (await act.DocumentTypes.CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    /// <summary>El listado también entrega la instrucción (la pantalla de admin la muestra).</summary>
+    [Fact]
+    public async Task HU12065_List_ReturnsUploadInstructions()
+    {
+        var db = NewDbName();
+        await SeedAsync(db, new DocumentType
+        {
+            Id = Guid.NewGuid(),
+            Code = "paz_salvo",
+            Name = "Paz y Salvo de Impuestos",
+            UploadInstructions = "Sube el Paz y Salvo de impuestos vehiculares.",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await using var ctx = NewContext(db);
+        var handler = new ListDocumentTypesHandler(new DocumentTypeRepository(ctx));
+        var result = await handler.HandleAsync(new ListDocumentTypesQuery(), TestContext.Current.CancellationToken);
+
+        result.Data.Should().ContainSingle()
+            .Which.InstruccionCargue.Should().Be("Sube el Paz y Salvo de impuestos vehiculares.");
+    }
+
     // ---------- Helpers ----------
 
     private static string NewDbName() => $"flit-doctypes-{Guid.NewGuid()}";

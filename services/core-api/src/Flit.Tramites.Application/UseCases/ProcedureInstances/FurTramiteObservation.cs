@@ -120,7 +120,7 @@ public static class FurTramiteObservation
 
         var tipo = string.IsNullOrWhiteSpace(locatario.DocumentType) ? "-" : locatario.DocumentType.Trim();
         var numero = string.IsNullOrWhiteSpace(locatario.Documento) ? "-" : locatario.Documento.Trim();
-        return $"Matrícula con locatario por Leasing de {propietario.Nombre.Trim()} a LOCATARIO TIPO DE DOCUMENTO {tipo}, NÚMERO DE DOCUMENTO {numero}";
+        return $"Matrícula con locatario por Leasing de {propietario.Nombre.Trim()} a {locatario.Nombre.Trim()} TIPO DE DOCUMENTO {tipo}, NÚMERO DE DOCUMENTO {numero}";
     }
 
     private static string? ComposeUnilateral(IReadOnlyList<DocumentParte> partes)

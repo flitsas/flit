@@ -13,13 +13,20 @@ public static partial class DocumentTypeValidator
     public const int CodeMaxLength = 50;
     public const int NameMaxLength = 150;
     public const int DescriptionMaxLength = 500;
+    public const int UploadInstructionsMaxLength = 500;
 
     /// <summary>Códigos: letras, números y guiones (alfanumérico + guion).</summary>
     [GeneratedRegex("^[A-Za-z0-9-]+$")]
     private static partial Regex CodeRegex();
 
-    /// <summary>Valida nombre y descripción ya recortados (el código lo genera el sistema).</summary>
-    public static string? ValidateNameAndDescription(string name, string? description)
+    /// <summary>
+    /// Valida nombre, descripción e instrucción de cargue ya recortados (el código lo genera el
+    /// sistema). <paramref name="uploadInstructions"/> es opcional (HU #12065).
+    /// </summary>
+    public static string? ValidateNameAndDescription(
+        string name,
+        string? description,
+        string? uploadInstructions = null)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -46,6 +53,17 @@ public static partial class DocumentTypeValidator
             return "La descripción no permite los caracteres < ni >.";
         }
 
+        if (uploadInstructions is { Length: > UploadInstructionsMaxLength })
+        {
+            return $"La instrucción de cargue no puede superar {UploadInstructionsMaxLength} caracteres.";
+        }
+
+        if (uploadInstructions is { Length: > 0 }
+            && !TextFieldPatterns.FreeTextNoAngleBrackets().IsMatch(uploadInstructions))
+        {
+            return "La instrucción de cargue no permite los caracteres < ni >.";
+        }
+
         return null;
     }
 
@@ -53,7 +71,11 @@ public static partial class DocumentTypeValidator
     /// Valida código, nombre y descripción ya recortados (trim). Asume que la capa
     /// de aplicación pasó cadenas vacías cuando el campo venía nulo/espacios.
     /// </summary>
-    public static string? Validate(string code, string name, string? description)
+    public static string? Validate(
+        string code,
+        string name,
+        string? description,
+        string? uploadInstructions = null)
     {
         if (string.IsNullOrWhiteSpace(code))
         {
@@ -75,6 +97,6 @@ public static partial class DocumentTypeValidator
             return "El código debe contener al menos una letra o número.";
         }
 
-        return ValidateNameAndDescription(name, description);
+        return ValidateNameAndDescription(name, description, uploadInstructions);
     }
 }

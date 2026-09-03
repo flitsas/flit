@@ -170,6 +170,35 @@ export function validateFile(file: File, limits?: FileTypeLimits): string | null
   return null;
 }
 
+/** Etiqueta corta por MIME para la leyenda de la tarjeta. Sin entrada → el subtipo en mayúscula. */
+const MIME_SHORT_LABEL: Record<string, string> = {
+  'application/pdf': 'PDF',
+  'image/jpeg': 'JPG',
+  'image/png': 'PNG',
+  'image/webp': 'WEBP',
+};
+
+function mimeShortLabel(mime: string): string {
+  const known = MIME_SHORT_LABEL[mime];
+  if (known) return known;
+  const subtype = mime.split('/')[1] ?? mime;
+  return subtype.toUpperCase();
+}
+
+/**
+ * Leyenda de formatos y peso de una casilla — "PDF, JPG · hasta 20 MB" (HU #12067). Sale de los
+ * límites que el catálogo entrega por tipo (RF08/09); sin ellos cae a los globales, que son los
+ * mismos que aplica {@link validateFile}. Antes era un literal fijo que además mentía (5 MB).
+ */
+export function formatUploadLimits(limits?: FileTypeLimits): string {
+  const mimes =
+    limits?.allowedMimes && limits.allowedMimes.length > 0 ? limits.allowedMimes : ALLOWED_MIME;
+  const maxSize = limits?.maxSizeBytes && limits.maxSizeBytes > 0 ? limits.maxSizeBytes : MAX_SIZE_BYTES;
+  // Deduplica manteniendo el orden del catálogo (jpeg/jpg distintos comparten etiqueta).
+  const formatos = [...new Set(mimes.map(mimeShortLabel))].join(', ');
+  return `${formatos} · hasta ${formatSize(maxSize)}`;
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -698,6 +727,11 @@ export function DocumentSlot({
   const isImpronta = tipo.toLowerCase() === 'impronta';
   const ocrRejected = ocr?.status === 'rejected';
   const showValidado = done && !ocrRejected;
+  const instruccion = item.instruccionCargue?.trim() || null;
+  const limitsCaption = formatUploadLimits({
+    allowedMimes: item.mimeTypesAllowed,
+    maxSizeBytes: item.maxSizeBytes,
+  });
   const canGenerate =
     isImpronta &&
     permiteGenerarImprontaAutomatica &&
@@ -736,7 +770,20 @@ export function DocumentSlot({
   return (
     <li
       className={
-        'relative flex h-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] ' +
+        // Filas del checklist (`DocumentChecklist`): `basis` fija el mismo tope de columnas que
+        // antes (1 / 2 / 4 / 6 según viewport) y `grow` es lo que falta para que una fila
+        // incompleta —p. ej. 3 documentos en un checklist con hueco para 6— reparta el espacio
+        // sobrante entre las tarjetas reales en vez de dejarlo en blanco. En los contenedores que
+        // reutilizan `DocumentSlot` dentro de un `<ul className="grid grid-cols-1">` (escritura del
+        // representante, prenda) estas clases de flex no aplican: no hay flex container que las lea.
+        //
+        // SIN `h-full`: con el `<ul>` en `flex-wrap` (no `grid`), su alto es automático —lo fija el
+        // contenido— y un hijo con `height:100%` no tiene contra qué resolverse, así que el navegador
+        // termina colapsándolo a su propio contenido. Es lo que igualaba mal la altura: la tarjeta
+        // «Certificado de Aduana» (sin nombre de archivo ni barra de progreso) quedaba más baja que
+        // sus vecinas. Quitar la altura explícita deja actuar el `align-items: stretch` por defecto
+        // del flex container, que sí iguala cada tarjeta a la más alta de su misma fila.
+        'relative flex grow shrink-0 basis-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] md:basis-[calc(50%-0.5rem)] xl:basis-[calc(25%-0.75rem)] 2xl:basis-[calc(16.6667%-0.8333rem)] ' +
         (isAuto || (done && !ocrRejected)
           ? 'border'
           : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]')
@@ -772,7 +819,19 @@ export function DocumentSlot({
       {isAuto && (
         <p className="mt-0.5 text-[11px] opacity-70">Autogenerado por el sistema</p>
       )}
-      <p className="mt-1 text-[11px] opacity-70">PDF, JPG hasta 5MB</p>
+      {/* HU #12067 — qué debe cargar el gestor aquí. El texto lo escribe el administrador en el
+          módulo documental; sin instrucción configurada no se pinta nada (ni hueco ni relleno). */}
+      {instruccion && (
+        <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
+          {/* El ícono marca el texto como ayuda. Va en el azul plano de la app (#557EFF, el mismo
+              de «Ver» y del foco), no en el degradado de marca, y a plena opacidad: el `opacity-70`
+              vive en el texto para que el color no salga lavado. `shrink-0` + `mt-px` evitan que se
+              deforme o se despegue de la primera línea cuando el texto envuelve. */}
+          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: '#557EFF' }} aria-hidden />
+          <span className="opacity-70">{instruccion}</span>
+        </p>
+      )}
+      <p className="mt-1 text-[11px] opacity-70">{limitsCaption}</p>
       {attachment && !isAuto && (
         <p className="mt-1 truncate text-[11px] opacity-60">
           {attachment.filename} · {formatSize(attachment.sizeBytes)}
@@ -1187,7 +1246,7 @@ export function DocumentChecklist({
         </p>
       ) : (
         <ul
-          className="mt-1 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6"
+          className="mt-1 flex flex-wrap gap-4"
           aria-label="Checklist de documentos"
         >
           {[...items]

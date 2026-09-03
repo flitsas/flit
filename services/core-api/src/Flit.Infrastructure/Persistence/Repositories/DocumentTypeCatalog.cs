@@ -24,13 +24,13 @@ internal sealed class DocumentTypeCatalog(FlitDbContext db) : IDocumentTypeCatal
         var row = await db.DocumentTypes
             .AsNoTracking()
             .Where(d => d.IsActive && d.Code == code)
-            .Select(d => new { d.Code, d.MimeTypesAllowed, d.MaxSizeBytes })
+            .Select(d => new { d.Code, d.MimeTypesAllowed, d.MaxSizeBytes, d.UploadInstructions })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
 
         return row is null
             ? null
-            : new DocumentTypeRule(row.Code, row.MimeTypesAllowed, row.MaxSizeBytes);
+            : new DocumentTypeRule(row.Code, row.MimeTypesAllowed, row.MaxSizeBytes, row.UploadInstructions);
     }
 
     public async Task<IReadOnlySet<string>> ListSystemGeneratedCodesAsync(CancellationToken ct = default)

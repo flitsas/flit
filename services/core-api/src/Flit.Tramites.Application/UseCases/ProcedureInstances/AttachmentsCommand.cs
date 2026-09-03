@@ -88,10 +88,14 @@ public static class AttachmentRules
     /// tiene una precedencia por tipo, el FUR y la Licencia de Tránsito reemplazan al regenerarse y la
     /// impronta se protege no regenerando. La subida del gestor era la única que acumulaba, y por eso el
     /// botón decía «Reemplazar archivo» mientras el expediente se quedaba con los dos.</para>
+    /// <para>Solo códigos que existen en el catálogo (<c>tramites.document_types</c>): un código
+    /// inexistente no protege nada y hace creer que la casilla existe. Aquí estuvo
+    /// <c>documentosTramite</c>, que solo existía en una base de pruebas local — lo cubre ahora
+    /// <c>AttachmentRulesCatalogParityTests</c>.</para>
     /// </summary>
     public static readonly IReadOnlySet<string> TiposMultiples = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "otro", "anexos_generales", "documentosTramite",
+        "otro", "anexos_generales",
     };
 
     /// <summary>¿Subir este tipo debe RETIRAR el adjunto anterior del mismo tipo?</summary>

@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-31-obs23-tabla",
+  "version": "2026-09-03-ot-name-fit",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -11,8 +11,8 @@
       "type": "text",
       "x": 512.0,
       "y": 64.0,
-      "w": 188.0,
-      "h": 11.9,
+      "w": 248.0,
+      "h": 20.0,
       "fontSize": 5.5,
       "bold": false,
       "align": "left"

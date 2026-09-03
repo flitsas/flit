@@ -28,7 +28,11 @@ public sealed class UpdateDocumentTypeHandler
             ? null
             : command.Request.Descripcion.Trim();
 
-        var error = DocumentTypeValidator.ValidateNameAndDescription(name, description);
+        var uploadInstructions = string.IsNullOrWhiteSpace(command.Request.InstruccionCargue)
+            ? null
+            : command.Request.InstruccionCargue.Trim();
+
+        var error = DocumentTypeValidator.ValidateNameAndDescription(name, description, uploadInstructions);
         if (error is not null)
         {
             return UpdateDocumentTypeResult.ValidationFailed(error);
@@ -46,7 +50,7 @@ public sealed class UpdateDocumentTypeHandler
             .UpdateAsync(
                 command.Id, code, name, description, command.UpdatedBy,
                 command.Request.MimeTypesAllowed, command.Request.MaxSizeBytes,
-                command.Request.EsAutogenerado, cancellationToken)
+                command.Request.EsAutogenerado, uploadInstructions, cancellationToken)
             .ConfigureAwait(false);
 
         // Carrera improbable: el registro fue borrado entre la lectura y el update.

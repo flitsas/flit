@@ -6,6 +6,7 @@ import {
   NuevoTramiteModalContent,
   type FamiliasBloqueadas,
 } from './NuevoTramiteModalContent';
+import { OperacionLoadingState } from './states';
 
 /**
  * Elección del trámite a crear, con la configuración de la compañía ya resuelta.
@@ -45,7 +46,7 @@ export function NuevoTramiteSelector({
   }, []);
 
   if (cargando) {
-    return <p className="text-xs opacity-70">Cargando tipos de trámite…</p>;
+    return <OperacionLoadingState />;
   }
 
   return (

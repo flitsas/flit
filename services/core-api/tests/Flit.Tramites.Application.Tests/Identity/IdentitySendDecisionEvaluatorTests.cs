@@ -114,6 +114,55 @@ public sealed class IdentitySendDecisionEvaluatorTests
         d.Motivo.Should().Be(IdentitySendMotivo.CorrespondeEnviar);
     }
 
+    /// <summary>
+    /// Reporte 2026-09-03 — una fila «en vuelo» HUÉRFANA (nunca se resolvió y quedó atrás cuando un
+    /// intento POSTERIOR ya se expiró/rechazó) no puede seguir bloqueando el envío para siempre. El
+    /// módulo de Identidad mostraba la fila NUEVA (expirada, la más reciente por <c>CreatedAt</c>) y el
+    /// guard de envío seguía viendo bloqueado por la fila VIEJA (en vuelo) — dos superficies mirando
+    /// filas distintas del mismo documento. Ahora el chequeo «en vuelo» solo mira la fila más reciente.
+    /// </summary>
+    [Fact]
+    public void FilaEnVueloHuerfana_SuperadaPorUnIntentoPosteriorYaTerminal_CorrespondeEnviar()
+    {
+        var vieja = EnVuelo("CC", "1", expiresAt: Now.AddHours(2), createdAt: Now.AddDays(-10));
+        var nueva = Expirada("CC", "1", createdAt: Now.AddDays(-1));
+        var ctx = Ctx("CC", "1", validations: new[] { vieja, nueva });
+
+        var d = IdentitySendDecisionEvaluator.Evaluate(ctx);
+
+        d.Kind.Should().Be(IdentitySendDecisionKind.Enviar);
+        d.Motivo.Should().Be(IdentitySendMotivo.CorrespondeEnviar);
+    }
+
+    [Fact]
+    public void FilaEnVueloEsLaMasReciente_SigueBloqueandoAunqueHayaUnaViejaExpirada()
+    {
+        // Control: si la fila en vuelo SÍ es la más reciente, el bloqueo sigue intacto — el fix no
+        // desactiva la guarda, solo la ata a la fila correcta.
+        var vieja = Expirada("CC", "1", createdAt: Now.AddDays(-10));
+        var nueva = EnVuelo("CC", "1", expiresAt: Now.AddHours(2), createdAt: Now.AddDays(-1));
+        var ctx = Ctx("CC", "1", validations: new[] { vieja, nueva });
+
+        var d = IdentitySendDecisionEvaluator.Evaluate(ctx);
+
+        d.Kind.Should().Be(IdentitySendDecisionKind.NoEnviar);
+        d.Motivo.Should().Be(IdentitySendMotivo.ValidacionEnVuelo);
+        d.ValidationId.Should().Be(nueva.Id);
+    }
+
+    [Fact]
+    public void DosFilasEnVuelo_EncauzaReenvioConLaMasReciente()
+    {
+        var vieja = EnVuelo("CC", "1", expiresAt: Now.AddHours(-5), createdAt: Now.AddDays(-2));
+        var nueva = EnVuelo("CC", "1", expiresAt: Now.AddHours(-1), createdAt: Now.AddDays(-1));
+        var ctx = Ctx("CC", "1", validations: new[] { vieja, nueva });
+
+        var d = IdentitySendDecisionEvaluator.Evaluate(ctx);
+
+        d.Kind.Should().Be(IdentitySendDecisionKind.EncauzarReenvio);
+        d.ValidationId.Should().Be(nueva.Id);
+    }
+
     [Fact]
     public void Precedencia_baul_gana_sobre_identidad_vigente()
     {
@@ -154,7 +203,7 @@ public sealed class IdentitySendDecisionEvaluatorTests
         };
 
     private static ProcedureInstanceBiometricValidation EnVuelo(
-        string tipo, string numero, DateTimeOffset expiresAt) =>
+        string tipo, string numero, DateTimeOffset expiresAt, DateTimeOffset? createdAt = null) =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -164,7 +213,22 @@ public sealed class IdentitySendDecisionEvaluatorTests
             DocumentNumber = numero,
             Status = BiometricEstados.EnProceso,
             ExpiresAt = expiresAt,
+            CreatedAt = createdAt ?? Now.AddMinutes(-10),
             UpdatedAt = Now.AddMinutes(-10),
+        };
+
+    private static ProcedureInstanceBiometricValidation Expirada(
+        string tipo, string numero, DateTimeOffset createdAt) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Tenant,
+            ProcedureInstanceId = Guid.NewGuid(),
+            DocumentType = tipo,
+            DocumentNumber = numero,
+            Status = BiometricEstados.Expirado,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
         };
 
     private static ProcedureInstanceActor ActorJuridicoConBaul() =>

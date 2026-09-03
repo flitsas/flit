@@ -53,7 +53,7 @@ public sealed class FurTransformationObservationsTests
         var result = FurTransformationObservations.Compose(
             null, colorRunt: "plata metalico", colorEfectivo: "rojo", fuelRunt: "gasolina", fuelEfectivo: "diesel");
 
-        result.Should().Be("Color nuevo(NUEVO COLOR: ROJO) COMBUSTIBLE_NUEVO: DIESEL");
+        result.Should().Be("Color nuevo(NUEVO COLOR: ROJO), COMBUSTIBLE_NUEVO: DIESEL");
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class FurTransformationObservationsTests
             fuelRunt: "gasolina", fuelEfectivo: "diesel",
             bodyTypeRunt: "sedan", bodyTypeEfectivo: "pickup");
 
-        result.Should().Be("Color nuevo(NUEVO COLOR: NEGRO) Carroceria nueva(NUEVA CARROCERIA: PICKUP) COMBUSTIBLE_NUEVO: DIESEL");
+        result.Should().Be("Color nuevo(NUEVO COLOR: NEGRO), Carroceria nueva(NUEVA CARROCERIA: PICKUP), COMBUSTIBLE_NUEVO: DIESEL");
     }
 
     [Fact]
@@ -167,6 +167,6 @@ public sealed class FurTransformationObservationsTests
             "PICKUP");
 
         texto.Should().Be(
-            "Color nuevo(NUEVO COLOR: MULTICOLOR CON AEROGRAFIAS) Carroceria nueva(NUEVA CARROCERIA: PICKUP) COMBUSTIBLE_NUEVO: DIESEL");
+            "Color nuevo(NUEVO COLOR: MULTICOLOR CON AEROGRAFIAS), Carroceria nueva(NUEVA CARROCERIA: PICKUP), COMBUSTIBLE_NUEVO: DIESEL");
     }
 }

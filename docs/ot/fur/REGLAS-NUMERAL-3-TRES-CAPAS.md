@@ -53,7 +53,7 @@ Dónde vive la regla (no reimplementarla suelta):
 
 ### Recuadro OBSERVACIONES (párrafo 23) — concatenar, no reemplazar
 
-Varios bloques automáticos **se unen con un espacio**. Ninguno pisa al anterior.
+Varios bloques automáticos **se unen con coma y espacio** (`", "`). Ninguno pisa al anterior.
 
 Orden:
 
@@ -64,7 +64,7 @@ Orden:
 5. Servicio + empresa vinculadora, **solo si hay razón social** — `FurServicioVinculadoraObservation`
 6. Texto libre del gestor (`fur_observations`) — se recorta si no cabe (presupuesto 500 caracteres)
 
-Bloques automáticos separados por un espacio. Si faltan datos (nombre del locatario o del acreedor), **sí casilla / sí tipo, no se inventa el texto** de ese bloque.
+Bloques automáticos separados por `, `. Si faltan datos (nombre del locatario o del acreedor), **sí casilla / sí tipo, no se inventa el texto** de ese bloque.
 
 ---
 
@@ -107,7 +107,7 @@ Define `tramites.procedure_types.family` + `code`. Sin prenda ni transformacione
 | Familia | Código | Tipo | Debe marcar (numeral 3) | Observación |
 |---------|--------|------|-------------------------|-------------|
 | Matrículas | `MATRICULA_NUEVA` | Matrícula inicial | **1** Matrícula / Registro | No hay bloque automático. Solo `fur_observations` si el gestor escribe. |
-| Matrículas | `MATRICULA_LEASING` | Matrícula Leasing | **1** | Obligatoria: `Matrícula con locatario por Leasing de {PROPIETARIO} a LOCATARIO TIPO DE DOCUMENTO {TIPO_DOC_LOCATARIO}, NÚMERO DE DOCUMENTO {NUMERO_LOCATARIO}`. Propietario y locatario son partes distintas. |
+| Matrículas | `MATRICULA_LEASING` | Matrícula Leasing | **1** | Obligatoria: `Matrícula con locatario por Leasing de {PROPIETARIO} a {NOMBRE_LOCATARIO} TIPO DE DOCUMENTO {TIPO_DOC_LOCATARIO}, NÚMERO DE DOCUMENTO {NUMERO_LOCATARIO}`. Propietario y locatario son partes distintas. |
 | Matrículas | `CANCELACION_MATRICULA` | Cancelación de matrícula | **13** Cancelación matrícula / registro | Obligatoria: la **causal** declarada (tabla 5). Sin causal declarada: sí casilla, no texto. |
 | Matrículas | `REMATRICULA` | Rematrícula *(inactivo)* | **16** Rematrícula | Sin bloque automático. |
 | Traspaso | `TRASPASO_STANDARD` | Traspaso | **2** Traspaso | Sin bloque automático. |
@@ -139,11 +139,11 @@ Se **suma** al tipo de la tabla 1 cuando el expediente trae gravamen (wizard / s
 | Tipo de acción | Debe marcar (numeral 3) | Observación — estructura |
 |----------------|-------------------------|--------------------------|
 | Ninguna / no aplica | No suma | No imprime bloque de gravamen. |
-| Inscribir / registrar / constituir | **+11** Inscrip. prenda | Si hay nombre: `Inscripción de prenda a favor de {NOMBRE_ACREEDOR}`. Sin nombre: **sí casilla, no texto**. No se imprime NIT. **Numeral 20:** LIM. PROPIEDAD + A FAVOR DE. |
-| Levantar | **+12** Levanta prenda | Si hay nombre: `Levantamiento de prenda a favor de {NOMBRE_ACREEDOR}`. Sin nombre: **sí casilla, no texto**. **Numeral 20:** OTRO + A FAVOR DE. **Excepción — trámite `LEVANTAMIENTO_PRENDA`:** ahí se captura la entidad ante la que se levantó y el literal pasa a `Levantamiento de prenda ante {ENTIDAD}`, porque el acreedor ya lo nombra el numeral 20 y repetirlo gasta renglones. En traspaso y matrícula la entidad no se captura y el literal es el de esta fila. |
-| Levantar e inscribir (mismo FUR) | **+11 +12** | Las dos frases, un espacio. El simulador admite `ambas`; el wizard operativo puede no capturar las dos a la vez. |
+| Inscribir / registrar / constituir | **+11** Inscrip. prenda | Si hay nombre y documento: `Inscripción de prenda a favor de {NOMBRE_ACREEDOR} identificado con número de documento {DOCUMENTO}`. Si hay nombre sin documento: solo el nombre (sin sufijo vacío). Sin nombre: **sí casilla, no texto**. **Numeral 20:** LIM. PROPIEDAD + A FAVOR DE. |
+| Levantar | **+12** Levanta prenda | Si hay nombre y documento: `Levantamiento de prenda a favor de {NOMBRE_ACREEDOR} identificado con número de documento {DOCUMENTO}`. Si hay nombre sin documento: solo el nombre. Sin nombre: **sí casilla, no texto**. **Numeral 20:** OTRO + A FAVOR DE. **Excepción — trámite `LEVANTAMIENTO_PRENDA`:** ahí se captura la entidad ante la que se levantó y el literal pasa a `Levantamiento de prenda ante {ENTIDAD}`, porque el acreedor ya lo nombra el numeral 20 y repetirlo gasta renglones. En traspaso y matrícula la entidad no se captura y el literal es el de esta fila. |
+| Levantar e inscribir (mismo FUR) | **+11 +12** | Las dos frases, unidas con `, `. El simulador admite `ambas`; el wizard operativo puede no capturar las dos a la vez. |
 
-Constantes de código: `FurPrendaObservation.Etiqueta` y `EtiquetaLevantamiento`. El nombre del acreedor se imprime tal cual (trim); no se inventa contenido.
+Constantes de código: `FurPrendaObservation.Etiqueta`, `EtiquetaLevantamiento` y `SufijoDocumento`. El nombre y el documento del acreedor se imprimen tal cual (trim); no se inventa contenido.
 
 ---
 
@@ -194,7 +194,7 @@ Dónde vive la regla (no reimplementarla suelta):
 **Traspaso** + inscribir prenda + color y carrocería → casillas **2 + 11 + 5 + 17**.
 
 ```
-Inscripción de prenda a favor de FONDEICON Color nuevo(NUEVO COLOR: NEGRO) Carroceria nueva(NUEVA CARROCERIA: PICKUP)
+Inscripción de prenda a favor de FONDEICON identificado con número de documento 890900608, Color nuevo(NUEVO COLOR: NEGRO), Carroceria nueva(NUEVA CARROCERIA: PICKUP)
 ```
 
 ---

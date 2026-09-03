@@ -18,7 +18,10 @@ public sealed record ChecklistItemDto(
     // Límites de carga por tipo (RF08/09) para que el front pre-valide inline con el límite real.
     // null ⇒ el tipo no tiene regla propia ⇒ el front usa los defaults globales.
     long? MaxSizeBytes = null,
-    IReadOnlyList<string>? MimeTypesAllowed = null);
+    IReadOnlyList<string>? MimeTypesAllowed = null,
+    // HU #12066 — instrucción de cargue del catálogo (qué debe subir el gestor en esta casilla).
+    // null ⇒ el tipo no tiene texto configurado ⇒ la tarjeta no muestra instrucción.
+    string? InstruccionCargue = null);
 
 public sealed record ChecklistResponse(
     IReadOnlyList<ChecklistItemDto> Items,
@@ -146,7 +149,8 @@ public sealed class GetChecklistHandler(
                     i.Item.DocTipo,
                     i.Satisfecho,
                     rule is { MaxSizeBytes: > 0 } ? rule.MaxSizeBytes : null,
-                    rule is { MimeTypesAllowed.Count: > 0 } ? rule.MimeTypesAllowed : null);
+                    rule is { MimeTypesAllowed.Count: > 0 } ? rule.MimeTypesAllowed : null,
+                    rule?.UploadInstructions);
             })
             .ToList();
 

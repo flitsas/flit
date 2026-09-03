@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Archive, CheckCircle2, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
@@ -128,7 +128,6 @@ export function TiposTramitePanel() {
             className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
             style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
           >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             Nuevo tipo
           </button>
         </div>

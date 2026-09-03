@@ -272,7 +272,7 @@ public sealed class FurPreviewSampleTests
     {
         var data = FurPreviewSample.Build("MATRICULA_LEASING", "MATRICULAS", "natural", "juridica", "carro");
         data.Observaciones.Should().Contain("Matrícula con locatario por Leasing de");
-        data.Observaciones.Should().Contain("LOCATARIO TIPO DE DOCUMENTO");
+        data.Observaciones.Should().Contain("[NOMBRE LOCATARIO] TIPO DE DOCUMENTO");
         data.Partes.Should().Contain(p => p.Rol == "locatario");
     }
 

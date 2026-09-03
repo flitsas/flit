@@ -4925,6 +4925,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
+                    b.Property<string>("UploadInstructions")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("upload_instructions");
+
                     b.HasKey("Id")
                         .HasName("pk_document_types");
 

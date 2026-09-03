@@ -7,4 +7,6 @@ public sealed record DocumentoInformativoItem(
     string Nombre,
     bool Obligatorio,
     short Orden,
-    string? Descripcion = null);
+    string? Descripcion = null,
+    // HU #12066 — instrucción de cargue del catálogo, la misma que ve el gestor en Requisitos.
+    string? InstruccionCargue = null);

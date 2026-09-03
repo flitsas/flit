@@ -8,7 +8,6 @@ import {
   Loader2,
   Pencil,
   Star,
-  Trash2,
 } from "lucide-react";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { DeedsFormPanel, type DeedEditingRef } from "../deeds/DeedsFormPanel";
@@ -23,9 +22,10 @@ import type { PanelMode, CompanyRow } from "./LegalRepresentativesFormPanel";
 import {
   RL_COLOR,
   RL_INPUT_CLS,
-  rlGhostBrandClass,
-  rlGhostBrandStyle,
-  rlDangerGhostStyle,
+  rlOutlinedActionClass,
+  rlOutlinedActionStyle,
+  rlTextDangerActionClass,
+  rlTextDangerActionStyle,
 } from "./rl-flit-styles";
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
@@ -215,8 +215,8 @@ export function RepresentativeCompaniesAccordion({
           <button
             type="button"
             onClick={onAddCompany}
-            className={rlGhostBrandClass}
-            style={rlGhostBrandStyle}
+            className={rlOutlinedActionClass}
+            style={rlOutlinedActionStyle}
           >
             Agregar empresa
           </button>
@@ -319,10 +319,10 @@ export function RepresentativeCompaniesAccordion({
                       type="button"
                       onClick={() => onRemoveCompany(index)}
                       aria-label={`Quitar empresa ${index + 1}`}
-                      className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
-                      style={rlDangerGhostStyle}
+                      className={rlTextDangerActionClass}
+                      style={rlTextDangerActionStyle}
                     >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Quitar
+                      Quitar
                     </button>
                   )}
                 </div>
@@ -525,8 +525,8 @@ function DeedBlock({
             type="button"
             onClick={onAsociar}
             disabled={asociando}
-            className={`${rlGhostBrandClass} disabled:opacity-50`}
-            style={rlGhostBrandStyle}
+            className={rlOutlinedActionClass}
+            style={rlOutlinedActionStyle}
             aria-label="Asociar escritura a esta compañía"
           >
             {asociando ? (
@@ -573,8 +573,8 @@ function DeedBlock({
                   onClick={() => void onVer(deed.id)}
                   disabled={viewing === deed.id}
                   aria-label={`Ver PDF de ${deed.description}`}
-                  className={`${rlGhostBrandClass} disabled:opacity-50`}
-                  style={rlGhostBrandStyle}
+                  className={rlOutlinedActionClass}
+                  style={rlOutlinedActionStyle}
                 >
                   {viewing === deed.id ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -589,8 +589,8 @@ function DeedBlock({
                     type="button"
                     onClick={() => onEditar(deed)}
                     aria-label={`Editar escritura ${deed.description}`}
-                    className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium"
-                    style={{ color: RL_COLOR.navy, borderColor: RL_COLOR.border }}
+                    className={rlOutlinedActionClass}
+                    style={rlOutlinedActionStyle}
                   >
                     <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                     Editar

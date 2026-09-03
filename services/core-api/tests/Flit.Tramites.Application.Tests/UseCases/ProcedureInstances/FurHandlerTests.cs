@@ -612,7 +612,7 @@ public sealed class FurHandlerTests
         FurNumeral3Marks.Resolve(data).Should().Contain(11);
         data.AcreedorPrenda.Should().Be("BANCO XYZ S.A.");
         data.PrendaMarking.Should().Be(FurPrendaMarking.Constitucion);
-        data.Observaciones.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
+        data.Observaciones.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     /// <summary>Genera el FUR de un trámite del tipo <c>BLINDAJE</c> con los field_values indicados.</summary>
@@ -742,7 +742,7 @@ public sealed class FurHandlerTests
         capturing.Captured.Should().NotBeNull();
         capturing.Captured!.Vehiculo.Color.Should().Be("PLATA");         // campo del FUR = RUNT original
         capturing.Captured.Vehiculo.Combustible.Should().Be("GASOLINA"); // campo del FUR = RUNT original
-        capturing.Captured.Observaciones.Should().Be("Color nuevo(NUEVO COLOR: NEGRO) COMBUSTIBLE_NUEVO: DIESEL");
+        capturing.Captured.Observaciones.Should().Be("Color nuevo(NUEVO COLOR: NEGRO), COMBUSTIBLE_NUEVO: DIESEL");
     }
 
     [Fact]

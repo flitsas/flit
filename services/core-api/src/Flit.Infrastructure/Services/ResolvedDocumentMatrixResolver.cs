@@ -42,7 +42,9 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
                 from r in _context.ProcedureDocumentRequirements.AsNoTracking()
                 where r.ProcedureTypeId == procedureTypeId
                 join d in _context.DocumentTypes.AsNoTracking() on r.DocumentTypeId equals d.Id
-                select new BaseDoc(d.Id, d.Code, d.Name, r.IsMandatory, r.DefaultSortOrder, r.IsDummy, d.IsSystemGenerated))
+                select new BaseDoc(
+                    d.Id, d.Code, d.Name, r.IsMandatory, r.DefaultSortOrder, r.IsDummy,
+                    d.IsSystemGenerated, d.UploadInstructions))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -104,6 +106,7 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
                 NivelAplicado = nivel,
                 EsDummy = doc.IsDummy,
                 EsGeneradoSistema = doc.IsSystemGenerated,
+                InstruccionCargue = doc.UploadInstructions,
             });
         }
 
@@ -210,5 +213,6 @@ internal sealed class ResolvedDocumentMatrixResolver : IResolvedDocumentMatrixRe
         bool IsMandatory,
         short DefaultSortOrder,
         bool IsDummy,
-        bool IsSystemGenerated);
+        bool IsSystemGenerated,
+        string? UploadInstructions);
 }

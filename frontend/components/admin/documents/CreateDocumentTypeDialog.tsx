@@ -31,7 +31,7 @@ export interface CreateDocumentTypeDialogProps {
   onSaved: (documentType: DocumentType, mode: "create" | "edit") => void;
 }
 
-type FieldErrors = Partial<Record<"nombre" | "descripcion" | "form", string>>;
+type FieldErrors = Partial<Record<"nombre" | "descripcion" | "instruccionCargue" | "form", string>>;
 
 // RF08 — formatos configurables por tipo (los mismos que el respaldo global del backend).
 const MIME_OPTIONS: { mime: string; label: string }[] = [
@@ -54,6 +54,9 @@ export function CreateDocumentTypeDialog({
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
+  // HU #12065 — el texto que lee el gestor al cargar el documento (distinto de la descripción,
+  // que es la nota interna de esta pantalla).
+  const [instruccionCargue, setInstruccionCargue] = useState("");
   // RF08/09 — límites por tipo. mimes vacío / MB vacío ⇒ se aplican los globales por defecto.
   const [mimes, setMimes] = useState<string[]>([]);
   const [maxSizeMb, setMaxSizeMb] = useState("");
@@ -68,6 +71,7 @@ export function CreateDocumentTypeDialog({
       setCodigo(editing?.codigo ?? "");
       setNombre(editing?.nombre ?? "");
       setDescripcion(editing?.descripcion ?? "");
+      setInstruccionCargue(editing?.instruccionCargue ?? "");
       setMimes(editing?.mimeTypesAllowed ?? []);
       const bytes = editing?.maxSizeBytes ?? 0;
       setMaxSizeMb(bytes > 0 ? String(Math.round((bytes / BYTES_PER_MB) * 100) / 100) : "");
@@ -96,6 +100,14 @@ export function CreateDocumentTypeDialog({
     const nom = nombre.trim();
     if (!nom) next.nombre = "El nombre es obligatorio.";
     else { const e = validateReadableName(nom, "El nombre"); if (e) next.nombre = e; }
+    // El textarea ya limita a 500 y filtra < >, pero un texto cargado desde el catálogo (o un
+    // pegado en un navegador que ignore maxLength) debe fallar junto al campo, no en el 422.
+    const instruccion = instruccionCargue.trim();
+    if (instruccion.length > 500) {
+      next.instruccionCargue = "La instrucción de cargue no puede superar 500 caracteres.";
+    } else if (/[<>]/.test(instruccion)) {
+      next.instruccionCargue = "La instrucción de cargue no permite los caracteres < ni >.";
+    }
     return next;
   };
 
@@ -113,6 +125,7 @@ export function CreateDocumentTypeDialog({
       const saved = await onSubmit({
         nombre: nombre.trim(),
         descripcion: descripcion.trim() || null,
+        instruccionCargue: instruccionCargue.trim() || null,
         mimeTypesAllowed: mimes.length > 0 ? mimes : null,
         maxSizeBytes: Number.isFinite(mb) && mb > 0 ? Math.round(mb * BYTES_PER_MB) : null,
         esAutogenerado,
@@ -122,7 +135,7 @@ export function CreateDocumentTypeDialog({
       if (error instanceof ApiValidationError) {
         const mapped: FieldErrors = {};
         for (const { field, message } of error.errors) {
-          if (field === "nombre" || field === "descripcion") {
+          if (field === "nombre" || field === "descripcion" || field === "instruccionCargue") {
             mapped[field] = message;
           } else {
             mapped.form = message;
@@ -199,6 +212,25 @@ export function CreateDocumentTypeDialog({
               aria-describedby={errors.descripcion ? "dt-desc-error" : undefined}
               className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
               style={{ borderColor: errors.descripcion ? "#FF4E00" : "#DFE5ED" }}
+            />
+          </Field>
+
+          <Field
+            label="Instrucción de cargue"
+            htmlFor="dt-instruccion"
+            error={errors.instruccionCargue}
+            hint="Opcional (máx. 500). Es el texto que ve el gestor en el paso Requisitos al cargar este documento."
+          >
+            <textarea
+              id="dt-instruccion"
+              value={instruccionCargue}
+              onChange={(e) => setInstruccionCargue(sanitizeNoAngleBrackets(e.target.value))}
+              maxLength={500}
+              rows={3}
+              placeholder="Ej.: Sube el Paz y Salvo de impuestos vehiculares expedido por la Secretaría de Hacienda."
+              aria-describedby={errors.instruccionCargue ? "dt-instruccion-error" : undefined}
+              className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              style={{ borderColor: errors.instruccionCargue ? "#FF4E00" : "#DFE5ED" }}
             />
           </Field>
 

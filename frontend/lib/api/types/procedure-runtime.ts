@@ -984,6 +984,11 @@ export interface ChecklistItemView {
   maxSizeBytes?: number;
   /** RF08 — formatos MIME permitidos por tipo. Ausente/vacío ⇒ formatos globales. */
   mimeTypesAllowed?: string[];
+  /**
+   * HU #12066 — instrucción de cargue del catálogo: qué debe subir el gestor en esta casilla.
+   * La escribe el administrador en el módulo documental. Ausente ⇒ la tarjeta no la muestra.
+   */
+  instruccionCargue?: string | null;
 }
 
 /** Respuesta de GET /instances/{id}/checklist. */
@@ -1010,6 +1015,8 @@ export interface DocumentoInformativoPreviewItem {
   obligatorio: boolean;
   orden: number;
   descripcion?: string | null;
+  /** HU #12066 — instrucción de cargue del catálogo, la misma que se ve en Requisitos. */
+  instruccionCargue?: string | null;
 }
 
 export type WizardStepStatus = 'complete' | 'incomplete' | 'locked';

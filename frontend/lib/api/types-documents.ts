@@ -11,6 +11,11 @@ export interface DocumentType {
   codigo: string;
   nombre: string;
   descripcion?: string | null;
+  /**
+   * Instrucción de cargue (HU #12065): el texto que el GESTOR lee en la tarjeta del paso
+   * Requisitos. Distinto de `descripcion`, que es la nota interna del administrador.
+   */
+  instruccionCargue?: string | null;
   estado: DocumentTypeEstado;
   fechaCreacion: string;
   /** RF08 — formatos MIME permitidos por tipo. Vacío/ausente ⇒ formatos globales por defecto. */
@@ -45,6 +50,8 @@ export interface CreateDocumentTypeRequest {
   codigo?: string;
   nombre: string;
   descripcion?: string | null;
+  /** Texto que ve el gestor al cargar el documento. Opcional, máx. 500. */
+  instruccionCargue?: string | null;
   /** RF08/09 — opcionales; omitidos ⇒ límites globales por defecto. */
   mimeTypesAllowed?: string[] | null;
   maxSizeBytes?: number | null;
@@ -57,6 +64,8 @@ export interface UpdateDocumentTypeRequest {
   codigo?: string;
   nombre: string;
   descripcion?: string | null;
+  /** Texto que ve el gestor al cargar el documento. Vaciarlo lo borra. */
+  instruccionCargue?: string | null;
   /** RF08/09 — opcionales; omitidos ⇒ no se modifican. */
   mimeTypesAllowed?: string[] | null;
   maxSizeBytes?: number | null;

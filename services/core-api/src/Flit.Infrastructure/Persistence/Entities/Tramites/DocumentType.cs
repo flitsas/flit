@@ -19,6 +19,13 @@ public sealed class DocumentType
 
     public string? Description { get; set; }
 
+    /// <summary>
+    /// HU #12065 — instrucción de cargue que lee el gestor en la tarjeta del paso Requisitos
+    /// (<c>upload_instructions</c>). Distinta de <see cref="Description"/>, que es la nota interna
+    /// del administrador. <c>null</c> ⇒ la tarjeta no muestra instrucción.
+    /// </summary>
+    public string? UploadInstructions { get; set; }
+
     /// <summary>MIME permitidos para este tipo (jsonb). Vacío ⇒ se aplican los defaults globales.</summary>
     public List<string> MimeTypesAllowed { get; set; } = [];
 

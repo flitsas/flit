@@ -184,7 +184,7 @@ describe("LegalRepresentativesFormPanel — modo create (AC4)", () => {
 
   it("el título es «Nuevo representante legal»", () => {
     renderPanel("create", { representativeId: null });
-    expect(screen.getByRole("dialog", { name: /registrar representante legal/i })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /nuevo representante legal/i })).toBeInTheDocument();
   });
 
   it("permite registrar solo la persona (sin NITs ni firma)", async () => {
@@ -356,7 +356,9 @@ describe("LegalRepresentativesFormPanel — modo edit (AC3)", () => {
   it("el título es «Editar persona, firma y trámites»", async () => {
     renderPanel("edit");
     await waitFor(() =>
-      expect(screen.getByRole("dialog", { name: /editar representante legal/i })).toBeInTheDocument(),
+      expect(
+        screen.getByRole("dialog", { name: /editar persona, firma y trámites/i }),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -584,7 +586,7 @@ describe("RepresentativeCompaniesAccordion — grid de compañías", () => {
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalledTimes(1));
     const btns = await screen.findAllByRole("button", { name: /asociar escritura/i });
     await userEvent.click(btns[0]);
-    expect(await screen.findByRole("dialog", { name: /registrar escritura/i })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /nueva escritura/i })).toBeInTheDocument();
   });
 
   it("AC4: al cerrar DeedsFormPanel el grid sigue visible", async () => {
@@ -592,10 +594,10 @@ describe("RepresentativeCompaniesAccordion — grid de compañías", () => {
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
     const btns = await screen.findAllByRole("button", { name: /asociar escritura/i });
     await userEvent.click(btns[0]);
-    await screen.findByRole("dialog", { name: /registrar escritura/i });
-    const deedsDialog = screen.getByRole("dialog", { name: /registrar escritura/i });
+    await screen.findByRole("dialog", { name: /nueva escritura/i });
+    const deedsDialog = screen.getByRole("dialog", { name: /nueva escritura/i });
     await userEvent.click(within(deedsDialog).getByRole("button", { name: /cerrar/i }));
-    expect(screen.getByRole("dialog", { name: /asociar empresas y escrituras/i })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /empresas y escrituras/i })).toBeInTheDocument();
     expect(screen.getByTestId("rl-companies-grid")).toBeInTheDocument();
   });
 
@@ -649,9 +651,9 @@ describe("RepresentativeCompaniesAccordion — grid de compañías", () => {
     await userEvent.click(asociarBtns[2]);
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole("dialog", { name: /registrar escritura/i })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /nueva escritura/i })).toBeInTheDocument();
     // No cierra el panel de empresas.
-    expect(screen.getByRole("dialog", { name: /asociar empresas y escrituras/i })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /empresas y escrituras/i })).toBeInTheDocument();
   }, 15000);
 
   it("AC5: en modo create NO aparece el grid de empresas", () => {
