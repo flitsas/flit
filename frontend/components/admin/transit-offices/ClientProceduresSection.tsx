@@ -742,11 +742,20 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setActing(true);
     try {
       // HU #10800 — del rango (outOfRange=false) o fuera de rango (outOfRange=true).
-      await assignPlateToProcedure(assignTarget.id, plateInput.trim().toUpperCase(), assignMode === "out");
+      const placaAsignada = plateInput.trim().toUpperCase();
+      await assignPlateToProcedure(assignTarget.id, placaAsignada, assignMode === "out");
       // HU #10785 — el status global permanece 'entregado'; avanza el sub-estado interno de placa.
-      setRows((prev) =>
-        prev.map((r) => (r.id === assignTarget.id ? { ...r, plateFlowStatus: "asignado" } : r)),
-      );
+      // La placa se refleja YA: es el dato que el operador acaba de escribir y el que viene a ver.
+      const conPlaca = (r: OtClientProcedure): OtClientProcedure => ({
+        ...r,
+        placa: placaAsignada,
+        plateFlowStatus: "asignado",
+      });
+      setRows((prev) => prev.map((r) => (r.id === assignTarget.id ? conPlaca(r) : r)));
+      // El detalle abierto es un objeto de estado APARTE del de la fila: sin esto seguía enseñando
+      // «Sin preasignar» hasta cerrar el modal y recargar la bandeja, y el operador no sabía si la
+      // asignación había cuajado.
+      setDetailProcedure((prev) => (prev && prev.id === assignTarget.id ? conPlaca(prev) : prev));
       setAssignTarget(null);
       setPlateInput("");
       show("Placa asignada al trámite.", "success");
@@ -767,9 +776,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     try {
       await revokeProcedurePlate(revokeTarget.id, revokePlateReason.trim());
       // HU #10785 — el status global permanece 'entregado'; el sub-estado vuelve a 'preasignado'.
-      setRows((prev) =>
-        prev.map((r) => (r.id === revokeTarget.id ? { ...r, plateFlowStatus: "preasignado" } : r)),
-      );
+      //
+      // Aquí NO se limpia `placa`: revocar libera la placa en el inventario y devuelve el sub-estado,
+      // pero deja el field_value 'plate' escrito, así que el trámite sigue trayendo la placa en la
+      // siguiente lectura. Ponerla a null la borraría de la pantalla y la haría reaparecer al
+      // refrescar — la UI no debe fingir un borrado que el servidor no hace. Esa asimetría del
+      // backend está pendiente de definición por el equipo.
+      const revocado = (r: OtClientProcedure): OtClientProcedure => ({
+        ...r,
+        plateFlowStatus: "preasignado",
+      });
+      setRows((prev) => prev.map((r) => (r.id === revokeTarget.id ? revocado(r) : r)));
+      setDetailProcedure((prev) => (prev && prev.id === revokeTarget.id ? revocado(prev) : prev));
       setRevokeTarget(null);
       setRevokePlateReason("");
       show("Preasignación revocada.", "success");

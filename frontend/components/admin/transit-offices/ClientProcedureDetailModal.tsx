@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
@@ -106,8 +106,16 @@ export function ClientProcedureDetailModal({
     documentos: false,
   });
 
+  /**
+   * Trámite cuyo estado inicial ya se sembró. Distingue «abrir otro trámite» de «el mismo trámite
+   * cambió»: al asignarle placa desde el pie, la bandeja rehace el objeto y este efecto se repite;
+   * recolocar entonces los acordeones cerraría lo que el operador tenía abierto.
+   */
+  const sembradoRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!open || !procedure) {
+      sembradoRef.current = null;
       return;
     }
 
@@ -116,16 +124,20 @@ export function ClientProcedureDetailModal({
     // El setState va dentro de la función async, no en el cuerpo síncrono del efecto:
     // react-hooks/set-state-in-effect tumba el lint en cuanto se hace al revés.
     const load = async () => {
+      // La fila manda mientras llega la red: si acaba de asignarse la placa, esa es la buena.
       setDetail(procedure);
-      // Se despliega el acordeón por el que se entró y solo ese: los otros dos se abren a mano.
-      setAbiertos({
-        vehiculo: initialSection === "vehiculo",
-        actores: initialSection === "actores",
-        documentos: initialSection === "documentos",
-      });
+      if (sembradoRef.current !== procedure.id) {
+        sembradoRef.current = procedure.id;
+        // Se despliega el acordeón por el que se entró y solo ese: los otros dos se abren a mano.
+        setAbiertos({
+          vehiculo: initialSection === "vehiculo",
+          actores: initialSection === "actores",
+          documentos: initialSection === "documentos",
+        });
+        setDocs([]);
+      }
       setDetailLoading(true);
       setDetailError(null);
-      setDocs([]);
 
       const [full, expediente] = await Promise.allSettled([
         fetchOtClientProcedure(procedure.id, controller.signal, scope),
