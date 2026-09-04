@@ -60,20 +60,13 @@ internal static class TraspasoConsolidadoOrdering
     };
 
     internal static IReadOnlyList<ProcedureInstanceAttachment> SelectOrdered(
-        IEnumerable<ProcedureInstanceAttachment> attachments)
-    {
-        var rank = Precedence
-            .Select((tipo, index) => (tipo, index))
-            .ToDictionary(x => x.tipo, x => x.index, StringComparer.OrdinalIgnoreCase);
-
-        return attachments
-            .Where(a => !Excluded.Contains(a.Tipo))
-            .Where(a => !a.Tipo.StartsWith("biometric_", StringComparison.OrdinalIgnoreCase))
-            .Where(a => IsMergeableMime(a.Mimetype))
-            .OrderBy(a => rank.TryGetValue(a.Tipo, out var r) ? r : Precedence.Length + 1)
-            .ThenBy(a => a.UploadedAt)
-            .ToList();
-    }
+        IEnumerable<ProcedureInstanceAttachment> attachments) =>
+        ConsolidadoAttachmentRank.OrderByPrecedence(
+            attachments,
+            Precedence,
+            a => !Excluded.Contains(a.Tipo)
+                 && !a.Tipo.StartsWith("biometric_", StringComparison.OrdinalIgnoreCase)
+                 && IsMergeableMime(a.Mimetype));
 
     private static bool IsMergeableMime(string? mimetype) =>
         string.Equals(mimetype, "application/pdf", StringComparison.OrdinalIgnoreCase)

@@ -17,13 +17,14 @@ Fuente: pedidos de producto 2026-09-02 (FUR overlay, luego compraventa, luego ma
 | Compraventa | QuestPDF | Casillas NIT/C.C./C.E./T.I/P.A. históricas | Lista `NOMBRE TIPO NÚMERO` separada por comas; firmas compactas en una fila; **una página** |
 | Mandato | QuestPDF | Mandante + mandatario lado a lado | Otorgantes concatenados (coma + tipo + documento) en comparecencia/`{{mandante_*}}`; firmas de todos los mandantes en fila compacta; mandatario único; **una página** |
 | Solicitud de trámite virtual | QuestPDF | Un otorgante | Misma concatenación y fila de firmas; **una página** |
+| Certificado de identidad (Kyverum) | Descarga en `FurCommand` → adjunto en consolidado | `certificado_identidad` (+ `_vendedor` en traspaso) | **Uno por actor** con ordinal: base histórica + `_{ordinal}` (`certificado_identidad_2`, `certificado_identidad_vendedor_2`, …). Solo si ese actor tiene validación Kyverum aprobada con id. |
 | Preview SuperAdmin (FUR) | `FurPreviewSample` + `FurSimulatorPanel` | 1/1 | Selectores de cantidad de compradores/vendedores (2–4) |
 
 Otorgantes del mandato y de la solicitud virtual: **vendedores en traspaso**, **compradores en matrícula** (misma regla que `FurDocumentData.Otorgante`).
 
 ## Fuera de alcance (sigue `ordinal=1`)
 
-Consolidado del expediente, impronta, certificado RUES, escrituras. No se tocó el wizard ni `FirmaCommand`.
+Impronta, certificado RUES, escrituras. No se tocó el wizard ni `FirmaCommand`.
 
 ## Dónde vive el código
 
@@ -33,6 +34,7 @@ Consolidado del expediente, impronta, certificado RUES, escrituras. No se tocó 
 | Overlay FUR | `FurFieldMapper`, `FurOverlayRenderer`, `FurSignatureLayout`, `FurCheckboxLayout`, manifiestos |
 | Observaciones FUR (porcentajes) | `FurCopropiedadObservation` — ver también [REGLAS-NUMERAL-3-TRES-CAPAS.md](../ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md) |
 | QuestPDF | `FurCompraventaDocumentGenerator`, `MandatoPdfGenerator`, `SolicitudVirtualPdfGenerator`, `FlitFirmaBlock` (`compact`) |
+| Certificados identidad N | `IdentityCertificateAttachmentTipo`, `FurCommand` (`TryDownloadIdentityCertificateAsync`), `ConsolidadoAttachmentRank` |
 | Preview | `FurPreviewSample`, `PreviewFurCommand`, `FurSimulatorPanel` |
 
 ## Reglas de producto (no normativas RNA)

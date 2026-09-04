@@ -1260,6 +1260,41 @@ public sealed class FurHandlerTests
     }
 
     [Fact]
+    public async Task Generar_Traspaso_MultiplePropietarios_DescargaCertificadoPorCadaActor()
+    {
+        // ADR-0053 / certificados N: 2 compradores + 2 vendedores con Kyverum → 4 adjuntos distintos
+        // (base histórica + sufijo _2) para que el consolidado no los colapse por Tipo.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "COMPRADOR UNO", "111", ordinal: 1));
+        instance.Actors.Add(ActorNatural(instance, "comprador", "COMPRADOR DOS", "222", ordinal: 2));
+        instance.Actors.Add(ActorNatural(instance, "vendedor", "VENDEDOR UNO", "333", ordinal: 1));
+        instance.Actors.Add(ActorNatural(instance, "vendedor", "VENDEDOR DOS", "444", ordinal: 2));
+        instance.BiometricValidations.Add(BioForDocumento("comprador", "111", "kyv-c1"));
+        instance.BiometricValidations.Add(BioForDocumento("comprador", "222", "kyv-c2"));
+        instance.BiometricValidations.Add(BioForDocumento("vendedor", "333", "kyv-v1"));
+        instance.BiometricValidations.Add(BioForDocumento("vendedor", "444", "kyv-v2"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Select(d => d.Tipo).Should().BeEquivalentTo(
+        [
+            "fur",
+            "certificado_identidad",
+            "certificado_identidad_2",
+            "certificado_identidad_vendedor",
+            "certificado_identidad_vendedor_2",
+            "compraventa",
+        ]);
+        _certClient.RequestedIds.Should().BeEquivalentTo(["kyv-c1", "kyv-c2", "kyv-v1", "kyv-v2"]);
+    }
+
+    [Fact]
     public async Task Generar_Matricula_CompradorAprobada_GeneratesOnlyFur()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -1411,7 +1446,8 @@ public sealed class FurHandlerTests
 
     // ── HU #10762 · Certificado RNMC ──────────────────────────────────────
 
-    private static ProcedureInstanceActor ActorNatural(ProcedureInstance instance, string rol, string nombre, string doc) =>
+    private static ProcedureInstanceActor ActorNatural(
+        ProcedureInstance instance, string rol, string nombre, string doc, int ordinal = 1) =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -1422,6 +1458,25 @@ public sealed class FurHandlerTests
             DocumentType = "CC",
             DocumentNumber = doc,
             FullName = nombre,
+            Ordinal = ordinal,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static ProcedureInstanceBiometricValidation BioForDocumento(
+        string parte, string documento, string kyverumId) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            PartyRole = parte,
+            Status = BiometricEstados.Aprobado,
+            Provider = BiometricProviders.Kyverum,
+            KyverumVerificationId = kyverumId,
+            Name = "X",
+            DocumentType = "CC",
+            DocumentNumber = documento,
+            Email = "x@y.com",
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
