@@ -59,24 +59,19 @@ internal static class GenericConsolidadoOrdering
 
     /// <summary>
     /// Orden por una prelación explícita (p. ej. la matriz documental configurada, RF26).
-    /// Los tipos no listados van al final, por fecha de carga.
+    /// Los tipos no listados van al final, por fecha de carga. Los certificados de identidad con
+    /// sufijo de ordinal (múltiple propietario) heredan el rank de su familia base.
     /// </summary>
     internal static IReadOnlyList<ProcedureInstanceAttachment> SelectByPrecedence(
         IEnumerable<ProcedureInstanceAttachment> attachments,
-        IReadOnlyList<string> precedence)
-    {
-        var rank = precedence
-            .Select((tipo, index) => (tipo, index))
-            .ToDictionary(x => x.tipo, x => x.index, StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<string> precedence) =>
+        ConsolidadoAttachmentRank.OrderByPrecedence(
+            attachments,
+            precedence,
+            a => !Excluded.Contains(a.Tipo)
+                 && !a.Tipo.StartsWith("biometric_", StringComparison.OrdinalIgnoreCase)
+                 && IsMergeableMime(a.Mimetype));
 
-        return attachments
-            .Where(a => !Excluded.Contains(a.Tipo))
-            .Where(a => !a.Tipo.StartsWith("biometric_", StringComparison.OrdinalIgnoreCase))
-            .Where(a => IsMergeableMime(a.Mimetype))
-            .OrderBy(a => rank.TryGetValue(a.Tipo, out var r) ? r : precedence.Count + 1)
-            .ThenBy(a => a.UploadedAt)
-            .ToList();
-    }
 
     private static bool IsMergeableMime(string? mimetype) =>
         string.Equals(mimetype, "application/pdf", StringComparison.OrdinalIgnoreCase)

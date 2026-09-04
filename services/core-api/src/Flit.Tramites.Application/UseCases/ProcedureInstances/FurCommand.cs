@@ -299,11 +299,11 @@ public sealed class GenerarFurHandler(
         // después y esta generación salía siempre con sello de texto (el PNG quedaba para la siguiente).
         if (identidadValidada && identitySignatureCapture is not null)
         {
-            foreach (var role in signatureRoles)
+            foreach (var slot in SignatureSlots(instance, signatureRoles))
             {
-                if (!sellosIdentidad.ContainsKey(role))
+                if (!sellosIdentidad.ContainsKey(slot.Key))
                     continue;
-                await TryCaptureIdentitySignatureAsync(instance, role, ct);
+                await TryCaptureIdentitySignatureAsync(instance, slot.Role, slot.Actor, ct);
             }
         }
 
@@ -368,26 +368,57 @@ public sealed class GenerarFurHandler(
 
         if (identidadValidada)
         {
-            // Certificado de identidad: PDF REAL de Kyverum (best-effort) POR PARTE. Traspaso emite el del
-            // comprador y el del vendedor; matrícula solo el del comprador (mismo patrón que los sellos).
-            // Si falla la descarga de una parte, warning + omitir esa parte (sin mock).
-            // ADR-0051 — mismo conjunto que los sellos de identidad (comentario original: "mismo patrón
-            // que los sellos"): a quien el tipo manda a firmar se le descarga el certificado real.
-            var rolesCert = signatureRoles;
-            foreach (var role in rolesCert)
+            // Certificado de identidad: PDF REAL de Kyverum (best-effort) POR ACTOR (ADR-0053).
+            // Traspaso: cada comprador y cada vendedor; matrícula: cada comprador. Un solo actor por
+            // lado conserva los tipos históricos (certificado_identidad / _vendedor). Si falla la
+            // descarga de un actor, warning + omitir ese actor (sin mock).
+            // ADR-0051 — mismo conjunto de roles que los sellos de identidad.
+            // Retira TODOS los certificados previos del sistema antes de reemitir: si el reparto baja
+            // de 3 a 1, los sufijos _2/_3 no deben quedar huérfanos en el expediente/consolidado.
+            foreach (var prev in instance.Attachments
+                         .Where(a => IdentityCertificateAttachmentTipo.IsIdentityCertificate(a.Tipo)
+                                     && (string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+                                         || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase)))
+                         .ToList())
             {
-                var certificado = await TryDownloadIdentityCertificateAsync(instance, role, ct);
-                if (certificado is not null)
-                    generated.Add(certificado);
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
+
+            foreach (var role in signatureRoles)
+            {
+                var actors = instance.Actors
+                    .Where(a => string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(a => a.Ordinal)
+                    .ToList();
+
+                if (actors.Count == 0)
+                {
+                    // Legacy / sin actores cargados: un certificado por rol (ordinal 1).
+                    var unico = await TryDownloadIdentityCertificateAsync(instance, role, ordinal: 1, actor: null, ct);
+                    if (unico is not null)
+                        generated.Add(unico);
+                    continue;
+                }
+
+                foreach (var actor in actors)
+                {
+                    var ordinal = actor.Ordinal > 0 ? actor.Ordinal : 1;
+                    var certificado = await TryDownloadIdentityCertificateAsync(
+                        instance, role, ordinal, actor, ct);
+                    if (certificado is not null)
+                        generated.Add(certificado);
+                }
             }
         }
         else
         {
             // Sin validación de identidad, retirar cualquier certificado previo (regeneración): el
             // consolidado no debe incluir un certificado de identidad obsoleto (#10463 AC5). StartsWith
-            // cubre ambas variantes por parte (certificado_identidad y certificado_identidad_vendedor).
+            // cubre base + sufijos de ordinal (certificado_identidad, _vendedor, _2, _vendedor_2, …).
             foreach (var prev in instance.Attachments
-                         .Where(a => a.Tipo.StartsWith("certificado_identidad", StringComparison.OrdinalIgnoreCase))
+                         .Where(a => IdentityCertificateAttachmentTipo.IsIdentityCertificate(a.Tipo))
                          .ToList())
             {
                 storage.Delete(prev.StoragePath);
@@ -1629,16 +1660,19 @@ public sealed class GenerarFurHandler(
     };
 
     /// <summary>
-    /// Extrae y persiste la rúbrica del certificado Kyverum de una parte antes de pintar el FUR.
+    /// Extrae y persiste la rúbrica del certificado Kyverum de un actor antes de pintar el FUR.
     /// Best-effort: no bloquea la generación.
     /// </summary>
     private async Task TryCaptureIdentitySignatureAsync(
-        ProcedureInstance instance, string role, CancellationToken ct)
+        ProcedureInstance instance,
+        string role,
+        ProcedureInstanceActor? actor,
+        CancellationToken ct)
     {
         if (identitySignatureCapture is null)
             return;
 
-        var bio = await ResolveKyverumBioForRoleAsync(instance, role, ct);
+        var bio = await ResolveKyverumBioForActorAsync(instance, role, actor, ct);
         if (bio is null)
             return;
 
@@ -1655,44 +1689,77 @@ public sealed class GenerarFurHandler(
         }
     }
 
-    private async Task<ProcedureInstanceBiometricValidation?> ResolveKyverumBioForRoleAsync(
-        ProcedureInstance instance, string role, CancellationToken ct)
+    private static bool EsKyverumConId(ProcedureInstanceBiometricValidation v) =>
+        v.Status == BiometricEstados.Aprobado
+        && string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(v.KyverumVerificationId);
+
+    /// <summary>
+    /// Validación Kyverum del actor concreto (documento del sujeto). Sin actor, cae al primer bio
+    /// aprobado del rol (comportamiento legacy de un certificado por parte).
+    /// </summary>
+    private async Task<ProcedureInstanceBiometricValidation?> ResolveKyverumBioForActorAsync(
+        ProcedureInstance instance,
+        string role,
+        ProcedureInstanceActor? actor,
+        CancellationToken ct)
     {
-        static bool EsKyverumConId(ProcedureInstanceBiometricValidation v) =>
-            v.Status == BiometricEstados.Aprobado
-            && string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(v.KyverumVerificationId);
-
-        var bio = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
-
-        if (bio is not null)
-            return bio;
-
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
         var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
-        if (subject is null
-            || string.IsNullOrWhiteSpace(subject.TipoDocumento)
-            || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+        if (subject is not null
+            && !string.IsNullOrWhiteSpace(subject.TipoDocumento)
+            && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+        {
+            var doc = subject.NumeroDocumento.Trim();
+            var bio = instance.BiometricValidations.FirstOrDefault(v =>
+                string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
+                && EsKyverumConId(v)
+                && string.Equals(v.DocumentNumber?.Trim(), doc, StringComparison.OrdinalIgnoreCase));
+
+            if (bio is not null)
+                return bio;
+
+            var source = await repo.FindVigenteApprovedByDocumentAsync(
+                instance.TenantId, subject.TipoDocumento.Trim(), doc, DateTimeOffset.UtcNow, ct);
+            return source is not null && EsKyverumConId(source) ? source : null;
+        }
+
+        // Sin actor (o sin documento usable): primer bio del rol, como antes.
+        var porRol = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
+        if (porRol is not null)
+            return porRol;
+
+        var actorRol = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        var subjectRol = actorRol is null ? null : IdentitySubjectResolver.For(actorRol);
+        if (subjectRol is null
+            || string.IsNullOrWhiteSpace(subjectRol.TipoDocumento)
+            || string.IsNullOrWhiteSpace(subjectRol.NumeroDocumento))
             return null;
 
-        var source = await repo.FindVigenteApprovedByDocumentAsync(
-            instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), DateTimeOffset.UtcNow, ct);
-        return source is not null && EsKyverumConId(source) ? source : null;
+        var vigente = await repo.FindVigenteApprovedByDocumentAsync(
+            instance.TenantId,
+            subjectRol.TipoDocumento.Trim(),
+            subjectRol.NumeroDocumento.Trim(),
+            DateTimeOffset.UtcNow,
+            ct);
+        return vigente is not null && EsKyverumConId(vigente) ? vigente : null;
     }
 
     /// <summary>
-    /// (<paramref name="role"/> = comprador | vendedor) desde Kyverum. El adjunto del comprador conserva
-    /// el tipo <c>certificado_identidad</c> (retrocompatible); el del vendedor usa
-    /// <c>certificado_identidad_vendedor</c>, de modo que ambos coexistan en el expediente.
+    /// Descarga el certificado Kyverum de un actor. Tipo de adjunto vía
+    /// <see cref="IdentityCertificateAttachmentTipo"/> (base histórica + sufijo de ordinal).
     /// Devuelve null (sin bloquear el FUR) si no hay validación Kyverum con id, si Kyverum no tiene
     /// certificado, o si la descarga falla — en los dos últimos casos registra un warning.
     /// </summary>
     private async Task<GeneratedDocument?> TryDownloadIdentityCertificateAsync(
-        ProcedureInstance instance, string role, CancellationToken ct)
+        ProcedureInstance instance,
+        string role,
+        int ordinal,
+        ProcedureInstanceActor? actor,
+        CancellationToken ct)
     {
-        var bio = await ResolveKyverumBioForRoleAsync(instance, role, ct);
+        var bio = await ResolveKyverumBioForActorAsync(instance, role, actor, ct);
         if (bio is null)
             return null; // provider mock o sin id de Kyverum: no hay certificado externo que descargar.
 
@@ -1708,10 +1775,7 @@ public sealed class GenerarFurHandler(
             if (identitySignatureCapture is not null)
                 await identitySignatureCapture.EnsureFromPdfAsync(bio, cert.Content, ct).ConfigureAwait(false);
 
-            // Comprador: certificado_identidad (retrocompatible). Otras partes: sufijo de rol.
-            var tipo = string.Equals(role, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase)
-                ? "certificado_identidad"
-                : $"certificado_identidad_{role}";
+            var tipo = IdentityCertificateAttachmentTipo.For(role, ordinal);
             var safeRef = instance.ReferenceNumber.Replace('/', '-');
             return new GeneratedDocument(
                 tipo, $"{tipo}_{safeRef}.pdf", cert.ContentType, cert.Content);

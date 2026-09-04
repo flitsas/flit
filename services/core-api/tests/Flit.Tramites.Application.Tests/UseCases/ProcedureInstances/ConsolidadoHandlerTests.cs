@@ -523,6 +523,38 @@ public sealed class ConsolidadoHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_Traspaso_IncluyeCertificadosDeCopropietariosEnOrden()
+    {
+        // Múltiple propietario: sufijos _2 heredan el rank de la familia y van tras el ordinal 1.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        AddAttachment(instance, "certificado_identidad_2", "cert_c2.pdf", "%PDF-cert-c2");
+        AddAttachment(instance, "certificado_identidad_vendedor_2", "cert_v2.pdf", "%PDF-cert-v2");
+
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        var idxC1 = content.IndexOf("cert.pdf", StringComparison.Ordinal);
+        var idxC2 = content.IndexOf("cert_c2.pdf", StringComparison.Ordinal);
+        var idxV1 = content.IndexOf("cert_vend.pdf", StringComparison.Ordinal);
+        var idxV2 = content.IndexOf("cert_v2.pdf", StringComparison.Ordinal);
+        var idxCompraventa = content.IndexOf("compraventa.pdf", StringComparison.Ordinal);
+
+        idxC1.Should().BeLessThan(idxC2);
+        idxC2.Should().BeLessThan(idxV1);
+        idxV1.Should().BeLessThan(idxV2);
+        idxV2.Should().BeLessThan(idxCompraventa);
+    }
+
+    [Fact]
     public async Task HandleAsync_SinFur_ReturnsFurRequerido()
     {
         var id = Guid.NewGuid();
