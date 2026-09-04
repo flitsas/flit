@@ -20,6 +20,8 @@ namespace Flit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // El script 34 no debe traer BEGIN/COMMIT: choca con la transacción de EF
+            // ("Transaction is already completed" en Apply migrations del CI).
             migrationBuilder.Sql(EmbeddedDdl.LoadUp("34-transit-offices-city-department-names.sql"));
         }
 

@@ -5,9 +5,9 @@
 -- Cobertura flit_dev: 298/298 (city/dept); 270 con address; 0 sin match
 -- Idempotente: ADD COLUMN IF NOT EXISTS + UPDATE por code
 -- address ya existia (varchar 500); se backfill desde traffic_secretaries.address
+-- Sin BEGIN/COMMIT: EF Core envuelve la migracion en su propia transaccion
+-- (BEGIN/COMMIT internos provocan "Transaction is already completed" en CI).
 -- =============================================================================
-
-BEGIN;
 
 ALTER TABLE catalogs.transit_offices
   ADD COLUMN IF NOT EXISTS city_name varchar(100) NULL;
@@ -332,5 +332,3 @@ FROM (VALUES
   ('99001000', 'PUERTO CARREÑO - VICHADA', 'VICHADA', 'CALLE 18 NO. 7-48')
 ) AS v(code, city_name, department_name, address)
 WHERE t.code = v.code;
-
-COMMIT;
