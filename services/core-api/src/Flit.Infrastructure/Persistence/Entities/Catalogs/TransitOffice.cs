@@ -13,6 +13,12 @@ public sealed class TransitOffice
 
     public string CityCode { get; set; } = string.Empty;
 
+    /// <summary>Nombre legible del municipio (<c>city_name</c>). Fuente catálogo FLIT 1.0 / DDL 34.</summary>
+    public string? CityName { get; set; }
+
+    /// <summary>Nombre legible del departamento (<c>department_name</c>). Fuente catálogo FLIT 1.0 / DDL 34.</summary>
+    public string? DepartmentName { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     /// <summary>

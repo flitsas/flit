@@ -1,7 +1,7 @@
 namespace Flit.Tramites.Domain.Integration;
 
 /// <summary>OT del catálogo FLIT resuelto para vincular al trámite (id + code + name + city).</summary>
-public sealed record ResolvedTransitOffice(Guid Id, string Code, string Name, string? CityCode);
+public sealed record ResolvedTransitOffice(Guid Id, string Code, string Name, string? CityCode, string? CityName = null);
 
 /// <summary>
 /// Puerto para resolver un organismo de tránsito HABILITADO de la empresa a partir del nombre que

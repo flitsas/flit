@@ -348,7 +348,7 @@ public sealed class GenerarFurHandler(
             data,
             Get(fv, TransitOfficeFieldKeys.Code),
             Get(fv, TransitOfficeFieldKeys.Name),
-            Get(fv, TransitOfficeFieldKeys.City),
+            Get(fv, TransitOfficeFieldKeys.CityName) ?? Get(fv, TransitOfficeFieldKeys.City),
             TransformacionesActivas(fv, data),
             ct);
         if (mandato is not null)
@@ -824,7 +824,8 @@ public sealed class GenerarFurHandler(
             Codigo: Get(fv, TransitOfficeFieldKeys.ActualCode) ?? Get(fv, TransitOfficeFieldKeys.Code),
             Nombre: organismoNombre,
             Ciudad: TransitOfficeCity.ForDocuments(
-                Get(fv, TransitOfficeFieldKeys.ActualCity) ?? Get(fv, TransitOfficeFieldKeys.City),
+                Get(fv, TransitOfficeFieldKeys.ActualCityName) ?? Get(fv, TransitOfficeFieldKeys.CityName)
+                    ?? Get(fv, TransitOfficeFieldKeys.ActualCity) ?? Get(fv, TransitOfficeFieldKeys.City),
                 organismoNombre));
 
         // ADR-0050 — en la familia OTROS solo entra la transformación que ES el trámite. Las banderas
@@ -1965,16 +1966,17 @@ public sealed class GenerarFurHandler(
         }
 
         Rellenar("transit_office_id", office.Id.ToString());
-        Rellenar("transit_office_code", office.Code);
-        Rellenar("transit_office_name", office.Name);
-        Rellenar("transit_office_city", office.CityCode);
+        Rellenar(TransitOfficeFieldKeys.Code, office.Code);
+        Rellenar(TransitOfficeFieldKeys.Name, office.Name);
+        Rellenar(TransitOfficeFieldKeys.City, office.CityCode);
+        Rellenar(TransitOfficeFieldKeys.CityName, office.CityName);
 
         // Solo se traza si de verdad se rellenó algo: un OT resuelto sin Name/CityCode y con el resto
         // de claves ya presentes no es un relleno, y el log dejaba de distinguir un caso del otro.
         if (rellenadas > 0)
             GenerarFurLog.OrganismoRellenadoDesdeInstancia(logger, instance.Id, office.Id);
 
-        return !string.IsNullOrWhiteSpace(Get(fv, "transit_office_code"));
+        return !string.IsNullOrWhiteSpace(Get(fv, TransitOfficeFieldKeys.Code));
     }
 
     private sealed record ActorMetadataDto(string? Ciudad, string? Direccion, ActorMetadataRl? RepresentanteLegal);

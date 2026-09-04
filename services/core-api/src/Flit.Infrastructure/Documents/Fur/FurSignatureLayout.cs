@@ -1,6 +1,31 @@
 namespace Flit.Infrastructure.Documents.Fur;
 
 /// <summary>
+/// Perfil de geometría cuando hay exactamente 4 copropietarios en <c>vehicle_owner_signature</c>.
+/// Usa el gutter izquierdo del rótulo «FIRMA DEL PROPIETARIO» y alinea rúbrica + estampa en la misma banda.
+/// </summary>
+public static class FourActorSignatureLayout
+{
+    /// <summary>Desplaza el origen X hacia la izquierda para usar el gutter del rótulo.</summary>
+    public const double ExpandLeft = 50;
+
+    /// <summary>Baja la estampa respecto al campo base.</summary>
+    public const double DropY = 3;
+
+    /// <summary>Fracción del ancho de columna reservada a la rúbrica (más espacio para el sidecar).</summary>
+    public const double ImageFraction = 0.28;
+
+    /// <summary>Aire entre rúbrica y estampa digital en columnas de 4 actores.</summary>
+    public const double SidecarGap = 2;
+
+    /// <summary>Fuente del sidecar: menor que el default para reducir truncado en columnas estrechas.</summary>
+    public const double SidecarFontSize = 2.45;
+
+    /// <summary>Sin lift vertical: la rúbrica y el sidecar comparten la misma banda horizontal.</summary>
+    public const double ImageLift = 0;
+}
+
+/// <summary>
 /// Geometría de la imagen de firma dentro de su campo del FUR (HU #11016). Pura y sin dependencia de
 /// PdfSharpCore para poder testearla: el renderer solo aporta el tamaño en píxeles de la imagen.
 /// </summary>
@@ -41,11 +66,14 @@ public static class FurSignatureLayout
         double fieldW,
         double fieldH,
         double drawW,
-        double drawH)
+        double drawH,
+        bool fourActorLayout = false)
     {
-        var imageY = fieldY + Math.Max(0, (fieldH - drawH) / 2) - ImageLift;
-        var sidecarX = fieldX + drawW + SidecarGap;
-        var sidecarW = Math.Max(0, fieldW - drawW - SidecarGap);
+        var imageLift = fourActorLayout ? FourActorSignatureLayout.ImageLift : ImageLift;
+        var sidecarGap = fourActorLayout ? FourActorSignatureLayout.SidecarGap : SidecarGap;
+        var imageY = fieldY + Math.Max(0, (fieldH - drawH) / 2) - imageLift;
+        var sidecarX = fieldX + drawW + sidecarGap;
+        var sidecarW = Math.Max(0, fieldW - drawW - sidecarGap);
         return (imageY, sidecarX, sidecarW);
     }
 
@@ -53,9 +81,11 @@ public static class FurSignatureLayout
     /// Fracción del ancho del campo reservada a la rúbrica. En columnas estrechas (copropiedad)
     /// se deja más de la mitad para la estampa digital a la derecha.
     /// </summary>
-    public static double ImageWidthCap(double fieldW, double maxImageW)
+    public static double ImageWidthCap(double fieldW, double maxImageW, bool fourActorLayout = false)
     {
-        var fraction = fieldW < 140 ? 0.38 : 0.50;
+        var fraction = fourActorLayout
+            ? FourActorSignatureLayout.ImageFraction
+            : fieldW < 140 ? 0.38 : 0.50;
         return Math.Min(maxImageW, fieldW * fraction);
     }
 
@@ -63,10 +93,18 @@ public static class FurSignatureLayout
     public static (double X, double W)[] Columns(double fieldX, double fieldW, int count)
     {
         var n = Math.Clamp(count, 1, 4);
-        var w = fieldW / n;
+        var originX = fieldX;
+        var totalW = fieldW;
+        if (n == 4)
+        {
+            originX = fieldX - FourActorSignatureLayout.ExpandLeft;
+            totalW = fieldW + FourActorSignatureLayout.ExpandLeft;
+        }
+
+        var w = totalW / n;
         var cols = new (double X, double W)[n];
         for (var i = 0; i < n; i++)
-            cols[i] = (fieldX + i * w, w);
+            cols[i] = (originX + i * w, w);
         return cols;
     }
 }

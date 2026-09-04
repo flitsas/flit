@@ -2,14 +2,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// Ciudad del organismo de tránsito para los documentos (HU #11016). El field_value
-/// <c>transit_office_city</c> NO guarda el nombre del municipio sino su CÓDIGO DIVIPOLA (p. ej.
-/// «25286»), porque así lo hidrata el preflight desde el catálogo de OT. Al imprimirlo, la solicitud
-/// de trámite virtual salía como «25286, 28 de julio de 2026» y el código parecía pegado a la fecha.
-/// <para>No hay catálogo código→nombre en el sistema, así que un valor puramente numérico se descarta
-/// (los documentos no deben mostrar el código) y un nombre real se sigue mostrando tal cual.</para>
-/// <para>Para el encabezado del FUR (y otros docs que piden ciudad legible), si solo hay código se
-/// intenta recuperar el municipio desde el nombre del OT («… de Medellín», «Cali — …»). Es un puente
-/// hasta que exista <c>CityName</c> / catálogo DIVIPOLA; no inventa ciudad si el nombre no la trae.</para>
+/// <c>transit_office_city</c> guarda el CÓDIGO DIVIPOLA del municipio (p. ej. «25286»), no su nombre.
+/// <para>El camino preferido para imprimir la ciudad legible es
+/// <c>transit_office_city_name</c> / <c>transit_office_actual_city_name</c>, hidratados desde
+/// <c>catalogs.transit_offices.city_name</c>. Si solo hay código DIVIPOLA, <see cref="Legible"/> lo
+/// descarta y <see cref="ForDocuments"/> intenta inferir el municipio desde el nombre del OT.</para>
 /// </summary>
 public static class TransitOfficeCity
 {
