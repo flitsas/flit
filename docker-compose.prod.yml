@@ -117,6 +117,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
+      # Kestrel limita el cuerpo a 30 MB por defecto, y AnalyzeBatchHandler dice admitir
+      # 100 MB por lote y 32 MB por archivo — topes que hoy son inalcanzables: un
+      # multipart de 35 MB muere en 413 aqui. Tiene que ir tambien en el gateway, que
+      # aplica su propio limite al reenviar.
+      Kestrel__Limits__MaxRequestBodySize: "134217728"
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       Cors__AllowedOrigins: ${CORS_ORIGIN:-https://dev.flitsas.online}
       # File Manager: DONDE LEE V2 los binarios de los adjuntos. Sin esta variable
@@ -433,6 +438,15 @@ services:
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
+      # Mismo destino que core-api-cluster: es un cluster aparte solo para darle al cargue
+      # masivo de OCR un ActivityTimeout de 10 min sin tocar el resto del trafico. SI hay
+      # que sobrescribirlo (a diferencia de migracion-cluster) porque core-api escucha en
+      # un puerto distinto por ambiente. Sin esta linea el OCR iria al 4003 de
+      # appsettings.json y en QA/PDN no responde nadie ahi.
+      ReverseProxy__Clusters__core-api-ocr-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
+      # Kestrel limita el cuerpo a 30 MB por defecto y un lote de OCR admite 100 MB, asi
+      # que sin esto el 413 lo daria el gateway aunque nginx ya deje pasar 120m.
+      Kestrel__Limits__MaxRequestBodySize: "134217728"
       # migracion-cluster NO se sobrescribe: migracion-api escucha en el 4030 fijo en
       # los tres ambientes (no publica puerto en el host, no hay nada con que chocar),
       # asi que vale el destino que ya trae appsettings.json.
