@@ -38,10 +38,23 @@ public static class DocumentLabels
     {
         if (string.IsNullOrWhiteSpace(tipo))
             return "Documento";
-        if (Curated.TryGetValue(tipo.Trim(), out var label))
+
+        var key = tipo.Trim();
+        if (Curated.TryGetValue(key, out var label))
             return label;
 
-        var text = tipo.Trim().Replace('_', ' ');
+        // Múltiple propietario: certificado_identidad_2 / certificado_identidad_vendedor_3.
+        if (IdentityCertificateAttachmentTipo.IsIdentityCertificate(key))
+        {
+            var family = IdentityCertificateAttachmentTipo.RankKey(key);
+            var ordinal = IdentityCertificateAttachmentTipo.OrdinalFromTipo(key);
+            var baseLabel = Curated.TryGetValue(family, out var curated)
+                ? curated
+                : "Certificado de validación de identidad";
+            return ordinal <= 1 ? baseLabel : $"{baseLabel} ({ordinal})";
+        }
+
+        var text = key.Replace('_', ' ');
         return char.ToUpperInvariant(text[0]) + text[1..];
     }
 
