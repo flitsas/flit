@@ -373,7 +373,7 @@ export function VehicleTransformationsCard({
 
       {/* Checks independientes: cada transformación se activa o se apaga sin el selector de agregar. */}
       {!soloSubtramite && (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-3">
           {subtramites.map((s) => (
             <div key={s.key} className="space-y-3">
               <WizardFieldToggle
@@ -482,7 +482,7 @@ function SubtramiteDocCard({
   return (
     <div
       className={cn(
-        'relative flex h-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744]',
+        'relative flex flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744]',
         done ? 'border' : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]',
       )}
       style={{ borderColor: '#E2E8F0' }}
