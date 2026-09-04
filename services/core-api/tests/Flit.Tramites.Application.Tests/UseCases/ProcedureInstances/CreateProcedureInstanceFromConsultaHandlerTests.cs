@@ -51,7 +51,7 @@ public sealed class CreateProcedureInstanceFromConsultaHandlerTests
     {
         _transitOfficeResolver
             .ResolveEnabledByIdAsync(tenantId, transitOfficeId, Arg.Any<CancellationToken>())
-            .Returns(new ResolvedTransitOffice(transitOfficeId, "25286000", "OT PRUEBA", "FUNZA"));
+            .Returns(new ResolvedTransitOffice(transitOfficeId, "25286000", "OT PRUEBA", "25286", "FUNZA"));
         _repo.FindTramitesByVinAsync(tenantId, Arg.Any<string>(), Guid.Empty, Arg.Any<CancellationToken>())
             .Returns([]);
     }

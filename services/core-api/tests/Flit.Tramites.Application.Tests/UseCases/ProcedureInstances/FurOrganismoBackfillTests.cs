@@ -192,6 +192,58 @@ public sealed class FurOrganismoBackfillTests
     }
 
     [Fact]
+    public async Task ConCityNameLegibleYDivipolaEnFieldValues_CiudadDelFurEsElNombre()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "transit_office_code",
+            ValueText = "25286000",
+            Source = "user",
+        });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "transit_office_name",
+            ValueText = "STRIA TTEyTTO MCPAL FUNZA",
+            Source = "user",
+        });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "transit_office_city",
+            ValueText = "25286",
+            Source = "consultation",
+        });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "transit_office_city_name",
+            ValueText = "FUNZA",
+            Source = "consultation",
+        });
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (_, error) = await Handler(new ResolverFake(null)).HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        _generador.Ultima!.Organismo.Ciudad.Should().Be("FUNZA");
+        NoSeEscribioNingunFieldValue(instance, filasIniciales: 4);
+    }
+
+    [Fact]
     public async Task ConClaveDuplicadaEnFieldValues_LaGeneracionNoRevienta()
     {
         // No hay índice único sobre (procedure_instance_id, field_key): dos filas de la misma clave

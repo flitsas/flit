@@ -63,6 +63,13 @@ public sealed class TransitOfficeCityTests
     }
 
     [Fact]
+    public void ForDocuments_ConCityNameLegible_PriorizaSobreCodigoDivipola()
+    {
+        TransitOfficeCity.ForDocuments("FUNZA", "STRIA TTEyTTO MCPAL")
+            .Should().Be("FUNZA");
+    }
+
+    [Fact]
     public void ForDocuments_SinCiudadEnNombre_NoInventa()
     {
         TransitOfficeCity.ForDocuments("25286", "STRIA TTEyTTO MCPAL").Should().BeNull();

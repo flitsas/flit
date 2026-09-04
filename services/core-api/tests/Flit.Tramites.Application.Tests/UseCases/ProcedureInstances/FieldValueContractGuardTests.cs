@@ -184,6 +184,7 @@ public sealed class FieldValueContractGuardTests
         // Organismo de tránsito y campos del FUR — los escribe el wizard vía PatchFieldValues.
         ["transit_office_code"] = new(WizardFur, Modo.Literal),
         ["transit_office_city"] = new(WizardFur, Modo.Literal),
+        ["transit_office_city_name"] = new([Preflight, CreateFromConsulta, App + "UseCases/ProcedureInstances/FurCommand.cs"], Modo.Dinamico, "TransitOfficeFieldKeys.CityName"),
 
         // Organismo donde el vehículo está matriculado HOY, cuando NO coincide con el del trámite.
         // Solo lo escribe el radicado de cuenta, cuyo organismo canónico es el DESTINO (quien
@@ -202,6 +203,7 @@ public sealed class FieldValueContractGuardTests
         ["transit_office_actual_code"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
         ["transit_office_actual_name"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
         ["transit_office_actual_city"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
+        ["transit_office_actual_city_name"] = new(Preflight, Modo.Dinamico, "RedirigirOrganismoDelRunt"),
         ["fur_observations"] = new(WizardTramite, Modo.Literal), // HU #10987 — productor en P6 del wizard
         ["fur_processing_date"] = new(WizardFur, Modo.Literal), // HU #10988
 

@@ -85,14 +85,57 @@ public sealed class FurSignatureLayoutTests
     }
 
     [Fact]
-    public void Columns_FourOwners_SplitsFieldInEqualSlots()
+    public void Columns_FourOwners_ExpandsLeftAndWidens()
     {
-        var cols = FurSignatureLayout.Columns(100, 400, 4);
+        const double fieldX = 102;
+        const double fieldW = 262;
+        var cols = FurSignatureLayout.Columns(fieldX, fieldW, 4);
+
         cols.Should().HaveCount(4);
-        cols[0].X.Should().Be(100);
-        cols[0].W.Should().Be(100);
-        cols[3].X.Should().Be(400);
-        cols.Sum(c => c.W).Should().Be(400);
+        cols[0].X.Should().BeApproximately(fieldX - FourActorSignatureLayout.ExpandLeft, 0.01);
+        cols.Sum(c => c.W).Should().BeApproximately(fieldW + FourActorSignatureLayout.ExpandLeft, 0.01);
+        cols[0].W.Should().BeApproximately((fieldW + FourActorSignatureLayout.ExpandLeft) / 4, 0.01);
+        cols[3].X.Should().BeApproximately(cols[0].X + 3 * cols[0].W, 0.01);
+    }
+
+    [Fact]
+    public void Columns_ThreeOwners_Unchanged()
+    {
+        const double fieldX = 102;
+        const double fieldW = 262;
+        var cols = FurSignatureLayout.Columns(fieldX, fieldW, 3);
+
+        cols.Should().HaveCount(3);
+        cols[0].X.Should().Be(fieldX);
+        cols[0].W.Should().BeApproximately(fieldW / 3, 0.01);
+        cols.Sum(c => c.W).Should().BeApproximately(fieldW, 0.01);
+    }
+
+    [Fact]
+    public void ImageWidthCap_FourActor_LeavesMoreRoomForSidecarThanNarrowDefault()
+    {
+        const double fieldW = 78;
+        var fourImageW = FurSignatureLayout.ImageWidthCap(fieldW, 145, fourActorLayout: true);
+        var defaultImageW = FurSignatureLayout.ImageWidthCap(fieldW, 145);
+
+        fourImageW.Should().BeApproximately(fieldW * FourActorSignatureLayout.ImageFraction, 0.01);
+        var fourSidecarW = fieldW - fourImageW - FourActorSignatureLayout.SidecarGap;
+        var defaultSidecarW = fieldW - defaultImageW - FurSignatureLayout.SidecarGap;
+        fourSidecarW.Should().BeGreaterThan(defaultSidecarW);
+    }
+
+    [Fact]
+    public void Place_FourActor_NoImageLift_UsesTighterSidecarGap()
+    {
+        var fieldW = 78;
+        var imageW = FurSignatureLayout.ImageWidthCap(fieldW, 145, fourActorLayout: true);
+        var (drawW, drawH) = FurSignatureLayout.Fit(600, 200, imageW, 28.8);
+        var (imageY, sidecarX, sidecarW) = FurSignatureLayout.Place(
+            fieldX: 52, fieldY: 381, fieldW, fieldH: 32, drawW, drawH, fourActorLayout: true);
+
+        imageY.Should().BeApproximately(381 + Math.Max(0, (32 - drawH) / 2), 0.01);
+        sidecarX.Should().BeApproximately(52 + drawW + FourActorSignatureLayout.SidecarGap, 0.01);
+        sidecarW.Should().BeApproximately(fieldW - drawW - FourActorSignatureLayout.SidecarGap, 0.01);
     }
 
     [Fact]
