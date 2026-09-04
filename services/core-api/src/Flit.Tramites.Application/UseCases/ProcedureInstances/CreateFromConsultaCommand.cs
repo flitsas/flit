@@ -215,6 +215,8 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
             items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.Code, secretaria.Code, null));
             items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.Name, secretaria.Name, null));
             items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.City, secretaria.CityCode, null));
+            if (!string.IsNullOrWhiteSpace(secretaria.CityName))
+                items.Add(new FieldValueInput(null, TransitOfficeFieldKeys.CityName, secretaria.CityName, null));
             items.Add(new FieldValueInput(
                 null,
                 TransitOfficeSelectionPolicy.OrigenFieldKey,

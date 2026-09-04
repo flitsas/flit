@@ -24,12 +24,16 @@ public static class TransitOfficeFieldKeys
     public const string Code = "transit_office_code";
     public const string Name = "transit_office_name";
     public const string City = "transit_office_city";
+    /// <summary>Nombre legible del municipio del organismo al que va el trámite (catálogo <c>city_name</c>).</summary>
+    public const string CityName = "transit_office_city_name";
 
     /// <summary>Organismo donde el vehículo está matriculado HOY, según el RUNT. Solo descriptivo.</summary>
     public const string ActualId = "transit_office_actual_id";
     public const string ActualCode = "transit_office_actual_code";
     public const string ActualName = "transit_office_actual_name";
     public const string ActualCity = "transit_office_actual_city";
+    /// <summary>Nombre legible del municipio del organismo actual (RUNT), espejo de <see cref="CityName"/>.</summary>
+    public const string ActualCityName = "transit_office_actual_city_name";
 
     /// <summary>
     /// Organismo al que se llevará la cuenta, DECLARADO en un trámite que se radica en otro sitio.

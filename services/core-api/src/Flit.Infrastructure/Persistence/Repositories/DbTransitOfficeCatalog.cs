@@ -32,7 +32,7 @@ internal sealed class DbTransitOfficeCatalog : ITransitOfficeCatalog
 
         return query
             .OrderBy(o => o.Name)
-            .Select(o => new TransitOfficeEntry(o.Id, o.Code, o.Name, o.DepartmentCode, o.CityCode))
+            .Select(o => new TransitOfficeEntry(o.Id, o.Code, o.Name, o.DepartmentCode, o.CityCode, o.CityName))
             .ToList();
     }
 
@@ -42,7 +42,7 @@ internal sealed class DbTransitOfficeCatalog : ITransitOfficeCatalog
     public TransitOfficeEntry? GetById(Guid id) =>
         _context.TransitOffices.AsNoTracking()
             .Where(o => o.Id == id && o.IsActive)
-            .Select(o => new TransitOfficeEntry(o.Id, o.Code, o.Name, o.DepartmentCode, o.CityCode))
+            .Select(o => new TransitOfficeEntry(o.Id, o.Code, o.Name, o.DepartmentCode, o.CityCode, o.CityName))
             .FirstOrDefault();
 
     private static string Fold(string value) =>

@@ -3500,6 +3500,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(5)")
                         .HasColumnName("city_code");
 
+                    b.Property<string>("CityName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("city_name");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -3511,6 +3516,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(2)
                         .HasColumnType("character varying(2)")
                         .HasColumnName("department_code");
+
+                    b.Property<string>("DepartmentName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("department_name");
 
                     b.Property<string>("DivipoCode")
                         .HasMaxLength(20)

@@ -222,18 +222,20 @@ public static partial class FurOverlayRenderer
     {
         var fieldH = field.H > 0 ? field.H : 36;
         var fieldW = field.W > 0 ? field.W : 120;
+        var fourActorLayout = stamps.Count == 4;
         var cols = FurSignatureLayout.Columns(field.X, fieldW, stamps.Count);
         for (var i = 0; i < cols.Length; i++)
         {
             var (colX, colW) = cols[i];
             var stamp = stamps[i];
+            var colY = field.Y + (fourActorLayout ? FourActorSignatureLayout.DropY : 0);
             var colField = new FurFieldDefinition
             {
                 Id = field.Id,
                 Page = field.Page,
                 Type = field.Type,
                 X = colX,
-                Y = field.Y,
+                Y = colY,
                 W = colW,
                 H = fieldH,
                 Size = field.Size,
@@ -244,7 +246,7 @@ public static partial class FurOverlayRenderer
 
             if (stamp.ImageBytes is { Length: > 0 })
             {
-                DrawSignatureImage(gfx, colField, stamp.ImageBytes, stamp.ImageSidecarText);
+                DrawSignatureImage(gfx, colField, stamp.ImageBytes, stamp.ImageSidecarText, fourActorLayout);
                 continue;
             }
 
@@ -257,11 +259,15 @@ public static partial class FurOverlayRenderer
         XGraphics gfx,
         FurFieldDefinition field,
         byte[] imageBytes,
-        string? sidecarText)
+        string? sidecarText,
+        bool fourActorLayout = false)
     {
         var fieldH = field.H > 0 ? field.H : 36;
         var fieldW = field.W > 0 ? field.W : 120;
-        var imageW = FurSignatureLayout.ImageWidthCap(fieldW, SignatureImageMaxWidth);
+        var imageW = FurSignatureLayout.ImageWidthCap(fieldW, SignatureImageMaxWidth, fourActorLayout);
+        var sidecarFontSize = fourActorLayout
+            ? FourActorSignatureLayout.SidecarFontSize
+            : SignatureSidecarFontSize;
 
         // HU #11016 — la firma se dibujaba con el ALTO COMPLETO del campo y sin respetar la relación de
         // aspecto: un PNG apaisado se estiraba verticalmente y se salía del espacio de firma, pisando lo
@@ -269,27 +275,49 @@ public static partial class FurOverlayRenderer
         // conservando la proporción y se centra verticalmente en el campo.
         double drawW;
         double drawH;
+        double imageY = field.Y;
         try
         {
             (drawW, drawH) = FitInBox(imageBytes, imageW, fieldH * SignatureImageMaxHeightRatio);
-            var (imageY, _, _) = FurSignatureLayout.Place(field.X, field.Y, fieldW, fieldH, drawW, drawH);
+            (imageY, _, _) = FurSignatureLayout.Place(
+                field.X, field.Y, fieldW, fieldH, drawW, drawH, fourActorLayout);
             DrawImage(gfx, field.X, imageY, drawW, drawH, imageBytes);
         }
         catch (Exception)
         {
             if (!string.IsNullOrWhiteSpace(sidecarText))
-                DrawSidecarText(gfx, field.X, field.Y, fieldW, fieldH, sidecarText, field.Align);
+            {
+                DrawSidecarText(
+                    gfx, field.X, field.Y, fieldW, fieldH, sidecarText, field.Align, sidecarFontSize);
+            }
+
             return;
         }
 
         if (string.IsNullOrWhiteSpace(sidecarText))
             return;
 
-        var (_, sidecarX, sidecarW) = FurSignatureLayout.Place(field.X, field.Y, fieldW, fieldH, drawW, drawH);
+        var (_, sidecarX, sidecarW) = FurSignatureLayout.Place(
+            field.X, field.Y, fieldW, fieldH, drawW, drawH, fourActorLayout);
         if (sidecarW <= 0)
             return;
 
-        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText, field.Align);
+        if (fourActorLayout)
+        {
+            DrawSidecarText(
+                gfx,
+                sidecarX,
+                imageY,
+                sidecarW,
+                drawH,
+                sidecarText,
+                field.Align,
+                sidecarFontSize,
+                centerBlockVertically: true);
+            return;
+        }
+
+        DrawSidecarText(gfx, sidecarX, field.Y, sidecarW, fieldH, sidecarText, field.Align, sidecarFontSize);
     }
 
     private static void DrawSidecarText(
@@ -299,11 +327,14 @@ public static partial class FurOverlayRenderer
         double w,
         double h,
         string text,
-        FurTextAlign align = FurTextAlign.Left)
+        FurTextAlign align = FurTextAlign.Left,
+        double? fontSize = null,
+        bool centerBlockVertically = false)
     {
-        var font = CreateFont(SignatureSidecarFontSize, bold: false);
+        var effectiveFontSize = fontSize ?? SignatureSidecarFontSize;
+        var font = CreateFont(effectiveFontSize, bold: false);
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var lineHeight = SignatureSidecarFontSize * 1.15;
+        var lineHeight = effectiveFontSize * 1.15;
         var maxLines = Math.Max(1, (int)Math.Floor(h / lineHeight));
         var visible = Math.Min(lines.Length, maxLines);
         var inset = align == FurTextAlign.Center ? 2.0 : 0.0;
@@ -312,7 +343,7 @@ public static partial class FurOverlayRenderer
         var boxY = y + inset;
         var boxH = Math.Max(0, h - inset * 2);
         var blockH = visible * lineHeight;
-        if (align == FurTextAlign.Center && blockH < boxH)
+        if ((align == FurTextAlign.Center || centerBlockVertically) && blockH < boxH)
             boxY += (boxH - blockH) / 2;
 
         for (var i = 0; i < visible; i++)
@@ -330,7 +361,7 @@ public static partial class FurOverlayRenderer
                 drawX = boxX + Math.Max(0, (boxW - size.Width) / 2);
             }
 
-            var yBaseline = boxY + i * lineHeight + SignatureSidecarFontSize * 0.82;
+            var yBaseline = boxY + i * lineHeight + effectiveFontSize * 0.82;
             gfx.DrawString(line, font, XBrushes.Black, new XPoint(drawX, yBaseline));
         }
     }

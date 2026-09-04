@@ -47,6 +47,7 @@ vi.mock("@/lib/api/tramites-client", () => ({
   },
 }));
 
+import { assignPlateToProcedure, revokeProcedurePlate } from "@/lib/api/admin-plate-ranges";
 import {
   fetchOtBandejaCounters,
   fetchOtBandejaHealth,
@@ -291,6 +292,91 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     await user.type(within(placas).getAllByRole("textbox")[0]!, "ABC123");
 
     expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1);
+  });
+
+  it("asignar la placa desde el detalle la refleja al instante, sin cerrar ni recargar", async () => {
+    // Defecto reportado tras la validación en DEV: el detalle es un objeto de estado APARTE del de
+    // la fila, así que seguía enseñando «Sin preasignar» hasta cerrar el modal y recargar la
+    // bandeja. El operador se quedaba esperando algo que ya había ocurrido.
+    const sinPlaca = { ...ENTREGADO, plateFlowStatus: "preasignado", placa: null };
+    prepararBandeja(sinPlaca);
+    // El backend devuelve el trámite ya con placa en la siguiente lectura, como en producción.
+    vi.mocked(assignPlateToProcedure).mockImplementation(async () => {
+      vi.mocked(fetchOtClientProcedure).mockResolvedValue({
+        ...sinPlaca,
+        placa: "XYZ987",
+        plateFlowStatus: "asignado",
+      });
+    });
+    const user = userEvent.setup();
+    renderSection(OT_ID);
+
+    const dialog = await abrirDetalle(user, "RAD-2026-101");
+    await waitFor(() => expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1));
+    expect(within(dialog).getByText("Sin preasignar")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Asignar placa" }));
+    const placas = await screen.findByRole("dialog", { name: "Asignar placa" });
+    await user.type(within(placas).getByLabelText("Placa fuera de rango"), "XYZ987");
+    await user.click(within(placas).getByRole("button", { name: "Asignar" }));
+
+    // El diálogo se cierra y el detalle —que sigue abierto— ya muestra la placa.
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Asignar placa" })).not.toBeInTheDocument(),
+    );
+    const detalle = screen.getByRole("dialog");
+    expect(within(detalle).getByText("XYZ987")).toBeInTheDocument();
+    expect(within(detalle).queryByText("Sin preasignar")).not.toBeInTheDocument();
+  });
+
+  it("el acordeón que el operador tenía abierto sobrevive a la asignación de placa", async () => {
+    prepararBandeja({ ...ENTREGADO, plateFlowStatus: "preasignado", placa: null });
+    vi.mocked(assignPlateToProcedure).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderSection(OT_ID);
+
+    const dialog = await abrirDetalle(user, "RAD-2026-101");
+    await waitFor(() => expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1));
+    const actores = within(dialog).getByRole("button", { name: "Actores del Trámite" });
+    await user.click(actores);
+    expect(actores).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(within(dialog).getByRole("button", { name: "Asignar placa" }));
+    const placas = await screen.findByRole("dialog", { name: "Asignar placa" });
+    await user.type(within(placas).getByLabelText("Placa fuera de rango"), "XYZ987");
+    await user.click(within(placas).getByRole("button", { name: "Asignar" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Asignar placa" })).not.toBeInTheDocument(),
+    );
+    expect(actores).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("revocar devuelve la fila a «Sin asignar» y NO finge que la placa se borró", async () => {
+    // Revocar libera la placa en el inventario y devuelve el sub-estado, pero el backend deja el
+    // field_value 'plate' escrito: el trámite sigue trayendo la placa en la siguiente lectura. Si la
+    // UI la borrara de forma optimista, desaparecería para reaparecer al refrescar — el usuario vería
+    // dos verdades distintas de la misma pantalla. Esa asimetría del backend está pendiente de
+    // definición por el equipo; hasta entonces la bandeja muestra lo que el servidor dice.
+    prepararBandeja({ ...ENTREGADO, plateFlowStatus: "asignado", placa: "OTV120" });
+    vi.mocked(revokeProcedurePlate).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderSection(OT_ID);
+
+    await screen.findByText("OTV120");
+    await user.click(
+      screen.getByRole("button", { name: "Acciones del trámite RAD-2026-101" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Revocar" }));
+
+    const revocar = await screen.findByRole("dialog", { name: "Revocar preasignación" });
+    await user.type(within(revocar).getByRole("textbox"), "Placa mal digitada");
+    await user.click(within(revocar).getByRole("button", { name: "Revocar" }));
+
+    // El sub-estado sí vuelve atrás, y esa parte se ve sin recargar.
+    expect(await screen.findByText("Sin asignar")).toBeInTheDocument();
+    // La placa sigue donde el servidor la deja: la pantalla no se contradice al refrescar.
+    expect(screen.getByText("OTV120")).toBeInTheDocument();
   });
 
   it("la bandeja se actualiza con un botón, sin recargar la página", async () => {

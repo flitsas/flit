@@ -52,7 +52,7 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
 
         return match is null
             ? null
-            : new ResolvedTransitOffice(match.Id, match.Code, match.Name, match.CityCode);
+            : new ResolvedTransitOffice(match.Id, match.Code, match.Name, match.CityCode, match.CityName);
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
         var entry = _catalog.GetById(transitOfficeId);
         return entry is null
             ? null
-            : new ResolvedTransitOffice(entry.Id, entry.Code, entry.Name, entry.CityCode);
+            : new ResolvedTransitOffice(entry.Id, entry.Code, entry.Name, entry.CityCode, entry.CityName);
     }
 
     /// <summary>

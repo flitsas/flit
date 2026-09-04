@@ -917,6 +917,7 @@ public sealed class RunPreflightHandler(
             TransitOfficeFieldKeys.Code => TransitOfficeFieldKeys.ActualCode,
             TransitOfficeFieldKeys.Name => TransitOfficeFieldKeys.ActualName,
             TransitOfficeFieldKeys.City => TransitOfficeFieldKeys.ActualCity,
+            TransitOfficeFieldKeys.CityName => TransitOfficeFieldKeys.ActualCityName,
             _ => null,
         };
 
@@ -1094,21 +1095,31 @@ public sealed class RunPreflightHandler(
             return; // Sin OT habilitado que coincida: se deja solo el nombre RUNT (no se inventa id).
 
         // Reusa el upsert idempotente de campos hidratados (Source="consultation").
-        UpsertHydratedFields(instance, tenantId, eligeElOperador
-            ?
-            [
-                new HydratedField(TransitOfficeFieldKeys.ActualId, match.Id.ToString(), null),
-                new HydratedField(TransitOfficeFieldKeys.ActualCode, match.Code, null),
-                new HydratedField(TransitOfficeFieldKeys.ActualName, match.Name, null),
-                new HydratedField(TransitOfficeFieldKeys.ActualCity, match.CityCode, null),
-            ]
+        var hydrated = eligeElOperador
+            ? new List<HydratedField>
+            {
+                new(TransitOfficeFieldKeys.ActualId, match.Id.ToString(), null),
+                new(TransitOfficeFieldKeys.ActualCode, match.Code, null),
+                new(TransitOfficeFieldKeys.ActualName, match.Name, null),
+                new(TransitOfficeFieldKeys.ActualCity, match.CityCode, null),
+            }
             :
-            [
-                new HydratedField(TransitOfficeFieldKeys.Id, match.Id.ToString(), null),
-                new HydratedField(TransitOfficeFieldKeys.Code, match.Code, null),
-                new HydratedField(TransitOfficeFieldKeys.Name, match.Name, null),
-                new HydratedField(TransitOfficeFieldKeys.City, match.CityCode, null),
-            ]);
+            new List<HydratedField>
+            {
+                new(TransitOfficeFieldKeys.Id, match.Id.ToString(), null),
+                new(TransitOfficeFieldKeys.Code, match.Code, null),
+                new(TransitOfficeFieldKeys.Name, match.Name, null),
+                new(TransitOfficeFieldKeys.City, match.CityCode, null),
+            };
+
+        if (!string.IsNullOrWhiteSpace(match.CityName))
+        {
+            hydrated.Add(eligeElOperador
+                ? new HydratedField(TransitOfficeFieldKeys.ActualCityName, match.CityName, null)
+                : new HydratedField(TransitOfficeFieldKeys.CityName, match.CityName, null));
+        }
+
+        UpsertHydratedFields(instance, tenantId, hydrated);
     }
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
