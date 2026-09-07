@@ -497,7 +497,26 @@ public interface IProcedureInstanceRepository
         Guid? tenantId,
         ProcedureInstanceListFilter filter,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Las opciones de los filtros que dependen de los datos del tenant: los organismos con los que
+    /// esta empresa tramita de verdad y los tipos de trámite que usa (HU #12106).
+    ///
+    /// <para>Se resuelven contra los datos y no contra el catálogo completo de la plataforma porque
+    /// ofrecer un organismo con el que nunca se ha tramitado es ofrecer un filtro que solo puede
+    /// devolver cero — el mismo criterio que sigue el catálogo de Consultas.</para>
+    /// </summary>
+    Task<TramitesFilterOptions> GetFilterOptionsAsync(Guid? tenantId, CancellationToken ct = default);
 }
+
+/// <summary>Opciones de filtro que salen de los datos del tenant, no de una lista fija.</summary>
+/// <param name="Organismos">Nombres de organismo presentes en los trámites, ordenados.</param>
+/// <param name="Tipos">Tipos de trámite usados: código canónico y nombre que se muestra.</param>
+public sealed record TramitesFilterOptions(
+    IReadOnlyList<string> Organismos,
+    IReadOnlyList<TramitesFilterTipoOption> Tipos);
+
+public sealed record TramitesFilterTipoOption(string Code, string Name, string Family);
 
 /// <summary>
 /// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre

@@ -16,6 +16,13 @@ public enum ProcedureInstanceSortBy
     Gestor,
     Placa,
     Vin,
+    // HU #12108 — subcampos de las celdas compuestas del listado: la cabecera de "Radicado",
+    // "Vehículo" y "Trámite" deja elegir por cuál de sus datos se ordena, y sin estas claves la
+    // mitad de las opciones del desplegable no ordenarían nada.
+    Radicado,
+    Estado,
+    TipoTramite,
+    Fuente,
 }
 
 /// <summary>Dirección de ordenamiento pedida por el caller.</summary>
