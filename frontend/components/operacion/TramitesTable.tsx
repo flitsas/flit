@@ -29,7 +29,6 @@ import {
   TramitesFiltrosBar,
   TramitesFiltrosChips,
   rangoDePeriodo,
-  type FiltroEspecificoKey,
   type RangoSobre,
 } from './TramitesFiltrosBar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
@@ -44,6 +43,8 @@ import {
   type TramitesColumnDef,
   type TramitesGridLayout,
 } from '@/lib/tramites/tramites-table-columns';
+import { QueryFilterBar } from '@/components/consultas/QueryFilterBar';
+import type { QueryCondition, QueryField } from '@/lib/api/queries';
 import { buildWorkbook, type DataColumn } from '@/components/consultas/columns';
 import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from '@/components/consultas/export';
 import { XLSX_MIME } from '@/lib/xlsx';
@@ -292,18 +293,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 
   // Filtros server-side (mismo contrato que GET /instances). Borrador del form → se aplican
   // solo con "Aplicar filtros"; el sort sí recarga de inmediato al clic en cabecera.
-  // Qué filtros específicos están AÑADIDOS (visibles) en la tarjeta — controla tanto el campo
-  // real que se pinta como el chip de la fila inferior. Es independiente de si ya se aplicaron.
-  const [filtrosEspecificos, setFiltrosEspecificos] = useState<Set<FiltroEspecificoKey>>(
-    () => new Set(),
-  );
-  const [placaFilter, setPlacaFilter] = useState('');
-  const [vendedorFilter, setVendedorFilter] = useState('');
-  const [compradorFilter, setCompradorFilter] = useState('');
-  const [gestorFilter, setGestorFilter] = useState('');
-  const [firmadoFilter, setFirmadoFilter] = useState<'' | 'true' | 'false'>('');
-  const [organismoFilter, setOrganismoFilter] = useState('');
-  const [tipoFilter, setTipoFilter] = useState('');
+  /**
+   * HU #12107 — condiciones de la gramática de Consultas. Sustituyen a los siete filtros sueltos
+   * (placa, vendedor, comprador, gestor, firmado, organismo, tipo), cada uno con su propio estado y
+   * su propio input: aquellos solo sabían preguntar «contiene» y añadir un campo obligaba a tocar
+   * cuatro sitios. Se conserva la separación borrador/aplicado que ya tenía la pantalla.
+   */
+  const [draftCondiciones, setDraftCondiciones] = useState<QueryCondition[]>([]);
+  const [appliedCondiciones, setAppliedCondiciones] = useState<QueryCondition[]>([]);
+  /** Catálogo servido por el backend: un campo nuevo aparece sin desplegar frontend. */
+  const [queryFields, setQueryFields] = useState<QueryField[]>([]);
+  const [fieldsError, setFieldsError] = useState(false);
+  const [fieldsKey, setFieldsKey] = useState(0);
   // "Rango sobre" + "Periodo" reemplazan a los 4 inputs de fecha sueltos: el usuario elige a qué
   // campo apunta el rango (creación o actualización) y un periodo predefinido — o "Rango propio"
   // con fechas propias. `rangoDePeriodo` (TramitesFiltrosBar) hace la conversión a
@@ -312,13 +313,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [periodo, setPeriodo] = useState('Sin periodo');
   const [rangoPropioDesde, setRangoPropioDesde] = useState('');
   const [rangoPropioHasta, setRangoPropioHasta] = useState('');
-  const [appliedPlaca, setAppliedPlaca] = useState('');
-  const [appliedVendedor, setAppliedVendedor] = useState('');
-  const [appliedComprador, setAppliedComprador] = useState('');
-  const [appliedGestor, setAppliedGestor] = useState('');
-  const [appliedFirmado, setAppliedFirmado] = useState<'' | 'true' | 'false'>('');
-  const [appliedOrganismo, setAppliedOrganismo] = useState('');
-  const [appliedTipo, setAppliedTipo] = useState('');
   const [appliedCreatedFrom, setAppliedCreatedFrom] = useState('');
   const [appliedCreatedTo, setAppliedCreatedTo] = useState('');
   const [appliedUpdatedFrom, setAppliedUpdatedFrom] = useState('');
@@ -430,6 +424,25 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
+  // HU #12107 — catálogo de campos filtrables. Degrada con elegancia: si no carga, la tabla se
+  // pinta igual con su listado y la barra ofrece reintentar (AC7). Nunca bloquea el render.
+  useEffect(() => {
+    let active = true;
+    void tramitesClient
+      .listFilterFields()
+      .then((fields) => {
+        if (!active) return;
+        setQueryFields(fields);
+        setFieldsError(false);
+      })
+      .catch(() => {
+        if (active) setFieldsError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fieldsKey]);
+
   // Config compañía: qué modalidades no se pueden iniciar (No permitir trámites…).
   useEffect(() => {
     let active = true;
@@ -509,41 +522,28 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
    */
   const buildListQuery = useCallback((): ListInstancesParams => {
     const query: ListInstancesParams = {};
-      if (appliedPlaca.trim()) query.placa = appliedPlaca.trim();
-      if (appliedVendedor.trim()) query.vendedor = appliedVendedor.trim();
-      if (appliedComprador.trim()) query.comprador = appliedComprador.trim();
-      if (appliedGestor.trim()) query.gestor = appliedGestor.trim();
-      if (appliedFirmado === 'true') query.firmado = true;
-      if (appliedFirmado === 'false') query.firmado = false;
-      // Estado y familia van al SERVIDOR, no al array ya traído: el listado devuelve como mucho
-      // SERVER_LIST_TAKE filas, así que filtrarlos en cliente respondía "los borradores que cupieron
-      // en la ventana" en vez de "los borradores del tenant". Con pocos trámites daba igual; con un
-      // tenant grande la respuesta era incompleta y nada lo delataba.
-      if (estado) query.estado = estado;
-      if (modalidad) query.modalidad = modalidad;
-      if (appliedOrganismo.trim()) query.organismoTransito = appliedOrganismo.trim();
-      if (appliedTipo.trim()) query.tipoCodigo = appliedTipo.trim();
-      if (appliedCreatedFrom.trim()) query.createdFrom = appliedCreatedFrom.trim();
-      if (appliedCreatedTo.trim()) query.createdTo = appliedCreatedTo.trim();
-      if (appliedUpdatedFrom.trim()) query.updatedFrom = appliedUpdatedFrom.trim();
-      if (appliedUpdatedTo.trim()) query.updatedTo = appliedUpdatedTo.trim();
-      if (sortBy) {
-        query.sortBy = sortBy;
-        query.sortDir = sortDir;
-      }
+    if (appliedCondiciones.length > 0) query.condiciones = appliedCondiciones;
+    // Estado y familia van al SERVIDOR, no al array ya traído: el listado devuelve como mucho
+    // SERVER_LIST_TAKE filas, así que filtrarlos en cliente respondía "los borradores que cupieron
+    // en la ventana" en vez de "los borradores del tenant". Con pocos trámites daba igual; con un
+    // tenant grande la respuesta era incompleta y nada lo delataba.
+    if (estado) query.estado = estado;
+    if (modalidad) query.modalidad = modalidad;
+    if (appliedCreatedFrom.trim()) query.createdFrom = appliedCreatedFrom.trim();
+    if (appliedCreatedTo.trim()) query.createdTo = appliedCreatedTo.trim();
+    if (appliedUpdatedFrom.trim()) query.updatedFrom = appliedUpdatedFrom.trim();
+    if (appliedUpdatedTo.trim()) query.updatedTo = appliedUpdatedTo.trim();
+    if (sortBy) {
+      query.sortBy = sortBy;
+      query.sortDir = sortDir;
+    }
     return query;
   }, [
-    appliedPlaca,
-    appliedVendedor,
-    appliedComprador,
-    appliedGestor,
-    appliedFirmado,
+    appliedCondiciones,
     appliedCreatedFrom,
     appliedCreatedTo,
     appliedUpdatedFrom,
     appliedUpdatedTo,
-    appliedOrganismo,
-    appliedTipo,
     estado,
     modalidad,
     sortBy,
@@ -554,20 +554,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setLoading(true);
     setError(null);
     try {
-      const query = buildListQuery();
-      // Cualquier filtro/orden activa el camino server-side: pedir el tope del API.
-      if (Object.keys(query).length > 0) {
-        query.take = SERVER_LIST_TAKE;
-        query.skip = 0;
-      }
+      // Siempre con paginación: el camino POST no tiene ruta histórica que evitar, y sin `take` el
+      // servidor devolvería su tope por defecto sin decir cuántos hay en total.
+      const query = { ...buildListQuery(), take: SERVER_LIST_TAKE, skip: 0 };
       // Las dos llamadas van en paralelo: la tabla y la tira de KPIs son independientes y
       // encadenarlas solo sumaría latencia. Los conteos no pueden salir de `data` — esa es la
       // PÁGINA, y la tira habla del universo entero.
-      const [data, counts] = await Promise.all([
-        tramitesClient.listInstances(Object.keys(query).length > 0 ? query : undefined),
-        tramitesClient.listInstanceEstadoCounts(query),
+      const [page1, counts] = await Promise.all([
+        tramitesClient.searchInstances(query),
+        tramitesClient.searchEstadoCounts(query),
       ]);
-      setItems(data);
+      setItems(page1.items);
       setEstadoCounts(counts);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -685,7 +682,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 
       // La primera página se pide aparte porque de ella sale el `total` con el que se sabe cuántas
       // quedan. Se guarda para reusarla como página 1 del recorrido en vez de volver a pedirla.
-      const primeraPagina = await tramitesClient.listInstancesPage({
+      const primeraPagina = await tramitesClient.searchInstances({
         ...base,
         skip: 0,
         take: SERVER_LIST_TAKE,
@@ -702,7 +699,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             pagina === 1
               ? primeraPagina.items
               : (
-                  await tramitesClient.listInstancesPage({
+                  await tramitesClient.searchInstances({
                     ...base,
                     skip: (pagina - 1) * pageSize,
                     take: pageSize,
@@ -894,13 +891,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   );
 
   const hasServerFilters =
-    appliedPlaca.trim() !== '' ||
-    appliedVendedor.trim() !== '' ||
-    appliedComprador.trim() !== '' ||
-    appliedGestor.trim() !== '' ||
-    appliedFirmado !== '' ||
-    appliedOrganismo.trim() !== '' ||
-    appliedTipo.trim() !== '' ||
+    appliedCondiciones.length > 0 ||
     appliedCreatedFrom.trim() !== '' ||
     appliedCreatedTo.trim() !== '' ||
     appliedUpdatedFrom.trim() !== '' ||
@@ -921,19 +912,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
    * borrarlo también — si solo mirara lo aplicado, quedaban chips a la vista con el botón apagado.
    */
   const hasDraftFilters =
-    filtrosEspecificos.size > 0 ||
+    draftCondiciones.length > 0 ||
     periodo !== 'Sin periodo' ||
     rangoPropioDesde !== '' ||
     rangoPropioHasta !== '';
 
   const applyServerFilters = () => {
-    setAppliedPlaca(placaFilter);
-    setAppliedVendedor(vendedorFilter);
-    setAppliedComprador(compradorFilter);
-    setAppliedGestor(gestorFilter);
-    setAppliedFirmado(firmadoFilter);
-    setAppliedOrganismo(organismoFilter);
-    setAppliedTipo(tipoFilter);
+    setAppliedCondiciones(draftCondiciones);
 
     // "Periodo" → fechas: "Rango propio" usa lo que el usuario escribió en el popover; cualquier
     // otro periodo predefinido se calcula con rangoDePeriodo. "Sin periodo" no filtra (null).
@@ -963,48 +948,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setPage(1);
   };
 
-  // Al desmarcar un filtro específico se limpia su valor (draft Y aplicado): no puede quedar un
-  // filtro activo en el backend con el campo escondido (invisible para el usuario).
-  const handleToggleFiltroEspecifico = (key: FiltroEspecificoKey) => {
-    setFiltrosEspecificos((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-        switch (key) {
-          case 'placa':
-            setPlacaFilter('');
-            setAppliedPlaca('');
-            break;
-          case 'vendedor':
-            setVendedorFilter('');
-            setAppliedVendedor('');
-            break;
-          case 'comprador':
-            setCompradorFilter('');
-            setAppliedComprador('');
-            break;
-          case 'gestor':
-            setGestorFilter('');
-            setAppliedGestor('');
-            break;
-          case 'firmado':
-            setFirmadoFilter('');
-            setAppliedFirmado('');
-            break;
-          case 'organismo':
-            setOrganismoFilter('');
-            setAppliedOrganismo('');
-            break;
-          case 'tipo':
-            setTipoFilter('');
-            setAppliedTipo('');
-            break;
-        }
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
+  /**
+   * Quitar un chip retira la condición del borrador Y de lo aplicado, y recarga.
+   *
+   * <p>El chip habla de lo que está filtrando AHORA: quitarlo solo del borrador dejaría la tabla
+   * igual y el chip desaparecido, que se lee como que el filtro no hacía nada.</p>
+   */
+  const handleQuitarCondicion = (fieldId: string) => {
+    setDraftCondiciones((prev) => prev.filter((c) => c.fieldId !== fieldId));
+    setAppliedCondiciones((prev) => prev.filter((c) => c.fieldId !== fieldId));
     setPage(1);
   };
 
@@ -1014,25 +966,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setEstado('');
     setCompania('');
     setSoloPrioritarios(false);
-    setFiltrosEspecificos(new Set());
-    setPlacaFilter('');
-    setVendedorFilter('');
-    setCompradorFilter('');
-    setGestorFilter('');
-    setFirmadoFilter('');
-    setOrganismoFilter('');
-    setTipoFilter('');
+    setDraftCondiciones([]);
     setRangoSobre('created');
     setPeriodo('Sin periodo');
     setRangoPropioDesde('');
     setRangoPropioHasta('');
-    setAppliedPlaca('');
-    setAppliedVendedor('');
-    setAppliedComprador('');
-    setAppliedGestor('');
-    setAppliedFirmado('');
-    setAppliedOrganismo('');
-    setAppliedTipo('');
+    setAppliedCondiciones([]);
     setAppliedCreatedFrom('');
     setAppliedCreatedTo('');
     setAppliedUpdatedFrom('');
@@ -1094,22 +1033,31 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               rangoPropioHasta={rangoPropioHasta}
               onRangoPropioDesdeChange={setRangoPropioDesde}
               onRangoPropioHastaChange={setRangoPropioHasta}
-              filtrosEspecificos={filtrosEspecificos}
-              onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
-              placa={placaFilter}
-              onPlacaChange={setPlacaFilter}
-              vendedor={vendedorFilter}
-              onVendedorChange={setVendedorFilter}
-              comprador={compradorFilter}
-              onCompradorChange={setCompradorFilter}
-              gestor={gestorFilter}
-              onGestorChange={setGestorFilter}
-              firmado={firmadoFilter}
-              onFirmadoChange={setFirmadoFilter}
-              organismo={organismoFilter}
-              onOrganismoChange={setOrganismoFilter}
-              tipo={tipoFilter}
-              onTipoChange={setTipoFilter}
+              condicionesCount={appliedCondiciones.length}
+              queryFilterBar={
+                fieldsError ? (
+                  // Un catálogo que no carga NO deja la pantalla inservible: la tabla ya se pintó
+                  // con su listado y aquí solo se dice qué falta y cómo reintentarlo.
+                  <div className="px-1 py-2 text-xs text-[#162744]/70 dark:text-white/60">
+                    <p>No se pudieron cargar los filtros.</p>
+                    <button
+                      type="button"
+                      onClick={() => setFieldsKey((k) => k + 1)}
+                      className="mt-1 font-semibold text-[#557EFF] hover:underline"
+                      data-testid="tramites-filtros-reintentar"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : (
+                  <QueryFilterBar
+                    fields={queryFields}
+                    conditions={draftCondiciones}
+                    onChange={setDraftCondiciones}
+                    testIdPrefix="tramites"
+                  />
+                )
+              }
               search={search}
               onSearchChange={handleSearchChange}
               onAplicar={applyServerFilters}
@@ -1196,19 +1144,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           </button>
         </div>
 
-        {/* Tira de chips: SOLO existe si hay periodo o algún filtro específico activo */}
+        {/* Tira de chips: SOLO existe si hay periodo o alguna condición aplicada */}
         <TramitesFiltrosChips
           periodo={periodo}
-          filtrosEspecificos={filtrosEspecificos}
-          onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
           onQuitarPeriodo={handleQuitarPeriodo}
-          appliedPlaca={appliedPlaca}
-          appliedVendedor={appliedVendedor}
-          appliedComprador={appliedComprador}
-          appliedGestor={appliedGestor}
-          appliedFirmado={appliedFirmado}
-          appliedOrganismo={appliedOrganismo}
-          appliedTipo={appliedTipo}
+          condiciones={appliedCondiciones}
+          fields={queryFields}
+          onQuitarCondicion={handleQuitarCondicion}
         />
 
         {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}

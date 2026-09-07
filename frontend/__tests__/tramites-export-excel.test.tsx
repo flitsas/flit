@@ -21,7 +21,9 @@ import { nombreArchivoTramites, selloDeArchivo } from '@/components/operacion/tr
 // ── Mocks ──────────────────────────────────────────────────────────
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
-  listInstancesPage: vi.fn(),
+  searchInstances: vi.fn(),
+  searchEstadoCounts: vi.fn().mockResolvedValue({}),
+  listFilterFields: vi.fn().mockResolvedValue([]),
   listInstanceEstadoCounts: vi.fn().mockResolvedValue({}),
   getConsultationConfig: vi.fn(),
   setPriority: vi.fn(),
@@ -119,6 +121,12 @@ beforeEach(() => {
     blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
   });
   mocks.listInstanceEstadoCounts.mockResolvedValue({});
+  mocks.searchEstadoCounts.mockResolvedValue({});
+  mocks.listFilterFields.mockResolvedValue([]);
+  // El listado de la tabla usa el mismo camino POST que el export.
+  if (!mocks.searchInstances.getMockImplementation()) {
+    mocks.searchInstances.mockImplementation(async () => ({ items: [], total: 0 }));
+  }
 });
 
 // ── AC3 — los datos apilados salen en columna propia ────────────────
@@ -217,7 +225,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
   it('AC2: recorre TODAS las páginas del servidor aunque la tabla muestre 10 filas', async () => {
     const universo = Array.from({ length: 450 }, (_, i) => makeInstance(i + 1));
     mocks.listInstances.mockResolvedValue(universo.slice(0, 200));
-    mocks.listInstancesPage.mockImplementation(({ skip = 0, take = 200 }) =>
+    mocks.searchInstances.mockImplementation(({ skip = 0, take = 200 }) =>
       Promise.resolve({ items: universo.slice(skip, skip + take), total: universo.length }),
     );
 
@@ -230,8 +238,10 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
     // Un solo archivo (450 < 5.000) con las 450 filas, no con las 10 de la página.
     expect(filasDe(mocks.download.mock.calls[0][0])).toBe(450);
     expect(mocks.download.mock.calls[0][1]).toMatch(/^tramites_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.xlsx$/);
-    // Tres páginas de 200: la primera la pide el propio export para conocer el total.
-    expect(mocks.listInstancesPage).toHaveBeenCalledTimes(3);
+    // Tres páginas de 200 las pide el export (la primera, para conocer el total). La cuarta llamada
+    // es la del propio listado al montar: desde la HU #12107 tabla y export comparten
+    // `searchInstances`, que es justo lo que hace que un filtro nuevo llegue a los dos a la vez.
+    expect(mocks.searchInstances).toHaveBeenCalledTimes(4);
     expect(screen.getByTestId('tramites-export-aviso')).toHaveTextContent('Se exportaron 450 trámites');
   });
 
@@ -242,7 +252,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
       makeInstance(3, { placa: 'ABC777' }),
     ];
     mocks.listInstances.mockResolvedValue(universo);
-    mocks.listInstancesPage.mockImplementation(({ skip = 0, take = 200 }) =>
+    mocks.searchInstances.mockImplementation(({ skip = 0, take = 200 }) =>
       Promise.resolve({ items: universo.slice(skip, skip + take), total: universo.length }),
     );
 
@@ -263,7 +273,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
     // 5.200 filas = dos archivos (5.000 + 200). Se construyen con `take` de 200, como el servidor.
     const universo = Array.from({ length: 5200 }, (_, i) => makeInstance(i + 1));
     mocks.listInstances.mockResolvedValue(universo.slice(0, 200));
-    mocks.listInstancesPage.mockImplementation(({ skip = 0, take = 200 }) =>
+    mocks.searchInstances.mockImplementation(({ skip = 0, take = 200 }) =>
       Promise.resolve({ items: universo.slice(skip, skip + take), total: universo.length }),
     );
 
@@ -289,7 +299,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
 
   it('AC6: sin ningún trámite que cumpla los filtros no se descarga archivo, y se dice', async () => {
     mocks.listInstances.mockResolvedValue([]);
-    mocks.listInstancesPage.mockResolvedValue({ items: [], total: 0 });
+    mocks.searchInstances.mockResolvedValue({ items: [], total: 0 });
 
     render(<TramitesTable />);
     await userEvent.click(await screen.findByTestId('tramites-export-xlsx'));
@@ -305,7 +315,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
   it('AC7: si una página falla se avisa y NO se deja un archivo incompleto', async () => {
     const universo = Array.from({ length: 300 }, (_, i) => makeInstance(i + 1));
     mocks.listInstances.mockResolvedValue(universo.slice(0, 200));
-    mocks.listInstancesPage
+    mocks.searchInstances
       .mockResolvedValueOnce({ items: universo.slice(0, 200), total: 300 })
       .mockRejectedValueOnce(new Error('502 Bad Gateway'));
 

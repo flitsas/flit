@@ -1,3 +1,4 @@
+import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import type {
   AceptarConsentimientoResult,
@@ -483,6 +484,33 @@ async function sha256Hex(file: File): Promise<string> {
  * Los defaults de los campos async (HU #10350 / #11056) se aplican AQUÍ y no en cada llamador: un
  * backend que todavía no exponga una columna deja la tabla funcionando en vez de romper el render.
  */
+/** Cuerpo y cabeceras del camino POST. El tenant sigue viajando por cabecera, no por el cuerpo. */
+function searchPayload(params: ListInstancesParams) {
+  const headers: Record<string, string> = {};
+  if (params.filterTenantId) headers['X-Tenant-Id'] = params.filterTenantId;
+  const { filterTenantId: _tenant, ...body } = params;
+  return { headers, body };
+}
+
+/**
+ * Una página del listado con `total`, por POST y con condiciones.
+ *
+ * Comparte con {@link listInstancesPage} la normalización de los campos async: se aplica en
+ * {@link normalizeInstances} para que las dos rutas no puedan divergir en qué defaults ponen.
+ */
+async function searchInstances(
+  params: ListInstancesParams,
+): Promise<{ items: InstanceSummary[]; total: number }> {
+  const { headers, body } = searchPayload(params);
+  const res = await request<InstancesResponse>('/api/v1/tramites/instances/search', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const items = normalizeInstances(res?.items);
+  return { items, total: res?.total ?? items.length };
+}
+
 async function listInstancesPage(
   params: ListInstancesParams,
 ): Promise<{ items: InstanceSummary[]; total: number }> {
@@ -495,9 +523,19 @@ async function listInstancesPage(
 
   const res = await request<InstancesResponse>(path, { headers });
 
-  // Normaliza los campos async de HU #10350 con defaults seguros: un backend que aún no los
-  // exponga (transición) deja la tabla funcionando (chips/estado base) sin romper el render.
-  const items = (res?.items ?? []).map((item) => ({
+  const items = normalizeInstances(res?.items);
+
+  // Sin `total` (ruta histórica, sin paginación) el respaldo es el tamaño de la página: nunca
+  // promete filas que no existen, que es el error que sí se notaría al exportar.
+  return { items, total: res?.total ?? items.length };
+}
+
+/**
+ * Defaults seguros de los campos async (HU #10350 / #11056): un backend que aún no exponga una
+ * columna deja la tabla funcionando en vez de romper el render.
+ */
+function normalizeInstances(items: InstanceSummary[] | undefined): InstanceSummary[] {
+  return (items ?? []).map((item) => ({
     ...item,
     draftFinalizedAt: item.draftFinalizedAt ?? null,
     identityValidationStatus: item.identityValidationStatus ?? null,
@@ -514,10 +552,6 @@ async function listInstancesPage(
     firmaCompradorEstado: item.firmaCompradorEstado ?? null,
     consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
   }));
-
-  // Sin `total` (ruta histórica, sin paginación) el respaldo es el tamaño de la página: nunca
-  // promete filas que no existen, que es el error que sí se notaría al exportar.
-  return { items, total: res?.total ?? items.length };
 }
 
 export const tramitesClient = {
@@ -570,6 +604,43 @@ export const tramitesClient = {
    * respaldo es el tamaño de la página, que al menos nunca promete filas que no existen.</p>
    */
   listInstancesPage: (params: ListInstancesParams = {}) => listInstancesPage(params),
+
+  /**
+   * HU #12106 — el listado por POST, que es el ÚNICO camino que admite condiciones.
+   *
+   * <p>Lo usan la tabla y el recorrido del export, así que un filtro nuevo llega a los dos a la vez.
+   * Es POST y no un GET con más parámetros porque placa, VIN y radicado aceptan pegar una lista
+   * completa desde Excel, y unos cientos de valores no caben en una query string.</p>
+   */
+  searchInstances: (params: ListInstancesParams = {}) => searchInstances(params),
+
+  /**
+   * HU #12106 — por qué se puede filtrar el listado. La barra se pinta a partir de esta respuesta,
+   * así que un campo nuevo aparece en pantalla sin desplegar frontend.
+   */
+  listFilterFields: async (filterTenantId?: string): Promise<QueryField[]> => {
+    const headers: Record<string, string> = {};
+    if (filterTenantId) headers['X-Tenant-Id'] = filterTenantId;
+    return (await request<QueryField[]>('/api/v1/tramites/instances/fields', { headers })) ?? [];
+  },
+
+  /** Conteo por estado bajo las mismas condiciones. `estado` se ignora en el servidor. */
+  searchEstadoCounts: async (params: ListInstancesParams = {}): Promise<Record<string, number>> => {
+    const { headers, body } = searchPayload(params);
+    try {
+      return (
+        (await request<Record<string, number>>('/api/v1/tramites/instances/estado-counts', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        })) ?? {}
+      );
+    } catch {
+      // Igual que su gemelo GET: unas tarjetas en blanco son mejor que una pantalla de error. La
+      // tabla es lo que el gestor necesita.
+      return {};
+    }
+  },
 
   /**
    * Conteo por estado para la tira de KPIs del listado, sobre el UNIVERSO que matchea los filtros

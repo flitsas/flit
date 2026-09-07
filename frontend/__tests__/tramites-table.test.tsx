@@ -7,6 +7,9 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
+  searchInstances: vi.fn(),
+  searchEstadoCounts: vi.fn(),
+  listFilterFields: vi.fn(),
   // La tira de KPIs pide sus conteos al backend (no se derivan del array del listado).
   listInstanceEstadoCounts: vi.fn().mockResolvedValue({}),
   setPriority: vi.fn(),
@@ -117,6 +120,17 @@ async function abrirAcciones(referenceNumber = 'TR-0001') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // HU #12107 — la tabla pasó al camino POST (`searchInstances`), que es el único que lleva
+  // condiciones. Se cablea sobre `listInstances` para que los casos que ya sembraban filas por ahí
+  // sigan valiendo sin tocarlos: lo que cambió es el transporte, no lo que devuelve el servidor.
+  mocks.searchInstances.mockImplementation(async (params?: unknown) => {
+    const items = (await mocks.listInstances(params)) ?? [];
+    return { items, total: items.length };
+  });
+  mocks.searchEstadoCounts.mockImplementation((params?: unknown) =>
+    mocks.listInstanceEstadoCounts(params),
+  );
+  mocks.listFilterFields.mockResolvedValue([]);
   // clearAllMocks borra la implementación: sin re-armarla el efecto de config recibe undefined
   // y encadena .then sobre él. Por defecto, ninguna familia bloqueada.
   mocks.getConsultationConfig.mockResolvedValue({
@@ -206,7 +220,7 @@ describe('TramitesTable — filtro por estado en el slider KPI', () => {
   // comprueba aquí es esa llamada, no que el array se recorte en memoria — el listado trae como
   // mucho una página, así que recortarla contestaba "los entregados que cupieron", no "los
   // entregados". Y el conteo de la tarjeta viene del backend por la misma razón.
-  it('al clic en una tarjeta pide ese estado al backend y no expone el filtro en + Filtro', async () => {
+  it('al clic en una tarjeta pide ese estado al backend y no expone el filtro en Filtros', async () => {
     const [a, b] = makeInstances(2);
     const borrador = { ...a, estado: 'borrador', placa: 'AAA111' };
     const entregado = { ...b, estado: 'entregado', placa: 'BBB222' };
@@ -234,7 +248,7 @@ describe('TramitesTable — filtro por estado en el slider KPI', () => {
     expect(await screen.findByText('AAA111')).toBeInTheDocument();
     expect(screen.getByText('BBB222')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
     expect(screen.queryByText('Filtrar por estado')).not.toBeInTheDocument();
   });
 
@@ -556,8 +570,8 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     expect(within(header).queryByText('Compañía')).not.toBeInTheDocument();
     expect(within(table).getByText('Empresa A')).toBeInTheDocument();
     // Filtro Compañía: select SIEMPRE presente (no checkbox) dentro del grupo ALCANCE del
-    // popover "+ Filtro", primero para el SuperAdmin.
-    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
+    // popover "Filtros", primero para el SuperAdmin.
+    await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
     expect(screen.getByLabelText('Compañía')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Empresa A' })).toBeInTheDocument();
 
@@ -1334,12 +1348,12 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 });
 
 describe('TramitesTable — filtros y ordenamiento server-side', () => {
-  // Los filtros específicos (placa/actores/gestor/firmado) ya no están siempre en pantalla: hay
-  // que añadirlos primero desde el popover "+ Filtro" (disparador con checkboxes agrupados). El
-  // rótulo del disparador cambia a "+ Filtro (n)" al marcar filtros, así que se abre por regex.
+  // HU #12107 — los filtros del listado usan la gramática de Consultas: dentro del popover
+  // "Filtros" vive `QueryFilterBar` (campo → operador → valores → chip). El rótulo del disparador
+  // cambia a "Filtros (n)" con condiciones aplicadas, así que se abre por regex.
   async function abrirPopoverFiltro() {
     if (screen.queryByRole('dialog', { name: 'Agregar filtro' })) return;
-    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
   }
   async function abrirPopoverPeriodo() {
     if (screen.queryByRole('dialog', { name: 'Elegir periodo' })) return;
@@ -1347,48 +1361,69 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     // nombre (p. ej. "Mes actual"). En estos tests siempre se abre en reposo, antes de elegir.
     await userEvent.click(screen.getByRole('button', { name: 'Periodo' }));
   }
-  /** Abre "+ Filtro" y marca cada casilla pedida; el popover se deja abierto (sus campos reales
-   *  se despliegan justo debajo de cada checkbox marcado, dentro del propio popover). */
-  async function agregarFiltrosEspecificos(...nombres: string[]) {
+  /**
+   * Arma una condición con la gramática: elige campo, operador y valores, y la aplica. Deja el
+   * popover "Filtros" abierto para poder encadenar varias.
+   */
+  async function agregarCondicion(
+    fieldId: string,
+    label: string,
+    operador: string,
+    valores: string,
+  ) {
     await abrirPopoverFiltro();
-    for (const nombre of nombres) {
-      await userEvent.click(screen.getByRole('checkbox', { name: nombre }));
-    }
+    await userEvent.click(screen.getByTestId('tramites-agregar-filtro'));
+    await userEvent.click(
+      within(screen.getByTestId('tramites-campos')).getByRole('button', { name: label }),
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Operador'), operador);
+    const caja = screen.queryByTestId(`tramites-valores-${fieldId}`);
+    if (caja) await userEvent.type(caja, valores);
+    await userEvent.click(screen.getByTestId(`tramites-aplicar-${fieldId}`));
   }
 
-  it('aplica filtros de placa, actores, gestor, firmado y rango de creación al listado', async () => {
+  /** Catálogo mínimo con la forma que sirve el backend (HU #12106). */
+  const CATALOGO = [
+    {
+      id: 'placa', label: 'Placa', kind: 'texto', group: 'Vehículo',
+      operators: ['es_alguno', 'contiene', 'esta_vacio', 'no_esta_vacio'],
+      options: [], hint: null, admiteLista: true,
+    },
+    {
+      id: 'comprador', label: 'Comprador', kind: 'texto', group: 'Personas',
+      operators: ['es_alguno', 'contiene', 'esta_vacio', 'no_esta_vacio'],
+      options: [], hint: null, admiteLista: true,
+    },
+  ];
+
+  it('aplica condiciones y un rango de creación al listado, y las muestra como chips', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
+    mocks.listFilterFields.mockResolvedValue(CATALOGO);
     render(<TramitesTable />);
     await screen.findByText('P0001');
-    expect(mocks.listInstances).toHaveBeenCalledWith(undefined);
 
-    await agregarFiltrosEspecificos('Placa', 'Propietario / vendedor', 'Comprador', 'Gestor', 'Firmado');
+    // La condición se arma eligiendo campo, operador y valores — no hay un input fijo por campo.
+    await agregarCondicion('placa', 'Placa', 'contiene', 'ABC');
+    await agregarCondicion('comprador', 'Comprador', 'es_alguno', 'García');
 
-    await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'ABC123');
-    await userEvent.type(screen.getByLabelText('Filtrar por propietario o vendedor'), 'Pérez');
-    await userEvent.type(screen.getByLabelText('Filtrar por comprador'), 'García');
-    await userEvent.type(screen.getByLabelText('Filtrar por gestor'), 'Ana');
-    await userEvent.selectOptions(screen.getByLabelText('Filtrar por firma de compraventa'), 'true');
-
-    // Rango propio sobre "Fecha de creación" (opción por defecto de "Rango sobre") — vive en el
-    // popover "Periodo", un disparador distinto: abrirlo cierra "+ Filtro" (clic fuera), pero el
-    // borrador de los campos ya escritos sigue vivo (todo el estado vive en TramitesTable, no en
-    // el popover).
+    // Rango propio sobre "Fecha de creación": vive en el popover "Periodo", un disparador distinto.
+    // Abrirlo cierra "Filtros" (clic fuera), pero el borrador sigue vivo — todo el estado vive en
+    // TramitesTable, no en el popover.
     await abrirPopoverPeriodo();
     await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
     await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-01-01');
     await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-01-31');
 
+    await abrirPopoverFiltro();
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
 
     await vi.waitFor(() => {
-      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          placa: 'ABC123',
-          vendedor: 'Pérez',
-          comprador: 'García',
-          gestor: 'Ana',
-          firmado: true,
+          condiciones: [
+            { fieldId: 'placa', operator: 'contiene', values: ['ABC'] },
+            { fieldId: 'comprador', operator: 'es_alguno', values: ['García'] },
+          ],
           createdFrom: '2026-01-01',
           createdTo: '2026-01-31',
           take: 200,
@@ -1396,6 +1431,9 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
         }),
       );
     });
+
+    // Y lo aplicado se lee como chips, con la etiqueta del catálogo y no con el id del campo.
+    expect(await screen.findByText(/Placa contiene ABC/)).toBeInTheDocument();
   });
 
   it('aplica un rango de fechas propio sobre la última actualización', async () => {
@@ -1420,32 +1458,35 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     });
   });
 
-  it('mantiene los filtros específicos ocultos por defecto y permite limpiarlos', async () => {
+  it('empieza sin condiciones y "Empezar de cero" las retira todas', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
+    mocks.listFilterFields.mockResolvedValue(CATALOGO);
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
     await abrirPopoverFiltro();
-    expect(screen.queryByLabelText('Filtrar por placa')).toBeNull();
+    // En reposo no hay ninguna condición y no hay nada que limpiar.
+    expect(screen.queryByTestId('tramites-chip-placa')).toBeNull();
     expect(screen.getByRole('button', { name: 'Empezar de cero' })).toBeDisabled();
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Placa' }));
-    expect(screen.getByLabelText('Filtrar por placa')).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'XYZ');
+    await agregarCondicion('placa', 'Placa', 'es_alguno', 'XYZ999');
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
 
     await vi.waitFor(() => {
-      expect(mocks.listInstances).toHaveBeenLastCalledWith(
-        expect.objectContaining({ placa: 'XYZ' }),
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          condiciones: [{ fieldId: 'placa', operator: 'es_alguno', values: ['XYZ999'] }],
+        }),
       );
     });
 
-    // "Aplicar" cerró el popover: se reabre (ahora con rótulo "+ Filtro (1)") para llegar a
+    // "Aplicar" cerró el popover: se reabre (ahora con rótulo "Filtros (1)") para llegar a
     // "Empezar de cero".
     await abrirPopoverFiltro();
     await userEvent.click(screen.getByRole('button', { name: 'Empezar de cero' }));
     await vi.waitFor(() => {
-      expect(mocks.listInstances).toHaveBeenLastCalledWith(undefined);
+      // Sin condiciones el cuerpo solo lleva la paginación: nada que filtrar.
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith({ take: 200, skip: 0 });
     });
   });
 
