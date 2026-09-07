@@ -44,8 +44,6 @@ export interface TramitesColumnDef {
    * que sí truncan. Antes crecían todas por igual y el aire terminaba inflando la columna de VIN.
    */
   fixed?: boolean;
-  /** Si la cabecera admite clic para ordenar vía API (`sortBy` / `sortDir`). */
-  sortable?: boolean;
   /**
    * Agrupación en el desplegable "Columnas". NO altera el orden de la tabla, que lo sigue dando
    * este arreglo: separa las columnas del listado base de los desgloses adicionales, que si no
@@ -79,7 +77,7 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   //
   // La CLAVE sigue siendo `placa`: es lo que viaja en la preferencia guardada de cada usuario.
   // Ordena por placa; para ordenar por VIN está su columna de desglose.
-  { key: 'placa', label: 'Vehículo', minPx: 180, sortable: true, group: GRUPO_BASE },
+  { key: 'placa', label: 'Vehículo', minPx: 180, group: GRUPO_BASE },
   // La celda solo trae `vendedorNombre`, así que el rótulo es "Vendedor" a secas: "Propietario /
   // vendedor" prometía un propietario inscrito que esta columna nunca ha pintado. La CLAVE sigue
   // siendo `propietario` — es lo que viaja en la preferencia guardada de cada usuario y
@@ -90,13 +88,13 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // dice de quién es. El piso cubre el peor caso de las DOS líneas: el nombre completo arriba y
   // el valor más largo ("Sin registrar", ~82px) debajo, más los 32px de padding del `<td>`.
   { key: 'propietario', label: 'Vendedor', minPx: 170, group: GRUPO_BASE },
-  { key: 'comprador', label: 'Comprador', minPx: 170, sortable: true, group: GRUPO_BASE },
+  { key: 'comprador', label: 'Comprador', minPx: 170, group: GRUPO_BASE },
   { key: 'tramite', label: 'Trámite / Estado', minPx: 160, group: GRUPO_BASE },
   // Sin truncar: el nombre del organismo es la mitad del valor de la columna ("SECRETARIA
   // DISTRITAL DE MOVILIDAD DE BOGOTA" cortado a "SECRETARIA DISTRITAL DE…" no distingue nada).
   // Envuelve en varias líneas, así que es de las que mejor aprovecha el ancho sobrante.
   { key: 'secretaria', label: 'Secretaría', minPx: 190, group: GRUPO_BASE },
-  { key: 'gestor', label: 'Gestor', minPx: 160, sortable: true, group: GRUPO_BASE },
+  { key: 'gestor', label: 'Gestor', minPx: 160, group: GRUPO_BASE },
   // Fija: tres etiquetas conocidas y cortas ("Dashboard", "Integración", "Migrado").
   { key: 'fuente', label: 'Fuente', minPx: 120, fixed: true, group: GRUPO_BASE },
   // Desgloses: su dato ya viaja apilado en una celda del listado (VIN y marca/modelo bajo
@@ -105,13 +103,13 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   //
   // El rótulo del desglose del vehículo NO puede ser "Vehículo" —ya lo lleva la columna fundida— y
   // "Marca / modelo" es además lo que de verdad pinta: marca + línea.
-  { key: 'vin', label: 'VIN', minPx: 168, fixed: true, sortable: true, group: GRUPO_DESGLOSE },
+  { key: 'vin', label: 'VIN', minPx: 168, fixed: true, group: GRUPO_DESGLOSE },
   { key: 'vehiculo', label: 'Marca / modelo', minPx: 140, group: GRUPO_DESGLOSE },
   { key: 'estado', label: 'Estado', minPx: 150, group: GRUPO_DESGLOSE },
   // Fijas: "3/5" con el nombre del paso, y dos fechas de formato constante.
   { key: 'paso', label: 'Paso', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
-  { key: 'fechaCreacion', label: 'Fecha de creación', minPx: 130, fixed: true, sortable: true, group: GRUPO_DESGLOSE },
-  { key: 'fechaActualizacion', label: 'Fecha de actualización', minPx: 140, fixed: true, sortable: true, group: GRUPO_DESGLOSE },
+  { key: 'fechaCreacion', label: 'Fecha de creación', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
+  { key: 'fechaActualizacion', label: 'Fecha de actualización', minPx: 140, fixed: true, group: GRUPO_DESGLOSE },
 ] as const;
 
 /**
@@ -133,22 +131,6 @@ export const TRAMITES_COLUMN_KEYS: readonly string[] = TRAMITES_COLUMNS.map((c) 
  */
 export const TRAMITES_COLUMNS_ADDED_SINCE_LEGACY: readonly string[] = [];
 
-/** Clave de UI → `sortBy` del API de listado de trámites. */
-export function tramitesColumnToSortBy(columnKey: string): string {
-  switch (columnKey) {
-    case 'fechaCreacion':
-      return 'createdAt';
-    case 'fechaActualizacion':
-      return 'updatedAt';
-    case 'vin':
-    case 'placa':
-    case 'comprador':
-    case 'gestor':
-      return columnKey;
-    default:
-      return columnKey;
-  }
-}
 
 /**
  * Columnas visibles por defecto: con lo que arranca un gestor que nunca ha tocado "Columnas".
@@ -312,6 +294,14 @@ export interface TramitesExportField {
    * veces, ni desaparece.
    */
   ownedBy?: string;
+  /**
+   * Clave de orden del API para este dato, si se puede ordenar por él (HU #12108).
+   *
+   * Vive en la MISMA entrada que `value`/`raw` y no en una lista aparte: el desplegable de la
+   * cabecera y el Excel hablan de los mismos datos, y con dos listas paralelas una columna nueva
+   * acabaría siendo exportable pero no ordenable, o al revés, sin que nada lo delatara.
+   */
+  sort?: string;
 }
 
 /** Texto para Excel: lo que la tabla pinta como «—» aquí es celda vacía, no un guion. */
@@ -359,6 +349,7 @@ function campoFirma(
 const CAMPO_FECHA_CREACION: TramitesExportField = {
   id: 'fechaCreacion',
   label: 'Fecha de creación',
+  sort: 'createdAt',
   value: (row) => formatFecha(row.createdAt),
   // `bogotaDay` y no el instante UTC crudo: Excel no guarda husos, así que un trámite creado a las
   // 22:00 saltaría al día siguiente solo dentro del archivo y contradiría la pantalla.
@@ -369,14 +360,15 @@ const CAMPO_FECHA_CREACION: TramitesExportField = {
 const CAMPO_FECHA_ACTUALIZACION: TramitesExportField = {
   id: 'fechaActualizacion',
   label: 'Fecha de actualización',
+  sort: 'updatedAt',
   value: (row) => (row.updatedAt ? formatFecha(row.updatedAt) : '—'),
   raw: (row) => bogotaDay(row.updatedAt ?? null),
   width: 18,
 };
 
-const CAMPO_VIN = campoTexto('vin', 'VIN', (row) => row.vin, 20);
+const CAMPO_VIN = { ...campoTexto('vin', 'VIN', (row) => row.vin, 20), sort: 'vin' };
 const CAMPO_VEHICULO = campoTexto('vehiculo', 'Marca / modelo', (row) => vehiculo(row), 24);
-const CAMPO_ESTADO = campoTexto('estado', 'Estado', (row) => estadoLabel(row.estado), 16);
+const CAMPO_ESTADO = { ...campoTexto('estado', 'Estado', (row) => estadoLabel(row.estado), 16), sort: 'estado' };
 const CAMPO_PASO = campoTexto('paso', 'Paso', (row) => `${row.pasoActual}/${row.totalPasos}`, 8);
 const CAMPO_PASO_NOMBRE = campoTexto('pasoNombre', 'Nombre del paso', (row) => stepLabel(row), 26);
 
@@ -395,12 +387,12 @@ function apilado(campo: TramitesExportField, ownedBy: string): TramitesExportFie
  */
 const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   radicado: [
-    campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 20),
+    { ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 20), sort: 'radicado' },
     apilado(CAMPO_FECHA_CREACION, 'fechaCreacion'),
     apilado(CAMPO_FECHA_ACTUALIZACION, 'fechaActualizacion'),
   ],
   placa: [
-    campoTexto('placa', 'Placa', (row) => row.placa, 12),
+    { ...campoTexto('placa', 'Placa', (row) => row.placa, 12), sort: 'placa' },
     apilado(CAMPO_VIN, 'vin'),
     apilado(CAMPO_VEHICULO, 'vehiculo'),
   ],
@@ -409,11 +401,11 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
     campoFirma('vendedorFirma', 'Firma del vendedor', (r) => r.vendedorNombre, (r) => r.firmaVendedorEstado),
   ],
   comprador: [
-    campoTexto('comprador', 'Comprador', (row) => row.compradorNombre, 28),
+    { ...campoTexto('comprador', 'Comprador', (row) => row.compradorNombre, 28), sort: 'comprador' },
     campoFirma('compradorFirma', 'Firma del comprador', (r) => r.compradorNombre, (r) => r.firmaCompradorEstado),
   ],
   tramite: [
-    campoTexto('tramite', 'Trámite', (row) => tramiteLabel(row), 22),
+    { ...campoTexto('tramite', 'Trámite', (row) => tramiteLabel(row), 22), sort: 'tipo_tramite' },
     apilado(CAMPO_ESTADO, 'estado'),
     apilado(CAMPO_PASO, 'paso'),
     apilado(CAMPO_PASO_NOMBRE, 'paso'),
@@ -423,9 +415,9 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   // quien la operó. En una sola columna no se puede agrupar por ninguna de las dos.
   gestor: [
     campoTexto('compania', 'Compañía', (row) => row.companiaNombre, 28),
-    campoTexto('gestor', 'Gestor', (row) => row.gestorNombre, 24),
+    { ...campoTexto('gestor', 'Gestor', (row) => row.gestorNombre, 24), sort: 'gestor' },
   ],
-  fuente: [campoTexto('fuente', 'Fuente', (row) => FUENTE_LABEL[row.fuente ?? 'dashboard'], 14)],
+  fuente: [{ ...campoTexto('fuente', 'Fuente', (row) => FUENTE_LABEL[row.fuente ?? 'dashboard'], 14), sort: 'fuente' }],
   vin: [CAMPO_VIN],
   vehiculo: [CAMPO_VEHICULO],
   estado: [CAMPO_ESTADO],
@@ -459,4 +451,27 @@ export function tramitesExportFields(visibleKeys: readonly string[]): TramitesEx
   }
 
   return campos;
+}
+
+/**
+ * Por cuáles de sus datos se puede ordenar una columna, y con qué clave del API (HU #12108).
+ *
+ * <p>Una celda compuesta lleva varios datos —«Radicado» apila las dos fechas, «Vehículo» la placa y
+ * el VIN— y un clic en la cabecera no puede decir por cuál se ordena. Devolviendo la lista, la
+ * cabecera puede ofrecer un desplegable cuando hay más de uno y conservar el clic simple cuando hay
+ * uno solo.</p>
+ *
+ * <p>Se aplica la MISMA regla de `ownedBy` que el export: si la columna dedicada de un subcampo está
+ * visible, ese dato ya no se apila aquí y por tanto tampoco se ordena desde aquí. Si no, habría dos
+ * cabeceras distintas ordenando por lo mismo.</p>
+ */
+export function tramitesSortOptions(
+  columnKey: string,
+  visibleKeys: readonly string[],
+): { id: string; label: string; sort: string }[] {
+  const visibles = new Set(visibleKeys);
+
+  return (EXPORT_FIELDS[columnKey] ?? [])
+    .filter((campo) => campo.sort && !(campo.ownedBy && visibles.has(campo.ownedBy)))
+    .map((campo) => ({ id: campo.id, label: campo.label, sort: campo.sort! }));
 }

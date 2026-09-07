@@ -192,3 +192,89 @@ describe('HU #12107 — AC8: sin resultados se distingue de un error', () => {
     expect(screen.getByRole('button', { name: 'Limpiar filtros' })).toBeInTheDocument();
   });
 });
+
+describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
+  it('AC1: la cabecera de una celda compuesta ofrece sus datos, en los dos sentidos', async () => {
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    // "Radicado" apila las dos fechas: un clic no podría decir por cuál se ordena.
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
+    const menu = screen.getByRole('menu', { name: /Ordenar por, en Radicado/ });
+
+    for (const opcion of ['Radicado', 'Fecha de creación', 'Fecha de actualización']) {
+      expect(within(menu).getAllByRole('menuitemradio', { name: new RegExp(opcion) })).toHaveLength(2);
+    }
+  });
+
+  it('AC4: elegir un criterio lo pide al servidor y vuelve a la primera página', async () => {
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Radicado/ })).getByRole(
+        'menuitemradio',
+        { name: /Fecha de actualización.*Z-A/ },
+      ),
+    );
+
+    await waitFor(() =>
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'updatedAt', sortDir: 'desc' }),
+      ),
+    );
+  });
+
+  it('AC3: solo hay un criterio activo, y la cabecera lo dice', async () => {
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Radicado/ })).getByRole(
+        'menuitemradio',
+        { name: /Fecha de creación.*A-Z/ },
+      ),
+    );
+
+    // El nombre accesible dice por qué ordena AHORA: sin esto solo lo diría el icono.
+    expect(
+      await screen.findByRole('button', {
+        name: /Ordenar Radicado\. Ahora: Fecha de creación ascendente/,
+      }),
+    ).toBeInTheDocument();
+    // Y ninguna otra cabecera compuesta se muestra como activa.
+    expect(screen.getByRole('button', { name: /^Ordenar Vehículo$/ })).toBeInTheDocument();
+  });
+
+  it('AC2: una columna con un solo dato ordenable conserva el clic simple', async () => {
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    // "Comprador" no es compuesta: alterna asc/desc al pulsar, sin menú.
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar por Comprador$/ }));
+
+    await waitFor(() =>
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'comprador', sortDir: 'asc' }),
+      ),
+    );
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('AC6: el menú se cierra con Escape y devuelve el foco a la cabecera', async () => {
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    const cabecera = screen.getByRole('button', { name: /^Ordenar Radicado$/ });
+    await userEvent.click(cabecera);
+    expect(screen.getByRole('menu', { name: /Ordenar por, en Radicado/ })).toBeInTheDocument();
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    // Sin devolver el foco, quien navega con teclado se queda dentro de un menú que ya no existe.
+    expect(screen.getByRole('button', { name: /^Ordenar Radicado$/ })).toHaveFocus();
+  });
+});

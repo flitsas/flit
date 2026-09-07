@@ -1490,33 +1490,40 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     });
   });
 
-  it('ordena por placa al hacer clic en la cabecera', async () => {
+  it('ordena por placa y por VIN desde la cabecera de Vehículo (HU #12108)', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
-    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Vehículo/i }));
-
-    await vi.waitFor(() => {
-      expect(mocks.listInstances).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          sortBy: 'placa',
-          sortDir: 'asc',
-          take: 200,
-        }),
-      );
-    });
-
+    // "Vehículo" apila placa y VIN: la cabecera abre un menú en vez de alternar a ciegas.
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Vehículo$/ }));
     await userEvent.click(
-      screen.getByRole('button', { name: /Ordenar por Vehículo \(ascendente\)/i }),
+      within(screen.getByRole('menu', { name: /Ordenar por, en Vehículo/ })).getByRole(
+        'menuitemradio',
+        { name: /Placa.*A-Z/ },
+      ),
     );
 
     await vi.waitFor(() => {
-      expect(mocks.listInstances).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          sortBy: 'placa',
-          sortDir: 'desc',
-        }),
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'placa', sortDir: 'asc', take: 200 }),
+      );
+    });
+
+    // El mismo menú permite ordenar por el VIN, que antes exigía encender su columna de desglose.
+    await userEvent.click(
+      screen.getByRole('button', { name: /Ordenar Vehículo\. Ahora: Placa ascendente/ }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Vehículo/ })).getByRole(
+        'menuitemradio',
+        { name: /VIN.*Z-A/ },
+      ),
+    );
+
+    await vi.waitFor(() => {
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'vin', sortDir: 'desc' }),
       );
     });
   });

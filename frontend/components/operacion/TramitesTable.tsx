@@ -39,7 +39,7 @@ import {
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
   buildTramitesGridLayout,
   buildTramitesColWidths,
-  tramitesColumnToSortBy,
+  tramitesSortOptions,
   type TramitesColumnDef,
   type TramitesGridLayout,
 } from '@/lib/tramites/tramites-table-columns';
@@ -1377,38 +1377,145 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 }
 
 /**
- * Cabecera ordenable — mismo patrón que OT ClientProceduresTable. Se renderiza DENTRO del `<th>`
- * (que ya aporta el contexto de bloque): sin envolver en un `<div>` de más, para no duplicar
- * semántica sobre la propia celda de cabecera.
+ * Cabecera ordenable (HU #12108).
+ *
+ * <p>Tres columnas del listado son COMPUESTAS: «Radicado» apila las dos fechas, «Vehículo» la placa
+ * y el VIN, y «Trámite» el tipo y el estado. Un clic en la cabecera no puede expresar por cuál de
+ * ellos se ordena, así que esas cabeceras abren un desplegable con sus datos y los dos sentidos.</p>
+ *
+ * <p>Las columnas con UN solo dato ordenable conservan el clic simple que alterna asc/desc: meterlas
+ * también en un menú añadiría dos pulsaciones para hacer lo mismo.</p>
+ *
+ * <p>Lo que se ofrece sale de `tramitesSortOptions`, la misma lista de subcampos que usa el Excel.
+ * Si el gestor enciende la columna de desglose de un dato, éste deja de ofrecerse desde la celda
+ * compuesta: si no, habría dos cabeceras distintas ordenando por lo mismo.</p>
  */
 function SortableHeaderCell({
   column,
+  visibleColumns,
   sortBy,
   sortDir,
   onSortChange,
 }: {
   column: TramitesColumnDef;
+  visibleColumns: readonly string[];
   sortBy: string;
   sortDir: 'asc' | 'desc';
   onSortChange: (sortBy: string, sortDir: 'asc' | 'desc') => void;
 }) {
-  if (!column.sortable) {
+  const opciones = tramitesSortOptions(column.key, visibleColumns);
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Cierra al pulsar fuera o con Escape, y devuelve el foco al disparador: sin esto, quien navega
+  // con teclado se queda dentro de un menú cerrado.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!panelRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  if (opciones.length === 0) {
     return <>{column.label}</>;
   }
-  const apiKey = tramitesColumnToSortBy(column.key);
-  const active = sortBy === apiKey;
-  const nextDir: 'asc' | 'desc' = active && sortDir === 'asc' ? 'desc' : 'asc';
-  const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+
+  const activa = opciones.find((o) => o.sort === sortBy);
+  const Icon = !activa ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+
+  // Un solo dato ordenable: se conserva el clic que alterna, como hasta ahora.
+  if (opciones.length === 1) {
+    const unica = opciones[0]!;
+    const active = sortBy === unica.sort;
+    const nextDir: 'asc' | 'desc' = active && sortDir === 'asc' ? 'desc' : 'asc';
+    return (
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+        aria-label={`Ordenar por ${column.label}${active ? ` (${sortDir === 'asc' ? 'ascendente' : 'descendente'})` : ''}`}
+        onClick={() => onSortChange(unica.sort, nextDir)}
+      >
+        {column.label}
+        <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
+      </button>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1 uppercase hover:opacity-80"
-      aria-label={`Ordenar por ${column.label}${active ? ` (${sortDir === 'asc' ? 'ascendente' : 'descendente'})` : ''}`}
-      onClick={() => onSortChange(apiKey, nextDir)}
-    >
-      {column.label}
-      <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
-    </button>
+    <div className="relative inline-block">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        // El nombre accesible dice por qué está ordenando AHORA, no solo que se puede ordenar: es
+        // la única forma de saberlo sin ver el icono.
+        aria-label={
+          activa
+            ? `Ordenar ${column.label}. Ahora: ${activa.label} ${sortDir === 'asc' ? 'ascendente' : 'descendente'}`
+            : `Ordenar ${column.label}`
+        }
+        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+      >
+        {column.label}
+        <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <div
+          ref={panelRef}
+          role="menu"
+          aria-label={`Ordenar por, en ${column.label}`}
+          className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-[#DFE5ED] bg-white p-1 normal-case shadow-lg dark:border-white/10 dark:bg-[#162744]"
+        >
+          {opciones.map((opcion) =>
+            (['asc', 'desc'] as const).map((dir) => {
+              const seleccionada = sortBy === opcion.sort && sortDir === dir;
+              return (
+                <button
+                  key={`${opcion.id}-${dir}`}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={seleccionada}
+                  onClick={() => {
+                    onSortChange(opcion.sort, dir);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-[#162744] hover:bg-[#EEF5FF] dark:text-white dark:hover:bg-white/5 ${
+                    seleccionada ? 'bg-[#EEF5FF] dark:bg-white/10' : ''
+                  }`}
+                >
+                  {dir === 'asc' ? (
+                    <ArrowUp className="h-3 w-3 opacity-60" aria-hidden="true" />
+                  ) : (
+                    <ArrowDown className="h-3 w-3 opacity-60" aria-hidden="true" />
+                  )}
+                  {opcion.label}
+                  <span className="ml-auto opacity-55">{dir === 'asc' ? 'A-Z' : 'Z-A'}</span>
+                </button>
+              );
+            }),
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1619,6 +1726,7 @@ function TableBody({
                 >
                   <SortableHeaderCell
                     column={col}
+                    visibleColumns={visibleColumns}
                     sortBy={sortBy}
                     sortDir={sortDir}
                     onSortChange={onSortChange}
