@@ -1,3 +1,4 @@
+using Flit.Queries.Domain;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -35,8 +36,78 @@ public sealed record ProcedureInstanceListRequest
     /// <summary>Código del tipo concreto de trámite, no la familia.</summary>
     public string? TipoCodigo { get; init; }
 
+    /// <summary>
+    /// Condiciones armadas con la gramática de Consultas (HU #12106). Llegan validadas contra
+    /// <see cref="TramitesQueryFieldCatalog"/>; ver <see cref="TramitesQueryConditions"/>.
+    /// </summary>
+    public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
+
     public string? SortBy { get; init; }
     public bool SortDescending { get; init; } = true;
+}
+
+/// <summary>
+/// Valida las condiciones contra el catálogo ANTES de que lleguen al repositorio.
+///
+/// <para>Es la pieza que sostiene el AC5: un campo o un operador que no está en el catálogo se
+/// rechaza con un mensaje que lo nombra, en vez de ignorarse. Ignorarlo sería lo peligroso —
+/// devolvería un listado MÁS AMPLIO del que el usuario pidió con la apariencia de estar filtrado, y
+/// nadie revisa un resultado que parece correcto.</para>
+///
+/// <para>El texto del cliente no llega nunca a la consulta: lo único que se acepta son
+/// identificadores de una lista cerrada, y los valores viajan como parámetros.</para>
+/// </summary>
+public static class TramitesQueryConditions
+{
+    /// <summary>Mensaje del primer problema encontrado, o <c>null</c> si todas son válidas.</summary>
+    public static string? Validate(IReadOnlyList<QueryCondition>? condiciones)
+    {
+        if (condiciones is null || condiciones.Count == 0)
+            return null;
+
+        foreach (var condicion in condiciones)
+        {
+            var campo = TramitesQueryFieldCatalog.Find(condicion.FieldId);
+            if (campo is null)
+                return $"El campo «{condicion.FieldId}» no se puede filtrar en el listado de trámites.";
+
+            if (!QueryOperator.IsKnown(condicion.Operator))
+                return $"El operador «{condicion.Operator}» no existe.";
+
+            if (!campo.Operators.Contains(condicion.Operator, StringComparer.Ordinal))
+                return $"El campo «{campo.Label}» no admite el operador «{condicion.Operator}».";
+
+            var unario = QueryOperator.IsUnary(condicion.Operator);
+            var valores = condicion.Values ?? [];
+
+            if (unario && valores.Count > 0)
+                return $"El operador «{condicion.Operator}» de «{campo.Label}» no lleva valores.";
+
+            if (!unario && valores.Count == 0)
+                return $"Falta el valor del filtro «{campo.Label}».";
+
+            // «Contiene» compara UN texto: con varios, el resultado dependería de cuál se eligiera.
+            if (condicion.Operator == QueryOperator.Contiene && valores.Count > 1)
+                return $"El filtro «{campo.Label}» con «contiene» admite un solo valor.";
+
+            // Una lista pegada en un campo que no la admite suele ser un error de quien la pega, y
+            // aceptarla en silencio daría un resultado que no se corresponde con lo que ve en pantalla.
+            if (!campo.AdmiteLista && valores.Count > 1)
+                return $"El filtro «{campo.Label}» admite un solo valor.";
+
+            // Una opción fuera del catálogo solo puede devolver cero: decirlo es más útil que
+            // devolver una lista vacía sin explicación.
+            if (campo.Options.Count > 0 && !unario)
+            {
+                var desconocida = valores.FirstOrDefault(v =>
+                    !campo.Options.Any(o => string.Equals(o.Value, v, StringComparison.OrdinalIgnoreCase)));
+                if (desconocida is not null)
+                    return $"«{desconocida}» no es una opción de «{campo.Label}».";
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>
@@ -59,6 +130,17 @@ public static class ProcedureInstanceSortFields
             ["placa"] = ProcedureInstanceSortBy.Placa,
             ["plate"] = ProcedureInstanceSortBy.Placa,
             ["vin"] = ProcedureInstanceSortBy.Vin,
+            // HU #12108 — subcampos de las celdas compuestas. Se aceptan los alias del catálogo
+            // (`TramitesQuerySort`) y también el nombre de la columna donde el cliente lo teclea
+            // distinto, por el mismo motivo que arriba: los dos circulan.
+            ["radicado"] = ProcedureInstanceSortBy.Radicado,
+            ["referenceNumber"] = ProcedureInstanceSortBy.Radicado,
+            ["reference_number"] = ProcedureInstanceSortBy.Radicado,
+            ["estado"] = ProcedureInstanceSortBy.Estado,
+            ["status"] = ProcedureInstanceSortBy.Estado,
+            ["tipo_tramite"] = ProcedureInstanceSortBy.TipoTramite,
+            ["tipoTramite"] = ProcedureInstanceSortBy.TipoTramite,
+            ["fuente"] = ProcedureInstanceSortBy.Fuente,
         };
 
     /// <summary>
@@ -109,6 +191,7 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
             Modalidad = request.Modalidad,
             OrganismoTransito = request.OrganismoTransito,
             TipoCodigo = request.TipoCodigo,
+            Condiciones = request.Condiciones,
         };
 
         var take = request.Take <= 0 || request.Take > ListProcedureInstancesHandler.MaxItems
@@ -175,6 +258,9 @@ public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRep
             Modalidad = request.Modalidad,
             OrganismoTransito = request.OrganismoTransito,
             TipoCodigo = request.TipoCodigo,
+            // Las condiciones SÍ viajan a los conteos: la tira de KPIs habla del universo que cumple
+            // los filtros. Lo único que se descarta es el estado, arriba.
+            Condiciones = request.Condiciones,
         };
 
         var conteos = await repo.CountByStatusFilteredAsync(request.TenantId, filter, ct);
