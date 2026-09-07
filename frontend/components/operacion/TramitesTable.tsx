@@ -1381,15 +1381,26 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
  *
  * <p>Tres columnas del listado son COMPUESTAS: «Radicado» apila las dos fechas, «Vehículo» la placa
  * y el VIN, y «Trámite» el tipo y el estado. Un clic en la cabecera no puede expresar por cuál de
- * ellos se ordena, así que esas cabeceras abren un desplegable con sus datos y los dos sentidos.</p>
+ * ellos se ordena, así que la cabecera abre un desplegable con sus datos y los dos sentidos.</p>
  *
- * <p>Las columnas con UN solo dato ordenable conservan el clic simple que alterna asc/desc: meterlas
- * también en un menú añadiría dos pulsaciones para hacer lo mismo.</p>
+ * <p>TODAS las columnas ordenables usan el mismo desplegable, también las de un solo dato. La
+ * alternativa —clic que alterna cuando hay uno, menú cuando hay varios— hacía que dos cabeceras
+ * vecinas idénticas respondieran distinto al mismo gesto, sin nada que lo anunciara.</p>
+ *
+ * <p>Cada dato es UNA fila con su nombre y un par de botones de sentido, en vez de N×2 filas
+ * planas: con seis entradas seguidas que solo se diferencian por una flecha no se ve cuántos datos
+ * hay realmente. El sentido se rotula según el tipo —una fecha ascendente es «Más antigua», no
+ * «A-Z»—, porque si no hay que adivinar qué hace la flecha.</p>
  *
  * <p>Lo que se ofrece sale de `tramitesSortOptions`, la misma lista de subcampos que usa el Excel.
  * Si el gestor enciende la columna de desglose de un dato, éste deja de ofrecerse desde la celda
  * compuesta: si no, habría dos cabeceras distintas ordenando por lo mismo.</p>
  */
+const SENTIDO_ETIQUETA: Record<'texto' | 'fecha', { asc: string; desc: string }> = {
+  texto: { asc: 'A-Z', desc: 'Z-A' },
+  fecha: { asc: 'Más antigua', desc: 'Más reciente' },
+};
+
 function SortableHeaderCell({
   column,
   visibleColumns,
@@ -1439,24 +1450,6 @@ function SortableHeaderCell({
   const activa = opciones.find((o) => o.sort === sortBy);
   const Icon = !activa ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
 
-  // Un solo dato ordenable: se conserva el clic que alterna, como hasta ahora.
-  if (opciones.length === 1) {
-    const unica = opciones[0]!;
-    const active = sortBy === unica.sort;
-    const nextDir: 'asc' | 'desc' = active && sortDir === 'asc' ? 'desc' : 'asc';
-    return (
-      <button
-        type="button"
-        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
-        aria-label={`Ordenar por ${column.label}${active ? ` (${sortDir === 'asc' ? 'ascendente' : 'descendente'})` : ''}`}
-        onClick={() => onSortChange(unica.sort, nextDir)}
-      >
-        {column.label}
-        <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
-      </button>
-    );
-  }
-
   return (
     <div className="relative inline-block">
       <button
@@ -1472,10 +1465,12 @@ function SortableHeaderCell({
             ? `Ordenar ${column.label}. Ahora: ${activa.label} ${sortDir === 'asc' ? 'ascendente' : 'descendente'}`
             : `Ordenar ${column.label}`
         }
-        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:bg-[#EEF5FF] dark:hover:bg-white/5 ${
+          activa ? 'text-[#2C6BED] dark:text-[#7FB0FF]' : ''
+        }`}
       >
         {column.label}
-        <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
+        <Icon className={`h-3 w-3 ${activa ? 'opacity-100' : 'opacity-45'}`} aria-hidden="true" />
       </button>
 
       {open ? (
@@ -1483,36 +1478,50 @@ function SortableHeaderCell({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${column.label}`}
-          className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-[#DFE5ED] bg-white p-1 normal-case shadow-lg dark:border-white/10 dark:bg-[#162744]"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-[#162744]"
         >
-          {opciones.map((opcion) =>
-            (['asc', 'desc'] as const).map((dir) => {
-              const seleccionada = sortBy === opcion.sort && sortDir === dir;
-              return (
-                <button
-                  key={`${opcion.id}-${dir}`}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={seleccionada}
-                  onClick={() => {
-                    onSortChange(opcion.sort, dir);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-[#162744] hover:bg-[#EEF5FF] dark:text-white dark:hover:bg-white/5 ${
-                    seleccionada ? 'bg-[#EEF5FF] dark:bg-white/10' : ''
-                  }`}
-                >
-                  {dir === 'asc' ? (
-                    <ArrowUp className="h-3 w-3 opacity-60" aria-hidden="true" />
-                  ) : (
-                    <ArrowDown className="h-3 w-3 opacity-60" aria-hidden="true" />
-                  )}
+          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
+            Ordenar por
+          </p>
+          <div className="p-1.5">
+            {opciones.map((opcion) => (
+              <div
+                key={opcion.id}
+                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
+              >
+                <p className="mb-1.5 text-xs font-medium text-[#162744] dark:text-white">
                   {opcion.label}
-                  <span className="ml-auto opacity-55">{dir === 'asc' ? 'A-Z' : 'Z-A'}</span>
-                </button>
-              );
-            }),
-          )}
+                </p>
+                <span className="flex items-center gap-1.5">
+                  {(['asc', 'desc'] as const).map((dir) => {
+                    const seleccionada = sortBy === opcion.sort && sortDir === dir;
+                    const Flecha = dir === 'asc' ? ArrowUp : ArrowDown;
+                    return (
+                      <button
+                        key={dir}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={seleccionada}
+                        aria-label={`${opcion.label}: ${SENTIDO_ETIQUETA[opcion.kind][dir]}`}
+                        onClick={() => {
+                          onSortChange(opcion.sort, dir);
+                          setOpen(false);
+                        }}
+                        className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                          seleccionada
+                            ? 'border-[#2C6BED] bg-[#2C6BED] text-white'
+                            : 'border-[#DFE5ED] text-[#5A6B7F] hover:bg-[#EEF5FF] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        <Flecha className="h-3 w-3" aria-hidden="true" />
+                        {SENTIDO_ETIQUETA[opcion.kind][dir]}
+                      </button>
+                    );
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>

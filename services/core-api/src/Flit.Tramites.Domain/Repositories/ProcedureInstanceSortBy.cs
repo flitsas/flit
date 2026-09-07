@@ -23,6 +23,11 @@ public enum ProcedureInstanceSortBy
     Estado,
     TipoTramite,
     Fuente,
+    Vendedor,
+    // El nombre del organismo vive en `field_values`, asi que su ORDER BY es una subconsulta
+    // correlacionada — la MISMA forma que ya usa Gestor contra identity.users.
+    Organismo,
+    Compania,
 }
 
 /// <summary>Dirección de ordenamiento pedida por el caller.</summary>

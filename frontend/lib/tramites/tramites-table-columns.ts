@@ -302,6 +302,12 @@ export interface TramitesExportField {
    * acabaría siendo exportable pero no ordenable, o al revés, sin que nada lo delatara.
    */
   sort?: string;
+
+  /**
+   * Cómo se LEE el sentido del orden en el desplegable de la cabecera. Una fecha ascendente no es
+   * «A-Z», es «más antigua primero»: etiquetar las dos igual obliga a adivinar qué hace la flecha.
+   */
+  sortKind?: 'texto' | 'fecha';
 }
 
 /** Texto para Excel: lo que la tabla pinta como «—» aquí es celda vacía, no un guion. */
@@ -350,6 +356,7 @@ const CAMPO_FECHA_CREACION: TramitesExportField = {
   id: 'fechaCreacion',
   label: 'Fecha de creación',
   sort: 'createdAt',
+  sortKind: 'fecha',
   value: (row) => formatFecha(row.createdAt),
   // `bogotaDay` y no el instante UTC crudo: Excel no guarda husos, así que un trámite creado a las
   // 22:00 saltaría al día siguiente solo dentro del archivo y contradiría la pantalla.
@@ -361,6 +368,7 @@ const CAMPO_FECHA_ACTUALIZACION: TramitesExportField = {
   id: 'fechaActualizacion',
   label: 'Fecha de actualización',
   sort: 'updatedAt',
+  sortKind: 'fecha',
   value: (row) => (row.updatedAt ? formatFecha(row.updatedAt) : '—'),
   raw: (row) => bogotaDay(row.updatedAt ?? null),
   width: 18,
@@ -397,7 +405,7 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
     apilado(CAMPO_VEHICULO, 'vehiculo'),
   ],
   propietario: [
-    campoTexto('vendedor', 'Vendedor', (row) => row.vendedorNombre, 28),
+    { ...campoTexto('vendedor', 'Vendedor', (row) => row.vendedorNombre, 28), sort: 'vendedor' },
     campoFirma('vendedorFirma', 'Firma del vendedor', (r) => r.vendedorNombre, (r) => r.firmaVendedorEstado),
   ],
   comprador: [
@@ -410,11 +418,16 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
     apilado(CAMPO_PASO, 'paso'),
     apilado(CAMPO_PASO_NOMBRE, 'paso'),
   ],
-  secretaria: [campoTexto('secretaria', 'Secretaría', (row) => row.organismoTransito, 34)],
+  secretaria: [
+    {
+      ...campoTexto('secretaria', 'Secretaría', (row) => row.organismoTransito, 34),
+      sort: 'organismo',
+    },
+  ],
   // La celda apila razón social y persona, y son dos cosas distintas: la compañía que radica y
   // quien la operó. En una sola columna no se puede agrupar por ninguna de las dos.
   gestor: [
-    campoTexto('compania', 'Compañía', (row) => row.companiaNombre, 28),
+    { ...campoTexto('compania', 'Compañía', (row) => row.companiaNombre, 28), sort: 'compania' },
     { ...campoTexto('gestor', 'Gestor', (row) => row.gestorNombre, 24), sort: 'gestor' },
   ],
   fuente: [{ ...campoTexto('fuente', 'Fuente', (row) => FUENTE_LABEL[row.fuente ?? 'dashboard'], 14), sort: 'fuente' }],
@@ -453,6 +466,14 @@ export function tramitesExportFields(visibleKeys: readonly string[]): TramitesEx
   return campos;
 }
 
+/** Una opción de orden ofrecida por la cabecera de una columna. */
+export interface TramitesSortOption {
+  id: string;
+  label: string;
+  sort: string;
+  kind: 'texto' | 'fecha';
+}
+
 /**
  * Por cuáles de sus datos se puede ordenar una columna, y con qué clave del API (HU #12108).
  *
@@ -468,10 +489,15 @@ export function tramitesExportFields(visibleKeys: readonly string[]): TramitesEx
 export function tramitesSortOptions(
   columnKey: string,
   visibleKeys: readonly string[],
-): { id: string; label: string; sort: string }[] {
+): TramitesSortOption[] {
   const visibles = new Set(visibleKeys);
 
   return (EXPORT_FIELDS[columnKey] ?? [])
     .filter((campo) => campo.sort && !(campo.ownedBy && visibles.has(campo.ownedBy)))
-    .map((campo) => ({ id: campo.id, label: campo.label, sort: campo.sort! }));
+    .map((campo) => ({
+      id: campo.id,
+      label: campo.label,
+      sort: campo.sort!,
+      kind: campo.sortKind ?? 'texto',
+    }));
 }

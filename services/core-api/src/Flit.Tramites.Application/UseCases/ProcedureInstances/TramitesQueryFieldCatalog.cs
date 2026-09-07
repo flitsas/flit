@@ -184,8 +184,10 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
 /// dos fechas, «Vehículo» la placa y el VIN, y «Trámite» el estado y el tipo, así que ordenar por
 /// cualquiera de ellos tiene que ser expresable.</para>
 ///
-/// <para>El organismo NO está: su nombre vive en <c>field_values</c> y su <c>ORDER BY</c> exige un
-/// join cuyo coste hay que medir antes de prometerlo.</para>
+/// <para>El organismo SÍ está: su nombre vive en <c>field_values</c>, así que su <c>ORDER BY</c> es
+/// una subconsulta correlacionada — exactamente la misma forma que ya usaba «Gestor» contra
+/// <c>identity.users</c>. Se añadió porque dejar una columna del listado sin desplegable rompía la
+/// promesa de «ordenar por cualquier columna».</para>
 /// </summary>
 public static class TramitesQuerySort
 {
@@ -197,11 +199,15 @@ public static class TramitesQuerySort
     public const string Estado = "estado";
     public const string TipoTramite = "tipo_tramite";
     public const string Fuente = "fuente";
+    public const string Vendedor = "vendedor";
+    public const string Organismo = "organismo";
+    public const string Compania = "compania";
     public const string Creado = "createdAt";
     public const string Actualizado = "updatedAt";
 
     public static IReadOnlyList<string> All { get; } =
-        [Radicado, Placa, Vin, Comprador, Gestor, Estado, TipoTramite, Fuente, Creado, Actualizado];
+        [Radicado, Placa, Vin, Comprador, Vendedor, Organismo, Compania, Gestor, Estado, TipoTramite,
+         Fuente, Creado, Actualizado];
 }
 
 /// <summary>

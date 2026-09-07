@@ -1782,14 +1782,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .OrderBy(nombre => nombre)
             .ToListAsync(ct);
 
-        var tipos = await baseQuery
+        // El DISTINCT va sobre un tipo anonimo, no sobre el record: EF no sabe traducir
+        // `Distinct()` de una proyeccion a un tipo con constructor y revienta en tiempo de
+        // ejecucion (InMemory si lo traga, por eso no lo vieron las pruebas). El orden se hace
+        // en memoria porque la lista es del tamano del catalogo de tipos, no del universo.
+        var tiposCrudos = await baseQuery
             .Where(x => x.ProcedureType != null)
-            .Select(x => new TramitesFilterTipoOption(
-                x.ProcedureType!.Code, x.ProcedureType.Name, x.ProcedureType.Family))
+            .Select(x => new
+            {
+                x.ProcedureType!.Code,
+                x.ProcedureType.Name,
+                x.ProcedureType.Family,
+            })
             .Distinct()
-            .OrderBy(t => t.Family)
-            .ThenBy(t => t.Name)
             .ToListAsync(ct);
+
+        var tipos = tiposCrudos
+            .OrderBy(t => t.Family, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(t => new TramitesFilterTipoOption(t.Code, t.Name, t.Family))
+            .ToList();
 
         return new TramitesFilterOptions(organismos, tipos);
     }
@@ -2204,6 +2216,29 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             ProcedureInstanceSortBy.Placa => descending
                 ? query.OrderByDescending(x => x.Plate).ThenByDescending(x => x.Id)
                 : query.OrderBy(x => x.Plate).ThenBy(x => x.Id),
+            ProcedureInstanceSortBy.Vendedor => descending
+                ? query.OrderByDescending(x => x.VendedorNombre).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.VendedorNombre).ThenBy(x => x.Id),
+            // Mismo patron que Gestor: subconsulta correlacionada. El nombre del organismo no es
+            // columna de la instancia, vive en `field_values` bajo `transit_office_name`.
+            ProcedureInstanceSortBy.Organismo => descending
+                ? query.OrderByDescending(x => x.FieldValues
+                        .Where(fv => fv.FieldKey == TransitOfficeNameFieldKey)
+                        .Select(fv => fv.ValueText).FirstOrDefault())
+                    .ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.FieldValues
+                        .Where(fv => fv.FieldKey == TransitOfficeNameFieldKey)
+                        .Select(fv => fv.ValueText).FirstOrDefault())
+                    .ThenBy(x => x.Id),
+            // La celda de "Gestor" apila la razon social y la persona: son dos datos distintos y
+            // cada uno necesita su opcion de orden.
+            ProcedureInstanceSortBy.Compania => descending
+                ? query.OrderByDescending(x => db.Tenants.Where(t => t.Id == x.TenantId)
+                        .Select(t => t.LegalName).FirstOrDefault())
+                    .ThenByDescending(x => x.Id)
+                : query.OrderBy(x => db.Tenants.Where(t => t.Id == x.TenantId)
+                        .Select(t => t.LegalName).FirstOrDefault())
+                    .ThenBy(x => x.Id),
             ProcedureInstanceSortBy.Comprador => descending
                 ? query.OrderByDescending(x => x.CompradorNombre).ThenByDescending(x => x.Id)
                 : query.OrderBy(x => x.CompradorNombre).ThenBy(x => x.Id),

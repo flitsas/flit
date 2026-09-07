@@ -1533,7 +1533,14 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
-    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Comprador/i }));
+    // Toda cabecera ordenable abre el mismo menú, tenga uno o varios datos dentro.
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Comprador$/ }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Comprador/ })).getByRole(
+        'menuitemradio',
+        { name: 'Comprador: A-Z' },
+      ),
+    );
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(
         expect.objectContaining({ sortBy: 'comprador', sortDir: 'asc' }),
@@ -1545,7 +1552,13 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
     await userEvent.click(screen.getByRole('checkbox', { name: /^Fecha de creación$/i }));
 
-    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Fecha de creación/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Fecha de creación$/ }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Fecha de creación/ })).getByRole(
+        'menuitemradio',
+        { name: 'Fecha de creación: Más antigua' },
+      ),
+    );
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(
         expect.objectContaining({ sortBy: 'createdAt', sortDir: 'asc' }),

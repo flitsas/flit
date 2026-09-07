@@ -342,7 +342,11 @@ function FiltroEspecificoPopover({
           id={panelId}
           role="dialog"
           aria-label="Agregar filtro"
-          className={`absolute right-0 top-full z-50 mt-2 max-h-[480px] w-[26rem] overflow-y-auto rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]`}
+          // Sin `overflow-y-auto`: el selector de campo de la barra de Consultas es un desplegable
+          // posicionado en absoluto DENTRO de este panel, y un ancestro con overflow lo recorta —
+          // se veia una lista de campos cortada a dos lineas. Cada lista interna ya limita su
+          // propia altura, asi que el recorte aqui solo estorbaba.
+          className={`absolute right-0 top-full z-50 mt-2 w-[26rem] rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]`}
         >
           {isAdmin && companias.length > 0 ? (
             <div className="border-b border-[#DFE5ED] pb-2 dark:border-white/10">

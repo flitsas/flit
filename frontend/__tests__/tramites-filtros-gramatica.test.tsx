@@ -215,7 +215,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
     await userEvent.click(
       within(screen.getByRole('menu', { name: /Ordenar por, en Radicado/ })).getByRole(
         'menuitemradio',
-        { name: /Fecha de actualización.*Z-A/ },
+        { name: /Fecha de actualización: Más reciente/ },
       ),
     );
 
@@ -234,7 +234,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
     await userEvent.click(
       within(screen.getByRole('menu', { name: /Ordenar por, en Radicado/ })).getByRole(
         'menuitemradio',
-        { name: /Fecha de creación.*A-Z/ },
+        { name: /Fecha de creación: Más antigua/ },
       ),
     );
 
@@ -248,19 +248,54 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
     expect(screen.getByRole('button', { name: /^Ordenar Vehículo$/ })).toBeInTheDocument();
   });
 
-  it('AC2: una columna con un solo dato ordenable conserva el clic simple', async () => {
+  it('AC2: una columna con un solo dato ordenable abre el MISMO menú', async () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
-    // "Comprador" no es compuesta: alterna asc/desc al pulsar, sin menú.
-    await userEvent.click(screen.getByRole('button', { name: /^Ordenar por Comprador$/ }));
+    // "Comprador" lleva un solo dato, pero la cabecera se comporta igual que las compuestas. Con
+    // el clic que alternaba, dos cabeceras vecinas idénticas respondían distinto al mismo gesto y
+    // nada lo anunciaba: había que pulsar para descubrir cuál era cuál.
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Comprador$/ }));
+
+    const menu = screen.getByRole('menu', { name: /Ordenar por, en Comprador/ });
+    await userEvent.click(within(menu).getByRole('menuitemradio', { name: /Comprador: A-Z/ }));
 
     await waitFor(() =>
       expect(mocks.searchInstances).toHaveBeenLastCalledWith(
         expect.objectContaining({ sortBy: 'comprador', sortDir: 'asc' }),
       ),
     );
-    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('el sentido se rotula según el tipo de dato: una fecha no se ordena de A a Z', async () => {
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
+    const menu = screen.getByRole('menu', { name: /Ordenar por, en Radicado/ });
+
+    // El radicado es texto; las dos fechas apiladas, no. Rotularlas igual obliga a adivinar qué
+    // hace la flecha en cada fila del menú.
+    expect(within(menu).getByRole('menuitemradio', { name: 'Radicado: A-Z' })).toBeInTheDocument();
+    expect(
+      within(menu).getByRole('menuitemradio', { name: 'Fecha de creación: Más antigua' }),
+    ).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitemradio', { name: /Fecha de creación: A-Z/ })).toBeNull();
+  });
+
+  it('toda columna ordenable ofrece su menú, también Vendedor y Secretaría', async () => {
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    // Se quedaron sin desplegable hasta que el catálogo del backend admitió ordenar por ellas:
+    // la cabecera solo ofrece lo que el servidor sabe ordenar, así que el hueco venía de allí.
+    for (const columna of ['Vendedor', 'Secretaría']) {
+      await userEvent.click(screen.getByRole('button', { name: new RegExp(`^Ordenar ${columna}$`) }));
+      expect(
+        screen.getByRole('menu', { name: new RegExp(`Ordenar por, en ${columna}`) }),
+      ).toBeInTheDocument();
+      await userEvent.keyboard('{Escape}');
+    }
   });
 
   it('AC6: el menú se cierra con Escape y devuelve el foco a la cabecera', async () => {
