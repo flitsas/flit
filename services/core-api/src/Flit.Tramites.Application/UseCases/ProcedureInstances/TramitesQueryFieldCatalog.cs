@@ -40,11 +40,18 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
     public const string Gestor = "gestor";
     public const string Fuente = "fuente";
     public const string FirmaCompraventa = "firma_compraventa";
+    public const string Prioritario = "prioritario";
+    public const string EnSubsanacion = "en_subsanacion";
+    public const string MetodoPago = "metodo_pago";
+    public const string Compania = "compania";
 
     public const string GrupoVehiculo = "Vehículo";
     public const string GrupoPersonas = "Personas";
     public const string GrupoTramite = "Trámite";
+    public const string GrupoCaracteristicas = "Características";
+    public const string GrupoComercial = "Comercial";
     public const string GrupoOrigen = "Origen";
+    public const string GrupoAlcance = "Alcance";
 
     private TramitesQueryFieldCatalog()
     {
@@ -133,6 +140,25 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
             "Firma electrónica de la compraventa completa. No es la acreditación que aparece junto a "
             + "cada actor, que además considera identidad validada y firma del baúl.",
             AdmiteLista: false),
+
+        // Mismos nombres y mismo grupo que en Consultas: es el mismo dato, y bautizarlo distinto
+        // según la pantalla obliga a traducir mentalmente entre las dos.
+        new(Prioritario, "Prioritario", QueryFieldKind.Booleano, GrupoCaracteristicas,
+            BooleanoOperators, SiNoOptions, null, AdmiteLista: false),
+        new(EnSubsanacion, "En subsanación", QueryFieldKind.Booleano, GrupoCaracteristicas,
+            BooleanoOperators, SiNoOptions,
+            "Si el organismo lo devolvió y sigue pendiente de corregir.", AdmiteLista: false),
+
+        // Del repositorio: los métodos de pago realmente usados. Es texto libre en la base, así que
+        // una lista fija se quedaría corta o sobraría según el cliente.
+        new(MetodoPago, "Método de pago", QueryFieldKind.Opcion, GrupoComercial,
+            OpcionOperators, [], null, AdmiteLista: true),
+
+        // Solo lo ve quien puede mirar más de una compañía; el repositorio pone las opciones. Antes
+        // era un desplegable propio del panel que filtraba la PÁGINA ya cargada y solo ofrecía las
+        // compañías presentes en ella: escondía filas en vez de acotar la consulta.
+        new(Compania, "Compañía", QueryFieldKind.Opcion, GrupoAlcance, OpcionOperators, [],
+            "Sin elegir ninguna, el listado corre sobre todas las compañías.", AdmiteLista: true),
     ];
 
     // ── IQueryFieldCatalog ────────────────────────────────────────────────────────────────────
@@ -235,11 +261,29 @@ public sealed class GetTramitesQueryFieldsHandler(IProcedureInstanceRepository r
             .Select(t => new QueryFieldOptionDto(t.Code, t.Name, FamiliaLabel(t.Family)))
             .ToList();
 
+        var metodosPago = opciones.MetodosPago
+            .Select(m => new QueryFieldOptionDto(m, m))
+            .ToList();
+
+        var companias = opciones.Companias
+            .Select(c => new QueryFieldOptionDto(c.Id.ToString(), c.Nombre))
+            .ToList();
+
         return TramitesQueryFieldCatalog.Fields
+            // Un campo de opciones cuyo catálogo salió vacío NO se ofrece: un filtro que solo puede
+            // devolver cero se lee como que el dato no existe. Es lo que retira «Compañía» a quien
+            // solo ve la suya, sin necesidad de preguntar por el rol.
+            .Where(campo => campo.Id is not (TramitesQueryFieldCatalog.Compania
+                    or TramitesQueryFieldCatalog.MetodoPago)
+                || (campo.Id == TramitesQueryFieldCatalog.Compania
+                    ? companias.Count > 0
+                    : metodosPago.Count > 0))
             .Select(campo => campo.Id switch
             {
                 TramitesQueryFieldCatalog.Organismo => campo with { Options = organismos },
                 TramitesQueryFieldCatalog.TipoTramite => campo with { Options = tipos },
+                TramitesQueryFieldCatalog.MetodoPago => campo with { Options = metodosPago },
+                TramitesQueryFieldCatalog.Compania => campo with { Options = companias },
                 _ => campo,
             })
             .ToList();

@@ -314,4 +314,90 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
         // Dashboard → Integración → Migrado.
         items.Select(i => i.ReferenceNumber).Should().Equal("R1", "R2", "R3");
     }
+
+    // ── Campos añadidos para acercar el listado a Consultas ───────────────────────────────────
+    //
+    // Salieron de una revisión en pantalla: el panel de /tramites ofrecía bastantes menos filtros
+    // que "consultas personalizadas" sobre el MISMO universo de trámites.
+
+    [Fact]
+    public async Task Prioritario_FiltraPorLaColumna_YCuentaElUniverso()
+    {
+        await using var db = NewContext(nameof(Prioritario_FiltraPorLaColumna_YCuentaElUniverso));
+        var marcado = Instancia("R1");
+        marcado.Prioritario = true;
+        db.ProcedureInstances.AddRange(marcado, Instancia("R2"), Instancia("R3"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prioritario, QueryOperator.EsAlguno, "true"));
+
+        refs.Should().Equal("R1");
+        total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Booleano_ConLasDosOpciones_NoAcotaNada()
+    {
+        await using var db = NewContext(nameof(Booleano_ConLasDosOpciones_NoAcotaNada));
+        var marcado = Instancia("R1");
+        marcado.Prioritario = true;
+        db.ProcedureInstances.AddRange(marcado, Instancia("R2"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // "Sí o no" es el universo entero: filtrar por ambas no puede vaciar ni recortar la lista.
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prioritario, QueryOperator.EsAlguno, "true", "false"));
+
+        refs.Should().Equal("R1", "R2");
+        total.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task EnSubsanacion_FiltraPorLaColumnaDedicada()
+    {
+        await using var db = NewContext(nameof(EnSubsanacion_FiltraPorLaColumnaDedicada));
+        var devuelto = Instancia("R1");
+        devuelto.SubsanacionActiva = true;
+        db.ProcedureInstances.AddRange(devuelto, Instancia("R2"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.EnSubsanacion, QueryOperator.EsAlguno, "true"));
+
+        refs.Should().Equal("R1");
+        total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task MetodoPago_NoEsNinguno_DejaPasarAlQueNoTieneDatosComerciales()
+    {
+        await using var db = NewContext(nameof(MetodoPago_NoEsNinguno_DejaPasarAlQueNoTieneDatosComerciales));
+        var conPago = Instancia("R1");
+        conPago.Commercial = new ProcedureInstanceCommercial
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ProcedureInstanceId = conPago.Id,
+            MetodoPago = "EFECTIVO",
+        };
+        var otroPago = Instancia("R2");
+        otroPago.Commercial = new ProcedureInstanceCommercial
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ProcedureInstanceId = otroPago.Id,
+            MetodoPago = "TRANSFERENCIA",
+        };
+        // Sin fila comercial: no tiene método de pago, así que NO es "EFECTIVO".
+        db.ProcedureInstances.AddRange(conPago, otroPago, Instancia("R3"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.MetodoPago, QueryOperator.NoEsNinguno, "EFECTIVO"));
+
+        refs.Should().Equal("R2", "R3");
+        total.Should().Be(2);
+    }
+
 }

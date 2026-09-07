@@ -43,7 +43,6 @@ import {
   type TramitesColumnDef,
   type TramitesGridLayout,
 } from '@/lib/tramites/tramites-table-columns';
-import { QueryFilterBar } from '@/components/consultas/QueryFilterBar';
 import type { QueryCondition, QueryField } from '@/lib/api/queries';
 import { buildWorkbook, type DataColumn } from '@/components/consultas/columns';
 import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from '@/components/consultas/export';
@@ -287,7 +286,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [modalidad, setModalidad] = useState<'' | ProcedureFamily>('');
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
-  const [compania, setCompania] = useState('');
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
 
@@ -602,14 +600,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     return c;
   }, [estadoCounts]);
 
-  // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
-  const companias = useMemo(() => {
-    const set = new Set<string>();
-    for (const it of items) if (it.companiaNombre) set.add(it.companiaNombre);
-    return [...set].sort((a, b) => a.localeCompare(b, 'es'));
-  }, [items]);
-
-  // Filtrado en cadena de lo que SIGUE siendo de cliente: búsqueda libre, compañía y prioritarios.
+  // Filtrado en cadena de lo que SIGUE siendo de cliente: búsqueda libre y prioritarios. La
+  // compañía se fue al servidor como un filtro más del catálogo (grupo «Alcance»): aquí solo podía
+  // mirar la página traída y ofrecer las compañías que aparecieran en ella, así que escondía filas
+  // en vez de acotar el listado, y el total y los contadores seguían contando las escondidas.
   // Estado y familia ya no están aquí — los resuelve el servidor (ver `load`), que es lo único que
   // puede verlos sobre el universo completo en vez de sobre la página traída.
   /**
@@ -636,11 +630,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           .toLowerCase();
         if (!haystack.includes(q)) return false;
       }
-      if (compania && item.companiaNombre !== compania) return false;
       if (soloPrioritarios && !item.prioritario) return false;
       return true;
     },
-    [search, compania, soloPrioritarios],
+    [search, soloPrioritarios],
   );
 
   const filtered = useMemo(() => items.filter(coincideEnCliente), [items, coincideEnCliente]);
@@ -773,10 +766,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setEstado(v);
     setPage(1);
   };
-  const handleCompaniaChange = (v: string) => {
-    setCompania(v);
-    setPage(1);
-  };
   const handlePrioritariosChange = (v: boolean) => {
     setSoloPrioritarios(v);
     setPage(1);
@@ -901,7 +890,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     search.trim() !== '' ||
     modalidad !== '' ||
     estado !== '' ||
-    compania !== '' ||
     soloPrioritarios ||
     hasServerFilters ||
     sortBy !== '';
@@ -964,7 +952,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setSearch('');
     setModalidad('');
     setEstado('');
-    setCompania('');
     setSoloPrioritarios(false);
     setDraftCondiciones([]);
     setRangoSobre('created');
@@ -1034,7 +1021,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               onRangoPropioDesdeChange={setRangoPropioDesde}
               onRangoPropioHastaChange={setRangoPropioHasta}
               condicionesCount={appliedCondiciones.length}
-              queryFilterBar={
+              queryFields={queryFields}
+              draftCondiciones={draftCondiciones}
+              onDraftCondicionesChange={setDraftCondiciones}
+              filtrosTestIdPrefix="tramites"
+              fieldsError={
                 fieldsError ? (
                   // Un catálogo que no carga NO deja la pantalla inservible: la tabla ya se pintó
                   // con su listado y aquí solo se dice qué falta y cómo reintentarlo.
@@ -1049,14 +1040,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                       Reintentar
                     </button>
                   </div>
-                ) : (
-                  <QueryFilterBar
-                    fields={queryFields}
-                    conditions={draftCondiciones}
-                    onChange={setDraftCondiciones}
-                    testIdPrefix="tramites"
-                  />
-                )
+                ) : undefined
               }
               search={search}
               onSearchChange={handleSearchChange}
@@ -1087,10 +1071,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                   {exporting ? 'Exportando…' : 'Exportar'}
                 </button>
               }
-              isAdmin={isAdmin}
-              companias={companias}
-              compania={compania}
-              onCompaniaChange={handleCompaniaChange}
             />
           }
         />

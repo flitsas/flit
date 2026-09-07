@@ -1803,7 +1803,32 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Select(t => new TramitesFilterTipoOption(t.Code, t.Name, t.Family))
             .ToList();
 
-        return new TramitesFilterOptions(organismos, tipos);
+        var metodosPago = await baseQuery
+            .Where(x => x.Commercial != null && x.Commercial.MetodoPago != null
+                && x.Commercial.MetodoPago != "")
+            .Select(x => x.Commercial!.MetodoPago!)
+            .Distinct()
+            .OrderBy(m => m)
+            .ToListAsync(ct);
+
+        // Solo para quien mira mas de una compañia. Acotado a un tenant, el filtro tendria una
+        // unica opcion que no puede acotar nada.
+        var companias = tenantId is null
+            ? await (from x in baseQuery
+                     join t in db.Tenants on x.TenantId equals t.Id
+                     select new { t.Id, t.LegalName })
+                .Distinct()
+                .ToListAsync(ct)
+            : [];
+
+        return new TramitesFilterOptions(
+            organismos,
+            tipos,
+            metodosPago,
+            companias
+                .OrderBy(c => c.LegalName, StringComparer.OrdinalIgnoreCase)
+                .Select(c => new TramitesFilterCompaniaOption(c.Id, c.LegalName))
+                .ToList());
     }
 
     /// <summary>Clave del `field_value` con el nombre del organismo de tránsito elegido — la misma que
@@ -2083,6 +2108,65 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 ? ApplyFirmaCompraventa(query, valores)
                 : query,
 
+            // Booleanos de columna: el catalogo solo les da `es alguno`, y con las dos opciones
+            // marcadas la condicion no acota nada (es la lista entera), asi que se deja pasar.
+            TramitesQueryFieldCatalog.Prioritario => ApplyBooleano(query, op, valores,
+                verdadero: q => q.Where(x => x.Prioritario),
+                falso: q => q.Where(x => !x.Prioritario)),
+            TramitesQueryFieldCatalog.EnSubsanacion => ApplyBooleano(query, op, valores,
+                verdadero: q => q.Where(x => x.SubsanacionActiva),
+                falso: q => q.Where(x => !x.SubsanacionActiva)),
+
+            // El metodo de pago vive en la fila comercial, que es opcional: un tramite sin datos
+            // comerciales no tiene metodo, y por eso "no es ninguno" tiene que dejarlo pasar.
+            TramitesQueryFieldCatalog.MetodoPago => op switch
+            {
+                QueryOperator.EsAlguno => query.Where(x =>
+                    x.Commercial != null && x.Commercial.MetodoPago != null
+                    && valores.Contains(x.Commercial.MetodoPago.ToUpper())),
+                QueryOperator.NoEsNinguno => query.Where(x =>
+                    x.Commercial == null || x.Commercial.MetodoPago == null
+                    || !valores.Contains(x.Commercial.MetodoPago.ToUpper())),
+                _ => query,
+            },
+
+            // La compañía se compara por identificador, no por razón social: dos empresas pueden
+            // renombrarse y el nombre no es clave de nada.
+            TramitesQueryFieldCatalog.Compania => ApplyCompania(query, op, valores),
+
+            _ => query,
+        };
+    }
+
+    /// <summary>
+    /// Un booleano de la gramática: los valores llegan como "TRUE"/"FALSE" ya normalizados. Con las
+    /// dos opciones marcadas no se filtra, porque «sí o no» es el universo entero.
+    /// </summary>
+    private static IQueryable<ProcedureInstance> ApplyBooleano(
+        IQueryable<ProcedureInstance> query, string op, List<string> valores,
+        Func<IQueryable<ProcedureInstance>, IQueryable<ProcedureInstance>> verdadero,
+        Func<IQueryable<ProcedureInstance>, IQueryable<ProcedureInstance>> falso)
+    {
+        if (op != QueryOperator.EsAlguno || valores.Count != 1) return query;
+        return valores[0] == "TRUE" ? verdadero(query) : falso(query);
+    }
+
+    /// <summary>
+    /// Acota a una o varias compañías. Solo tiene efecto para quien consulta sin tenant fijado (el
+    /// SuperAdmin); a los demás el `tenantId` del token ya les acotó la consulta antes de llegar aquí.
+    /// </summary>
+    private static IQueryable<ProcedureInstance> ApplyCompania(
+        IQueryable<ProcedureInstance> query, string op, List<string> valores)
+    {
+        var ids = new List<Guid>();
+        foreach (var valor in valores)
+            if (Guid.TryParse(valor, out var id)) ids.Add(id);
+        if (ids.Count == 0) return query;
+
+        return op switch
+        {
+            QueryOperator.EsAlguno => query.Where(x => ids.Contains(x.TenantId)),
+            QueryOperator.NoEsNinguno => query.Where(x => !ids.Contains(x.TenantId)),
             _ => query,
         };
     }

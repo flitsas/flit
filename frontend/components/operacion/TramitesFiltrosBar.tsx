@@ -4,7 +4,11 @@ import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } fr
 import { ChevronDown, Search, X } from 'lucide-react';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { controlCls } from './tramites-control-styles';
-import { describeCondition } from '@/components/consultas/QueryFilterBar';
+import {
+  ConditionEditor,
+  QueryFieldPicker,
+  describeCondition,
+} from '@/components/consultas/QueryFilterBar';
 import type { QueryCondition, QueryField } from '@/lib/api/queries';
 
 /**
@@ -278,35 +282,57 @@ function PeriodoPopover({
 }
 
 interface FiltroEspecificoPopoverProps {
-  queryFilterBar: ReactNode;
+  /** El catálogo del servidor: qué se puede filtrar y con qué operadores. */
+  fields: QueryField[];
+  /** Las condiciones EN BORRADOR — se aplican al listado al pulsar "Aplicar". */
+  condiciones: QueryCondition[];
+  onCondicionesChange: (condiciones: QueryCondition[]) => void;
   condicionesCount: number;
   onAplicar: () => void;
   onEmpezarDeCero: () => void;
   empezarDeCeroDisabled: boolean;
-  /** #1 — filtro de compañía, SOLO SuperAdmin (ve trámites de todas las empresas). */
-  isAdmin: boolean;
-  companias: readonly string[];
-  compania: string;
-  onCompaniaChange: (v: string) => void;
+  testIdPrefix: string;
+  /** Qué pintar en lugar de la lista cuando el catálogo no cargó. */
+  fieldsError?: ReactNode;
 }
 
+/**
+ * El panel de filtros del listado (HU #12107, rehecho tras la validación).
+ *
+ * <p>Es de UN nivel: al abrirlo se ve directamente QUÉ se puede filtrar, y elegir un campo cambia
+ * el contenido del mismo panel por su editor, con un «Volver». Antes se montaba aquí dentro la
+ * barra entera de Consultas, con su propio botón «+ Filtro» que abría un panel flotante ENCIMA de
+ * este: dos superficies apiladas y dos clics para llegar a la primera pregunta.</p>
+ *
+ * <p>Tampoco lleva ya un selector de compañía propio. La compañía es un filtro más y viaja en el
+ * catálogo del servidor, dentro del grupo «Alcance» — igual que en Consultas. El selector local
+ * además solo sabía de las compañías presentes en la página cargada y filtraba sobre ella, así que
+ * escondía filas en vez de acotar la consulta.</p>
+ */
 function FiltroEspecificoPopover({
-  queryFilterBar,
+  fields,
+  condiciones,
+  onCondicionesChange,
   condicionesCount,
   onAplicar,
   onEmpezarDeCero,
   empezarDeCeroDisabled,
-  isAdmin,
-  companias,
-  compania,
-  onCompaniaChange,
+  testIdPrefix,
+  fieldsError,
 }: FiltroEspecificoPopoverProps) {
   const [open, setOpen] = useState(false);
+  // `null` = viendo la lista de campos; una cadena = editando ese campo dentro del mismo panel.
+  const [editando, setEditando] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const close = () => setOpen(false);
+  const close = () => {
+    setOpen(false);
+    setEditando(null);
+  };
   const panelRef = usePopoverDismiss(open, close, triggerRef);
   const panelId = useId();
   const count = condicionesCount;
+
+  const campoEditado = editando ? fields.find((f) => f.id === editando) : undefined;
 
   const handleAplicar = () => {
     onAplicar();
@@ -317,12 +343,25 @@ function FiltroEspecificoPopover({
     close();
   };
 
+  function upsert(condicion: QueryCondition) {
+    onCondicionesChange([
+      ...condiciones.filter((c) => c.fieldId !== condicion.fieldId),
+      condicion,
+    ]);
+    setEditando(null);
+  }
+
+  function quitar(fieldId: string) {
+    onCondicionesChange(condiciones.filter((c) => c.fieldId !== fieldId));
+    setEditando(null);
+  }
+
   return (
     <div className="relative">
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? close() : setOpen(true))}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
@@ -330,9 +369,6 @@ function FiltroEspecificoPopover({
         // era la única señal, y el azul del texto estaba puesto en reposo, sin significar nada.
         className={controlCls(count > 0)}
       >
-        {/* "Filtros" y no "+ Filtro": desde la HU #12107 el panel contiene un constructor
-            completo, cuyo propio botón de añadir ya se llama "+ Filtro". Dos controles con el
-            mismo nombre, uno dentro del otro, no se pueden nombrar en voz alta. */}
         {count > 0 ? `Filtros (${count})` : 'Filtros'}
         <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
@@ -341,44 +377,74 @@ function FiltroEspecificoPopover({
           ref={panelRef}
           id={panelId}
           role="dialog"
-          aria-label="Agregar filtro"
-          // Sin `overflow-y-auto`: el selector de campo de la barra de Consultas es un desplegable
-          // posicionado en absoluto DENTRO de este panel, y un ancestro con overflow lo recorta —
-          // se veia una lista de campos cortada a dos lineas. Cada lista interna ya limita su
-          // propia altura, asi que el recorte aqui solo estorbaba.
-          className={`absolute right-0 top-full z-50 mt-2 w-[26rem] rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]`}
+          aria-label="Filtros del listado"
+          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]"
         >
-          {isAdmin && companias.length > 0 ? (
-            <div className="border-b border-[#DFE5ED] pb-2 dark:border-white/10">
-              <p className="select-none px-2 py-1 text-xs font-bold uppercase tracking-wide text-[#162744] dark:text-white">
-                ALCANCE
-              </p>
-              <div className="px-2 py-1">
-                <Field label="Compañía">
-                  <select
-                    value={compania}
-                    onChange={(e) => onCompaniaChange(e.target.value)}
-                    className={INPUT_CLS}
-                  >
-                    <option value="">Todas</option>
-                    {companias.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-            </div>
-          ) : null}
+          {fieldsError ? (
+            fieldsError
+          ) : campoEditado ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditando(null)}
+                className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-[#557EFF] hover:underline"
+              >
+                ← Volver a los filtros
+              </button>
+              <ConditionEditor
+                field={campoEditado}
+                value={condiciones.find((c) => c.fieldId === campoEditado.id) ?? null}
+                onApply={upsert}
+                onRemove={() => quitar(campoEditado.id)}
+                testIdPrefix={testIdPrefix}
+                anchored={false}
+              />
+            </>
+          ) : (
+            <>
+              {condiciones.length > 0 ? (
+                <div className="mb-2 flex flex-wrap gap-1.5 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+                  {condiciones.map((c) => (
+                    <span
+                      key={c.fieldId}
+                      className="inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 bg-[#557EFF]/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setEditando(c.fieldId)}
+                        className="max-w-[14rem] truncate"
+                        data-testid={`${testIdPrefix}-chip-${c.fieldId}`}
+                      >
+                        {describeCondition(c, fields)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => quitar(c.fieldId)}
+                        aria-label={`Quitar filtro ${c.fieldId}`}
+                        className="rounded-full px-1.5 text-sm leading-none opacity-60 hover:opacity-100"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
 
-          {/* HU #12107 — la gramática de Consultas: campo, operador y valores, con cada condición
-              como un chip. Sustituye a los checkboxes con un input fijo por campo, que solo sabían
-              preguntar "contiene" y obligaban a añadir un campo nuevo aquí cada vez. Lo que se
-              ofrece lo manda el servidor (`queryFields`), así que un campo nuevo aparece sin
-              desplegar frontend. */}
-          <div className="py-1">{queryFilterBar}</div>
+              <QueryFieldPicker
+                fields={fields.filter((f) => !condiciones.some((c) => c.fieldId === f.id))}
+                onPick={setEditando}
+                testIdPrefix={testIdPrefix}
+                className="max-h-[22rem] overflow-y-auto"
+              />
+            </>
+          )}
 
+          {/* El pie NO se renderiza mientras se edita un campo: el editor trae su propio "Aplicar",
+              que confirma LA CONDICION, y el del pie aplica EL LISTADO. Dos botones con la misma
+              palabra y distinto alcance, uno encima del otro, no se pueden distinguir. Se quita
+              del DOM en vez de ocultarse con clase, para que tampoco exista para un lector de
+              pantalla ni sea alcanzable con el tabulador. */}
+          {campoEditado && !fieldsError ? null : (
           <div className="mt-2 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
             <button
               type="button"
@@ -397,6 +463,7 @@ function FiltroEspecificoPopover({
               Aplicar
             </button>
           </div>
+          )}
         </div>
       ) : null}
     </div>
@@ -413,11 +480,17 @@ export interface TramitesFiltrosBarProps {
   onRangoPropioDesdeChange: (v: string) => void;
   onRangoPropioHastaChange: (v: string) => void;
 
-  /** HU #12107 — `QueryFilterBar` ya montada por el contenedor, con el catálogo del servidor. */
-  queryFilterBar: ReactNode;
-
-  /** Cuántas condiciones hay aplicadas: es lo que numera y colorea el disparador "+ Filtro". */
+  /** HU #12107 — el catálogo de campos filtrables que sirve el servidor. */
+  queryFields: QueryField[];
+  /** Condiciones en borrador dentro del panel; se aplican al listado con "Aplicar". */
+  draftCondiciones: QueryCondition[];
+  onDraftCondicionesChange: (condiciones: QueryCondition[]) => void;
+  /** Cuántas condiciones hay APLICADAS: es lo que numera y colorea el disparador "Filtros". */
   condicionesCount: number;
+  /** Distingue en las pruebas esta barra de la de Consultas. */
+  filtrosTestIdPrefix: string;
+  /** Aviso a pintar dentro del panel si el catálogo de campos no cargó. */
+  fieldsError?: ReactNode;
 
   search: string;
   onSearchChange: (v: string) => void;
@@ -432,11 +505,6 @@ export interface TramitesFiltrosBarProps {
   /** HU #12104 — "Exportar a Excel", el último control: actúa sobre lo que los demás acotaron. */
   exportAction?: ReactNode;
 
-  /** #1 — filtro de compañía, SOLO SuperAdmin (ve trámites de todas las empresas). */
-  isAdmin: boolean;
-  companias: readonly string[];
-  compania: string;
-  onCompaniaChange: (v: string) => void;
 }
 
 /**
@@ -454,8 +522,12 @@ export function TramitesFiltrosBar({
   rangoPropioHasta,
   onRangoPropioDesdeChange,
   onRangoPropioHastaChange,
-  queryFilterBar,
+  queryFields,
+  draftCondiciones,
+  onDraftCondicionesChange,
   condicionesCount,
+  filtrosTestIdPrefix,
+  fieldsError,
   search,
   onSearchChange,
   onAplicar,
@@ -463,10 +535,6 @@ export function TramitesFiltrosBar({
   empezarDeCeroDisabled = false,
   columnSelector,
   exportAction,
-  isAdmin,
-  companias,
-  compania,
-  onCompaniaChange,
 }: TramitesFiltrosBarProps) {
   return (
     <>
@@ -499,15 +567,15 @@ export function TramitesFiltrosBar({
       />
 
       <FiltroEspecificoPopover
-        queryFilterBar={queryFilterBar}
+        fields={queryFields}
+        condiciones={draftCondiciones}
+        onCondicionesChange={onDraftCondicionesChange}
         condicionesCount={condicionesCount}
         onAplicar={onAplicar}
         onEmpezarDeCero={onEmpezarDeCero}
         empezarDeCeroDisabled={empezarDeCeroDisabled}
-        isAdmin={isAdmin}
-        companias={companias}
-        compania={compania}
-        onCompaniaChange={onCompaniaChange}
+        testIdPrefix={filtrosTestIdPrefix}
+        fieldsError={fieldsError}
       />
 
       {columnSelector}

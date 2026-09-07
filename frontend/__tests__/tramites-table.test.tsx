@@ -553,6 +553,15 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
   // columna "Gestor" (empresa + persona que radica), que es la misma información con más contexto y
   // para todos los perfiles. El filtro por compañía del SuperAdmin sigue intacto.
   it('muestra la compañía en Gestor, conserva el filtro y abre con el tenant de la fila (?t=)', async () => {
+    // El catálogo se pide al montar, así que se fija ANTES del render.
+    mocks.listFilterFields.mockResolvedValue([
+      {
+        id: 'compania', label: 'Compañía', kind: 'opcion', group: 'Alcance',
+        operators: ['es_alguno', 'no_es_ninguno'],
+        options: [{ value: 'ten-a', label: 'Empresa A' }],
+        hint: null, admiteLista: true,
+      },
+    ]);
     mocks.listInstances.mockResolvedValue([
       instance({ id: 'a', placa: 'AAA111', tenantId: 'ten-a', companiaNombre: 'Empresa A' }),
       instance({ id: 'b', placa: 'BBB222', tenantId: 'ten-b', companiaNombre: 'Empresa B' }),
@@ -569,11 +578,17 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     expect(within(header).getByText('Gestor')).toBeInTheDocument();
     expect(within(header).queryByText('Compañía')).not.toBeInTheDocument();
     expect(within(table).getByText('Empresa A')).toBeInTheDocument();
-    // Filtro Compañía: select SIEMPRE presente (no checkbox) dentro del grupo ALCANCE del
-    // popover "Filtros", primero para el SuperAdmin.
+    // El filtro por compañía ya no es un desplegable propio del panel: es un campo más del
+    // catálogo que sirve el servidor, en el grupo «Alcance», igual que en Consultas. El de antes
+    // solo conocía las compañías de la PÁGINA cargada y filtraba sobre ella, así que escondía
+    // filas en vez de acotar el listado — y el total seguía contando las escondidas.
     await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
-    expect(screen.getByLabelText('Compañía')).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Empresa A' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId('tramites-campos')).getByRole('button', { name: 'Compañía' }),
+      ).toBeInTheDocument(),
+    );
+    await userEvent.keyboard('{Escape}');
 
     // Abrir una fila navega con ?t=<tenant de la fila>.
     await userEvent.click(screen.getByText('AAA111'));
@@ -1352,7 +1367,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
   // "Filtros" vive `QueryFilterBar` (campo → operador → valores → chip). El rótulo del disparador
   // cambia a "Filtros (n)" con condiciones aplicadas, así que se abre por regex.
   async function abrirPopoverFiltro() {
-    if (screen.queryByRole('dialog', { name: 'Agregar filtro' })) return;
+    if (screen.queryByRole('dialog', { name: 'Filtros del listado' })) return;
     await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
   }
   async function abrirPopoverPeriodo() {
@@ -1372,7 +1387,6 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     valores: string,
   ) {
     await abrirPopoverFiltro();
-    await userEvent.click(screen.getByTestId('tramites-agregar-filtro'));
     await userEvent.click(
       within(screen.getByTestId('tramites-campos')).getByRole('button', { name: label }),
     );

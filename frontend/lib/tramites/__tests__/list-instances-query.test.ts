@@ -74,10 +74,17 @@ describe('list-instances-query', () => {
 describe('tramitesSortOptions — HU #12108', () => {
   it('una celda compuesta ofrece cada uno de sus datos con su clave de orden', () => {
     // "Radicado" apila las dos fechas: un clic en la cabecera no podría decir por cuál se ordena.
+    // `kind` viaja con la opción para que la cabecera rotule el sentido según el tipo: una fecha
+    // ascendente es «Más antigua», no «A-Z».
     expect(tramitesSortOptions('radicado', DEFAULT_TRAMITES_VISIBLE_COLUMNS)).toEqual([
-      { id: 'radicado', label: 'Radicado', sort: 'radicado' },
-      { id: 'fechaCreacion', label: 'Fecha de creación', sort: 'createdAt' },
-      { id: 'fechaActualizacion', label: 'Fecha de actualización', sort: 'updatedAt' },
+      { id: 'radicado', label: 'Radicado', sort: 'radicado', kind: 'texto' },
+      { id: 'fechaCreacion', label: 'Fecha de creación', sort: 'createdAt', kind: 'fecha' },
+      {
+        id: 'fechaActualizacion',
+        label: 'Fecha de actualización',
+        sort: 'updatedAt',
+        kind: 'fecha',
+      },
     ]);
     // "Vehículo" apila la placa y el VIN; marca/modelo no es ordenable en el API.
     expect(tramitesSortOptions('placa', DEFAULT_TRAMITES_VISIBLE_COLUMNS).map((o) => o.sort)).toEqual([
@@ -99,13 +106,17 @@ describe('tramitesSortOptions — HU #12108', () => {
   });
 
   it('una columna sin nada ordenable no ofrece opciones', () => {
-    // La secretaría vive en `field_values`: su ORDER BY exige un join, y queda fuera de alcance.
-    expect(tramitesSortOptions('secretaria', DEFAULT_TRAMITES_VISIBLE_COLUMNS)).toEqual([]);
+    // Ya no queda ninguna del catálogo: «Secretaría» era la última, y su ORDER BY resultó ser la
+    // misma subconsulta correlacionada que «Gestor» ya usaba, así que la precaución de dejarla
+    // fuera no se sostenía. Una columna desconocida sigue sin ofrecer nada.
+    expect(tramitesSortOptions('columna_que_no_existe', DEFAULT_TRAMITES_VISIBLE_COLUMNS)).toEqual(
+      [],
+    );
   });
 
   it('las claves ofrecidas son las que el backend acepta', () => {
     const aceptadas = new Set([
-      'radicado', 'placa', 'vin', 'comprador', 'gestor',
+      'radicado', 'placa', 'vin', 'comprador', 'vendedor', 'organismo', 'compania', 'gestor',
       'estado', 'tipo_tramite', 'fuente', 'createdAt', 'updatedAt',
     ]);
     for (const columna of TRAMITES_COLUMNS) {
@@ -126,10 +137,13 @@ describe('columnas ordenables', () => {
       .map((c) => c.key);
 
     // Se compara el CONJUNTO, no el orden: el orden del catálogo es la disposición de la tabla.
+    // `propietario` (Vendedor), `secretaria` y `gestor`/Compañía entraron después: eran las únicas
+    // cabeceras del listado sin desplegable, y el hueco venía de que el repositorio no tenía rama
+    // de orden para ellas, no de la UI.
     expect([...ordenables].sort()).toEqual(
       [
-        'radicado', 'placa', 'comprador', 'tramite', 'gestor', 'fuente',
-        'vin', 'estado', 'fechaCreacion', 'fechaActualizacion',
+        'radicado', 'placa', 'propietario', 'comprador', 'tramite', 'secretaria', 'gestor',
+        'fuente', 'vin', 'estado', 'fechaCreacion', 'fechaActualizacion',
       ].sort(),
     );
   });

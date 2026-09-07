@@ -109,7 +109,6 @@ export function QueryFilterBar({
   }
 
   const disponibles = fields.filter((f) => !conditions.some((c) => c.fieldId === f.id));
-  const grupos = [...new Set(disponibles.map((f) => f.group))];
 
   return (
     <div className="flex flex-wrap items-center gap-2" ref={containerRef} data-testid={`${testIdPrefix}-filtros`}>
@@ -159,30 +158,12 @@ export function QueryFilterBar({
         </button>
 
         {editing === "" && (
-          <div
+          <QueryFieldPicker
+            fields={disponibles}
+            onPick={setEditing}
+            testIdPrefix={testIdPrefix}
             className="absolute left-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-[#DFE5ED] bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
-            data-testid={`${testIdPrefix}-campos`}
-          >
-            {grupos.map((grupo) => (
-              <div key={grupo} className="mb-1.5">
-                <p className="mb-1 rounded-md bg-[#F5F7FA] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#162744] dark:bg-white/[0.06] dark:text-white/75">
-                  {grupo}
-                </p>
-                {disponibles
-                  .filter((f) => f.group === grupo)
-                  .map((field) => (
-                    <button
-                      key={field.id}
-                      type="button"
-                      onClick={() => setEditing(field.id)}
-                      className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"
-                    >
-                      {field.label}
-                    </button>
-                  ))}
-              </div>
-            ))}
-          </div>
+          />
         )}
       </div>
 
@@ -202,18 +183,65 @@ export function QueryFilterBar({
   );
 }
 
-function ConditionEditor({
+/**
+ * El listado de campos disponibles, agrupado. Vive aparte porque no todas las pantallas lo abren
+ * igual: en Consultas cuelga del botón «+ Filtro», y en el listado de trámites ES el contenido del
+ * panel de filtros — allí, un desplegable dentro del desplegable dejaba un panel encima de otro y
+ * exigía dos clics para llegar a lo mismo.
+ */
+export function QueryFieldPicker({
+  fields,
+  onPick,
+  testIdPrefix,
+  className,
+}: {
+  fields: QueryField[];
+  onPick: (fieldId: string) => void;
+  testIdPrefix: string;
+  className?: string;
+}) {
+  const grupos = [...new Set(fields.map((f) => f.group))];
+
+  return (
+    <div className={className} data-testid={`${testIdPrefix}-campos`}>
+      {grupos.map((grupo) => (
+        <div key={grupo} className="mb-1.5">
+          <p className="mb-1 rounded-md bg-[#F5F7FA] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#162744] dark:bg-white/[0.06] dark:text-white/75">
+            {grupo}
+          </p>
+          {fields
+            .filter((f) => f.group === grupo)
+            .map((field) => (
+              <button
+                key={field.id}
+                type="button"
+                onClick={() => onPick(field.id)}
+                className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"
+              >
+                {field.label}
+              </button>
+            ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ConditionEditor({
   field,
   value,
   onApply,
   onRemove,
   testIdPrefix,
+  anchored = true,
 }: {
   field: QueryField;
   value: QueryCondition | null;
   onApply: (condition: QueryCondition) => void;
   onRemove: () => void;
   testIdPrefix: string;
+  /** `false` lo pinta en el flujo del contenedor, sin flotar: es como lo usa el panel de trámites. */
+  anchored?: boolean;
 }) {
   const [operator, setOperator] = useState<QueryOperator>(
     value?.operator ?? field.operators[0] ?? "es_alguno",
@@ -253,7 +281,11 @@ function ConditionEditor({
 
   return (
     <div
-      className="absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl border border-[#DFE5ED] bg-white p-3 text-left shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
+      className={
+        anchored
+          ? "absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl border border-[#DFE5ED] bg-white p-3 text-left shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
+          : "text-left"
+      }
       data-testid={`${testIdPrefix}-editor-${field.id}`}
     >
       <p className="mb-2 text-xs font-semibold text-[#0B1F33] dark:text-white">{field.label}</p>

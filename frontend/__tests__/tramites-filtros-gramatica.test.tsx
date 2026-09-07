@@ -100,8 +100,9 @@ describe('HU #12107 — AC2: el catálogo lo manda el servidor', () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
+    // UN clic. El panel ES el listado de campos: antes había que pulsar "Filtros" y luego un
+    // "+ Filtro" que abría otro panel encima, dos superficies para llegar a la primera pregunta.
     await abrirFiltros();
-    await userEvent.click(screen.getByTestId('tramites-agregar-filtro'));
 
     expect(
       within(screen.getByTestId('tramites-campos')).getByRole('button', { name: 'Color de carrocería' }),
@@ -113,8 +114,52 @@ describe('HU #12107 — AC2: el catálogo lo manda el servidor', () => {
     await screen.findByText('P0001');
 
     await abrirFiltros();
-    // El botón de añadir existe pero no puede ofrecer nada: mejor deshabilitado que un panel vacío.
-    expect(screen.getByTestId('tramites-agregar-filtro')).toBeDisabled();
+    // El panel abre, pero sin catálogo no tiene ningún campo que ofrecer.
+    expect(screen.getByTestId('tramites-campos')).toBeEmptyDOMElement();
+  });
+});
+
+describe('el panel de filtros es de un solo nivel', () => {
+  it('elegir un campo cambia el contenido del panel, y "Volver" devuelve a la lista', async () => {
+    mocks.listFilterFields.mockResolvedValue([CAMPO_INVENTADO]);
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await abrirFiltros();
+    await userEvent.click(
+      within(screen.getByTestId('tramites-campos')).getByRole('button', {
+        name: 'Color de carrocería',
+      }),
+    );
+
+    // El editor SUSTITUYE a la lista dentro del mismo panel; no se abre otro encima.
+    expect(screen.getByTestId('tramites-editor-color_carroceria')).toBeInTheDocument();
+    expect(screen.queryByTestId('tramites-campos')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: /Volver a los filtros/ }));
+    expect(screen.getByTestId('tramites-campos')).toBeInTheDocument();
+    expect(screen.queryByTestId('tramites-editor-color_carroceria')).toBeNull();
+  });
+
+  it('mientras se edita un campo no hay dos "Aplicar" a la vez', async () => {
+    mocks.listFilterFields.mockResolvedValue([CAMPO_INVENTADO]);
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await abrirFiltros();
+    // En la lista, el "Aplicar" del pie aplica EL LISTADO.
+    expect(screen.getAllByRole('button', { name: 'Aplicar' })).toHaveLength(1);
+
+    await userEvent.click(
+      within(screen.getByTestId('tramites-campos')).getByRole('button', {
+        name: 'Color de carrocería',
+      }),
+    );
+
+    // Editando, el único "Aplicar" es el del editor, que confirma LA CONDICIÓN. Dos botones con
+    // la misma palabra y distinto alcance, uno encima del otro, no se pueden distinguir.
+    expect(screen.getAllByRole('button', { name: 'Aplicar' })).toHaveLength(1);
+    expect(screen.getByTestId('tramites-aplicar-color_carroceria')).toBeInTheDocument();
   });
 });
 
@@ -133,7 +178,11 @@ describe('HU #12107 — AC7: un catálogo que no carga no deja la pantalla inser
     await userEvent.click(screen.getByTestId('tramites-filtros-reintentar'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('tramites-agregar-filtro')).toBeInTheDocument(),
+      expect(
+        within(screen.getByTestId('tramites-campos')).getByRole('button', {
+          name: 'Color de carrocería',
+        }),
+      ).toBeInTheDocument(),
     );
     expect(screen.queryByText(/No se pudieron cargar los filtros/i)).toBeNull();
   });
@@ -146,7 +195,6 @@ describe('HU #12107 — los chips hablan de lo APLICADO', () => {
     await screen.findByText('P0001');
 
     await abrirFiltros();
-    await userEvent.click(screen.getByTestId('tramites-agregar-filtro'));
     await userEvent.click(
       within(screen.getByTestId('tramites-campos')).getByRole('button', { name: 'Color de carrocería' }),
     );
