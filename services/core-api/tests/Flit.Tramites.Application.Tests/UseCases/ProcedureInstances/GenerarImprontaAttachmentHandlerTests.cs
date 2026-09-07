@@ -1,6 +1,7 @@
 using Flit.Modules.Improntas.Domain;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -174,6 +175,7 @@ public sealed class GenerarImprontaAttachmentHandlerTests
         _client.LastRequest!.OrgNombre.Should().Be("SDM Bogotá");
         _client.LastRequest!.Operador.Should().Be("Ana Operadora");
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "impronta");
+        instance.Attachments.Single(a => a.Tipo == "impronta").Provider.Should().Be(AttachmentProviders.Kyverum);
     }
 
     [Fact]

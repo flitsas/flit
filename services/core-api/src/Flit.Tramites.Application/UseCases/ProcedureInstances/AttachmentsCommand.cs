@@ -19,7 +19,8 @@ public sealed record AttachmentDto(
     long SizeBytes,
     string Sha256,
     string Source,
-    DateTimeOffset UploadedAt);
+    DateTimeOffset UploadedAt,
+    string? Provider = null);
 
 public sealed record AttachmentsResponse(IReadOnlyList<AttachmentDto> Attachments);
 
@@ -29,7 +30,11 @@ public sealed record UploadAttachmentInput(
     string Filename,
     string Mimetype,
     long SizeBytes,
-    Stream Content);
+    Stream Content,
+    /// <summary>
+    /// Proveedor externo opcional (p. ej. <c>kyverum</c>). Las cargas del gestor lo dejan null.
+    /// </summary>
+    string? Provider = null);
 
 /// <summary>Reglas de validación de adjuntos (compartidas con el contrato del front).</summary>
 public static class AttachmentRules
@@ -233,6 +238,7 @@ public sealed class UploadAttachmentHandler(
             Sha256 = stored.Sha256,
             StoragePath = stored.StoragePath,
             Source = "user",
+            Provider = string.IsNullOrWhiteSpace(input.Provider) ? null : input.Provider.Trim().ToLowerInvariant(),
             UploadedAt = DateTimeOffset.UtcNow,
             UploadedBy = uploadedBy,
         };
@@ -261,7 +267,7 @@ public sealed class UploadAttachmentHandler(
         || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase);
 
     internal static AttachmentDto ToDto(ProcedureInstanceAttachment a) =>
-        new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt);
+        new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt, a.Provider);
 }
 
 /// <summary>

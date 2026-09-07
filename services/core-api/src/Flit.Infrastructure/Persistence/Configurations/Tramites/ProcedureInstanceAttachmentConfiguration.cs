@@ -22,6 +22,8 @@ internal sealed class ProcedureInstanceAttachmentConfiguration : IEntityTypeConf
         builder.Property(x => x.Sha256).HasColumnName("sha256").HasMaxLength(64).IsRequired();
         builder.Property(x => x.StoragePath).HasColumnName("storage_path").HasMaxLength(1000).IsRequired();
         builder.Property(x => x.Source).HasColumnName("source").HasMaxLength(20).IsRequired().HasDefaultValue("user");
+        // Procedencia Kyverum vs manual (impronta): no reutiliza Source (DT-4).
+        builder.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(40);
         builder.Property(x => x.UploadedAt).HasColumnName("uploaded_at").IsRequired();
         builder.Property(x => x.UploadedBy).HasColumnName("uploaded_by");
         // HU #10936 — escritura utilizada (admin.company_deeds.id) para las escrituras de sistema.

@@ -1,0 +1,36 @@
+namespace Flit.Tramites.Application.Documents;
+
+/// <summary>Firmante (propietario / copropietario) a estampar en la impronta manual.</summary>
+public sealed record ImprontaManualSigner(
+    string FullName,
+    string? HuellaDigital,
+    string? HashPropietario,
+    byte[]? SignatureImage);
+
+/// <summary>Datos del expediente necesarios para sellar una impronta cargada a mano.</summary>
+public sealed record ImprontaManualStampContext(
+    string ReferenceNumber,
+    string? Placa,
+    string? Vin,
+    string? NumMotor,
+    string? NumChasis,
+    DateTimeOffset FechaCargue,
+    IReadOnlyList<ImprontaManualSigner> Signers);
+
+/// <summary>
+/// Estampa hash, firmas de propietario(s) y firma digital visual sobre un PDF de impronta
+/// <b>manual</b> (no Kyverum). Idempotente: si el PDF ya contiene el marcador
+/// <c>Firma digital impronta:</c> (texto) o la keyword de metadata FLIT, no vuelve a estampar.
+/// </summary>
+public interface IImprontaManualStamper
+{
+    /// <summary>Marcador visual de zona 3.</summary>
+    public const string Marker = "Firma digital impronta:";
+
+    /// <summary>Keyword PDF (metadata, sin comprimir) para idempotencia fiable.</summary>
+    public const string MetadataKeyword = "FLIT_IMPRONTA_STAMP_V1";
+
+    bool AlreadyStamped(byte[] pdf);
+
+    byte[] Stamp(byte[] pdf, ImprontaManualStampContext context);
+}

@@ -206,6 +206,7 @@ public static class InfrastructureExtensions
         // tramites.vehicle_classification_fur). Singleton: cachea el catálogo una sola vez.
         services.AddSingleton<IFurTemplateResolver, Documents.Fur.VehicleClassificationFurResolver>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
+        services.AddSingleton<IImprontaManualStamper, Documents.Improntas.ImprontaManualStamper>();
         // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
