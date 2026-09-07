@@ -7125,6 +7125,13 @@ components:
         code: { type: string, example: TRASPASO_SIMPLE }
         name: { type: string, example: Traspaso Simple }
         family: { type: string, example: traspaso }
+        description:
+          type: string
+          nullable: true
+          description: >
+            Copy configurado en el tipo de trámite para mostrarse en el WIZARD (HU #12124).
+            `null` si el tipo no tiene descripción configurada.
+          example: Traspaso simple entre personas naturales sin gravámenes.
         version: { type: integer, example: 1 }
     ProcedureConformationProfile:
       type: object
