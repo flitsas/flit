@@ -286,6 +286,7 @@ function tipo(id: string, code: string, name: string, family: ProcedureFamily): 
     isActive: true,
     wizardEnabled: true,
     publishedAt: null,
+    description: null,
   };
 }
 
