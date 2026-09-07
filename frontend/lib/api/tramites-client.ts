@@ -476,6 +476,50 @@ async function sha256Hex(file: File): Promise<string> {
     .join('');
 }
 
+
+/**
+ * Una página del listado de trámites, con el `total` del universo filtrado.
+ *
+ * Los defaults de los campos async (HU #10350 / #11056) se aplican AQUÍ y no en cada llamador: un
+ * backend que todavía no exponga una columna deja la tabla funcionando en vez de romper el render.
+ */
+async function listInstancesPage(
+  params: ListInstancesParams,
+): Promise<{ items: InstanceSummary[]; total: number }> {
+  const headers: Record<string, string> = {};
+  if (params.filterTenantId) headers['X-Tenant-Id'] = params.filterTenantId;
+
+  const { filterTenantId: _tenant, ...query } = params;
+  const qs = buildListInstancesSearchParams(query).toString();
+  const path = qs ? `/api/v1/tramites/instances?${qs}` : '/api/v1/tramites/instances';
+
+  const res = await request<InstancesResponse>(path, { headers });
+
+  // Normaliza los campos async de HU #10350 con defaults seguros: un backend que aún no los
+  // exponga (transición) deja la tabla funcionando (chips/estado base) sin romper el render.
+  const items = (res?.items ?? []).map((item) => ({
+    ...item,
+    draftFinalizedAt: item.draftFinalizedAt ?? null,
+    identityValidationStatus: item.identityValidationStatus ?? null,
+    signaturePending: item.signaturePending ?? false,
+    canSubmit: item.canSubmit ?? false,
+    prioritario: item.prioritario ?? false,
+    // HU #11056 — mismo criterio: un backend que aún no exponga estas columnas deja la tabla
+    // funcionando. `fuente` cae a 'dashboard' (el origen por defecto), y los estados de "Firmado" a
+    // null = "no aplica", que es la lectura conservadora: no inventa un estado que no se conoce.
+    updatedAt: item.updatedAt ?? null,
+    gestorNombre: item.gestorNombre ?? null,
+    fuente: item.fuente ?? 'dashboard',
+    firmaVendedorEstado: item.firmaVendedorEstado ?? null,
+    firmaCompradorEstado: item.firmaCompradorEstado ?? null,
+    consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
+  }));
+
+  // Sin `total` (ruta histórica, sin paginación) el respaldo es el tamaño de la página: nunca
+  // promete filas que no existen, que es el error que sí se notaría al exportar.
+  return { items, total: res?.total ?? items.length };
+}
+
 export const tramitesClient = {
   // AC1 — selector solo published. Sin header de tenant.
   listPublishedProcedureTypes: () =>
@@ -508,37 +552,24 @@ export const tramitesClient = {
       typeof filterTenantIdOrParams === 'string'
         ? { filterTenantId: filterTenantIdOrParams }
         : (filterTenantIdOrParams ?? {});
-
-    const headers: Record<string, string> = {};
-    if (params.filterTenantId) headers['X-Tenant-Id'] = params.filterTenantId;
-
-    const { filterTenantId: _tenant, ...query } = params;
-    const qs = buildListInstancesSearchParams(query).toString();
-    const path = qs
-      ? `/api/v1/tramites/instances?${qs}`
-      : '/api/v1/tramites/instances';
-
-    const res = await request<InstancesResponse>(path, { headers });
-    // Normaliza los campos async de HU #10350 con defaults seguros: un backend que aún no los
-    // exponga (transición) deja la tabla funcionando (chips/estado base) sin romper el render.
-    return (res?.items ?? []).map((item) => ({
-      ...item,
-      draftFinalizedAt: item.draftFinalizedAt ?? null,
-      identityValidationStatus: item.identityValidationStatus ?? null,
-      signaturePending: item.signaturePending ?? false,
-      canSubmit: item.canSubmit ?? false,
-      prioritario: item.prioritario ?? false,
-      // HU #11056 — mismo criterio: un backend que aún no exponga estas columnas deja la tabla
-      // funcionando. `fuente` cae a 'dashboard' (el origen por defecto), y los estados de "Firmado" a
-      // null = "no aplica", que es la lectura conservadora: no inventa un estado que no se conoce.
-      updatedAt: item.updatedAt ?? null,
-      gestorNombre: item.gestorNombre ?? null,
-      fuente: item.fuente ?? 'dashboard',
-      firmaVendedorEstado: item.firmaVendedorEstado ?? null,
-      firmaCompradorEstado: item.firmaCompradorEstado ?? null,
-      consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
-    }));
+    return (await listInstancesPage(params)).items;
   },
+
+  /**
+   * HU #12104 — el MISMO listado pero conservando el `total`, que es cuántos trámites cumplen los
+   * filtros en el universo entero y no cuántos vinieron en esta página.
+   *
+   * <p>Existe porque `listInstances` desempaqueta al arreglo y ese número se perdía. Quien exporta
+   * necesita saber cuándo parar de pedir páginas: sin el total tendría que seguir pidiendo hasta
+   * recibir una vacía, que es una petición de más en cada exportación y no distingue «ya no hay»
+   * de «esta página falló».</p>
+   *
+   * <p>Ojo con el contrato del endpoint: el `total` SOLO viaja por el camino filtrado/ordenado, y
+   * ese camino se activa con cualquier parámetro —incluidos `skip`/`take`—. Un recorrido que no
+   * mande paginación cae en la ruta histórica (top-N sin filtros) y se queda sin total; por eso el
+   * respaldo es el tamaño de la página, que al menos nunca promete filas que no existen.</p>
+   */
+  listInstancesPage: (params: ListInstancesParams = {}) => listInstancesPage(params),
 
   /**
    * Conteo por estado para la tira de KPIs del listado, sobre el UNIVERSO que matchea los filtros

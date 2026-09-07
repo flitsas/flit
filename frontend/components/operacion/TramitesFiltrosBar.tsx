@@ -598,8 +598,11 @@ export interface TramitesFiltrosBarProps {
   onEmpezarDeCero: () => void;
   empezarDeCeroDisabled?: boolean;
 
-  /** `ColumnSelector` ya montado por el contenedor — último control de la fila. */
+  /** `ColumnSelector` ya montado por el contenedor — penúltimo control de la fila. */
   columnSelector: ReactNode;
+
+  /** HU #12104 — "Exportar a Excel", el último control: actúa sobre lo que los demás acotaron. */
+  exportAction?: ReactNode;
 
   /** #1 — filtro de compañía, SOLO SuperAdmin (ve trámites de todas las empresas). */
   isAdmin: boolean;
@@ -645,6 +648,7 @@ export function TramitesFiltrosBar({
   onEmpezarDeCero,
   empezarDeCeroDisabled = false,
   columnSelector,
+  exportAction,
   isAdmin,
   companias,
   compania,
@@ -707,6 +711,7 @@ export function TramitesFiltrosBar({
       />
 
       {columnSelector}
+      {exportAction}
     </>
   );
 }

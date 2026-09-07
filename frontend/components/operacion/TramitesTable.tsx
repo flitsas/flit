@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowDown,
   ArrowUp,
+  Download,
   ArrowUpDown,
   CheckCircle2,
   Eye,
@@ -43,6 +44,18 @@ import {
   type TramitesColumnDef,
   type TramitesGridLayout,
 } from '@/lib/tramites/tramites-table-columns';
+import { buildWorkbook, type DataColumn } from '@/components/consultas/columns';
+import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from '@/components/consultas/export';
+import { XLSX_MIME } from '@/lib/xlsx';
+import { nombreArchivoTramites, selloDeArchivo } from './tramites-export';
+import { tramitesExportFields } from '@/lib/tramites/tramites-table-columns';
+import {
+  FIRMA_TEXTO,
+  FUENTE_LABEL,
+  stepLabel,
+  tramiteLabel,
+  vehiculo,
+} from '@/lib/tramites/tramites-row-labels';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
 import { controlCls } from './tramites-control-styles';
 import { StatusBadge } from '@/components/atom/StatusBadge';
@@ -72,7 +85,6 @@ import type {
   InstanceStatus,
   InstanceSummary,
   ListInstancesParams,
-  TramiteFuente,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
@@ -233,93 +245,6 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
 function shortDate(iso: string): string {
   return formatFecha(iso);
 }
-
-function vehiculo(item: InstanceSummary): string {
-  const text = `${item.vehiculoMarca ?? ''} ${item.vehiculoLinea ?? ''}`.trim();
-  return text || '—';
-}
-
-const MODALIDAD_SHORT: Record<ProcedureFamily, string> = {
-  OTROS: 'Otros',
-  MATRICULAS: 'Matrícula',
-  TRASPASO: 'Traspaso',
-};
-
-/**
- * Qué rotula la fila del listado.
- *
- * En MATRICULAS y TRASPASO la familia identifica bien el trámite. En OTROS no: agrupa quince tipos
- * —blindaje, cambio de color, levantamiento de prenda, duplicado de tarjeta…— que se veían los tres
- * igual, «Otros», sin forma de distinguirlos sin abrirlos. Ahí manda el nombre del tipo.
- *
- * Respaldo a la familia si el expediente viene de un backend anterior al campo, para que la celda
- * nunca quede vacía.
- */
-function tramiteLabel(item: InstanceSummary): string {
-  const familia = MODALIDAD_SHORT[item.modalidad];
-  if (item.modalidad !== 'OTROS') return familia;
-  return item.tipoNombre?.trim() || familia;
-}
-
-/**
- * Nombres de paso por familia — RESPALDO para expedientes servidos por un backend anterior a
- * `pasoNombre`. No se amplía: desde ADR-0050 el recorrido lo define el TIPO, no la familia, así que
- * una lista por familia no puede acertar en OTROS —quince tipos con recorridos distintos— y de hecho
- * estaba VACÍA, que es por lo que esas filas mostraban «—».
- */
-const STEP_LABELS_FALLBACK: Record<ProcedureFamily, string[]> = {
-  OTROS: [],
-  MATRICULAS: [
-    'Consulta VIN',
-    'Datos y Documentos del Trámite',
-    'Comprador',
-    'Identidad',
-    'Resumen del trámite',
-  ],
-  TRASPASO: [
-    'Consulta del vehículo',
-    'Datos y Documentos del Trámite',
-    'Vendedor',
-    'Comprador',
-    'Datos comerciales',
-    'Resumen del trámite',
-  ],
-};
-
-/** Rótulo del paso en curso: manda el que arma el recorrido del tipo en el servidor. */
-function stepLabel(item: InstanceSummary): string {
-  return (
-    item.pasoNombre?.trim() ||
-    STEP_LABELS_FALLBACK[item.modalidad]?.[item.pasoActual - 1] ||
-    '—'
-  );
-}
-
-/**
- * Acreditación de una parte (identidad validada o firma del baúl) en la columna "Firmas".
- *
- * El diseño la dibuja como TEXTO PLANO de color, no como píldora, así que aquí solo se necesita
- * etiqueta + color, y se usan los tonos EXACTOS de la propuesta por decisión expresa del usuario.
- *
- * DEUDA DE CONTRASTE CONOCIDA: sobre blanco, `#F9AC00` da 1.9:1 y `#16A34A` 3.3:1, por debajo del
- * 4.5:1 que pide AA para texto. Se asume a sabiendas: el estado nunca depende solo del color —la
- * etiqueta lo dice— pero la legibilidad sigue siendo peor de lo que exige la norma. Se documentó
- * junto a las otras dos deudas de contraste abiertas (blanco sobre `#8CC63F` y sobre `#FF4E00`).
- */
-const FIRMA_TEXTO: Record<FirmaParteEstado, { label: string; color: string }> = {
-  firmado: { label: 'Firmado', color: '#16A34A' },
-  pendiente: { label: 'Sin firma', color: '#F9AC00' },
-  // La propuesta no dibuja una firma rechazada, así que no hay "tono exacto" que copiar: se queda
-  // el naranja de marca en su variante para texto, que sí cumple contraste.
-  rechazado: { label: 'Rechazado', color: '#C2410C' },
-};
-
-/** HU #11057 — etiqueta de la columna Fuente. No hay "QX": Quipux es canal de salida, no de entrada. */
-const FUENTE_LABEL: Record<TramiteFuente, string> = {
-  dashboard: 'Dashboard',
-  integracion: 'Integración',
-  migrado: 'Migrado',
-};
 
 // Selector de columnas — el ancho/orden de cada columna vive en TRAMITES_COLUMNS
 // (lib/tramites/tramites-table-columns.ts); `buildTramitesGridLayout` calcula el
@@ -492,6 +417,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     rotulo: string;
   } | null>(null);
 
+  // HU #12104 — exportación a Excel. `exportNotice` es el resultado (cuántas filas, cuántos
+  // archivos): sin él, un export repartido en tres archivos parece un fallo con dos descargas de más.
+  const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
   /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
@@ -566,11 +497,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     }
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const query: ListInstancesParams = {};
+  /**
+   * Los criterios que resuelve el SERVIDOR, tal y como están aplicados ahora mismo.
+   *
+   * Vive aparte de `load` porque tiene DOS consumidores: el listado y el recorrido del export
+   * (HU #12104). Con una copia en cada sitio, el día que se añada un filtro habría que acordarse de
+   * ponerlo también en el export — y hasta que alguien lo notara, el Excel traería filas que la
+   * pantalla no está mostrando. Así el filtro nuevo llega al archivo sin tocar el export.
+   *
+   * NO incluye `skip`/`take`: la paginación es cosa de cada consumidor.
+   */
+  const buildListQuery = useCallback((): ListInstancesParams => {
+    const query: ListInstancesParams = {};
       if (appliedPlaca.trim()) query.placa = appliedPlaca.trim();
       if (appliedVendedor.trim()) query.vendedor = appliedVendedor.trim();
       if (appliedComprador.trim()) query.comprador = appliedComprador.trim();
@@ -593,6 +531,30 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         query.sortBy = sortBy;
         query.sortDir = sortDir;
       }
+    return query;
+  }, [
+    appliedPlaca,
+    appliedVendedor,
+    appliedComprador,
+    appliedGestor,
+    appliedFirmado,
+    appliedCreatedFrom,
+    appliedCreatedTo,
+    appliedUpdatedFrom,
+    appliedUpdatedTo,
+    appliedOrganismo,
+    appliedTipo,
+    estado,
+    modalidad,
+    sortBy,
+    sortDir,
+  ]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const query = buildListQuery();
       // Cualquier filtro/orden activa el camino server-side: pedir el tope del API.
       if (Object.keys(query).length > 0) {
         query.take = SERVER_LIST_TAKE;
@@ -612,23 +574,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     } finally {
       setLoading(false);
     }
-  }, [
-    appliedPlaca,
-    appliedVendedor,
-    appliedComprador,
-    appliedGestor,
-    appliedFirmado,
-    appliedCreatedFrom,
-    appliedCreatedTo,
-    appliedUpdatedFrom,
-    appliedUpdatedTo,
-    appliedOrganismo,
-    appliedTipo,
-    estado,
-    modalidad,
-    sortBy,
-    sortDir,
-  ]);
+  }, [buildListQuery]);
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -669,9 +615,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // Filtrado en cadena de lo que SIGUE siendo de cliente: búsqueda libre, compañía y prioritarios.
   // Estado y familia ya no están aquí — los resuelve el servidor (ver `load`), que es lo único que
   // puede verlos sobre el universo completo en vez de sobre la página traída.
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return items.filter((item) => {
+  /**
+   * Los criterios que NO viajan al servidor. Se aplican fila a fila, así que valen igual sobre la
+   * página que se está pintando y sobre cada página que trae el export (HU #12104) — que es la
+   * razón de que sea un predicado suelto y no un `filter` incrustado en el `useMemo`. Si el export
+   * no lo reaplicara, el Excel traería filas que la pantalla está escondiendo.
+   */
+  const coincideEnCliente = useCallback(
+    (item: InstanceSummary) => {
+      const q = search.trim().toLowerCase();
       if (q) {
         const haystack = [
           item.placa,
@@ -690,8 +642,101 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       if (compania && item.companiaNombre !== compania) return false;
       if (soloPrioritarios && !item.prioritario) return false;
       return true;
-    });
-  }, [items, search, compania, soloPrioritarios]);
+    },
+    [search, compania, soloPrioritarios],
+  );
+
+  const filtered = useMemo(() => items.filter(coincideEnCliente), [items, coincideEnCliente]);
+
+  /**
+   * HU #12104 — descarga a Excel de TODO lo que cumple los filtros, no de la página a la vista.
+   *
+   * <p>Exportar solo las diez filas de pantalla sería una trampa: el archivo parecería completo y
+   * nadie lo comprobaría. Y exportar lo que la tabla tiene en memoria no serviría tampoco — el
+   * listado trae como mucho {@link SERVER_LIST_TAKE} filas, así que el archivo diría «los borradores
+   * que cupieron en la ventana» en vez de «los borradores del tenant».</p>
+   *
+   * <p>Por eso recorre el servidor de {@link SERVER_LIST_TAKE} en {@link SERVER_LIST_TAKE} —el tope
+   * DURO del endpoint, pedir más no trae más— hasta agotar el total, y reparte en archivos de
+   * {@link EXPORT_BATCH_SIZE} filas en vez de truncar. Cada archivo se dispara apenas se arma,
+   * dentro de la misma interacción del clic, para no depender de que el usuario pida «el resto».</p>
+   *
+   * <p>Se manda SIEMPRE `take`/`skip` aunque no haya ningún filtro: sin parámetros el endpoint cae
+   * en su ruta histórica, que devuelve el top-N sin paginar y sin `total` — el recorrido no tendría
+   * dónde parar.</p>
+   */
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    setExportNotice(null);
+    setExportError(null);
+    try {
+      const base = buildListQuery();
+      const campos = tramitesExportFields(effectiveColumns);
+      const columnasExcel: DataColumn<InstanceSummary>[] = campos.map((campo) => ({
+        id: campo.id,
+        label: campo.label,
+        group: 'Trámites',
+        value: campo.value,
+        raw: campo.raw,
+        width: campo.width,
+      }));
+      const idsVisibles = campos.map((c) => c.id);
+      const sello = selloDeArchivo(new Date());
+
+      // La primera página se pide aparte porque de ella sale el `total` con el que se sabe cuántas
+      // quedan. Se guarda para reusarla como página 1 del recorrido en vez de volver a pedirla.
+      const primeraPagina = await tramitesClient.listInstancesPage({
+        ...base,
+        skip: 0,
+        take: SERVER_LIST_TAKE,
+      });
+
+      // El `total` del servidor es el universo que cumple los filtros SERVER-SIDE. Los tres que solo
+      // viven en cliente (búsqueda libre, compañía y prioritarios) se reaplican página a página, así
+      // que lo exportado puede ser menos — por eso el aviso final cuenta filas REALES y no el total.
+      const { exportadas, archivos } = await exportarPorLotes<InstanceSummary>({
+        total: primeraPagina.total,
+        pageSize: SERVER_LIST_TAKE,
+        traerPagina: async (pagina, pageSize) => {
+          const filas =
+            pagina === 1
+              ? primeraPagina.items
+              : (
+                  await tramitesClient.listInstancesPage({
+                    ...base,
+                    skip: (pagina - 1) * pageSize,
+                    take: pageSize,
+                  })
+                ).items;
+          return filas.filter(coincideEnCliente);
+        },
+        volcar: (lote, parte) => {
+          download(
+            buildWorkbook('Trámites', columnasExcel, lote, idsVisibles),
+            nombreArchivoTramites(sello, parte),
+            XLSX_MIME,
+          );
+        },
+      });
+
+      if (exportadas === 0) {
+        setExportNotice('Ningún trámite cumple los filtros activos: no se descargó ningún archivo.');
+        return;
+      }
+      setExportNotice(
+        archivos > 1
+          ? `Se exportaron ${exportadas} trámites en ${archivos} archivos de hasta ${EXPORT_BATCH_SIZE} filas cada uno, con ${idsVisibles.length} columnas.`
+          : `Se exportaron ${exportadas} trámites con ${idsVisibles.length} columnas.`,
+      );
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? `No se pudo exportar: ${err.message}` : 'No se pudo exportar.',
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [buildListQuery, coincideEnCliente, effectiveColumns]);
+
 
   // HU #10536 — sin orden explicito por columna, el backend devuelve los prioritarios primero. Al
   // marcar uno desde la tabla se replica ESE mismo criterio en cliente, para que suba a la primera
@@ -1080,6 +1125,20 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                   buttonClassName={controlCls(columnasPersonalizadas)}
                 />
               }
+              exportAction={
+                <button
+                  type="button"
+                  onClick={() => void handleExportExcel()}
+                  disabled={exporting || loading}
+                  aria-label="Exportar el listado de trámites a Excel"
+                  title="Exportar a Excel"
+                  className={controlCls(false)}
+                  data-testid="tramites-export-xlsx"
+                >
+                  <Download className={`h-3.5 w-3.5 ${exporting ? 'animate-pulse' : ''}`} aria-hidden="true" />
+                  {exporting ? 'Exportando…' : 'Exportar'}
+                </button>
+              }
               isAdmin={isAdmin}
               companias={companias}
               compania={compania}
@@ -1087,6 +1146,24 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             />
           }
         />
+
+        {/* HU #12104 — resultado de la exportación. El reparto en varios archivos necesita decirse:
+            tres descargas seguidas sin explicación se leen como un fallo, no como un archivo por
+            lote. `role="status"` para que un lector de pantalla lo anuncie sin robar el foco. */}
+        {exportError ? (
+          <InlineAlert tone="warning" title="No se pudo exportar">
+            {exportError}
+          </InlineAlert>
+        ) : null}
+        {exportNotice ? (
+          <p
+            role="status"
+            className="text-xs text-[#162744]/70 dark:text-white/60"
+            data-testid="tramites-export-aviso"
+          >
+            {exportNotice}
+          </p>
+        ) : null}
 
         {/* KPIs por estado (filtro) + CTA Nuevo trámite */}
         <div className="flex items-stretch gap-4">

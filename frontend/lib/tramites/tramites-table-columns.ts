@@ -1,3 +1,15 @@
+import { bogotaDay, type XlsxCell } from '@/lib/xlsx';
+import { formatFecha } from '@/lib/format/date';
+import { estadoLabel } from '@/lib/tramites/estados';
+import {
+  FIRMA_TEXTO,
+  FUENTE_LABEL,
+  stepLabel,
+  tramiteLabel,
+  vehiculo,
+} from '@/lib/tramites/tramites-row-labels';
+import type { FirmaParteEstado, InstanceSummary } from '@/lib/api/types/procedure-runtime';
+
 /**
  * Definición de las columnas configurables de la tabla "Trámites en curso" del gestor
  * (selector de columnas, preferencia `tramites.columns` — ver lib/api/ui-preferences.ts).
@@ -272,4 +284,179 @@ export function buildTramitesColWidths(
     ...columns.map((c) => (esFija(c) ? `${c.minPx}px` : anchoFlexible(c.minPx))),
     `${ACTIONS_COL_PX}px`,
   ];
+}
+
+// ── Exportación a Excel (HU #12104) ────────────────────────────────────────────
+
+/**
+ * Un DATO exportable del listado. No es lo mismo que una columna: tres columnas de la tabla son
+ * compuestas —«Radicado» apila las dos fechas, «Vehículo» la placa, el VIN y la marca/modelo, y
+ * «Trámite» el estado y el paso— y en el Excel cada dato va a su propia columna. Una celda con dos
+ * valores no se puede ordenar ni sumar, que es justo para lo que se abre el archivo.
+ *
+ * `value` produce el texto que se lee; `raw` el valor TIPADO que va a la celda. Sin `raw` una fecha
+ * llegaría como cadena y la columna no se podría ordenar cronológicamente.
+ */
+export interface TramitesExportField {
+  id: string;
+  label: string;
+  value: (row: InstanceSummary) => string;
+  /** Valor tipado. Devuelve `null` para celda VACÍA: un «—» en columna numérica la vuelve texto. */
+  raw: (row: InstanceSummary) => XlsxCell;
+  /** Ancho en Excel, en caracteres. Sin esto una fecha sale como `#####`. */
+  width?: number;
+  /**
+   * Clave de la columna DEDICADA que posee este dato, cuando el dato solo se apila aquí porque esa
+   * columna está oculta. Es el mismo criterio que `shows()` usa en la tabla para decidir qué se
+   * apila: si el gestor enciende la columna de desglose, el dato SE MUDA allí — nunca sale dos
+   * veces, ni desaparece.
+   */
+  ownedBy?: string;
+}
+
+/** Texto para Excel: lo que la tabla pinta como «—» aquí es celda vacía, no un guion. */
+function texto(valor: string | null | undefined): XlsxCell {
+  const limpio = valor?.trim();
+  return limpio && limpio !== '—' ? limpio : null;
+}
+
+/** Un campo de texto simple, con el mismo criterio de vacío en pantalla y en el archivo. */
+function campoTexto(
+  id: string,
+  label: string,
+  lee: (row: InstanceSummary) => string | null | undefined,
+  width?: number,
+): TramitesExportField {
+  return { id, label, value: (row) => lee(row)?.trim() || '—', raw: (row) => texto(lee(row)), width };
+}
+
+/**
+ * Acreditación de una parte, con la MISMA regla que `ActorCell`: sin actor capturado no hay firma
+ * que reportar. «Sin registrar» junto a una celda de nombre vacía se leería como una acreditación
+ * pendiente de alguien que ni siquiera existe en ese tipo de trámite (el vendedor de una matrícula
+ * inicial) o que aún no se ha capturado.
+ */
+function campoFirma(
+  id: string,
+  label: string,
+  nombreDe: (row: InstanceSummary) => string | null | undefined,
+  estadoDe: (row: InstanceSummary) => FirmaParteEstado | null | undefined,
+): TramitesExportField {
+  const lee = (row: InstanceSummary): string | null => {
+    if (!nombreDe(row)?.trim()) return null;
+    const estado = estadoDe(row);
+    return estado ? FIRMA_TEXTO[estado].label : 'Sin registrar';
+  };
+  return { id, label, value: (row) => lee(row) ?? '—', raw: (row) => texto(lee(row)), width: 16 };
+}
+
+/**
+ * Los datos que viven DENTRO de una celda compuesta y además tienen columna propia. Se declaran una
+ * sola vez y se referencian desde los dos sitios: si estuvieran escritos dos veces, el día que
+ * alguien cambie cómo se lee una fecha, el Excel diría una cosa con la columna encendida y otra con
+ * la columna apagada.
+ */
+const CAMPO_FECHA_CREACION: TramitesExportField = {
+  id: 'fechaCreacion',
+  label: 'Fecha de creación',
+  value: (row) => formatFecha(row.createdAt),
+  // `bogotaDay` y no el instante UTC crudo: Excel no guarda husos, así que un trámite creado a las
+  // 22:00 saltaría al día siguiente solo dentro del archivo y contradiría la pantalla.
+  raw: (row) => bogotaDay(row.createdAt),
+  width: 16,
+};
+
+const CAMPO_FECHA_ACTUALIZACION: TramitesExportField = {
+  id: 'fechaActualizacion',
+  label: 'Fecha de actualización',
+  value: (row) => (row.updatedAt ? formatFecha(row.updatedAt) : '—'),
+  raw: (row) => bogotaDay(row.updatedAt ?? null),
+  width: 18,
+};
+
+const CAMPO_VIN = campoTexto('vin', 'VIN', (row) => row.vin, 20);
+const CAMPO_VEHICULO = campoTexto('vehiculo', 'Marca / modelo', (row) => vehiculo(row), 24);
+const CAMPO_ESTADO = campoTexto('estado', 'Estado', (row) => estadoLabel(row.estado), 16);
+const CAMPO_PASO = campoTexto('paso', 'Paso', (row) => `${row.pasoActual}/${row.totalPasos}`, 8);
+const CAMPO_PASO_NOMBRE = campoTexto('pasoNombre', 'Nombre del paso', (row) => stepLabel(row), 26);
+
+/** El mismo campo, marcado como prestado a una celda compuesta. */
+function apilado(campo: TramitesExportField, ownedBy: string): TramitesExportField {
+  return { ...campo, ownedBy };
+}
+
+/**
+ * Qué datos exporta cada columna del listado. La clave es la de `TRAMITES_COLUMNS`.
+ *
+ * Vive junto a la definición de columnas —y no en un módulo aparte— por la misma razón que
+ * `components/consultas/columns.ts` junta `value` y `raw` con la columna: para que una columna
+ * nueva no pueda nacer sin export. Con dos listas paralelas, el día que alguien añade una columna a
+ * la tabla y olvida esta, nadie se entera hasta que un informe llega incompleto a una reunión.
+ */
+const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
+  radicado: [
+    campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 20),
+    apilado(CAMPO_FECHA_CREACION, 'fechaCreacion'),
+    apilado(CAMPO_FECHA_ACTUALIZACION, 'fechaActualizacion'),
+  ],
+  placa: [
+    campoTexto('placa', 'Placa', (row) => row.placa, 12),
+    apilado(CAMPO_VIN, 'vin'),
+    apilado(CAMPO_VEHICULO, 'vehiculo'),
+  ],
+  propietario: [
+    campoTexto('vendedor', 'Vendedor', (row) => row.vendedorNombre, 28),
+    campoFirma('vendedorFirma', 'Firma del vendedor', (r) => r.vendedorNombre, (r) => r.firmaVendedorEstado),
+  ],
+  comprador: [
+    campoTexto('comprador', 'Comprador', (row) => row.compradorNombre, 28),
+    campoFirma('compradorFirma', 'Firma del comprador', (r) => r.compradorNombre, (r) => r.firmaCompradorEstado),
+  ],
+  tramite: [
+    campoTexto('tramite', 'Trámite', (row) => tramiteLabel(row), 22),
+    apilado(CAMPO_ESTADO, 'estado'),
+    apilado(CAMPO_PASO, 'paso'),
+    apilado(CAMPO_PASO_NOMBRE, 'paso'),
+  ],
+  secretaria: [campoTexto('secretaria', 'Secretaría', (row) => row.organismoTransito, 34)],
+  // La celda apila razón social y persona, y son dos cosas distintas: la compañía que radica y
+  // quien la operó. En una sola columna no se puede agrupar por ninguna de las dos.
+  gestor: [
+    campoTexto('compania', 'Compañía', (row) => row.companiaNombre, 28),
+    campoTexto('gestor', 'Gestor', (row) => row.gestorNombre, 24),
+  ],
+  fuente: [campoTexto('fuente', 'Fuente', (row) => FUENTE_LABEL[row.fuente ?? 'dashboard'], 14)],
+  vin: [CAMPO_VIN],
+  vehiculo: [CAMPO_VEHICULO],
+  estado: [CAMPO_ESTADO],
+  paso: [CAMPO_PASO, CAMPO_PASO_NOMBRE],
+  fechaCreacion: [CAMPO_FECHA_CREACION],
+  fechaActualizacion: [CAMPO_FECHA_ACTUALIZACION],
+};
+
+/**
+ * Los datos a exportar para una selección de columnas, en el ORDEN de la tabla.
+ *
+ * Recorre `TRAMITES_COLUMNS` (no la selección del usuario) para que el archivo salga siempre con el
+ * mismo orden de columnas que la pantalla, sin depender de en qué orden se fueron activando.
+ *
+ * Un subcampo prestado (`ownedBy`) se omite cuando su columna dedicada también está visible: ahí el
+ * dato ya sale por su cuenta y repetirlo daría dos columnas con lo mismo.
+ */
+export function tramitesExportFields(visibleKeys: readonly string[]): TramitesExportField[] {
+  const visibles = new Set(visibleKeys);
+  const campos: TramitesExportField[] = [];
+  const yaPuestos = new Set<string>();
+
+  for (const columna of TRAMITES_COLUMNS) {
+    if (!visibles.has(columna.key)) continue;
+    for (const campo of EXPORT_FIELDS[columna.key] ?? []) {
+      if (campo.ownedBy && visibles.has(campo.ownedBy)) continue;
+      if (yaPuestos.has(campo.id)) continue;
+      yaPuestos.add(campo.id);
+      campos.push(campo);
+    }
+  }
+
+  return campos;
 }
