@@ -69,13 +69,17 @@ public sealed class GenerarConsolidadoHandler(
     IImprontaAutoGenerator? improntaGenerator = null,
     IOtConfiguredDocumentOrderProvider? otOrderProvider = null,
     Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null,
-    IImprontaManualStamper? improntaManualStamper = null)
+    IImprontaManualStamper? improntaManualStamper = null,
+    Flit.Tramites.Domain.Integration.ISignatureVaultPolicy? signatureVaultPolicy = null)
 {
     // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
     // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
     // portada queda como estaba.
     private readonly Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory _companiaRadicadoraDirectory =
         companiaRadicadoraDirectory ?? Flit.Tramites.Domain.Integration.NullCompaniaRadicadoraDirectory.Instance;
+
+    private readonly Flit.Tramites.Domain.Integration.ISignatureVaultPolicy _signatureVaultPolicy =
+        signatureVaultPolicy ?? Flit.Tramites.Domain.Integration.NullSignatureVaultPolicy.Instance;
 
     public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -259,7 +263,7 @@ public sealed class GenerarConsolidadoHandler(
             {
                 var pdf = merger.NormalizeToPdf(bytes, attachment.Mimetype);
                 pdf = await ImprontaManualStampApplier
-                    .MaybeStampAsync(pdf, attachment, instance, storage, improntaManualStamper, ct)
+                    .MaybeStampAsync(pdf, attachment, instance, storage, improntaManualStamper, ct, _signatureVaultPolicy, repo)
                     .ConfigureAwait(false);
                 pdfParts.Add(pdf);
             }

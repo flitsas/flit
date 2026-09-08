@@ -5,17 +5,29 @@ using Flit.Tramites.Application.Documents;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace Flit.Infrastructure.Documents.Improntas;
 
 /// <summary>
-/// Estampa zonas 1–3 de sellos FLIT sobre impronta cargada a mano (PdfSharpCore).
-/// Zona 1 en la primera página; zonas 2–3 + pie en una página nueva al final (nunca pisa calcos).
+/// Estampa zonas 1–3 sobre impronta manual. Rúbrica como el FUR (PNG + sidecar).
+/// Bloque de firmas anclado al pie de la última página (sin hoja nueva).
 /// </summary>
 public sealed class ImprontaManualStamper : IImprontaManualStamper
 {
     private static readonly XColor Blue = XColor.FromArgb(0x00, 0x55, 0xA5);
+    private static readonly XColor LightGrey = XColor.FromArgb(0xB0, 0xB0, 0xB0);
     private static readonly Encoding Latin1 = Encoding.GetEncoding("ISO-8859-1");
+    // 50% del tamaño FUR previo (field 48→24, ancho máx. 145→72.5).
+    private const double SignatureFieldH = 24;
+    private const double SignatureImageMaxWidth = 72.5;
+    // Base 2.5 (50% FUR) + 2pt a pedido de legibilidad de la estampa.
+    private const double SignatureSidecarFontSize = 4.5;
+    private const double FooterLineH = 14;
+    private const double BottomPad = 8;
+    private const double GapAboveFooter = 4;
 
     public bool AlreadyStamped(byte[] pdf)
     {
@@ -55,29 +67,20 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
 
         var documentHash = Sha256Hex(pdf);
         var hashImpronta = Guid.NewGuid().ToString("D");
-        var firmaDigital = BuildFirmaDigital(documentHash, hashImpronta, context);
+        // Paridad BackCrudTransfer: RSA-2048 efímero → Base64 (wrap 50 en zona 3).
+        var firmaDigital = BuildFirmaDigital(documentHash);
 
         using var document = PdfReader.Open(new MemoryStream(pdf), PdfDocumentOpenMode.Modify);
         document.Info.Keywords = IImprontaManualStamper.MetadataKeyword;
 
-        // Zona 1 — hash del documento base en cabecera de la primera página.
-        if (document.PageCount > 0)
-            DrawZone1(document.Pages[0], documentHash);
+        if (document.PageCount == 0)
+            return pdf;
 
-        // Zonas 2–3 + pie — página dedicada para no pisar contenido previo.
-        var stampPage = document.AddPage();
-        if (document.PageCount > 1)
-        {
-            stampPage.Width = document.Pages[0].Width;
-            stampPage.Height = document.Pages[0].Height;
-        }
-
-        DrawStampPage(stampPage, context, hashImpronta, firmaDigital, documentHash);
+        var page = document.Pages[document.PageCount - 1];
+        DrawAllZones(page, context, hashImpronta, firmaDigital, documentHash);
 
         using var ms = new MemoryStream();
         document.Save(ms, false);
-        // Keyword + DocHash en comentario ASCII al final: los content streams van comprimidos
-        // y no son fiables para buscar el marcador visual.
         return AppendAsciiMarker(ms.ToArray(), documentHash);
     }
 
@@ -91,71 +94,83 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         return result;
     }
 
-    private static void DrawZone1(PdfPage page, string documentHash)
-    {
-        using var gfx = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
-        var font = new XFont("Arial", 7, XFontStyle.Regular);
-        var text = $"Identificador del documento (Hash): {documentHash}";
-        gfx.DrawString(text, font, XBrushes.Black, new XRect(24, 10, page.Width - 48, 14), XStringFormats.TopLeft);
-    }
-
-    private static void DrawStampPage(
+    private static void DrawAllZones(
         PdfPage page,
         ImprontaManualStampContext context,
         string hashImpronta,
         string firmaDigital,
         string documentHash)
     {
-        using var gfx = XGraphics.FromPdfPage(page);
+        using var gfx = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
         var titleFont = new XFont("Arial", 8, XFontStyle.Bold);
         var metaFont = new XFont("Arial", 6.5, XFontStyle.Regular);
+        var greyBrush = new XSolidBrush(LightGrey);
         var blueBrush = new XSolidBrush(Blue);
 
-        // Sello de tiempo vertical (margen derecho).
+        // Zona 1 — hash del documento base en cabecera (fuera de la sección de firma).
+        gfx.DrawString(
+            $"Identificador del documento (Hash): {documentHash}",
+            new XFont("Arial", 7, XFontStyle.Regular),
+            XBrushes.Black,
+            new XRect(24, 10, page.Width - 48, 14),
+            XStringFormats.TopLeft);
+
         var stampTime = context.FechaCargue.ToLocalTime().ToString("M/d/yyyy h:mm:ss tt");
         DrawVerticalText(gfx, $"Sello de tiempo: {stampTime}", metaFont, blueBrush, page.Width - 18, page.Height - 40);
 
         var signers = context.Signers.Count == 0
-            ? [new ImprontaManualSigner("(sin propietario)", null, null, null)]
+            ? [new ImprontaManualSigner("(sin propietario)", null, null)]
             : context.Signers.Take(4).ToList();
+
+        // Pie: frase de validez (gris). Sin "Improntas del cliente".
+        var footerY = page.Height - BottomPad - FooterLineH;
+        gfx.DrawString(
+            "Este documento cuenta con validaciones y certificaciones de seguridad válidas para los nodos de control de Runt, Simit, Hqrunt",
+            metaFont, greyBrush,
+            new XRect(24, footerY, page.Width - 48, FooterLineH), XStringFormats.TopLeft);
+
+        // Bloque de firmas alineado al final de la página (justo encima del footer).
+        var leftBlockH = EstimateLeftBlockHeight();
+        var rightBlockH = EstimateRightBlockHeight(firmaDigital);
+        var contentH = Math.Max(leftBlockH, rightBlockH);
+        var topY = Math.Max(28.0, footerY - GapAboveFooter - contentH);
 
         var leftWidth = page.Width * 0.58;
         var rightX = leftWidth + 12;
-        var rightWidth = page.Width - rightX - 28;
-        var topY = 40.0;
         var cols = FurSignatureLayout.Columns(24, leftWidth - 24, signers.Count);
+        var fourActor = signers.Count == 4;
 
         for (var i = 0; i < signers.Count; i++)
         {
             var (colX, colW) = cols[i];
-            DrawSignerBlock(gfx, signers[i], context, hashImpronta, colX, topY, colW, titleFont, metaFont, blueBrush);
+            DrawSignerColumn(
+                gfx, signers[i], context, hashImpronta,
+                colX, topY, colW, fourActor, metaFont, greyBrush);
         }
 
-        // Zona 3 — firma digital del documento.
+        // Zona 3 — título azul; cuerpo Base64 RSA (legacy wrap 50).
         var z3Y = topY;
-        gfx.DrawString(IImprontaManualStamper.Marker, titleFont, blueBrush, new XPoint(rightX, z3Y));
-        z3Y += 12;
-        foreach (var line in Wrap(firmaDigital, 42))
+        gfx.DrawString(IImprontaManualStamper.Marker, titleFont, blueBrush, new XPoint(rightX, z3Y + 8));
+        z3Y += 16;
+        foreach (var line in Wrap(firmaDigital, FirmaDigitalWrapWidth))
         {
             gfx.DrawString(line, metaFont, XBrushes.Black, new XPoint(rightX, z3Y));
-            z3Y += 9;
-            if (z3Y > page.Height - 60)
+            z3Y += 8;
+            if (z3Y > footerY - 2)
                 break;
         }
-
-        // Pie de validez.
-        var footerY = page.Height - 36;
-        var footer = "Este documento cuenta con validaciones y certificaciones de seguridad válidas para los nodos de control de Runt, Simit, Hqrunt";
-        gfx.DrawString(footer, metaFont, XBrushes.Black, new XRect(24, footerY, page.Width - 48, 20), XStringFormats.TopLeft);
-        gfx.DrawString("Improntas del cliente", metaFont, XBrushes.Black,
-            new XRect(24, footerY + 12, page.Width - 48, 14), XStringFormats.TopRight);
-
-        // Eco del hash base (trazabilidad; también en comentario ASCII al pie del archivo).
-        gfx.DrawString($"DocHash:{documentHash[..Math.Min(16, documentHash.Length)]}…", metaFont, XBrushes.Gray,
-            new XPoint(24, 24));
     }
 
-    private static void DrawSignerBlock(
+    private const int FirmaDigitalWrapWidth = 50;
+
+    private static double EstimateLeftBlockHeight() =>
+        // Rúbrica + hashes (propietario puede ir en 2 líneas) + 4 metas.
+        SignatureFieldH + 4 + (2 * 8) + (1 * 8) + (4 * 8) + 2;
+
+    private static double EstimateRightBlockHeight(string firmaDigital) =>
+        16 + (Math.Ceiling(Math.Max(1, firmaDigital.Length) / (double)FirmaDigitalWrapWidth) * 8) + 2;
+
+    private static void DrawSignerColumn(
         XGraphics gfx,
         ImprontaManualSigner signer,
         ImprontaManualStampContext context,
@@ -163,56 +178,177 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         double x,
         double y,
         double width,
-        XFont titleFont,
+        bool fourActorLayout,
         XFont metaFont,
-        XBrush blueBrush)
+        XBrush greyBrush)
     {
         var cursor = y;
+
+        // Rúbrica (PNG + sidecar) al 50%; sin título "Firmado digitalmente por".
+        var drew = DrawFurStyleSignature(gfx, signer, x, cursor, width, SignatureFieldH, fourActorLayout, greyBrush);
+        cursor += (drew ? SignatureFieldH : Math.Min(SignatureFieldH, 16)) + 4;
+
+        var fecha = context.FechaCargue.ToLocalTime().ToString("dd-MM-yyyy HH:mm:ss");
+        // Hashes completos (sin Trunc); el resto puede partirse por ancho de columna.
+        var hashWrap = Math.Max(48, (int)(width / 3.2));
+        var metaWrap = Math.Max(28, (int)(width / 4.2));
+        DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor,
+            $"Hash propietario: {signer.HashPropietario ?? "-"}", hashWrap);
+        DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor,
+            $"Hash Impronta: {hashImpronta}", hashWrap);
+        foreach (var line in new[]
+                 {
+                     $"Fecha y Hora de Cargue: {fecha}",
+                     $"Placa del vehículo: {context.Placa ?? "-"}",
+                     $"Id del proceso: {context.ReferenceNumber}",
+                     $"NroVIN: {context.Vin ?? "-"} - NroMotor: {context.NumMotor ?? "-"} - NroChasis: {context.NumChasis ?? "-"}",
+                 })
+        {
+            DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor, line, metaWrap);
+        }
+    }
+
+    private static void DrawWrappedLines(
+        XGraphics gfx, XFont font, XBrush brush, double x, ref double cursor, string text, int wrapWidth)
+    {
+        foreach (var wrapped in Wrap(text, wrapWidth))
+        {
+            gfx.DrawString(wrapped, font, brush, new XPoint(x, cursor + 6));
+            cursor += 8;
+        }
+    }
+
+    /// <returns><c>true</c> si pintó imagen o sello en la banda de rúbrica.</returns>
+    private static bool DrawFurStyleSignature(
+        XGraphics gfx,
+        ImprontaManualSigner signer,
+        double fieldX,
+        double fieldY,
+        double fieldW,
+        double fieldH,
+        bool fourActorLayout,
+        XBrush greyBrush)
+    {
         if (signer.SignatureImage is { Length: > 0 })
         {
             try
             {
-                using var img = XImage.FromStream(() => new MemoryStream(signer.SignatureImage));
-                var maxW = Math.Min(90, width - 8);
-                var maxH = 36.0;
-                var (dw, dh) = FurSignatureLayout.Fit(img.PixelWidth, img.PixelHeight, maxW, maxH);
-                gfx.DrawImage(img, x, cursor, dw, dh);
-                cursor += dh + 2;
+                var payload = FlattenAlphaOntoWhite(signer.SignatureImage);
+                using var img = XImage.FromStream(() => new MemoryStream(payload));
+                img.Interpolate = true;
+
+                var imageW = FurSignatureLayout.ImageWidthCap(fieldW, SignatureImageMaxWidth, fourActorLayout);
+                var (dw, dh) = FurSignatureLayout.Fit(
+                    img.PixelWidth, img.PixelHeight, imageW, fieldH * 0.88);
+                if (dw > 0 && dh > 0)
+                {
+                    var (imageY, sidecarX, sidecarW) = FurSignatureLayout.Place(
+                        fieldX, fieldY, fieldW, fieldH, dw, dh, fourActorLayout);
+                    gfx.DrawImage(img, fieldX, Math.Max(fieldY, imageY), dw, dh);
+
+                    if (!string.IsNullOrWhiteSpace(signer.ImageSidecarText) && sidecarW > 0)
+                    {
+                        DrawSidecarText(
+                            gfx, sidecarX, fieldY, sidecarW, fieldH,
+                            signer.ImageSidecarText!,
+                            SignatureSidecarFontSize,
+                            greyBrush);
+                    }
+
+                    return true;
+                }
             }
             catch
             {
-                // Sin imagen usable: solo texto.
+                // Cae a sello texto.
             }
         }
 
-        gfx.DrawString("Firmado digitalmente por:", titleFont, blueBrush, new XPoint(x, cursor));
-        cursor += 10;
-        gfx.DrawString(Trunc(signer.FullName, 40), metaFont, XBrushes.Black, new XPoint(x, cursor));
-        cursor += 10;
-
-        if (!string.IsNullOrWhiteSpace(signer.HuellaDigital))
+        var seal = !string.IsNullOrWhiteSpace(signer.SealText)
+            ? signer.SealText
+            : signer.ImageSidecarText;
+        if (!string.IsNullOrWhiteSpace(seal))
         {
-            gfx.DrawString($"Huella digital: {Trunc(signer.HuellaDigital!, 36)}", metaFont, XBrushes.Black, new XPoint(x, cursor));
-            cursor += 9;
+            DrawSidecarText(gfx, fieldX, fieldY, fieldW, fieldH, seal!, fontSize: 3.5, greyBrush);
+            return true;
         }
 
-        var fecha = context.FechaCargue.ToLocalTime().ToString("dd-MM-yyyy HH:mm:ss");
-        var lines = new[]
+        return false;
+    }
+
+    private static void DrawSidecarText(
+        XGraphics gfx, double x, double y, double w, double h, string text, double fontSize, XBrush brush)
+    {
+        var font = new XFont("Arial", fontSize, XFontStyle.Regular);
+        var lineH = fontSize * 1.15;
+        var cursor = y + fontSize;
+        foreach (var raw in text.Split('\n'))
         {
-            $"Hash propietario: {Trunc(signer.HashPropietario ?? "-", 36)}",
-            $"Hash Impronta: {hashImpronta}",
-            $"Fecha y Hora de Cargue: {fecha}",
-            $"Placa del vehículo: {context.Placa ?? "-"}",
-            $"Id del proceso: {context.ReferenceNumber}",
-            $"NroVIN: {context.Vin ?? "-"} - NroMotor: {context.NumMotor ?? "-"} - NroChasis: {context.NumChasis ?? "-"}",
-        };
-        foreach (var line in lines)
+            if (cursor > y + h)
+                break;
+            var line = TruncToWidth(gfx, font, raw, w);
+            gfx.DrawString(line, font, brush, new XPoint(x, cursor));
+            cursor += lineH;
+        }
+    }
+
+    private static string TruncToWidth(XGraphics gfx, XFont font, string text, double maxW)
+    {
+        if (string.IsNullOrEmpty(text) || gfx.MeasureString(text, font).Width <= maxW)
+            return text;
+        var ellipsis = "…";
+        for (var len = text.Length - 1; len > 0; len--)
         {
-            foreach (var wrapped in Wrap(line, Math.Max(28, (int)(width / 4.2))))
+            var candidate = text[..len] + ellipsis;
+            if (gfx.MeasureString(candidate, font).Width <= maxW)
+                return candidate;
+        }
+
+        return ellipsis;
+    }
+
+    private static byte[] FlattenAlphaOntoWhite(byte[] imageBytes)
+    {
+        try
+        {
+            using var image = Image.Load<Rgba32>(imageBytes);
+            var hasAlpha = false;
+            for (var row = 0; row < image.Height && !hasAlpha; row++)
             {
-                gfx.DrawString(wrapped, metaFont, XBrushes.Black, new XPoint(x, cursor));
-                cursor += 8;
+                for (var col = 0; col < image.Width; col++)
+                {
+                    if (image[col, row].A < 255)
+                    {
+                        hasAlpha = true;
+                        break;
+                    }
+                }
             }
+
+            if (!hasAlpha)
+                return imageBytes;
+
+            for (var row = 0; row < image.Height; row++)
+            {
+                for (var col = 0; col < image.Width; col++)
+                {
+                    var p = image[col, row];
+                    var a = p.A / 255f;
+                    image[col, row] = new Rgba32(
+                        (byte)Math.Round(p.R * a + 255 * (1 - a)),
+                        (byte)Math.Round(p.G * a + 255 * (1 - a)),
+                        (byte)Math.Round(p.B * a + 255 * (1 - a)),
+                        255);
+                }
+            }
+
+            using var ms = new MemoryStream();
+            image.Save(ms, new PngEncoder { ColorType = PngColorType.Rgb });
+            return ms.ToArray();
+        }
+        catch
+        {
+            return imageBytes;
         }
     }
 
@@ -225,13 +361,19 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         gfx.Restore(state);
     }
 
-    private static string BuildFirmaDigital(string documentHash, string hashImpronta, ImprontaManualStampContext context)
+    /// <summary>
+    /// Paridad con BackCrudTransfer <c>VehicleTransferSignedPdfService.signDocument</c>:
+    /// RSA-2048 efímero, firma SHA-256 del hash del documento (UTF-8), resultado en Base64 puro.
+    /// </summary>
+    internal static string BuildFirmaDigital(string documentHash)
     {
-        var payload = $"{documentHash}|{hashImpronta}|{context.ReferenceNumber}|{context.Placa}|{context.FechaCargue:O}";
-        foreach (var s in context.Signers)
-            payload += $"|{s.FullName}|{s.HashPropietario}";
-        var mac = HMACSHA256.HashData(Encoding.UTF8.GetBytes("flit-impronta-manual-v1"), Encoding.UTF8.GetBytes(payload));
-        return Convert.ToBase64String(mac) + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentHash);
+        using var rsa = RSA.Create(2048);
+        var signature = rsa.SignData(
+            Encoding.UTF8.GetBytes(documentHash),
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        return Convert.ToBase64String(signature);
     }
 
     private static string Sha256Hex(byte[] bytes) =>

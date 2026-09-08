@@ -1,11 +1,15 @@
 namespace Flit.Tramites.Application.Documents;
 
-/// <summary>Firmante (propietario / copropietario) a estampar en la impronta manual.</summary>
+/// <summary>
+/// Firmante a estampar en la impronta manual. La rúbrica se pinta como en el FUR
+/// (PNG + sidecar baúl/identidad). <see cref="FullName"/> no se imprime: solo alimenta el MAC.
+/// </summary>
 public sealed record ImprontaManualSigner(
     string FullName,
-    string? HuellaDigital,
     string? HashPropietario,
-    byte[]? SignatureImage);
+    byte[]? SignatureImage,
+    string? ImageSidecarText = null,
+    string? SealText = null);
 
 /// <summary>Datos del expediente necesarios para sellar una impronta cargada a mano.</summary>
 public sealed record ImprontaManualStampContext(

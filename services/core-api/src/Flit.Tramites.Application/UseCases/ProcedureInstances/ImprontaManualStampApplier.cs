@@ -2,6 +2,8 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
+using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -17,7 +19,9 @@ public static class ImprontaManualStampApplier
         ProcedureInstance instance,
         IAttachmentStorage storage,
         IImprontaManualStamper? stamper,
-        CancellationToken ct)
+        CancellationToken ct,
+        ISignatureVaultPolicy? vaultPolicy = null,
+        IProcedureInstanceRepository? repo = null)
     {
         if (stamper is null)
             return pdf;
@@ -29,7 +33,7 @@ public static class ImprontaManualStampApplier
             return pdf;
 
         var context = await ImprontaManualStampContextBuilder
-            .BuildAsync(instance, attachment, storage, ct)
+            .BuildAsync(instance, attachment, storage, vaultPolicy, repo, ct)
             .ConfigureAwait(false);
         return stamper.Stamp(pdf, context);
     }
