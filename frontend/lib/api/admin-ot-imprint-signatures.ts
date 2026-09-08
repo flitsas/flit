@@ -37,12 +37,20 @@ interface ImprintSignaturesListResponse {
   data: ImprintSignatureDto[];
 }
 
+export interface OtImprintSignatureScope {
+  transitOfficeId?: string;
+}
+
 export function fetchListImprintSignatures(
   placa: string,
   signal?: AbortSignal,
+  scope?: OtImprintSignatureScope,
 ): Promise<ImprintSignatureDto[]> {
   return apiFetch<ImprintSignaturesListResponse>(`${base}/imprint-signatures`, {
-    query: { placa: placa.trim() },
+    query: {
+      placa: placa.trim(),
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+    },
     signal,
   }).then((response) => response.data);
 }
@@ -50,9 +58,11 @@ export function fetchListImprintSignatures(
 export function validateImprintSignature(
   id: string,
   signal?: AbortSignal,
+  scope?: OtImprintSignatureScope,
 ): Promise<ImprintSignatureValidationResult> {
   return apiFetch<ImprintSignatureValidationResult>(`${base}/imprint-signatures/${id}/validate`, {
     method: "POST",
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
 }

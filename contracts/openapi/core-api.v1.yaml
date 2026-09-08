@@ -1085,6 +1085,13 @@ paths:
           required: true
           schema: { type: string }
           description: Placa del vehículo (normalización Trim+Upper en servidor).
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Obligatorio para SuperAdmin — resuelve el tenant OT dueño del organismo
+            (mismo patrón que /admin/ot/requirements). ot_admin ignora el parámetro.
       responses:
         "200":
           description: Improntas firmadas encontradas.
@@ -1120,6 +1127,12 @@ paths:
           required: true
           schema: { type: string, format: uuid }
           description: Id de tramites.vehicle_signature_imprints.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Obligatorio para SuperAdmin — tenant OT del hub. ot_admin ignora el parámetro.
       responses:
         "200":
           description: Validación ejecutada (valid o invalid).

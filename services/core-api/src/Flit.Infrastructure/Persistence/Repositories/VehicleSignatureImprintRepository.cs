@@ -60,6 +60,7 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
     }
 
     public async Task<IReadOnlyList<VehicleSignatureImprintListRow>> ListByPlacaAsync(
+        Guid tenantId,
         string placa,
         CancellationToken cancellationToken = default)
     {
@@ -72,7 +73,9 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
                 from imp in db.VehicleSignatureImprints.IgnoreQueryFilters().AsNoTracking()
                 join pi in db.ProcedureInstances.AsNoTracking()
                     on imp.ProcedureInstanceId equals pi.Id
-                where pi.Plate != null && pi.Plate.Trim().ToUpper() == normalized
+                where imp.TenantId == tenantId
+                      && pi.Plate != null
+                      && pi.Plate.Trim().ToUpper() == normalized
                 orderby imp.SignedAt descending
                 select new VehicleSignatureImprintListRow
                 {

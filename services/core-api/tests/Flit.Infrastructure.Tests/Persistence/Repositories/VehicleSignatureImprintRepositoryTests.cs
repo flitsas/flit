@@ -88,7 +88,7 @@ public sealed class VehicleSignatureImprintRepositoryTests
         await using var ctx = NewContext(dbName);
         var repo = new VehicleSignatureImprintRepository(ctx);
 
-        var rows = await repo.ListByPlacaAsync("  pov420 ", TestContext.Current.CancellationToken);
+        var rows = await repo.ListByPlacaAsync(TenantId, "  pov420 ", TestContext.Current.CancellationToken);
 
         rows.Should().HaveCount(2);
         rows.Select(x => x.Id).Should().Contain(new[] { activeId, deletedId });

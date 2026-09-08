@@ -19,7 +19,7 @@ type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
 const INPUT_CLS =
   "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
 
-export function OtImprintValidationSection({ transitOfficeId: _transitOfficeId }: { transitOfficeId: string }) {
+export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeId: string }) {
   const { show } = useToast();
   const [placaInput, setPlacaInput] = useState("");
   const [appliedPlaca, setAppliedPlaca] = useState("");
@@ -31,31 +31,34 @@ export function OtImprintValidationSection({ transitOfficeId: _transitOfficeId }
     Record<string, { result: ImprintSignatureValidationResultKind; failureReason: string | null }>
   >({});
 
-  const load = useCallback(async (placa: string) => {
-    const trimmed = placa.trim();
-    if (!trimmed) {
-      setPhase("idle");
-      setRows([]);
-      setAppliedPlaca("");
-      return;
-    }
+  const load = useCallback(
+    async (placa: string) => {
+      const trimmed = placa.trim();
+      if (!trimmed) {
+        setPhase("idle");
+        setRows([]);
+        setAppliedPlaca("");
+        return;
+      }
 
-    setPhase("loading");
-    setErrorMessage(null);
-    try {
-      const data = await fetchListImprintSignatures(trimmed);
-      setRows(data);
-      setAppliedPlaca(trimmed);
-      setValidationById({});
-      setPhase(data.length === 0 ? "empty" : "ready");
-    } catch (err) {
-      setRows([]);
-      setPhase("error");
-      setErrorMessage(
-        err instanceof ApiError ? err.message : "No se pudieron consultar las improntas firmadas.",
-      );
-    }
-  }, []);
+      setPhase("loading");
+      setErrorMessage(null);
+      try {
+        const data = await fetchListImprintSignatures(trimmed, undefined, { transitOfficeId });
+        setRows(data);
+        setAppliedPlaca(trimmed);
+        setValidationById({});
+        setPhase(data.length === 0 ? "empty" : "ready");
+      } catch (err) {
+        setRows([]);
+        setPhase("error");
+        setErrorMessage(
+          err instanceof ApiError ? err.message : "No se pudieron consultar las improntas firmadas.",
+        );
+      }
+    },
+    [transitOfficeId],
+  );
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +69,7 @@ export function OtImprintValidationSection({ transitOfficeId: _transitOfficeId }
     async (row: ImprintSignatureDto) => {
       setValidatingId(row.id);
       try {
-        const result = await validateImprintSignature(row.id);
+        const result = await validateImprintSignature(row.id, undefined, { transitOfficeId });
         setValidationById((prev) => ({
           ...prev,
           [row.id]: { result: result.result, failureReason: result.failureReason },
@@ -87,7 +90,7 @@ export function OtImprintValidationSection({ transitOfficeId: _transitOfficeId }
         setValidatingId(null);
       }
     },
-    [show],
+    [show, transitOfficeId],
   );
 
   const columns: DataTableColumn<ImprintSignatureDto>[] = useMemo(

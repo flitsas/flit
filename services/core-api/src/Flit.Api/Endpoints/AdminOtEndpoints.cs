@@ -692,14 +692,18 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ListImprintSignaturesAsync(
         HttpContext httpContext,
         ListImprintSignaturesByPlacaHandler handler,
+        FlitDbContext db,
         [FromQuery] string? placa,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        // SuperAdmin opera el hub OT con tenant de compañía en el JWT; el scope real es el
+        // tenant OT dueño del organismo (?transitOfficeId=), igual que requisitos/usuarios.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         if (string.IsNullOrWhiteSpace(placa))
@@ -722,13 +726,15 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         Guid id,
         ValidateImprintSignatureHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var validatedBy = ResolveUserId(httpContext.User);

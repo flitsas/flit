@@ -68,7 +68,9 @@ describe("OtImprintValidationSection", () => {
       expect(screen.getByTestId("ot-imprint-validation-table")).toBeInTheDocument();
     });
     expect(screen.getByText("ABC123")).toBeInTheDocument();
-    expect(fetchListImprintSignatures).toHaveBeenCalledWith("ABC123");
+    expect(fetchListImprintSignatures).toHaveBeenCalledWith("ABC123", undefined, {
+      transitOfficeId: "ot-1",
+    });
   });
 
   it("muestra estado vacío tras búsqueda sin resultados", async () => {
@@ -124,6 +126,8 @@ describe("OtImprintValidationSection", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("Estado: Válida")).toBeInTheDocument();
     });
-    expect(validateImprintSignature).toHaveBeenCalledWith("imp-1");
+    expect(validateImprintSignature).toHaveBeenCalledWith("imp-1", undefined, {
+      transitOfficeId: "ot-1",
+    });
   });
 });
