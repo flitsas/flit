@@ -134,13 +134,44 @@ describe("OtImprintValidationSection", () => {
     await userEvent.click(screen.getByTestId("ot-imprint-validation-accept-btn"));
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Estado: Válida")).toBeInTheDocument();
+      expect(screen.queryByTestId("ot-imprint-validation-modal")).not.toBeInTheDocument();
     });
+    expect(screen.getByLabelText("Estado: Válida")).toBeInTheDocument();
     expect(validateImprintSignature).toHaveBeenCalledWith(
       "imp-1",
       "UgMgkJ+Ay1OwexM8",
       undefined,
       { transitOfficeId: "ot-1" },
     );
+  });
+
+  it("cierra el modal y muestra badge inválida cuando la firma no corresponde", async () => {
+    fetchListImprintSignatures.mockResolvedValue([imprintRow()]);
+    validateImprintSignature.mockResolvedValue({
+      validationId: "val-2",
+      vehicleSignatureImprintId: "imp-1",
+      result: "invalid",
+      failureReason: "La firma ingresada no corresponde a esta impronta.",
+      validatedAt: "2026-09-08T13:00:00Z",
+    });
+
+    renderSection();
+    await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /validar firma de impronta abc123/i }),
+    );
+    await userEvent.type(screen.getByTestId("ot-imprint-validation-signature-input"), "firma-mala");
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-accept-btn"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("ot-imprint-validation-modal")).not.toBeInTheDocument();
+    });
+    expect(
+      screen.getByLabelText(/Firma inválida: La firma ingresada no corresponde/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("La firma ingresada no corresponde a esta impronta."),
+    ).toBeInTheDocument();
   });
 });

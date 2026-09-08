@@ -91,19 +91,21 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
       return;
     }
 
+    const rowId = modalRow.id;
     setSubmitting(true);
     try {
-      const result = await validateImprintSignature(modalRow.id, signature, undefined, {
+      const result = await validateImprintSignature(rowId, signature, undefined, {
         transitOfficeId,
       });
       setValidationById((prev) => ({
         ...prev,
-        [modalRow.id]: { result: result.result, failureReason: result.failureReason },
+        [rowId]: { result: result.result, failureReason: result.failureReason },
       }));
+      // Cerrar primero: el toast (z-100) queda tapado por el overlay del Modal (mismo z-index).
+      setModalRow(null);
+      setSignatureInput("");
       if (result.result === "valid") {
         show("La firma corresponde a esta impronta.", "success");
-        setModalRow(null);
-        setSignatureInput("");
       } else if (result.result === "invalid") {
         show(result.failureReason?.trim() || "La firma no corresponde a esta impronta.", "error");
       } else {
