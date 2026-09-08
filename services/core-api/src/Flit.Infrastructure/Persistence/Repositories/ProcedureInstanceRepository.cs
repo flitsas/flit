@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
@@ -2234,6 +2235,16 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 verdadero: q => q.Where(x => x.SubsanacionActiva),
                 falso: q => q.Where(x => !x.SubsanacionActiva)),
 
+            // Las dos marcas del listado (HU #12199). No son columna: cada una es la disyunción de
+            // sus DOS disparadores, así que el «No» se construye negando la misma expresión y no con
+            // una condición propia — dos expresiones separadas se irían apartando.
+            TramitesQueryFieldCatalog.Prenda => ApplyBooleano(query, op, valores,
+                verdadero: q => q.Where(TienePrendaExpr),
+                falso: q => q.Where(Negar(TienePrendaExpr))),
+            TramitesQueryFieldCatalog.Transformacion => ApplyBooleano(query, op, valores,
+                verdadero: q => q.Where(TieneTransformacionExpr),
+                falso: q => q.Where(Negar(TieneTransformacionExpr))),
+
             // El metodo de pago vive en la fila comercial, que es opcional: un tramite sin datos
             // comerciales no tiene metodo, y por eso "no es ninguno" tiene que dejarlo pasar.
             TramitesQueryFieldCatalog.MetodoPago => op switch
@@ -2254,6 +2265,64 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             _ => query,
         };
     }
+
+    /// <summary>
+    /// Códigos y valores de las dos marcas, ya normalizados como los guarda la base, para no
+    /// recalcularlos en cada consulta. Salen del DOMINIO —<see cref="ProcedureTypeLayers"/> y
+    /// <see cref="TramiteMarcas"/>—, que es lo que impide que el <c>WHERE</c> y el ícono del listado
+    /// se separen: si mañana entra un tipo o una forma afirmativa nueva, entra en los dos a la vez.
+    /// </summary>
+    private static readonly string[] CodigosPrendaBase =
+        [.. ProcedureTypeLayers.CodigosPrendaBase.Select(c => c.ToUpperInvariant())];
+
+    private static readonly string[] CodigosTransformacion =
+        [.. ProcedureTypeLayers.CodigosTransformacion.Select(c => c.ToUpperInvariant())];
+
+    private static readonly string[] ClavesTransformacion =
+        [.. TramiteMarcas.ClavesTransformacion];
+
+    private static readonly string[] ValoresAfirmativos =
+        [.. TramiteMarcas.ValoresAfirmativos];
+
+    /// <summary>
+    /// «Tiene prenda», en SQL. Réplica de <see cref="TramiteMarcas.TienePrenda"/>: la decisión
+    /// VIGENTE que no sea <c>omitir</c> ni <c>sin_prenda</c> —mismo <c>WHERE</c> que
+    /// <see cref="ListInstanceIdsConPrendaVigenteAsync"/>— <b>o</b> que el trámite SEA de prenda,
+    /// que lo es desde que se abre, antes de que nadie capture la decisión.
+    /// </summary>
+    /// <remarks>
+    /// No es <c>static</c> porque la decisión de prenda no cuelga de la instancia como navegación:
+    /// vive en su propia tabla y hay que ir a ella por subconsulta correlacionada, igual que hace el
+    /// filtro «Gestor» contra <c>identity.users</c>.
+    /// </remarks>
+    private Expression<Func<ProcedureInstance, bool>> TienePrendaExpr =>
+        x => (x.ProcedureType != null && CodigosPrendaBase.Contains(x.ProcedureType.Code.ToUpper()))
+            || db.ProcedureInstancePrendas.Any(p => p.ProcedureInstanceId == x.Id
+                && p.Estado == PrendaEstado.Vigente
+                && p.Decision != PrendaDecision.SinPrenda
+                && p.Decision != PrendaDecision.Omitir);
+
+    /// <summary>
+    /// «Tiene transformación», en SQL. Réplica de <see cref="TramiteMarcas.TieneTransformacion"/>:
+    /// el tipo ES la transformación <b>o</b> el formulario declara alguna de las cuatro claves con
+    /// un valor afirmativo. El <c>Trim</c>/<c>ToLower</c> no es adorno: por los migrados de V1
+    /// circulan <c>1</c> y <c>si</c> además de <c>true</c>, y con espacios alrededor.
+    /// </summary>
+    private static readonly Expression<Func<ProcedureInstance, bool>> TieneTransformacionExpr =
+        x => (x.ProcedureType != null && CodigosTransformacion.Contains(x.ProcedureType.Code.ToUpper()))
+            || x.FieldValues.Any(fv => ClavesTransformacion.Contains(fv.FieldKey)
+                && fv.ValueText != null
+                && ValoresAfirmativos.Contains(fv.ValueText.Trim().ToLower()));
+
+    /// <summary>
+    /// El «No» de una marca es exactamente la negación de su «Sí», no una condición aparte: así el
+    /// AC5 —los dos conjuntos son complementarios y ninguno pierde filas— se cumple por
+    /// construcción y no por haber escrito dos veces la misma regla al derecho y al revés.
+    /// </summary>
+    private static Expression<Func<ProcedureInstance, bool>> Negar(
+        Expression<Func<ProcedureInstance, bool>> expr) =>
+        Expression.Lambda<Func<ProcedureInstance, bool>>(
+            Expression.Not(expr.Body), expr.Parameters);
 
     /// <summary>
     /// Un booleano de la gramática: los valores llegan como "TRUE"/"FALSE" ya normalizados. Con las

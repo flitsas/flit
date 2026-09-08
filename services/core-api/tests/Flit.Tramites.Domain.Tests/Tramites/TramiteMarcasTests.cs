@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Services;
 using FluentAssertions;
 using Xunit;
@@ -112,4 +113,69 @@ public sealed class TramiteMarcasTests
         TramiteMarcas.ClavesTransformacion.Should().BeEquivalentTo(
             ["cambio_color", "cambio_carroceria", "cambio_combustible", "blindaje"]);
     }
+
+    // ── HU #12199 — las listas que viajan a SQL ──────────────────────────────────────────────
+    //
+    // El filtro del listado no puede llamar a estos predicados: un `switch` de C# no se traduce a
+    // WHERE. Lo que viaja son las listas de códigos y de valores afirmativos, así que el riesgo real
+    // es que una lista y su predicado se separen y el filtro deje de coincidir con el ícono.
+
+    [Fact]
+    public void LosCodigosDeTransformacionSonExactamenteLosQueElTipoTransforma()
+    {
+        // `CodigosTransformacion` no puede derivarse del switch —ese devuelve QUÉ atributo cambia—,
+        // así que la coherencia la sostiene esta prueba y no el compilador.
+        foreach (var codigo in ProcedureTypeLayers.CodigosTransformacion)
+        {
+            ProcedureTypeLayers.TransformacionDelTipo(codigo)
+                .Should().NotBe(TransformacionBase.Ninguna, $"«{codigo}» está en la lista");
+            ProcedureTypeLayers.EsTipoTransformacion(codigo).Should().BeTrue();
+        }
+
+        // Y al revés: ningún tipo del catálogo transforma sin estar en la lista.
+        foreach (var codigo in CodigosDelCatalogo)
+        {
+            var transforma = ProcedureTypeLayers.TransformacionDelTipo(codigo) != TransformacionBase.Ninguna;
+            transforma.Should().Be(ProcedureTypeLayers.CodigosTransformacion.Contains(codigo),
+                $"«{codigo}» tiene que estar en la lista si y solo si transforma");
+        }
+    }
+
+    [Fact]
+    public void LosCodigosDePrendaBaseSonExactamenteLosDelPredicado()
+    {
+        foreach (var codigo in CodigosDelCatalogo)
+            ProcedureTypeLayers.EsTipoPrendaBase(codigo)
+                .Should().Be(ProcedureTypeLayers.CodigosPrendaBase.Contains(codigo), codigo);
+    }
+
+    [Theory]
+    [InlineData("true")]
+    [InlineData("1")]
+    [InlineData("si")]
+    [InlineData("sí")]
+    public void LosValoresAfirmativosPublicadosSonLosQueElDominioAcepta(string valor)
+    {
+        // La lista es lo que el WHERE compara; si se quedara corta respecto del método, el filtro
+        // perdería trámites que el listado sí marca.
+        TramiteMarcas.ValoresAfirmativos.Should().Contain(valor);
+        TramiteMarcas.TieneTransformacion(
+            new Dictionary<string, string?> { [MandatoObjetoComposer.CambioColor] = $"  {valor.ToUpperInvariant()}  " },
+            tipoCodigo: null).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Los veintiún códigos parametrizados (seed <c>81-parametrizacion-tipos-operativos.sql</c>).
+    /// Se listan a mano a propósito: un tipo nuevo en el seed que no llegue aquí deja de estar
+    /// cubierto, y eso se ve en la revisión del seed, que es donde hay que decidirlo.
+    /// </summary>
+    private static readonly string[] CodigosDelCatalogo =
+    [
+        "MATRICULA_NUEVA", "MATRICULA_LEASING", "REMATRICULA", "TRASPASO_STANDARD",
+        "TRASPASO_TRANSFERENCIA_DE_DOMINIO", "CAMBIO_LOCATARIO", "CAMBIO_COLOR",
+        "CAMBIO_CARROCERIA", "CONVERSION_COMBUSTIBLE", "BLINDAJE", "PRENDA_INSCRIPCION",
+        "LEVANTAMIENTO_PRENDA", "LEVANTAR_INSCRIBIR_PRENDA", "CAMBIO_ACREEDOR",
+        "DUPLICADO_PLACA", "DUPLICADO_TARJETA", "REGRABAR_MOTOR_CHASIS", "RADICADO_CUENTA",
+        "TRASLADO_CUENTA", "CANCELACION_MATRICULA",
+    ];
 }

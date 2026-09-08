@@ -38,7 +38,7 @@ public static class TramiteMarcas
     public static bool TieneTransformacion(
         IReadOnlyDictionary<string, string?> fieldValues, string? tipoCodigo)
     {
-        if (ProcedureTypeLayers.TransformacionDelTipo(tipoCodigo) != TransformacionBase.Ninguna)
+        if (ProcedureTypeLayers.EsTipoTransformacion(tipoCodigo))
             return true;
 
         foreach (var clave in ClavesTransformacion)
@@ -65,5 +65,15 @@ public static class TramiteMarcas
     /// trámites migrados de V1 circulan también <c>1</c> y <c>si</c>.
     /// </summary>
     private static bool EsAfirmativo(string? value) =>
-        value?.Trim().ToLowerInvariant() is "true" or "1" or "si" or "sí";
+        value is not null && ValoresAfirmativos.Contains(value.Trim().ToLowerInvariant());
+
+    /// <summary>
+    /// Los mismos valores de <see cref="EsAfirmativo"/>, enumerables y ya en minúscula.
+    ///
+    /// <para>El filtro «Transformación» del listado (HU #12199) tiene que repetir esta comparación
+    /// en SQL, donde no llega el método. Se expone la lista y el método se deriva de ella para que
+    /// una no pueda quedarse corta respecto del otro: si aparece otra forma afirmativa en los
+    /// migrados de V1, entra aquí y la reconocen los dos.</para>
+    /// </summary>
+    public static readonly IReadOnlyList<string> ValoresAfirmativos = ["true", "1", "si", "sí"];
 }

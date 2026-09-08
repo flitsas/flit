@@ -40,11 +40,23 @@ public static class ProcedureTypeLayers
     /// 11/12: la pregunta es de quién es la capa, no qué casilla marca. Sustituir un acreedor exige
     /// capturar el gravamen, así que el paso de prenda le pertenece al tipo.</para>
     /// </summary>
-    public static bool EsTipoPrendaBase(string? code) => Norm(code) switch
-    {
-        "PRENDA_INSCRIPCION" or "LEVANTAMIENTO_PRENDA" or "LEVANTAR_INSCRIBIR_PRENDA" or "CAMBIO_ACREEDOR" => true,
-        _ => false,
-    };
+    public static bool EsTipoPrendaBase(string? code) => CodigosPrendaBase.Contains(Norm(code));
+
+    /// <summary>
+    /// Los mismos códigos de <see cref="EsTipoPrendaBase"/>, enumerables.
+    ///
+    /// <para>Existe porque la misma pregunta hay que hacerla también en SQL: el filtro «Prenda» del
+    /// listado (HU #12199) traduce la marca a un <c>WHERE</c>, y un <c>switch</c> de C# no viaja a la
+    /// base de datos. El predicado se deriva de esta lista —no al revés— para que no puedan
+    /// separarse: si mañana entra un tipo nuevo, entra en los dos sitios a la vez o en ninguno.</para>
+    /// </summary>
+    public static readonly IReadOnlyList<string> CodigosPrendaBase =
+    [
+        "PRENDA_INSCRIPCION",
+        "LEVANTAMIENTO_PRENDA",
+        "LEVANTAR_INSCRIBIR_PRENDA",
+        "CAMBIO_ACREEDOR",
+    ];
 
     /// <summary>
     /// Tipos prendarios de UNA sola acción sobre el gravamen: inscribirlo o levantarlo.
@@ -99,6 +111,28 @@ public static class ProcedureTypeLayers
         "PRENDA_INSCRIPCION" or "LEVANTAMIENTO_PRENDA" => true,
         _ => false,
     };
+
+    /// <summary>
+    /// Los códigos cuyo tipo ES una transformación, enumerables. Mismo motivo que
+    /// <see cref="CodigosPrendaBase"/>: el filtro «Transformación» del listado (HU #12199) necesita
+    /// preguntarlo en SQL, donde <see cref="TransformacionDelTipo"/> no llega.
+    ///
+    /// <para>Aquí la lista no puede derivar del <c>switch</c> —ese devuelve QUÉ atributo cambia, no
+    /// si cambia alguno—, así que la coherencia entre ambos la sostiene una prueba de dominio, no el
+    /// compilador. Es deliberado: perder el valor del enum para poder derivarla saldría más caro que
+    /// la prueba.</para>
+    /// </summary>
+    public static readonly IReadOnlyList<string> CodigosTransformacion =
+    [
+        "CAMBIO_COLOR",
+        "CAMBIO_CARROCERIA",
+        "CONVERSION_COMBUSTIBLE",
+        "BLINDAJE",
+    ];
+
+    /// <summary>¿El tipo ES una transformación, sea cual sea el atributo que cambia?</summary>
+    public static bool EsTipoTransformacion(string? code) =>
+        CodigosTransformacion.Contains(Norm(code));
 
     /// <summary>Atributo que el tipo cambia por definición; <see cref="TransformacionBase.Ninguna"/> si no cambia ninguno.</summary>
     public static TransformacionBase TransformacionDelTipo(string? code) => Norm(code) switch

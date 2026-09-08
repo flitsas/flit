@@ -4,7 +4,10 @@ using Flit.Queries.Domain;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -434,4 +437,237 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
         total.Should().Be(2);
     }
 
+
+    // ── HU #12199 — filtrar por las dos marcas del listado ───────────────────────────────────
+    //
+    // Cada marca tiene DOS disparadores: el trámite LLEVA la capa encima, o el trámite ES la capa
+    // (ADR-0050). Lo que estas pruebas defienden es que el WHERE reproduce los dos, porque mirar
+    // solo uno da un filtro que parece funcionar —devuelve trámites, no falla— y silenciosamente
+    // deja fuera filas que el listado sí está pintando con el ícono.
+
+    /// <summary>Tipos de la familia OTROS, donde la capa ES el trámite. Instancias únicas: EF no
+    /// admite dos objetos distintos con la misma clave adjuntos a la vez.</summary>
+    private static readonly ProcedureType TipoCambioColor = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000b1"),
+        Code = "CAMBIO_COLOR",
+        Name = "Cambio de color",
+        Family = "OTROS",
+    };
+
+    private static readonly ProcedureType TipoLevantamientoPrenda = new()
+    {
+        Id = Guid.Parse("00000000-0000-0000-0000-0000000000b2"),
+        Code = "LEVANTAMIENTO_PRENDA",
+        Name = "Levantar prenda",
+        Family = "OTROS",
+    };
+
+    private static ProcedureInstance DeTipo(string reference, ProcedureType tipo)
+    {
+        var instancia = Instancia(reference);
+        instancia.ProcedureType = tipo;
+        return instancia;
+    }
+
+    private static ProcedureInstance ConCampo(string reference, string clave, string valor)
+    {
+        var instancia = Instancia(reference);
+        instancia.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ProcedureInstanceId = instancia.Id,
+            FieldKey = clave,
+            ValueText = valor,
+            CreatedAt = Base,
+        });
+        return instancia;
+    }
+
+    private static ProcedureInstancePrenda Decision(
+        ProcedureInstance instancia, string decision, string estado = PrendaEstado.Vigente) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = TenantId,
+        ProcedureInstanceId = instancia.Id,
+        Decision = decision,
+        Estado = estado,
+        CreatedAt = Base,
+    };
+
+    [Fact]
+    public async Task Prenda_TraeTantoElGravamenVigenteComoElTramiteQueEsDePrenda()
+    {
+        // AC2. El segundo caso es el que se pierde si el WHERE solo mira la tabla de decisiones: un
+        // LEVANTAMIENTO_PRENDA es un trámite de prenda desde que se abre, antes de que nadie haya
+        // capturado nada, y el listado ya le pinta el ícono.
+        await using var db = NewContext(nameof(Prenda_TraeTantoElGravamenVigenteComoElTramiteQueEsDePrenda));
+        var conGravamen = Instancia("R1");
+        db.ProcedureInstances.AddRange(conGravamen, DeTipo("R2", TipoLevantamientoPrenda), Instancia("R3"));
+        db.ProcedureInstancePrendas.Add(Decision(conGravamen, PrendaDecision.Registrar));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "true"));
+
+        refs.Should().Equal("R1", "R2");
+        total.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Prenda_NoCuentaLaDecisionQueNoEsUnGravamen()
+    {
+        // `omitir` y `sin_prenda` son decisiones registradas, pero decir «este trámite no tiene
+        // prenda» no es tenerla. Mismo WHERE que la consulta de la empresa y que el ícono.
+        await using var db = NewContext(nameof(Prenda_NoCuentaLaDecisionQueNoEsUnGravamen));
+        var omitida = Instancia("R1");
+        var sinPrenda = Instancia("R2");
+        var reemplazada = Instancia("R3");
+        db.ProcedureInstances.AddRange(omitida, sinPrenda, reemplazada);
+        db.ProcedureInstancePrendas.AddRange(
+            Decision(omitida, PrendaDecision.Omitir),
+            Decision(sinPrenda, PrendaDecision.SinPrenda),
+            // Versionada: la fila existe, pero ya no es la vigente.
+            Decision(reemplazada, PrendaDecision.Registrar, PrendaEstado.Reemplazada));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "true"));
+
+        refs.Should().BeEmpty();
+        total.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Prenda_ElNoEsElComplementoExactoDelSi()
+    {
+        // AC5 en su forma más simple: los dos conjuntos parten el universo sin solaparse ni perder
+        // filas. Si «No» se hubiera escrito como una condición aparte en vez de como la negación de
+        // la misma expresión, aquí es donde se vería la grieta.
+        await using var db = NewContext(nameof(Prenda_ElNoEsElComplementoExactoDelSi));
+        var conGravamen = Instancia("R1");
+        db.ProcedureInstances.AddRange(
+            conGravamen, DeTipo("R2", TipoLevantamientoPrenda), Instancia("R3"), Instancia("R4"));
+        db.ProcedureInstancePrendas.Add(Decision(conGravamen, PrendaDecision.Solicitar));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (conMarca, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "true"));
+        var (sinMarca, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "false"));
+
+        conMarca.Should().Equal("R1", "R2");
+        sinMarca.Should().Equal("R3", "R4");
+        conMarca.Should().NotIntersectWith(sinMarca);
+    }
+
+    [Fact]
+    public async Task Transformacion_TraeLaDeclaradaYLaQueEsElTramite()
+    {
+        // AC3. Las cuatro claves son las del mandato, blindaje incluido: el catálogo de Consultas
+        // solo lista tres y esta marca no hereda esa omisión.
+        await using var db = NewContext(nameof(Transformacion_TraeLaDeclaradaYLaQueEsElTramite));
+        db.ProcedureInstances.AddRange(
+            ConCampo("R1", MandatoObjetoComposer.CambioCarroceria, "true"),
+            ConCampo("R2", MandatoObjetoComposer.Blindaje, "true"),
+            DeTipo("R3", TipoCambioColor),
+            Instancia("R4"),
+            // Declarada en falso: el campo existe, la transformación no.
+            ConCampo("R5", MandatoObjetoComposer.CambioColor, "false"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Transformacion, QueryOperator.EsAlguno, "true"));
+
+        refs.Should().Equal("R1", "R2", "R3");
+        total.Should().Be(3);
+    }
+
+    [Theory]
+    [InlineData("true")]
+    [InlineData("1")]
+    [InlineData("si")]
+    [InlineData("SÍ")]
+    [InlineData("  true  ")]
+    public async Task Transformacion_ReconoceLasFormasAfirmativasQueCirculanEnLosMigrados(string valor)
+    {
+        // El asistente guarda "true", pero por los trámites migrados de V1 circulan 1 y si, y con
+        // espacios. El ícono los acepta todos; el filtro tiene que aceptar exactamente los mismos.
+        // El nombre lleva el valor CRUDO: "true" y "  true  " son casos distintos y comparten
+        // base si se normaliza, con lo que uno vería las filas del otro.
+        await using var db = NewContext($"transf-afirmativo-[{valor}]");
+        db.ProcedureInstances.AddRange(
+            ConCampo("R1", MandatoObjetoComposer.CambioColor, valor), Instancia("R2"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Transformacion, QueryOperator.EsAlguno, "true"));
+
+        refs.Should().Equal("R1");
+    }
+
+    [Fact]
+    public async Task LasDosMarcasALaVezSeAcumulan()
+    {
+        // AC4. Dos condiciones son AND, así que solo pasa quien tiene las dos.
+        await using var db = NewContext(nameof(LasDosMarcasALaVezSeAcumulan));
+        var ambas = ConCampo("R1", MandatoObjetoComposer.CambioColor, "true");
+        var soloPrenda = Instancia("R2");
+        db.ProcedureInstances.AddRange(
+            ambas, soloPrenda, ConCampo("R3", MandatoObjetoComposer.Blindaje, "true"));
+        db.ProcedureInstancePrendas.AddRange(
+            Decision(ambas, PrendaDecision.Registrar),
+            Decision(soloPrenda, PrendaDecision.Registrar));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "true"),
+            Cond(TramitesQueryFieldCatalog.Transformacion, QueryOperator.EsAlguno, "true"));
+
+        refs.Should().Equal("R1");
+        total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ElFiltroDevuelveExactamenteLoQueElDominioMarca()
+    {
+        // AC5 contra la fuente del ícono, no contra una lista escrita a mano: se recorre el mismo
+        // universo con `TramiteMarcas` —que es lo que decide qué fila pinta el ícono— y se exige que
+        // los dos conjuntos coincidan. Es la prueba que impide que el WHERE y la marca se separen.
+        await using var db = NewContext(nameof(ElFiltroDevuelveExactamenteLoQueElDominioMarca));
+        var conGravamen = Instancia("R1");
+        db.ProcedureInstances.AddRange(
+            conGravamen,
+            DeTipo("R2", TipoLevantamientoPrenda),
+            DeTipo("R3", TipoCambioColor),
+            ConCampo("R4", MandatoObjetoComposer.CambioCombustible, "1"),
+            ConCampo("R5", MandatoObjetoComposer.CambioColor, "false"),
+            Instancia("R6"));
+        db.ProcedureInstancePrendas.Add(Decision(conGravamen, PrendaDecision.Registrar));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var universo = await db.ProcedureInstances
+            .Include(i => i.ProcedureType).Include(i => i.FieldValues)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        var conPrendaVigente = db.ProcedureInstancePrendas
+            .Where(p => p.Estado == PrendaEstado.Vigente
+                && p.Decision != PrendaDecision.SinPrenda && p.Decision != PrendaDecision.Omitir)
+            .Select(p => p.ProcedureInstanceId)
+            .ToHashSet();
+
+        var segunElDominio = (Func<Func<ProcedureInstance, bool>, string[]>)(predicado =>
+            [.. universo.Where(predicado).Select(i => i.ReferenceNumber).Order()]);
+
+        var (prendaSegunSql, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "true"));
+        var (transfSegunSql, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Transformacion, QueryOperator.EsAlguno, "true"));
+
+        prendaSegunSql.Should().Equal(segunElDominio(i =>
+            TramiteMarcas.TienePrenda(conPrendaVigente.Contains(i.Id), i.ProcedureType?.Code)));
+        transfSegunSql.Should().Equal(segunElDominio(i => TramiteMarcas.TieneTransformacion(
+            i.FieldValues.ToDictionary(fv => fv.FieldKey, fv => fv.ValueText),
+            i.ProcedureType?.Code)));
+    }
 }
