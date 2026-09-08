@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   downloadAttachment: vi.fn(),
   // Frente C, etapa 1 — modal de detalle de un trámite ya radicado.
   getInstance: vi.fn(),
+  // HU #12185 — el panel del trámite pide el historial paginado (que sí trae usuario y compañía),
+  // no el `statusHistory` del detalle, que no trae ninguno de los dos.
+  getStatusHistory: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 }),
   listBiometricExpediente: vi.fn(),
   // ICT (PR #204) — pausa individual y masiva + cierre del subflujo de placa.
   pauseInstance: vi.fn(),
@@ -1053,16 +1056,38 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
   });
 
-  it('el badge de Estado abre el modal de línea de tiempo sin abrir el detalle ni navegar', async () => {
+  it('el badge de Estado abre el panel del trámite sin abrir el detalle ni navegar', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'rad-tl', referenceNumber: 'TR-TL', placa: 'RADTL1', estado: 'entregado' },
     ]);
-    mocks.getInstance.mockResolvedValue({
-      id: 'rad-tl',
-      statusHistory: [
-        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
-        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
+    // HU #12185 — el panel lee el historial PAGINADO, no el `statusHistory` del detalle: ese no
+    // trae quién movió cada estado ni desde qué compañía, que es la mitad de lo que se viene a ver.
+    mocks.getStatusHistory.mockResolvedValue({
+      items: [
+        {
+          id: 'h2',
+          fromStatus: 'borrador',
+          toStatus: 'entregado',
+          changedAt: '2026-07-03T09:00:00Z',
+          changedByUserId: 'u1',
+          changedByName: 'Laura Restrepo',
+          changedByCompania: 'Renting Colombia S.A.S',
+          reason: null,
+        },
+        {
+          id: 'h1',
+          fromStatus: null,
+          toStatus: 'borrador',
+          changedAt: '2026-07-01T09:00:00Z',
+          changedByUserId: null,
+          changedByName: null,
+          changedByCompania: null,
+          reason: null,
+        },
       ],
+      total: 2,
+      page: 1,
+      pageSize: 50,
     });
     render(<TramitesTable />);
 
@@ -1070,12 +1095,13 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
       await screen.findByRole('button', { name: /Ver trazabilidad del trámite TR-TL/i }),
     );
 
-    expect(
-      await screen.findByRole('dialog', { name: /Línea de tiempo del trámite/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /Trámite TR-TL/i })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).toBeNull();
     expect(routerPush).not.toHaveBeenCalled();
+    // La ficha identifica el trámite; el historial dice por dónde va y quién lo movió.
+    expect(await screen.findByRole('region', { name: 'Resumen del trámite' })).toBeInTheDocument();
     expect(await screen.findByText(/Entregado desde Borrador/)).toBeInTheDocument();
+    expect(screen.getByText('Renting Colombia S.A.S · Laura Restrepo')).toBeInTheDocument();
   });
 
   it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {

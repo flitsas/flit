@@ -1237,16 +1237,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         }}
       />
 
+      {/* HU #12185 — la fila entera, no solo su id: la ficha del panel se arma con campos que ya
+          viajan en el listado, así que abrirlo no cuesta ninguna consulta más que el historial. */}
       <TramiteTrackingModal
         open={trackingTramite !== null}
         onClose={() => setTrackingTramite(null)}
-        instanceId={trackingTramite?.id ?? null}
+        item={trackingTramite}
         tenantId={isAdmin ? trackingTramite?.tenantId : undefined}
-        titleHint={
-          trackingTramite
-            ? [trackingTramite.referenceNumber, trackingTramite.placa].filter(Boolean).join(' · ')
-            : null
-        }
       />
 
       <IdentidadParteTrackingModal
