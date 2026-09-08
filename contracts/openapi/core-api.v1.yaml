@@ -6325,6 +6325,62 @@ paths:
         "409": { description: "Conflicto de concurrencia (row_version): recargue e intente de nuevo." }
         "422": { description: "Estado destino desconocido, o 'aprobado' como origen/destino (excluido por regla de negocio)." }
 
+  # ── Admin · Trámites · Anular desde cualquier estado (Feature #12155, HU #12160) ────────────────
+
+  /api/v1/admin/tramites/{id}/anular:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Anula un trámite desde cualquier estado (excluye 'aprobado' y 'revocado')
+      operationId: adminTramiteAnular
+      security:
+        - bearerAuth: []
+      description: >
+        Cambia `status` directamente a `anulado` desde CUALQUIER estado de origen, sin pasar por las
+        transiciones válidas de la máquina de estados normal del gestor/OT ni por sus gates de
+        negocio. Dos excepciones duras (422): `aprobado` (`CANNOT_ANNUL_APPROVED`) y `revocado`
+        (`CANNOT_ANNUL_REVOKED`, estado que introducirá la Feature #12156/HU #12165) no pueden
+        anularse — son autoridad exclusiva del organismo de tránsito. No replica los efectos
+        colaterales de una transición normal (no libera/asigna placa, no regenera consolidados/FUR, no
+        resuelve mandatario, no encola notificaciones): es una corrección puntual del campo `status`
+        para descartar radicaciones inválidas. Requiere el permiso `AdminTramiteAnular` (SuperAdmin
+        bypassa). La acción queda registrada en el historial de estados y en la bitácora del trámite
+        con estado anterior, usuario, fecha y hora.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  nullable: true
+                  description: Motivo de la anulación administrativa (libre, no obligatorio).
+      responses:
+        "200":
+          description: Trámite anulado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  previousStatus: { type: string }
+                  newStatus: { type: string }
+                  changedAt: { type: string, format: date-time }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteAnular." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Conflicto de concurrencia (row_version): recargue e intente de nuevo." }
+        "422": { description: "'aprobado' o 'revocado' como origen (excluidos por regla de negocio)." }
+
   # ── Admin · OT · Documentos del trámite de cliente (Feature #10701 / HU #10704 + HU #10706) ──
 
   /api/v1/admin/ot/client-procedures/{id}/documents:

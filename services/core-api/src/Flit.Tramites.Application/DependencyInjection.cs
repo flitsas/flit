@@ -218,6 +218,8 @@ public static class DependencyInjection
         services.AddScoped<CargarConsolidadoExternoHandler>();
         // HU #12159 — cambio de estado administrativo (sin TramiteStateMachine, excluye 'aprobado').
         services.AddScoped<AdminCambiarEstadoHandler>();
+        // HU #12160 — anulación administrativa (cualquier origen, excluye 'aprobado' y 'revocado').
+        services.AddScoped<AdminAnularHandler>();
         // HU #11051 — gate de generación documental del GESTOR (estado final ⇒ documentación definitiva).
         // Lo consumen SOLO los endpoints de /api/v1/tramites; la regeneración interna del sistema
         // (aprobación OT, placa, identidad validada, transiciones) NO pasa por él a propósito.

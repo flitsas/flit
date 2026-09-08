@@ -120,4 +120,20 @@ public static class TramiteEstadoErrores
     /// efectos en cascada) que este endpoint deliberadamente NO reproduce (422).
     /// </summary>
     public const string AdminAprobadoExcluido = "admin_aprobado_excluido";
+
+    /// <summary>
+    /// HU #12160 — anulación ADMINISTRATIVA: el trámite está en <c>aprobado</c> y no puede anularse
+    /// (422). Código ESTABLE definido por el AC de la HU (formato distinto al resto de este catálogo
+    /// a propósito: es el contrato literal acordado con frontend/QA para esta acción).
+    /// </summary>
+    public const string CannotAnnulApproved = "CANNOT_ANNUL_APPROVED";
+
+    /// <summary>
+    /// HU #12160 — anulación ADMINISTRATIVA: el trámite está en <c>revocado</c> y no puede anularse
+    /// (422). El estado <c>revocado</c> TODAVÍA NO EXISTE como miembro de <see cref="TramiteEstado"/>
+    /// (lo agrega la Feature hermana #12156, HU #12165); ver <c>AdminAnularHandler</c> (capa
+    /// Application) para la comparación por string mientras tanto. Código ESTABLE definido por el AC
+    /// de la HU (mismo criterio de formato que <see cref="CannotAnnulApproved"/>).
+    /// </summary>
+    public const string CannotAnnulRevoked = "CANNOT_ANNUL_REVOKED";
 }
