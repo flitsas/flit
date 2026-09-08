@@ -24,6 +24,10 @@ const mocks = vi.hoisted(() => ({
   setActiveTramitesTenant: vi.fn(),
   listCompanies: vi.fn(),
   isSuperAdmin: vi.fn(),
+  hasPermission: vi.fn(),
+  // HU #12164 — reenvío administrativo de validación de identidad (mismo mecanismo del Dashboard).
+  listBiometricExpediente: vi.fn(),
+  adminReenviarValidacionIdentidad: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -39,6 +43,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
     resendPrevalidacion: mocks.resendPrevalidacion,
     iniciarBiometric: mocks.iniciarBiometric,
     simulateBiometric: mocks.simulateBiometric,
+    listBiometricExpediente: mocks.listBiometricExpediente,
+    adminReenviarValidacionIdentidad: mocks.adminReenviarValidacionIdentidad,
   },
   setActiveTramitesTenant: mocks.setActiveTramitesTenant,
   TramitesApiError: class TramitesApiError extends Error {
@@ -76,8 +82,12 @@ vi.mock('@/lib/api/client', () => ({ getToken: () => 'token-de-prueba' }));
 vi.mock('@/lib/auth/jwt', () => ({
   decodeJwtPayload: () => ({}),
   isSuperAdmin: () => mocks.isSuperAdmin(),
+  // HU #12164 — permiso `AdminTramiteReenviarValidacion` leído del JWT (mismo helper que
+  // `AdminTramiteAcciones.tsx`). Por defecto sin permiso; cada test lo activa si lo necesita.
+  hasPermission: (...args: unknown[]) => mocks.hasPermission(...args),
 }));
 
+import { ToastProvider } from '@/components/admin/Toast';
 import { Validaciones } from '@/components/atom/modules/Validaciones';
 
 const ROW_APROBADA: TenantBiometricValidation = {
@@ -226,7 +236,13 @@ const EMPTY_PERSON_HISTORY = {
 };
 
 function renderValidaciones() {
-  return render(<Validaciones />);
+  // `useToast` (HU #12164) exige un `<ToastProvider>` ancestro — igual que en la app real
+  // (`frontend/app/page.tsx` envuelve todo el shell).
+  return render(
+    <ToastProvider>
+      <Validaciones />
+    </ToastProvider>,
+  );
 }
 
 async function abrirFiltros(user = userEvent.setup()) {
@@ -257,6 +273,8 @@ beforeEach(() => {
   // Por defecto, usuario de compañía: sin selector de empresa.
   mocks.isSuperAdmin.mockReturnValue(false);
   mocks.listCompanies.mockResolvedValue({ data: [] });
+  // HU #12164 — sin el permiso `AdminTramiteReenviarValidacion` por defecto; cada test lo activa.
+  mocks.hasPermission.mockReturnValue(false);
 });
 
 describe('Validaciones — AC8 estados de UI', () => {
@@ -269,7 +287,7 @@ describe('Validaciones — AC8 estados de UI', () => {
     });
     mocks.listTenantBiometricPersons.mockReturnValue(pending);
 
-    render(<Validaciones />); // sin conmutar de vista: se mide el primer render
+    renderValidaciones(); // sin conmutar de vista: se mide el primer render
 
     // role="status" con el texto sr-only de carga (la grilla; el panel de atascadas tiene el suyo).
     const status = screen.getByText(/cargando validaciones de identidad/i).closest('[role="status"]');
@@ -825,7 +843,7 @@ describe('Validaciones — filtros (HU #10348)', () => {
     vi.useFakeTimers();
     try {
       mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
-      render(<Validaciones />);
+      renderValidaciones();
 
       // Resuelve la carga inicial. Con timers falsos se usa act + advanceTimers: userEvent
       // espera timers reales para su delay interno.
@@ -1402,6 +1420,115 @@ describe('Validaciones — paginación', () => {
 
       expect(screen.queryByText(/solo lectura/i)).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('HU #12164 — reenvío administrativo de una validación de trámite (AC1/AC2)', () => {
+  /** Trámite con la identidad PENDIENTE (enviada, aún sin completar): antes de esta HU no tenía
+   *  NINGUNA acción de reenvío en este módulo (solo se podía desde el Dashboard). */
+  const ROW_PENDIENTE_TRAMITE: TenantBiometricValidation = {
+    ...ROW_EN_PROCESO,
+    id: 'v-4',
+    status: 'enviado',
+    captureUrl: null,
+    linkExpiresAt: null,
+  };
+
+  const EXPEDIENTE_UNA_VALIDACION = {
+    validations: [
+      {
+        id: 'v-4',
+        partyRole: 'vendedor',
+        name: 'Carlos Vendedor',
+        documentType: 'CC',
+        documentNumber: '5566',
+        email: 'carlos.vendedor@correo.co',
+        status: 'enviado',
+        intentos: 0,
+        maxIntentos: 3,
+        score: null,
+        expiresAt: '2026-09-09T00:00:00Z',
+        validatedAt: null,
+        expired: false,
+        provider: 'kyverum',
+        captureUrl: null,
+      },
+    ],
+    firmaBaulPartes: [],
+    firmaBaulActores: [],
+  };
+
+  async function abrirAccionesFila(row: TenantBiometricValidation) {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([row]));
+    renderValidaciones();
+    await screen.findByText(row.name);
+    await user.click(screen.getByRole('button', { name: /acciones de validación/i }));
+    return user;
+  }
+
+  it('AC1: sin el permiso administrativo, una validación PENDIENTE de trámite no ofrece Reenviar', async () => {
+    mocks.hasPermission.mockReturnValue(false);
+    await abrirAccionesFila(ROW_PENDIENTE_TRAMITE);
+
+    expect(screen.queryByRole('menuitem', { name: /^reenviar$/i })).not.toBeInTheDocument();
+  });
+
+  it('AC1: con el permiso, ofrece "Reenviar" (igual que el Dashboard) y llama al endpoint administrativo', async () => {
+    mocks.hasPermission.mockReturnValue(true);
+    mocks.listBiometricExpediente.mockResolvedValue(EXPEDIENTE_UNA_VALIDACION);
+    mocks.adminReenviarValidacionIdentidad.mockResolvedValue({
+      validation: {},
+      captureUrl: 'https://kyverum.local/x',
+      emailActualizado: false,
+      queued: false,
+    });
+
+    const user = await abrirAccionesFila(ROW_PENDIENTE_TRAMITE);
+    await user.click(screen.getByRole('menuitem', { name: /^reenviar$/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /reenviar validación de identidad/i });
+    await within(dialog).findByText(/Carlos Vendedor/);
+    await user.click(within(dialog).getByRole('button', { name: 'Reenviar' }));
+
+    await waitFor(() =>
+      expect(mocks.adminReenviarValidacionIdentidad).toHaveBeenCalledWith(
+        'inst-3',
+        'v-4',
+        null,
+        undefined,
+      ),
+    );
+    // No es el mecanismo standalone ni el de "lanzar validación nueva": ninguno de los dos se toca.
+    expect(mocks.resendPrevalidacion).not.toHaveBeenCalled();
+    expect(mocks.iniciarBiometric).not.toHaveBeenCalled();
+    expect(await screen.findByText('Validación de identidad reenviada.')).toBeInTheDocument();
+  });
+
+  it('AC2: el correo es opcional, pero si se escribe debe tener formato válido para habilitar "Reenviar"', async () => {
+    mocks.hasPermission.mockReturnValue(true);
+    mocks.listBiometricExpediente.mockResolvedValue(EXPEDIENTE_UNA_VALIDACION);
+
+    const user = await abrirAccionesFila(ROW_PENDIENTE_TRAMITE);
+    await user.click(screen.getByRole('menuitem', { name: /^reenviar$/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /reenviar validación de identidad/i });
+    const correoInput = await within(dialog).findByLabelText(/nuevo correo/i);
+    const reenviarBtn = within(dialog).getByRole('button', { name: 'Reenviar' });
+
+    // Vacío (default): habilitado — reenvía al correo ya registrado (AC1 de HU #12161).
+    expect(reenviarBtn).not.toBeDisabled();
+
+    // Copiar/pegar funciona nativo porque es un `<input type="email">` sin `onPaste` bloqueado (no
+    // hay nada que testear ahí); lo que valida esta prueba es el formato exigido por AC2.
+    await user.type(correoInput, 'correo-sin-arroba');
+    expect(reenviarBtn).toBeDisabled();
+    expect(await within(dialog).findByText('Correo inválido.')).toBeInTheDocument();
+
+    await user.clear(correoInput);
+    await user.type(correoInput, 'nuevo@correo.com');
+    expect(reenviarBtn).not.toBeDisabled();
+    expect(within(dialog).queryByText('Correo inválido.')).not.toBeInTheDocument();
   });
 });
 

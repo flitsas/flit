@@ -11,6 +11,7 @@ import {
   SeccionVacia,
 } from '@/components/operacion/detalle/primitivos';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { ReenviarValidacionIdentidadModal } from './ReenviarValidacionIdentidadModal';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient, type GestorOption } from '@/lib/api/tramites-client';
@@ -19,7 +20,7 @@ import {
   ADMIN_ESTADO_DESTINO_OPTIONS,
   ADMIN_TRAMITE_PERMISSIONS,
 } from '@/lib/tramites/admin-tramite-permissions';
-import type { BiometricValidation, InstanceSummary } from '@/lib/api/types/procedure-runtime';
+import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 /**
  * HU #12163 (Feature #12155) — menú de acciones avanzadas del administrador sobre un trámite del
@@ -413,156 +414,6 @@ function ConsolidadoModal({
   );
 }
 
-const PARTE_LABEL: Record<string, string> = { vendedor: 'Vendedor', comprador: 'Comprador' };
-
-/** HU #12161 — Reenviar validación de identidad: 4 estados (carga/error/vacío/lleno) + formulario. */
-function ReenviarValidacionModal({ open, onClose, item, tenantId, onSuccess, onError }: ModalBaseProps) {
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [validations, setValidations] = useState<BiometricValidation[]>([]);
-  const [validationId, setValidationId] = useState('');
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    // Carga las validaciones de identidad cada vez que el modal se abre.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    setLoadError(null);
-    setSubmitError(null);
-    setEmail('');
-    tramitesClient
-      .listBiometricExpediente(item.id, tenantId)
-      .then((res) => {
-        if (cancelled) return;
-        setValidations(res.validations ?? []);
-        setValidationId(res.validations?.[0]?.id ?? '');
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setLoadError(
-          e instanceof Error ? e.message : 'No se pudieron cargar las validaciones de identidad.',
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, item.id, tenantId, reloadKey]);
-
-  const confirmar = async () => {
-    if (!validationId) return;
-    setBusy(true);
-    setSubmitError(null);
-    try {
-      const res = await tramitesClient.adminReenviarValidacionIdentidad(
-        item.id,
-        validationId,
-        email.trim() || null,
-        tenantId,
-      );
-      onSuccess(
-        res.queued
-          ? 'El reenvío quedó en cola: el proveedor tuvo una falla transitoria y se reintentará automáticamente.'
-          : 'Validación de identidad reenviada.',
-      );
-      onClose();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'No se pudo reenviar la validación de identidad.';
-      setSubmitError(msg);
-      onError(msg);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Reenviar validación de identidad"
-      icon={Send}
-      description={item.referenceNumber}
-      size="sm"
-      busy={busy}
-    >
-      {/* `contents`: envoltorio solo para detener la propagación del clic hacia `<tr
-          onClick={handleOpen}>` (el portal de `Modal` burbujea por el árbol de React, no por el
-          DOM) — no aporta layout propio, así que no cambia la disposición de los estados de abajo. */}
-      <div className="contents" onClick={(e) => e.stopPropagation()}>
-      {loading ? <SeccionCargando etiqueta="Cargando validaciones de identidad" filas={2} /> : null}
-      {!loading && loadError ? (
-        <SeccionError
-          mensaje={loadError}
-          contexto="las validaciones de identidad"
-          onReintentar={() => setReloadKey((k) => k + 1)}
-        />
-      ) : null}
-      {!loading && !loadError && validations.length === 0 ? (
-        <SeccionVacia mensaje="Este trámite no tiene validaciones de identidad registradas." />
-      ) : null}
-      {!loading && !loadError && validations.length > 0 ? (
-        <div className="space-y-3">
-          <label className={FIELD_LABEL_CLS} htmlFor={`admin-reenviar-validacion-${item.id}`}>
-            Validación a reenviar
-          </label>
-          <select
-            id={`admin-reenviar-validacion-${item.id}`}
-            value={validationId}
-            onChange={(e) => setValidationId(e.target.value)}
-            disabled={busy}
-            className={FIELD_CLS}
-            style={FIELD_BORDER}
-          >
-            {validations.map((v) => (
-              <option key={v.id} value={v.id}>
-                {(v.partyRole ? `${PARTE_LABEL[v.partyRole] ?? v.partyRole} · ` : '') +
-                  `${v.name} · ${v.email}`}
-              </option>
-            ))}
-          </select>
-
-          <label className={FIELD_LABEL_CLS} htmlFor={`admin-reenviar-email-${item.id}`}>
-            Nuevo correo (opcional)
-          </label>
-          <input
-            id={`admin-reenviar-email-${item.id}`}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={busy}
-            placeholder="Deja vacío para reenviar al correo actual"
-            className={FIELD_CLS}
-            style={FIELD_BORDER}
-          />
-
-          {submitError ? <InlineAlert tone="error">{submitError}</InlineAlert> : null}
-
-          <div className="flex gap-3 pt-1">
-            <SecondaryButton className="flex-1" onClick={onClose} disabled={busy}>
-              Cancelar
-            </SecondaryButton>
-            <PrimaryButton
-              className="flex-1"
-              onClick={() => void confirmar()}
-              disabled={busy || !validationId}
-            >
-              {busy ? 'Reenviando…' : 'Reenviar'}
-            </PrimaryButton>
-          </div>
-        </div>
-      ) : null}
-      </div>
-    </Modal>
-  );
-}
-
 /** HU #12162 — Reasignar gestor: 4 estados + selector de gestores DISPONIBLES del tenant. */
 function ReasignarGestorModal({ open, onClose, item, tenantId, onSuccess, onError }: ModalBaseProps) {
   const [loading, setLoading] = useState(false);
@@ -803,10 +654,11 @@ export function useAdminTramiteAcciones({
         onSuccess={onSuccess}
         onError={onError}
       />
-      <ReenviarValidacionModal
+      <ReenviarValidacionIdentidadModal
         open={reenviarOpen}
         onClose={() => setReenviarOpen(false)}
-        item={item}
+        instanceId={item.id}
+        referenceNumber={item.referenceNumber}
         tenantId={tenantId}
         onSuccess={onSuccess}
         onError={onError}
