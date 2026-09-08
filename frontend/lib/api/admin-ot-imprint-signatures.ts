@@ -55,13 +55,16 @@ export function fetchListImprintSignatures(
   }).then((response) => response.data);
 }
 
+/** Valida la firma digital pegada desde el PDF contra la impronta registrada. */
 export function validateImprintSignature(
   id: string,
+  signature: string,
   signal?: AbortSignal,
   scope?: OtImprintSignatureScope,
 ): Promise<ImprintSignatureValidationResult> {
   return apiFetch<ImprintSignatureValidationResult>(`${base}/imprint-signatures/${id}/validate`, {
     method: "POST",
+    body: { signature },
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });

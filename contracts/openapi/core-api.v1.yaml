@@ -1118,8 +1118,8 @@ paths:
       operationId: adminOtValidateImprintSignature
       summary: Valida firma digital de impronta manual (HU #12148)
       description: >
-        Verifica RSA-SHA256 PKCS#1 del hash registrado y persiste el resultado en
-        tramites.imprint_signature_validations (append-only).
+        Verifica la firma digital pegada (Base64 del PDF) contra public_key + document_hash
+        de la impronta y persiste el resultado en tramites.imprint_signature_validations.
       security:
         - bearerAuth: []
       parameters:
@@ -1134,6 +1134,17 @@ paths:
           schema: { type: string, format: uuid }
           description: >
             Obligatorio para SuperAdmin — tenant OT del hub. ot_admin ignora el parámetro.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signature]
+              properties:
+                signature:
+                  type: string
+                  description: Firma digital Base64 pegada desde el PDF (se normalizan espacios/saltos).
       responses:
         "200":
           description: Validación ejecutada (valid o invalid).

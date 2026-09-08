@@ -5,6 +5,7 @@ import { ShieldCheck } from "lucide-react";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   fetchListImprintSignatures,
@@ -19,6 +20,9 @@ type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
 const INPUT_CLS =
   "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
 
+const TEXTAREA_CLS =
+  "w-full min-h-[8rem] rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 font-mono text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+
 export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeId: string }) {
   const { show } = useToast();
   const [placaInput, setPlacaInput] = useState("");
@@ -26,10 +30,13 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
   const [phase, setPhase] = useState<ViewPhase>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [rows, setRows] = useState<ImprintSignatureDto[]>([]);
-  const [validatingId, setValidatingId] = useState<string | null>(null);
   const [validationById, setValidationById] = useState<
     Record<string, { result: ImprintSignatureValidationResultKind; failureReason: string | null }>
   >({});
+
+  const [modalRow, setModalRow] = useState<ImprintSignatureDto | null>(null);
+  const [signatureInput, setSignatureInput] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(
     async (placa: string) => {
@@ -65,33 +72,49 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
     void load(placaInput);
   };
 
-  const handleValidate = useCallback(
-    async (row: ImprintSignatureDto) => {
-      setValidatingId(row.id);
-      try {
-        const result = await validateImprintSignature(row.id, undefined, { transitOfficeId });
-        setValidationById((prev) => ({
-          ...prev,
-          [row.id]: { result: result.result, failureReason: result.failureReason },
-        }));
-        if (result.result === "valid") {
-          show("Firma válida.", "success");
-        } else if (result.result === "invalid") {
-          show(result.failureReason?.trim() || "Firma inválida.", "error");
-        } else {
-          show("Impronta no encontrada.", "error");
-        }
-      } catch (err) {
-        show(
-          err instanceof ApiError ? err.message : "No se pudo validar la firma.",
-          "error",
-        );
-      } finally {
-        setValidatingId(null);
+  const openValidateModal = (row: ImprintSignatureDto) => {
+    setModalRow(row);
+    setSignatureInput("");
+  };
+
+  const closeValidateModal = () => {
+    if (submitting) return;
+    setModalRow(null);
+    setSignatureInput("");
+  };
+
+  const handleAcceptValidation = useCallback(async () => {
+    if (!modalRow) return;
+    const signature = signatureInput.trim();
+    if (!signature) {
+      show("Ingrese la firma digital de la impronta.", "error");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const result = await validateImprintSignature(modalRow.id, signature, undefined, {
+        transitOfficeId,
+      });
+      setValidationById((prev) => ({
+        ...prev,
+        [modalRow.id]: { result: result.result, failureReason: result.failureReason },
+      }));
+      if (result.result === "valid") {
+        show("La firma corresponde a esta impronta.", "success");
+        setModalRow(null);
+        setSignatureInput("");
+      } else if (result.result === "invalid") {
+        show(result.failureReason?.trim() || "La firma no corresponde a esta impronta.", "error");
+      } else {
+        show("Impronta no encontrada.", "error");
       }
-    },
-    [show, transitOfficeId],
-  );
+    } catch (err) {
+      show(err instanceof ApiError ? err.message : "No se pudo validar la firma.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [modalRow, show, signatureInput, transitOfficeId]);
 
   const columns: DataTableColumn<ImprintSignatureDto>[] = useMemo(
     () => [
@@ -163,19 +186,18 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         render: (row) => (
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
             style={{ background: "#557EFF" }}
-            disabled={validatingId === row.id}
             aria-label={`Validar firma de impronta ${row.placa}`}
-            onClick={() => void handleValidate(row)}
+            onClick={() => openValidateModal(row)}
           >
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-            {validatingId === row.id ? "Validando…" : "Validar firma"}
+            Validar firma
           </button>
         ),
       },
     ],
-    [handleValidate, validatingId, validationById],
+    [validationById],
   );
 
   const boundaryStatus =
@@ -196,8 +218,8 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           Validación de firma de impronta
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
-          Consulta las improntas firmadas por placa y verifica la firma digital RSA-SHA256 del hash
-          registrado.
+          Consulte por placa, pegue la firma digital del PDF y confirme si corresponde a esa
+          impronta.
         </p>
       </div>
 
@@ -261,6 +283,57 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           </div>
         </UiStateBoundary>
       )}
+
+      <Modal
+        open={modalRow !== null}
+        onClose={closeValidateModal}
+        title="Validar firma digital"
+        icon={ShieldCheck}
+        description={
+          modalRow
+            ? `Placa ${modalRow.placa} · firmado ${formatDateTime(modalRow.signedAt)}. Pegue el texto de «Firma digital impronta» del PDF.`
+            : undefined
+        }
+        size="md"
+        busy={submitting}
+      >
+        <div className="flex flex-col gap-4 p-1" data-testid="ot-imprint-validation-modal">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-[#162244] dark:text-white">
+              Firma digital de la impronta
+            </span>
+            <textarea
+              value={signatureInput}
+              onChange={(e) => setSignatureInput(e.target.value)}
+              placeholder="Pegue aquí la Base64 de la firma digital…"
+              className={TEXTAREA_CLS}
+              disabled={submitting}
+              data-testid="ot-imprint-validation-signature-input"
+              aria-label="Firma digital de la impronta"
+            />
+          </label>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold text-[#162244] dark:border-white/15 dark:text-white"
+              onClick={closeValidateModal}
+              disabled={submitting}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ background: "#557EFF" }}
+              onClick={() => void handleAcceptValidation()}
+              disabled={submitting}
+              data-testid="ot-imprint-validation-accept-btn"
+            >
+              {submitting ? "Validando…" : "Aceptar"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

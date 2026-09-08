@@ -103,7 +103,7 @@ describe("OtImprintValidationSection", () => {
     });
   });
 
-  it("valida firma y muestra badge válida", async () => {
+  it("abre modal, acepta firma pegada y muestra badge válida", async () => {
     fetchListImprintSignatures.mockResolvedValue([imprintRow()]);
     validateImprintSignature.mockResolvedValue({
       validationId: "val-1",
@@ -124,10 +124,23 @@ describe("OtImprintValidationSection", () => {
     await userEvent.click(screen.getByRole("button", { name: /validar firma de impronta abc123/i }));
 
     await waitFor(() => {
+      expect(screen.getByTestId("ot-imprint-validation-modal")).toBeInTheDocument();
+    });
+
+    await userEvent.type(
+      screen.getByTestId("ot-imprint-validation-signature-input"),
+      "UgMgkJ+Ay1OwexM8",
+    );
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-accept-btn"));
+
+    await waitFor(() => {
       expect(screen.getByLabelText("Estado: Válida")).toBeInTheDocument();
     });
-    expect(validateImprintSignature).toHaveBeenCalledWith("imp-1", undefined, {
-      transitOfficeId: "ot-1",
-    });
+    expect(validateImprintSignature).toHaveBeenCalledWith(
+      "imp-1",
+      "UgMgkJ+Ay1OwexM8",
+      undefined,
+      { transitOfficeId: "ot-1" },
+    );
   });
 });

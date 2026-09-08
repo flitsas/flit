@@ -728,6 +728,7 @@ public static class AdminOtEndpoints
         ValidateImprintSignatureHandler handler,
         FlitDbContext db,
         [FromQuery] Guid? transitOfficeId,
+        [FromBody] ValidateImprintSignatureRequest? body,
         CancellationToken cancellationToken)
     {
         var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
@@ -745,12 +746,18 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        if (body is null || string.IsNullOrWhiteSpace(body.Signature))
+        {
+            return Results.BadRequest(new { error = "signature es obligatoria (firma digital pegada desde el PDF)." });
+        }
+
         var result = await handler.HandleAsync(
             new ValidateImprintSignatureCommand
             {
                 TenantId = tenantId,
                 VehicleSignatureImprintId = id,
                 ValidatedBy = validatedBy.Value,
+                ProvidedSignature = body.Signature,
             },
             cancellationToken).ConfigureAwait(false);
 
@@ -2543,6 +2550,8 @@ public static class AdminOtEndpoints
 
         return (targetTenantId, null);
     }
+
+    private sealed record ValidateImprintSignatureRequest(string Signature);
 
     // RoleIds opcional: si viene vacío se conserva el comportamiento histórico (ot_admin
     // forzado); si trae roles, deben pertenecer al catálogo TRANSIT_OFFICE.

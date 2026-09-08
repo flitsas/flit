@@ -68,6 +68,7 @@ public sealed class ValidateImprintSignatureHandlerTests
                 TenantId = tenantId,
                 VehicleSignatureImprintId = imprintId,
                 ValidatedBy = userId,
+                ProvidedSignature = "sig",
             },
             TestContext.Current.CancellationToken);
 
@@ -124,6 +125,7 @@ public sealed class ValidateImprintSignatureHandlerTests
                 TenantId = tenantId,
                 VehicleSignatureImprintId = imprintId,
                 ValidatedBy = Guid.NewGuid(),
+                ProvidedSignature = "sig",
             },
             TestContext.Current.CancellationToken);
 
@@ -166,7 +168,7 @@ public sealed class ValidateImprintSignatureHandlerTests
                 CreatedAt = DateTimeOffset.UtcNow,
             });
 
-        _verifier.Verify("pub", "hash", "sig").Returns(true);
+        _verifier.Verify("pub", "hash", "sigwithspaces").Returns(true);
 
         ImprintSignatureValidation? captured = null;
         _validations.When(v => v.Add(Arg.Any<ImprintSignatureValidation>()))
@@ -178,6 +180,7 @@ public sealed class ValidateImprintSignatureHandlerTests
                 TenantId = otTenantId,
                 VehicleSignatureImprintId = imprintId,
                 ValidatedBy = Guid.NewGuid(),
+                ProvidedSignature = "sig\n with spaces ",
             },
             TestContext.Current.CancellationToken);
 
@@ -185,6 +188,7 @@ public sealed class ValidateImprintSignatureHandlerTests
         captured.Should().NotBeNull();
         captured!.TenantId.Should().Be(otTenantId);
         captured.Placa.Should().Be("HHH123");
+        _verifier.Received(1).Verify("pub", "hash", "sigwithspaces");
     }
 
     [Fact]
@@ -202,6 +206,7 @@ public sealed class ValidateImprintSignatureHandlerTests
                 TenantId = tenantId,
                 VehicleSignatureImprintId = imprintId,
                 ValidatedBy = Guid.NewGuid(),
+                ProvidedSignature = "anything",
             },
             TestContext.Current.CancellationToken);
 

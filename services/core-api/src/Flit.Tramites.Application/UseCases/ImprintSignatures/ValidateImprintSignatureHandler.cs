@@ -50,13 +50,27 @@ public sealed class ValidateImprintSignatureHandler
             };
         }
 
-        var isValid = _verifier.Verify(imprint.PublicKey, imprint.DocumentHash, imprint.Signature);
+        var provided = NormalizeSignature(command.ProvidedSignature);
+        if (string.IsNullOrEmpty(provided))
+        {
+            return new ValidateImprintSignatureResult
+            {
+                ValidationId = Guid.Empty,
+                VehicleSignatureImprintId = imprint.Id,
+                Result = ImprintSignatureValidationResults.Invalid,
+                FailureReason = "Debe ingresar la firma digital de la impronta.",
+                ValidatedAt = validatedAt,
+            };
+        }
+
+        // La firma pegada (PDF) se verifica contra el hash y la clave pública registrados.
+        var isValid = _verifier.Verify(imprint.PublicKey, imprint.DocumentHash, provided);
         var result = isValid
             ? ImprintSignatureValidationResults.Valid
             : ImprintSignatureValidationResults.Invalid;
         var failureReason = isValid
             ? null
-            : "La firma RSA no coincide con el hash del documento registrado.";
+            : "La firma ingresada no corresponde a esta impronta.";
 
         // Placa del documento: el trámite suele vivir en tenant compañía, no en el OT validador.
         var instance = await _instanceRepository
@@ -64,6 +78,8 @@ public sealed class ValidateImprintSignatureHandler
             .ConfigureAwait(false);
         var placa = NormalizePlacaSnapshot(instance?.Plate);
 
+        // Si la firma está vacía no persistimos bitácora de intento vacío con success path —
+        // pero sí persistimos valid/invalid criptográfico.
         var log = new ImprintSignatureValidation
         {
             Id = Guid.NewGuid(),
@@ -93,4 +109,13 @@ public sealed class ValidateImprintSignatureHandler
 
     private static string NormalizePlacaSnapshot(string? plate) =>
         string.IsNullOrWhiteSpace(plate) ? "-" : plate.Trim().ToUpperInvariant();
+
+    /// <summary>Quita espacios y saltos (el PDF suele partir la Base64 en varias líneas).</summary>
+    internal static string NormalizeSignature(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        return string.Concat(raw.Where(c => !char.IsWhiteSpace(c)));
+    }
 }

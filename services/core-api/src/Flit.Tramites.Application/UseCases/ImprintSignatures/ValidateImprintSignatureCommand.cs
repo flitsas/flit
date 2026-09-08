@@ -7,6 +7,12 @@ public sealed class ValidateImprintSignatureCommand
     public required Guid VehicleSignatureImprintId { get; init; }
 
     public required Guid ValidatedBy { get; init; }
+
+    /// <summary>
+    /// Firma digital pegada desde el PDF (Base64). Se normaliza quitando espacios/saltos
+    /// y se verifica con <c>public_key</c> + <c>document_hash</c> de la impronta.
+    /// </summary>
+    public required string ProvidedSignature { get; init; }
 }
 
 public sealed class ValidateImprintSignatureResult
