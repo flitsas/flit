@@ -6381,6 +6381,82 @@ paths:
         "409": { description: "Conflicto de concurrencia (row_version): recargue e intente de nuevo." }
         "422": { description: "'aprobado' o 'revocado' como origen (excluidos por regla de negocio)." }
 
+  # ── Admin · Trámites · Reenviar validación de identidad (Feature #12155, HU #12161) ─────────────
+
+  /api/v1/admin/tramites/{id}/validaciones-identidad/{validationId}/reenviar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: validationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Reenvía la validación de identidad de un trámite, con correo opcional
+      operationId: adminTramiteReenviarValidacionIdentidad
+      security:
+        - bearerAuth: []
+      description: >
+        Reenvía la validación de identidad (biométrica) de una parte de un trámite fuera del gate
+        `not_draft` del wizard (`POST /instances/{id}/biometric`, solo borrador/subsanación) y sin
+        pasar por `POST /biometric-validations/{id}/resend` (exclusivo de la prevalidación standalone,
+        que rechaza validaciones ligadas a trámite). Pensado para trámites ya `entregado` con datos de
+        contacto incorrectos. Sin `email` en el body, reenvía al correo actual (mismo registro, token/
+        enlace nuevo, TTL 24h); con `email`, lo persiste y reenvía al nuevo destinatario. Rechaza (422)
+        si el trámite está en `aprobado`, `anulado` o `revocado` (estado que introducirá la Feature
+        #12156/HU #12165): en esos tres estados la identidad ya no es accionable. Aplica el mismo tope
+        de reenvíos y cooldown que la prevalidación standalone (429). Requiere el permiso
+        `AdminTramiteReenviarValidacion` (SuperAdmin bypassa). El reenvío queda registrado en el
+        historial del trámite y en la bitácora técnica de identidad (correo siempre enmascarado).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  nullable: true
+                  description: Nuevo correo destinatario (opcional). Omitido/vacío ⇒ reenvía al correo actual.
+      responses:
+        "200":
+          description: Reenvío completado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation: { $ref: "#/components/schemas/BiometricValidationDto" }
+                  captureUrl: { type: string }
+                  emailActualizado: { type: boolean }
+                  queued: { type: boolean }
+        "202":
+          description: Envío encolado (falla transitoria del proveedor); el worker reintenta.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation: { $ref: "#/components/schemas/BiometricValidationDto" }
+                  captureUrl: { type: string }
+                  emailActualizado: { type: boolean }
+                  queued: { type: boolean }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteReenviarValidacion." }
+        "404": { description: "Trámite o validación de identidad no encontrada." }
+        "409": { description: "La identidad ya está aprobada: revalidar exige una validación nueva." }
+        "422": { description: "El trámite está en 'aprobado', 'anulado' o 'revocado' (identidad no accionable)." }
+        "429": { description: "Tope de reenvíos agotado, o en cooldown entre reenvíos." }
+        "502": { description: "El proveedor de validación de identidad rechazó la solicitud." }
+        "503": { description: "El proveedor de validación de identidad no está disponible." }
+
   # ── Admin · OT · Documentos del trámite de cliente (Feature #10701 / HU #10704 + HU #10706) ──
 
   /api/v1/admin/ot/client-procedures/{id}/documents:

@@ -136,4 +136,12 @@ public static class TramiteEstadoErrores
     /// de la HU (mismo criterio de formato que <see cref="CannotAnnulApproved"/>).
     /// </summary>
     public const string CannotAnnulRevoked = "CANNOT_ANNUL_REVOKED";
+
+    /// <summary>
+    /// HU #12161 — reenvío ADMINISTRATIVO de la validación de identidad de un trámite: el trámite está en
+    /// <c>aprobado</c>, <c>anulado</c> o "revocado" (string, HU #12165 aún no existe como enum — ver
+    /// <c>AdminReenviarValidacionIdentidadHandler</c>, capa Application) y la identidad ya no es
+    /// accionable, sin importar el estado de la validación en sí (422).
+    /// </summary>
+    public const string IdentidadReenvioNoDisponible = "identidad_reenvio_no_disponible";
 }

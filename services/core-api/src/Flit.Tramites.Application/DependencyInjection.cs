@@ -220,6 +220,9 @@ public static class DependencyInjection
         services.AddScoped<AdminCambiarEstadoHandler>();
         // HU #12160 — anulación administrativa (cualquier origen, excluye 'aprobado' y 'revocado').
         services.AddScoped<AdminAnularHandler>();
+        // HU #12161 — reenvío administrativo de la validación de identidad de un trámite (correo
+        // opcional), fuera del gate not_draft y del mecanismo standalone.
+        services.AddScoped<AdminReenviarValidacionIdentidadHandler>();
         // HU #11051 — gate de generación documental del GESTOR (estado final ⇒ documentación definitiva).
         // Lo consumen SOLO los endpoints de /api/v1/tramites; la regeneración interna del sistema
         // (aprobación OT, placa, identidad validada, transiciones) NO pasa por él a propósito.
