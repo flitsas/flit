@@ -248,12 +248,12 @@ export function ReenviarValidacionIdentidadModal({
                     </option>
                   ))}
                 </select>
-                {selectedValidation ? (
-                  <p className="text-xs text-[#162744]/60 dark:text-white/60">
-                    Correo registrado: <span className="font-medium">{selectedValidation.email}</span>
-                  </p>
-                ) : null}
               </>
+            ) : null}
+            {selectedValidation ? (
+              <p className="text-xs text-[#162744]/60 dark:text-white/60">
+                Correo registrado: <span className="font-medium">{selectedValidation.email}</span>
+              </p>
             ) : null}
 
             <label className={FIELD_LABEL_CLS} htmlFor={`admin-reenviar-email-${instanceId}`}>

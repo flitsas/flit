@@ -465,6 +465,9 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
     const dialog = await screen.findByRole('dialog', { name: /Reenviar validación/ });
     // Con una sola validación (no traspaso) no hay nada que elegir: sin selector, se reenvía directo.
     expect(within(dialog).queryByLabelText('Validación a reenviar')).not.toBeInTheDocument();
+    // Pero sí se ve a qué correo se reenviará.
+    expect(within(dialog).getByText(/Correo registrado:/)).toBeInTheDocument();
+    expect(within(dialog).getByText('juan@example.com')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reenviar' }));
 
     expect(mocks.adminReenviarValidacionIdentidad).toHaveBeenCalledWith(
