@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useId, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly } from '@/lib/format/currency';
@@ -11,6 +11,8 @@ import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PrendaDocumentUpload } from './PrendaDocumentUpload';
 import { prendaDocTipoFor } from './prenda-document-tipos';
 import { blockerCopy } from './wizard-copy';
+import { WizardModal } from './WizardModal';
+import type { RuntAvisoGravamenVariant } from './wizardCapabilities';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
@@ -53,6 +55,27 @@ const MUESTRA_ACREEDOR: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
 
 /** En matrícula la prenda es declarativa: registrar o sin prenda. */
 const MATRICULA_DECISIONS: PrendaDecision[] = ['registrar', 'sin_prenda'];
+
+/**
+ * Copy del aviso «RUNT sin gravamen registrado» (HU #12131). Se muestra cuando el trámite ES la
+ * prenda —Inscribir o Levantar Prenda— y la consulta RUNT resolvió sin encontrar gravamen: el
+ * gestor no queda sin explicación de por qué no hay automapeo, y sabe que puede seguir capturando
+ * el acreedor/entidad a mano en los campos de esta misma sección.
+ */
+const RUNT_SIN_GRAVAMEN_AVISO: Record<RuntAvisoGravamenVariant, { titulo: string; texto: string }> = {
+  levantamiento: {
+    titulo: 'RUNT sin gravamen registrado',
+    texto:
+      'No se encontró ningún gravamen o prenda registrado en el RUNT para este vehículo. Puedes ' +
+      'continuar registrando manualmente la entidad ante la que se levantó.',
+  },
+  inscripcion: {
+    titulo: 'RUNT sin gravamen registrado',
+    texto:
+      'No se encontró ningún gravamen o prenda registrado en el RUNT para este vehículo. Puedes ' +
+      'continuar capturando manualmente el acreedor de la prenda que vas a inscribir.',
+  },
+};
 
 /**
  * Decisiones que ofrece el traspaso (R10, HU #10598).
@@ -108,6 +131,20 @@ interface Props {
   runtHasGravamen?: boolean;
   /** Mensaje opcional del check RUNT (detalle). */
   runtGravamenMessage?: string | null;
+  /**
+   * El check `gravamenes` del preflight YA corrió (existe en la respuesta), a diferencia de
+   * `runtHasGravamen` que solo dice si trajo gravamen. Distingue «aún no se ha consultado» (este
+   * flag en `false`) de «se consultó y no encontró nada» (`true` + `runtHasGravamen` en `false`) —
+   * HU #12131: sin este dato el aviso de «RUNT sin gravamen» no puede diferenciar ambos casos.
+   */
+  runtGravamenChecked?: boolean;
+  /**
+   * Variante de copy del aviso «RUNT sin gravamen registrado» (HU #12131): cuál de los dos trámites
+   * de una sola acción prendaria (Inscribir / Levantar Prenda) es este. `null`/`undefined` desactiva
+   * el aviso por completo —p. ej. en la prenda complementaria de traspaso/matrícula, fuera del
+   * alcance de esta HU—.
+   */
+  runtAvisoVariant?: RuntAvisoGravamenVariant | null;
   /**
    * El trámite ES el levantamiento del gravamen (`LEVANTAMIENTO_PRENDA`): captura la entidad ante la
    * que se levantó —lo que su FUR declara en el párrafo 23— y PERSISTE el acreedor, que el numeral 20
@@ -256,6 +293,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     embeddedInWizard = false,
     runtHasGravamen = false,
     runtGravamenMessage = null,
+    runtGravamenChecked = false,
+    runtAvisoVariant = null,
     modalidad = 'matricula_inicial',
     documentRequired = true,
     exigeEntidadLevantamiento = false,
@@ -285,6 +324,11 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [runtSummary, setRuntSummary] = useState<RuntPrendaSummary | null>(null);
   const [runtOpen, setRuntOpen] = useState(false);
   const [docSatisfied, setDocSatisfied] = useState(false);
+  // HU #12131 — aviso «RUNT sin gravamen»: se abre solo, una vez, cuando el check YA corrió y
+  // resolvió sin gravamen. El ref (no state) es lo que impide que un re-render posterior —p. ej. al
+  // reabrir el acordeón— lo vuelva a abrir después de que el gestor lo cerró.
+  const [avisoSinGravamenOpen, setAvisoSinGravamenOpen] = useState(false);
+  const avisoSinGravamenShownRef = useRef(false);
   const offersRegistrar = decisions.includes('registrar');
   /**
    * ADR-0050 — una sola decisión ofrecida: el tipo de trámite YA la eligió (inscribir prenda,
@@ -409,6 +453,21 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     onDocumentGateChange?.(documentGateReady);
   }, [documentGateReady, onDocumentGateChange]);
 
+  // HU #12131 (AC1/AC2) — el check `gravamenes` corrió y NO trajo gravamen: informa al gestor que
+  // el automapeo no aplicó y que puede seguir con captura manual. AC4: con `runtHasGravamen` en
+  // `true` (SÍ hay gravamen) esta condición nunca se cumple, así que el automapeo existente no
+  // cambia. `runtAvisoVariant` en `null` (p. ej. prenda complementaria de traspaso/matrícula, fuera
+  // de alcance de esta HU) desactiva el aviso sin tocar el resto del formulario.
+  const debeAvisarSinGravamen =
+    Boolean(runtAvisoVariant) && runtGravamenChecked && !runtHasGravamen;
+
+  useEffect(() => {
+    if (debeAvisarSinGravamen && !avisoSinGravamenShownRef.current) {
+      avisoSinGravamenShownRef.current = true;
+      setAvisoSinGravamenOpen(true);
+    }
+  }, [debeAvisarSinGravamen]);
+
   const selectDecision = (d: PrendaDecision) => {
     pending.markDirty();
     setDecision(d);
@@ -523,6 +582,27 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
           title="Asignación de Prenda / Limitación a la Propiedad"
           subtitle="Declara si el vehículo tiene prenda. Si registras, solicitas o levantas, adjunta el certificado en esta sección."
         />
+      )}
+
+      {/* HU #12131 — aviso NO bloqueante: el gestor lo cierra (X, Escape o "Entendido") y sigue
+          capturando acreedor/entidad en los campos de siempre, ya editables más abajo. */}
+      {avisoSinGravamenOpen && runtAvisoVariant && (
+        <WizardModal
+          title={RUNT_SIN_GRAVAMEN_AVISO[runtAvisoVariant].titulo}
+          onClose={() => setAvisoSinGravamenOpen(false)}
+        >
+          <InlineAlert tone="info">{RUNT_SIN_GRAVAMEN_AVISO[runtAvisoVariant].texto}</InlineAlert>
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setAvisoSinGravamenOpen(false)}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-white"
+              style={{ background: WIZARD_CTA_GRADIENT }}
+            >
+              Entendido
+            </button>
+          </div>
+        </WizardModal>
       )}
 
       {showRuntPanel && (

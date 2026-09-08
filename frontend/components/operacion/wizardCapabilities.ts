@@ -295,6 +295,23 @@ export function decisionesDelTipoDePrenda(
   }
 }
 
+/** Variante de copy del aviso «RUNT sin gravamen registrado» (HU #12131). */
+export type RuntAvisoGravamenVariant = 'inscripcion' | 'levantamiento';
+
+/**
+ * Tipo prendario de UNA sola decisión (Inscribir o Levantar Prenda, HU #12131): cuál de las dos
+ * lecturas del aviso corresponde cuando el RUNT no reporta gravamen. `null` cuando el tipo no es
+ * prendario o cuando ofrece dos decisiones (`LEVANTAR_INSCRIBIR_PRENDA` / `CAMBIO_ACREEDOR`): ahí
+ * no hay una única lectura «Inscribir» o «Levantar» que mostrar, y esta HU no cubre esa variante.
+ */
+export function runtAvisoGravamenVariant(
+  codigo: string | null | undefined,
+): RuntAvisoGravamenVariant | null {
+  const decisiones = decisionesDelTipoDePrenda(codigo);
+  if (decisiones?.length !== 1) return null;
+  return decisiones[0] === 'levantar' ? 'levantamiento' : 'inscripcion';
+}
+
 /**
  * Roles que captura el paso de actores. El orden importa: saliente antes que entrante, que es como
  * lo lee el gestor y como lo ordena el resto del expediente.

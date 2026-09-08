@@ -8,6 +8,7 @@ import {
   modalidadPorEntrada,
   modalidadPorPartes,
   rolesDeActores,
+  runtAvisoGravamenVariant,
   transformacionDelTipo,
   permiteGenerarImprontaAutomatica,
 } from '../wizardCapabilities';
@@ -189,6 +190,19 @@ describe('capa que le pertenece al tipo', () => {
     expect(decisionesDelTipoDePrenda('LEVANTAR_INSCRIBIR_PRENDA')).toEqual(['levantar', 'registrar']);
     expect(decisionesDelTipoDePrenda('BLINDAJE')).toBeNull();
     expect(decisionesDelTipoDePrenda('TRASPASO_STANDARD')).toBeNull();
+  });
+
+  // HU #12131 — variante de copy del aviso "RUNT sin gravamen" para los dos tipos prendarios de
+  // una sola acción (Inscribir / Levantar Prenda). Los tipos de dos decisiones y los no prendarios
+  // no tienen una única lectura que mostrar: quedan fuera del alcance de esta HU.
+  it('runtAvisoGravamenVariant — solo resuelve variante en los tipos de una sola decisión de prenda', () => {
+    expect(runtAvisoGravamenVariant('PRENDA_INSCRIPCION')).toBe('inscripcion');
+    expect(runtAvisoGravamenVariant('LEVANTAMIENTO_PRENDA')).toBe('levantamiento');
+    expect(runtAvisoGravamenVariant('LEVANTAR_INSCRIBIR_PRENDA')).toBeNull();
+    expect(runtAvisoGravamenVariant('CAMBIO_ACREEDOR')).toBeNull();
+    expect(runtAvisoGravamenVariant('BLINDAJE')).toBeNull();
+    expect(runtAvisoGravamenVariant('TRASPASO_STANDARD')).toBeNull();
+    expect(runtAvisoGravamenVariant(null)).toBeNull();
   });
 });
 

@@ -31,6 +31,7 @@ import {
   modalidadPorEntrada,
   modalidadPorPartes,
   rolesDeActores,
+  runtAvisoGravamenVariant,
   transformacionDelTipo,
   type CapacidadesEfectivas,
 } from './wizardCapabilities';
@@ -4672,6 +4673,12 @@ function StepBody({
                         onDocumentGateChange={onPrendaDocumentGateChange}
                         runtHasGravamen={gravamen?.status === 'warn'}
                         runtGravamenMessage={gravamen?.message}
+                        // HU #12131 (AC1/AC2) — el check ya corrió (existe en la respuesta) y no
+                        // encontró gravamen: `runtAvisoGravamenVariant` solo devuelve variante para
+                        // los tipos de UNA sola decisión de prenda (Inscribir/Levantar), que es
+                        // justo el alcance de esta HU.
+                        runtGravamenChecked={gravamen !== undefined}
+                        runtAvisoVariant={runtAvisoGravamenVariant(tipoCodigo)}
                         hideHeader
                       />
                     </WizardAccordion>
