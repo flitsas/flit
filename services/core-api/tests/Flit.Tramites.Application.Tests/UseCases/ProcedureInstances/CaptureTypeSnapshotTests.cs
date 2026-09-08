@@ -196,7 +196,7 @@ public sealed class CaptureTypeSnapshotTests
         typeRepo.GetByIdAsync(type.Id, ct).Returns(type);
         typeRepo.GetByIdWithDetailsAsync(type.Id, ct).Returns(type);
         instanceRepo.AddWithUniqueReferenceAsync(
-                Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+                Arg.Any<ProcedureInstance>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 call.Arg<ProcedureInstance>().ReferenceNumber = "TRM-2026-000001";

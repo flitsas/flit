@@ -120,7 +120,6 @@ public sealed class CreateProcedureInstanceHandler(
         }
 
         var now = DateTimeOffset.UtcNow;
-        var year = now.Year;
 
         var instance = new ProcedureInstance
         {
@@ -131,7 +130,10 @@ public sealed class CreateProcedureInstanceHandler(
             // la navegación al tipo aquí: de ella dependen Family/TypeCode/TypeName, que los pasos
             // posteriores de la creación (snapshot, field values, preflight) ya consultan.
             ProcedureType = procedureType,
-            ReferenceNumber = string.Empty, // generado de forma resiliente en el repo (retry ante colisión)
+            // HU #12151 — lo asigna el DEFAULT de la columna (secuencia global). Se deja en
+            // string.Empty porque la propiedad no es anulable; EF tiene la columna marcada como
+            // BeforeSaveBehavior.Ignore, así que NO la manda en el INSERT y la lee de vuelta.
+            ReferenceNumber = string.Empty,
             Status = TramiteEstado.Borrador,
             TransitOfficeId = request.TransitOfficeId,
             CreatedByUserId = request.CreatedByUserId,
@@ -154,7 +156,7 @@ public sealed class CreateProcedureInstanceHandler(
             ChangedBy = request.CreatedByUserId
         });
 
-        var outcome = await repo.AddWithUniqueReferenceAsync(instance, year, ct);
+        var outcome = await repo.AddWithUniqueReferenceAsync(instance, ct);
         if (outcome == AddProcedureInstanceOutcome.ReferenceConflict)
             return (null, "reference_conflict");
         if (outcome == AddProcedureInstanceOutcome.ReferencedEntityMissing)

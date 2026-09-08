@@ -321,6 +321,33 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
     }
 
     [Theory]
+    [InlineData(SortDirection.Ascending, new[] { "2", "9", "10", "100", "1467" })]
+    [InlineData(SortDirection.Descending, new[] { "1467", "100", "10", "9", "2" })]
+    public async Task OrdenaPorRadicadoDeFormaNumerica_NoAlfabetica(
+        SortDirection direction, string[] ordenEsperado)
+    {
+        // HU #12153 — el radicado es un número guardado como texto. Ordenado como texto daría
+        // 10, 100, 1467, 2, 9: el trámite más reciente aparecería en mitad de la lista. Antes
+        // coincidía con el orden correcto por accidente, porque TRM-2026-000123 tenía ancho fijo.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext($"radicado-num-{direction}");
+        db.ProcedureInstances.AddRange(
+            Instancia(TenantId, "100"),
+            Instancia(TenantId, "9"),
+            Instancia(TenantId, "1467"),
+            Instancia(TenantId, "2"),
+            Instancia(TenantId, "10"));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, _) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20, new ProcedureInstanceListFilter(),
+            ProcedureInstanceSortBy.Radicado, direction, ct);
+
+        items.Select(i => i.ReferenceNumber).Should().ContainInOrder(ordenEsperado);
+    }
+
+    [Theory]
     [InlineData(SortDirection.Ascending, new[] { "R2", "R1", "R3" })]
     [InlineData(SortDirection.Descending, new[] { "R3", "R1", "R2" })]
     public async Task OrdenaPorOrganismo_AunqueElNombreViveEnFieldValues(

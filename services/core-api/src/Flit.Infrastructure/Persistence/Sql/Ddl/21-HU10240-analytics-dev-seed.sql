@@ -6,7 +6,7 @@
 --       DEV_TENANT_ID = 11111111-1111-1111-1111-111111111111
 --       DEV_USER_ID   = 22222222-2222-2222-2222-222222222222
 -- Idempotente:
---   · instancias  → ON CONFLICT (tenant_id, reference_number) DO NOTHING
+--   · instancias  → ON CONFLICT (id) DO NOTHING (id determinista, ver más abajo)
 --   · historial   → WHERE NOT EXISTS por (instancia, to_status)
 --   · agregados   → la función hace upsert (ON CONFLICT DO UPDATE)
 -- Re-ejecutable sin duplicar filas.
@@ -64,13 +64,25 @@ combos AS (
     CROSS JOIN variants v
     CROSS JOIN LATERAL generate_series(1, v.n_copies) AS c(copy)
 )
+-- HU #12151 — el radicado ya no lo escribe el seed: lo asigna el DEFAULT de la columna
+-- (secuencia global), y un valor con prefijo violaría ck_procedure_instances_reference_numerico.
+-- Eso deja al seed sin sus dos apoyos, y los dos los recupera el ID, que pasa a ser DETERMINISTA
+-- y AUTOIDENTIFICABLE — se construye con el prefijo fijo 5eeda01c-:
+--   · idempotencia      → ON CONFLICT (id) DO NOTHING.
+--   · «esta fila es mía» → id::text LIKE '5eeda01c-%', que reemplaza al viejo LIKE 'SEED-ANL-%'.
+-- Se resuelve con el id y NO con una columna marcadora a propósito: cualquier columna añadida
+-- después (origin, external_ref…) todavía no existe en este punto de la cadena de migraciones, y
+-- usarla revienta el despliegue desde cero. El id existe desde el primer día.
 INSERT INTO tramites.procedure_instances
     (id, tenant_id, procedure_type_id, reference_number, status,
      submitted_at, completed_at, created_by_user_id, created_at)
-SELECT uuidv7(),
+SELECT ('5eeda01c-0000-4000-8000-' || lpad(
+            row_number() OVER (ORDER BY c.metric_date, c.fidx, c.variant, c.copy)::text,
+            12, '0'))::uuid,
        dev.tenant_id,
        c.procedure_type_id,
-       'SEED-ANL-' || to_char(c.metric_date, 'YYYYMMDD') || '-' || c.fidx || '-' || c.variant || '-' || c.copy,
+       -- Rango sintético 92xxxxxxxx: ver la nota del seed 16 sobre por qué hace falta un valor.
+       '92' || lpad(row_number() OVER (ORDER BY c.metric_date, c.fidx, c.variant, c.copy)::text, 8, '0'),
        c.status,
        CASE WHEN c.do_submit THEN (c.metric_date + time '10:00')::timestamptz END,
        CASE WHEN c.do_approve OR c.do_reject THEN (c.metric_date + time '12:00')::timestamptz END,
@@ -78,7 +90,7 @@ SELECT uuidv7(),
        (c.metric_date + time '09:00')::timestamptz
 FROM combos c
 CROSS JOIN dev
-ON CONFLICT (tenant_id, reference_number) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. Historial de estados (productividad). Derivado de las instancias sembradas.
@@ -91,7 +103,7 @@ SELECT uuidv7(), pi.tenant_id, pi.id, 'draft', 'submitted',
        COALESCE(pi.submitted_at, pi.created_at), pi.created_by_user_id
 FROM tramites.procedure_instances pi
 WHERE pi.tenant_id = '11111111-1111-1111-1111-111111111111'
-  AND pi.reference_number LIKE 'SEED-ANL-%'
+  AND pi.id::text LIKE '5eeda01c-%'
   AND pi.status IN ('submitted', 'in_review', 'approved_ot', 'rejected_ot')
   AND NOT EXISTS (
       SELECT 1 FROM tramites.procedure_instance_status_history h
@@ -105,7 +117,7 @@ SELECT uuidv7(), pi.tenant_id, pi.id, 'in_review', 'approved_ot',
        COALESCE(pi.completed_at, pi.created_at), pi.created_by_user_id
 FROM tramites.procedure_instances pi
 WHERE pi.tenant_id = '11111111-1111-1111-1111-111111111111'
-  AND pi.reference_number LIKE 'SEED-ANL-%'
+  AND pi.id::text LIKE '5eeda01c-%'
   AND pi.status = 'approved_ot'
   AND NOT EXISTS (
       SELECT 1 FROM tramites.procedure_instance_status_history h
@@ -119,7 +131,7 @@ SELECT uuidv7(), pi.tenant_id, pi.id, 'in_review', 'rejected_ot',
        COALESCE(pi.completed_at, pi.created_at), pi.created_by_user_id
 FROM tramites.procedure_instances pi
 WHERE pi.tenant_id = '11111111-1111-1111-1111-111111111111'
-  AND pi.reference_number LIKE 'SEED-ANL-%'
+  AND pi.id::text LIKE '5eeda01c-%'
   AND pi.status = 'rejected_ot'
   AND NOT EXISTS (
       SELECT 1 FROM tramites.procedure_instance_status_history h

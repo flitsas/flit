@@ -1,4 +1,3 @@
-using System.Globalization;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
@@ -18,7 +17,6 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedureInstanceRepository
 {
     private const string ReferenceUniqueConstraint = "uq_procedure_instances_tenant_reference";
-    private const int MaxReferenceRetries = 5;
     public Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.ProcedureType)
@@ -1421,54 +1419,35 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstances
             .CountAsync(x => x.TenantId == tenantId && x.CreatedAt.Year == year, ct);
 
-    public async Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, int year, CancellationToken ct)
+    public async Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, CancellationToken ct)
     {
         await db.ProcedureInstances.AddAsync(instance, ct);
 
-        for (var attempt = 0; attempt < MaxReferenceRetries; attempt++)
+        try
         {
-            instance.ReferenceNumber = $"TRM-{year}-{await NextSeqAsync(instance.TenantId, year, ct):D6}";
-            try
-            {
-                await db.SaveChangesAsync(ct);
-                return AddProcedureInstanceOutcome.Created;
-            }
-            catch (DbUpdateException ex) when (IsReferenceUniqueViolation(ex))
-            {
-                // Colisión de reference_number bajo concurrencia: regenera el siguiente seq y reintenta.
-                // EF deja la entidad marcada como Added tras el fallo, así que el siguiente SaveChanges
-                // reintenta el mismo insert con la nueva referencia.
-            }
-            catch (DbUpdateException ex) when (IsForeignKeyViolation(ex))
-            {
-                // tenant_id / created_by_user_id / procedure_type_id inexistente: no tiene sentido
-                // reintentar. Se traduce a 422 en el handler/endpoint (antes burbujeaba como 500).
-                return AddProcedureInstanceOutcome.ReferencedEntityMissing;
-            }
+            // HU #12151 — aquí ya no se calcula ningún número. El radicado lo asigna el DEFAULT de
+            // la columna (una SEQUENCE), que es atómico: no hay carrera que perder y por tanto no
+            // hay nada que reintentar. Antes esto era un MAX(seq)+1 que traía a memoria todas las
+            // referencias del tenant y reintentaba hasta 5 veces ante colisión.
+            await db.SaveChangesAsync(ct);
+            return AddProcedureInstanceOutcome.Created;
         }
-
-        return AddProcedureInstanceOutcome.ReferenceConflict;
+        catch (DbUpdateException ex) when (IsReferenceUniqueViolation(ex))
+        {
+            // Con la secuencia esto ya no debería ocurrir nunca. Se conserva el caso porque el
+            // camino 409 sigue existiendo en el endpoint y porque un INSERT que fije el radicado a
+            // mano (fuera de esta ruta) seguiría pudiendo chocar. Sin reintento: reintentar el mismo
+            // valor daría el mismo choque.
+            return AddProcedureInstanceOutcome.ReferenceConflict;
+        }
+        catch (DbUpdateException ex) when (IsForeignKeyViolation(ex))
+        {
+            // tenant_id / created_by_user_id / procedure_type_id inexistente: se traduce a 422 en el
+            // handler/endpoint (antes burbujeaba como 500).
+            return AddProcedureInstanceOutcome.ReferencedEntityMissing;
+        }
     }
 
-    /// <summary>MAX(seq) + 1 por (tenant, year) parseando el sufijo D6 de las referencias existentes.</summary>
-    private async Task<int> NextSeqAsync(Guid tenantId, int year, CancellationToken ct)
-    {
-        var prefix = $"TRM-{year}-";
-        var references = await db.ProcedureInstances
-            .Where(x => x.TenantId == tenantId && x.ReferenceNumber.StartsWith(prefix))
-            .Select(x => x.ReferenceNumber)
-            .ToListAsync(ct);
-
-        var max = 0;
-        foreach (var reference in references)
-        {
-            var suffix = reference[prefix.Length..];
-            if (int.TryParse(suffix, NumberStyles.None, CultureInfo.InvariantCulture, out var seq) && seq > max)
-                max = seq;
-        }
-
-        return max + 1;
-    }
 
     private static bool IsReferenceUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
@@ -2338,9 +2317,23 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     .ThenByDescending(x => x.Id)
                 : query.OrderBy(x => db.Users.Where(u => u.Id == x.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault())
                     .ThenBy(x => x.Id),
+            // HU #12153 — el radicado es un número guardado como texto, así que ordenarlo como
+            // texto da 1, 10, 100, 2. Antes coincidía con el orden correcto por accidente, porque
+            // TRM-2026-000123 era de ancho fijo con ceros a la izquierda.
+            //
+            // Se ordena por (longitud, texto) y NO con un cast a bigint: sobre enteros sin ceros a
+            // la izquierda las dos ordenaciones son idénticas —verificado fila a fila sobre 967
+            // trámites reales, cero discrepancias— y esta no puede fallar en ejecución ni obliga a
+            // un índice de expresión con cast, que no se puede crear en la misma transacción que
+            // la renumeración. El invariante lo garantiza ck_procedure_instances_reference_numerico
+            // ('^[1-9][0-9]*$'), y lo apoya ix_procedure_instances_reference_orden.
             ProcedureInstanceSortBy.Radicado => descending
-                ? query.OrderByDescending(x => x.ReferenceNumber).ThenByDescending(x => x.Id)
-                : query.OrderBy(x => x.ReferenceNumber).ThenBy(x => x.Id),
+                ? query.OrderByDescending(x => x.ReferenceNumber.Length)
+                       .ThenByDescending(x => x.ReferenceNumber)
+                       .ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.ReferenceNumber.Length)
+                       .ThenBy(x => x.ReferenceNumber)
+                       .ThenBy(x => x.Id),
             ProcedureInstanceSortBy.Estado => descending
                 ? query.OrderByDescending(x => x.Status).ThenByDescending(x => x.Id)
                 : query.OrderBy(x => x.Status).ThenBy(x => x.Id),

@@ -65,7 +65,9 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // El piso lo manda la línea más larga que apila, "Actualización: 2026/08/27": ~158px de texto
   // + los 32px de padding del `<td>`. Con 190px se cortaba a "Actualización: 2026/08…" — una
   // fecha a medias no dice nada, y a diferencia de un nombre no tiene dónde partirse bien.
-  { key: 'radicado', label: 'Radicado', minPx: 210, group: GRUPO_BASE },
+  // HU #12154 — el radicado pasa de TRM-2026-000123 a un numero pelado, asi que la columna
+  // deja de necesitar 210px. Dejarlos era regalar ancho en una tabla que va justa.
+  { key: 'radicado', label: 'Radicado', minPx: 120, group: GRUPO_BASE },
   // Vehículo = placa + VIN + marca/línea en UNA celda. Los tres identifican el mismo objeto y el
   // gestor los lee juntos; repartidos en tres columnas, la placa quedaba a dos columnas del VIN y
   // había que barrer la fila a lo ancho para reconocer un vehículo.
@@ -306,8 +308,10 @@ export interface TramitesExportField {
   /**
    * Cómo se LEE el sentido del orden en el desplegable de la cabecera. Una fecha ascendente no es
    * «A-Z», es «más antigua primero»: etiquetar las dos igual obliga a adivinar qué hace la flecha.
+   * Desde la HU #12154 hay un tercer caso: el radicado es un NÚMERO, y «A-Z» sobre un número no
+   * significa nada — se ordena de menor a mayor, no alfabéticamente.
    */
-  sortKind?: 'texto' | 'fecha';
+  sortKind?: 'texto' | 'fecha' | 'numero';
 }
 
 /** Texto para Excel: lo que la tabla pinta como «—» aquí es celda vacía, no un guion. */
@@ -395,7 +399,13 @@ function apilado(campo: TramitesExportField, ownedBy: string): TramitesExportFie
  */
 const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   radicado: [
-    { ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 20), sort: 'radicado' },
+    // Ancho de la columna en el .xlsx. La celda va como TEXTO a proposito: como numero, Excel
+    // le mete separador de miles (4.571) y deja de leerse como un identificador.
+    {
+      ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 12),
+      sort: 'radicado',
+      sortKind: 'numero',
+    },
     apilado(CAMPO_FECHA_CREACION, 'fechaCreacion'),
     apilado(CAMPO_FECHA_ACTUALIZACION, 'fechaActualizacion'),
   ],
@@ -471,7 +481,7 @@ export interface TramitesSortOption {
   id: string;
   label: string;
   sort: string;
-  kind: 'texto' | 'fecha';
+  kind: 'texto' | 'fecha' | 'numero';
 }
 
 /**

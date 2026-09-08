@@ -53,9 +53,13 @@ public static class TransferMapper
             Id = instanceId,
             TenantId = context.TenantId,
             ProcedureTypeId = context.ProcedureTypeId,
-            // Prefijo propio: nunca colisiona con el consecutivo TRM-{año}-{n} que genera la app
-            // y deja evidente, a simple vista, que el trámite vino de la migración.
-            ReferenceNumber = $"MIG-TR-{record.Id.ToString(CultureInfo.InvariantCulture)}",
+            // HU #12151 — el radicado ya no lo fija el migrador: lo asigna el DEFAULT de la
+            // columna (secuencia global), y un valor con prefijo violaría
+            // ck_procedure_instances_reference_numerico. El prefijo MIG- era trazabilidad
+            // DUPLICADA: el id de V1 ya vive en migration.migration_map y el trámite queda
+            // marcado con is_migrated. Consecuencia asumida: un trámite migrado deja de
+            // distinguirse a simple vista en el listado; si hiciera falta, se marca en la UI
+            // con is_migrated, nunca metiéndole letras al identificador.
             // Se inserta en borrador a propósito: el trigger de inmutabilidad solo permite
             // escribir field_values mientras el padre esté en borrador. El estado real se
             // aplica al final (ver ProcedureInstanceLoader).
