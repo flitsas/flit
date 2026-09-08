@@ -9,6 +9,7 @@ import { Tramites } from "@/components/atom/modules/Tramites";
 import { Reportes } from "@/components/atom/modules/Reportes";
 import { ReportesDetallados } from "@/components/atom/modules/ReportesDetallados";
 import { Validaciones } from "@/components/atom/modules/Validaciones";
+import { HistorialPlaca } from "@/components/atom/modules/HistorialPlaca";
 import { Usuarios } from "@/components/atom/modules/Usuarios";
 import { Ayuda } from "@/components/atom/modules/Ayuda";
 import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
@@ -168,6 +169,12 @@ function HomeContent() {
       {moduleReady && module === "reportes" && <Reportes />}
       {moduleReady && module === "reportes-detallados" && <ReportesDetallados />}
       {moduleReady && module === "validaciones" && <Validaciones />}
+      {/* HU #12194 — el gate real es RBAC (`historial-placa` en accessibleCodes, ya aplicado por
+          resolveNavigableModuleIds); `isSuperAdmin` aquí solo decide si se pinta la columna de
+          compañía, porque solo él recibe filas de más de una. */}
+      {moduleReady && module === "historial-placa" && (
+        <HistorialPlaca isSuperAdmin={isSuperAdminUser} />
+      )}
       {moduleReady && module === "usuarios" && <Usuarios />}
       {moduleReady && module === "ayuda" && <Ayuda />}
       {moduleReady && module === "rbac" && <RbacAdmin />}

@@ -77,6 +77,8 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   tramites: "tramites",
   // Módulo id sigue siendo `validaciones` en la SPA; el label visible es "Identidad".
   validaciones: "identidad",
+  // HU #12194 — el historial por placa es una lectura del universo de trámites: cuelga de Trámites.
+  "historial-placa": "tramites",
   reportes: "reportes",
   "reportes-detallados": "reportes",
   usuarios: "usuarios",

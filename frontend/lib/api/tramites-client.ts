@@ -498,6 +498,36 @@ async function searchInstances(
   return { items, total: res?.total ?? items.length };
 }
 
+/**
+ * HU #12194 — historial operativo de una placa.
+ *
+ * <p>Endpoint propio y no `listInstances({ placa })` porque el alcance NO es el mismo: el historial
+ * lo resuelve el servidor por rol (SuperAdmin ve la placa en todas las compañías; el resto solo en
+ * la suya) y fija el orden cronológico descendente. El cliente no manda `sortBy` ni tenant: si los
+ * mandara, estaría reproduciendo una decisión que ya es del servidor y podría divergir de ella.</p>
+ *
+ * <p>Una placa sin trámites responde `200` con lista vacía, nunca `404`: el vacío es un resultado,
+ * no un error, y quien llama debe pintarlo como estado vacío.</p>
+ */
+async function listPlateHistory(params: {
+  placa: string;
+  skip?: number;
+  take?: number;
+}): Promise<{ items: InstanceSummary[]; total: number }> {
+  const qs = new URLSearchParams();
+  // La normalización canónica la hace el servidor (Trim + upper); aquí solo se evita mandar
+  // espacios de sobra que ensucian la URL.
+  qs.set('placa', params.placa.trim());
+  if (params.skip !== undefined) qs.set('skip', String(params.skip));
+  if (params.take !== undefined) qs.set('take', String(params.take));
+
+  const res = await request<InstancesResponse>(
+    `/api/v1/tramites/instances/plate-history?${qs.toString()}`,
+  );
+  const items = normalizeInstances(res?.items);
+  return { items, total: res?.total ?? items.length };
+}
+
 async function listInstancesPage(
   params: ListInstancesParams,
 ): Promise<{ items: InstanceSummary[]; total: number }> {
@@ -591,6 +621,15 @@ export const tramitesClient = {
    * respaldo es el tamaño de la página, que al menos nunca promete filas que no existen.</p>
    */
   listInstancesPage: (params: ListInstancesParams = {}) => listInstancesPage(params),
+
+  /**
+   * HU #12194 — historial de trámites de una placa, paginado y con el `total` del universo.
+   *
+   * <p>El alcance por compañía y el orden (createdAt desc) los decide el servidor según el rol de
+   * quien consulta; por eso la firma solo admite placa y paginación.</p>
+   */
+  listPlateHistory: (params: { placa: string; skip?: number; take?: number }) =>
+    listPlateHistory(params),
 
   /**
    * HU #12106 — el listado por POST, que es el ÚNICO camino que admite condiciones.
