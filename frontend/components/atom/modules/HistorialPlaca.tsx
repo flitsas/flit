@@ -17,7 +17,12 @@
 //  3. HU #12195 — el detalle de cada fila NO es un modal propio: se reutiliza el MISMO
 //     `TramiteDetalleModal` del módulo de Trámites, en modo `readOnly`. Clonarlo aquí crearía dos
 //     detalles del mismo trámite que se separarían al primer cambio funcional.
-import { useCallback, useMemo, useState } from "react";
+//  4. HU #12196 — `initialPlaca` permite entrar con una placa ya consultada (`?m=historial-placa
+//     &placa=ABC123`), que es como se llega desde una fila del listado de trámites. La consulta la
+//     dispara ESTE módulo con el mismo `load` del formulario: el llamador no trae datos, solo la
+//     placa, así que entrar por el atajo y entrar escribiéndola producen exactamente la misma
+//     pantalla — que es el criterio del PO.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, History, Search } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -53,13 +58,25 @@ function formatDateTime(iso: string | null | undefined): string {
   return date.toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
 }
 
+/** Forma canónica de la placa en el cliente: sin espacios y en mayúscula (el servidor repite). */
+function normalizarPlaca(value: string | null | undefined): string {
+  return (value ?? "").trim().toUpperCase();
+}
+
 function textoOGuion(value: string | null | undefined): string {
   const trimmed = value?.trim();
   return trimmed ? trimmed : "—";
 }
 
-export function HistorialPlaca({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
-  const [placaInput, setPlacaInput] = useState("");
+export function HistorialPlaca({
+  isSuperAdmin = false,
+  initialPlaca = null,
+}: {
+  isSuperAdmin?: boolean;
+  /** Placa precargada desde otra pantalla (HU #12196). `null` = entrada normal, sin consulta. */
+  initialPlaca?: string | null;
+}) {
+  const [placaInput, setPlacaInput] = useState(() => normalizarPlaca(initialPlaca));
   const [appliedPlaca, setAppliedPlaca] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -70,7 +87,7 @@ export function HistorialPlaca({ isSuperAdmin = false }: { isSuperAdmin?: boolea
   const [detalle, setDetalle] = useState<InstanceSummary | null>(null);
 
   const load = useCallback(async (placa: string, pageToLoad: number) => {
-    const normalized = placa.trim().toUpperCase();
+    const normalized = normalizarPlaca(placa);
     // Placa vacía: no se consulta al servidor. Volver a `idle` es deliberado — nadie ha buscado
     // nada, así que anunciar "no hay resultados" sería responder una pregunta que no se hizo.
     if (!normalized) {
@@ -113,6 +130,18 @@ export function HistorialPlaca({ isSuperAdmin = false }: { isSuperAdmin?: boolea
     event.preventDefault();
     void load(placaInput, 1);
   };
+
+  // HU #12196 — entrada con placa precargada. El `ref` guarda la última placa auto-consultada para
+  // no repetir la petición en cada render, y a la vez permitir que llegar OTRA vez con una placa
+  // distinta (segundo atajo, sin desmontar el módulo) vuelva a consultar.
+  const autoConsultada = useRef<string | null>(null);
+  useEffect(() => {
+    const normalized = normalizarPlaca(initialPlaca);
+    if (!normalized || autoConsultada.current === normalized) return;
+    autoConsultada.current = normalized;
+    setPlacaInput(normalized);
+    void load(normalized, 1);
+  }, [initialPlaca, load]);
 
   const columns: DataTableColumn<InstanceSummary>[] = useMemo(() => {
     const base: DataTableColumn<InstanceSummary>[] = [

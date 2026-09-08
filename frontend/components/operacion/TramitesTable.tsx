@@ -14,6 +14,7 @@ import {
   FileCheck,
   FileStack,
   FileText,
+  History,
   Pause,
   Play,
   Star,
@@ -57,6 +58,7 @@ import {
   vehiculo,
 } from '@/lib/tramites/tramites-row-labels';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
+import { useNavigableModules } from '@/hooks/useNavigableModules';
 import { controlCls } from './tramites-control-styles';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
@@ -399,6 +401,33 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           : `/tramites/${id}`,
       ),
     [router, isAdmin],
+  );
+  /**
+   * HU #12196 — atajo "Ver historial de la placa" desde la fila. El gate NO es un permiso nuevo ni
+   * una lectura propia del JWT: es el MISMO catálogo de módulos navegables que pinta el dock y que
+   * decide si `?m=historial-placa` se abre o rebota al dashboard. Si aquí se usara otro criterio,
+   * la fila podría ofrecer un atajo que el gate de la SPA rechaza acto seguido.
+   */
+  const { ids: navigableModuleIds } = useNavigableModules();
+  const puedeVerHistorialPlaca = navigableModuleIds.includes('historial-placa');
+  /**
+   * Abre el módulo dedicado con la placa precargada, en vez de repintar la tabla del historial
+   * dentro del listado: el PO pidió que la información sea LA MISMA que la del módulo, y dos
+   * superficies que muestran lo mismo se separan en cuanto una de las dos cambie.
+   *
+   * SIN tenant, deliberadamente, y aunque la fila sepa el suyo: el alcance del historial lo decide
+   * el servidor por ROL —el SuperAdmin ve la placa en todas las compañías— así que acotarlo al
+   * tenant de la fila le escondería justo los trámites de otras empresas, que es el caso que motiva
+   * el módulo. (Distinto del detalle del trámite: ese sí es un registro concreto de una compañía
+   * concreta y por eso `TramiteDetalleModal` sí recibe `tenantId`.)
+   */
+  const verHistorialPlaca = useCallback(
+    (placa: string) => {
+      const normalizada = placa.trim().toUpperCase();
+      if (!normalizada) return;
+      router.push(`/?m=historial-placa&placa=${encodeURIComponent(normalizada)}`);
+    },
+    [router],
   );
   /** Click en badge Estado → modal de línea de tiempo del trámite (todas las modalidades). */
   const [trackingTramite, setTrackingTramite] = useState<InstanceSummary | null>(null);
@@ -1198,6 +1227,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           onOpenDetalle={setDetalleTramite}
           onOpenTrackingTramite={setTrackingTramite}
           onOpenIdentidadTracking={setIdentidadTracking}
+          puedeVerHistorialPlaca={puedeVerHistorialPlaca}
+          onVerHistorialPlaca={verHistorialPlaca}
         />
       </div>
 
@@ -1543,6 +1574,8 @@ function TableBody({
   onOpenDetalle,
   onOpenTrackingTramite,
   onOpenIdentidadTracking,
+  puedeVerHistorialPlaca,
+  onVerHistorialPlaca,
 }: {
   loading: boolean;
   error: string | null;
@@ -1583,6 +1616,11 @@ function TableBody({
     parte: BiometricParte;
     rotulo: string;
   }) => void;
+  /** HU #12196 — el usuario tiene acceso al módulo de historial por placa (gate RBAC del dock). */
+  puedeVerHistorialPlaca: boolean;
+  /** HU #12196 — abre el historial de esa placa. Recibe la placa, no la fila: el historial NO se
+   *  acota al trámite ni a su compañía. */
+  onVerHistorialPlaca: (placa: string) => void;
 }) {
   if (loading) {
     // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
@@ -1755,6 +1793,8 @@ function TableBody({
                 onOpenDetalle={onOpenDetalle}
                 onOpenTrackingTramite={onOpenTrackingTramite}
                 onOpenIdentidadTracking={onOpenIdentidadTracking}
+                puedeVerHistorialPlaca={puedeVerHistorialPlaca}
+                onVerHistorialPlaca={onVerHistorialPlaca}
               />
             ))}
           </tbody>
@@ -1868,6 +1908,8 @@ function TramiteRow({
   onOpenDetalle,
   onOpenTrackingTramite,
   onOpenIdentidadTracking,
+  puedeVerHistorialPlaca,
+  onVerHistorialPlaca,
 }: {
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
@@ -1893,10 +1935,17 @@ function TramiteRow({
     parte: BiometricParte;
     rotulo: string;
   }) => void;
+  /** HU #12196 — el usuario tiene acceso al módulo de historial por placa (gate RBAC del dock). */
+  puedeVerHistorialPlaca: boolean;
+  /** HU #12196 — abre el historial de esa placa. Recibe la placa, no la fila: el historial NO se
+   *  acota al trámite ni a su compañía. */
+  onVerHistorialPlaca: (placa: string) => void;
 }) {
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
   const consolidadoDisponible = !!item.consolidadoAttachmentId;
+  // HU #12196 — placa de la fila, normalizada. Vacía en borradores que aún no la tienen asignada.
+  const placaDeLaFila = (item.placa ?? '').trim().toUpperCase();
   // ICT (paridad v1) — solo los borradores originados por ICT son pausables/seleccionables.
   const isIctDraft = item.origin === 'ict' && item.estado === 'borrador';
   // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
@@ -1955,6 +2004,26 @@ function TramiteRow({
       icon: FileText,
       onSelect: () => onVerDocumentos(item),
     },
+    // HU #12196 — atajo al historial de ESTA placa. Se OMITE por completo si el usuario no tiene
+    // el módulo (`historial-placa` fuera de sus módulos navegables): enseñar un destino al que el
+    // gate va a rebotar no informa de nada, solo promete acceso.
+    //
+    // Con permiso pero sin placa (un borrador puede no tenerla todavía) sí aparece, DESHABILITADA
+    // y con motivo: aquí el atajo no está prohibido, es que ese trámite aún no tiene por dónde
+    // consultarlo. Ocultarlo dejaría al gestor buscando una acción que en otras filas sí está;
+    // navegar con la placa vacía abriría el módulo a preguntar por nada.
+    ...(puedeVerHistorialPlaca
+      ? [
+          {
+            key: 'historial-placa',
+            label: 'Ver historial de la placa',
+            icon: History,
+            disabled: !placaDeLaFila,
+            disabledReason: 'Este trámite todavía no tiene placa asignada.',
+            onSelect: () => onVerHistorialPlaca(placaDeLaFila),
+          },
+        ]
+      : []),
     // HU #11055 — el negocio pidió la acción "sólo visible si ya se encuentra generado": se OMITE
     // cuando no hay consolidado, en vez de mostrarse deshabilitada. Así nunca dispara una generación.
     ...(consolidadoDisponible

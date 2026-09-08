@@ -172,8 +172,10 @@ function HomeContent() {
       {/* HU #12194 — el gate real es RBAC (`historial-placa` en accessibleCodes, ya aplicado por
           resolveNavigableModuleIds); `isSuperAdmin` aquí solo decide si se pinta la columna de
           compañía, porque solo él recibe filas de más de una. */}
+      {/* HU #12196 — `placa` en la URL precarga la consulta: es como entra el atajo "Ver historial
+          de la placa" del listado de trámites. Mismo patrón que `log-qx` con `instanceId`. */}
       {moduleReady && module === "historial-placa" && (
-        <HistorialPlaca isSuperAdmin={isSuperAdminUser} />
+        <HistorialPlaca isSuperAdmin={isSuperAdminUser} initialPlaca={params.get("placa")} />
       )}
       {moduleReady && module === "usuarios" && <Usuarios />}
       {moduleReady && module === "ayuda" && <Ayuda />}
