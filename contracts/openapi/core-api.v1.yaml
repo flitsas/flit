@@ -1159,6 +1159,48 @@ paths:
         "404":
           description: Impronta firmada no encontrada (not_found).
 
+  /api/v1/admin/ot/imprint-signatures/{id}/preview-url:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtGetImprintSignaturePreviewUrl
+      summary: URL de previsualización del PDF firmado de impronta (HU #12173)
+      description: >
+        Emite una URL presignada (Content-Disposition inline) del PDF firmado.
+        Prefiere signed_storage_path; si falta, usa el adjunto vigente (attachmentId).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de tramites.vehicle_signature_imprints.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Obligatorio para SuperAdmin — tenant OT del hub. ot_admin ignora el parámetro.
+      responses:
+        "200":
+          description: URL de previsualización.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expiresAt]
+                properties:
+                  url: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+        "404":
+          description: Impronta no encontrada o PDF no disponible.
+        "503":
+          description: Storage no disponible.
+
   /api/v1/admin/transit-office-tenants/index:
     get:
       tags: [Admin · Tenants OT]

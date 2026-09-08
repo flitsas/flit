@@ -285,6 +285,7 @@ public static class DependencyInjection
         // HU #12148 — validación OT de firma digital de impronta manual.
         services.AddScoped<ListImprintSignaturesByPlacaHandler>();
         services.AddScoped<ValidateImprintSignatureHandler>();
+        services.AddScoped<GetImprintSignaturePreviewUrlHandler>();
 
         return services;
     }

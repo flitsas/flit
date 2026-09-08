@@ -469,6 +469,16 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/imprint-signatures/{id:guid}/preview-url", GetImprintSignaturePreviewUrlAsync)
+            .WithName("AdminOtGetImprintSignaturePreviewUrl")
+            .WithSummary("URL de previsualización del PDF firmado de una impronta (HU #12173)")
+            .WithDescription("Presigned GET inline desde signed_storage_path o el adjunto vigente. No expone private_key.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status503ServiceUnavailable);
+
         return app;
     }
 
@@ -780,6 +790,34 @@ public static class AdminOtEndpoints
             failureReason = result.FailureReason,
             validatedAt = result.ValidatedAt,
         });
+    }
+
+    private static async Task<IResult> GetImprintSignaturePreviewUrlAsync(
+        HttpContext httpContext,
+        Guid id,
+        GetImprintSignaturePreviewUrlHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (_, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var (preview, error) = await handler.HandleAsync(id, cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Impronta firmada no encontrada" }),
+            "file_missing" => Results.NotFound(new { error = "PDF de impronta no disponible" }),
+            "storage_unavailable" => Results.Json(
+                new { error = "storage_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            _ => Results.Ok(new { url = preview!.Url, expiresAt = preview.ExpiresAt }),
+        };
     }
 
     private static async Task<IResult> ListWebhooksAsync(
