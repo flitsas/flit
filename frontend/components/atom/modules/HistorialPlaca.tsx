@@ -14,11 +14,15 @@
 //  2. Una placa sin trámites es un RESULTADO, no un fallo: el backend responde 200 con lista vacía
 //     y la vista lo pinta como estado vacío redactado con la placa consultada, distinto del estado
 //     inicial "aún no se ha buscado nada".
+//  3. HU #12195 — el detalle de cada fila NO es un modal propio: se reutiliza el MISMO
+//     `TramiteDetalleModal` del módulo de Trámites, en modo `readOnly`. Clonarlo aquí crearía dos
+//     detalles del mismo trámite que se separarían al primer cambio funcional.
 import { useCallback, useMemo, useState } from "react";
-import { History, Search } from "lucide-react";
+import { Eye, History, Search } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
+import { TramiteDetalleModal } from "@/components/operacion/TramiteDetalleModal";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import type { InstanceSummary } from "@/lib/api/types/procedure-runtime";
 import { estadoLabel } from "@/lib/tramites/estados";
@@ -62,6 +66,8 @@ export function HistorialPlaca({ isSuperAdmin = false }: { isSuperAdmin?: boolea
   const [rows, setRows] = useState<InstanceSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  /** Fila abierta en el detalle. `null` = modal cerrado (el modal es controlado por `open`). */
+  const [detalle, setDetalle] = useState<InstanceSummary | null>(null);
 
   const load = useCallback(async (placa: string, pageToLoad: number) => {
     const normalized = placa.trim().toUpperCase();
@@ -161,6 +167,25 @@ export function HistorialPlaca({ isSuperAdmin = false }: { isSuperAdmin?: boolea
         header: "VIN",
         cellClassName: "font-mono",
         render: (row) => textoOGuion(row.vin),
+      },
+      {
+        key: "acciones",
+        header: "Acciones",
+        align: "center",
+        render: (row) => (
+          <button
+            type="button"
+            onClick={() => setDetalle(row)}
+            // El nombre accesible lleva el radicado: en una tabla con N filas, diez botones
+            // llamados "Ver detalle" son diez destinos indistinguibles para un lector de pantalla.
+            aria-label={`Ver detalle del trámite ${row.referenceNumber ?? row.id}`}
+            title="Ver detalle del trámite"
+            data-testid={`historial-placa-ver-${row.id}`}
+            className="inline-flex items-center justify-center rounded-lg border border-[#DFE5ED] p-1.5 text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/10"
+          >
+            <Eye className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        ),
       },
     ];
 
@@ -276,7 +301,7 @@ export function HistorialPlaca({ isSuperAdmin = false }: { isSuperAdmin?: boolea
               rows={rows}
               getRowKey={(row) => row.id}
               ariaLabel={`Historial de trámites de la placa ${appliedPlaca}`}
-              minWidth={1280}
+              minWidth={1400}
               pagination={{
                 page,
                 pageSize: PAGE_SIZE,
@@ -287,6 +312,19 @@ export function HistorialPlaca({ isSuperAdmin = false }: { isSuperAdmin?: boolea
           </div>
         </UiStateBoundary>
       )}
+
+      {/* Mismo modal «Ver» del módulo de Trámites, en modo consulta (decisión D3 del PO). Sin
+          `onAbrirAsistente` y con `readOnly`: desde el historial no se edita ni se transiciona el
+          trámite. `tenantId` solo viaja para SuperAdmin, que es el único que ve filas de otras
+          compañías; para el resto el backend ya resolvió el alcance por su propio tenant. */}
+      <TramiteDetalleModal
+        open={detalle !== null}
+        onClose={() => setDetalle(null)}
+        instanceId={detalle?.id ?? null}
+        tenantId={isSuperAdmin ? detalle?.tenantId : undefined}
+        item={detalle}
+        readOnly
+      />
     </div>
   );
 }
