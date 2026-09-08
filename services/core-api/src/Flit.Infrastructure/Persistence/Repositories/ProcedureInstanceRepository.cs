@@ -2006,6 +2006,39 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && fv.ValueText.ToLower().Contains(ot)));
         }
 
+        if (filter.Prioritario is { } prioritario)
+            query = query.Where(x => x.Prioritario == prioritario);
+
+        if (!string.IsNullOrWhiteSpace(filter.Busqueda))
+        {
+            // HU #12187 — el mismo alcance que tenía la búsqueda cuando se resolvía en el navegador,
+            // más el documento de las partes: radicado, placa, VIN, nombre y documento de comprador y
+            // vendedor, organismo de tránsito y razón social de la compañía.
+            //
+            // El RADICADO casa exacto y no por subcadena: es un consecutivo numérico corto desde el
+            // Feature #12150, así que buscar «1» por subcadena traería el 1, el 10, el 11 y el 100.
+            //
+            // Nombre y organismo van en minúsculas y placa/VIN en mayúsculas porque así se comparan
+            // ya en el resto de este método; el criterio no cambia por venir de la barra de búsqueda.
+            var termino = filter.Busqueda.Trim();
+            var enMinusculas = termino.ToLowerInvariant();
+            var enMayusculas = termino.ToUpperInvariant();
+
+            query = query.Where(x =>
+                x.ReferenceNumber == termino
+                || (x.Plate != null && x.Plate.ToUpper().Contains(enMayusculas))
+                || (x.Vin != null && x.Vin.ToUpper().Contains(enMayusculas))
+                || (x.CompradorNombre != null && x.CompradorNombre.ToLower().Contains(enMinusculas))
+                || (x.VendedorNombre != null && x.VendedorNombre.ToLower().Contains(enMinusculas))
+                || x.Actors.Any(a => a.DocumentNumber != null
+                    && a.DocumentNumber.ToLower().Contains(enMinusculas))
+                || x.FieldValues.Any(fv => fv.FieldKey == TransitOfficeNameFieldKey
+                    && fv.ValueText != null
+                    && fv.ValueText.ToLower().Contains(enMinusculas))
+                || db.Tenants.Any(t => t.Id == x.TenantId
+                    && t.LegalName.ToLower().Contains(enMinusculas)));
+        }
+
         if (filter.Condiciones is { Count: > 0 } condiciones)
         {
             foreach (var condicion in condiciones)

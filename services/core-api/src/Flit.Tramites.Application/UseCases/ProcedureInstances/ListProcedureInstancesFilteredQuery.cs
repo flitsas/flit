@@ -36,6 +36,12 @@ public sealed record ProcedureInstanceListRequest
     /// <summary>Código del tipo concreto de trámite, no la familia.</summary>
     public string? TipoCodigo { get; init; }
 
+    /// <summary>HU #12187 — texto libre transversal (radicado exacto; el resto por subcadena).</summary>
+    public string? Busqueda { get; init; }
+
+    /// <summary>HU #12187 — <c>true</c> = solo los marcados como prioritarios.</summary>
+    public bool? Prioritario { get; init; }
+
     /// <summary>
     /// Condiciones armadas con la gramática de Consultas (HU #12106). Llegan validadas contra
     /// <see cref="TramitesQueryFieldCatalog"/>; ver <see cref="TramitesQueryConditions"/>.
@@ -194,6 +200,8 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
             Modalidad = request.Modalidad,
             OrganismoTransito = request.OrganismoTransito,
             TipoCodigo = request.TipoCodigo,
+            Busqueda = request.Busqueda,
+            Prioritario = request.Prioritario,
             Condiciones = request.Condiciones,
         };
 
@@ -269,6 +277,11 @@ public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRep
             Modalidad = request.Modalidad,
             OrganismoTransito = request.OrganismoTransito,
             TipoCodigo = request.TipoCodigo,
+            // La búsqueda y el marcado prioritario SÍ acotan las tarjetas: si la tabla dice «3
+            // resultados» para un texto y la tarjeta de borradores dice 40, la pantalla se
+            // contradice — que es justo el defecto que esta HU corrige.
+            Busqueda = request.Busqueda,
+            Prioritario = request.Prioritario,
             // Las condiciones SÍ viajan a los conteos: la tira de KPIs habla del universo que cumple
             // los filtros. Lo único que se descarta es el estado, arriba.
             Condiciones = request.Condiciones,
