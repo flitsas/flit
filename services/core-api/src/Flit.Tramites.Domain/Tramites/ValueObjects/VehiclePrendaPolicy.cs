@@ -3,35 +3,30 @@ using Flit.Tramites.Domain.Tramites.Services;
 namespace Flit.Tramites.Domain.Tramites.ValueObjects;
 
 /// <summary>
-/// Detalle del bloqueo «no hay prenda que levantar»: viaja del preflight al endpoint, que lo traduce
-/// a las extensions RFC7807 del 422 <see cref="VehiclePrendaPolicy.ErrorCode"/>.
-/// </summary>
-public sealed record VehiclePrendaBlock(string ProcedureType);
-
-/// <summary>
-/// Precondición registral del levantamiento de prenda: no se puede levantar un gravamen que el RUNT
-/// no reporta.
+/// Precondición registral del levantamiento de prenda: el RUNT no reporta el gravamen que se
+/// pretende levantar.
 ///
-/// <para><b>Por qué es un bloqueo.</b> El trámite consiste en extinguir un gravamen existente, y el
-/// FUR lo declara como tal: marca la casilla 12 y escribe en el numeral 20 «A FAVOR DE» el acreedor
-/// del gravamen que se levanta. Sobre un vehículo sin prenda no hay acreedor que nombrar ni acto que
-/// soportar: el formulario saldría marcado y mudo, y el organismo devuelve el expediente. Además el
-/// acreedor lo PRECARGA el propio RUNT desde el gravamen reportado — sin gravamen, el gestor tendría
-/// que inventarlo.</para>
+/// <para><b>Por qué NO bloquea (HU #12131/#12129 — corrección de un bloqueo duro previo,
+/// ADR-0050).</b> La lectura original era que, sin gravamen, el FUR saldría "mudo" (sin acreedor que
+/// nombrar) y el organismo devolvería el expediente — pero el criterio de negocio es explícito: esta
+/// validación NUNCA debe cortar la radicación, solo informar y dejar que el gestor capture el
+/// acreedor/entidad manualmente (mismo mecanismo que ya existe para el caso <c>unknown</c>, ver
+/// abajo). Por eso <see cref="Evaluar"/> es un detector puro (<c>bool</c>), no algo que un endpoint
+/// pueda traducir a un 422 — a diferencia de <see cref="VehicleBodyTypePolicy"/> (que sí sigue siendo
+/// un bloqueo duro legítimo: sin carrocería previa no hay OTRO tipo de trámite al que redirigir al
+/// gestor). Esta regla es de negocio, no de ambiente: no se resuelve con
+/// <c>TramiteValidationPolicy</c>/<c>.env</c> — el código nunca ofrece la opción de bloquear.</para>
 ///
-/// <para><b>Lo que NO bloquea.</b> Que el RUNT no traiga información de gravámenes
-/// (<c>unknown</c>). Ahí no se sabe si el vehículo tiene prenda o no, y convertir un dato ausente en
-/// un trámite imposible de radicar sería castigar al gestor por una falla ajena. Mismo criterio
-/// deliberado que <see cref="VehicleBodyTypePolicy"/>.</para>
+/// <para><b>Qué SÍ hace</b>: cuando el RUNT confirma la ausencia (<c>ok</c>), se agrega un check
+/// informativo (<c>warn</c>) al semáforo del preflight, y el paso de captura de prenda del asistente
+/// (<c>PrendaForm</c>) avisa con un modal no bloqueante y habilita la captura manual.</para>
+///
+/// <para><b>Tampoco avisa</b> cuando el RUNT no trae información de gravámenes (<c>unknown</c>): ahí
+/// no se sabe si el vehículo tiene prenda o no, y no hay nada nuevo que informar sobre esa
+/// incertidumbre aquí (la ausencia de dato ya es visible en el propio check <c>gravamenes</c>).</para>
 /// </summary>
 public static class VehiclePrendaPolicy
 {
-    /// <summary>Código de error 422: el vehículo no tiene prenda que levantar.</summary>
-    public const string ErrorCode = "VEHICLE_PRENDA_MISSING";
-
-    /// <summary><c>procedureType</c> del detalle RFC7807.</summary>
-    public const string ProcedureTypeLevantamiento = "levantamiento_prenda";
-
     /// <summary>Clave del check del semáforo que reporta gravámenes y prendas.</summary>
     public const string GravamenCheckKey = "gravamenes";
 
@@ -45,19 +40,15 @@ public static class VehiclePrendaPolicy
         string.Equals(gravamenCheckStatus?.Trim(), "ok", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Resuelve el bloqueo, o <c>null</c> si el trámite puede seguir.
+    /// ¿El tipo de trámite exige gravamen previo (levantamiento) Y el RUNT confirma que no lo hay?
+    /// <c>true</c> significa "avisa" (check <c>warn</c> + modal informativo), nunca "bloquea": no
+    /// existe una variante de esta función que devuelva un código de error.
     /// </summary>
     /// <param name="procedureTypeCode">Código del tipo de trámite de la instancia.</param>
     /// <param name="gravamenCheckStatus">
     /// Estado del check <c>gravamenes</c> del semáforo; <c>null</c> si el check no llegó a emitirse.
     /// </param>
-    public static VehiclePrendaBlock? Evaluar(string? procedureTypeCode, string? gravamenCheckStatus)
-    {
-        if (!ProcedureTypeLayers.ExigePrendaPreviaEnRunt(procedureTypeCode))
-            return null;
-        if (!RuntAfirmaSinGravamen(gravamenCheckStatus))
-            return null;
-
-        return new VehiclePrendaBlock(ProcedureTypeLevantamiento);
-    }
+    public static bool Evaluar(string? procedureTypeCode, string? gravamenCheckStatus) =>
+        ProcedureTypeLayers.ExigePrendaPreviaEnRunt(procedureTypeCode)
+        && RuntAfirmaSinGravamen(gravamenCheckStatus);
 }

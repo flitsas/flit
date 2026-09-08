@@ -94,6 +94,38 @@ public sealed class FurNumeral3MarksTests
         Marks("PRENDA_INSCRIPCION", prenda: FurPrendaMarking.Constitucion).Should().Equal(11);
     }
 
+    // ── ADR-0055 (HU #12128/#12129): acción complementaria en PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
+    // Antes de esta corrección, BaseBoxes fijaba una sola casilla por CÓDIGO y el bloque dinámico
+    // excluía a estos dos tipos (`IsPrendaBase`) — con la acción complementaria activa (`Ambos`) la
+    // casilla de la familia contraria nunca se sumaba, aunque el dominio ya resolviera `Ambos`.
+
+    [Fact]
+    public void PrendaInscripcion_ConAccionComplementaria_SumaLaCasilla12()
+    {
+        Marks("PRENDA_INSCRIPCION", prenda: FurPrendaMarking.Ambos).Should().BeEquivalentTo([11, 12]);
+    }
+
+    [Fact]
+    public void LevantamientoPrenda_ConAccionComplementaria_SumaLaCasilla11()
+    {
+        Marks("LEVANTAMIENTO_PRENDA", prenda: FurPrendaMarking.Ambos).Should().BeEquivalentTo([11, 12]);
+    }
+
+    [Fact]
+    public void LevantamientoPrenda_SinAccionComplementaria_SoloSuPropiaCasilla()
+    {
+        // Regresión: sin la complementaria activa, sigue marcando solo la 12 (comportamiento previo).
+        Marks("LEVANTAMIENTO_PRENDA", prenda: FurPrendaMarking.Levantamiento).Should().Equal(12);
+    }
+
+    [Fact]
+    public void LevantarInscribirPrenda_Inactivo_MantieneLasDosCasillasFijasPorTipo()
+    {
+        // Tipo inactivo del catálogo: no pasa por RegistrarPrendaHandler, así que su `prenda` real es
+        // siempre Ninguna — sigue dependiendo de BaseBoxes, no de PermiteAccionComplementaria.
+        Marks("LEVANTAR_INSCRIBIR_PRENDA", prenda: FurPrendaMarking.Ninguna).Should().BeEquivalentTo([11, 12]);
+    }
+
     [Fact]
     public void Ambos_Une11Y12SobreTraspaso()
     {

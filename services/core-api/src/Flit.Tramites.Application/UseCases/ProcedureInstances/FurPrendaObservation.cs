@@ -47,10 +47,12 @@ public static class FurPrendaObservation
     /// </summary>
     /// <param name="levantamientoEntidad">
     /// Entidad ante la que se extinguió el gravamen. Cuando viene, el bloque de levantamiento declara
-    /// DÓNDE se hizo en vez de a favor de quién — el acreedor ya lo nombra el numeral 20 «A FAVOR DE»,
-    /// y repetirlo en el recuadro gastaba renglones sin añadir información. Solo lo captura el trámite
-    /// de levantamiento de prenda; en traspaso y matrícula llega <c>null</c> y el literal es el de
-    /// siempre, así que esos dos flujos no cambian.
+    /// ADEMÁS del beneficiario, DÓNDE se hizo — el numeral 20 «A FAVOR DE» solo tiene espacio para el
+    /// NOMBRE del acreedor (sin documento), así que el recuadro es el único lugar del FUR donde el NIT
+    /// del acreedor del levantamiento queda escrito (hallazgo QA: antes de esta corrección el bloque
+    /// se cortaba en la entidad y el NIT no aparecía en ningún sitio del formulario). Solo la captura
+    /// el trámite de levantamiento de prenda; en traspaso y matrícula llega <c>null</c> y, sin
+    /// acreedor persistido tampoco, el literal es el de siempre.
     /// </param>
     public static string? Compose(
         FurPrendaMarking marking,
@@ -69,7 +71,17 @@ public static class FurPrendaObservation
         {
             var entidad = levantamientoEntidad?.Trim();
             if (!string.IsNullOrEmpty(entidad))
-                return $"{EtiquetaLevantamientoEntidad} {entidad}";
+            {
+                var nombreLevanta = acreedorNombre?.Trim();
+                if (string.IsNullOrEmpty(nombreLevanta))
+                    return $"{EtiquetaLevantamientoEntidad} {entidad}";
+
+                var documentoLevanta = acreedorDocumento?.Trim();
+                var beneficiario = string.IsNullOrEmpty(documentoLevanta)
+                    ? nombreLevanta
+                    : $"{nombreLevanta}{SufijoDocumento} {documentoLevanta}";
+                return $"{EtiquetaLevantamientoEntidad} {entidad}, a favor de {beneficiario}";
+            }
         }
 
         var etiqueta = marking switch
@@ -89,6 +101,27 @@ public static class FurPrendaObservation
         return string.IsNullOrEmpty(documento)
             ? $"{etiqueta} {nombre}"
             : $"{etiqueta} {nombre}{SufijoDocumento} {documento}";
+    }
+
+    /// <summary>
+    /// ADR-0055 (HU #12129) — variante para DOS hechos vigentes con acreedores DISTINTOS
+    /// (constitución de un crédito nuevo + levantamiento de uno pagado — el caso real de negocio que
+    /// motiva la captura dual). El overload <see cref="Compose"/> de 4 parámetros sigue sirviendo,
+    /// sin cambios, al escenario histórico donde <c>Ambos</c> comparte un único acreedor (simulador /
+    /// dictamen art. 5.1.8, HU #11257): aquí cada familia trae el suyo, sin mezclarlos — evita que el
+    /// bloque de una familia filtre el documento del acreedor de la otra (Security, ADR-0055,
+    /// <c>@pii:medium</c> en <c>acreedor_documento</c>).
+    /// </summary>
+    public static string? ComposeDual(
+        string? acreedorNombreConstitucion,
+        string? acreedorDocumentoConstitucion,
+        string? acreedorNombreLevantamiento,
+        string? acreedorDocumentoLevantamiento,
+        string? levantamientoEntidad = null)
+    {
+        return Join(
+            Compose(FurPrendaMarking.Levantamiento, acreedorNombreLevantamiento, acreedorDocumentoLevantamiento, levantamientoEntidad),
+            Compose(FurPrendaMarking.Constitucion, acreedorNombreConstitucion, acreedorDocumentoConstitucion));
     }
 
     /// <summary>

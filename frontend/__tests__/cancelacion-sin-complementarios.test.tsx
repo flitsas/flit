@@ -132,7 +132,7 @@ beforeEach(() => {
   mocks.getPreflight.mockResolvedValue(null);
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt' });
   mocks.getCommercial.mockResolvedValue(null);
-  mocks.getPrenda.mockResolvedValue(null);
+  mocks.getPrenda.mockResolvedValue([]);
   mocks.getActors.mockResolvedValue([]);
   mocks.listVehicleServiceTypes.mockResolvedValue([]);
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });

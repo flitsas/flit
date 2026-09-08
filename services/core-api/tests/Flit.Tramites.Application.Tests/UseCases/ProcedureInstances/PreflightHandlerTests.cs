@@ -511,7 +511,7 @@ public sealed class PreflightHandlerTests
         new("gravamenes", "Gravámenes y limitaciones", status, "stub", null);
 
     /// <summary>Preflight de un tipo prendario cuyo RUNT devuelve el semáforo de gravámenes dado.</summary>
-    private async Task<string?> PreflightPrendario(
+    private async Task<(string? Error, PreflightSnapshotDto? Result)> PreflightPrendario(
         ProcedureType tipo, CancellationToken ct, params ConsultationCheck[] checks)
     {
         var instance = InstanceOf(tipo, Actor("comprador", "111"));
@@ -523,19 +523,22 @@ public sealed class PreflightHandlerTests
                 new ConsultationResult("proveedor_placa", "green", checks, []))),
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
 
-        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
-        return error;
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        return (error, result);
     }
 
     [Fact]
-    public async Task Levantamiento_RuntSinGravamen_Bloquea()
+    public async Task Levantamiento_RuntSinGravamen_NoBloqueaYAvisa()
     {
+        // HU #12131/#12129 — corrección: esto NUNCA debe bloquear, solo avisar (check warn) y dejar
+        // que el gestor capture el acreedor/entidad manualmente.
         var ct = TestContext.Current.CancellationToken;
 
-        var error = await PreflightPrendario(
+        var (error, result) = await PreflightPrendario(
             ProcedureTypeFixture.LevantamientoPrenda, ct, Check("ok"), CheckGravamenes("ok"));
 
-        error.Should().Be(VehiclePrendaPolicy.ErrorCode);
+        error.Should().BeNull();
+        result!.Checks.Should().Contain(c => c.Key == "prenda_ausente" && c.Status == "warn");
     }
 
     [Fact]
@@ -543,7 +546,7 @@ public sealed class PreflightHandlerTests
     {
         var ct = TestContext.Current.CancellationToken;
 
-        var error = await PreflightPrendario(
+        var (error, _) = await PreflightPrendario(
             ProcedureTypeFixture.LevantamientoPrenda, ct, Check("ok"), CheckGravamenes("warn"));
 
         error.Should().BeNull();
@@ -555,10 +558,13 @@ public sealed class PreflightHandlerTests
         // «No se sabe» no es «no tiene»: sin dato del proveedor no se le niega el trámite al gestor.
         var ct = TestContext.Current.CancellationToken;
 
-        var error = await PreflightPrendario(
+        var (error, result) = await PreflightPrendario(
             ProcedureTypeFixture.LevantamientoPrenda, ct, Check("ok"), CheckGravamenes("unknown"));
 
         error.Should().BeNull();
+        // Sin dato tampoco avisa: no hay nada nuevo que informar sobre una incertidumbre que el
+        // propio check "gravamenes" ya deja ver.
+        result!.Checks.Should().NotContain(c => c.Key == "prenda_ausente");
     }
 
     [Fact]
@@ -568,7 +574,7 @@ public sealed class PreflightHandlerTests
         // caso normal.
         var ct = TestContext.Current.CancellationToken;
 
-        var error = await PreflightPrendario(
+        var (error, _) = await PreflightPrendario(
             ProcedureTypeFixture.PrendaInscripcion, ct, Check("ok"), CheckGravamenes("ok"));
 
         error.Should().BeNull();

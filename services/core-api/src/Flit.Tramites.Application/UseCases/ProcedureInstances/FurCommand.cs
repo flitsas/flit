@@ -246,22 +246,46 @@ public sealed class GenerarFurHandler(
             }
         }
 
-        // HU #10601, ampliado por HU #11257 (Feature #11254) — prenda vigente: resuelve YA en el
-        // dominio (PrendaDecision.ToFurMarking) qué casilla marca el FUR: Constitucion (solicitar/
-        // registrar) → 11, Levantamiento (levantar) → 12, Ninguna (omitir/sin_prenda/sin fila) →
-        // ninguna. Antes `tienePrenda` (bool) colapsaba `levantar` al mismo `false` que "sin prenda":
-        // el generador no podía distinguirlos.
-        var prendaVigente = await prendaRepo.GetVigenteAsync(id, tenantId, ct);
-        var prendaMarking = PrendaDecision.ToFurMarking(prendaVigente?.Decision);
-        var acreedorPrenda = prendaMarking != FurPrendaMarking.Ninguna ? prendaVigente!.AcreedorNombre : null;
+        // HU #10601, ampliado por HU #11257 (Feature #11254) y por ADR-0055 (HU #12129) — TODAS las
+        // decisiones vigentes de la instancia (hasta dos desde HU #12128, una por AccionFamilia):
+        // PrendaDecision.ToFurMarking(IEnumerable<string?>) resuelve YA en el dominio qué casillas
+        // marca el FUR — Constitucion → 11, Levantamiento → 12, Ambos → 11 y 12 (antes de esta HU no
+        // había productor de Ambos: la sobrecarga de una sola decisión no podía representarlo porque
+        // el modelo solo admitía una fila vigente por instancia).
+        // Defensivo: dobles de prueba sin configurar GetVigentesAsync no deben tumbar la generación
+        // del FUR con NRE — se tratan como "sin prenda vigente" (comportamiento previo intacto).
+        var prendasVigentes = await prendaRepo.GetVigentesAsync(id, tenantId, ct) ?? [];
+        var prendaMarking = PrendaDecision.ToFurMarking(prendasVigentes.Select(p => p.Decision));
+        var prendaConstitucion = prendasVigentes.FirstOrDefault(
+            p => PrendaDecision.ToFurMarking(p.Decision) == FurPrendaMarking.Constitucion);
+        var prendaLevantamiento = prendasVigentes.FirstOrDefault(
+            p => PrendaDecision.ToFurMarking(p.Decision) == FurPrendaMarking.Levantamiento);
+
         // HU #10989, CF11 (HU #11257) — el documento del acreedor acompaña al nombre en el bloque de
         // observaciones, tanto en constitución como en levantamiento. Se lee solo cuando la marca no es
         // Ninguna: una fila previa 'registrar' que se reemplazó por 'levantar' no arrastra su acreedor
-        // al FUR porque siempre se lee de la fila VIGENTE (prendaRepo.GetVigenteAsync), nunca de historia.
-        var acreedorPrendaDocumento = prendaMarking != FurPrendaMarking.Ninguna ? prendaVigente!.AcreedorDocumento : null;
+        // al FUR porque siempre se lee de las filas VIGENTES, nunca de historia.
+        //
+        // Caso histórico (0 o 1 vigente, Matrícula/Traspaso incluidos): compat total con el
+        // comportamiento previo a ADR-0055 — un único hecho, así que "el" acreedor es el de esa única
+        // fila (constitución si es esa la que hay, si no, levantamiento).
+        var acreedorPrenda = prendaMarking != FurPrendaMarking.Ninguna
+            ? (prendaConstitucion ?? prendaLevantamiento)?.AcreedorNombre
+            : null;
+        var acreedorPrendaDocumento = prendaMarking != FurPrendaMarking.Ninguna
+            ? (prendaConstitucion ?? prendaLevantamiento)?.AcreedorDocumento
+            : null;
         // Entidad ante la que se levantó el gravamen: la declara el párrafo 23 en el trámite de
-        // levantamiento de prenda. Vacía en traspaso y matrícula, donde el literal no cambia.
-        var entidadLevantamiento = prendaMarking != FurPrendaMarking.Ninguna ? prendaVigente!.LevantamientoEntidad : null;
+        // levantamiento de prenda. Vacía en traspaso y matrícula, donde el literal no cambia. Se lee
+        // SIEMPRE de la fila de levantamiento (nunca de la de constitución), también cuando Ambos.
+        var entidadLevantamiento = prendaLevantamiento?.LevantamientoEntidad;
+        // ADR-0055 — caso dual (Ambos): cada familia trae su PROPIO acreedor, sin mezclarlos con el de
+        // la otra (Security: no filtrar el documento de un acreedor en el bloque de la otra familia).
+        // Nulos fuera de Ambos: el bloque de observaciones usa acreedorPrenda/acreedorPrendaDocumento.
+        var acreedorLevantamientoNombreDual = prendaMarking == FurPrendaMarking.Ambos
+            ? prendaLevantamiento?.AcreedorNombre : null;
+        var acreedorLevantamientoDocumentoDual = prendaMarking == FurPrendaMarking.Ambos
+            ? prendaLevantamiento?.AcreedorDocumento : null;
 
         // HU #10645 (ADR-0025 §4) — imagen REAL de la firma del baúl por parte NIT cubierta: se descarga el
         // artefacto (best-effort) y se alimenta FurDocumentData.FirmaImagenes; el mapper la estampa en el
@@ -319,7 +343,7 @@ public sealed class GenerarFurHandler(
         // una función pura y síncrona.
         var nombresRlDirectorio = await ResolverNombresDelDirectorioAsync(instance, signatureRoles, ct);
 
-        var data = AssembleData(instance, codigo, profile, signatureRoles, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento, firmaImagenes, firmaBaulMetadatos, classification.Format, nombresRlDirectorio, classification.FieldToFill, firmaIdentidadImagenes);
+        var data = AssembleData(instance, codigo, profile, signatureRoles, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento, acreedorLevantamientoNombreDual, acreedorLevantamientoDocumentoDual, firmaImagenes, firmaBaulMetadatos, classification.Format, nombresRlDirectorio, classification.FieldToFill, firmaIdentidadImagenes);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -763,6 +787,7 @@ public sealed class GenerarFurHandler(
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
         FurPrendaMarking prendaMarking, string? acreedorPrenda, string? acreedorPrendaDocumento,
         string? entidadLevantamiento,
+        string? acreedorLevantamientoNombreDual, string? acreedorLevantamientoDocumentoDual,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
         FurTemplateFormat templateFormat,
@@ -885,6 +910,8 @@ public sealed class GenerarFurHandler(
                 acreedorPrenda,
                 acreedorPrendaDocumento,
                 entidadLevantamiento,
+                acreedorLevantamientoNombreDual,
+                acreedorLevantamientoDocumentoDual,
                 fv,
                 transformaciones,
                 blindajeOpcion),
@@ -936,10 +963,21 @@ public sealed class GenerarFurHandler(
         string? acreedorPrenda,
         string? acreedorPrendaDocumento,
         string? entidadLevantamiento,
+        string? acreedorLevantamientoNombreDual,
+        string? acreedorLevantamientoDocumentoDual,
         Dictionary<string, string?> fv,
         FurTransformacionesDeclaradas transformaciones,
         BlindajeOpcion blindajeOpcion)
     {
+        // ADR-0055 — con Ambos, cada familia trae su PROPIO acreedor (ComposeDual); en los demás
+        // casos (0 o 1 vigente, comportamiento histórico) sigue siendo el Compose de 4 parámetros.
+        var bloquePrenda = prendaMarking == FurPrendaMarking.Ambos
+            ? FurPrendaObservation.ComposeDual(
+                acreedorPrenda, acreedorPrendaDocumento,
+                acreedorLevantamientoNombreDual, acreedorLevantamientoDocumentoDual,
+                entidadLevantamiento)
+            : FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento);
+
         var automatico = FurPrendaObservation.Join(
             FurTramiteObservation.Compose(
                 codigo,
@@ -952,7 +990,7 @@ public sealed class GenerarFurHandler(
             FurPrendaObservation.Join(
                 FurCopropiedadObservation.Compose(partes),
                 FurPrendaObservation.Join(
-                FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento),
+                bloquePrenda,
                 FurPrendaObservation.Join(
                     FurTransformationObservations.ComposeDeclaradas(
                         transformaciones,

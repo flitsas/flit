@@ -76,6 +76,30 @@ public static class ProcedureTypeLayers
     public static bool ExigePrendaPreviaEnRunt(string? code) =>
         Norm(code) == "LEVANTAMIENTO_PRENDA";
 
+    /// <summary>
+    /// ADR-0055 (HU #12129) — el tipo admite declarar, ADEMÁS de su acción propia, la acción
+    /// complementaria de prenda en la MISMA instancia (constitución + levantamiento vigentes a la
+    /// vez, una por <c>AccionFamilia</c>). Distinta pregunta de <see cref="EsPrendaDeAccionUnica"/>:
+    /// esa responde "¿el tipo fija una sola decisión posible?" (sigue siendo <c>true</c> para estos
+    /// mismos dos tipos, la acción PROPIA del trámite sigue siendo una), y esta responde "¿puede
+    /// coexistir con ella un segundo hecho vigente de la familia contraria?".
+    ///
+    /// <para>Se define como una función nueva, y no una excepción dentro de
+    /// <see cref="EsPrendaDeAccionUnica"/>, porque los llamadores de esa función (gate de
+    /// preparación, <c>decisionFija</c> del asistente) siguen necesitando la respuesta original sin
+    /// matices para todo lo que NO es el mecanismo de captura dual de <c>RegistrarPrendaHandler</c>.
+    /// </para>
+    ///
+    /// <para>Matrícula y Traspaso —y cualquier otro tipo— devuelven <c>false</c>: siguen operando
+    /// con una sola decisión de prenda mutuamente excluyente (ADR-0050), invariante que
+    /// <c>RegistrarPrendaHandler</c> hace valer explícitamente, no solo el índice de BD.</para>
+    /// </summary>
+    public static bool PermiteAccionComplementaria(string? code) => Norm(code) switch
+    {
+        "PRENDA_INSCRIPCION" or "LEVANTAMIENTO_PRENDA" => true,
+        _ => false,
+    };
+
     /// <summary>Atributo que el tipo cambia por definición; <see cref="TransformacionBase.Ninguna"/> si no cambia ninguno.</summary>
     public static TransformacionBase TransformacionDelTipo(string? code) => Norm(code) switch
     {

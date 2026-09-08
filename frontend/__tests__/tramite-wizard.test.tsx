@@ -304,7 +304,7 @@ beforeEach(() => {
     radicado: 'R-1',
     hash: 'h',
   });
-  mocks.getPrenda.mockResolvedValue(null);
+  mocks.getPrenda.mockResolvedValue([]);
   mocks.listMandateSigners.mockResolvedValue({ opciones: [], elegidoId: null, editable: true });
   mocks.setMandateSigner.mockResolvedValue(undefined);
   mocks.generarConsolidado.mockResolvedValue({
@@ -806,7 +806,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       fieldValues: [],
       actors: [],
     });
-    mocks.getPrenda.mockResolvedValue(null);
+    mocks.getPrenda.mockResolvedValue([]);
   mocks.generarConsolidado.mockResolvedValue({
       document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
       regenerado: true,

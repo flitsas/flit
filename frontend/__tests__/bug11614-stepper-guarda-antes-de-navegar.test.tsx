@@ -164,7 +164,8 @@ beforeEach(() => {
   });
   mocks.getCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
   mocks.putCommercial.mockResolvedValue(EMPTY_COMMERCIAL);
-  mocks.getPrenda.mockResolvedValue(null);
+  // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY (0-2, una por familia).
+  mocks.getPrenda.mockResolvedValue([]);
   mocks.putPrenda.mockResolvedValue(PRENDA_SIN_PRENDA);
   mocks.submitInstance.mockResolvedValue({ id: 'inst-1' });
   mocks.transitionInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado' });
@@ -231,7 +232,7 @@ describe('Bug #11614 — el stepper persiste el paso activo antes de navegar', (
     await user.click(await screen.findByRole('button', { name: 'Sin prenda' }));
     // Tras persistir, el backend devuelve la decisión guardada (rehidratación del paso).
     mocks.putPrenda.mockImplementation(async () => {
-      mocks.getPrenda.mockResolvedValue(PRENDA_SIN_PRENDA);
+      mocks.getPrenda.mockResolvedValue([PRENDA_SIN_PRENDA]);
       return PRENDA_SIN_PRENDA;
     });
 
@@ -314,10 +315,10 @@ describe('Bug #11614 — el stepper persiste el paso activo antes de navegar', (
   it('O1 (carrera) — la carga del formulario que resuelve DESPUÉS de la captura no borra la marca de pendiente', async () => {
     const user = userEvent.setup();
     // La decisión de prenda guardada tarda en llegar: el gestor ya está capturando cuando aterriza.
-    let resolverCarga: ((valor: PrendaData | null) => void) | undefined;
+    let resolverCarga: ((valor: PrendaData[]) => void) | undefined;
     mocks.getPrenda.mockImplementation(
       () =>
-        new Promise<PrendaData | null>((resolve) => {
+        new Promise<PrendaData[]>((resolve) => {
           resolverCarga = resolve;
         }),
     );
@@ -328,7 +329,7 @@ describe('Bug #11614 — el stepper persiste el paso activo antes de navegar', (
     await user.click(await screen.findByRole('button', { name: 'Sin prenda' }));
     // Y solo entonces aterriza la carga (sin decisión previa: no pisa lo que el gestor eligió).
     await act(async () => {
-      resolverCarga?.(null);
+      resolverCarga?.([]);
     });
 
     // Navegar por el stepper debe seguir guardando: la marca de pendiente sobrevivió a la carga.

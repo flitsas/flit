@@ -40,6 +40,18 @@ public static class FurNumeral3Marks
             if (prenda is FurPrendaMarking.Levantamiento or FurPrendaMarking.Ambos)
                 marks.Add(12);
         }
+        // ADR-0055 (HU #12128/#12129) — PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA ya NO garantizan una
+        // sola casilla: con la acción complementaria activa pueden tener constitución Y levantamiento
+        // vigentes a la vez, y `prenda` resuelve `Ambos`. BaseBoxes ya fijó la casilla del propio tipo
+        // (11 o 12) — eso no cambia, incluso sin vigentes guardadas (el tipo la implica) —; aquí solo
+        // se suma la casilla de la familia CONTRARIA cuando de verdad hay un segundo hecho vigente.
+        // `LEVANTAR_INSCRIBIR_PRENDA` (inactivo, no pasa por `RegistrarPrendaHandler`) sigue con las
+        // dos fijas por `BaseBoxes`, sin depender de `prenda`.
+        else if (ProcedureTypeLayers.PermiteAccionComplementaria(code) && prenda == FurPrendaMarking.Ambos)
+        {
+            marks.Add(11);
+            marks.Add(12);
+        }
 
         // En OTROS la casilla del cambio ya la puso BaseBoxes (5 / 17 / 18, o ninguna en blindaje):
         // la tabla 3 solo podría añadir la de OTRO cambio, que es justo lo que no puede acumularse.
