@@ -317,7 +317,6 @@ public sealed class TransitOfficeEnPasoUnoTests
 
         _repo.AddWithUniqueReferenceAsync(
                 Arg.Any<Flit.Tramites.Domain.Entities.ProcedureInstance>(),
-                Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {

@@ -10,8 +10,9 @@ public enum AddProcedureInstanceOutcome
     Created,
 
     /// <summary>
-    /// Se agotaron los reintentos de número de referencia único bajo concurrencia
-    /// (constraint <c>uq_procedure_instances_tenant_reference</c>) → mapear a 409.
+    /// El radicado chocó contra el índice único global <c>uq_procedure_instances_reference</c>
+    /// → mapear a 409. Desde la HU #12151 lo asigna una secuencia, así que por la ruta normal de
+    /// creación no puede ocurrir; queda para un INSERT que fije el radicado a mano.
     /// </summary>
     ReferenceConflict,
 

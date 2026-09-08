@@ -1,4 +1,3 @@
-using System.Globalization;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
@@ -18,7 +17,6 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedureInstanceRepository
 {
     private const string ReferenceUniqueConstraint = "uq_procedure_instances_tenant_reference";
-    private const int MaxReferenceRetries = 5;
     public Task<ProcedureInstance?> GetByIdAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.ProcedureType)
@@ -1421,54 +1419,35 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         db.ProcedureInstances
             .CountAsync(x => x.TenantId == tenantId && x.CreatedAt.Year == year, ct);
 
-    public async Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, int year, CancellationToken ct)
+    public async Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, CancellationToken ct)
     {
         await db.ProcedureInstances.AddAsync(instance, ct);
 
-        for (var attempt = 0; attempt < MaxReferenceRetries; attempt++)
+        try
         {
-            instance.ReferenceNumber = $"TRM-{year}-{await NextSeqAsync(instance.TenantId, year, ct):D6}";
-            try
-            {
-                await db.SaveChangesAsync(ct);
-                return AddProcedureInstanceOutcome.Created;
-            }
-            catch (DbUpdateException ex) when (IsReferenceUniqueViolation(ex))
-            {
-                // Colisión de reference_number bajo concurrencia: regenera el siguiente seq y reintenta.
-                // EF deja la entidad marcada como Added tras el fallo, así que el siguiente SaveChanges
-                // reintenta el mismo insert con la nueva referencia.
-            }
-            catch (DbUpdateException ex) when (IsForeignKeyViolation(ex))
-            {
-                // tenant_id / created_by_user_id / procedure_type_id inexistente: no tiene sentido
-                // reintentar. Se traduce a 422 en el handler/endpoint (antes burbujeaba como 500).
-                return AddProcedureInstanceOutcome.ReferencedEntityMissing;
-            }
+            // HU #12151 — aquí ya no se calcula ningún número. El radicado lo asigna el DEFAULT de
+            // la columna (una SEQUENCE), que es atómico: no hay carrera que perder y por tanto no
+            // hay nada que reintentar. Antes esto era un MAX(seq)+1 que traía a memoria todas las
+            // referencias del tenant y reintentaba hasta 5 veces ante colisión.
+            await db.SaveChangesAsync(ct);
+            return AddProcedureInstanceOutcome.Created;
         }
-
-        return AddProcedureInstanceOutcome.ReferenceConflict;
+        catch (DbUpdateException ex) when (IsReferenceUniqueViolation(ex))
+        {
+            // Con la secuencia esto ya no debería ocurrir nunca. Se conserva el caso porque el
+            // camino 409 sigue existiendo en el endpoint y porque un INSERT que fije el radicado a
+            // mano (fuera de esta ruta) seguiría pudiendo chocar. Sin reintento: reintentar el mismo
+            // valor daría el mismo choque.
+            return AddProcedureInstanceOutcome.ReferenceConflict;
+        }
+        catch (DbUpdateException ex) when (IsForeignKeyViolation(ex))
+        {
+            // tenant_id / created_by_user_id / procedure_type_id inexistente: se traduce a 422 en el
+            // handler/endpoint (antes burbujeaba como 500).
+            return AddProcedureInstanceOutcome.ReferencedEntityMissing;
+        }
     }
 
-    /// <summary>MAX(seq) + 1 por (tenant, year) parseando el sufijo D6 de las referencias existentes.</summary>
-    private async Task<int> NextSeqAsync(Guid tenantId, int year, CancellationToken ct)
-    {
-        var prefix = $"TRM-{year}-";
-        var references = await db.ProcedureInstances
-            .Where(x => x.TenantId == tenantId && x.ReferenceNumber.StartsWith(prefix))
-            .Select(x => x.ReferenceNumber)
-            .ToListAsync(ct);
-
-        var max = 0;
-        foreach (var reference in references)
-        {
-            var suffix = reference[prefix.Length..];
-            if (int.TryParse(suffix, NumberStyles.None, CultureInfo.InvariantCulture, out var seq) && seq > max)
-                max = seq;
-        }
-
-        return max + 1;
-    }
 
     private static bool IsReferenceUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
