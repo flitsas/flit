@@ -27,19 +27,19 @@ const MODALIDAD_SHORT: Record<ProcedureFamily, string> = {
 };
 
 /**
- * Qué rotula la fila del listado.
+ * Qué rotula la fila del listado: el nombre del TIPO, no el de su familia.
  *
- * En MATRICULAS y TRASPASO la familia identifica bien el trámite. En OTROS no: agrupa quince tipos
- * —blindaje, cambio de color, levantamiento de prenda, duplicado de tarjeta…— que se veían los tres
- * igual, «Otros», sin forma de distinguirlos sin abrirlos. Ahí manda el nombre del tipo.
+ * <p>HU #12181 — antes el tipo solo mandaba en OTROS, y en las otras dos familias se rotulaba
+ * «Matrícula» o «Traspaso». Pero la familia tampoco identifica ahí: `TRASPASO_STANDARD` y
+ * `TRASPASO_UNILATERAL` son trámites distintos —en el unilateral el comprador ni siquiera
+ * comparece— y los dos se leían «Traspaso». El nombre del tipo es lo que el gestor reconoce, en
+ * las tres familias.</p>
  *
- * Respaldo a la familia si el expediente viene de un backend anterior al campo, para que la celda
- * nunca quede vacía.
+ * <p>Respaldo a la familia si el tipo no está parametrizado o el expediente viene de un backend
+ * anterior al campo: la celda nunca queda vacía, y una fila sin tipo se sigue pintando.</p>
  */
 export function tramiteLabel(item: InstanceSummary): string {
-  const familia = MODALIDAD_SHORT[item.modalidad];
-  if (item.modalidad !== 'OTROS') return familia;
-  return item.tipoNombre?.trim() || familia;
+  return item.tipoNombre?.trim() || MODALIDAD_SHORT[item.modalidad] || '—';
 }
 
 /**

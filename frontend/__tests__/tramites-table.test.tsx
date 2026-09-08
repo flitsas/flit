@@ -1613,14 +1613,28 @@ describe('TramitesTable — rótulo del trámite', () => {
     expect(await screen.findByText('Otros')).toBeInTheDocument();
   });
 
-  it('matrícula y traspaso conservan el rótulo de familia (regresión)', async () => {
+  /**
+   * HU #12181 — REVIERTE a propósito el guardián anterior, que fijaba que matrícula y traspaso
+   * conservaran el rótulo de FAMILIA.
+   *
+   * Aquella decisión venía de ADR-0050, donde el problema visible era «Otros». Pero la familia
+   * tampoco identifica en las otras dos: «Matrícula Leasing» y «Matrícula Inicial» se leían las
+   * dos «Matrícula», y en un `TRASPASO_UNILATERAL` el comprador ni siquiera comparece. Son
+   * trámites distintos y el gestor los reconoce por su nombre.
+   */
+  it('matrícula y traspaso también nombran su tipo, no la familia', async () => {
     mocks.listInstances.mockResolvedValue(conTipo('MATRICULAS', 'Matrícula Leasing'));
     const { unmount } = render(<TramitesTable />);
-    expect(await screen.findByText('Matrícula')).toBeInTheDocument();
-    expect(screen.queryByText('Matrícula Leasing')).not.toBeInTheDocument();
+    expect(await screen.findByText('Matrícula Leasing')).toBeInTheDocument();
     unmount();
 
     mocks.listInstances.mockResolvedValue(conTipo('TRASPASO', 'Traspaso Unilateral'));
+    render(<TramitesTable />);
+    expect(await screen.findByText('Traspaso Unilateral')).toBeInTheDocument();
+  });
+
+  it('sin nombre de tipo, matrícula y traspaso siguen cayendo a la familia', async () => {
+    mocks.listInstances.mockResolvedValue(conTipo('TRASPASO', null));
     render(<TramitesTable />);
     expect(await screen.findByText('Traspaso')).toBeInTheDocument();
   });
