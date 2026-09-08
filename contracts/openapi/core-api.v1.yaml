@@ -6189,6 +6189,82 @@ paths:
         "404": { description: "Trámite no encontrado." }
         "409": { description: "Modalidad no soportada, FUR faltante, documentos incompletos o adjunto no disponible." }
 
+  # ── Admin · Trámites · Gestión avanzada del consolidado (Feature #12155, HU #12158) ──────────
+
+  /api/v1/admin/tramites/{id}/consolidado/limpiar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Limpiar (forzar la regeneración de) el consolidado de un trámite
+      operationId: adminTramiteLimpiarConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        Descarta el consolidado vigente y lo regenera desde cero, incluso si el vigente lo cargó el
+        admin a mano (Source="user"): es la ÚNICA acción que puede descartarlo. El nuevo consolidado
+        queda con Source="system". Requiere el permiso `AdminTramiteLimpiarConsolidado` (SuperAdmin
+        bypassa). La acción queda registrada en la bitácora del trámite con usuario, fecha y hora.
+      responses:
+        "200":
+          description: Consolidado regenerado (adjunto tipo "consolidado", Source="system").
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteLimpiarConsolidado." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Trámite migrado (solo lectura), FUR faltante, documentos incompletos o adjunto no disponible." }
+
+  /api/v1/admin/tramites/{id}/consolidado/cargar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Cargar un PDF externo como el consolidado de un trámite
+      operationId: adminTramiteCargarConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        Registra un PDF provisto por el admin (multipart/form-data, campo `file`) como el expediente
+        consolidado del trámite, con Source="user". Reemplaza CUALQUIER consolidado vigente sin
+        importar su Source actual, y a partir de ahí prevalece sobre cualquier regeneración
+        automática futura hasta que se reemplace con "Limpiar consolidado" u otra carga. Requiere el
+        permiso `AdminTramiteCargarConsolidado` (SuperAdmin bypassa). La acción queda registrada en
+        la bitácora del trámite con usuario, fecha y hora.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo PDF a registrar como consolidado.
+              required: [file]
+      responses:
+        "201":
+          description: Consolidado externo registrado (adjunto tipo "consolidado", Source="user").
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "400": { description: "Falta el header X-Tenant-Id, falta el archivo, el mimetype no es PDF o excede el tamaño máximo." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteCargarConsolidado." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Trámite migrado (solo lectura)." }
+
   # ── Admin · OT · Documentos del trámite de cliente (Feature #10701 / HU #10704 + HU #10706) ──
 
   /api/v1/admin/ot/client-procedures/{id}/documents:

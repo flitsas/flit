@@ -213,6 +213,9 @@ public static class DependencyInjection
         services.AddScoped<RegenerarDocumentosTrazadoHandler>();
         services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
+        // HU #12158 — acciones avanzadas del admin sobre el consolidado (limpiar/cargar externo).
+        services.AddScoped<LimpiarConsolidadoHandler>();
+        services.AddScoped<CargarConsolidadoExternoHandler>();
         // HU #11051 — gate de generación documental del GESTOR (estado final ⇒ documentación definitiva).
         // Lo consumen SOLO los endpoints de /api/v1/tramites; la regeneración interna del sistema
         // (aprobación OT, placa, identidad validada, transiciones) NO pasa por él a propósito.

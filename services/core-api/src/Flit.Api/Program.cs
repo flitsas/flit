@@ -274,6 +274,7 @@ app.MapTramitesBiometricaEndpoints();
 app.MapTramitesFirmaEndpoints();
 app.MapTramitesFurEndpoints();
 app.MapTramitesConsolidadoEndpoints();
+app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar consolidado (admin)
 app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();
