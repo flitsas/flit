@@ -6,12 +6,15 @@ namespace Flit.Tramites.Application.UseCases.ProcedureTypes;
 /// <summary>
 /// Resumen de un tipo publicado para el selector de operador (FEATURE-08 / CFD-12, §6.1).
 /// Incluye <c>version</c> (a diferencia del listado SuperAdmin) para trazar la configuración vigente.
+/// <c>Description</c> es el copy configurado para el WIZARD (HU #12124): puede ser <c>null</c> si
+/// el tipo de trámite no lo tiene configurado.
 /// </summary>
 public sealed record PublishedProcedureTypeDto(
     Guid Id,
     string Code,
     string Name,
     string Family,
+    string? Description,
     int Version,
     bool WizardEnabled);
 
@@ -25,7 +28,7 @@ public sealed class GetPublishedProcedureTypesHandler(IProcedureTypeRepository r
     {
         var types = await repository.ListAsync(family: null, publicationStatus: PublicationStatus.Published, ct);
         return types
-            .Select(t => new PublishedProcedureTypeDto(t.Id, t.Code, t.Name, t.Family, t.Version, t.WizardEnabled))
+            .Select(t => new PublishedProcedureTypeDto(t.Id, t.Code, t.Name, t.Family, t.Description, t.Version, t.WizardEnabled))
             .ToList();
     }
 }
