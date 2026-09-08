@@ -214,7 +214,7 @@ beforeEach(() => {
   mocks.generarFur.mockResolvedValue({ documents: [] });
   mocks.generarImpronta.mockResolvedValue({ attachmentId: 'imp-1', filename: 'i.pdf', sha256: 'x', radicado: 'R', hash: 'h' });
   mocks.generarConsolidado.mockResolvedValue({ regenerado: true });
-  mocks.getPrenda.mockResolvedValue(null);
+  mocks.getPrenda.mockResolvedValue([]);
   mocks.listMandateSigners.mockResolvedValue({ opciones: [], elegidoId: null, editable: true });
   mocks.setMandateSigner.mockResolvedValue(undefined);
   mocks.listVehicleServiceTypes.mockResolvedValue([

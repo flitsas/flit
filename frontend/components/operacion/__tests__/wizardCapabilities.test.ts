@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest';
 
 import {
   capacidadesEfectivas,
+  decisionComplementariaDelTipo,
   decisionesDelTipoDePrenda,
   esFamiliaTraspaso,
   esTipoDePrenda,
   modalidadPorEntrada,
   modalidadPorPartes,
+  permiteAccionComplementaria,
   rolesDeActores,
+  runtAvisoGravamenVariant,
   transformacionDelTipo,
   permiteGenerarImprontaAutomatica,
 } from '../wizardCapabilities';
@@ -189,6 +192,46 @@ describe('capa que le pertenece al tipo', () => {
     expect(decisionesDelTipoDePrenda('LEVANTAR_INSCRIBIR_PRENDA')).toEqual(['levantar', 'registrar']);
     expect(decisionesDelTipoDePrenda('BLINDAJE')).toBeNull();
     expect(decisionesDelTipoDePrenda('TRASPASO_STANDARD')).toBeNull();
+  });
+
+  // HU #12131 — variante de copy del aviso "RUNT sin gravamen" para los dos tipos prendarios de
+  // una sola acción (Inscribir / Levantar Prenda). Los tipos de dos decisiones y los no prendarios
+  // no tienen una única lectura que mostrar: quedan fuera del alcance de esta HU.
+  it('runtAvisoGravamenVariant — solo resuelve variante en los tipos de una sola decisión de prenda', () => {
+    expect(runtAvisoGravamenVariant('PRENDA_INSCRIPCION')).toBe('inscripcion');
+    expect(runtAvisoGravamenVariant('LEVANTAMIENTO_PRENDA')).toBe('levantamiento');
+    expect(runtAvisoGravamenVariant('LEVANTAR_INSCRIBIR_PRENDA')).toBeNull();
+    expect(runtAvisoGravamenVariant('CAMBIO_ACREEDOR')).toBeNull();
+    expect(runtAvisoGravamenVariant('BLINDAJE')).toBeNull();
+    expect(runtAvisoGravamenVariant('TRASPASO_STANDARD')).toBeNull();
+    expect(runtAvisoGravamenVariant(null)).toBeNull();
+  });
+
+  // ADR-0055/HU #12129/#12130 — espejo frontend de `ProcedureTypeLayers.PermiteAccionComplementaria`
+  // (dominio): MISMOS codes, misma respuesta. Solo los dos tipos de acción única prendarios admiten
+  // declarar la acción complementaria en la misma radicación.
+  it('permiteAccionComplementaria — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA la admiten', () => {
+    expect(permiteAccionComplementaria('PRENDA_INSCRIPCION')).toBe(true);
+    expect(permiteAccionComplementaria('LEVANTAMIENTO_PRENDA')).toBe(true);
+    // Matrícula/Traspaso y cualquier otro tipo — incluidos los inactivos de dos decisiones — NO
+    // admiten dos hechos vigentes (ADR-0050, RegistrarPrendaHandler.SegundaDecisionVigenteNoAdmitidaError).
+    expect(permiteAccionComplementaria('LEVANTAR_INSCRIBIR_PRENDA')).toBe(false);
+    expect(permiteAccionComplementaria('CAMBIO_ACREEDOR')).toBe(false);
+    expect(permiteAccionComplementaria('TRASPASO_STANDARD')).toBe(false);
+    expect(permiteAccionComplementaria('MATRICULA_INICIAL')).toBe(false);
+    expect(permiteAccionComplementaria(null)).toBe(false);
+  });
+
+  it('decisionComplementariaDelTipo — la familia CONTRARIA a la que fija decisionesDelTipoDePrenda', () => {
+    // PRENDA_INSCRIPCION fija "registrar" (constitución) ⇒ complementaria "levantar" (levantamiento).
+    expect(decisionComplementariaDelTipo('PRENDA_INSCRIPCION')).toBe('levantar');
+    // LEVANTAMIENTO_PRENDA fija "levantar" ⇒ complementaria "registrar" (constitución).
+    expect(decisionComplementariaDelTipo('LEVANTAMIENTO_PRENDA')).toBe('registrar');
+    // Sin `permiteAccionComplementaria`, no hay complementaria que declarar.
+    expect(decisionComplementariaDelTipo('LEVANTAR_INSCRIBIR_PRENDA')).toBeNull();
+    expect(decisionComplementariaDelTipo('CAMBIO_ACREEDOR')).toBeNull();
+    expect(decisionComplementariaDelTipo('TRASPASO_STANDARD')).toBeNull();
+    expect(decisionComplementariaDelTipo(null)).toBeNull();
   });
 });
 

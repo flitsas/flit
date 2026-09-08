@@ -68,13 +68,19 @@ public sealed class GenerarConsolidadoHandler(
     IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null,
     IImprontaAutoGenerator? improntaGenerator = null,
     IOtConfiguredDocumentOrderProvider? otOrderProvider = null,
-    Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null)
+    Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null,
+    IImprontaManualStamper? improntaManualStamper = null,
+    Flit.Tramites.Domain.Integration.ISignatureVaultPolicy? signatureVaultPolicy = null,
+    IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null)
 {
     // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
     // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
     // portada queda como estaba.
     private readonly Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory _companiaRadicadoraDirectory =
         companiaRadicadoraDirectory ?? Flit.Tramites.Domain.Integration.NullCompaniaRadicadoraDirectory.Instance;
+
+    private readonly Flit.Tramites.Domain.Integration.ISignatureVaultPolicy _signatureVaultPolicy =
+        signatureVaultPolicy ?? Flit.Tramites.Domain.Integration.NullSignatureVaultPolicy.Instance;
 
     public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -256,7 +262,13 @@ public sealed class GenerarConsolidadoHandler(
             var bytes = await ReadAllBytesAsync(stream, ct);
             try
             {
-                pdfParts.Add(merger.NormalizeToPdf(bytes, attachment.Mimetype));
+                var pdf = merger.NormalizeToPdf(bytes, attachment.Mimetype);
+                pdf = await ImprontaManualStampApplier
+                    .MaybeStampAsync(
+                        pdf, attachment, instance, storage, improntaManualStamper, ct,
+                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository)
+                    .ConfigureAwait(false);
+                pdfParts.Add(pdf);
             }
             catch (NotSupportedException)
             {

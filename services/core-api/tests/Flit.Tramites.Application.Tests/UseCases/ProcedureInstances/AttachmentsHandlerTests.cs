@@ -238,7 +238,9 @@ public sealed class AttachmentsHandlerTests
         result!.Tipo.Should().Be("factura");
         result.Sha256.Should().Be("deadbeef");
         result.Source.Should().Be("user");
+        result.Provider.Should().BeNull();
         instance.Attachments.Should().ContainSingle();
+        instance.Attachments.Single().Provider.Should().BeNull();
         _storage.Saved.Should().ContainSingle();
         // El adjunto NUEVO se marca Added explícito → INSERT (PK store-generated con Id ya seteado).
         _repo.Received(1).Add(Arg.Is<ProcedureInstanceAttachment>(a => a.Tipo == "factura"));

@@ -16,6 +16,14 @@ public sealed class ProcedureInstanceAttachment
     public string Sha256 { get; set; } = string.Empty;
     public string StoragePath { get; set; } = string.Empty;
     public string Source { get; set; } = "user";
+
+    /// <summary>
+    /// Proveedor externo del documento cuando FLIT lo generó vía integración (p. ej.
+    /// <c>kyverum</c> para Certificado de Improntas Digitales). <c>null</c> = carga manual
+    /// u origen no proveedor. No confundir con <see cref="Source"/>.
+    /// </summary>
+    public string? Provider { get; set; }
+
     public DateTimeOffset UploadedAt { get; set; }
     public Guid? UploadedBy { get; set; }
 

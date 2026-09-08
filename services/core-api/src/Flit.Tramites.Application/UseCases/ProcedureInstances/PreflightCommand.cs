@@ -278,19 +278,14 @@ public sealed class RunPreflightHandler(
         // que levantar, y el acreedor del numeral 20 lo precarga justamente ese gravamen. Se lee del
         // check ya compuesto, no de los field_values: el semáforo es quien sabe si el proveedor
         // afirmó la ausencia o simplemente no trajo el dato.
-        if (_validationPolicy.VehiclePrendaRequired != TramiteValidationMode.Off)
-        {
-            var prendaBlock = VehiclePrendaPolicy.Evaluar(
+        // HU #12131/#12129 — regla de NEGOCIO, no de ambiente: nunca bloquea, solo informa (check
+        // warn) y deja que el gestor capture el acreedor/entidad manualmente. A diferencia de
+        // duplicidad/estado registral/carrocería, no pasa por TramiteValidationPolicy.
+        if (VehiclePrendaPolicy.Evaluar(
                 instance.ProcedureType?.Code,
-                EstadoDelCheck(checks, VehiclePrendaPolicy.GravamenCheckKey));
-
-            if (prendaBlock is not null)
-            {
-                if (_validationPolicy.VehiclePrendaRequired == TramiteValidationMode.Block)
-                    return (null, VehiclePrendaPolicy.ErrorCode, null, null);
-
-                checks.Add(BuildPrendaAusenteCheck());
-            }
+                EstadoDelCheck(checks, VehiclePrendaPolicy.GravamenCheckKey)))
+        {
+            checks.Add(BuildPrendaAusenteCheck());
         }
 
         // CF-01 (HU #10876) — bloqueo DURO de duplicidad EN PROCESO por familia (VIN en Matrícula
@@ -576,8 +571,8 @@ public sealed class RunPreflightHandler(
         checks.FirstOrDefault(c => string.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase))?.Status;
 
     /// <summary>
-    /// Bloqueo «sin prenda que levantar» en modo <c>warn</c>: no corta el flujo pero pinta el
-    /// semáforo en amarillo. En modo <c>block</c> este check no existe: allí viaja como 422.
+    /// «Sin prenda que levantar»: HU #12131/#12129 — nunca bloquea, solo pinta el semáforo en
+    /// amarillo. El gestor puede continuar y capturar el acreedor/entidad manualmente.
     /// </summary>
     internal static PreflightCheckDto BuildPrendaAusenteCheck() =>
         new(CheckPrendaAusente,
@@ -585,7 +580,7 @@ public sealed class RunPreflightHandler(
             "warn",
             SystemSource,
             "El RUNT no reporta gravamen sobre este vehículo, así que no hay prenda que levantar. "
-            + "El bloqueo está en modo advertencia en este ambiente.");
+            + "Puedes continuar y capturar los datos manualmente.");
 
     internal static PreflightCheckDto BuildCarroceriaAusenteCheck() =>
         new(CheckCarroceriaAusente,

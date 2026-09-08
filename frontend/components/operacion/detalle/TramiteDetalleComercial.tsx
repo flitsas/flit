@@ -120,7 +120,11 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
     const load = async () => {
       setPrenda((s) => ({ ...s, loading: true, error: null }));
       try {
-        const data = await tramitesClient.getPrenda(instanceId, tenantId);
+        // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY (0-2, una por familia). Esta tarjeta de
+        // detalle admin muestra la primera vigente (comportamiento histórico); reflejar AMBAS
+        // decisiones de la acción complementaria es alcance del resumen del wizard (AC4, HU #12130),
+        // no de este modal de solo lectura.
+        const [data] = await tramitesClient.getPrenda(instanceId, tenantId);
         if (active) setPrenda({ loading: false, error: null, data: data ?? null });
       } catch (err) {
         if (active) {

@@ -322,8 +322,9 @@ export function FirmaFurStep({
   // ADR-0053 (Múltiple Propietario) — cobertura del baúl POR ACTOR (documento del RL + ordinal),
   // dato real que reemplaza la aproximación por lado para `CopropietariosEstadoSection`.
   const [firmaBaulActores, setFirmaBaulActores] = useState<FirmaBaulActorCoberturaDto[]>([]);
-  // Decisión de prenda/gravamen (si el gestor ya eligió una opción en el paso previo).
-  const [prenda, setPrenda] = useState<PrendaData | null>(null);
+  // Decisiones de prenda/gravamen vigentes (0-2, ADR-0055/HU #12129: constitución + levantamiento
+  // pueden coexistir en PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA con la acción complementaria activa).
+  const [prenda, setPrenda] = useState<PrendaData[]>([]);
   // HU #10988 — fecha del trámite en el resumen (estampa FUR y documentos).
   const [fechaTramite, setFechaTramite] = useState(todayIsoDate);
   // HU #10536 — trámite prioritario, visible y accionable desde la cabecera del resumen (antes solo
@@ -345,9 +346,9 @@ export function FirmaFurStep({
   const loadDetail = useCallback(async () => {
     if (!instanceId) return;
     try {
-      const [d, p, actors] = await Promise.all([
+      const [d, prendas, actors] = await Promise.all([
         tramitesClient.getInstance(instanceId),
-        tramitesClient.getPrenda(instanceId).catch(() => null),
+        tramitesClient.getPrenda(instanceId).catch(() => [] as PrendaData[]),
         tramitesClient.getActors(instanceId).catch(() => [] as ProcedureActor[]),
       ]);
       setDetail({
@@ -357,7 +358,11 @@ export function FirmaFurStep({
         statusHistory: d.statusHistory ?? [],
       });
       setActorsContact(actors);
-      setPrenda(p);
+      // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY de 0-2 (una por familia). El resumen
+      // (AC4, HU #12130) refleja TODAS las vigentes, no solo la primera: en `PRENDA_INSCRIPCION`/
+      // `LEVANTAMIENTO_PRENDA` con la acción complementaria activada puede haber constitución +
+      // levantamiento a la vez.
+      setPrenda(prendas);
       setPrioritario(d.prioritario ?? false);
       // Siempre la fecha del día (no editable en el resumen).
       const fecha = todayIsoDate();
@@ -739,30 +744,28 @@ export function FirmaFurStep({
         firmaBaulPartes={firmaBaulPartes}
         soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
         transformaciones={transformacionesDeclaradas}
-        prenda={
-          prenda
-            ? (() => {
-                const docTipo = prendaDocTipoFor(prenda.decision);
-                const docAdj = docTipo
-                  ? attachments.find((a) => a.tipo === docTipo)
-                  : undefined;
-                return {
-                  decisionLabel: PRENDA_DECISION_LABELS[prenda.decision],
-                  acreedorNombre: prenda.acreedorNombre,
-                  acreedorDocumento: prenda.acreedorDocumento,
-                  documentoLabel: docTipo ? prendaDocLabelFor(prenda.decision) : null,
-                  documento: docAdj
-                    ? {
-                        id: docAdj.id,
-                        tipo: docAdj.tipo,
-                        filename: docAdj.filename,
-                        mimetype: docAdj.mimetype,
-                      }
-                    : null,
-                };
-              })()
-            : null
-        }
+        // AC4 (HU #12130) — refleja TODAS las decisiones vigentes: en `PRENDA_INSCRIPCION`/
+        // `LEVANTAMIENTO_PRENDA` con la acción complementaria activada llegan dos (constitución +
+        // levantamiento), cada una con su propio acreedor/documento. `MatriculaResumen` acepta
+        // array y pinta una tarjeta por elemento; con 0-1 elementos el comportamiento no cambia.
+        prenda={prenda.map((p) => {
+          const docTipo = prendaDocTipoFor(p.decision);
+          const docAdj = docTipo ? attachments.find((a) => a.tipo === docTipo) : undefined;
+          return {
+            decisionLabel: PRENDA_DECISION_LABELS[p.decision],
+            acreedorNombre: p.acreedorNombre,
+            acreedorDocumento: p.acreedorDocumento,
+            documentoLabel: docTipo ? prendaDocLabelFor(p.decision) : null,
+            documento: docAdj
+              ? {
+                  id: docAdj.id,
+                  tipo: docAdj.tipo,
+                  filename: docAdj.filename,
+                  mimetype: docAdj.mimetype,
+                }
+              : null,
+          };
+        })}
         fechaTramite={fechaTramite}
         instanceId={instanceId}
         compradorBio={

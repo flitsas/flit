@@ -28,22 +28,25 @@ describe('PrendaModificar (R17)', () => {
   });
 
   it('no se muestra si el trámite no tiene prenda vigente', async () => {
-    client.getPrenda.mockResolvedValue(null);
+    // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY (vacío cuando no hay vigente).
+    client.getPrenda.mockResolvedValue([]);
     const { container } = render(<PrendaModificar instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
   });
 
   it('muestra la prenda vigente y la acción de modificar', async () => {
-    client.getPrenda.mockResolvedValue({
-      id: '1',
-      decision: 'registrar',
-      estado: 'vigente',
-      acreedorNombre: 'Banco XYZ',
-      acreedorDocumento: null,
-      levantamientoEntidad: null,
-      createdAt: '2026-07-07T00:00:00Z',
-    });
+    client.getPrenda.mockResolvedValue([
+      {
+        id: '1',
+        decision: 'registrar',
+        estado: 'vigente',
+        acreedorNombre: 'Banco XYZ',
+        acreedorDocumento: null,
+        levantamientoEntidad: null,
+        createdAt: '2026-07-07T00:00:00Z',
+      },
+    ]);
     render(<PrendaModificar instanceId="abc" />);
 
     await waitFor(() =>
@@ -56,15 +59,17 @@ describe('PrendaModificar (R17)', () => {
   });
 
   it('al abrir muestra el formulario editable de prenda', async () => {
-    client.getPrenda.mockResolvedValue({
-      id: '1',
-      decision: 'registrar',
-      estado: 'vigente',
-      acreedorNombre: null,
-      acreedorDocumento: null,
-      levantamientoEntidad: null,
-      createdAt: '2026-07-07T00:00:00Z',
-    });
+    client.getPrenda.mockResolvedValue([
+      {
+        id: '1',
+        decision: 'registrar',
+        estado: 'vigente',
+        acreedorNombre: null,
+        acreedorDocumento: null,
+        levantamientoEntidad: null,
+        createdAt: '2026-07-07T00:00:00Z',
+      },
+    ]);
     render(<PrendaModificar instanceId="abc" />);
 
     await waitFor(() =>

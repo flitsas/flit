@@ -105,6 +105,8 @@ public static class InfrastructureExtensions
         // HU #11196 — marcas de firma a posteriori (el lote que se firma cuando el representante valida).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IDeferredSignatureMarkRepository,
             DeferredSignatureMarkRepository>();
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IVehicleSignatureImprintRepository,
+            VehicleSignatureImprintRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
@@ -206,6 +208,7 @@ public static class InfrastructureExtensions
         // tramites.vehicle_classification_fur). Singleton: cachea el catálogo una sola vez.
         services.AddSingleton<IFurTemplateResolver, Documents.Fur.VehicleClassificationFurResolver>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
+        services.AddSingleton<IImprontaManualStamper, Documents.Improntas.ImprontaManualStamper>();
         // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();

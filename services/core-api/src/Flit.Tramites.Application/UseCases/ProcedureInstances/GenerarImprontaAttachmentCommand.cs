@@ -1,4 +1,5 @@
 using Flit.Modules.Improntas.Domain;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -121,7 +122,13 @@ public sealed class GenerarImprontaAttachmentHandler(
         var (uploaded, uploadError) = await uploadHandler.HandleAsync(
             id,
             tenantId,
-            new UploadAttachmentInput("impronta", filename, "application/pdf", pdfBytes.Length, new MemoryStream(pdfBytes)),
+            new UploadAttachmentInput(
+                "impronta",
+                filename,
+                "application/pdf",
+                pdfBytes.Length,
+                new MemoryStream(pdfBytes),
+                Provider: AttachmentProviders.Kyverum),
             requestedBy,
             ct);
         if (uploaded is null)
