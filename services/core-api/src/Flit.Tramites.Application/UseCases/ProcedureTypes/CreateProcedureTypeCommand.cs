@@ -17,7 +17,8 @@ public sealed record ProcedureTypeSummary(
     string PublicationStatus,
     bool IsActive,
     bool WizardEnabled,
-    DateTimeOffset? PublishedAt);
+    DateTimeOffset? PublishedAt,
+    string? Description);
 
 public sealed class CreateProcedureTypeHandler(IProcedureTypeRepository repository)
 {
@@ -73,5 +74,5 @@ public sealed class CreateProcedureTypeHandler(IProcedureTypeRepository reposito
     }
 
     internal static ProcedureTypeSummary ToSummary(ProcedureType e) =>
-        new(e.Id, e.Code, e.Name, e.Family, e.PublicationStatus, e.IsActive, e.WizardEnabled, e.PublishedAt);
+        new(e.Id, e.Code, e.Name, e.Family, e.PublicationStatus, e.IsActive, e.WizardEnabled, e.PublishedAt, e.Description);
 }

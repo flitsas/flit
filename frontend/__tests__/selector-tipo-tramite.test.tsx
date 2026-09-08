@@ -26,6 +26,7 @@ function tipo(
     isActive: true,
     wizardEnabled,
     publishedAt: null,
+    description: null,
   };
 }
 

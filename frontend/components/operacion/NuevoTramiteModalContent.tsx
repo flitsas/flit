@@ -267,10 +267,11 @@ export function NuevoTramiteModalContent({
     return tiposOtros.map((t) => ({ value: t.code, label: t.name }));
   };
 
-  const infoText = infoTextNuevoTramite(tipo, {
-    leasing,
-    modalidadTraspaso: modalidad,
-  });
+  const infoText = infoTextNuevoTramite(
+    tipo,
+    { leasing, modalidadTraspaso: modalidad, subtipoOtrosCode: subtipoOtros },
+    tiposPlanos,
+  );
 
   const puedeIniciar =
     tipo !== null && !estaBloqueada(tipo) && (tipo !== 'OTROS' || subtipoOtros.length > 0);
