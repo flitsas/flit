@@ -220,13 +220,21 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
 
+        // HU #12182 — misma marca de prenda que el listado sin filtros, y por el mismo camino: una
+        // consulta en lote. Las dos rutas comparten `ToSummary`, así que también tienen que
+        // compartir lo que le pasan; si esta se quedara sin la marca, el listado la perdería en
+        // cuanto el gestor aplicara cualquier filtro.
+        IReadOnlySet<Guid> conPrenda = await repo.ListInstanceIdsConPrendaVigenteAsync(
+            instances.Select(i => i.Id).ToList(), ct) ?? new HashSet<Guid>();
+
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
                 IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.CreatedByUserId),
-                firmaBaul))
+                firmaBaul,
+                conPrenda.Contains(e.Id)))
             .ToList();
 
         return (items, total);

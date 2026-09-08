@@ -281,6 +281,32 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlySet<Guid>> ListInstanceIdsConPrendaVigenteAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct)
+    {
+        if (instanceIds.Count == 0)
+            return new HashSet<Guid>();
+
+        var distinct = instanceIds.Distinct().ToList();
+
+        // El WHERE es el mismo de CompanyQueryRepository (consulta de la empresa): solo la decisión
+        // VIGENTE cuenta —las filas están versionadas— y `omitir`/`sin_prenda` no son tener prenda.
+        // No lleva filtro por tenant: los ids salen de un listado que YA está acotado al tenant del
+        // caller, así que volver a filtrar aquí no añade aislamiento y sí ocultaría un error de
+        // llamada en vez de dejarlo salir.
+        var ids = await db.ProcedureInstancePrendas
+            .AsNoTracking()
+            .Where(p => distinct.Contains(p.ProcedureInstanceId)
+                && p.Estado == PrendaEstado.Vigente
+                && p.Decision != PrendaDecision.SinPrenda
+                && p.Decision != PrendaDecision.Omitir)
+            .Select(p => p.ProcedureInstanceId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return ids.ToHashSet();
+    }
+
     public async Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)
     {

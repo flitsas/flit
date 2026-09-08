@@ -77,6 +77,23 @@ public interface IProcedureInstanceRepository
     Task<IReadOnlyList<ProcedureInstance>> ListWithSummaryGraphAsync(Guid? tenantId, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12182 — instancias, de entre las indicadas, con una decisión de prenda VIGENTE que sea un
+    /// hecho de gravamen. Alimenta la marca de prenda del listado.
+    ///
+    /// <para>Va en una consulta aparte y no como <c>Include</c> del grafo porque la decisión vive en
+    /// su propia tabla (<c>procedure_instance_prendas</c>) y la instancia no la navega. Una consulta
+    /// por listado, nunca por fila.</para>
+    ///
+    /// <para><b>Solo la VIGENTE, y solo si es un hecho.</b> Las filas están versionadas: mirarlas
+    /// todas diría «tiene prenda» de un trámite al que se le quitó. Y <c>omitir</c>/<c>sin_prenda</c>
+    /// son exactamente lo contrario a tenerla. Es el mismo predicado que usa la consulta de la
+    /// empresa (<c>CompanyQueryRepository</c>), a propósito: dos superficies que responden lo mismo
+    /// sobre el mismo trámite no pueden discrepar.</para>
+    /// </summary>
+    Task<IReadOnlySet<Guid>> ListInstanceIdsConPrendaVigenteAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el nombre (razón social) de cada tenant indicado, para la columna "Compañía" del
     /// listado multi-tenant del SuperAdmin (#1). Devuelve un mapa id→nombre; ids sin tenant se omiten.
     /// </summary>

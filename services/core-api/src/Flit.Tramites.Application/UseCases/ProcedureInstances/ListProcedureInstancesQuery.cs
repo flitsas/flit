@@ -79,7 +79,13 @@ public sealed record InstanceSummaryDto(
                                               // Rótulo del paso en curso, tomado del recorrido del TIPO. El frontend lo derivaba de
                                               // un array de nombres por familia, que para OTROS estaba vacío —salía «—»— y que de
                                               // todos modos no puede acertar: cada tipo tiene su propio recorrido desde ADR-0050.
-    string? PasoNombre = null);
+    string? PasoNombre = null,
+                                              // HU #12182 — marcas informativas de la fila. `TienePrenda` necesita una consulta
+                                              // en lote (la decisión vive en su propia tabla); `TieneTransformacion` sale de los
+                                              // field_values que el grafo del listado YA carga, así que no cuesta nada.
+                                              // Las dos las decide `TramiteMarcas`, no este mapeo.
+    bool TienePrenda = false,
+    bool TieneTransformacion = false);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -135,13 +141,20 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
 
+        // HU #12182 — marca de prenda: UNA consulta para todo el listado (la decisión vive en tabla
+        // aparte y la instancia no la navega). La de transformación no aparece aquí porque sale de
+        // los field_values que el grafo ya trae.
+        IReadOnlySet<Guid> conPrenda = await repo.ListInstanceIdsConPrendaVigenteAsync(
+            instances.Select(i => i.Id).ToList(), ct) ?? new HashSet<Guid>();
+
         return instances
             .Select(e => ToSummary(
                 e,
                 IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.CreatedByUserId),
-                firmaBaul))
+                firmaBaul,
+                conPrenda.Contains(e.Id)))
             .ToList();
     }
 
@@ -157,7 +170,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         IReadOnlySet<string> identidadAprobadaPartes,
         string? companiaNombre = null,
         string? gestorNombre = null,
-        IReadOnlyDictionary<string, bool>? firmaBaulPorPersona = null)
+        IReadOnlyDictionary<string, bool>? firmaBaulPorPersona = null,
+        bool prendaVigente = false)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
@@ -228,7 +242,9 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             // es el de esa posición. Null si el tipo no tiene recorrido parametrizado.
             pasoActual >= 1 && pasoActual <= state.Steps.Count
                 ? state.Steps[pasoActual - 1].Label
-                : null);
+                : null,
+            TramiteMarcas.TienePrenda(prendaVigente, e.TypeCode),
+            TramiteMarcas.TieneTransformacion(fv, e.TypeCode));
     }
 
     /// <summary>
