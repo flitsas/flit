@@ -22,6 +22,7 @@ using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
@@ -449,6 +450,25 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status429TooManyRequests);
 
+        group.MapGet("/imprint-signatures", ListImprintSignaturesAsync)
+            .WithName("AdminOtListImprintSignatures")
+            .WithSummary("Lista improntas firmadas por placa (HU #12148)")
+            .WithDescription("Consulta las auditorías de firma digital de impronta manual asociadas a la placa. "
+                + "No expone private_key.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/imprint-signatures/{id:guid}/validate", ValidateImprintSignatureAsync)
+            .WithName("AdminOtValidateImprintSignature")
+            .WithSummary("Valida la firma digital de una impronta manual (HU #12148)")
+            .WithDescription("Verifica RSA-SHA256 del hash registrado y persiste el resultado en bitácora append-only.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
@@ -667,6 +687,86 @@ public static class AdminOtEndpoints
     {
         var sub = user.FindFirstValue("sub");
         return Guid.TryParse(sub, out var userId) ? userId : null;
+    }
+
+    private static async Task<IResult> ListImprintSignaturesAsync(
+        HttpContext httpContext,
+        ListImprintSignaturesByPlacaHandler handler,
+        [FromQuery] string? placa,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (string.IsNullOrWhiteSpace(placa))
+        {
+            return Results.BadRequest(new { error = "placa es obligatoria" });
+        }
+
+        var result = await handler.HandleAsync(
+            new ListImprintSignaturesByPlacaQuery
+            {
+                TenantId = tenantId,
+                Placa = placa,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data = result.Data });
+    }
+
+    private static async Task<IResult> ValidateImprintSignatureAsync(
+        HttpContext httpContext,
+        Guid id,
+        ValidateImprintSignatureHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var validatedBy = ResolveUserId(httpContext.User);
+        if (validatedBy is null)
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim sub" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var result = await handler.HandleAsync(
+            new ValidateImprintSignatureCommand
+            {
+                TenantId = tenantId,
+                VehicleSignatureImprintId = id,
+                ValidatedBy = validatedBy.Value,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Found)
+        {
+            return Results.NotFound(new
+            {
+                vehicleSignatureImprintId = result.VehicleSignatureImprintId,
+                result = result.Result,
+                failureReason = result.FailureReason,
+                validatedAt = result.ValidatedAt,
+            });
+        }
+
+        return Results.Ok(new
+        {
+            validationId = result.ValidationId,
+            vehicleSignatureImprintId = result.VehicleSignatureImprintId,
+            result = result.Result,
+            failureReason = result.FailureReason,
+            validatedAt = result.ValidatedAt,
+        });
     }
 
     private static async Task<IResult> ListWebhooksAsync(

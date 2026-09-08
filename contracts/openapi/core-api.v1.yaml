@@ -1069,6 +1069,71 @@ paths:
         "200":
           description: Perfil actualizado.
 
+  /api/v1/admin/ot/imprint-signatures:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListImprintSignatures
+      summary: Lista improntas firmadas por placa (HU #12148)
+      description: >
+        Consulta auditorías de firma digital de impronta manual asociadas a la placa.
+        No expone private_key. Requiere rol SuperAdmin u ot_admin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: placa
+          in: query
+          required: true
+          schema: { type: string }
+          description: Placa del vehículo (normalización Trim+Upper en servidor).
+      responses:
+        "200":
+          description: Improntas firmadas encontradas.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ImprintSignatureItem"
+        "400":
+          description: Falta query placa.
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+
+  /api/v1/admin/ot/imprint-signatures/{id}/validate:
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtValidateImprintSignature
+      summary: Valida firma digital de impronta manual (HU #12148)
+      description: >
+        Verifica RSA-SHA256 PKCS#1 del hash registrado y persiste el resultado en
+        tramites.imprint_signature_validations (append-only).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de tramites.vehicle_signature_imprints.
+      responses:
+        "200":
+          description: Validación ejecutada (valid o invalid).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImprintSignatureValidationResult"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+        "404":
+          description: Impronta firmada no encontrada (not_found).
+
   /api/v1/admin/transit-office-tenants/index:
     get:
       tags: [Admin · Tenants OT]
@@ -8275,6 +8340,45 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
       required: [data, totalCount, page, pageSize]
+
+    ImprintSignatureItem:
+      type: object
+      description: >
+        Auditoría de impronta manual firmada (tramites.vehicle_signature_imprints).
+        Deliberadamente NO incluye private_key (HU #12148).
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid }
+        placa: { type: string }
+        moduleCode: { type: string }
+        attachmentId: { type: string, format: uuid, nullable: true }
+        publicKey: { type: string }
+        documentHash: { type: string }
+        signature: { type: string }
+        signedAt: { type: string, format: date-time }
+        wasSignedWithoutOwnerSignature: { type: boolean }
+        signedStoragePath: { type: string, nullable: true }
+        signedSha256: { type: string, nullable: true }
+        signedSizeBytes: { type: integer, format: int64, nullable: true }
+        signedFilename: { type: string, nullable: true }
+        deletedAt: { type: string, format: date-time, nullable: true }
+      required:
+        [id, tenantId, procedureInstanceId, placa, moduleCode, publicKey, documentHash,
+         signature, signedAt, wasSignedWithoutOwnerSignature]
+
+    ImprintSignatureValidationResult:
+      type: object
+      description: Resultado de POST /admin/ot/imprint-signatures/{id}/validate (HU #12148).
+      properties:
+        validationId: { type: string, format: uuid }
+        vehicleSignatureImprintId: { type: string, format: uuid }
+        result:
+          type: string
+          enum: [valid, invalid, not_found]
+        failureReason: { type: string, nullable: true }
+        validatedAt: { type: string, format: date-time }
+      required: [vehicleSignatureImprintId, result, validatedAt]
 
     ImprontaGenerationItem:
       type: object

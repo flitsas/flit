@@ -58,4 +58,53 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
 
         return preserve;
     }
+
+    public async Task<IReadOnlyList<VehicleSignatureImprintListRow>> ListByPlacaAsync(
+        string placa,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(placa))
+            return Array.Empty<VehicleSignatureImprintListRow>();
+
+        var normalized = NormalizePlaca(placa);
+
+        return await (
+                from imp in db.VehicleSignatureImprints.IgnoreQueryFilters().AsNoTracking()
+                join pi in db.ProcedureInstances.AsNoTracking()
+                    on imp.ProcedureInstanceId equals pi.Id
+                where pi.Plate != null && pi.Plate.Trim().ToUpper() == normalized
+                orderby imp.SignedAt descending
+                select new VehicleSignatureImprintListRow
+                {
+                    Id = imp.Id,
+                    TenantId = imp.TenantId,
+                    ProcedureInstanceId = imp.ProcedureInstanceId,
+                    Placa = pi.Plate!,
+                    ModuleCode = imp.ModuleCode,
+                    AttachmentId = imp.AttachmentId,
+                    PublicKey = imp.PublicKey,
+                    DocumentHash = imp.DocumentHash,
+                    Signature = imp.Signature,
+                    SignedAt = imp.SignedAt,
+                    WasSignedWithoutOwnerSignature = imp.WasSignedWithoutOwnerSignature,
+                    SignedStoragePath = imp.SignedStoragePath,
+                    SignedSha256 = imp.SignedSha256,
+                    SignedSizeBytes = imp.SignedSizeBytes,
+                    SignedFilename = imp.SignedFilename,
+                    DeletedAt = imp.DeletedAt,
+                })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public Task<VehicleSignatureImprint?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default) =>
+        db.VehicleSignatureImprints
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+    private static string NormalizePlaca(string placa) =>
+        placa.Trim().ToUpperInvariant();
 }
