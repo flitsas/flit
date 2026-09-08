@@ -1847,21 +1847,14 @@ function TableBody({
         </table>
       </div>
 
-      {/* Fuera del contenedor con scroll horizontal: la paginación no se desplaza con la tabla.
-          Sin caja: encerrar el pie en una barra con borde le daba el mismo peso visual que a una
-          fila de datos, y el pie no es un dato. Lo que lo ata al listado es la alineación —el
-          selector a la izquierda y el conteo a la derecha, sobre los mismos ejes que las
-          columnas— y el aire, no un marco. */}
-      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 pt-3">
-        <label className="flex items-center gap-2 text-xs text-[#162744]/55 dark:text-white/45">
+      {/* Fuera del contenedor con scroll horizontal: la paginación no se desplaza con la tabla. */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
           Filas por página
-          {/* Control discreto: en reposo no dibuja caja. La cantidad de filas por página se elige
-              una vez y no se vuelve a tocar, así que un control de 36px con borde permanente pesa
-              más de lo que vale. El borde aparece al pasar el puntero o al enfocar con teclado. */}
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="h-8 cursor-pointer rounded-lg border border-transparent bg-transparent px-1.5 text-xs font-semibold text-[#162744] transition hover:border-[#DFE5ED] hover:bg-white focus:outline-none focus-visible:border-[#DFE5ED] focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:text-white dark:hover:border-white/15 dark:hover:bg-white/[0.06]"
+            className={controlCls(false)}
             aria-label="Filas por página"
           >
             {TAMANOS_DE_PAGINA.map((n) => (
@@ -1883,7 +1876,6 @@ function TableBody({
           }
           ariaLabel="Paginación de trámites"
           onPageChange={onPageChange}
-          espacioSuperior={false}
           className="flex-1"
         />
       </div>
