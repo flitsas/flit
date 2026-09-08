@@ -9,7 +9,8 @@ export type OtHubTabId =
   | "plate-ranges"
   | "usuarios"
   | "reportes"
-  | "mandatos";
+  | "mandatos"
+  | "imprint-validation";
 
 export interface OtHubTab {
   id: OtHubTabId;
@@ -33,6 +34,7 @@ export const OT_HUB_TABS: OtHubTab[] = [
   { id: "usuarios", label: "Usuarios", segment: "usuarios" },
   { id: "reportes", label: "Reportes", segment: "reportes" },
   { id: "mandatos", label: "Mandatos", segment: "mandatos" },
+  { id: "imprint-validation", label: "Validar impronta", segment: "imprint-validation" },
 ];
 
 /** Keys del dock Admin OT (agrupación distinta a SuperAdmin). */
@@ -45,6 +47,7 @@ export const OT_ADM_DOCK = {
   usuarios: "ot-adm-usuarios",
   reportes: "ot-adm-reportes",
   mandatos: "ot-adm-mandatos",
+  imprintValidation: "ot-adm-imprint-validation",
 } as const;
 
 const OT_PROFILE_ID_KEY = "flit-ot-transit-office-id";

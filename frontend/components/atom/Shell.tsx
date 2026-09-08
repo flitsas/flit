@@ -399,6 +399,13 @@ export function Shell({
         active: isOtHubSegmentActive(pathname, "mandatos"),
         onClick: () => goOtHub("mandatos"),
       },
+      {
+        key: OT_ADM_DOCK.imprintValidation,
+        label: "Validar impronta",
+        icon: Fingerprint,
+        active: isOtHubSegmentActive(pathname, "imprint-validation"),
+        onClick: () => goOtHub("imprint-validation"),
+      },
     );
   }
 
