@@ -3474,6 +3474,75 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/plate-history:
+    get:
+      operationId: tramitesListPlateHistory
+      tags: [Tramites]
+      summary: Historial de trámites de una placa, del más reciente al más antiguo
+      description: >
+        Feature #12189 / HU #12192 — historial operativo de una placa. Devuelve los trámites
+        asociados a esa placa ordenados por fecha de creación DESCENDENTE (el orden lo fija el
+        servidor: no hay parámetro de ordenamiento) junto con el `total` del universo para paginar.
+
+
+        El ALCANCE lo decide el rol de quien consulta, no un parámetro: `SuperAdmin` ve la placa en
+        TODAS las compañías —cada fila trae `tenantId` y `companiaNombre` para identificar de quién
+        es— y cualquier otro rol la ve únicamente dentro de su propia compañía. Un usuario
+        autenticado cuya compañía no se pueda resolver recibe 403; nunca el alcance global.
+
+
+        Los trámites con borrado lógico quedan excluidos. La placa se normaliza en el SERVIDOR
+        (se recortan espacios y se pasa a mayúsculas), así que `abc123`, ` ABC123 ` y `ABC123`
+        devuelven lo mismo. Una placa sin trámites responde 200 con `items` vacío y `total` 0,
+        NUNCA 404: la ausencia de historial es un resultado, no un error.
+
+
+        Requiere el permiso `historial-placa.read` (SuperAdmin bypassa por rol).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: placa
+          in: query
+          required: true
+          description: Placa a consultar. Se normaliza en el servidor (trim + mayúsculas).
+          schema: { type: string }
+          example: ABC123
+        - name: skip
+          in: query
+          required: false
+          description: Filas a omitir. Un valor negativo se trata como 0.
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: take
+          in: query
+          required: false
+          description: >
+            Tamaño de página. Fuera del rango 1..200 cae al tope de 200 (nunca devuelve
+            cero filas por un `take` inválido).
+          schema: { type: integer, minimum: 1, maximum: 200, default: 200 }
+      responses:
+        "200":
+          description: Historial de la placa dentro del alcance del consultante (puede ser vacío).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlateHistoryResponse"
+        "400":
+          description: Falta el parámetro `placa` o viene vacío.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: >
+            Sin el permiso `historial-placa.read`, o usuario autenticado sin compañía resoluble
+            (no se puede acotar el historial a su empresa).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/actors:
     get:
       operationId: tramitesGetActors
@@ -9275,6 +9344,59 @@ components:
         snapshotAt: { type: string, format: date-time }
         documentCount: { type: integer, description: Documentos congelados en el snapshot. }
       required: [id, referenceNumber, status, snapshotAt, documentCount]
+
+    PlateHistoryResponse:
+      type: object
+      description: >
+        Página del historial por placa (HU #12192). Misma forma que el listado de trámites
+        (`items` + `total`) para que el cliente reutilice el mismo mapeo de fila.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlateHistoryItem"
+        total:
+          type: integer
+          description: >
+            Total de trámites de la placa DENTRO DEL ALCANCE del consultante, no el tamaño de la
+            página: es el número con el que se paginan los resultados.
+      required: [items, total]
+
+    PlateHistoryItem:
+      type: object
+      description: >
+        Fila del historial. Es la MISMA proyección de resumen que devuelve el listado de trámites
+        (`InstanceSummary`), no un DTO propio: el módulo de historial reutiliza la fila del listado
+        para no duplicar un contrato que ya consumen el dashboard y DR. FLIT. Aquí se documentan los
+        campos que el módulo pinta; la proyección incluye además el resto de campos del resumen del
+        listado.
+      additionalProperties: true
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string, description: Radicado del trámite. }
+        modalidad: { type: string, description: "Familia: matriculas | traspaso | otros." }
+        estado: { type: string, example: entregado }
+        tipoNombre: { type: string, nullable: true, description: Nombre del tipo concreto de trámite. }
+        tipoCodigo: { type: string, nullable: true }
+        placa: { type: string, nullable: true }
+        vin: { type: string, nullable: true }
+        organismoTransito: { type: string, nullable: true }
+        compradorNombre: { type: string, nullable: true }
+        vendedorNombre: { type: string, nullable: true, description: Parte saliente; null en matrícula inicial. }
+        gestorNombre: { type: string, nullable: true, description: Persona que radicó el trámite. }
+        createdAt: { type: string, format: date-time, description: Criterio de orden del historial (descendente). }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        tenantId:
+          type: string
+          format: uuid
+          description: Compañía dueña del trámite.
+        companiaNombre:
+          type: string
+          nullable: true
+          description: >
+            Razón social de la compañía dueña. La columna solo tiene sentido para SuperAdmin, que
+            es quien puede ver filas de varias compañías en la misma respuesta.
+      required: [id, referenceNumber, modalidad, estado, createdAt, tenantId]
 
     ProcedureInstanceSummary:
       type: object

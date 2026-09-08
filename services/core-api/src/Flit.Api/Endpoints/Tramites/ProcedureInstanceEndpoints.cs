@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.PlatePreassign;
+using Flit.Api.Authorization;
 using Flit.Api.Middleware;
 using Flit.Queries.Domain;
 using Flit.Tramites.Application.UseCases.Consultations;
@@ -187,6 +188,72 @@ internal static class ProcedureInstanceEndpoints
             var (filteredItems, total) = await filteredHandler.HandleAsync(request, ct);
             return Results.Ok(new { items = filteredItems, total });
         }).WithName("ListProcedureInstances");
+
+        // ── GET /instances/plate-history — Historial operativo por placa (Feature #12189, HU #12192) ──
+        //
+        // Endpoint propio y no un parámetro más del listado, aunque por dentro reutilice el MISMO
+        // handler filtrado: lo que cambia no es el filtro sino el ALCANCE y las garantías. El listado
+        // sirve a la operación diaria de una empresa; esto responde "todo lo que le ha pasado a esta
+        // placa", con permiso propio (historial-placa.read), orden cronológico fijado por contrato y
+        // —para SuperAdmin— visión de todas las compañías. Meterlo en /instances habría cambiado el
+        // contrato que ya consumen el listado y DR. FLIT.
+        //
+        // Tres decisiones que NO son del cliente y por eso no viajan como parámetros:
+        //   1) Alcance por rol (D1) — lo resuelve PlateHistoryScope, no un tenant que llegue en la URL.
+        //   2) Orden — SIEMPRE createdAt DESC. Dejarlo en un `sortBy` opcional significaba que sin él
+        //      el orden lo decidía el handler y no el criterio "más reciente primero".
+        //   3) Normalización de la placa — Trim + upper EN EL SERVIDOR. Si dependiera del cliente,
+        //      "abc123 " devolvería vacío desde curl y resultados desde la SPA.
+        //
+        // Los trámites con borrado lógico quedan fuera (D2): el repositorio aplica DeletedAt == null
+        // siempre, aquí solo se comprueba que nadie lo rompa.
+        group.MapGet("/instances/plate-history", async (
+            HttpContext http,
+            ListProcedureInstancesFilteredHandler filteredHandler,
+            [FromQuery] string? placa,
+            [FromQuery] int? skip,
+            [FromQuery] int? take,
+            CancellationToken ct) =>
+        {
+            var (contextTenantId, isSuperAdmin) = ResolveTenantContext(http);
+            var alcance = PlateHistoryScope.Resolve(contextTenantId, isSuperAdmin);
+            if (!alcance.Allowed)
+                return Results.Problem(
+                    statusCode: alcance.StatusCode, title: "Forbidden", detail: alcance.Detail);
+
+            // Sin placa no hay historial que pedir: 400 explícito en vez de devolver el listado
+            // completo de la compañía, que es lo que haría un filtro nulo.
+            var placaNormalizada = PlacaNormalizer.NormalizeOrNull(placa);
+            if (placaNormalizada is null)
+                return Results.Problem(
+                    statusCode: 400, title: "Bad Request",
+                    detail: "Indique la placa cuyo historial quiere consultar (parámetro 'placa').");
+
+            // La consulta se arma a partir del ALCANCE, no de variables sueltas: el tenant (incluido
+            // el null global) sale de PlateHistoryScope y el orden/tope los fija el contrato.
+            var request = PlateHistoryScope.BuildRequest(alcance, placaNormalizada, skip, take);
+
+            // Placa sin trámites → 200 con lista vacía y total 0. NUNCA 404: la placa no es un
+            // recurso de esta API, y un 404 haría que el cliente pintara un error donde solo hay
+            // ausencia de historial.
+            var (items, total) = await filteredHandler.HandleAsync(request, ct);
+            return Results.Ok(new { items, total });
+        })
+            .RequirePermission("historial-placa.read")
+            .WithName("ListProcedureInstancesPlateHistory")
+            .WithSummary("Historial de trámites de una placa, del más reciente al más antiguo")
+            .WithDescription("Devuelve los trámites asociados a una placa ordenados por fecha de "
+                + "creación descendente, con el total del universo para paginar. El alcance lo "
+                + "decide el rol de quien consulta: SuperAdmin ve la placa en todas las compañías "
+                + "(cada fila trae su tenantId y companiaNombre) y cualquier otro rol solo en la "
+                + "suya. Excluye los trámites con borrado lógico. La placa se normaliza en el "
+                + "servidor (sin espacios de borde y en mayúsculas). Una placa sin trámites "
+                + "responde 200 con items vacío y total 0, nunca 404. Requiere el permiso "
+                + "historial-placa.read (SuperAdmin bypassa).")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         // ── Filtros con la gramática de Consultas (HU #12106) ────────────────────────────────────
         //
