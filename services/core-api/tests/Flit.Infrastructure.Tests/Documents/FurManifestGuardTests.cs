@@ -509,8 +509,8 @@ public sealed class FurManifestGuardTests
         observations=Multiline:382,470,365,35,6.5,Left,True,5
         """;
 
-    // Línea base MAQUINARIA. Regenerada 2026-09-01: alineación visual (OT, placa, trámite,
-    // clase, marca/línea/colores/modelo, motor/VIN, combustible, propietario/comprador).
+    // Línea base MAQUINARIA. Regenerada 2026-09-08: microajuste visual (prenda −4pt Y,
+    // tracción −3pt Y, cabina OTROS +3pt X, A FAVOR DE −6pt Y, tipos de documento −2pt Y).
     // Los IDs `requested_process_11`/`_12` siguen siendo semánticos (constitución/levantamiento):
     // en esta plantilla el rótulo impreso "10"/"11" es prenda, no el número del id.
     private const string BaselineMaquinaria = """
@@ -524,8 +524,8 @@ public sealed class FurManifestGuardTests
         plate_number=Text:935,60,30,12,9,Center,False,null
         requested_process_1=cb:120.8,101.9,8
         requested_process_2=cb:182.6,101.9,8
-        requested_process_11=cb:325.6,125,8
-        requested_process_12=cb:389.6,125,8
+        requested_process_11=cb:325.6,129,8
+        requested_process_12=cb:389.6,129,8
         vehicle_class_AGRICOLA=cb:98,211,8
         vehicle_class_INDUSTRIAL=cb:195,211,8
         vehicle_class_CONSTRUCCION=cb:315,211,8
@@ -538,14 +538,14 @@ public sealed class FurManifestGuardTests
         vehicle_width=Text:595,162,130,12,7,Left,False,null
         vehicle_height=Text:737,162,60,12,7,Left,False,null
         vehicle_axles=Text:782,250,50,12,7,Left,False,null
-        vehicle_traction_llantas=cb:726.7,109.4,8
-        vehicle_traction_orugas=cb:795.2,109.4,8
-        vehicle_traction_cilindros=cb:861.5,109.4,8
-        vehicle_traction_otros=cb:930.1,109.4,8
+        vehicle_traction_llantas=cb:726.7,112.4,8
+        vehicle_traction_orugas=cb:795.2,112.4,8
+        vehicle_traction_cilindros=cb:861.5,112.4,8
+        vehicle_traction_otros=cb:930.1,112.4,8
         vehicle_cabin_cerrada=cb:507.5,218.5,8
         vehicle_cabin_parasol=cb:575.2,218.5,8
         vehicle_cabin_sin=cb:640,218.5,8
-        vehicle_cabin_otros=cb:696.8,218.5,8
+        vehicle_cabin_otros=cb:699.8,218.5,8
         vehicle_fuel_maq_1=cb:751.1,292.3,8
         vehicle_fuel_maq_2=cb:822.1,292.3,8
         vehicle_fuel_maq_3=cb:901.9,292.3,8
@@ -557,14 +557,14 @@ public sealed class FurManifestGuardTests
         vehicle_owner_first_last_name=Text:88,294,150,14,7,Left,False,null
         vehicle_owner_second_last_name=Text:242,294,148,14,7,Left,False,null
         vehicle_owner_name=Text:394,292,92,20,7,Left,False,5.5
-        vehicle_owner_document_type_c=cb:93.5,324.5,8
-        vehicle_owner_document_type_nit=cb:126.5,324.5,8
-        vehicle_owner_document_type_nn=cb:158.5,324.5,8
-        vehicle_owner_document_type_p=cb:192,324.5,8
-        vehicle_owner_document_type_ce=cb:233,324.5,8
-        vehicle_owner_document_type_ti=cb:275,324.5,8
-        vehicle_owner_document_type_nuip=cb:321.5,324.5,8
-        vehicle_owner_document_type_cd=cb:379,324.5,8
+        vehicle_owner_document_type_c=cb:93.5,326.5,8
+        vehicle_owner_document_type_nit=cb:126.5,326.5,8
+        vehicle_owner_document_type_nn=cb:158.5,326.5,8
+        vehicle_owner_document_type_p=cb:192,326.5,8
+        vehicle_owner_document_type_ce=cb:233,326.5,8
+        vehicle_owner_document_type_ti=cb:275,326.5,8
+        vehicle_owner_document_type_nuip=cb:321.5,326.5,8
+        vehicle_owner_document_type_cd=cb:379,326.5,8
         vehicle_owner_document_number=Multiline:426,323,58,24,6.5,Left,True,4.5
         vehicle_owner_address=Text:88,348,188,13,7,Left,False,null
         vehicle_owner_city=Text:286,348,118,13,7,Left,False,null
@@ -573,14 +573,14 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_first_last_name=Text:88,445,150,14,7,Left,False,null
         vehicle_buyer_second_last_name=Text:242,445,148,14,7,Left,False,null
         vehicle_buyer_name=Text:394,443,92,20,7,Left,False,5.5
-        vehicle_buyer_document_type_c=cb:93.5,487,8
-        vehicle_buyer_document_type_nit=cb:126.5,487,8
-        vehicle_buyer_document_type_nn=cb:158.5,487,8
-        vehicle_buyer_document_type_p=cb:192,487,8
-        vehicle_buyer_document_type_ce=cb:233,487,8
-        vehicle_buyer_document_type_ti=cb:275,487,8
-        vehicle_buyer_document_type_nuip=cb:321.5,487,8
-        vehicle_buyer_document_type_cd=cb:379,487,8
+        vehicle_buyer_document_type_c=cb:93.5,489,8
+        vehicle_buyer_document_type_nit=cb:126.5,489,8
+        vehicle_buyer_document_type_nn=cb:158.5,489,8
+        vehicle_buyer_document_type_p=cb:192,489,8
+        vehicle_buyer_document_type_ce=cb:233,489,8
+        vehicle_buyer_document_type_ti=cb:275,489,8
+        vehicle_buyer_document_type_nuip=cb:321.5,489,8
+        vehicle_buyer_document_type_cd=cb:379,489,8
         vehicle_buyer_document_number=Multiline:426,484,58,24,6.5,Left,True,4.5
         vehicle_buyer_address=Text:88,508,188,13,7,Left,False,null
         vehicle_buyer_city=Text:286,508,118,13,7,Left,False,null
@@ -590,12 +590,12 @@ public sealed class FurManifestGuardTests
         alert_data_code_2=cb:605,411.5,8
         alert_data_code_3=cb:689,411.5,8
         alert_data_code_4=cb:758,411.5,8
-        alert_data_code_5=Text:848,404,140,18,5.5,Left,False,4
+        alert_data_code_5=Text:848,410,140,18,5.5,Left,False,4
         observations=Multiline:498,453,468,40,6.5,Left,True,5
         """;
 
-    // Línea base REMOLQUES. Regenerada 2026-09-01: misma tanda de alineación visual que
-    // maquinaria, coordenadas propias. Plantilla oficial intacta. Automotor no se toca.
+    // Línea base REMOLQUES. Regenerada 2026-09-08: microajuste visual (duplicado tarjeta
+    // −6pt Y, inscripción prenda −3pt Y, A FAVOR DE −6pt Y). Plantilla oficial intacta.
     private const string BaselineRemolques = """
         traffic_secretary_name=Text:662,44,226,22,5.5,Left,False,null
         traffic_secretary_city=Text:635,69,60,11,5.5,Left,False,null
@@ -607,8 +607,8 @@ public sealed class FurManifestGuardTests
         plate_number=Text:936,58,30,12,9,Center,False,null
         requested_process_1=cb:120.8,101.9,8
         requested_process_2=cb:182.6,101.9,8
-        requested_process_10=cb:332.1,120.9,8
-        requested_process_11=cb:394.4,125,8
+        requested_process_10=cb:332.1,126.9,8
+        requested_process_11=cb:394.4,128,8
         requested_process_12=cb:460.1,128.9,8
         vehicle_class_REMOLQUE=cb:96,211,8
         vehicle_class_SEMIREMOLQUE=cb:186,211,8
@@ -660,7 +660,7 @@ public sealed class FurManifestGuardTests
         alert_data_code_2=cb:608,370,8
         alert_data_code_3=cb:692,370,8
         alert_data_code_4=cb:761,370,8
-        alert_data_code_5=Text:850,362,140,18,5.5,Left,False,4
+        alert_data_code_5=Text:850,368,140,18,5.5,Left,False,4
         observations=Multiline:500,420,478,70,6.5,Left,True,5
         """;
 
