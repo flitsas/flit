@@ -89,7 +89,7 @@ export const sanitizePlate = (v: string): string =>
 export const validatePlate = (value: string): string | null =>
   PLATE_PATTERN.test(value)
     ? null
-    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque) o MC029554 (maquinaria).";
+    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
 
 /** ¿El tipo de documento es pasaporte? (admite letras y números). */
 export const isPassport = (docType: string): boolean => docType.trim().toUpperCase() === "PAS";

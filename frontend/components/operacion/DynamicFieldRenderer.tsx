@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
 import type { FormFieldItem, ValidationErrorCode } from '@/lib/api/types/procedure-parametrization';
+import { InlineAlert } from '@/components/atom/InlineAlert';
 import { digitsOnly } from '@/lib/format/currency';
 import {
   sanitizeDocNumber,
@@ -328,9 +329,9 @@ export function DynamicFieldRenderer({ field, value, onChange, showErrors, serve
         </p>
       )}
       {displayError && (
-        <p id={errorId} role="alert" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+        <InlineAlert id={errorId} tone="warning" compact className="mt-1">
           {displayError}
-        </p>
+        </InlineAlert>
       )}
     </div>
   );

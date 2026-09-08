@@ -59,6 +59,10 @@ export interface InlineAlertProps {
   /** Acción opcional a la derecha (p. ej. "Reintentar"). */
   action?: ReactNode;
   className?: string;
+  /** id del contenedor, para enlazarlo desde `aria-describedby` de un campo. */
+  id?: string;
+  /** Compacta el padding/gap para usarlo debajo de un campo de formulario denso. */
+  compact?: boolean;
 }
 
 export function InlineAlert({
@@ -67,18 +71,21 @@ export function InlineAlert({
   children,
   action,
   className = '',
+  id,
+  compact = false,
 }: InlineAlertProps) {
   const { color, background, border, Icon } = INLINE_ALERT_TONES[tone];
   const interrumpe = tone === 'error' || tone === 'warning';
 
   return (
     <div
+      id={id}
       role={interrumpe ? 'alert' : 'status'}
       aria-live={interrumpe ? 'assertive' : 'polite'}
-      className={`flex items-start gap-3 rounded-xl p-3 ${className}`.trim()}
+      className={`flex items-start ${compact ? 'gap-1.5 rounded-lg p-1.5' : 'gap-3 rounded-xl p-3'} ${className}`.trim()}
       style={{ background, border: `1px solid ${border}` }}
     >
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color }} aria-hidden="true" />
+      <Icon className={compact ? 'mt-0.5 h-3.5 w-3.5 shrink-0' : 'mt-0.5 h-4 w-4 shrink-0'} style={{ color }} aria-hidden="true" />
       <div className="min-w-0 flex-1">
         {title ? (
           <p className="text-xs font-semibold" style={{ color }}>

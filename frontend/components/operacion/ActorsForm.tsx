@@ -2852,9 +2852,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               aria-invalid={!!rlErrors.representanteLegal}
             />
             {rlErrors.representanteLegal && (
-              <p className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+              <InlineAlert tone="warning" compact className="mt-1">
                 {rlErrors.representanteLegal}
-              </p>
+              </InlineAlert>
             )}
           </div>
           {/* Teléfono */}
@@ -3103,9 +3103,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.numeroDocumento && (
-                    <p id="comprador-numeroDoc-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                    <InlineAlert id="comprador-numeroDoc-err" tone="warning" compact className="mt-1">
                       {errors.numeroDocumento}
-                    </p>
+                    </InlineAlert>
                   )}
                   {seedingOwnerDoc && ownerSeedStatus === 'loading' && (
                     <p
@@ -3188,9 +3188,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.numeroDocumento && (
-                    <p id="comprador-numeroDoc-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                    <InlineAlert id="comprador-numeroDoc-err" tone="warning" compact className="mt-1">
                       {errors.numeroDocumento}
-                    </p>
+                    </InlineAlert>
                   )}
                 </div>
                 {!readOnly && !autoConsultRunt && (
@@ -3258,9 +3258,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 style={nombreBloqueado ? { background: 'rgba(223,229,237,0.35)' } : undefined}
               />
               {errors.nombreCompleto && (
-                <p id="comprador-nombre-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                <InlineAlert id="comprador-nombre-err" tone="warning" compact className="mt-1">
                   {errors.nombreCompleto}
-                </p>
+                </InlineAlert>
               )}
               {(runtState.status === 'error' || runtState.status === 'not_found') &&
                 !isJuridical(actor) && (
@@ -3301,9 +3301,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 className={INPUT_BASE}
               />
               {errors.email && (
-                <p id="comprador-email-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                <InlineAlert id="comprador-email-err" tone="warning" compact className="mt-1">
                   {errors.email}
-                </p>
+                </InlineAlert>
               )}
             </div>
             {/* Fila 2: teléfono | ciudad | dirección */}
@@ -3331,9 +3331,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 className={INPUT_BASE}
               />
               {errors.telefono && (
-                <p id="comprador-telefono-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                <InlineAlert id="comprador-telefono-err" tone="warning" compact className="mt-1">
                   {errors.telefono}
-                </p>
+                </InlineAlert>
               )}
             </div>
             <div className={`relative ${showCiudades ? 'z-40' : ''}`}>
@@ -3363,9 +3363,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 className={INPUT_BASE}
               />
               {errors.ciudad && (
-                <p id="comprador-ciudad-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                <InlineAlert id="comprador-ciudad-err" tone="warning" compact className="mt-1">
                   {errors.ciudad}
-                </p>
+                </InlineAlert>
               )}
               {showCiudades && (
                 <ul
@@ -3412,9 +3412,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 className={INPUT_BASE}
               />
               {errors.direccion && (
-                <p id="comprador-direccion-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                <InlineAlert id="comprador-direccion-err" tone="warning" compact className="mt-1">
                   {errors.direccion}
-                </p>
+                </InlineAlert>
               )}
             </div>
           </div>
@@ -3717,9 +3717,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className={INPUT_BASE}
                       />
                       {errors.numeroDocumento && (
-                        <p id={`${prefix}-numeroDoc-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                        <InlineAlert id={`${prefix}-numeroDoc-err`} tone="warning" compact className="mt-1">
                           {errors.numeroDocumento}
-                        </p>
+                        </InlineAlert>
                       )}
                     </div>
                     {!readOnly && (
@@ -3769,9 +3769,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                     />
                     {errors.numeroDocumento && (
-                      <p id={`${prefix}-numeroDoc-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                      <InlineAlert id={`${prefix}-numeroDoc-err`} tone="warning" compact className="mt-1">
                         {errors.numeroDocumento}
-                      </p>
+                      </InlineAlert>
                     )}
                     {seedingOwnerDoc && ownerSeedStatus === 'loading' && (
                       <p
@@ -3858,9 +3858,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     style={razonLocked || isNameLockedByRunt(index, actor) ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.nombreCompleto && (
-                    <p id={`${prefix}-nombre-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                    <InlineAlert id={`${prefix}-nombre-err`} tone="warning" compact className="mt-1">
                       {errors.nombreCompleto}
-                    </p>
+                    </InlineAlert>
                   )}
                   {(runtState.status === 'error' || runtState.status === 'not_found') && !isJuridical(actor) && (
                     <p id={`${prefix}-nombre-hint`} className="text-xs mt-1 opacity-70">
@@ -3899,9 +3899,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className={INPUT_BASE}
                       />
                       {errors.email && (
-                        <p id={`${prefix}-email-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                        <InlineAlert id={`${prefix}-email-err`} tone="warning" compact className="mt-1">
                           {errors.email}
-                        </p>
+                        </InlineAlert>
                       )}
                     </div>
                     {/* Teléfono — obligatorio (HU #11595 / validación HEAD) */}
@@ -3928,9 +3928,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className={INPUT_BASE}
                       />
                       {errors.telefono && (
-                        <p id={`${prefix}-telefono-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                        <InlineAlert id={`${prefix}-telefono-err`} tone="warning" compact className="mt-1">
                           {errors.telefono}
-                        </p>
+                        </InlineAlert>
                       )}
                     </div>
                     {/* Ciudad — HU #10956, precargable desde contacto ya conocido */}
@@ -3963,9 +3963,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className={INPUT_BASE}
                       />
                       {errors.ciudad && (
-                        <p id={`${prefix}-ciudad-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                        <InlineAlert id={`${prefix}-ciudad-err`} tone="warning" compact className="mt-1">
                           {errors.ciudad}
-                        </p>
+                        </InlineAlert>
                       )}
                       {showCiudadSuggestions && (
                         <ul
@@ -4013,9 +4013,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className={INPUT_BASE}
                       />
                       {errors.direccion && (
-                        <p id={`${prefix}-direccion-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                        <InlineAlert id={`${prefix}-direccion-err`} tone="warning" compact className="mt-1">
                           {errors.direccion}
-                        </p>
+                        </InlineAlert>
                       )}
                     </div>
                   </div>
