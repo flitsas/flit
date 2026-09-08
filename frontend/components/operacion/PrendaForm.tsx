@@ -155,6 +155,13 @@ interface Props {
    */
   exigeEntidadLevantamiento?: boolean;
   /**
+   * El tipo admite declarar la acción complementaria de prenda en la MISMA radicación (ADR-0055,
+   * HU #12129/#12130): solo `PRENDA_INSCRIPCION`/`LEVANTAMIENTO_PRENDA`
+   * (`wizardCapabilities.permiteAccionComplementaria`). En `false` (default) el comportamiento es
+   * el de siempre —`decisionFija` afirmado, sin superficie adicional— preservando AC2.
+   */
+  permiteAccionComplementaria?: boolean;
+  /**
    * Modalidad del trámite (OCR / documentos). Default matrícula.
    */
   modalidad?: WizardModalidad;
@@ -298,6 +305,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     modalidad = 'matricula_inicial',
     documentRequired = true,
     exigeEntidadLevantamiento = false,
+    permiteAccionComplementaria = false,
     onDocumentGateChange,
   },
   ref,
@@ -337,6 +345,39 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
    * certificado). Un selector de un solo valor es una pregunta cuya respuesta ya está dada.
    */
   const decisionFija = decisions.length === 1 ? decisions[0] : null;
+
+  /**
+   * ADR-0055/HU #12130 (AC1/AC2) — decisión de la acción COMPLEMENTARIA: la familia contraria a
+   * `decisionFija`. Solo existe cuando el tipo la admite (`permiteAccionComplementaria`, prop) Y hay
+   * `decisionFija` (acción única): `PRENDA_INSCRIPCION` fija `registrar` ⇒ complementaria `levantar`;
+   * `LEVANTAMIENTO_PRENDA` fija `levantar` ⇒ complementaria `registrar`. `null` desactiva por
+   * completo la superficie de la complementaria (checkbox + subformulario), preservando AC2 — el
+   * comportamiento por defecto de `decisionFija` (ADR-0050) no cambia si el gestor no la activa.
+   */
+  const complementariaDecision: PrendaDecision | null =
+    permiteAccionComplementaria && decisionFija === 'registrar'
+      ? 'levantar'
+      : permiteAccionComplementaria && decisionFija === 'levantar'
+        ? 'registrar'
+        : null;
+
+  // Checkbox + subformulario de la acción complementaria (AC1): activa/inactiva y sus propios
+  // campos de acreedor/entidad — independientes de los de la acción base de arriba.
+  const [complementariaActiva, setComplementariaActiva] = useState(false);
+  const [complementariaAcreedorNombre, setComplementariaAcreedorNombre] = useState('');
+  const [complementariaAcreedorDocumento, setComplementariaAcreedorDocumento] = useState('');
+  const [complementariaLevantamientoEntidad, setComplementariaLevantamientoEntidad] = useState('');
+  const [complementariaFieldErrors, setComplementariaFieldErrors] = useState<AcreedorFieldErrors>({});
+  const [complementariaDocSatisfied, setComplementariaDocSatisfied] = useState(false);
+  // AC1 — el subformulario complementario siempre incluye acreedor: obligatorio cuando la acción
+  // CONSTITUYE gravamen (`registrar`), opcional (pero capturable, sin prefill de RUNT propio) cuando
+  // LEVANTA — mismo criterio que `persisteAcreedor` de la acción base en tipos de acción única.
+  const complementariaMuestraAcreedor = complementariaDecision !== null;
+  const complementariaCapturaAcreedor = complementariaDecision === 'registrar';
+  const complementariaRequiereLevantamientoEntidad = complementariaDecision === 'levantar';
+  const complementariaRequiereDocumento =
+    complementariaDecision !== null && REQUIERE_DOCUMENTO.has(complementariaDecision);
+  const complementariaDocTipo = complementariaDecision ? prendaDocTipoFor(complementariaDecision) : null;
 
   /**
    * Matrícula inicial: sin decisión guardada y sin gravamen reportado, se preselecciona
@@ -383,16 +424,34 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       // ANTES del await: si el gestor elige decisión mientras la carga viaja, la marca sobrevive.
       const settle = pending.beginSettle();
       try {
-        const [p, detail] = await Promise.all([
+        const [items, detail] = await Promise.all([
           tramitesClient.getPrenda(instanceId),
           tramitesClient.getInstance(instanceId).catch(() => null),
         ]);
         if (!active) return;
+        // ADR-0055/HU #12129 — GET ahora es un ARRAY (0-2, una por familia). Cuando el tipo fija
+        // `decisionFija`, la fila de ESTE formulario es la que coincide exactamente con esa
+        // decisión (nunca cambia); la de la acción complementaria, si existe, es la otra. En el
+        // resto de tipos (0 o 1 vigente en la práctica, nunca dos) el primer elemento reproduce el
+        // comportamiento histórico de "el objeto o null".
+        const p = decisionFija ? (items.find((i) => i.decision === decisionFija) ?? null) : (items[0] ?? null);
+        const complementariaGuardada = complementariaDecision
+          ? (items.find((i) => i.decision === complementariaDecision) ?? null)
+          : null;
         const summary = detail?.fieldValues
           ? buildRuntPrendaSummary(detail.fieldValues)
           : { items: [] as RuntGravamenItem[] };
         setRuntSummary(summary);
         if (hasRuntAcreedorDetail(summary)) setRuntOpen(true);
+
+        if (complementariaGuardada) {
+          // AC1 — reabrir un borrador con la complementaria ya guardada: el checkbox y su
+          // subformulario se rehidratan igual que la acción base de abajo.
+          setComplementariaActiva(true);
+          setComplementariaAcreedorNombre(complementariaGuardada.acreedorNombre ?? '');
+          setComplementariaAcreedorDocumento(digitsOnly(complementariaGuardada.acreedorDocumento ?? ''));
+          setComplementariaLevantamientoEntidad(complementariaGuardada.levantamientoEntidad ?? '');
+        }
 
         if (p) {
           setDecision(p.decision);
@@ -440,14 +499,27 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       active = false;
     };
     // `pending` es estable (instancia única por montaje): no re-dispara la carga.
-  }, [instanceId, runtHasGravamen, offersRegistrar, pending, decisionFija, defaultSinPrenda]);
+  }, [
+    instanceId,
+    runtHasGravamen,
+    offersRegistrar,
+    pending,
+    decisionFija,
+    defaultSinPrenda,
+    complementariaDecision,
+  ]);
 
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */
   const muestraAcreedor = decision !== '' && MUESTRA_ACREEDOR.has(decision);
   const acreedorReadOnly = decision === 'levantar';
   const requiereDocumento = decision !== '' && REQUIERE_DOCUMENTO.has(decision);
-  const documentGateReady = !requiereDocumento || !documentRequired || docSatisfied;
+  const baseDocumentGateReady = !requiereDocumento || !documentRequired || docSatisfied;
+  // AC1/AC3 — mientras la complementaria esté activa, su certificado también gatea Continuar: dos
+  // acciones declaradas exigen dos soportes (docTipo distinto por familia, sin colisión de adjunto).
+  const complementariaDocumentGateReady =
+    !complementariaActiva || !complementariaRequiereDocumento || !documentRequired || complementariaDocSatisfied;
+  const documentGateReady = baseDocumentGateReady && complementariaDocumentGateReady;
 
   useEffect(() => {
     onDocumentGateChange?.(documentGateReady);
@@ -524,7 +596,36 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       setError('Indica ante qué entidad se levantó la prenda: es lo que el FUR declara en observaciones.');
       return false;
     }
+    // ADR-0055/HU #12130 (AC1) — con la complementaria activa, sus propios campos son obligatorios
+    // antes de guardar: mismo criterio que la acción base de arriba (acreedor si constituye,
+    // entidad si levanta).
+    if (complementariaActiva && complementariaDecision) {
+      if (complementariaCapturaAcreedor) {
+        const nombreVacio = !complementariaAcreedorNombre.trim();
+        const documentoVacio = !complementariaAcreedorDocumento.trim();
+        if (nombreVacio || documentoVacio) {
+          setComplementariaFieldErrors({
+            nombre: nombreVacio ? 'Ingresa el nombre del acreedor.' : undefined,
+            documento: documentoVacio ? 'Ingresa el documento del acreedor.' : undefined,
+          });
+          setError('Completa los datos del acreedor (nombre y documento) de la acción complementaria para continuar.');
+          return false;
+        }
+      }
+      if (complementariaRequiereLevantamientoEntidad && !complementariaLevantamientoEntidad.trim()) {
+        setError('Indica ante qué entidad se levantó la prenda de la acción complementaria.');
+        return false;
+      }
+    }
+    // AC5 — GAP DE NEGOCIO documentado (no implementado): ni ADR-0055 ni `PrendaCommand.cs`
+    // (`RegistrarPrendaHandler`) definen qué constituye un "conflicto entre inscripción y
+    // levantamiento sobre el mismo vehículo". Al contrario: el ADR describe como caso de uso
+    // VÁLIDO levantar el gravamen de un crédito pagado e inscribir de una vez el de un crédito
+    // nuevo (acreedores casi siempre distintos, pero no lo prohíbe si coinciden). Sin una regla de
+    // negocio real que distinguir de un uso legítimo, esta validación NO se inventa aquí — ver
+    // reporte de la HU #12130 para el gap a resolver con Producto/QA antes de cerrar AC5.
     setFieldErrors({});
+    setComplementariaFieldErrors({});
     setSaving(true);
     setSaved(false);
     setError(null);
@@ -543,6 +644,45 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         levantamientoEntidad:
           decision === 'levantar' ? levantamientoEntidad.trim() || null : null,
       });
+
+      // ADR-0055 (AC3) — el PUT NO cambió de forma: la acción complementaria se persiste con una
+      // SEGUNDA llamada idempotente al mismo endpoint. El backend re-scopea el versionado por
+      // familia automáticamente (no toca la vigente de la acción base que se acaba de guardar).
+      if (complementariaActiva && complementariaDecision) {
+        try {
+          await tramitesClient.putPrenda(instanceId, {
+            decision: complementariaDecision,
+            // El acreedor se persiste siempre que el subformulario lo muestra (`registrar` y
+            // `levantar`, AC1) — mismo criterio que `persisteAcreedor` de la acción base en tipos de
+            // acción única: el numeral 20 «A FAVOR DE» del FUR no debe salir mudo.
+            acreedorNombre: complementariaMuestraAcreedor
+              ? complementariaAcreedorNombre.trim() || null
+              : null,
+            acreedorDocumento: complementariaMuestraAcreedor
+              ? complementariaAcreedorDocumento.trim() || null
+              : null,
+            levantamientoEntidad: complementariaRequiereLevantamientoEntidad
+              ? complementariaLevantamientoEntidad.trim() || null
+              : null,
+          });
+        } catch (err) {
+          // La base YA quedó persistida (la llamada de arriba no lanzó): no se silencia el fallo
+          // parcial — se informa explícitamente cuál de las dos acciones sí quedó guardada y cuál
+          // no, para que el gestor sepa que debe reintentar SOLO la complementaria (Guardar de
+          // nuevo reintenta ambas, pero la base es idempotente: el reemplazo no la duplica).
+          const message =
+            err instanceof Error ? err.message : 'Error al guardar la acción complementaria';
+          setError(
+            `Se guardó "${PRENDA_DECISION_LABELS[decision]}", pero la acción complementaria ` +
+              `"${PRENDA_DECISION_LABELS[complementariaDecision]}" NO se guardó: ${message}. ` +
+              'Corrige lo que haga falta y vuelve a guardar.',
+          );
+          settle();
+          onSaved?.();
+          return false;
+        }
+      }
+
       setSaved(true);
       settle();
       onSaved?.();
@@ -943,6 +1083,193 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   <p className="mt-1 text-xs opacity-70">
                     Se imprime en las observaciones del FUR: «Levantamiento de prenda ante …».
                   </p>
+                </div>
+              )}
+
+              {/* ADR-0055/HU #12130 (AC1) — acción complementaria: solo existe para los tipos de
+                  acción única que la admiten (PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA). AC2: no
+                  activarla deja intacto el comportamiento por defecto de `decisionFija` de arriba. */}
+              {complementariaDecision && (
+                <div className="mt-2 border-t pt-4" style={{ borderColor: '#DFE5ED' }}>
+                  <label className="flex items-start gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={complementariaActiva}
+                      onChange={(e) => {
+                        pending.markDirty();
+                        const checked = e.target.checked;
+                        setComplementariaActiva(checked);
+                        setError(null);
+                        if (!checked) {
+                          // Desactivar la complementaria descarta sus errores de campo pendientes:
+                          // mismo criterio que el cambio de decisión base más arriba.
+                          setComplementariaFieldErrors({});
+                          setComplementariaDocSatisfied(false);
+                        }
+                      }}
+                      disabled={readOnly}
+                      className="mt-0.5"
+                      aria-controls="prenda-complementaria-subform"
+                    />
+                    <span>
+                      ¿También necesitas {complementariaDecision === 'levantar' ? 'levantar' : 'inscribir'}{' '}
+                      una prenda en esta radicación?
+                    </span>
+                  </label>
+
+                  {complementariaActiva && (
+                    <div id="prenda-complementaria-subform" className="mt-3 grid grid-cols-1 gap-4">
+                      <p className="text-xs" role="status">
+                        Acción complementaria:{' '}
+                        <span className="font-semibold">
+                          {PRENDA_DECISION_LABELS[complementariaDecision].toLowerCase()}
+                        </span>
+                        . Completa el acreedor y adjunta el certificado.
+                      </p>
+
+                      {complementariaMuestraAcreedor && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label
+                              htmlFor="prenda-complementaria-acreedor-nombre"
+                              className={
+                                complementariaCapturaAcreedor
+                                  ? REQUIRED_LABEL
+                                  : 'mb-1.5 block text-xs font-semibold'
+                              }
+                            >
+                              Acreedor (beneficiario)
+                              {complementariaCapturaAcreedor && (
+                                <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                                  *
+                                </span>
+                              )}
+                            </label>
+                            <input
+                              id="prenda-complementaria-acreedor-nombre"
+                              type="text"
+                              required={complementariaCapturaAcreedor}
+                              value={complementariaAcreedorNombre}
+                              onChange={(e) => {
+                                pending.markDirty();
+                                setComplementariaAcreedorNombre(e.target.value);
+                                if (complementariaFieldErrors.nombre) {
+                                  setComplementariaFieldErrors((f) => ({ ...f, nombre: undefined }));
+                                }
+                              }}
+                              disabled={readOnly}
+                              placeholder="Ej. Banco XYZ"
+                              className={INPUT_BASE}
+                              aria-invalid={!!complementariaFieldErrors.nombre}
+                              aria-describedby={
+                                complementariaFieldErrors.nombre
+                                  ? 'prenda-complementaria-acreedor-nombre-err'
+                                  : undefined
+                              }
+                            />
+                            {complementariaFieldErrors.nombre && (
+                              <p
+                                id="prenda-complementaria-acreedor-nombre-err"
+                                className="mt-1 text-xs"
+                                style={{ color: '#FF4E00' }}
+                              >
+                                {complementariaFieldErrors.nombre}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="prenda-complementaria-acreedor-doc"
+                              className={
+                                complementariaCapturaAcreedor
+                                  ? REQUIRED_LABEL
+                                  : 'mb-1.5 block text-xs font-semibold'
+                              }
+                            >
+                              NIT / documento del acreedor
+                              {complementariaCapturaAcreedor && (
+                                <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                                  *
+                                </span>
+                              )}
+                            </label>
+                            <input
+                              id="prenda-complementaria-acreedor-doc"
+                              type="text"
+                              required={complementariaCapturaAcreedor}
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              autoComplete="off"
+                              value={complementariaAcreedorDocumento}
+                              onChange={(e) => {
+                                pending.markDirty();
+                                setComplementariaAcreedorDocumento(digitsOnly(e.target.value));
+                                if (complementariaFieldErrors.documento) {
+                                  setComplementariaFieldErrors((f) => ({ ...f, documento: undefined }));
+                                }
+                              }}
+                              disabled={readOnly}
+                              className={INPUT_BASE}
+                              aria-invalid={!!complementariaFieldErrors.documento}
+                              aria-describedby={
+                                complementariaFieldErrors.documento
+                                  ? 'prenda-complementaria-acreedor-doc-err'
+                                  : undefined
+                              }
+                            />
+                            {complementariaFieldErrors.documento && (
+                              <p
+                                id="prenda-complementaria-acreedor-doc-err"
+                                className="mt-1 text-xs"
+                                style={{ color: '#FF4E00' }}
+                              >
+                                {complementariaFieldErrors.documento}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {complementariaRequiereLevantamientoEntidad && (
+                        <div>
+                          <label htmlFor="prenda-complementaria-levantamiento-entidad" className={REQUIRED_LABEL}>
+                            Entidad ante la que se levantó
+                            <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                              *
+                            </span>
+                          </label>
+                          <input
+                            id="prenda-complementaria-levantamiento-entidad"
+                            type="text"
+                            required
+                            value={complementariaLevantamientoEntidad}
+                            onChange={(e) => {
+                              pending.markDirty();
+                              setComplementariaLevantamientoEntidad(e.target.value);
+                            }}
+                            disabled={readOnly}
+                            maxLength={200}
+                            placeholder="Ej. Notaría 15 de Medellín"
+                            className={INPUT_BASE}
+                          />
+                          <p className="mt-1 text-xs opacity-70">
+                            Se imprime en las observaciones del FUR: «Levantamiento de prenda ante …».
+                          </p>
+                        </div>
+                      )}
+
+                      {complementariaRequiereDocumento && complementariaDocTipo && (
+                        <PrendaDocumentUpload
+                          instanceId={instanceId}
+                          decision={complementariaDecision}
+                          docTipo={complementariaDocTipo}
+                          documentRequired={documentRequired}
+                          onSatisfiedChange={setComplementariaDocSatisfied}
+                          onChanged={onSaved}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </>

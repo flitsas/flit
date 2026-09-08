@@ -1263,9 +1263,15 @@ export interface SuggestedCommercialValue {
   sources: AvaluoSource[];
 }
 
-// ── Prenda / gravamen (IT-3, Feature #10585) ─────────────────────────
+// ── Prenda / gravamen (IT-3, Feature #10585; captura dual ADR-0055/HU #12129) ─
 //   PUT /api/v1/tramites/instances/{id}/prenda -> PrendaData
-//   GET /api/v1/tramites/instances/{id}/prenda -> PrendaData | null
+//   GET /api/v1/tramites/instances/{id}/prenda -> PrendaData[] (0 a 2 elementos)
+//
+// Cambio de contrato de lectura (ADR-0055, HU #12129/#12130): antes devolvía `PrendaData | null`
+// (a lo sumo una decisión), porque el modelo solo admitía una fila vigente por instancia. Desde
+// HU #12128, `PRENDA_INSCRIPCION`/`LEVANTAMIENTO_PRENDA` pueden tener constitución y levantamiento
+// vigentes A LA VEZ (una por familia), así que el shape pasa a ARRAY de 0-2 elementos. Matrícula y
+// Traspaso siguen devolviendo, en la práctica, 0 o 1 elemento — no admiten la acción complementaria.
 export type PrendaDecision =
   | 'solicitar'
   | 'registrar'
@@ -1273,7 +1279,7 @@ export type PrendaDecision =
   | 'omitir'
   | 'sin_prenda';
 
-/** Decisión de prenda vigente del trámite (o null si no se ha registrado ninguna). */
+/** Una decisión de prenda vigente del trámite. `GET /prenda` devuelve un ARRAY de 0-2 de este DTO. */
 export interface PrendaData {
   id: string;
   decision: PrendaDecision;

@@ -171,7 +171,7 @@ beforeEach(() => {
   mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listTransitOffices.mockResolvedValue([]);
   mocks.runRnmc.mockResolvedValue([]);
-  mocks.getPrenda.mockResolvedValue(null);
+  mocks.getPrenda.mockResolvedValue([]);
   mocks.getActors.mockResolvedValue([
     {
       rol: 'vendedor',
@@ -689,14 +689,17 @@ describe('FirmaFurStep — resumen / expediente', () => {
         { formFieldId: null, fieldKey: 'cambio_combustible', valueText: 'true', valueJson: null, source: 'user' },
       ],
     });
-    mocks.getPrenda.mockResolvedValue({
-      id: 'prenda-1',
-      decision: 'registrar',
-      estado: 'vigente',
-      acreedorNombre: 'Banco Demo',
-      acreedorDocumento: '900111222',
-      createdAt: '2026-06-19T00:00:00Z',
-    });
+    // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY (0-2, una por familia).
+    mocks.getPrenda.mockResolvedValue([
+      {
+        id: 'prenda-1',
+        decision: 'registrar',
+        estado: 'vigente',
+        acreedorNombre: 'Banco Demo',
+        acreedorDocumento: '900111222',
+        createdAt: '2026-06-19T00:00:00Z',
+      },
+    ]);
 
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });

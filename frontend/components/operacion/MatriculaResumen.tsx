@@ -133,7 +133,13 @@ interface Props {
   firmaBaulPartes?: string[];
   soat?: { estado?: string | null; vencimiento?: string | null };
   transformaciones?: string[];
-  prenda?: ResumenPrenda | null;
+  /**
+   * Decisión(es) de prenda vigentes a reflejar. Acepta un objeto único (compatibilidad histórica,
+   * matrícula/traspaso) o un ARRAY (ADR-0055/HU #12130): `PRENDA_INSCRIPCION`/`LEVANTAMIENTO_PRENDA`
+   * con la acción complementaria activada llegan con constitución + levantamiento a la vez, y cada
+   * una se pinta en su propia tarjeta (AC4).
+   */
+  prenda?: ResumenPrenda | ResumenPrenda[] | null;
   /** Fecha del trámite (YYYY-MM-DD). Solo lectura en UI; siempre la del día. */
   fechaTramite?: string;
   instanceId?: string | null;
@@ -696,7 +702,10 @@ export default function MatriculaResumen({
   // / TramitesTable.tsx), fuera del alcance de este componente.
   const resumenTitulo = 'Consolidado del trámite';
   const partesTxt = [vendedor?.nombre, comprador?.nombre].filter(Boolean).join(' · ');
-  const hasExtras = transformaciones.length > 0 || !!prenda;
+  // ADR-0055/HU #12130 (AC4) — normaliza a array: acepta el objeto único histórico o el array de
+  // hasta dos decisiones vigentes (constitución + levantamiento) de la acción complementaria.
+  const prendas = prenda == null ? [] : Array.isArray(prenda) ? prenda : [prenda];
+  const hasExtras = transformaciones.length > 0 || prendas.length > 0;
   const showFecha = typeof fechaTramite === 'string' && fechaTramite.length > 0;
   const soatLine = `SOAT: ${soatLabel}${
     soatEstado === 'vigente' && soat?.vencimiento
@@ -1153,33 +1162,39 @@ export default function MatriculaResumen({
               </div>
             </ResumenCard>
           ) : null}
-          {prenda ? (
-            <ResumenCard title="Prenda / gravamen">
+          {/* AC4 (HU #12130) — una tarjeta por decisión vigente: con la acción complementaria
+              activada (ADR-0055) llegan dos (constitución + levantamiento), cada una con su
+              propio acreedor/documento; con 0-1 elementos el markup es idéntico al histórico. */}
+          {prendas.map((p, idx) => (
+            <ResumenCard
+              key={`${p.decisionLabel}-${idx}`}
+              title={prendas.length > 1 ? `Prenda / gravamen (${idx + 1} de ${prendas.length})` : 'Prenda / gravamen'}
+            >
               <div
                 className="grid grid-cols-1 gap-3"
                 aria-label="Prenda o gravamen"
               >
-                <Field label="Decisión" value={prenda.decisionLabel} />
-                {prenda.acreedorNombre || prenda.acreedorDocumento ? (
+                <Field label="Decisión" value={p.decisionLabel} />
+                {p.acreedorNombre || p.acreedorDocumento ? (
                   <>
-                    <Field label="Acreedor (beneficiario)" value={prenda.acreedorNombre} />
-                    <Field label="NIT / documento del acreedor" value={prenda.acreedorDocumento} />
+                    <Field label="Acreedor (beneficiario)" value={p.acreedorNombre} />
+                    <Field label="NIT / documento del acreedor" value={p.acreedorDocumento} />
                   </>
                 ) : null}
-                {prenda.documentoLabel ? (
-                  prenda.documento && instanceId ? (
+                {p.documentoLabel ? (
+                  p.documento && instanceId ? (
                     <PrendaDocumentoVerButton
                       instanceId={instanceId}
-                      documento={prenda.documento}
-                      label={prenda.documentoLabel}
+                      documento={p.documento}
+                      label={p.documentoLabel}
                     />
                   ) : (
-                    <Field label={prenda.documentoLabel} value="Sin documento cargado" />
+                    <Field label={p.documentoLabel} value="Sin documento cargado" />
                   )
                 ) : null}
               </div>
             </ResumenCard>
-          ) : null}
+          ))}
           {extrasSlot}
         </div>
       ) : null}

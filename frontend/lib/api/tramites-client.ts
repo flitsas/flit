@@ -1410,13 +1410,18 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     ),
 
-  // ── Prenda / gravamen (IT-3, Feature #10585) — GET/PUT /prenda ───
+  // ── Prenda / gravamen (IT-3, Feature #10585; captura dual ADR-0055/HU #12129) ───
+  // GET devuelve un ARRAY de 0-2 decisiones vigentes (una por familia constitución/levantamiento) —
+  // cambio de contrato de lectura cerrado en HU-FE-1 (#12130), ver `PrendaData` en procedure-runtime.
   getPrenda: (instanceId: string, tenantId?: string) =>
-    request<PrendaData | null>(
+    request<PrendaData[]>(
       `/api/v1/tramites/instances/${instanceId}/prenda`,
       { headers: tenantHeader(tenantId) },
     ),
 
+  // PUT NO cambió de forma: sigue recibiendo UNA decisión por request. El patrón para declarar la
+  // acción complementaria (ADR-0055) es llamar este mismo PUT dos veces, una por acción — el
+  // backend re-scopea el versionado por familia automáticamente.
   putPrenda: (instanceId: string, data: PrendaInput, tenantId?: string) =>
     request<PrendaData>(
       `/api/v1/tramites/instances/${instanceId}/prenda`,

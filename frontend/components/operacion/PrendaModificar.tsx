@@ -31,8 +31,11 @@ export function PrendaModificar({ instanceId }: { instanceId: string }) {
     let active = true;
     const load = async () => {
       try {
-        const p = await tramitesClient.getPrenda(instanceId);
-        if (active) setPrenda(p);
+        // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY. Este panel vive fuera de los tipos
+        // prendarios de acción única (Matrícula/Traspaso, `ALL_DECISIONS`), que nunca admiten dos
+        // vigentes a la vez: tomar la primera reproduce el comportamiento histórico sin cambios.
+        const [p] = await tramitesClient.getPrenda(instanceId);
+        if (active) setPrenda(p ?? null);
       } catch {
         /* sin prenda vigente: el panel no se muestra */
       } finally {

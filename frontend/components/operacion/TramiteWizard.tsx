@@ -30,6 +30,7 @@ import {
   esTipoDePrenda,
   modalidadPorEntrada,
   modalidadPorPartes,
+  permiteAccionComplementaria,
   rolesDeActores,
   runtAvisoGravamenVariant,
   transformacionDelTipo,
@@ -4670,6 +4671,9 @@ function StepBody({
                         }
                         documentRequired={documentoObligatorio}
                         exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
+                        // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
+                        // admiten declarar la acción complementaria en la misma radicación.
+                        permiteAccionComplementaria={permiteAccionComplementaria(tipoCodigo)}
                         onDocumentGateChange={onPrendaDocumentGateChange}
                         runtHasGravamen={gravamen?.status === 'warn'}
                         runtGravamenMessage={gravamen?.message}

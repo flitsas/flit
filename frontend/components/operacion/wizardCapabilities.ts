@@ -273,6 +273,42 @@ export function esPrendaDeAccionUnica(codigo: string | null | undefined): boolea
 }
 
 /**
+ * ¿El tipo admite declarar la acción complementaria de prenda en la MISMA radicación (ADR-0055,
+ * HU #12129/#12130)? Espejo de `ProcedureTypeLayers.PermiteAccionComplementaria` en el dominio:
+ * MISMOS codes, misma respuesta. Distinta pregunta de {@link esPrendaDeAccionUnica} — esa responde
+ * «¿el tipo fija una sola decisión posible?» (sigue siendo `true` para estos mismos dos tipos: la
+ * acción PROPIA del trámite sigue siendo una), y esta responde «¿puede coexistir con ella un
+ * segundo hecho vigente de la familia contraria?».
+ *
+ * <p>Solo `PRENDA_INSCRIPCION`/`LEVANTAMIENTO_PRENDA` devuelven `true`. Cualquier otro tipo —
+ * Matrícula, Traspaso, `LEVANTAR_INSCRIBIR_PRENDA`/`CAMBIO_ACREEDOR` (inactivos)— devuelve `false`:
+ * siguen operando con una sola decisión de prenda mutuamente excluyente (ADR-0050).</p>
+ */
+export function permiteAccionComplementaria(codigo: string | null | undefined): boolean {
+  const v = (codigo ?? '').trim().toUpperCase();
+  return v === 'PRENDA_INSCRIPCION' || v === 'LEVANTAMIENTO_PRENDA';
+}
+
+/**
+ * Decisión de la acción COMPLEMENTARIA para un tipo prendario de acción única (ADR-0055): la
+ * familia contraria a la que ya fija `decisionesDelTipoDePrenda`. `null` cuando el tipo no admite
+ * complementaria ({@link permiteAccionComplementaria} en `false`).
+ *
+ * <p>`PRENDA_INSCRIPCION` fija `registrar` (constitución) ⇒ su complementaria es `levantar`
+ * (levantamiento). `LEVANTAMIENTO_PRENDA` fija `levantar` ⇒ su complementaria es `registrar`. No
+ * hay una tercera opción posible: son exactamente los dos únicos tipos con
+ * `permiteAccionComplementaria`.</p>
+ */
+export function decisionComplementariaDelTipo(
+  codigo: string | null | undefined,
+): PrendaDecision | null {
+  if (!permiteAccionComplementaria(codigo)) return null;
+  const decisiones = decisionesDelTipoDePrenda(codigo);
+  if (decisiones?.length !== 1) return null;
+  return decisiones[0] === 'levantar' ? 'registrar' : 'levantar';
+}
+
+/**
  * Decisiones de prenda que ofrece un tipo PRENDARIO: son fijas, porque la acción ya la eligió quien
  * eligió el trámite. Ofrecer «omitir» o «sin prenda» en un levantamiento de prenda sería ofrecer no
  * hacer el trámite que se está radicando. `null` si el tipo no es de prenda.
