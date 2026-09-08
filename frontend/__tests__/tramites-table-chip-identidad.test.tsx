@@ -47,6 +47,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { TramitesTable } from '@/components/operacion/TramitesTable';
+// HU #12163 — el menú de acciones avanzadas del admin usa `useToast`: la tabla necesita
+// `<ToastProvider>` en el árbol, igual que en producción.
+import { ToastProvider } from '@/components/admin/Toast';
 
 // Uso de ejemplo: instancia({ identityValidationStatus: 'aprobado' }) → fila con chip acreditado.
 function instancia(overrides: Partial<InstanceSummary> = {}): InstanceSummary {
@@ -89,7 +92,7 @@ function instancia(overrides: Partial<InstanceSummary> = {}): InstanceSummary {
 
 async function filaConChip(item: InstanceSummary) {
   mocks.listInstances.mockResolvedValue([item]);
-  render(<TramitesTable />);
+  render(<ToastProvider><TramitesTable /></ToastProvider>);
   const row = (await screen.findByText(item.placa as string)).closest('tr') as HTMLElement;
   return row;
 }
