@@ -150,6 +150,10 @@ describe('HU #12104 — AC3: las celdas compuestas se despliegan en columnas', (
       'estado',
       'paso',
       'pasoNombre',
+      // HU #12183 — el .xlsx no puede llevar el ícono, así que las marcas salen en texto. Sin esta
+      // columna el dato desaparecería justo en el archivo, que es donde nadie puede contrastarlo
+      // con la pantalla.
+      'marcas',
       'secretaria',
     ]);
     expect(new Set(ids).size).toBe(ids.length);

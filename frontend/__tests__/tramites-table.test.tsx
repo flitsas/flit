@@ -1730,3 +1730,84 @@ describe('TramitesTable — abrir un trámite en subsanación', () => {
     expect(screen.queryByRole('menuitem', { name: /^Ver$/ })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * HU #12183 — la columna de marcas: prenda y transformación.
+ *
+ * Son DOS y solo dos —el borrador del requerimiento pedía «un ícono por tipo de trámite», que
+ * serían quince y ninguno diría nada que la columna «Trámite» no diga ya con palabras—, son
+ * informativas (no filtran, no ordenan, no responden al clic) y el color no puede ser lo único que
+ * las distinga: cada una lleva su rótulo accesible.
+ */
+describe('TramitesTable — marcas de prenda y transformación', () => {
+  function conMarcas(tienePrenda: boolean, tieneTransformacion: boolean): InstanceSummary[] {
+    const [base] = makeInstances(1);
+    return [{ ...base, tienePrenda, tieneTransformacion }];
+  }
+
+  it('pinta el ícono de prenda con su rótulo accesible', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(true, false));
+    render(<TramitesTable />);
+
+    const icono = await screen.findByAltText('Con prenda');
+    expect(icono).toHaveAttribute('src', '/assets/marcas/prenda.svg');
+    expect(screen.queryByAltText('Con transformación')).not.toBeInTheDocument();
+  });
+
+  it('pinta el ícono de transformación con su rótulo accesible', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(false, true));
+    render(<TramitesTable />);
+
+    const icono = await screen.findByAltText('Con transformación');
+    expect(icono).toHaveAttribute('src', '/assets/marcas/transformacion.svg');
+    expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
+  });
+
+  it('un trámite con las dos muestra los dos íconos, no uno', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(true, true));
+    render(<TramitesTable />);
+
+    expect(await screen.findByAltText('Con prenda')).toBeInTheDocument();
+    expect(screen.getByAltText('Con transformación')).toBeInTheDocument();
+  });
+
+  it('sin marcas pinta un guion, no una celda vacía', async () => {
+    // Una celda vacía se lee como un dato que falta —o como una fila que no cargó— y no como
+    // «este trámite no tiene ninguna de las dos».
+    mocks.listInstances.mockResolvedValue(conMarcas(false, false));
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
+    expect(screen.queryByAltText('Con transformación')).not.toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('un expediente servido sin las marcas no rompe la fila', async () => {
+    // Backend anterior al campo: `tienePrenda`/`tieneTransformacion` llegan indefinidos.
+    const [base] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([base]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
+  });
+
+  it('los íconos son informativos: no son botones ni enlaces', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(true, true));
+    render(<TramitesTable />);
+
+    const prenda = await screen.findByAltText('Con prenda');
+    expect(prenda.closest('button')).toBeNull();
+    expect(prenda.closest('a')).toBeNull();
+  });
+
+  it('la cabecera de Marcas no ofrece ordenar', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(true, false));
+    render(<TramitesTable />);
+
+    await screen.findByAltText('Con prenda');
+    const cabecera = screen.getByRole('columnheader', { name: /Marcas/i });
+    expect(within(cabecera).queryByRole('button')).toBeNull();
+  });
+});

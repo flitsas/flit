@@ -147,6 +147,16 @@ export interface InstanceSummary {
   tipoNombre?: string | null;
   /** `code` canónico del tipo, para decidir por tipo sin depender del nombre mostrado. */
   tipoCodigo?: string | null;
+  /**
+   * HU #12182 — marcas informativas de la fila: el trámite tiene un gravamen de prenda, o declara
+   * (o ES) una transformación del vehículo. Las decide el servidor con `TramiteMarcas`; el cliente
+   * solo las pinta. Un mismo trámite puede llevar las dos.
+   *
+   * Opcionales para expedientes servidos por un backend anterior al campo: la columna pinta un
+   * guion, que es lo mismo que pinta cuando la marca es `false`.
+   */
+  tienePrenda?: boolean;
+  tieneTransformacion?: boolean;
   estado: InstanceStatus;
   /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
   plateFlowStatus?: PlateFlowStatus | null;
@@ -2169,6 +2179,12 @@ export interface StatusHistoryItem {
   changedByUserId: string | null;
   changedByName: string | null;
   reason: string | null;
+  /**
+   * HU #12184 — compañía a la que pertenecía quien ejecutó el movimiento. No es la compañía dueña
+   * del trámite (esa es la misma en todos los movimientos): es quién hizo cada paso. `null` cuando
+   * lo movió un proceso automático o en movimientos anteriores a esa HU.
+   */
+  changedByCompania?: string | null;
 }
 
 /** Página del historial: más reciente primero. */

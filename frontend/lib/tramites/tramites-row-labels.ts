@@ -43,6 +43,49 @@ export function tramiteLabel(item: InstanceSummary): string {
 }
 
 /**
+ * HU #12183 — las dos marcas informativas de la fila, en el orden en que se pintan.
+ *
+ * <p>Son <b>dos</b> y solo dos: prenda y transformación. El borrador del requerimiento pedía «un
+ * ícono por tipo de trámite», que serían quince y ninguno diría nada que la columna «Trámite» no
+ * diga ya con palabras. Estas dos marcan lo que NO se ve en ninguna otra columna.</p>
+ *
+ * <p>El rótulo no es decorativo: los dos íconos son círculos de color —verde y azul— y el color no
+ * puede ser el único portador del significado. Va como `alt` de la imagen, así que un lector de
+ * pantalla lee «Con prenda» y quien pasa el ratón ve el mismo texto.</p>
+ *
+ * <p>Los SVG traen su propio círculo de color: se pintan enteros, sin pastilla ni recoloreado por
+ * CSS, igual que los íconos de estado.</p>
+ */
+export const MARCAS_TRAMITE = [
+  {
+    id: 'prenda',
+    label: 'Con prenda',
+    src: '/assets/marcas/prenda.svg',
+    lee: (item: InstanceSummary) => item.tienePrenda === true,
+  },
+  {
+    id: 'transformacion',
+    label: 'Con transformación',
+    src: '/assets/marcas/transformacion.svg',
+    lee: (item: InstanceSummary) => item.tieneTransformacion === true,
+  },
+] as const;
+
+/** Marcas activas de una fila, en orden. Vacío si no tiene ninguna. */
+export function marcasDe(item: InstanceSummary): readonly (typeof MARCAS_TRAMITE)[number][] {
+  return MARCAS_TRAMITE.filter((marca) => marca.lee(item));
+}
+
+/**
+ * Las marcas en TEXTO, para el Excel. Un archivo no puede llevar el ícono, y sin esta columna el
+ * dato desaparecería justo en el sitio donde nadie puede contrastarlo con la pantalla.
+ */
+export function marcasLabel(item: InstanceSummary): string {
+  const activas = marcasDe(item);
+  return activas.length > 0 ? activas.map((m) => m.label.replace('Con ', '')).join(', ') : '';
+}
+
+/**
  * Nombres de paso por familia — RESPALDO para expedientes servidos por un backend anterior a
  * `pasoNombre`. No se amplía: desde ADR-0050 el recorrido lo define el TIPO, no la familia, así que
  * una lista por familia no puede acertar en OTROS —quince tipos con recorridos distintos— y de hecho

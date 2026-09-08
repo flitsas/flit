@@ -52,6 +52,7 @@ import { tramitesExportFields } from '@/lib/tramites/tramites-table-columns';
 import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
+  marcasDe,
   stepLabel,
   tramiteLabel,
   vehiculo,
@@ -2354,6 +2355,34 @@ function TramiteRow({
     fuente: (
       <span className="block truncate text-xs text-[#162744]/90 dark:text-white/80">
         {FUENTE_LABEL[item.fuente ?? 'dashboard']}
+      </span>
+    ),
+    // HU #12183 — marcas de prenda y transformación. INFORMATIVAS: no son botones, no filtran y no
+    // ordenan (la cabecera de esta columna tampoco lleva orden, ver `sort` en la definición).
+    //
+    // El guion no es decoración: una celda vacía se lee como un dato que falta —o como una fila que
+    // no cargó bien— y no como «este trámite no tiene ninguna de las dos».
+    //
+    // Cada ícono lleva su rótulo en `alt` y en `title`: el color es lo único que los distingue a
+    // simple vista, y el color no puede ser el único portador del significado.
+    marcas: (
+      <span className="flex items-center gap-1.5">
+        {marcasDe(item).length === 0 ? (
+          <span className="text-xs text-[#162744]/45 dark:text-white/40">—</span>
+        ) : (
+          marcasDe(item).map((marca) => (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              key={marca.id}
+              src={marca.src}
+              alt={marca.label}
+              title={marca.label}
+              width={20}
+              height={20}
+              className="h-5 w-5 shrink-0"
+            />
+          ))
+        )}
       </span>
     ),
   };
