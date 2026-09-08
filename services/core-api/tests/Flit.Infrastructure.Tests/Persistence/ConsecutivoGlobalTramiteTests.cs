@@ -161,6 +161,43 @@ public sealed class ConsecutivoGlobalTramiteTests
             sql.Should().NotContain($"'{prefijoViejo}", $"{prefijoViejo} no es numérico y violaría el CHECK");
     }
 
+    // ── Orden numérico (HU #12153) ───────────────────────────────────────────
+
+    [Fact]
+    public void ElOrdenPorRadicadoSeTraduceASqlYNoSeEvaluaEnCliente()
+    {
+        // La prueba de comportamiento del orden corre sobre EF InMemory, que traduce cosas que
+        // Postgres no. Esta comprueba lo que aquella no puede: que Npgsql genera el ORDER BY en
+        // el servidor. Si length() no fuera traducible, EF Core lanzaría en ejecución — y el
+        // listado entero se caería, no solo el orden.
+        using var db = NewContext();
+
+        var sql = db.ProcedureInstances
+            .OrderBy(x => x.ReferenceNumber.Length)
+            .ThenBy(x => x.ReferenceNumber)
+            .ToQueryString();
+
+        sql.Should().Contain("ORDER BY");
+        sql.Should().Contain("length(", "el orden por longitud debe resolverse en Postgres");
+        sql.Should().NotContain("::bigint", "se evita el cast a propósito: puede fallar en ejecución");
+    }
+
+    [Fact]
+    public void ElDdl104ExigeEnteroSinCerosALaIzquierda()
+    {
+        // La equivalencia entre ORDER BY (longitud, texto) y el orden numérico solo se sostiene si
+        // no hay ceros a la izquierda: '0123' se ordenaría después de '999'. El CHECK lo impone.
+        // Sin comentarios: el propio script explica por qué NO se usa ::bigint, y esa mención
+        // no debe hacer fallar la comprobación.
+        var sql = SinComentarios(LoadResource(
+            "Flit.Infrastructure.Persistence.Sql.Ddl.104-HU12153-orden-numerico-radicado.sql"));
+
+        sql.Should().Contain("CHECK (reference_number ~ '^[1-9][0-9]*$')");
+        sql.Should().Contain("ix_procedure_instances_reference_orden");
+        sql.Should().Contain("length(reference_number), reference_number");
+        sql.Should().NotContain("::bigint", "el índice de apoyo no lleva cast");
+    }
+
     // ── Modelo de EF ─────────────────────────────────────────────────────────
 
     [Fact]

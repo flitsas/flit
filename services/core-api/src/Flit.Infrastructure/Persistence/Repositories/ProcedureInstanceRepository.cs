@@ -2317,9 +2317,23 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     .ThenByDescending(x => x.Id)
                 : query.OrderBy(x => db.Users.Where(u => u.Id == x.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault())
                     .ThenBy(x => x.Id),
+            // HU #12153 — el radicado es un número guardado como texto, así que ordenarlo como
+            // texto da 1, 10, 100, 2. Antes coincidía con el orden correcto por accidente, porque
+            // TRM-2026-000123 era de ancho fijo con ceros a la izquierda.
+            //
+            // Se ordena por (longitud, texto) y NO con un cast a bigint: sobre enteros sin ceros a
+            // la izquierda las dos ordenaciones son idénticas —verificado fila a fila sobre 967
+            // trámites reales, cero discrepancias— y esta no puede fallar en ejecución ni obliga a
+            // un índice de expresión con cast, que no se puede crear en la misma transacción que
+            // la renumeración. El invariante lo garantiza ck_procedure_instances_reference_numerico
+            // ('^[1-9][0-9]*$'), y lo apoya ix_procedure_instances_reference_orden.
             ProcedureInstanceSortBy.Radicado => descending
-                ? query.OrderByDescending(x => x.ReferenceNumber).ThenByDescending(x => x.Id)
-                : query.OrderBy(x => x.ReferenceNumber).ThenBy(x => x.Id),
+                ? query.OrderByDescending(x => x.ReferenceNumber.Length)
+                       .ThenByDescending(x => x.ReferenceNumber)
+                       .ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.ReferenceNumber.Length)
+                       .ThenBy(x => x.ReferenceNumber)
+                       .ThenBy(x => x.Id),
             ProcedureInstanceSortBy.Estado => descending
                 ? query.OrderByDescending(x => x.Status).ThenByDescending(x => x.Id)
                 : query.OrderBy(x => x.Status).ThenBy(x => x.Id),

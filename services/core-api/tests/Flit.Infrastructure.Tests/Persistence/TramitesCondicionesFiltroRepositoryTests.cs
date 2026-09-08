@@ -64,6 +64,40 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
         return (items.Select(i => i.ReferenceNumber).ToList(), total);
     }
 
+    // ── HU #12153 AC3 — buscar por el consecutivo ────────────────────────────────────────────
+
+    [Fact]
+    public async Task BuscarPorElConsecutivoEncuentraElTramite()
+    {
+        // El identificador pasa a ser un número pelado. El filtro ya normalizaba quitando guiones
+        // y puntos, así que sigue sirviendo tal cual: esta prueba lo fija para que nadie lo cambie
+        // suponiendo que el radicado siempre lleva prefijo.
+        await using var db = NewContext(nameof(BuscarPorElConsecutivoEncuentraElTramite));
+        db.ProcedureInstances.AddRange(Instancia("4571"), Instancia("4572"), Instancia("571"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Radicado, QueryOperator.EsAlguno, "4571"));
+
+        refs.Should().ContainSingle().Which.Should().Be("4571");
+        total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task BuscarPorParteDelConsecutivoNoSeLlevaAlQueSoloLoContiene()
+    {
+        // «contiene» sigue siendo contiene: 571 aparece dentro de 4571. Se deja explícito para que
+        // nadie lo lea como búsqueda numérica por prefijo, que es lo que un usuario podría esperar.
+        await using var db = NewContext(nameof(BuscarPorParteDelConsecutivoNoSeLlevaAlQueSoloLoContiene));
+        db.ProcedureInstances.AddRange(Instancia("4571"), Instancia("571"), Instancia("900"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Radicado, QueryOperator.Contiene, "571"));
+
+        refs.Should().BeEquivalentTo(["571", "4571"]);
+    }
+
     // ── AC3 — los cinco operadores, con la normalización de identificadores ──────────────────
 
     [Fact]
