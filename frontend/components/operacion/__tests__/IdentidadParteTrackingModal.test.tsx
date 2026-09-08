@@ -156,7 +156,10 @@ describe('IdentidadParteTrackingModal', () => {
     expect(screen.getByText(/enlace nuevo/i)).toBeInTheDocument();
   });
 
-  it('lo primero que se lee NO es la bitácora técnica: está detrás, plegada', async () => {
+  it('no ofrece la bitácora técnica: este panel no está acotado por permiso', async () => {
+    // El modal lo abre cualquiera que vea el listado. La bitácora enseña proveedor, códigos HTTP y
+    // reintentos de integración: diagnóstico de soporte, no lectura del gestor. Sigue disponible en
+    // el expediente y en los drawers de identidad, que es donde soporte la consulta.
     listBiometricExpediente.mockResolvedValue({
       validations: [VALIDACION_APROBADA],
       firmaBaulPartes: [],
@@ -164,15 +167,11 @@ describe('IdentidadParteTrackingModal', () => {
     });
     abrir();
 
-    // La tabla de siempre no se borra: sigue ahí, un clic más adentro y rotulada para soporte.
-    const boton = await screen.findByRole('button', { name: 'Bitácora técnica (soporte)' });
-    expect(boton).toHaveAttribute('aria-expanded', 'false');
+    await screen.findByRole('region', {
+      name: 'Validación de identidad de Laura Restrepo Ossa',
+    });
+    expect(screen.queryByRole('button', { name: /Bitácora técnica/i })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: /Cifrado/i })).toBeNull();
-
-    await userEvent.click(boton);
-    await waitFor(() =>
-      expect(screen.getByRole('columnheader', { name: /Cifrado/i })).toBeInTheDocument(),
-    );
   });
 
   it('la lectura humana no menciona ningún servicio externo', async () => {

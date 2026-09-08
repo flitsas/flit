@@ -1847,9 +1847,13 @@ function TableBody({
         </table>
       </div>
 
-      {/* Fuera del contenedor con scroll horizontal: la paginación no se desplaza con la tabla. */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
+      {/* Fuera del contenedor con scroll horizontal: la paginación no se desplaza con la tabla.
+          Va en su propia BARRA DE PIE, con el mismo borde, radio y fondo que las tarjetas de fila:
+          sueltos sobre el fondo de la página, el selector de filas y la navegación quedaban en dos
+          esquinas opuestas de un ancho de 1.400px, sin nada que los relacionara ni que cerrara el
+          listado por abajo — se leían como restos, no como el pie de la tabla. */}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-2xl border border-[#DFE5ED] bg-white px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">
+        <label className="flex items-center gap-2 text-xs font-semibold text-[#162744]/70 dark:text-white/60">
           Filas por página
           <select
             value={pageSize}
@@ -1876,6 +1880,7 @@ function TableBody({
           }
           ariaLabel="Paginación de trámites"
           onPageChange={onPageChange}
+          espacioSuperior={false}
           className="flex-1"
         />
       </div>
@@ -2486,9 +2491,9 @@ function TramiteRow({
               src={marca.src}
               alt={marca.label}
               title={marca.label}
-              width={20}
-              height={20}
-              className="h-5 w-5 shrink-0"
+              width={26}
+              height={26}
+              className="h-[26px] w-[26px] shrink-0"
             />
           ))
         )}

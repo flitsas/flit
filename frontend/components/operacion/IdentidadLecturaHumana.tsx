@@ -1,8 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
-import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   estadoDeIdentidad,
@@ -33,7 +31,6 @@ export function IdentidadLecturaHumana({
 }) {
   const [eventos, setEventos] = useState<IdentityAuditEvent[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [tecnicaAbierta, setTecnicaAbierta] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
@@ -120,33 +117,19 @@ export function IdentidadLecturaHumana({
       </div>
 
       {/*
-       * La bitácora de siempre, un clic más adentro. No se borra nada: cuando algo falla de verdad
-       * hay que poder diagnosticarlo. Lo que cambia es que deja de ser lo primero que se lee.
+       * NO hay bitácora técnica aquí.
        *
-       * El panel se MONTA al abrir, no se esconde con CSS. Montado y oculto seguiría pidiendo su
-       * propia copia de la bitácora en cada apertura del modal —una consulta que nadie miró— y su
-       * contenido, con el nombre del proveedor y los códigos HTTP, estaría igualmente en el
-       * documento aunque no se vea.
+       * La hubo: un desplegable «Bitácora técnica (soporte)» al pie de este panel. Se quitó porque
+       * este modal lo abre CUALQUIERA que pueda ver el listado —no hay permiso que lo acote—, y lo
+       * que la bitácora enseña es el nombre del proveedor de biometría, los códigos HTTP y los
+       * reintentos de integración. Eso no es información del gestor: es diagnóstico, y ponerlo a un
+       * clic de la fila lo convierte en parte de la lectura normal del trámite.
+       *
+       * No se pierde: `IdentityValidationTrackingPanel` sigue vivo y sigue montado en el expediente
+       * (`detalle/TramiteDetalleIdentidad`), en el paso de biometría y en los drawers de identidad,
+       * que es donde soporte lo consulta. Si algún día debe volver a este panel, tiene que venir
+       * detrás de un permiso —`usePermissions` / `hasPermission`—, no abierto.
        */}
-      <div className="border-t border-[#DFE5ED] px-4 py-2 dark:border-white/10">
-        <button
-          type="button"
-          onClick={() => setTecnicaAbierta((v) => !v)}
-          aria-expanded={tecnicaAbierta}
-          className="flex items-center gap-1.5 text-xs font-semibold text-[#162744]/55 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:text-white/50"
-        >
-          <ChevronRight
-            className={`h-3 w-3 shrink-0 transition-transform ${tecnicaAbierta ? 'rotate-90' : ''}`}
-            aria-hidden
-          />
-          Bitácora técnica (soporte)
-        </button>
-        {tecnicaAbierta ? (
-          <div className="mt-2">
-            <IdentityValidationTrackingPanel validationId={validation.id} embebido detailLayout />
-          </div>
-        ) : null}
-      </div>
     </section>
   );
 }

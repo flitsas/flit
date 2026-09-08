@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Car, FileText, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { SeccionCargando, SeccionError } from '@/components/operacion/detalle/primitivos';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { estadoLabel } from '@/lib/tramites/estados';
+import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { tramiteLabel, vehiculo } from '@/lib/tramites/tramites-row-labels';
 import type { InstanceSummary, StatusHistoryItem } from '@/lib/api/types/procedure-runtime';
 
@@ -80,21 +82,52 @@ export function TramiteTrackingModal({
 
   if (!item) return null;
 
+  const chip = estadoChipStyle(item.estado);
+
   return (
-    <Modal open={open} onClose={onClose} title={`Trámite ${item.referenceNumber}`} size="lg">
-      <FichaTramite item={item} />
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Trámite ${item.referenceNumber}`}
+      size="xl"
+      description={
+        // La identidad del trámite va en la cabecera, no repartida por la ficha: quien abre el
+        // panel desde una tabla larga necesita reconocer la fila de un vistazo, y el estado es
+        // justo el dato por el que hizo clic.
+        <span className="flex flex-wrap items-center gap-2">
+          <span
+            className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"
+            style={{ background: chip.bg, color: chip.color, borderColor: chip.border }}
+          >
+            {estadoLabel(item.estado)}
+          </span>
+          <span className="text-xs text-[#162744]/60 dark:text-white/50">
+            {[item.placa?.trim(), tramiteLabel(item)].filter(Boolean).join(' · ')}
+          </span>
+        </span>
+      }
+    >
+      <div className="space-y-5">
+        <FichaTramite item={item} />
 
-      <h4 className="mb-2 mt-5 text-sm font-bold text-[#162744] dark:text-white">Historial</h4>
+        {/* El historial también en tarjeta: suelto sobre el fondo del modal, y con líneas cortas,
+            quedaba flotando contra el borde izquierdo mientras la mitad derecha se veía vacía. */}
+        <section className="rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-3.5 dark:border-white/10 dark:bg-white/[0.03]">
+          <h4 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-[#557EFF]">
+            Historial
+          </h4>
 
-      {loading ? <SeccionCargando etiqueta="Cargando historial" filas={3} /> : null}
-      {!loading && error ? (
-        <SeccionError
-          mensaje={error}
-          contexto="el historial del trámite"
-          onReintentar={() => setReloadKey((k) => k + 1)}
-        />
-      ) : null}
-      {!loading && !error ? <Historial movimientos={movimientos} /> : null}
+          {loading ? <SeccionCargando etiqueta="Cargando historial" filas={3} /> : null}
+          {!loading && error ? (
+            <SeccionError
+              mensaje={error}
+              contexto="el historial del trámite"
+              onReintentar={() => setReloadKey((k) => k + 1)}
+            />
+          ) : null}
+          {!loading && !error ? <Historial movimientos={movimientos} /> : null}
+        </section>
+      </div>
     </Modal>
   );
 }
@@ -126,13 +159,31 @@ function Dato({ etiqueta, valor, mono = false }: { etiqueta: string; valor?: str
   );
 }
 
-function Bloque({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+/**
+ * Un grupo de la ficha, como TARJETA propia.
+ *
+ * <p>Antes los tres grupos compartían una sola caja y se repartían en columnas. Como cada grupo
+ * tiene un número distinto de datos —el vehículo tres, las partes una o dos, el trámite cuatro—,
+ * la caja quedaba con un agujero de aire debajo de la columna más corta y el borde inferior no
+ * cerraba con nada. Con una tarjeta por grupo esa diferencia de alturas deja de leerse como un
+ * hueco: `h-full` iguala los bordes y el aire sobrante queda DENTRO de una caja que lo justifica.</p>
+ */
+function Bloque({
+  titulo,
+  icono: Icono,
+  children,
+}: {
+  titulo: string;
+  icono: LucideIcon;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="min-w-0">
-      <p className="mb-2 border-b border-[#DFE5ED] pb-1 text-[11px] font-bold uppercase tracking-wider text-[#162744]/70 dark:border-white/10 dark:text-white/60">
+    <div className="flex h-full min-w-0 flex-col rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-3.5 dark:border-white/10 dark:bg-white/[0.03]">
+      <p className="mb-3 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#557EFF]">
+        <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden />
         {titulo}
       </p>
-      <dl className="space-y-2">{children}</dl>
+      <dl className="space-y-2.5">{children}</dl>
     </div>
   );
 }
@@ -151,15 +202,15 @@ function FichaTramite({ item }: { item: InstanceSummary }) {
   return (
     <section
       aria-label="Resumen del trámite"
-      className="grid gap-x-6 gap-y-5 rounded-2xl border border-[#DFE5ED] bg-[#F8FAFC] p-4 sm:grid-cols-3 dark:border-white/10 dark:bg-white/[0.03]"
+      className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3"
     >
-      <Bloque titulo="Vehículo">
+      <Bloque titulo="Vehículo" icono={Car}>
         <Dato etiqueta="Placa" valor={item.placa} mono />
         <Dato etiqueta="VIN" valor={item.vin} mono />
         <Dato etiqueta="Marca y línea" valor={vehiculo(item)} />
       </Bloque>
 
-      <Bloque titulo="Partes">
+      <Bloque titulo="Partes" icono={Users}>
         {esMatricula ? (
           <Dato
             etiqueta="Propietario"
@@ -173,7 +224,7 @@ function FichaTramite({ item }: { item: InstanceSummary }) {
         )}
       </Bloque>
 
-      <Bloque titulo="Trámite">
+      <Bloque titulo="Trámite" icono={FileText}>
         <Dato etiqueta="Tipo" valor={tramiteLabel(item)} />
         <Dato etiqueta="Organismo" valor={item.organismoTransito} />
         <Dato etiqueta="Gestiona" valor={item.companiaNombre} />
@@ -245,7 +296,17 @@ function Historial({ movimientos }: { movimientos: StatusHistoryItem[] }) {
               {[m.changedByCompania, m.changedByName].filter(Boolean).join(' · ')}
             </p>
           ) : null}
-          <p className="mt-0.5 font-mono text-[11px] text-[#162744]/50 dark:text-white/40">
+          {/* El motivo va DEBAJO y en tono secundario, no dentro del titular.
+              Muchos motivos los escribe el propio sistema al radicar («Radicación: entregado;
+              placa seleccionada/RUNT y paso gestor omitido (sub-estado terminado)») y son largos
+              y técnicos: en negrita, junto al estado, se comían dos renglones de titular y
+              tapaban lo único que el gestor busca en esta lista, que es POR DÓNDE VA. */}
+          {m.reason?.trim() ? (
+            <p className="mt-0.5 text-[11px] leading-4 text-[#162744]/55 dark:text-white/45">
+              {m.reason.trim()}
+            </p>
+          ) : null}
+          <p className="mt-1 font-mono text-[11px] text-[#162744]/50 dark:text-white/40">
             {fecha(m.changedAt)}
           </p>
         </li>
@@ -254,10 +315,9 @@ function Historial({ movimientos }: { movimientos: StatusHistoryItem[] }) {
   );
 }
 
-/** «Rechazado desde Entregado (motivo)». `fromStatus` y `reason` solo si el backend los trae. */
+/** «Rechazado desde Entregado». El motivo se pinta aparte, en su propia línea. */
 function hito(m: StatusHistoryItem): string {
   const to = estadoLabel(m.toStatus);
   const from = m.fromStatus ? estadoLabel(m.fromStatus) : null;
-  const motivo = m.reason?.trim();
-  return `${to}${from ? ` desde ${from}` : ''}${motivo ? ` (${motivo})` : ''}`;
+  return `${to}${from ? ` desde ${from}` : ''}`;
 }

@@ -21,6 +21,13 @@ export interface PageNavProps {
   resumen: string;
   /** Nombre accesible de la navegación; distingue varias paginaciones en una misma pantalla. */
   ariaLabel: string;
+  /**
+   * Separación propia respecto de lo que tiene encima. Por defecto sí, que es como la usan los
+   * listados que la cuelgan directamente de la tabla. Se apaga cuando la paginación vive DENTRO de
+   * una barra de pie con su propio relleno: ahí el `pt-3` descuadraba la línea de base contra el
+   * resto de los controles de la barra.
+   */
+  espacioSuperior?: boolean;
   className?: string;
 }
 
@@ -30,6 +37,7 @@ export function PageNav({
   onPageChange,
   resumen,
   ariaLabel,
+  espacioSuperior = true,
   className = '',
 }: PageNavProps) {
   const hayVariasPaginas = totalPages > 1;
@@ -45,7 +53,7 @@ export function PageNav({
 
   return (
     <nav
-      className={`flex flex-wrap items-center justify-end gap-4 pt-3 ${className}`}
+      className={`flex flex-wrap items-center justify-end gap-4 ${espacioSuperior ? 'pt-3' : ''} ${className}`}
       aria-label={ariaLabel}
     >
       <p className="text-xs opacity-70" role="status" aria-live="polite">
@@ -57,7 +65,7 @@ export function PageNav({
             type="button"
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
-            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
+            className="grid h-8 min-w-8 place-items-center rounded-lg px-2 text-sm font-semibold leading-none transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40 disabled:hover:brightness-100"
             style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
             aria-label="Página anterior"
           >
@@ -75,7 +83,7 @@ export function PageNav({
                 onClick={() => onPageChange(p)}
                 aria-label={`Página ${p}`}
                 aria-current={p === page ? 'page' : undefined}
-                className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                className="grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
                 style={
                   p === page
                     ? { background: '#557EFF', color: '#fff' }
@@ -90,7 +98,7 @@ export function PageNav({
             type="button"
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
-            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
+            className="grid h-8 min-w-8 place-items-center rounded-lg px-2 text-sm font-semibold leading-none transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40 disabled:hover:brightness-100"
             style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
             aria-label="Página siguiente"
           >
