@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-03-rem-calib-casillas",
+  "version": "2026-09-08-rem-calib-casillas",
   "pageWidth": 1008,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -17,8 +17,8 @@
 
     { "id": "requested_process_1", "type": "checkbox", "x": 120.8, "y": 101.9, "size": 8.0, "fontSize": 5.0 },
     { "id": "requested_process_2", "type": "checkbox", "x": 182.6, "y": 101.9, "size": 8.0, "fontSize": 5.0 },
-    { "id": "requested_process_10", "type": "checkbox", "x": 332.1, "y": 120.9, "size": 8.0, "fontSize": 5.0 },
-    { "id": "requested_process_11", "type": "checkbox", "x": 394.4, "y": 125.0, "size": 8.0, "fontSize": 5.0 },
+    { "id": "requested_process_10", "type": "checkbox", "x": 332.1, "y": 126.9, "size": 8.0, "fontSize": 5.0 },
+    { "id": "requested_process_11", "type": "checkbox", "x": 394.4, "y": 128.0, "size": 8.0, "fontSize": 5.0 },
     { "id": "requested_process_12", "type": "checkbox", "x": 460.1, "y": 128.9, "size": 8.0, "fontSize": 5.0 },
 
     { "id": "vehicle_class_REMOLQUE", "type": "checkbox", "x": 96.0, "y": 211.0, "size": 8.0, "fontSize": 5.0 },
@@ -76,7 +76,7 @@
     { "id": "alert_data_code_2", "type": "checkbox", "x": 608.0, "y": 370.0, "size": 8.0, "fontSize": 5.0 },
     { "id": "alert_data_code_3", "type": "checkbox", "x": 692.0, "y": 370.0, "size": 8.0, "fontSize": 5.0 },
     { "id": "alert_data_code_4", "type": "checkbox", "x": 761.0, "y": 370.0, "size": 8.0, "fontSize": 5.0 },
-    { "id": "alert_data_code_5", "type": "text", "x": 850.0, "y": 362.0, "w": 140.0, "h": 18.0, "fontSize": 5.5, "minFontSize": 4.0, "bold": false, "align": "left" },
+    { "id": "alert_data_code_5", "type": "text", "x": 850.0, "y": 368.0, "w": 140.0, "h": 18.0, "fontSize": 5.5, "minFontSize": 4.0, "bold": false, "align": "left" },
 
     { "id": "observations", "type": "multiline", "x": 500.0, "y": 420.0, "w": 478.0, "h": 70.0, "fontSize": 6.5, "minFontSize": 5.0, "bold": false, "align": "left", "autoFit": true }
   ]

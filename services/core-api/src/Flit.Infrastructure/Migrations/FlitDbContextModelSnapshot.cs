@@ -7237,6 +7237,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_instance_id");
 
+                    b.Property<string>("Provider")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("provider");
+
                     b.Property<string>("Sha256")
                         .IsRequired()
                         .HasMaxLength(64)

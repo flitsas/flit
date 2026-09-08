@@ -23,13 +23,19 @@ public sealed class GenerarConsolidadoMaestroHandler(
     IExpedienteConsolidadoMerger merger,
     IAttachmentStorage storage,
     IOtConfiguredDocumentOrderProvider? otOrderProvider = null,
-    Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null)
+    Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null,
+    IImprontaManualStamper? improntaManualStamper = null,
+    Domain.Integration.ISignatureVaultPolicy? signatureVaultPolicy = null,
+    IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null)
 {
     // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
     // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
     // portada queda como estaba.
     private readonly Domain.Integration.ICompaniaRadicadoraDirectory _companiaRadicadoraDirectory =
         companiaRadicadoraDirectory ?? Domain.Integration.NullCompaniaRadicadoraDirectory.Instance;
+
+    private readonly Domain.Integration.ISignatureVaultPolicy _signatureVaultPolicy =
+        signatureVaultPolicy ?? Domain.Integration.NullSignatureVaultPolicy.Instance;
 
     private static readonly HashSet<string> ConsolidadoTipos = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -116,7 +122,13 @@ public sealed class GenerarConsolidadoMaestroHandler(
             var bytes = await ReadAllBytesAsync(stream, ct);
             try
             {
-                pdfParts.Add(merger.NormalizeToPdf(bytes, attachment.Mimetype));
+                var pdf = merger.NormalizeToPdf(bytes, attachment.Mimetype);
+                pdf = await ImprontaManualStampApplier
+                    .MaybeStampAsync(
+                        pdf, attachment, instance, storage, improntaManualStamper, ct,
+                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository)
+                    .ConfigureAwait(false);
+                pdfParts.Add(pdf);
             }
             catch (NotSupportedException)
             {

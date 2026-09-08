@@ -853,6 +853,13 @@ export interface ProcedureAttachment {
    */
   source: string;
   uploadedAt: string;
+  /** Proveedor externo opcional (p. ej. `kyverum`). Ausente en cargas manuales del gestor. */
+  provider?: string | null;
+  /**
+   * HU #12116 — true si la impronta manual ya tiene firma digital de auditoría vigente.
+   * Reemplazar el archivo no es bloqueante; se firmará de nuevo al enviar a OT.
+   */
+  digitallySigned?: boolean;
 }
 
 /**
