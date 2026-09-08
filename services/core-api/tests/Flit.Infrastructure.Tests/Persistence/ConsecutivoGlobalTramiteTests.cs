@@ -107,6 +107,60 @@ public sealed class ConsecutivoGlobalTramiteTests
         LoadDdl().Should().NotContain("::bigint))");
     }
 
+    // ── Seeds (HU #12152) ────────────────────────────────────────────────────
+
+    /// <summary>Los seeds que insertan trámites y por tanto tocan el radicado.</summary>
+    public static TheoryData<string> SeedsDeTramites() =>
+    [
+        "Flit.Infrastructure.Persistence.Sql.Ddl.16-HU10133-ot-admin-dev-seed.sql",
+        "Flit.Infrastructure.Persistence.Sql.Ddl.21-HU10240-analytics-dev-seed.sql",
+        "Flit.Infrastructure.Persistence.Sql.Ddl.35-F11-log-qx-mock-seed.sql",
+    ];
+
+    /// <summary>Quita los comentarios de línea SQL para no medir lo que dice la documentación.</summary>
+    private static string SinComentarios(string sql) =>
+        string.Join('\n', sql.Split('\n').Select(linea =>
+        {
+            var corte = linea.IndexOf("--", StringComparison.Ordinal);
+            return corte >= 0 ? linea[..corte] : linea;
+        }));
+
+    private static string LoadResource(string recurso)
+    {
+        var assembly = typeof(FlitDbContext).Assembly;
+        using var stream = assembly.GetManifestResourceStream(recurso);
+        stream.Should().NotBeNull($"el DDL embebido {recurso} debe existir");
+        using var reader = new StreamReader(stream!, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
+    [Theory]
+    [MemberData(nameof(SeedsDeTramites))]
+    public void NingunSeedSeApoyaEnLaConstraintPorTenant(string recurso)
+    {
+        // uq_procedure_instances_tenant_reference deja de existir tras la migración 103, así que
+        // un ON CONFLICT que la nombre falla con «there is no unique or exclusion constraint
+        // matching the ON CONFLICT specification» al reejecutar el seed sobre una base migrada.
+        // La llave natural de estos seeds es el id, que ya era fijo.
+        SinComentarios(LoadResource(recurso)).Should()
+            .NotContain("ON CONFLICT (tenant_id, reference_number)");
+    }
+
+    [Theory]
+    [MemberData(nameof(SeedsDeTramites))]
+    public void LosRadicadosQueEscribenLosSeedsSonNumericos(string recurso)
+    {
+        // Estos seeds corren ANTES de la migración 103, cuando reference_number es NOT NULL y aún
+        // no tiene DEFAULT: tienen que traer un valor. Y ese valor debe ser numérico, o el CHECK
+        // que añade la 103 rechazaría la fila al renumerar. De ahí los rangos sintéticos 91/92/93.
+        // Solo el SQL: los comentarios de estos mismos archivos citan los prefijos viejos para
+        // explicar por qué se fueron, y eso no debe hacer fallar la prueba.
+        var sql = SinComentarios(LoadResource(recurso));
+
+        foreach (var prefijoViejo in new[] { "OT-DEV-", "SEED-ANL-", "QXSEED-" })
+            sql.Should().NotContain($"'{prefijoViejo}", $"{prefijoViejo} no es numérico y violaría el CHECK");
+    }
+
     // ── Modelo de EF ─────────────────────────────────────────────────────────
 
     [Fact]

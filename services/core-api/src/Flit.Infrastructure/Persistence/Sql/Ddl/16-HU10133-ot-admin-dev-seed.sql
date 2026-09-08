@@ -99,6 +99,17 @@ ON CONFLICT (code) DO NOTHING;
 --    DevelopmentAuthSeeder en cada arranque dev (post-migraciones), por eso debe usar
 --    el vocabulario nuevo.
 -- ─────────────────────────────────────────────────────────────────────────────
+-- HU #12151 — este seed tiene que funcionar en DOS mundos, y por eso queda así:
+--   · Antes de la migración 103 (cadena desde cero): reference_number es NOT NULL y todavía no
+--     tiene DEFAULT, así que el seed DEBE traer un valor.
+--   · Después de la 103: ese valor tiene que ser numérico (ck_..._reference_numerico) y único a
+--     nivel global (uq_procedure_instances_reference).
+-- De ahí el rango sintético 91xxxxxxxx: numérico, altísimo, y sin riesgo de chocar con la
+-- secuencia real durante la vida del producto. En una cadena desde cero la 103 los renumera
+-- después; solo sobreviven si el seed se reejecuta sobre una base ya migrada.
+-- La idempotencia deja de apoyarse en ON CONFLICT (tenant_id, reference_number) —esa constraint
+-- ya no existe tras la 103— y pasa al id, que ya era un GUID fijo: era la llave natural desde
+-- el principio.
 INSERT INTO tramites.procedure_instances
     (id, tenant_id, procedure_type_id, reference_number, status, transit_office_id,
      submitted_at, created_by_user_id, created_at)
@@ -108,17 +119,17 @@ SELECT
     'ec4dddb9-ade5-43e8-b33b-c6036eba49d0', now()
 FROM (VALUES
     ('bbbbbbbb-0001-4000-8000-000000000010'::uuid, '0ad1c0de-0000-4000-8000-000000000001'::uuid,
-     'TRASPASO_STANDARD', 'OT-DEV-0001'),
+     'TRASPASO_STANDARD', '9100000001'),
     ('bbbbbbbb-0001-4000-8000-000000000011'::uuid, '0ad1c0de-0000-4000-8000-000000000002'::uuid,
-     'TRASPASO_STANDARD', 'OT-DEV-0002'),
+     'TRASPASO_STANDARD', '9100000002'),
     ('bbbbbbbb-0001-4000-8000-000000000012'::uuid, '0ad1c0de-0000-4000-8000-000000000001'::uuid,
-     'MATRICULA_NUEVA', 'OT-DEV-0003')
+     'MATRICULA_NUEVA', '9100000003')
 ) AS v(id, tenant_id, procedure_type_code, reference_number)
 JOIN tramites.procedure_types pt ON pt.code = v.procedure_type_code
 WHERE EXISTS (
     SELECT 1 FROM identity.users u WHERE u.id = 'ec4dddb9-ade5-43e8-b33b-c6036eba49d0'
 )
-ON CONFLICT (tenant_id, reference_number) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. Feature flag demo (perfil OT)
