@@ -21,6 +21,16 @@ public sealed class ImprontaManualStamperTests
         return ms.ToArray();
     }
 
+    private static void AssertImportableRsaPemPair(string privateKeyPem, string publicKeyPem)
+    {
+        privateKeyPem.Should().NotBeNullOrWhiteSpace();
+        publicKeyPem.Should().NotBeNullOrWhiteSpace();
+        using var privateRsa = RSA.Create();
+        privateRsa.ImportFromPem(privateKeyPem);
+        using var publicRsa = RSA.Create();
+        publicRsa.ImportFromPem(publicKeyPem);
+    }
+
     private static ImprontaManualStampContext Ctx(params ImprontaManualSigner[] signers) =>
         new(
             ReferenceNumber: "FLIT-0234659",
@@ -89,8 +99,7 @@ public sealed class ImprontaManualStamperTests
 
         result.Applied.Should().BeTrue();
         result.Pdf.Length.Should().BeGreaterThan(pdf.Length);
-        result.PrivateKeyPem.Should().Contain("BEGIN RSA PRIVATE KEY");
-        result.PublicKeyPem.Should().Contain("BEGIN RSA PUBLIC KEY");
+        AssertImportableRsaPemPair(result.PrivateKeyPem, result.PublicKeyPem);
         result.SignatureBase64.Length.Should().BeInRange(340, 350);
         _sut.AlreadyStamped(result.Pdf).Should().BeTrue();
         Encoding.ASCII.GetString(result.Pdf).Should().Contain(IImprontaManualStamper.MetadataKeyword);
@@ -197,8 +206,7 @@ public sealed class ImprontaManualStamperTests
         firma.SignatureBase64.Length.Should().BeInRange(340, 350);
         firma.SignatureBase64.Should().MatchRegex("^[A-Za-z0-9+/]+=*$");
         firma.SignatureBase64.Should().EndWith("=");
-        firma.PrivateKeyPem.Should().StartWith("-----BEGIN RSA PRIVATE KEY-----");
-        firma.PublicKeyPem.Should().StartWith("-----BEGIN RSA PUBLIC KEY-----");
+        AssertImportableRsaPemPair(firma.PrivateKeyPem, firma.PublicKeyPem);
     }
 
     [Fact]

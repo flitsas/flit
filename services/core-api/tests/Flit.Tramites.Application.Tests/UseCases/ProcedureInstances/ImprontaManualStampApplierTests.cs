@@ -114,8 +114,8 @@ public sealed class ImprontaManualStampApplierTests
             Applied: true,
             DocumentHash: "abc123",
             SignatureBase64: "sig==",
-            PrivateKeyPem: "-----BEGIN RSA PRIVATE KEY-----\nX\n-----END RSA PRIVATE KEY-----",
-            PublicKeyPem: "-----BEGIN RSA PUBLIC KEY-----\nY\n-----END RSA PUBLIC KEY-----",
+            PrivateKeyPem: "test-private-key",
+            PublicKeyPem: "test-public-key",
             SignedAt: DateTimeOffset.UtcNow,
             WasSignedWithoutOwnerSignature: true);
         _stamper.AlreadyStamped(pdf).Returns(false);
@@ -140,7 +140,7 @@ public sealed class ImprontaManualStampApplierTests
             r.DocumentHash == "abc123"
             && r.AttachmentId == att.Id
             && r.Signature == "sig=="
-            && r.PrivateKey.Contains("PRIVATE KEY", StringComparison.Ordinal)
+            && r.PrivateKey == "test-private-key"
             && r.WasSignedWithoutOwnerSignature
             && r.SignedStoragePath == "path-new"
             && r.SignedSha256 == "bb"
