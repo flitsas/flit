@@ -20,7 +20,9 @@ public sealed record AttachmentDto(
     string Sha256,
     string Source,
     DateTimeOffset UploadedAt,
-    string? Provider = null);
+    string? Provider = null,
+    /// <summary>True si hay auditoría de firma digital vigente para este adjunto (impronta manual).</summary>
+    bool DigitallySigned = false);
 
 public sealed record AttachmentsResponse(IReadOnlyList<AttachmentDto> Attachments);
 
@@ -174,7 +176,8 @@ public sealed record RegisterAttachmentInput(
 public sealed class UploadAttachmentHandler(
     IProcedureInstanceRepository repo,
     IAttachmentStorage storage,
-    AttachmentValidator? validator = null)
+    AttachmentValidator? validator = null,
+    IVehicleSignatureImprintRepository? imprintAudit = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -219,9 +222,12 @@ public sealed class UploadAttachmentHandler(
         var stored = await storage.SaveAsync(id, tipo, input.Filename ?? "file", input.Content, ct);
 
         // Se retiran DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor conserva el que tenía.
+        // Soft-delete auditoría + conservar blob firmado (snapshot signed_storage_path).
+        var preservePaths = SoftDeleteImprintAudits(previos, imprintAudit);
         foreach (var prev in previos)
         {
-            storage.Delete(prev.StoragePath);
+            if (!preservePaths.Contains(prev.StoragePath))
+                storage.Delete(prev.StoragePath);
             instance.Attachments.Remove(prev);
             repo.RemoveAttachment(prev);
         }
@@ -266,8 +272,20 @@ public sealed class UploadAttachmentHandler(
         string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
         || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase);
 
-    internal static AttachmentDto ToDto(ProcedureInstanceAttachment a) =>
-        new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt, a.Provider);
+    internal static IReadOnlySet<string> SoftDeleteImprintAudits(
+        IReadOnlyList<ProcedureInstanceAttachment> previos,
+        IVehicleSignatureImprintRepository? imprintAudit)
+    {
+        if (imprintAudit is null || previos.Count == 0)
+            return new HashSet<string>(StringComparer.Ordinal);
+        return imprintAudit.SoftDeleteByAttachmentIds(
+                   previos.Select(p => p.Id),
+                   DateTimeOffset.UtcNow)
+               ?? new HashSet<string>(StringComparer.Ordinal);
+    }
+
+    internal static AttachmentDto ToDto(ProcedureInstanceAttachment a, bool digitallySigned = false) =>
+        new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt, a.Provider, digitallySigned);
 }
 
 /// <summary>
@@ -315,7 +333,9 @@ public sealed class PresignAttachmentHandler(
 /// </summary>
 public sealed class RegisterAttachmentHandler(
     IProcedureInstanceRepository repo,
-    AttachmentValidator? validator = null)
+    IAttachmentStorage? storage = null,
+    AttachmentValidator? validator = null,
+    IVehicleSignatureImprintRepository? imprintAudit = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -341,6 +361,25 @@ public sealed class RegisterAttachmentHandler(
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
+
+        // Paridad HU #12046 con UploadAttachmentHandler: el front usa presign→register.
+        var previos = AttachmentRules.ReemplazaAlSubir(tipo)
+            ? instance.Attachments
+                .Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase))
+                .ToList()
+            : [];
+
+        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits(previos, imprintAudit);
+        foreach (var prev in previos)
+        {
+            if (storage is not null && !preservePaths.Contains(prev.StoragePath))
+                storage.Delete(prev.StoragePath);
+            instance.Attachments.Remove(prev);
+            repo.RemoveAttachment(prev);
+        }
+
         var attachment = new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),
@@ -476,7 +515,9 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
 }
 
 /// <summary>Lista los adjuntos de una instancia.</summary>
-public sealed class ListAttachmentsHandler(IProcedureInstanceRepository repo)
+public sealed class ListAttachmentsHandler(
+    IProcedureInstanceRepository repo,
+    IVehicleSignatureImprintRepository? imprintAudit = null)
 {
     public async Task<(AttachmentsResponse? Result, string? Error)> HandleAsync(
         Guid id,
@@ -487,9 +528,15 @@ public sealed class ListAttachmentsHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
+        IReadOnlySet<Guid> signedIds = imprintAudit is null
+            ? new HashSet<Guid>()
+            : await imprintAudit
+                .ListSignedAttachmentIdsForInstanceAsync(id, ct)
+                .ConfigureAwait(false);
+
         var dtos = instance.Attachments
             .OrderBy(a => a.UploadedAt)
-            .Select(UploadAttachmentHandler.ToDto)
+            .Select(a => UploadAttachmentHandler.ToDto(a, signedIds.Contains(a.Id)))
             .ToList();
         return (new AttachmentsResponse(dtos), null);
     }
@@ -535,7 +582,8 @@ public sealed class DownloadAttachmentHandler(
 /// <summary>Borra un adjunto (FS + fila). Solo en <c>draft</c>.</summary>
 public sealed class DeleteAttachmentHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    IVehicleSignatureImprintRepository? imprintAudit = null)
 {
     public async Task<string?> HandleAsync(
         Guid id,
@@ -554,7 +602,9 @@ public sealed class DeleteAttachmentHandler(
             return "attachment_not_found";
 
         var tipo = attachment.Tipo;
-        storage.Delete(attachment.StoragePath);
+        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits([attachment], imprintAudit);
+        if (!preservePaths.Contains(attachment.StoragePath))
+            storage.Delete(attachment.StoragePath);
         instance.Attachments.Remove(attachment);
         repo.RemoveAttachment(attachment);
 

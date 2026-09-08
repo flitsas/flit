@@ -9,8 +9,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// Aplica sellos FLIT a la impronta manual al componer el consolidado (ruta OT).
-/// Si el stamp aplica: sobrescribe el adjunto en storage (nuevo path + fila) y
-/// registra auditoría en <c>tramites.vehicle_signature_imprints</c> (paridad legacy).
+/// Gates: matrícula con placa asignada; propietarios con identidad vigente.
+/// Si el stamp aplica: sobrescribe el adjunto en storage y registra auditoría.
 /// </summary>
 public static class ImprontaManualStampApplier
 {
@@ -32,6 +32,12 @@ public static class ImprontaManualStampApplier
         if (AttachmentProviders.IsKyverum(attachment.Provider))
             return pdf;
         if (stamper.AlreadyStamped(pdf))
+            return pdf;
+
+        var (ready, _) = await ImprontaManualStampReadiness
+            .EvaluateAsync(instance, repo, vaultPolicy, ct)
+            .ConfigureAwait(false);
+        if (!ready)
             return pdf;
 
         var context = await ImprontaManualStampContextBuilder
@@ -60,7 +66,7 @@ public static class ImprontaManualStampApplier
         if (repo is null || auditRepo is null)
             return;
 
-        // Idempotencia por hash único (paridad legacy uq sobre hash).
+        // Idempotencia: solo filas activas (parcial uq document_hash WHERE deleted_at IS NULL).
         var existing = await auditRepo
             .FindByDocumentHashAsync(stamp.DocumentHash, ct)
             .ConfigureAwait(false);
@@ -112,6 +118,10 @@ public static class ImprontaManualStampApplier
             Signature = stamp.SignatureBase64,
             SignedAt = now,
             WasSignedWithoutOwnerSignature = stamp.WasSignedWithoutOwnerSignature,
+            SignedStoragePath = stored.StoragePath,
+            SignedSha256 = stored.Sha256,
+            SignedSizeBytes = stored.SizeBytes,
+            SignedFilename = previous.Filename,
             CreatedAt = now,
         });
     }

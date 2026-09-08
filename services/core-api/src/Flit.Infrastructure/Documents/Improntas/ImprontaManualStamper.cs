@@ -142,7 +142,10 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             new XRect(24, footerY, page.Width - 48, FooterLineH), XStringFormats.TopLeft);
 
         // Bloque de firmas alineado al final de la página (justo encima del footer).
-        var leftBlockH = EstimateLeftBlockHeight();
+        var multiOwner = signers.Count > 1;
+        var compactLayout = signers.Count >= 3;
+        var sigFieldH = compactLayout ? 20.0 : SignatureFieldH;
+        var leftBlockH = EstimateLeftBlockHeight(signers.Count, multiOwner, sigFieldH);
         var rightBlockH = EstimateRightBlockHeight(firmaDigital);
         var contentH = Math.Max(leftBlockH, rightBlockH);
         var topY = Math.Max(28.0, footerY - GapAboveFooter - contentH);
@@ -157,7 +160,15 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             var (colX, colW) = cols[i];
             DrawSignerColumn(
                 gfx, signers[i], context, hashImpronta,
-                colX, topY, colW, fourActor, metaFont, greyBrush);
+                colX, topY, colW, fourActor, compactLayout, sigFieldH,
+                signerIndex: i, signers.Count, metaFont, greyBrush);
+        }
+
+        if (multiOwner)
+        {
+            var sharedMetaY = topY + EstimatePerSignerColumnHeight(sigFieldH);
+            DrawSharedMetadata(
+                gfx, context, hashImpronta, 24, sharedMetaY, leftWidth - 24, metaFont, greyBrush);
         }
 
         // Zona 3 — título azul; cuerpo Base64 RSA (legacy wrap 50).
@@ -175,9 +186,44 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
 
     private const int FirmaDigitalWrapWidth = 50;
 
-    private static double EstimateLeftBlockHeight() =>
-        // Rúbrica + hashes (propietario puede ir en 2 líneas) + 4 metas.
-        SignatureFieldH + 4 + (2 * 8) + (1 * 8) + (4 * 8) + 2;
+    private static double EstimatePerSignerColumnHeight(double sigFieldH) =>
+        sigFieldH + 4 + (2 * 8);
+
+    private static double EstimateSharedMetadataHeight() =>
+        4 + (1 * 8) + (4 * 8);
+
+    internal static string FormatOwnerHashLabel(int signerIndex, int signerCount, string? hashPropietario) =>
+        signerCount > 1
+            ? $"Hash propietario{signerIndex + 1}: {hashPropietario ?? "-"}"
+            : $"Hash propietario: {hashPropietario ?? "-"}";
+
+    internal static bool UsesSharedMetadataBlock(int signerCount) => signerCount > 1;
+
+    internal static double EstimateLayoutHeightForTest(int signerCount)
+    {
+        var multi = signerCount > 1;
+        var sigFieldH = signerCount >= 3 ? 20.0 : SignatureFieldH;
+        return EstimateLeftBlockHeight(signerCount, multi, sigFieldH);
+    }
+
+    internal static double EstimateLegacyRepeatedHeightForTest(int signerCount)
+    {
+        var sigFieldH = signerCount >= 3 ? 20.0 : SignatureFieldH;
+        var perColumn = sigFieldH + 4 + (2 * 8) + EstimateSharedMetadataHeight();
+        return perColumn * signerCount;
+    }
+
+    private static double EstimateLeftBlockHeight(int signerCount, bool multiOwner, double sigFieldH)
+    {
+        if (!multiOwner)
+        {
+            // Rúbrica + hash propietario (puede ir en 2 líneas) + metas compartidas.
+            return sigFieldH + 4 + (2 * 8) + EstimateSharedMetadataHeight();
+        }
+
+        // Varias columnas: fila de rúbricas + hashes por propietario; metas una sola vez debajo.
+        return EstimatePerSignerColumnHeight(sigFieldH) + EstimateSharedMetadataHeight() + 2;
+    }
 
     private static double EstimateRightBlockHeight(string firmaDigital) =>
         16 + (Math.Ceiling(Math.Max(1, firmaDigital.Length) / (double)FirmaDigitalWrapWidth) * 8) + 2;
@@ -191,21 +237,43 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         double y,
         double width,
         bool fourActorLayout,
+        bool compactLayout,
+        double sigFieldH,
+        int signerIndex,
+        int totalSigners,
+        XFont metaFont,
+        XBrush greyBrush)
+    {
+        var multiOwner = totalSigners > 1;
+        var cursor = y;
+
+        // Rúbrica (PNG + sidecar); sin título "Firmado digitalmente por".
+        var drew = DrawFurStyleSignature(gfx, signer, x, cursor, width, sigFieldH, fourActorLayout, greyBrush);
+        cursor += (drew ? sigFieldH : Math.Min(sigFieldH, 16)) + 4;
+
+        // Hashes completos (sin Trunc); el resto puede partirse por ancho de columna.
+        var hashWrap = Math.Max(compactLayout ? 32 : 48, (int)(width / 3.2));
+        var hashLabel = FormatOwnerHashLabel(signerIndex, totalSigners, signer.HashPropietario);
+        DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor, hashLabel, hashWrap);
+
+        if (!multiOwner)
+            DrawSharedMetadata(gfx, context, hashImpronta, x, cursor, width, metaFont, greyBrush);
+    }
+
+    private static void DrawSharedMetadata(
+        XGraphics gfx,
+        ImprontaManualStampContext context,
+        string hashImpronta,
+        double x,
+        double y,
+        double width,
         XFont metaFont,
         XBrush greyBrush)
     {
         var cursor = y;
-
-        // Rúbrica (PNG + sidecar) al 50%; sin título "Firmado digitalmente por".
-        var drew = DrawFurStyleSignature(gfx, signer, x, cursor, width, SignatureFieldH, fourActorLayout, greyBrush);
-        cursor += (drew ? SignatureFieldH : Math.Min(SignatureFieldH, 16)) + 4;
-
         var fecha = context.FechaCargue.ToLocalTime().ToString("dd-MM-yyyy HH:mm:ss");
-        // Hashes completos (sin Trunc); el resto puede partirse por ancho de columna.
         var hashWrap = Math.Max(48, (int)(width / 3.2));
         var metaWrap = Math.Max(28, (int)(width / 4.2));
-        DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor,
-            $"Hash propietario: {signer.HashPropietario ?? "-"}", hashWrap);
         DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor,
             $"Hash Impronta: {hashImpronta}", hashWrap);
         foreach (var line in new[]

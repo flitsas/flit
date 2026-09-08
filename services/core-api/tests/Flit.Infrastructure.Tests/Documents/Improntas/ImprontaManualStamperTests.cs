@@ -32,6 +32,48 @@ public sealed class ImprontaManualStamperTests
             Signers: signers);
 
     [Fact]
+    public void FormatOwnerHashLabel_SingleSigner_IsUnindexed()
+    {
+        ImprontaManualStamper.FormatOwnerHashLabel(0, 1, "solo-hash")
+            .Should().Be("Hash propietario: solo-hash");
+    }
+
+    [Fact]
+    public void FormatOwnerHashLabel_MultipleSigners_UsesOneBasedIndex()
+    {
+        ImprontaManualStamper.FormatOwnerHashLabel(0, 2, "p1")
+            .Should().Be("Hash propietario1: p1");
+        ImprontaManualStamper.FormatOwnerHashLabel(1, 2, "p2")
+            .Should().Be("Hash propietario2: p2");
+        ImprontaManualStamper.FormatOwnerHashLabel(3, 4, "h4")
+            .Should().Be("Hash propietario4: h4");
+    }
+
+    [Fact]
+    public void UsesSharedMetadataBlock_IsTrueWhenMultipleSigners()
+    {
+        ImprontaManualStamper.UsesSharedMetadataBlock(1).Should().BeFalse();
+        ImprontaManualStamper.UsesSharedMetadataBlock(2).Should().BeTrue();
+        ImprontaManualStamper.UsesSharedMetadataBlock(4).Should().BeTrue();
+    }
+
+    [Fact]
+    public void EstimateLayoutHeight_MultiOwner_IsShorterThanLegacyPerColumnRepeat()
+    {
+        ImprontaManualStamper.EstimateLayoutHeightForTest(2)
+            .Should().BeLessThan(ImprontaManualStamper.EstimateLegacyRepeatedHeightForTest(2));
+        ImprontaManualStamper.EstimateLayoutHeightForTest(4)
+            .Should().BeLessThan(ImprontaManualStamper.EstimateLegacyRepeatedHeightForTest(4));
+    }
+
+    [Fact]
+    public void EstimateLayoutHeight_FourSigners_UsesCompactSignatureBand()
+    {
+        ImprontaManualStamper.EstimateLayoutHeightForTest(4)
+            .Should().BeLessThan(ImprontaManualStamper.EstimateLayoutHeightForTest(2) + 40);
+    }
+
+    [Fact]
     public void Stamp_Manual_AddsMarkerAndKeepsSamePageCount()
     {
         var pdf = MinimalPdf();
@@ -70,6 +112,41 @@ public sealed class ImprontaManualStamperTests
     }
 
     [Fact]
+    public void Stamp_TwoSigners_AppliesStamp()
+    {
+        var pdf = MinimalPdf();
+        var ctx = Ctx(
+            new ImprontaManualSigner("UNO", "owner-hash-alpha", null),
+            new ImprontaManualSigner("DOS", "owner-hash-beta", null));
+
+        var result = _sut.Stamp(pdf, ctx);
+
+        result.Applied.Should().BeTrue();
+        _sut.AlreadyStamped(result.Pdf).Should().BeTrue();
+        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(new MemoryStream(result.Pdf), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
+        doc.PageCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void Stamp_FourSigners_AppliesWithoutOverflow()
+    {
+        var pdf = MinimalPdf();
+        var ctx = Ctx(
+            new ImprontaManualSigner("UNO", "h1", null),
+            new ImprontaManualSigner("DOS", "h2", null),
+            new ImprontaManualSigner("TRES", "h3", null),
+            new ImprontaManualSigner("CUATRO", "h4", null));
+
+        var result = _sut.Stamp(pdf, ctx);
+
+        result.Applied.Should().BeTrue();
+        _sut.AlreadyStamped(result.Pdf).Should().BeTrue();
+        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(new MemoryStream(result.Pdf), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
+        doc.PageCount.Should().Be(1);
+        Encoding.ASCII.GetString(result.Pdf).Should().Contain(IImprontaManualStamper.MetadataKeyword);
+    }
+
+    [Fact]
     public void Stamp_MultipleSigners_DoesNotThrow()
     {
         var pdf = MinimalPdf();
@@ -80,6 +157,7 @@ public sealed class ImprontaManualStamperTests
 
         var act = () => _sut.Stamp(pdf, ctx);
         act.Should().NotThrow();
+        act().Applied.Should().BeTrue();
         _sut.AlreadyStamped(act().Pdf).Should().BeTrue();
     }
 

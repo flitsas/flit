@@ -14,7 +14,7 @@ import { BatchDropzone } from './BatchDropzone';
 import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader } from './wizard-atoms';
-import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
+import { INLINE_ALERT_TONES, InlineAlert } from '@/components/atom/InlineAlert';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { isPrendaManagedChecklistTipo } from './prenda-document-tipos';
@@ -836,6 +836,14 @@ export function DocumentSlot({
         <p className="mt-1 truncate text-[11px] opacity-60">
           {attachment.filename} · {formatSize(attachment.sizeBytes)}
         </p>
+      )}
+      {isImpronta && attachment?.digitallySigned && !readOnly && (
+        <div className="mt-2">
+          <InlineAlert tone="warning" title="Impronta ya firmada digitalmente">
+            Si reemplazas este archivo, la firma actual se invalida. La nueva impronta se firmará de
+            nuevo al enviar el registro a la OT. Esta acción no está bloqueada.
+          </InlineAlert>
+        </div>
       )}
 
             {(done || analyzing || generating) && (
