@@ -92,6 +92,27 @@ public static class FurPrendaObservation
     }
 
     /// <summary>
+    /// ADR-0055 (HU #12129) — variante para DOS hechos vigentes con acreedores DISTINTOS
+    /// (constitución de un crédito nuevo + levantamiento de uno pagado — el caso real de negocio que
+    /// motiva la captura dual). El overload <see cref="Compose"/> de 4 parámetros sigue sirviendo,
+    /// sin cambios, al escenario histórico donde <c>Ambos</c> comparte un único acreedor (simulador /
+    /// dictamen art. 5.1.8, HU #11257): aquí cada familia trae el suyo, sin mezclarlos — evita que el
+    /// bloque de una familia filtre el documento del acreedor de la otra (Security, ADR-0055,
+    /// <c>@pii:medium</c> en <c>acreedor_documento</c>).
+    /// </summary>
+    public static string? ComposeDual(
+        string? acreedorNombreConstitucion,
+        string? acreedorDocumentoConstitucion,
+        string? acreedorNombreLevantamiento,
+        string? acreedorDocumentoLevantamiento,
+        string? levantamientoEntidad = null)
+    {
+        return Join(
+            Compose(FurPrendaMarking.Levantamiento, acreedorNombreLevantamiento, acreedorDocumentoLevantamiento, levantamientoEntidad),
+            Compose(FurPrendaMarking.Constitucion, acreedorNombreConstitucion, acreedorDocumentoConstitucion));
+    }
+
+    /// <summary>
     /// Une el bloque de gravamen con el resto de observaciones (manuales + automáticas), anteponiéndolo.
     /// Los bloques automáticos se separan con coma; cualquiera de los dos puede faltar. Si faltan ambos
     /// devuelve <c>null</c> para que el recuadro quede exactamente como estaba antes de esta HU.

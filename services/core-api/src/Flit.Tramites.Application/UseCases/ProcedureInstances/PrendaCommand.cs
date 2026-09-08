@@ -46,6 +46,16 @@ public sealed class RegistrarPrendaHandler(
     /// <summary>Error: este tipo no tiene dimensión de gravamen (familia OTROS, tipo no prendario).</summary>
     public const string PrendaNoAdmitidaError = "prenda_no_admitida_en_tipo";
 
+    /// <summary>
+    /// ADR-0055 (HU #12129, AC3) — Matrícula/Traspaso (y cualquier tipo que no admite la acción
+    /// complementaria de prenda) siguen siendo de UNA sola decisión vigente por instancia
+    /// (ADR-0050): regla de negocio EXPLÍCITA, no solo el índice único parcial de BD (que desde
+    /// HU #12128 sí permite hasta dos vigentes por instancia). Se devuelve cuando la instancia ya
+    /// tiene más de una fila vigente y el tipo no admite la complementaria — estado que este mismo
+    /// handler nunca produce por su cuenta, pero que se rechaza en vez de adivinar cuál reemplazar.
+    /// </summary>
+    public const string SegundaDecisionVigenteNoAdmitidaError = "prenda_segunda_decision_no_admitida";
+
     private readonly IPrendaDocumentRequirementPolicy _documentPolicy =
         prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
 
@@ -98,10 +108,40 @@ public sealed class RegistrarPrendaHandler(
 
         var now = DateTimeOffset.UtcNow;
 
-        // Versionado: la decisión vigente anterior queda reemplazada. Se persiste PRIMERO (libera el índice
-        // único parcial) y luego se inserta la nueva vigente. La modificación se audita como evento.
-        var vigente = await prendas.GetVigenteAsync(instanceId, tenantId, ct);
-        if (vigente is not null)
+        // ADR-0055 (HU #12129) — familia de la decisión entrante y si el TIPO admite que coexista con
+        // una vigente de la familia contraria (PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA únicamente).
+        var accionFamilia = PrendaDecision.AccionFamiliaFor(decision);
+        var permiteComplementaria = ProcedureTypeLayers.PermiteAccionComplementaria(instance.ProcedureType?.Code);
+
+        // Defensivo: dobles de prueba (Substitute/Fake) sin configurar este método no deben tumbar el
+        // handler con NRE — se tratan como "sin vigentes", igual que devolvía GetVigenteAsync = null.
+        var vigentes = await prendas.GetVigentesAsync(instanceId, tenantId, ct) ?? [];
+
+        IReadOnlyList<ProcedureInstancePrenda> aReemplazar;
+        if (permiteComplementaria)
+        {
+            // Versionado RE-SCOPEADO POR FAMILIA (AC2): solo se reemplaza la vigente de la MISMA
+            // familia que la decisión entrante. La vigente de la familia contraria, si existe, no se
+            // toca (AC1) — así conviven constitución y levantamiento, cada una con su propio
+            // acreedor/documento.
+            aReemplazar = vigentes.Where(v => v.AccionFamilia == accionFamilia).ToList();
+        }
+        else
+        {
+            // Matrícula/Traspaso (AC3): decisión mutuamente excluyente, a lo sumo UNA vigente por
+            // instancia SIN IMPORTAR la familia (comportamiento histórico, R4/R10/R17 intacto) — por
+            // eso se reemplaza la vigente aunque cambie de familia (p. ej. "solicitar" → "levantar").
+            // Regla de negocio explícita, no solo el índice de BD: si ya hubiera más de una vigente
+            // para un tipo que no admite la complementaria, se rechaza en vez de reemplazar a ciegas.
+            if (vigentes.Count > 1)
+                return (null, SegundaDecisionVigenteNoAdmitidaError);
+
+            aReemplazar = vigentes;
+        }
+
+        // Se persiste cada reemplazo PRIMERO (libera el índice único parcial) y luego se inserta la
+        // nueva vigente. Cada reemplazo audita su propio evento old/new.
+        foreach (var vigente in aReemplazar)
         {
             var anterior = vigente.Decision;
             vigente.Estado = PrendaEstado.Reemplazada;
@@ -130,6 +170,7 @@ public sealed class RegistrarPrendaHandler(
             AcreedorNombre = Trimmed(input.AcreedorNombre),
             AcreedorDocumento = Trimmed(input.AcreedorDocumento),
             LevantamientoEntidad = Trimmed(input.LevantamientoEntidad),
+            AccionFamilia = accionFamilia,
             Metadata = string.IsNullOrWhiteSpace(input.MetadataJson) ? "{}" : input.MetadataJson,
             CreatedAt = now,
             CreatedBy = userId,
@@ -147,12 +188,23 @@ public sealed class RegistrarPrendaHandler(
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
-/// <summary>Lee la decisión de prenda vigente de un trámite (o <c>null</c> si no hay).</summary>
+/// <summary>
+/// Lee las decisiones de prenda VIGENTES de un trámite.
+///
+/// <para><b>Cambio de contrato de lectura (ADR-0055, HU #12129, AC4).</b> Antes de esta HU devolvía
+/// <c>PrendaDto?</c> (a lo sumo una decisión), porque el modelo solo admitía una fila vigente por
+/// instancia. Desde HU #12128, PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA pueden tener constitución y
+/// levantamiento vigentes a la vez, así que el resultado pasa a ser una colección de 0 a 2
+/// <see cref="PrendaDto"/> (Matrícula/Traspaso siguen devolviendo, en la práctica, 0 o 1 elemento).
+/// Es un cambio BINARIO del shape de <c>GET /instances/{id}/prenda</c> (objeto nullable → array),
+/// documentado en <c>contracts/openapi/core-api.v1.yaml</c>; el consumidor actual del frontend
+/// (<c>tramites-client.ts</c>) debe adaptarse en HU-FE-1 (#12130).</para>
+/// </summary>
 public sealed class GetPrendaVigenteHandler(IProcedureInstancePrendaRepository prendas)
 {
-    public async Task<PrendaDto?> HandleAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<PrendaDto>> HandleAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default)
     {
-        var vigente = await prendas.GetVigenteAsync(instanceId, tenantId, ct);
-        return vigente is null ? null : RegistrarPrendaHandler.ToDto(vigente);
+        var vigentes = await prendas.GetVigentesAsync(instanceId, tenantId, ct) ?? [];
+        return vigentes.Select(RegistrarPrendaHandler.ToDto).ToList();
     }
 }

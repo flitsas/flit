@@ -405,11 +405,16 @@ internal static class ProcedureInstanceEndpoints
                 RegistrarPrendaHandler.PrendaNoAdmitidaError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.PrendaNoAdmitidaError, detail: "Este tipo de trámite no gestiona prenda: para inscribirla o levantarla radica el trámite de prenda correspondiente."),
                 // R17 (HU #10599) — un trámite en estado final no admite modificar la prenda.
                 TramiteEstadoErrores.EstadoFinal => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.EstadoFinal, detail: "El trámite está en estado final y no admite modificar la prenda."),
+                // ADR-0055 (HU #12129, AC3) — Matrícula/Traspaso no admiten una segunda decisión vigente.
+                RegistrarPrendaHandler.SegundaDecisionVigenteNoAdmitidaError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.SegundaDecisionVigenteNoAdmitidaError, detail: "Este tipo de trámite no admite dos hechos de prenda vigentes: registra o levanta uno solo."),
                 _ => Results.Ok(result)
             };
         }).WithName("PutProcedureInstancePrenda");
 
-        // Lectura de la decisión de prenda vigente del trámite (o null si no hay ninguna).
+        // Lectura de las decisiones de prenda VIGENTES del trámite: 0, 1 o hasta 2 (ADR-0055, HU
+        // #12129, AC4) — array, no objeto nullable. PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA pueden
+        // traer constitución + levantamiento simultáneas; Matrícula/Traspaso siguen devolviendo, en
+        // la práctica, 0 o 1 elemento.
         group.MapGet("/instances/{id:guid}/prenda", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,

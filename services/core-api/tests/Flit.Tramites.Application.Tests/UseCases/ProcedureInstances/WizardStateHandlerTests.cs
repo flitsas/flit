@@ -175,6 +175,13 @@ public sealed class WizardStateHandlerTests
                         AcreedorDocumento = PrendaDecision.ImplicaGravamen(decision) ? "900123456" : null,
                     });
 
+        public async Task<IReadOnlyList<ProcedureInstancePrenda>> GetVigentesAsync(
+            Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default)
+        {
+            var vigente = await GetVigenteAsync(procedureInstanceId, tenantId, ct);
+            return vigente is null ? [] : [vigente];
+        }
+
         public Task<IReadOnlyList<ProcedureInstancePrenda>> ListByInstanceAsync(
             Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ProcedureInstancePrenda>>([]);

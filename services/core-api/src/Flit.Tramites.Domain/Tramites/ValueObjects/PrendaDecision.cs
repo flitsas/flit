@@ -41,6 +41,20 @@ public static class PrendaDecision
         !string.IsNullOrWhiteSpace(decision) && RequierenDocumento.Contains(decision);
 
     /// <summary>
+    /// ADR-0055 (HU #12128/#12129) — familia de acción derivada de la decisión: <see cref="PrendaAccionFamilia.Constitucion"/>
+    /// (<c>solicitar</c>/<c>registrar</c>), <see cref="PrendaAccionFamilia.Levantamiento"/> (<c>levantar</c>), o
+    /// <c>null</c> en <c>omitir</c>/<c>sin_prenda</c> (declaran AUSENCIA de gravamen, no un hecho que deba
+    /// versionarse por familia). Misma derivación, en el mismo orden, que la migración SQL
+    /// <c>103-prenda-accion-familia-dual.sql</c> — si esta función cambia, esa migración debe revisarse.
+    /// </summary>
+    public static string? AccionFamiliaFor(string? decision) => decision?.Trim().ToLowerInvariant() switch
+    {
+        Solicitar or Registrar => PrendaAccionFamilia.Constitucion,
+        Levantar => PrendaAccionFamilia.Levantamiento,
+        _ => null,
+    };
+
+    /// <summary>
     /// Indica presencia de gravamen para reflejarlo en el FUR (HU-F2-08): <c>solicitar</c>/<c>registrar</c>
     /// marcan el gravamen; <c>sin_prenda</c>/<c>omitir</c>/<c>levantar</c> no.
     /// </summary>
@@ -77,6 +91,31 @@ public static class PrendaDecision
 
         return FurPrendaMarking.Ninguna;
     }
+
+    /// <summary>
+    /// ADR-0055 (HU #12129) — traduce el CONJUNTO de decisiones vigentes de la instancia (hasta dos,
+    /// una por <c>AccionFamilia</c>: constitución y levantamiento) a la marca combinada del FUR.
+    /// Antes de esta HU no existía productor de <see cref="FurPrendaMarking.Ambos"/>: la sobrecarga
+    /// de una sola decisión (<see cref="ToFurMarking(string?)"/>) no podía representar dos hechos
+    /// simultáneos porque el modelo solo admitía una fila vigente por instancia. Esa sobrecarga NO
+    /// se toca — sigue sirviendo a todo consumidor de una sola decisión (matrícula, traspaso).
+    /// </summary>
+    public static FurPrendaMarking ToFurMarking(IEnumerable<string?> decisionesVigentes)
+    {
+        ArgumentNullException.ThrowIfNull(decisionesVigentes);
+
+        var marcas = decisionesVigentes.Select(ToFurMarking).ToHashSet();
+        var constituye = marcas.Contains(FurPrendaMarking.Constitucion);
+        var levanta = marcas.Contains(FurPrendaMarking.Levantamiento);
+
+        return (constituye, levanta) switch
+        {
+            (true, true) => FurPrendaMarking.Ambos,
+            (true, false) => FurPrendaMarking.Constitucion,
+            (false, true) => FurPrendaMarking.Levantamiento,
+            _ => FurPrendaMarking.Ninguna,
+        };
+    }
 }
 
 /// <summary>
@@ -100,6 +139,18 @@ public enum FurPrendaMarking
 
     /// <summary>Levanta e inscribe en el mismo FUR (casillas 11 y 12). Simulador / dictamen art. 5.1.8.</summary>
     Ambos,
+}
+
+/// <summary>
+/// Valores de <c>AccionFamilia</c> (ADR-0055, HU #12128) — agrupan las cinco decisiones de
+/// <see cref="PrendaDecision"/> en dos familias mutuamente excluyentes ENTRE SÍ (nunca dos filas
+/// vigentes de la misma familia), pero que SÍ pueden coexistir vigentes entre ellas cuando el tipo
+/// admite la acción complementaria (<see cref="Flit.Tramites.Domain.Tramites.Services.ProcedureTypeLayers.PermiteAccionComplementaria"/>).
+/// </summary>
+public static class PrendaAccionFamilia
+{
+    public const string Constitucion = "constitucion";
+    public const string Levantamiento = "levantamiento";
 }
 
 /// <summary>DocTipos de los adjuntos de prenda (compartidos con <c>AttachmentRules.ValidTipos</c>).</summary>
