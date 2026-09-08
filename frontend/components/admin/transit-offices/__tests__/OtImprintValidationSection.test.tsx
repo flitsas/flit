@@ -7,10 +7,23 @@ import type { ImprintSignatureDto } from "@/lib/api/admin-ot-imprint-signatures"
 
 const fetchListImprintSignatures = vi.fn();
 const validateImprintSignature = vi.fn();
+const fetchImprintSignaturePreviewUrl = vi.fn();
+const openPdfBlobInNewTab = vi.fn();
 
-vi.mock("@/lib/api/admin-ot-imprint-signatures", () => ({
-  fetchListImprintSignatures: (...args: unknown[]) => fetchListImprintSignatures(...args),
-  validateImprintSignature: (...args: unknown[]) => validateImprintSignature(...args),
+vi.mock("@/lib/api/admin-ot-imprint-signatures", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/admin-ot-imprint-signatures")>(
+    "@/lib/api/admin-ot-imprint-signatures",
+  );
+  return {
+    ...actual,
+    fetchListImprintSignatures: (...args: unknown[]) => fetchListImprintSignatures(...args),
+    validateImprintSignature: (...args: unknown[]) => validateImprintSignature(...args),
+    fetchImprintSignaturePreviewUrl: (...args: unknown[]) => fetchImprintSignaturePreviewUrl(...args),
+  };
+});
+
+vi.mock("@/lib/documents/open-document-tab", () => ({
+  openPdfBlobInNewTab: (...args: unknown[]) => openPdfBlobInNewTab(...args),
 }));
 
 function imprintRow(overrides: Partial<ImprintSignatureDto> = {}): ImprintSignatureDto {
@@ -47,6 +60,11 @@ describe("OtImprintValidationSection", () => {
   beforeEach(() => {
     fetchListImprintSignatures.mockReset();
     validateImprintSignature.mockReset();
+    fetchImprintSignaturePreviewUrl.mockReset();
+    openPdfBlobInNewTab.mockReset();
+    openPdfBlobInNewTab.mockImplementation(async (fn: () => Promise<Blob>) => {
+      await fn();
+    });
   });
 
   it("muestra estado vacío inicial antes de consultar", () => {
@@ -173,5 +191,46 @@ describe("OtImprintValidationSection", () => {
     expect(
       screen.getByText("La firma ingresada no corresponde a esta impronta."),
     ).toBeInTheDocument();
+  });
+
+  it("deshabilita Ver PDF cuando no hay archivo disponible", async () => {
+    fetchListImprintSignatures.mockResolvedValue([imprintRow()]);
+    renderSection();
+    await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
+
+    const viewBtn = await screen.findByTestId("ot-imprint-view-pdf-imp-1");
+    expect(viewBtn).toBeDisabled();
+    expect(fetchImprintSignaturePreviewUrl).not.toHaveBeenCalled();
+  });
+
+  it("abre el PDF firmado cuando hay signedStoragePath", async () => {
+    fetchListImprintSignatures.mockResolvedValue([
+      imprintRow({ signedStoragePath: "snap/impronta.pdf", signedFilename: "impronta.pdf" }),
+    ]);
+    fetchImprintSignaturePreviewUrl.mockResolvedValue({
+      url: "https://s3.test/view/snap/impronta.pdf",
+      expiresAt: "2026-09-08T14:00:00Z",
+    });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["%PDF"], { type: "application/octet-stream" }),
+    }) as unknown as typeof fetch;
+
+    renderSection();
+    await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
+
+    const viewBtn = await screen.findByRole("button", { name: /ver pdf de impronta abc123/i });
+    expect(viewBtn).toBeEnabled();
+    await userEvent.click(viewBtn);
+
+    await waitFor(() => {
+      expect(fetchImprintSignaturePreviewUrl).toHaveBeenCalledWith("imp-1", undefined, {
+        transitOfficeId: "ot-1",
+      });
+    });
+    expect(openPdfBlobInNewTab).toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledWith("https://s3.test/view/snap/impronta.pdf");
   });
 });

@@ -1,19 +1,22 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { FileText, ShieldCheck } from "lucide-react";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
+  fetchImprintSignaturePreviewUrl,
   fetchListImprintSignatures,
+  imprintHasPdf,
   validateImprintSignature,
   type ImprintSignatureDto,
   type ImprintSignatureValidationResultKind,
 } from "@/lib/api/admin-ot-imprint-signatures";
 import { ApiError } from "@/lib/api/types";
+import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 
 type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
 
@@ -33,6 +36,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
   const [validationById, setValidationById] = useState<
     Record<string, { result: ImprintSignatureValidationResultKind; failureReason: string | null }>
   >({});
+  const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
 
   const [modalRow, setModalRow] = useState<ImprintSignatureDto | null>(null);
   const [signatureInput, setSignatureInput] = useState("");
@@ -82,6 +86,34 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
     setModalRow(null);
     setSignatureInput("");
   };
+
+  const handleViewPdf = useCallback(
+    async (row: ImprintSignatureDto) => {
+      if (!imprintHasPdf(row) || openingPdfId) return;
+      setOpeningPdfId(row.id);
+      try {
+        await openPdfBlobInNewTab(async () => {
+          const preview = await fetchImprintSignaturePreviewUrl(row.id, undefined, {
+            transitOfficeId,
+          });
+          const response = await fetch(preview.url);
+          if (!response.ok) {
+            throw new Error(`preview_fetch_${response.status}`);
+          }
+          const blob = await response.blob();
+          return new Blob([blob], { type: "application/pdf" });
+        });
+      } catch (err) {
+        show(
+          err instanceof ApiError ? err.message : "No se pudo abrir el PDF de la impronta.",
+          "error",
+        );
+      } finally {
+        setOpeningPdfId(null);
+      }
+    },
+    [openingPdfId, show, transitOfficeId],
+  );
 
   const handleAcceptValidation = useCallback(async () => {
     if (!modalRow) return;
@@ -185,21 +217,42 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         key: "actions",
         header: "Acción",
         align: "right",
-        render: (row) => (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-            style={{ background: "#557EFF" }}
-            aria-label={`Validar firma de impronta ${row.placa}`}
-            onClick={() => openValidateModal(row)}
-          >
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-            Validar firma
-          </button>
-        ),
+        render: (row) => {
+          const canViewPdf = imprintHasPdf(row);
+          const opening = openingPdfId === row.id;
+          return (
+            <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#162244] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-white"
+                aria-label={
+                  canViewPdf
+                    ? `Ver PDF de impronta ${row.placa}`
+                    : `PDF no disponible para impronta ${row.placa}`
+                }
+                disabled={!canViewPdf || openingPdfId !== null}
+                onClick={() => void handleViewPdf(row)}
+                data-testid={`ot-imprint-view-pdf-${row.id}`}
+              >
+                <FileText className="h-3.5 w-3.5" aria-hidden />
+                {opening ? "Abriendo…" : "Ver PDF"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
+                style={{ background: "#557EFF" }}
+                aria-label={`Validar firma de impronta ${row.placa}`}
+                onClick={() => openValidateModal(row)}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+                Validar firma
+              </button>
+            </div>
+          );
+        },
       },
     ],
-    [validationById],
+    [handleViewPdf, openingPdfId, validationById],
   );
 
   const boundaryStatus =
@@ -220,8 +273,8 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           Validación de firma de impronta
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
-          Consulte por placa, pegue la firma digital del PDF y confirme si corresponde a esa
-          impronta.
+          Consulte por placa, abra el PDF firmado y pegue la firma digital para confirmar si
+          corresponde a esa impronta.
         </p>
       </div>
 
@@ -280,7 +333,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
               rows={rows}
               getRowKey={(row) => row.id}
               ariaLabel="Improntas firmadas por placa"
-              minWidth={960}
+              minWidth={1040}
             />
           </div>
         </UiStateBoundary>
