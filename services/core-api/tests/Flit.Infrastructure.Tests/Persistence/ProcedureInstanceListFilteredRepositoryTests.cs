@@ -295,6 +295,64 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         items.Select(i => i.Plate).Should().ContainInOrder(ordenEsperado);
     }
 
+    // Vendedor, organismo y compañía se añadieron cuando se vio que sus cabeceras eran las UNICAS
+    // del listado sin desplegable de orden: la cabecera solo ofrece lo que el repositorio sabe
+    // ordenar, asi que el hueco de la pantalla venia de que aqui no existia la rama.
+
+    [Theory]
+    [InlineData(SortDirection.Ascending, new[] { "Ana", "Beto", "Carla" })]
+    [InlineData(SortDirection.Descending, new[] { "Carla", "Beto", "Ana" })]
+    public async Task OrdenaPorVendedor(SortDirection direction, string[] ordenEsperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext($"vendedor-{direction}");
+        db.ProcedureInstances.AddRange(
+            Instancia(TenantId, "R1", vendedor: "Beto"),
+            Instancia(TenantId, "R2", vendedor: "Ana"),
+            Instancia(TenantId, "R3", vendedor: "Carla"));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, _) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20, new ProcedureInstanceListFilter(),
+            ProcedureInstanceSortBy.Vendedor, direction, ct);
+
+        items.Select(i => i.VendedorNombre).Should().ContainInOrder(ordenEsperado);
+    }
+
+    [Theory]
+    [InlineData(SortDirection.Ascending, new[] { "R2", "R1", "R3" })]
+    [InlineData(SortDirection.Descending, new[] { "R3", "R1", "R2" })]
+    public async Task OrdenaPorOrganismo_AunqueElNombreViveEnFieldValues(
+        SortDirection direction, string[] ordenEsperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext($"orden-organismo-{direction}");
+        db.ProcedureInstances.AddRange(
+            ConOrganismo(Instancia(TenantId, "R1"), "STRIA TTOyTTE MCPAL FUNZA"),
+            ConOrganismo(Instancia(TenantId, "R2"), "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA"),
+            ConOrganismo(Instancia(TenantId, "R3"), "STRIA TTOyTTE MCPAL SABANETA"));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, _) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20, new ProcedureInstanceListFilter(),
+            ProcedureInstanceSortBy.Organismo, direction, ct);
+
+        items.Select(i => i.ReferenceNumber).Should().ContainInOrder(ordenEsperado);
+    }
+
+    private static ProcedureInstance ConOrganismo(ProcedureInstance instancia, string nombre)
+    {
+        instancia.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            FieldKey = "transit_office_name",
+            ValueText = nombre,
+        });
+        return instancia;
+    }
+
     [Theory]
     [InlineData(SortDirection.Ascending, new[] { "Ana", "Beto", "Carla" })]
     [InlineData(SortDirection.Descending, new[] { "Carla", "Beto", "Ana" })]

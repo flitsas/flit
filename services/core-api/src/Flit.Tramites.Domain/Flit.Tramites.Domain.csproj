@@ -8,4 +8,10 @@
     <NuGetAuditMode>direct</NuGetAuditMode>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- La gramatica de consultas (QueryCondition, operadores) se comparte con el modulo de
+         Consultas: el filtro del listado la reutiliza, aunque NO su motor. Ver HU #12106. -->
+    <ProjectReference Include="..\Flit.Queries.Domain\Flit.Queries.Domain.csproj" />
+  </ItemGroup>
+
 </Project>

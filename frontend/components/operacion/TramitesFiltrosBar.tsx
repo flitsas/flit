@@ -4,6 +4,12 @@ import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } fr
 import { ChevronDown, Search, X } from 'lucide-react';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { controlCls } from './tramites-control-styles';
+import {
+  ConditionEditor,
+  QueryFieldPicker,
+  describeCondition,
+} from '@/components/consultas/QueryFilterBar';
+import type { QueryCondition, QueryField } from '@/lib/api/queries';
 
 /**
  * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
@@ -30,50 +36,6 @@ export const PERIODOS = [
   'Rango propio',
 ] as const;
 export type Periodo = (typeof PERIODOS)[number];
-
-/** Filtros específicos disponibles en el popover "+ Filtro". */
-export type FiltroEspecificoKey =
-  | 'placa'
-  | 'vendedor'
-  | 'comprador'
-  | 'gestor'
-  | 'firmado'
-  | 'organismo'
-  | 'tipo';
-
-const FILTROS_ESPECIFICOS_GRUPOS: {
-  grupo: string;
-  items: { key: FiltroEspecificoKey; label: string }[];
-}[] = [
-  { grupo: 'VEHÍCULO', items: [{ key: 'placa', label: 'Placa' }] },
-  {
-    grupo: 'PERSONAS',
-    items: [
-      { key: 'vendedor', label: 'Propietario / vendedor' },
-      { key: 'comprador', label: 'Comprador' },
-    ],
-  },
-  {
-    grupo: 'TRÁMITE',
-    items: [
-      // El organismo es por dónde trabaja un gestor, y el TIPO concreto es lo único que separa los
-      // quince trámites que la familia "Otros" agrupa bajo una sola pestaña.
-      { key: 'organismo', label: 'Organismo de tránsito' },
-      { key: 'tipo', label: 'Tipo de trámite' },
-      { key: 'gestor', label: 'Gestor' },
-      { key: 'firmado', label: 'Firmado' },
-    ],
-  },
-];
-/** Orden canónico (mismo de los grupos) para pintar chips y campos siempre igual, sin importar el
- *  orden en que el usuario los fue añadiendo. */
-const FILTROS_ESPECIFICOS_ORDEN: FiltroEspecificoKey[] = FILTROS_ESPECIFICOS_GRUPOS.flatMap((g) =>
-  g.items.map((i) => i.key),
-);
-
-export function filtroEspecificoLabel(key: FiltroEspecificoKey): string {
-  return FILTROS_ESPECIFICOS_GRUPOS.flatMap((g) => g.items).find((i) => i.key === key)?.label ?? key;
-}
 
 const INPUT_CLS =
   'h-9 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs text-[#162744] outline-none transition focus:border-[#557EFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
@@ -320,63 +282,57 @@ function PeriodoPopover({
 }
 
 interface FiltroEspecificoPopoverProps {
-  activos: ReadonlySet<FiltroEspecificoKey>;
-  onToggle: (key: FiltroEspecificoKey) => void;
-  placa: string;
-  onPlacaChange: (v: string) => void;
-  vendedor: string;
-  onVendedorChange: (v: string) => void;
-  comprador: string;
-  onCompradorChange: (v: string) => void;
-  gestor: string;
-  onGestorChange: (v: string) => void;
-  firmado: '' | 'true' | 'false';
-  onFirmadoChange: (v: '' | 'true' | 'false') => void;
-  organismo: string;
-  onOrganismoChange: (v: string) => void;
-  tipo: string;
-  onTipoChange: (v: string) => void;
+  /** El catálogo del servidor: qué se puede filtrar y con qué operadores. */
+  fields: QueryField[];
+  /** Las condiciones EN BORRADOR — se aplican al listado al pulsar "Aplicar". */
+  condiciones: QueryCondition[];
+  onCondicionesChange: (condiciones: QueryCondition[]) => void;
+  condicionesCount: number;
   onAplicar: () => void;
   onEmpezarDeCero: () => void;
   empezarDeCeroDisabled: boolean;
-  /** #1 — filtro de compañía, SOLO SuperAdmin (ve trámites de todas las empresas). */
-  isAdmin: boolean;
-  companias: readonly string[];
-  compania: string;
-  onCompaniaChange: (v: string) => void;
+  testIdPrefix: string;
+  /** Qué pintar en lugar de la lista cuando el catálogo no cargó. */
+  fieldsError?: ReactNode;
 }
 
+/**
+ * El panel de filtros del listado (HU #12107, rehecho tras la validación).
+ *
+ * <p>Es de UN nivel: al abrirlo se ve directamente QUÉ se puede filtrar, y elegir un campo cambia
+ * el contenido del mismo panel por su editor, con un «Volver». Antes se montaba aquí dentro la
+ * barra entera de Consultas, con su propio botón «+ Filtro» que abría un panel flotante ENCIMA de
+ * este: dos superficies apiladas y dos clics para llegar a la primera pregunta.</p>
+ *
+ * <p>Tampoco lleva ya un selector de compañía propio. La compañía es un filtro más y viaja en el
+ * catálogo del servidor, dentro del grupo «Alcance» — igual que en Consultas. El selector local
+ * además solo sabía de las compañías presentes en la página cargada y filtraba sobre ella, así que
+ * escondía filas en vez de acotar la consulta.</p>
+ */
 function FiltroEspecificoPopover({
-  activos,
-  onToggle,
-  placa,
-  onPlacaChange,
-  vendedor,
-  onVendedorChange,
-  comprador,
-  onCompradorChange,
-  gestor,
-  onGestorChange,
-  firmado,
-  onFirmadoChange,
-  organismo,
-  onOrganismoChange,
-  tipo,
-  onTipoChange,
+  fields,
+  condiciones,
+  onCondicionesChange,
+  condicionesCount,
   onAplicar,
   onEmpezarDeCero,
   empezarDeCeroDisabled,
-  isAdmin,
-  companias,
-  compania,
-  onCompaniaChange,
+  testIdPrefix,
+  fieldsError,
 }: FiltroEspecificoPopoverProps) {
   const [open, setOpen] = useState(false);
+  // `null` = viendo la lista de campos; una cadena = editando ese campo dentro del mismo panel.
+  const [editando, setEditando] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const close = () => setOpen(false);
+  const close = () => {
+    setOpen(false);
+    setEditando(null);
+  };
   const panelRef = usePopoverDismiss(open, close, triggerRef);
   const panelId = useId();
-  const count = activos.size;
+  const count = condicionesCount;
+
+  const campoEditado = editando ? fields.find((f) => f.id === editando) : undefined;
 
   const handleAplicar = () => {
     onAplicar();
@@ -387,12 +343,25 @@ function FiltroEspecificoPopover({
     close();
   };
 
+  function upsert(condicion: QueryCondition) {
+    onCondicionesChange([
+      ...condiciones.filter((c) => c.fieldId !== condicion.fieldId),
+      condicion,
+    ]);
+    setEditando(null);
+  }
+
+  function quitar(fieldId: string) {
+    onCondicionesChange(condiciones.filter((c) => c.fieldId !== fieldId));
+    setEditando(null);
+  }
+
   return (
     <div className="relative">
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? close() : setOpen(true))}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
@@ -400,7 +369,7 @@ function FiltroEspecificoPopover({
         // era la única señal, y el azul del texto estaba puesto en reposo, sin significar nada.
         className={controlCls(count > 0)}
       >
-        {count > 0 ? `+ Filtro (${count})` : '+ Filtro'}
+        {count > 0 ? `Filtros (${count})` : 'Filtros'}
         <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
       {open ? (
@@ -408,137 +377,74 @@ function FiltroEspecificoPopover({
           ref={panelRef}
           id={panelId}
           role="dialog"
-          aria-label="Agregar filtro"
-          className={`absolute right-0 top-full z-50 mt-2 max-h-[420px] w-60 overflow-y-auto rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]`}
+          aria-label="Filtros del listado"
+          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]"
         >
-          {isAdmin && companias.length > 0 ? (
-            <div className="border-b border-[#DFE5ED] pb-2 dark:border-white/10">
-              <p className="select-none px-2 py-1 text-xs font-bold uppercase tracking-wide text-[#162744] dark:text-white">
-                ALCANCE
-              </p>
-              <div className="px-2 py-1">
-                <Field label="Compañía">
-                  <select
-                    value={compania}
-                    onChange={(e) => onCompaniaChange(e.target.value)}
-                    className={INPUT_CLS}
-                  >
-                    <option value="">Todas</option>
-                    {companias.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-            </div>
-          ) : null}
-
-          {FILTROS_ESPECIFICOS_GRUPOS.map((grupo, gi) => (
-            <div
-              key={grupo.grupo}
-              className={gi > 0 ? 'mt-2 border-t border-[#DFE5ED] pt-2 dark:border-white/10' : ''}
-            >
-              <p className="select-none px-2 py-1 text-xs font-bold uppercase tracking-wide text-[#162744] dark:text-white">
-                {grupo.grupo}
-              </p>
-              {grupo.items.map((item) => (
-                <div key={item.key}>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-[#162744] hover:bg-[#EEF5FF] dark:text-white dark:hover:bg-white/5">
-                    <input
-                      type="checkbox"
-                      checked={activos.has(item.key)}
-                      onChange={() => onToggle(item.key)}
-                      className="h-3.5 w-3.5 accent-[#557EFF]"
-                    />
-                    {item.label}
-                  </label>
-                  {/* El campo real se despliega DEBAJO del checkbox, dentro del popover: en
-                      pantalla solo queda su chip, nunca el input suelto. */}
-                  {activos.has(item.key) ? (
-                    <div className="px-2 pb-2 pl-8">
-                      {item.key === 'placa' ? (
-                        <input
-                          type="search"
-                          aria-label="Filtrar por placa"
-                          value={placa}
-                          onChange={(e) => onPlacaChange(e.target.value)}
-                          placeholder="ABC123"
-                          className={`${INPUT_CLS} w-full`}
-                        />
-                      ) : null}
-                      {item.key === 'vendedor' ? (
-                        <input
-                          type="search"
-                          aria-label="Filtrar por propietario o vendedor"
-                          value={vendedor}
-                          onChange={(e) => onVendedorChange(e.target.value)}
-                          placeholder="Nombre"
-                          className={`${INPUT_CLS} w-full`}
-                        />
-                      ) : null}
-                      {item.key === 'comprador' ? (
-                        <input
-                          type="search"
-                          aria-label="Filtrar por comprador"
-                          value={comprador}
-                          onChange={(e) => onCompradorChange(e.target.value)}
-                          placeholder="Nombre"
-                          className={`${INPUT_CLS} w-full`}
-                        />
-                      ) : null}
-                      {item.key === 'gestor' ? (
-                        <input
-                          type="search"
-                          aria-label="Filtrar por gestor"
-                          value={gestor}
-                          onChange={(e) => onGestorChange(e.target.value)}
-                          placeholder="Nombre"
-                          className={`${INPUT_CLS} w-full`}
-                        />
-                      ) : null}
-                      {item.key === 'organismo' ? (
-                        <input
-                          type="search"
-                          aria-label="Filtrar por organismo de tránsito"
-                          value={organismo}
-                          onChange={(e) => onOrganismoChange(e.target.value)}
-                          placeholder="Nombre o parte del nombre"
-                          className={`${INPUT_CLS} w-full`}
-                        />
-                      ) : null}
-                      {item.key === 'tipo' ? (
-                        <input
-                          type="search"
-                          aria-label="Filtrar por tipo de trámite"
-                          value={tipo}
-                          onChange={(e) => onTipoChange(e.target.value)}
-                          placeholder="Código del tipo"
-                          title="Código exacto del tipo de trámite (p. ej. TRASPASO_STANDARD)"
-                          className={`${INPUT_CLS} w-full`}
-                        />
-                      ) : null}
-                      {item.key === 'firmado' ? (
-                        <select
-                          aria-label="Filtrar por firma de compraventa"
-                          value={firmado}
-                          onChange={(e) => onFirmadoChange(e.target.value as '' | 'true' | 'false')}
-                          title="Firma electrónica de la compraventa (completa o pendiente)"
-                          className={`${INPUT_CLS} w-full`}
-                        >
-                          <option value="">Todos</option>
-                          <option value="true">Firmado</option>
-                          <option value="false">Pendiente</option>
-                        </select>
-                      ) : null}
-                    </div>
-                  ) : null}
+          {fieldsError ? (
+            fieldsError
+          ) : campoEditado ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditando(null)}
+                className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-[#557EFF] hover:underline"
+              >
+                ← Volver a los filtros
+              </button>
+              <ConditionEditor
+                field={campoEditado}
+                value={condiciones.find((c) => c.fieldId === campoEditado.id) ?? null}
+                onApply={upsert}
+                onRemove={() => quitar(campoEditado.id)}
+                testIdPrefix={testIdPrefix}
+                anchored={false}
+              />
+            </>
+          ) : (
+            <>
+              {condiciones.length > 0 ? (
+                <div className="mb-2 flex flex-wrap gap-1.5 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+                  {condiciones.map((c) => (
+                    <span
+                      key={c.fieldId}
+                      className="inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 bg-[#557EFF]/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setEditando(c.fieldId)}
+                        className="max-w-[14rem] truncate"
+                        data-testid={`${testIdPrefix}-chip-${c.fieldId}`}
+                      >
+                        {describeCondition(c, fields)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => quitar(c.fieldId)}
+                        aria-label={`Quitar filtro ${c.fieldId}`}
+                        className="rounded-full px-1.5 text-sm leading-none opacity-60 hover:opacity-100"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ))}
+              ) : null}
 
+              <QueryFieldPicker
+                fields={fields.filter((f) => !condiciones.some((c) => c.fieldId === f.id))}
+                onPick={setEditando}
+                testIdPrefix={testIdPrefix}
+                className="max-h-[22rem] overflow-y-auto"
+              />
+            </>
+          )}
+
+          {/* El pie NO se renderiza mientras se edita un campo: el editor trae su propio "Aplicar",
+              que confirma LA CONDICION, y el del pie aplica EL LISTADO. Dos botones con la misma
+              palabra y distinto alcance, uno encima del otro, no se pueden distinguir. Se quita
+              del DOM en vez de ocultarse con clase, para que tampoco exista para un lector de
+              pantalla ni sea alcanzable con el tabulador. */}
+          {campoEditado && !fieldsError ? null : (
           <div className="mt-2 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
             <button
               type="button"
@@ -557,6 +463,7 @@ function FiltroEspecificoPopover({
               Aplicar
             </button>
           </div>
+          )}
         </div>
       ) : null}
     </div>
@@ -573,23 +480,17 @@ export interface TramitesFiltrosBarProps {
   onRangoPropioDesdeChange: (v: string) => void;
   onRangoPropioHastaChange: (v: string) => void;
 
-  filtrosEspecificos: ReadonlySet<FiltroEspecificoKey>;
-  onToggleFiltroEspecifico: (key: FiltroEspecificoKey) => void;
-
-  placa: string;
-  onPlacaChange: (v: string) => void;
-  vendedor: string;
-  onVendedorChange: (v: string) => void;
-  comprador: string;
-  onCompradorChange: (v: string) => void;
-  gestor: string;
-  onGestorChange: (v: string) => void;
-  firmado: '' | 'true' | 'false';
-  onFirmadoChange: (v: '' | 'true' | 'false') => void;
-  organismo: string;
-  onOrganismoChange: (v: string) => void;
-  tipo: string;
-  onTipoChange: (v: string) => void;
+  /** HU #12107 — el catálogo de campos filtrables que sirve el servidor. */
+  queryFields: QueryField[];
+  /** Condiciones en borrador dentro del panel; se aplican al listado con "Aplicar". */
+  draftCondiciones: QueryCondition[];
+  onDraftCondicionesChange: (condiciones: QueryCondition[]) => void;
+  /** Cuántas condiciones hay APLICADAS: es lo que numera y colorea el disparador "Filtros". */
+  condicionesCount: number;
+  /** Distingue en las pruebas esta barra de la de Consultas. */
+  filtrosTestIdPrefix: string;
+  /** Aviso a pintar dentro del panel si el catálogo de campos no cargó. */
+  fieldsError?: ReactNode;
 
   search: string;
   onSearchChange: (v: string) => void;
@@ -598,14 +499,12 @@ export interface TramitesFiltrosBarProps {
   onEmpezarDeCero: () => void;
   empezarDeCeroDisabled?: boolean;
 
-  /** `ColumnSelector` ya montado por el contenedor — último control de la fila. */
+  /** `ColumnSelector` ya montado por el contenedor — penúltimo control de la fila. */
   columnSelector: ReactNode;
 
-  /** #1 — filtro de compañía, SOLO SuperAdmin (ve trámites de todas las empresas). */
-  isAdmin: boolean;
-  companias: readonly string[];
-  compania: string;
-  onCompaniaChange: (v: string) => void;
+  /** HU #12104 — "Exportar a Excel", el último control: actúa sobre lo que los demás acotaron. */
+  exportAction?: ReactNode;
+
 }
 
 /**
@@ -623,32 +522,19 @@ export function TramitesFiltrosBar({
   rangoPropioHasta,
   onRangoPropioDesdeChange,
   onRangoPropioHastaChange,
-  filtrosEspecificos,
-  onToggleFiltroEspecifico,
-  placa,
-  onPlacaChange,
-  vendedor,
-  onVendedorChange,
-  comprador,
-  onCompradorChange,
-  gestor,
-  onGestorChange,
-  firmado,
-  onFirmadoChange,
-  organismo,
-  onOrganismoChange,
-  tipo,
-  onTipoChange,
+  queryFields,
+  draftCondiciones,
+  onDraftCondicionesChange,
+  condicionesCount,
+  filtrosTestIdPrefix,
+  fieldsError,
   search,
   onSearchChange,
   onAplicar,
   onEmpezarDeCero,
   empezarDeCeroDisabled = false,
   columnSelector,
-  isAdmin,
-  companias,
-  compania,
-  onCompaniaChange,
+  exportAction,
 }: TramitesFiltrosBarProps) {
   return (
     <>
@@ -681,96 +567,53 @@ export function TramitesFiltrosBar({
       />
 
       <FiltroEspecificoPopover
-        activos={filtrosEspecificos}
-        onToggle={onToggleFiltroEspecifico}
-        placa={placa}
-        onPlacaChange={onPlacaChange}
-        vendedor={vendedor}
-        onVendedorChange={onVendedorChange}
-        comprador={comprador}
-        onCompradorChange={onCompradorChange}
-        gestor={gestor}
-        onGestorChange={onGestorChange}
-        firmado={firmado}
-        onFirmadoChange={onFirmadoChange}
-        organismo={organismo}
-        onOrganismoChange={onOrganismoChange}
-        tipo={tipo}
-        onTipoChange={onTipoChange}
+        fields={queryFields}
+        condiciones={draftCondiciones}
+        onCondicionesChange={onDraftCondicionesChange}
+        condicionesCount={condicionesCount}
         onAplicar={onAplicar}
         onEmpezarDeCero={onEmpezarDeCero}
         empezarDeCeroDisabled={empezarDeCeroDisabled}
-        isAdmin={isAdmin}
-        companias={companias}
-        compania={compania}
-        onCompaniaChange={onCompaniaChange}
+        testIdPrefix={filtrosTestIdPrefix}
+        fieldsError={fieldsError}
       />
 
       {columnSelector}
+      {exportAction}
     </>
   );
 }
 
 export interface TramitesFiltrosChipsProps {
   periodo: string;
-  filtrosEspecificos: ReadonlySet<FiltroEspecificoKey>;
-  onToggleFiltroEspecifico: (key: FiltroEspecificoKey) => void;
   onQuitarPeriodo: () => void;
-  /** Valores YA APLICADOS (no el borrador): el chip solo muestra `Etiqueta: valor` una vez que el
-   *  usuario pulsó "Aplicar" — mientras tanto queda solo la etiqueta, sin adelantar un valor que
-   *  todavía no rige la consulta. */
-  appliedPlaca: string;
-  appliedVendedor: string;
-  appliedComprador: string;
-  appliedGestor: string;
-  appliedFirmado: '' | 'true' | 'false';
-  appliedOrganismo: string;
-  appliedTipo: string;
+  /** HU #12107 — condiciones APLICADAS (no el borrador): la tira dice qué está filtrando ahora. */
+  condiciones: QueryCondition[];
+  /** El catálogo, para leer la etiqueta del campo y de sus opciones en vez del identificador. */
+  fields: QueryField[];
+  onQuitarCondicion: (fieldId: string) => void;
 }
 
 /**
- * Tira de chips debajo de la fila de tabs: SOLO se renderiza si hay algo activo (periodo o algún
- * filtro específico). Sin tarjeta ni borde — es lo único que delata que hay filtros aplicados,
- * ahora que sus campos viven escondidos dentro de los popovers.
+ * Tira de chips de lo que está filtrando AHORA MISMO.
+ *
+ * <p>Muestra lo aplicado, no el borrador: un chip que anuncia un filtro que todavía no se ha
+ * pulsado «Aplicar» diría que la tabla está acotada cuando no lo está.</p>
+ *
+ * <p>El texto de cada condición lo arma `describeCondition`, el mismo de Consultas, para que una
+ * condición se lea igual en las dos pantallas — incluido el resumen «3 valores» cuando se pegó una
+ * lista larga, que dentro de un chip es lo único legible.</p>
  */
 export function TramitesFiltrosChips({
   periodo,
-  filtrosEspecificos,
-  onToggleFiltroEspecifico,
   onQuitarPeriodo,
-  appliedPlaca,
-  appliedVendedor,
-  appliedComprador,
-  appliedGestor,
-  appliedFirmado,
-  appliedOrganismo,
-  appliedTipo,
+  condiciones,
+  fields,
+  onQuitarCondicion,
 }: TramitesFiltrosChipsProps) {
-  const activosOrdenados = FILTROS_ESPECIFICOS_ORDEN.filter((k) => filtrosEspecificos.has(k));
   const periodoActivo = periodo !== 'Sin periodo';
 
-  const valorDe = (key: FiltroEspecificoKey): string => {
-    switch (key) {
-      case 'placa':
-        return appliedPlaca;
-      case 'vendedor':
-        return appliedVendedor;
-      case 'comprador':
-        return appliedComprador;
-      case 'gestor':
-        return appliedGestor;
-      case 'firmado':
-        return appliedFirmado === 'true' ? 'Firmado' : appliedFirmado === 'false' ? 'Pendiente' : '';
-      case 'organismo':
-        return appliedOrganismo;
-      case 'tipo':
-        return appliedTipo;
-      default:
-        return '';
-    }
-  };
-
-  if (!periodoActivo && activosOrdenados.length === 0) return null;
+  if (!periodoActivo && condiciones.length === 0) return null;
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -787,26 +630,22 @@ export function TramitesFiltrosChips({
           </button>
         </span>
       ) : null}
-      {activosOrdenados.map((key) => {
-        const label = filtroEspecificoLabel(key);
-        const valor = valorDe(key).trim();
-        return (
-          <span
-            key={key}
-            className="flex items-center gap-1.5 rounded-full border border-[#557EFF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]"
+      {condiciones.map((condicion) => (
+        <span
+          key={condicion.fieldId}
+          className="flex items-center gap-1.5 rounded-full border border-[#557EFF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]"
+        >
+          {describeCondition(condicion, fields)}
+          <button
+            type="button"
+            onClick={() => onQuitarCondicion(condicion.fieldId)}
+            aria-label={`Quitar filtro ${describeCondition(condicion, fields)}`}
+            className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
           >
-            {valor ? `${label}: ${valor}` : label}
-            <button
-              type="button"
-              onClick={() => onToggleFiltroEspecifico(key)}
-              aria-label={`Quitar filtro ${label}`}
-              className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-            >
-              <X className="h-3 w-3" aria-hidden="true" />
-            </button>
-          </span>
-        );
-      })}
+            <X className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </span>
+      ))}
     </div>
   );
 }

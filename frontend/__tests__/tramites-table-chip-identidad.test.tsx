@@ -13,6 +13,9 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
+  searchInstances: vi.fn(),
+  searchEstadoCounts: vi.fn(),
+  listFilterFields: vi.fn(),
   // La tira de KPIs pide sus conteos al backend (no se derivan del array del listado).
   listInstanceEstadoCounts: vi.fn().mockResolvedValue({}),
   setPriority: vi.fn(),
@@ -93,6 +96,17 @@ async function filaConChip(item: InstanceSummary) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // HU #12107 — la tabla pasó al camino POST (`searchInstances`), que es el único que lleva
+  // condiciones. Se cablea sobre `listInstances` para que los casos que ya sembraban filas por ahí
+  // sigan valiendo sin tocarlos: lo que cambió es el transporte, no lo que devuelve el servidor.
+  mocks.searchInstances.mockImplementation(async (params?: unknown) => {
+    const items = (await mocks.listInstances(params)) ?? [];
+    return { items, total: items.length };
+  });
+  mocks.searchEstadoCounts.mockImplementation((params?: unknown) =>
+    mocks.listInstanceEstadoCounts(params),
+  );
+  mocks.listFilterFields.mockResolvedValue([]);
   mocks.getConsultationConfig.mockResolvedValue({
     vehiclePlate: 'kyverum_runt',
     onlyOwnVehicles: false,
