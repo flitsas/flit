@@ -56,32 +56,44 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             || asUtf8.Contains(IImprontaManualStamper.Marker, StringComparison.Ordinal);
     }
 
-    public byte[] Stamp(byte[] pdf, ImprontaManualStampContext context)
+    public ImprontaManualStampResult Stamp(byte[] pdf, ImprontaManualStampContext context)
     {
         ArgumentNullException.ThrowIfNull(pdf);
         ArgumentNullException.ThrowIfNull(context);
         if (pdf.Length == 0)
-            return pdf;
+            return new ImprontaManualStampResult(pdf, Applied: false);
         if (AlreadyStamped(pdf))
-            return pdf;
+            return new ImprontaManualStampResult(pdf, Applied: false);
 
         var documentHash = Sha256Hex(pdf);
         var hashImpronta = Guid.NewGuid().ToString("D");
-        // Paridad BackCrudTransfer: RSA-2048 efímero → Base64 (wrap 50 en zona 3).
-        var firmaDigital = BuildFirmaDigital(documentHash);
+        // Paridad BackCrudTransfer: RSA-2048 efímero → Base64 + PEM (wrap 50 en zona 3).
+        var crypto = BuildFirmaDigital(documentHash);
+        var withoutOwner = context.Signers.Count == 0
+            || context.Signers.All(s => s.SignatureImage is not { Length: > 0 });
+        var signedAt = DateTimeOffset.UtcNow;
 
         using var document = PdfReader.Open(new MemoryStream(pdf), PdfDocumentOpenMode.Modify);
         document.Info.Keywords = IImprontaManualStamper.MetadataKeyword;
 
         if (document.PageCount == 0)
-            return pdf;
+            return new ImprontaManualStampResult(pdf, Applied: false);
 
         var page = document.Pages[document.PageCount - 1];
-        DrawAllZones(page, context, hashImpronta, firmaDigital, documentHash);
+        DrawAllZones(page, context, hashImpronta, crypto.SignatureBase64, documentHash);
 
         using var ms = new MemoryStream();
         document.Save(ms, false);
-        return AppendAsciiMarker(ms.ToArray(), documentHash);
+        var stamped = AppendAsciiMarker(ms.ToArray(), documentHash);
+        return new ImprontaManualStampResult(
+            stamped,
+            Applied: true,
+            documentHash,
+            crypto.SignatureBase64,
+            crypto.PrivateKeyPem,
+            crypto.PublicKeyPem,
+            signedAt,
+            withoutOwner);
     }
 
     private static byte[] AppendAsciiMarker(byte[] pdf, string documentHash)
@@ -361,11 +373,16 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         gfx.Restore(state);
     }
 
+    internal readonly record struct FirmaDigitalMaterial(
+        string SignatureBase64,
+        string PrivateKeyPem,
+        string PublicKeyPem);
+
     /// <summary>
     /// Paridad con BackCrudTransfer <c>VehicleTransferSignedPdfService.signDocument</c>:
-    /// RSA-2048 efímero, firma SHA-256 del hash del documento (UTF-8), resultado en Base64 puro.
+    /// RSA-2048 efímero, firma SHA-256 del hash del documento (UTF-8), Base64 + PEM.
     /// </summary>
-    internal static string BuildFirmaDigital(string documentHash)
+    internal static FirmaDigitalMaterial BuildFirmaDigital(string documentHash)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentHash);
         using var rsa = RSA.Create(2048);
@@ -373,7 +390,10 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             Encoding.UTF8.GetBytes(documentHash),
             HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1);
-        return Convert.ToBase64String(signature);
+        return new FirmaDigitalMaterial(
+            Convert.ToBase64String(signature),
+            rsa.ExportRSAPrivateKeyPem(),
+            rsa.ExportRSAPublicKeyPem());
     }
 
     private static string Sha256Hex(byte[] bytes) =>

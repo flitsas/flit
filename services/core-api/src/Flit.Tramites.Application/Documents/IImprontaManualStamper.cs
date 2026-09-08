@@ -2,7 +2,7 @@ namespace Flit.Tramites.Application.Documents;
 
 /// <summary>
 /// Firmante a estampar en la impronta manual. La rúbrica se pinta como en el FUR
-/// (PNG + sidecar baúl/identidad). <see cref="FullName"/> no se imprime: solo alimenta el MAC.
+/// (PNG + sidecar baúl/identidad). <see cref="FullName"/> no se imprime en el PDF.
 /// </summary>
 public sealed record ImprontaManualSigner(
     string FullName,
@@ -22,6 +22,20 @@ public sealed record ImprontaManualStampContext(
     IReadOnlyList<ImprontaManualSigner> Signers);
 
 /// <summary>
+/// Resultado del stamp: PDF sellado + material criptográfico (paridad BackCrudTransfer).
+/// <see cref="Applied"/> es false si el PDF ya estaba sellado o estaba vacío.
+/// </summary>
+public sealed record ImprontaManualStampResult(
+    byte[] Pdf,
+    bool Applied,
+    string DocumentHash = "",
+    string SignatureBase64 = "",
+    string PrivateKeyPem = "",
+    string PublicKeyPem = "",
+    DateTimeOffset? SignedAt = null,
+    bool WasSignedWithoutOwnerSignature = false);
+
+/// <summary>
 /// Estampa hash, firmas de propietario(s) y firma digital visual sobre un PDF de impronta
 /// <b>manual</b> (no Kyverum). Idempotente: si el PDF ya contiene el marcador
 /// <c>Firma digital impronta:</c> (texto) o la keyword de metadata FLIT, no vuelve a estampar.
@@ -36,5 +50,5 @@ public interface IImprontaManualStamper
 
     bool AlreadyStamped(byte[] pdf);
 
-    byte[] Stamp(byte[] pdf, ImprontaManualStampContext context);
+    ImprontaManualStampResult Stamp(byte[] pdf, ImprontaManualStampContext context);
 }

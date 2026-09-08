@@ -37,10 +37,14 @@ public sealed class ImprontaManualStamperTests
         var pdf = MinimalPdf();
         var result = _sut.Stamp(pdf, Ctx(new ImprontaManualSigner("DANIEL FERNANDO GARCIA", "hashprop", null)));
 
-        result.Length.Should().BeGreaterThan(pdf.Length);
-        _sut.AlreadyStamped(result).Should().BeTrue();
-        Encoding.ASCII.GetString(result).Should().Contain(IImprontaManualStamper.MetadataKeyword);
-        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(new MemoryStream(result), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
+        result.Applied.Should().BeTrue();
+        result.Pdf.Length.Should().BeGreaterThan(pdf.Length);
+        result.PrivateKeyPem.Should().Contain("BEGIN RSA PRIVATE KEY");
+        result.PublicKeyPem.Should().Contain("BEGIN RSA PUBLIC KEY");
+        result.SignatureBase64.Length.Should().BeInRange(340, 350);
+        _sut.AlreadyStamped(result.Pdf).Should().BeTrue();
+        Encoding.ASCII.GetString(result.Pdf).Should().Contain(IImprontaManualStamper.MetadataKeyword);
+        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(new MemoryStream(result.Pdf), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
         doc.PageCount.Should().Be(1);
     }
 
@@ -50,7 +54,7 @@ public sealed class ImprontaManualStamperTests
         var pdf = MinimalPdf(pages: 2);
         var result = _sut.Stamp(pdf, Ctx(new ImprontaManualSigner("ANA", null, null)));
 
-        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(new MemoryStream(result), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
+        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(new MemoryStream(result.Pdf), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
         doc.PageCount.Should().Be(2);
     }
 
@@ -59,9 +63,10 @@ public sealed class ImprontaManualStamperTests
     {
         var pdf = MinimalPdf();
         var once = _sut.Stamp(pdf, Ctx(new ImprontaManualSigner("A", null, null)));
-        var twice = _sut.Stamp(once, Ctx(new ImprontaManualSigner("B", null, null)));
+        var twice = _sut.Stamp(once.Pdf, Ctx(new ImprontaManualSigner("B", null, null)));
 
-        twice.Should().Equal(once);
+        twice.Applied.Should().BeFalse();
+        twice.Pdf.Should().Equal(once.Pdf);
     }
 
     [Fact]
@@ -75,7 +80,7 @@ public sealed class ImprontaManualStamperTests
 
         var act = () => _sut.Stamp(pdf, ctx);
         act.Should().NotThrow();
-        _sut.AlreadyStamped(act()).Should().BeTrue();
+        _sut.AlreadyStamped(act().Pdf).Should().BeTrue();
     }
 
     [Fact]
@@ -90,10 +95,11 @@ public sealed class ImprontaManualStamperTests
         var pdf = MinimalPdf();
         var expected = Convert.ToHexString(SHA256.HashData(pdf)).ToLowerInvariant();
         var stamped = _sut.Stamp(pdf, Ctx());
-        _sut.AlreadyStamped(stamped).Should().BeTrue();
-        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(new MemoryStream(stamped), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
+        stamped.DocumentHash.Should().Be(expected);
+        _sut.AlreadyStamped(stamped.Pdf).Should().BeTrue();
+        using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(new MemoryStream(stamped.Pdf), PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
         doc.PageCount.Should().Be(1);
-        Encoding.ASCII.GetString(stamped).Should().Contain($"DocHash:{expected}");
+        Encoding.ASCII.GetString(stamped.Pdf).Should().Contain($"DocHash:{expected}");
     }
 
     [Fact]
@@ -102,12 +108,11 @@ public sealed class ImprontaManualStamperTests
         var hash = Convert.ToHexString(SHA256.HashData("doc"u8.ToArray())).ToLowerInvariant();
         var firma = ImprontaManualStamper.BuildFirmaDigital(hash);
 
-        // RSA-2048 → 256 bytes → Base64 ~344 chars, padding "==".
-        firma.Length.Should().BeInRange(340, 350);
-        firma.Should().MatchRegex("^[A-Za-z0-9+/]+=*$");
-        firma.Should().EndWith("=");
-        // Sin hex concatenado (el MAC anterior mezclaba Base64 + hex).
-        firma.Should().NotMatchRegex("[a-f0-9]{64}$");
+        firma.SignatureBase64.Length.Should().BeInRange(340, 350);
+        firma.SignatureBase64.Should().MatchRegex("^[A-Za-z0-9+/]+=*$");
+        firma.SignatureBase64.Should().EndWith("=");
+        firma.PrivateKeyPem.Should().StartWith("-----BEGIN RSA PRIVATE KEY-----");
+        firma.PublicKeyPem.Should().StartWith("-----BEGIN RSA PUBLIC KEY-----");
     }
 
     [Fact]
@@ -116,6 +121,6 @@ public sealed class ImprontaManualStamperTests
         var hash = Convert.ToHexString(SHA256.HashData("same"u8.ToArray())).ToLowerInvariant();
         var a = ImprontaManualStamper.BuildFirmaDigital(hash);
         var b = ImprontaManualStamper.BuildFirmaDigital(hash);
-        a.Should().NotBe(b);
+        a.SignatureBase64.Should().NotBe(b.SignatureBase64);
     }
 }
