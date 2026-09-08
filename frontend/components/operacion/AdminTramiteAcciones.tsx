@@ -37,6 +37,9 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 const FIELD_LABEL_CLS = 'block text-xs font-semibold text-[#162744] dark:text-white';
 const FIELD_CLS =
   'w-full rounded-xl border px-3 py-2 text-sm text-[#162744] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent dark:text-white';
+// El asa de resize nativa del <textarea> es cuadrada: sobre `rounded-xl` recorta la esquina
+// inferior derecha y se ve como una muesca. `resize-none` la quita (el campo ya crece con `rows`).
+const TEXTAREA_CLS = `${FIELD_CLS} resize-none`;
 const FIELD_BORDER = { borderColor: '#DFE5ED' };
 
 function PrimaryButton({
@@ -207,7 +210,7 @@ function CambiarEstadoModal({ open, onClose, item, tenantId, onSuccess, onError 
           disabled={busy}
           rows={3}
           placeholder="Motivo de la corrección administrativa"
-          className={FIELD_CLS}
+          className={TEXTAREA_CLS}
           style={FIELD_BORDER}
         />
 
@@ -278,7 +281,7 @@ function AnularModal({ open, onClose, item, tenantId, onSuccess, onError }: Moda
           disabled={busy}
           rows={3}
           placeholder="Motivo de la anulación administrativa"
-          className={FIELD_CLS}
+          className={TEXTAREA_CLS}
           style={FIELD_BORDER}
         />
 
