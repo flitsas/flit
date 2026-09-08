@@ -268,11 +268,6 @@ function AnularModal({ open, onClose, item, tenantId, onSuccess, onError }: Moda
       busy={busy}
     >
       <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-        <InlineAlert tone="warning">
-          Anula el trámite desde su estado actual, sin pasar por el flujo normal del gestor/OT (no
-          libera placa ni regenera consolidados). Esta acción no se puede deshacer desde aquí.
-        </InlineAlert>
-
         <label className={FIELD_LABEL_CLS} htmlFor={`admin-anular-motivo-${item.id}`}>
           Motivo (opcional)
         </label>
