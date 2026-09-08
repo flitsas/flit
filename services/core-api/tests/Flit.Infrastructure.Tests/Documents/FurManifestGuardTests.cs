@@ -405,7 +405,7 @@ public sealed class FurManifestGuardTests
         processing_year=Text:649.3,90.2,30.4,12.4,7.7,Center,False,null
         plate_letter=Text:704.7,85.5,26.2,14,9.7,Center,False,null
         plate_number=Text:734.1,85.5,23.7,14,9.7,Center,False,null
-        requested_process_1=cb:71.3,119.2,9.9
+        requested_process_1=cb:65.3,123.2,9.9
         requested_process_2=cb:119.5,121.1,9.8
         requested_process_3=cb:167.7,121.1,10.1
         requested_process_4=cb:215.9,121.1,10.1
