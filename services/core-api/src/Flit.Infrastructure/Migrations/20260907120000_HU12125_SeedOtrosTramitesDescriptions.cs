@@ -18,10 +18,13 @@ namespace Flit.Infrastructure.Migrations;
 /// arranque, igual que <c>CatalogoTiposTramiteCanonico</c> (patrón para migraciones donde el diff
 /// del modelo EF sale vacío).
 ///
-/// Idempotente y no destructivo con ediciones manuales: el <c>UPDATE</c> filtra
-/// <c>WHERE description IS NULL</c>, así que solo siembra el copy inicial una vez por fila y nunca
-/// pisa una descripción que ya haya sido editada a mano desde el configurador. Correrla varias
-/// veces no tiene efecto adicional tras la primera vez que puebla cada fila.
+/// Idempotente y no destructivo con ediciones manuales: el <c>UPDATE</c> solo reemplaza
+/// <c>description</c> cuando está en <c>NULL</c> o cuando coincide EXACTAMENTE con el placeholder
+/// genérico que <c>40-catalogo-tipos-tramite-canonico.sql</c> sembró originalmente para cada code
+/// (p. ej. <c>'Blindaje de vehículo.'</c>, <c>'Cambio de color.'</c>) — nunca pisa un valor distinto
+/// a esos dos casos, que sería una edición manual real hecha desde el configurador. Sin este match
+/// por placeholder conocido, un <c>WHERE description IS NULL</c> a secas NUNCA se dispara aquí,
+/// porque los 12 codes ya tenían un valor no nulo desde su siembra original.
 ///
 /// Reversible: el <c>Down</c> vuelve <c>description</c> a <c>NULL</c> únicamente en las filas cuyo
 /// valor coincide exactamente con el copy sembrado por este <c>Up</c> (match por <c>code</c> +
@@ -57,7 +60,23 @@ public partial class HU12125_SeedOtrosTramitesDescriptions : Migration
                 'DUPLICADO_TARJETA', 'PRENDA_INSCRIPCION', 'LEVANTAMIENTO_PRENDA',
                 'RADICADO_CUENTA', 'TRASLADO_CUENTA'
             )
-            AND description IS NULL;
+            AND (
+                description IS NULL
+                OR (code, description) IN (
+                    ('BLINDAJE', 'Blindaje de vehículo.'),
+                    ('CAMBIO_CARROCERIA', 'Cambio de carrocería.'),
+                    ('CAMBIO_COLOR', 'Cambio de color.'),
+                    ('CAMBIO_LOCATARIO', 'Cambio de locatario (leasing).'),
+                    ('CANCELACION_MATRICULA', 'Cancelación de matrícula.'),
+                    ('CONVERSION_COMBUSTIBLE', 'Conversiones de combustible.'),
+                    ('DUPLICADO_PLACA', 'Duplicado de placa.'),
+                    ('DUPLICADO_TARJETA', 'Duplicado de tarjeta de propiedad.'),
+                    ('PRENDA_INSCRIPCION', 'Inscripción de prenda.'),
+                    ('LEVANTAMIENTO_PRENDA', 'Levantamiento de prenda.'),
+                    ('RADICADO_CUENTA', 'Radicado de cuenta.'),
+                    ('TRASLADO_CUENTA', 'Traslado de cuenta.')
+                )
+            );
             """);
 
     /// <inheritdoc />
