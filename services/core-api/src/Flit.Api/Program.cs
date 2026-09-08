@@ -275,6 +275,7 @@ app.MapTramitesFirmaEndpoints();
 app.MapTramitesFurEndpoints();
 app.MapTramitesConsolidadoEndpoints();
 app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar consolidado (admin)
+app.MapAdminTramiteEstadoEndpoints(); // HU #12159 — cambiar estado sin restricción de flujo (admin)
 app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();

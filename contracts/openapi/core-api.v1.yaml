@@ -6265,6 +6265,66 @@ paths:
         "404": { description: "Trámite no encontrado." }
         "409": { description: "Trámite migrado (solo lectura)." }
 
+  # ── Admin · Trámites · Cambiar estado sin restricción de flujo (Feature #12155, HU #12159) ─────
+
+  /api/v1/admin/tramites/{id}/estado:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Cambia el estado de un trámite sin restricciones de flujo (excluye 'aprobado')
+      operationId: adminTramiteCambiarEstado
+      security:
+        - bearerAuth: []
+      description: >
+        Cambia `status` directamente a cualquier estado de negocio conocido (borrador, preparado,
+        entregado, rechazado o anulado) SIN pasar por las transiciones válidas de la máquina de
+        estados normal del gestor/OT ni por sus gates de negocio. Única regla dura: `aprobado` nunca
+        participa, ni como origen ni como destino (422) — la aprobación exige el flujo formal del
+        organismo de tránsito. No replica los efectos colaterales de una transición normal (no
+        libera/asigna placa, no regenera consolidados/FUR, no resuelve mandatario, no encola
+        notificaciones): es una corrección puntual del campo `status` para situaciones excepcionales.
+        Requiere el permiso `AdminTramiteCambiarEstado` (SuperAdmin bypassa). La acción queda
+        registrada en el historial de estados y en la bitácora del trámite con estado anterior, nuevo
+        estado, usuario, fecha y hora.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                toStatus:
+                  type: string
+                  description: Estado destino (borrador, preparado, entregado, rechazado o anulado).
+                reason:
+                  type: string
+                  nullable: true
+                  description: Motivo de la corrección administrativa (libre, no obligatorio).
+              required: [toStatus]
+      responses:
+        "200":
+          description: Estado cambiado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  previousStatus: { type: string }
+                  newStatus: { type: string }
+                  changedAt: { type: string, format: date-time }
+        "400": { description: "Falta el header X-Tenant-Id o el campo toStatus." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteCambiarEstado." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Conflicto de concurrencia (row_version): recargue e intente de nuevo." }
+        "422": { description: "Estado destino desconocido, o 'aprobado' como origen/destino (excluido por regla de negocio)." }
+
   # ── Admin · OT · Documentos del trámite de cliente (Feature #10701 / HU #10704 + HU #10706) ──
 
   /api/v1/admin/ot/client-procedures/{id}/documents:

@@ -112,4 +112,12 @@ public static class TramiteEstadoErrores
     /// false) ⇒ cero impacto en trámites de plataforma (409).
     /// </summary>
     public const string TramitePausado = "tramite_pausado";
+
+    /// <summary>
+    /// HU #12159 — cambio de estado ADMINISTRATIVO (fuera de <see cref="TramiteStateMachine"/>): la
+    /// única regla dura de este endpoint es que <c>aprobado</c> nunca participa, ni como origen ni
+    /// como destino. La aprobación exige el flujo formal (gates de entrega, resolución de mandatario,
+    /// efectos en cascada) que este endpoint deliberadamente NO reproduce (422).
+    /// </summary>
+    public const string AdminAprobadoExcluido = "admin_aprobado_excluido";
 }
