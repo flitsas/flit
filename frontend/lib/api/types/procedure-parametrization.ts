@@ -27,6 +27,11 @@ export interface ProcedureTypeSummary {
    */
   wizardEnabled: boolean;
   publishedAt: string | null;
+  /**
+   * Copy que ve el gestor en el asistente al elegir este trámite (HU #12125). El backend la expone
+   * en `ProcedureTypeSummary` —listado, alta y corrección— desde el fix de esta misma HU.
+   */
+  description: string | null;
 }
 
 /** Etiquetas de familia para el selector y los filtros. */

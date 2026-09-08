@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
-import { resolveNuevoTramiteCode } from '@/lib/tramites/nuevo-tramite-resolver';
+import { infoTextNuevoTramite, resolveNuevoTramiteCode } from '@/lib/tramites/nuevo-tramite-resolver';
 
 function tipo(
   code: string,
   name: string,
   family: ProcedureTypeSummary['family'],
   wizardEnabled = true,
+  description: string | null = null,
 ): ProcedureTypeSummary {
   return {
     id: code,
@@ -17,6 +18,7 @@ function tipo(
     isActive: true,
     wizardEnabled,
     publishedAt: null,
+    description,
   };
 }
 
@@ -123,5 +125,63 @@ describe('resolveNuevoTramiteCode', () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe('not-found');
+  });
+});
+
+// HU #12126 — el copy de la franja informativa ya no está fijo en código: sale del `description`
+// del tipo resuelto en el catálogo, para las tres familias (antes Matrícula/Traspaso tenían texto
+// hardcodeado y Otros no mostraba nada nunca).
+describe('infoTextNuevoTramite', () => {
+  it('AC1 — retorna el description del code resuelto para Matrícula y Traspaso', () => {
+    const catalogo: ProcedureTypeSummary[] = [
+      tipo('MATRICULA_NUEVA', 'Matrícula inicial', 'MATRICULAS', true, 'Copy matrícula tradicional.'),
+      tipo('MATRICULA_LEASING', 'Matrícula leasing', 'MATRICULAS', true, 'Copy matrícula leasing.'),
+      tipo('TRASPASO_STANDARD', 'Traspaso', 'TRASPASO', true, 'Copy traspaso bilateral.'),
+      tipo('TRASPASO_UNILATERAL', 'Traspaso unilateral', 'TRASPASO', true, 'Copy traspaso unilateral.'),
+    ];
+
+    expect(infoTextNuevoTramite('MATRICULAS', { leasing: false }, catalogo)).toBe(
+      'Copy matrícula tradicional.',
+    );
+    expect(infoTextNuevoTramite('MATRICULAS', { leasing: true }, catalogo)).toBe(
+      'Copy matrícula leasing.',
+    );
+    expect(
+      infoTextNuevoTramite('TRASPASO', { modalidadTraspaso: 'bilateral' }, catalogo),
+    ).toBe('Copy traspaso bilateral.');
+    expect(
+      infoTextNuevoTramite('TRASPASO', { modalidadTraspaso: 'unilateral' }, catalogo),
+    ).toBe('Copy traspaso unilateral.');
+  });
+
+  it('AC1/AC3 — Otros también resuelve su description por el subtipo elegido (ya no retorna null siempre)', () => {
+    const catalogo: ProcedureTypeSummary[] = [
+      tipo('BLINDAJE', 'Blindaje', 'OTROS', true, 'Copy de blindaje.'),
+    ];
+    expect(
+      infoTextNuevoTramite('OTROS', { subtipoOtrosCode: 'BLINDAJE' }, catalogo),
+    ).toBe('Copy de blindaje.');
+  });
+
+  it('AC2 — sin description configurado no hay franja (null, no texto de relleno)', () => {
+    const catalogo: ProcedureTypeSummary[] = [
+      tipo('MATRICULA_NUEVA', 'Matrícula inicial', 'MATRICULAS', true, null),
+    ];
+    expect(infoTextNuevoTramite('MATRICULAS', { leasing: false }, catalogo)).toBeNull();
+  });
+
+  it('AC2 — description en blanco cuenta como no configurado', () => {
+    const catalogo: ProcedureTypeSummary[] = [
+      tipo('MATRICULA_NUEVA', 'Matrícula inicial', 'MATRICULAS', true, '   '),
+    ];
+    expect(infoTextNuevoTramite('MATRICULAS', { leasing: false }, catalogo)).toBeNull();
+  });
+
+  it('sin tipo elegido no hay franja', () => {
+    expect(infoTextNuevoTramite(null, {}, [])).toBeNull();
+  });
+
+  it('sin ningún tipo resoluble en el catálogo no hay franja', () => {
+    expect(infoTextNuevoTramite('MATRICULAS', { leasing: false }, [])).toBeNull();
   });
 });
