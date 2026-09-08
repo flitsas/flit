@@ -28,6 +28,9 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".
   listInstances: vi.fn(),
+  searchInstances: vi.fn(),
+  searchEstadoCounts: vi.fn(),
+  listFilterFields: vi.fn(),
   // La tira de KPIs pide sus conteos al backend (no se derivan del array del listado).
   listInstanceEstadoCounts: vi.fn().mockResolvedValue({}),
   getConsultationConfig: vi.fn(),
@@ -84,6 +87,17 @@ const TRASPASO_WIZARD: WizardState = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // HU #12107 — la tabla pasó al camino POST (`searchInstances`), que es el único que lleva
+  // condiciones. Se cablea sobre `listInstances` para que los casos que ya sembraban filas por ahí
+  // sigan valiendo sin tocarlos: lo que cambió es el transporte, no lo que devuelve el servidor.
+  mocks.searchInstances.mockImplementation(async (params?: unknown) => {
+    const items = (await mocks.listInstances(params)) ?? [];
+    return { items, total: items.length };
+  });
+  mocks.searchEstadoCounts.mockImplementation((params?: unknown) =>
+    mocks.listInstanceEstadoCounts(params),
+  );
+  mocks.listFilterFields.mockResolvedValue([]);
   mocks.createInstance.mockResolvedValue({
     id: 'inst-1',
     referenceNumber: 'TR-001',

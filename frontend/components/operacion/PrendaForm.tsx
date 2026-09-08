@@ -1015,9 +1015,9 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       aria-describedby={fieldErrors.nombre ? 'prenda-acreedor-nombre-err' : undefined}
                     />
                     {fieldErrors.nombre && (
-                      <p id="prenda-acreedor-nombre-err" className="mt-1 text-xs" style={{ color: '#FF4E00' }}>
+                      <InlineAlert id="prenda-acreedor-nombre-err" tone="warning" compact className="mt-1">
                         {fieldErrors.nombre}
-                      </p>
+                      </InlineAlert>
                     )}
                   </div>
                   <div>
@@ -1054,9 +1054,9 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       aria-describedby={fieldErrors.documento ? 'prenda-acreedor-doc-err' : undefined}
                     />
                     {fieldErrors.documento && (
-                      <p id="prenda-acreedor-doc-err" className="mt-1 text-xs" style={{ color: '#FF4E00' }}>
+                      <InlineAlert id="prenda-acreedor-doc-err" tone="warning" compact className="mt-1">
                         {fieldErrors.documento}
-                      </p>
+                      </InlineAlert>
                     )}
                   </div>
                 </div>

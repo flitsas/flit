@@ -17,8 +17,10 @@ const ETIQUETA = 'text-xs font-semibold text-[#162744] dark:text-white';
  * Identidad del tipo: nombre, descripción, familia y si está activo.
  *
  * Nada de esto es cosmético. El NOMBRE es el rótulo legal del mandato y de la portada del
- * expediente —un tipo mal nombrado se firma mal—, y la FAMILIA gobierna clasificación, filtros,
- * causales de rechazo y el bloqueo por compañía. El código no se edita: identifica al tipo en el
+ * expediente —un tipo mal nombrado se firma mal—, la FAMILIA gobierna clasificación, filtros,
+ * causales de rechazo y el bloqueo por compañía, y la DESCRIPCIÓN es el copy que el gestor lee en
+ * el asistente al elegir el trámite (HU #12125): hoy solo se podía fijar al crear el tipo, y
+ * corregirlo después exigía desplegar código. El código no se edita: identifica al tipo en el
  * catálogo, en las integraciones y en los snapshots ya congelados.
  */
 export function TipoTramiteIdentidad({
@@ -31,11 +33,16 @@ export function TipoTramiteIdentidad({
   const [nombre, setNombre] = useState(tipo.name);
   const [familia, setFamilia] = useState<ProcedureFamily>(tipo.family);
   const [activo, setActivo] = useState(tipo.isActive);
+  const [descripcion, setDescripcion] = useState(tipo.description ?? '');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
 
-  const sinCambios = nombre.trim() === tipo.name && familia === tipo.family && activo === tipo.isActive;
+  const sinCambios =
+    nombre.trim() === tipo.name &&
+    familia === tipo.family &&
+    activo === tipo.isActive &&
+    descripcion.trim() === (tipo.description ?? '');
 
   const guardar = async () => {
     setGuardando(true);
@@ -44,6 +51,9 @@ export function TipoTramiteIdentidad({
     try {
       const actualizado = await superadminClient.updateProcedureType(tipo.id, {
         name: nombre.trim(),
+        // Vacío se persiste como `null`, igual que en el alta (NuevoTipoTramiteModal): no bloquea
+        // el guardado (AC2), simplemente significa que el tipo no tiene copy propio todavía.
+        description: descripcion.trim() || null,
         isActive: activo,
         family: familia,
       });
@@ -94,6 +104,27 @@ export function TipoTramiteIdentidad({
           </span>
         </label>
       </div>
+
+      <label className="flex flex-col gap-1">
+        <span className={ETIQUETA}>
+          Descripción <span className="font-normal opacity-60">(opcional)</span>
+        </span>
+        <textarea
+          className={`${CAMPO} min-h-[4.5rem] resize-y`}
+          value={descripcion}
+          onChange={(e) => setDescripcion(e.target.value)}
+          rows={3}
+          placeholder="Copy que ve el gestor al elegir este trámite en el asistente."
+          // Igual que Nombre: la ayuda vive aparte, en el <span> de abajo, para que el lector de
+          // pantalla no la funda con el nombre del campo.
+          aria-label="Descripción"
+          aria-describedby="descripcion-nota"
+        />
+        <span id="descripcion-nota" className="text-xs opacity-60">
+          Es el copy que ve el gestor en el asistente al elegir este trámite. Puede quedar vacío: no
+          bloquea el guardado.
+        </span>
+      </label>
 
       <label className="flex items-center gap-2">
         <input

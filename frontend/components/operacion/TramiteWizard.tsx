@@ -3037,6 +3037,10 @@ function ConsultaStep({
   const [ownerDocNumber, setOwnerDocNumber] = useState('');
   const [persisting, setPersisting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Distingue un dato mal escrito/incompleto (warning, ámbar — el gestor lo corrige y sigue) de un
+  // bloqueo real de negocio (error, rojo — compañía bloqueada, vehículo no propio): ambos comparten
+  // el mismo cartel de `error`, pero no son igual de graves.
+  const [errorTone, setErrorTone] = useState<'error' | 'warning'>('warning');
   // AC1 (HU #10882) — id del trámite existente cuando el preflight bloquea por duplicidad (409
   // DUPLICATE_ACTIVE_PROCEDURE, HU #10876). Presente ⇒ se ofrece "Retomar" (AC2) en vez del error genérico.
   const [duplicateInstanceId, setDuplicateInstanceId] = useState<string | null>(null);
@@ -3351,6 +3355,7 @@ function ConsultaStep({
     if (!instanceId && !deferred) return;
     const items = buildItems();
     if (!items) {
+      setErrorTone('warning');
       setError(
         isVin
           ? 'Ingresa el VIN antes de consultar.'
@@ -3360,6 +3365,7 @@ function ConsultaStep({
     }
     // Familia bloqueada en config de compañía: no consultar ni crear.
     if (familyBlocked) {
+      setErrorTone('error');
       setError(
         isVin
           ? 'La compañía tiene bloqueada la creación de trámites de matrículas. Contacta al administrador.'
@@ -3371,14 +3377,17 @@ function ConsultaStep({
     // del tenant, se bloquea ANTES de consultar el RUNT con un mensaje claro (no se gasta la consulta).
     if (!isVin && onlyOwnVehicles &&
         !isTenantOwnDocument(ownerDocType, ownerDocNumber.trim(), tenantNitDigits)) {
+      setErrorTone('error');
       setError(OWNER_NOT_TENANT_MESSAGE);
       return;
     }
-    // Validación de formato antes de gastar una consulta al RUNT.
+    // Validación de formato antes de gastar una consulta al RUNT: dato del tipo equivocado, no un
+    // bloqueo de negocio — se avisa en warning (ámbar), el gestor lo corrige y reintenta.
     const formatError = isVin
       ? validateVin(vin.trim())
       : (validatePlate(plate.trim()) ?? validateDocNumber(ownerDocNumber.trim(), ownerDocType));
     if (formatError) {
+      setErrorTone('warning');
       setError(formatError);
       return;
     }
@@ -4288,7 +4297,7 @@ function ConsultaStep({
       {/* El aviso del paso 1 era un párrafo naranja suelto: sin superficie, sin icono y con #FF4E00
           como color de texto (≈3.5:1, por debajo del 4.5:1 que exige AA). `InlineAlert` es el patrón
           vigente y ya trae tono, icono y los tokens de badge que sí cumplen contraste. */}
-      {error && <InlineAlert tone="error">{error}</InlineAlert>}
+      {error && <InlineAlert tone={errorTone}>{error}</InlineAlert>}
 
       {/* AC1/AC2 (HU #10882) — bloqueo de duplicidad: ya hay un trámite en curso para este
           VIN/placa (409 DUPLICATE_ACTIVE_PROCEDURE del preflight, HU #10876). "Retomar" abre

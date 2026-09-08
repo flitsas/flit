@@ -1183,21 +1183,8 @@ public sealed class GenerarFurHandler(
     /// certificado (firmaSerie) y fechas de aprobación/vencimiento (día calendario Colombia). Multilínea: el
     /// overlay del FUR lo pinta línea a línea en el espacio de firma.
     /// </summary>
-    private static string BuildIdentidadSello(ProcedureInstanceBiometricValidation v)
-    {
-        var doc = $"{v.DocumentType} {v.DocumentNumber}".Trim();
-        var uuid = string.IsNullOrWhiteSpace(v.KyverumVerificationId) ? v.Id.ToString("D") : v.KyverumVerificationId!;
-        // HU #11015 — un guion no dice nada: si el proveedor no entregó la serie del certificado se
-        // declara explícitamente, para que quien lee el documento sepa que la firma no se pudo estampar
-        // en vez de creer que el valor se perdió al imprimir.
-        var firma = string.IsNullOrWhiteSpace(v.CertificateHash) ? "no disponible" : v.CertificateHash!;
-        // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA, sin hora.
-        var aprob = v.ValidatedAt is { } va
-            ? va.ToOffset(ColombiaOffset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
-        var vence = v.ValidUntil is { } vu
-            ? vu.ToOffset(ColombiaOffset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
-        return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob} · Vence {vence}";
-    }
+    private static string BuildIdentidadSello(ProcedureInstanceBiometricValidation v) =>
+        IdentidadSelloText.Build(v);
 
     /// <summary>
     /// ADR-0036 (HU #10915) — Genera el Contrato de Mandato siempre que haya generador y código de OT

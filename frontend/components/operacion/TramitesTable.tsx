@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowDown,
   ArrowUp,
+  Download,
   ArrowUpDown,
   CheckCircle2,
   Eye,
@@ -28,7 +29,6 @@ import {
   TramitesFiltrosBar,
   TramitesFiltrosChips,
   rangoDePeriodo,
-  type FiltroEspecificoKey,
   type RangoSobre,
 } from './TramitesFiltrosBar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
@@ -39,10 +39,23 @@ import {
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
   buildTramitesGridLayout,
   buildTramitesColWidths,
-  tramitesColumnToSortBy,
+  tramitesSortOptions,
   type TramitesColumnDef,
   type TramitesGridLayout,
 } from '@/lib/tramites/tramites-table-columns';
+import type { QueryCondition, QueryField } from '@/lib/api/queries';
+import { buildWorkbook, type DataColumn } from '@/components/consultas/columns';
+import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from '@/components/consultas/export';
+import { XLSX_MIME } from '@/lib/xlsx';
+import { nombreArchivoTramites, selloDeArchivo } from './tramites-export';
+import { tramitesExportFields } from '@/lib/tramites/tramites-table-columns';
+import {
+  FIRMA_TEXTO,
+  FUENTE_LABEL,
+  stepLabel,
+  tramiteLabel,
+  vehiculo,
+} from '@/lib/tramites/tramites-row-labels';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
 import { controlCls } from './tramites-control-styles';
 import { StatusBadge } from '@/components/atom/StatusBadge';
@@ -72,7 +85,6 @@ import type {
   InstanceStatus,
   InstanceSummary,
   ListInstancesParams,
-  TramiteFuente,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
@@ -234,93 +246,6 @@ function shortDate(iso: string): string {
   return formatFecha(iso);
 }
 
-function vehiculo(item: InstanceSummary): string {
-  const text = `${item.vehiculoMarca ?? ''} ${item.vehiculoLinea ?? ''}`.trim();
-  return text || '—';
-}
-
-const MODALIDAD_SHORT: Record<ProcedureFamily, string> = {
-  OTROS: 'Otros',
-  MATRICULAS: 'Matrícula',
-  TRASPASO: 'Traspaso',
-};
-
-/**
- * Qué rotula la fila del listado.
- *
- * En MATRICULAS y TRASPASO la familia identifica bien el trámite. En OTROS no: agrupa quince tipos
- * —blindaje, cambio de color, levantamiento de prenda, duplicado de tarjeta…— que se veían los tres
- * igual, «Otros», sin forma de distinguirlos sin abrirlos. Ahí manda el nombre del tipo.
- *
- * Respaldo a la familia si el expediente viene de un backend anterior al campo, para que la celda
- * nunca quede vacía.
- */
-function tramiteLabel(item: InstanceSummary): string {
-  const familia = MODALIDAD_SHORT[item.modalidad];
-  if (item.modalidad !== 'OTROS') return familia;
-  return item.tipoNombre?.trim() || familia;
-}
-
-/**
- * Nombres de paso por familia — RESPALDO para expedientes servidos por un backend anterior a
- * `pasoNombre`. No se amplía: desde ADR-0050 el recorrido lo define el TIPO, no la familia, así que
- * una lista por familia no puede acertar en OTROS —quince tipos con recorridos distintos— y de hecho
- * estaba VACÍA, que es por lo que esas filas mostraban «—».
- */
-const STEP_LABELS_FALLBACK: Record<ProcedureFamily, string[]> = {
-  OTROS: [],
-  MATRICULAS: [
-    'Consulta VIN',
-    'Datos y Documentos del Trámite',
-    'Comprador',
-    'Identidad',
-    'Resumen del trámite',
-  ],
-  TRASPASO: [
-    'Consulta del vehículo',
-    'Datos y Documentos del Trámite',
-    'Vendedor',
-    'Comprador',
-    'Datos comerciales',
-    'Resumen del trámite',
-  ],
-};
-
-/** Rótulo del paso en curso: manda el que arma el recorrido del tipo en el servidor. */
-function stepLabel(item: InstanceSummary): string {
-  return (
-    item.pasoNombre?.trim() ||
-    STEP_LABELS_FALLBACK[item.modalidad]?.[item.pasoActual - 1] ||
-    '—'
-  );
-}
-
-/**
- * Acreditación de una parte (identidad validada o firma del baúl) en la columna "Firmas".
- *
- * El diseño la dibuja como TEXTO PLANO de color, no como píldora, así que aquí solo se necesita
- * etiqueta + color, y se usan los tonos EXACTOS de la propuesta por decisión expresa del usuario.
- *
- * DEUDA DE CONTRASTE CONOCIDA: sobre blanco, `#F9AC00` da 1.9:1 y `#16A34A` 3.3:1, por debajo del
- * 4.5:1 que pide AA para texto. Se asume a sabiendas: el estado nunca depende solo del color —la
- * etiqueta lo dice— pero la legibilidad sigue siendo peor de lo que exige la norma. Se documentó
- * junto a las otras dos deudas de contraste abiertas (blanco sobre `#8CC63F` y sobre `#FF4E00`).
- */
-const FIRMA_TEXTO: Record<FirmaParteEstado, { label: string; color: string }> = {
-  firmado: { label: 'Firmado', color: '#16A34A' },
-  pendiente: { label: 'Sin firma', color: '#F9AC00' },
-  // La propuesta no dibuja una firma rechazada, así que no hay "tono exacto" que copiar: se queda
-  // el naranja de marca en su variante para texto, que sí cumple contraste.
-  rechazado: { label: 'Rechazado', color: '#C2410C' },
-};
-
-/** HU #11057 — etiqueta de la columna Fuente. No hay "QX": Quipux es canal de salida, no de entrada. */
-const FUENTE_LABEL: Record<TramiteFuente, string> = {
-  dashboard: 'Dashboard',
-  integracion: 'Integración',
-  migrado: 'Migrado',
-};
-
 // Selector de columnas — el ancho/orden de cada columna vive en TRAMITES_COLUMNS
 // (lib/tramites/tramites-table-columns.ts); `buildTramitesGridLayout` calcula el
 // `gridTemplateColumns` (Selección + visibles + Acciones) UNA sola vez a partir de las columnas
@@ -361,24 +286,23 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [modalidad, setModalidad] = useState<'' | ProcedureFamily>('');
   const [estado, setEstado] = useState<'' | InstanceStatus>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
-  const [compania, setCompania] = useState('');
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
 
   // Filtros server-side (mismo contrato que GET /instances). Borrador del form → se aplican
   // solo con "Aplicar filtros"; el sort sí recarga de inmediato al clic en cabecera.
-  // Qué filtros específicos están AÑADIDOS (visibles) en la tarjeta — controla tanto el campo
-  // real que se pinta como el chip de la fila inferior. Es independiente de si ya se aplicaron.
-  const [filtrosEspecificos, setFiltrosEspecificos] = useState<Set<FiltroEspecificoKey>>(
-    () => new Set(),
-  );
-  const [placaFilter, setPlacaFilter] = useState('');
-  const [vendedorFilter, setVendedorFilter] = useState('');
-  const [compradorFilter, setCompradorFilter] = useState('');
-  const [gestorFilter, setGestorFilter] = useState('');
-  const [firmadoFilter, setFirmadoFilter] = useState<'' | 'true' | 'false'>('');
-  const [organismoFilter, setOrganismoFilter] = useState('');
-  const [tipoFilter, setTipoFilter] = useState('');
+  /**
+   * HU #12107 — condiciones de la gramática de Consultas. Sustituyen a los siete filtros sueltos
+   * (placa, vendedor, comprador, gestor, firmado, organismo, tipo), cada uno con su propio estado y
+   * su propio input: aquellos solo sabían preguntar «contiene» y añadir un campo obligaba a tocar
+   * cuatro sitios. Se conserva la separación borrador/aplicado que ya tenía la pantalla.
+   */
+  const [draftCondiciones, setDraftCondiciones] = useState<QueryCondition[]>([]);
+  const [appliedCondiciones, setAppliedCondiciones] = useState<QueryCondition[]>([]);
+  /** Catálogo servido por el backend: un campo nuevo aparece sin desplegar frontend. */
+  const [queryFields, setQueryFields] = useState<QueryField[]>([]);
+  const [fieldsError, setFieldsError] = useState(false);
+  const [fieldsKey, setFieldsKey] = useState(0);
   // "Rango sobre" + "Periodo" reemplazan a los 4 inputs de fecha sueltos: el usuario elige a qué
   // campo apunta el rango (creación o actualización) y un periodo predefinido — o "Rango propio"
   // con fechas propias. `rangoDePeriodo` (TramitesFiltrosBar) hace la conversión a
@@ -387,13 +311,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [periodo, setPeriodo] = useState('Sin periodo');
   const [rangoPropioDesde, setRangoPropioDesde] = useState('');
   const [rangoPropioHasta, setRangoPropioHasta] = useState('');
-  const [appliedPlaca, setAppliedPlaca] = useState('');
-  const [appliedVendedor, setAppliedVendedor] = useState('');
-  const [appliedComprador, setAppliedComprador] = useState('');
-  const [appliedGestor, setAppliedGestor] = useState('');
-  const [appliedFirmado, setAppliedFirmado] = useState<'' | 'true' | 'false'>('');
-  const [appliedOrganismo, setAppliedOrganismo] = useState('');
-  const [appliedTipo, setAppliedTipo] = useState('');
   const [appliedCreatedFrom, setAppliedCreatedFrom] = useState('');
   const [appliedCreatedTo, setAppliedCreatedTo] = useState('');
   const [appliedUpdatedFrom, setAppliedUpdatedFrom] = useState('');
@@ -492,12 +409,37 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     rotulo: string;
   } | null>(null);
 
+  // HU #12104 — exportación a Excel. `exportNotice` es el resultado (cuántas filas, cuántos
+  // archivos): sin él, un export repartido en tres archivos parece un fallo con dos descargas de más.
+  const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
   /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
   // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  // HU #12107 — catálogo de campos filtrables. Degrada con elegancia: si no carga, la tabla se
+  // pinta igual con su listado y la barra ofrece reintentar (AC7). Nunca bloquea el render.
+  useEffect(() => {
+    let active = true;
+    void tramitesClient
+      .listFilterFields()
+      .then((fields) => {
+        if (!active) return;
+        setQueryFields(fields);
+        setFieldsError(false);
+      })
+      .catch(() => {
+        if (active) setFieldsError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fieldsKey]);
 
   // Config compañía: qué modalidades no se pueden iniciar (No permitir trámites…).
   useEffect(() => {
@@ -566,69 +508,68 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     }
   };
 
+  /**
+   * Los criterios que resuelve el SERVIDOR, tal y como están aplicados ahora mismo.
+   *
+   * Vive aparte de `load` porque tiene DOS consumidores: el listado y el recorrido del export
+   * (HU #12104). Con una copia en cada sitio, el día que se añada un filtro habría que acordarse de
+   * ponerlo también en el export — y hasta que alguien lo notara, el Excel traería filas que la
+   * pantalla no está mostrando. Así el filtro nuevo llega al archivo sin tocar el export.
+   *
+   * NO incluye `skip`/`take`: la paginación es cosa de cada consumidor.
+   */
+  const buildListQuery = useCallback((): ListInstancesParams => {
+    const query: ListInstancesParams = {};
+    if (appliedCondiciones.length > 0) query.condiciones = appliedCondiciones;
+    // Estado y familia van al SERVIDOR, no al array ya traído: el listado devuelve como mucho
+    // SERVER_LIST_TAKE filas, así que filtrarlos en cliente respondía "los borradores que cupieron
+    // en la ventana" en vez de "los borradores del tenant". Con pocos trámites daba igual; con un
+    // tenant grande la respuesta era incompleta y nada lo delataba.
+    if (estado) query.estado = estado;
+    if (modalidad) query.modalidad = modalidad;
+    if (appliedCreatedFrom.trim()) query.createdFrom = appliedCreatedFrom.trim();
+    if (appliedCreatedTo.trim()) query.createdTo = appliedCreatedTo.trim();
+    if (appliedUpdatedFrom.trim()) query.updatedFrom = appliedUpdatedFrom.trim();
+    if (appliedUpdatedTo.trim()) query.updatedTo = appliedUpdatedTo.trim();
+    if (sortBy) {
+      query.sortBy = sortBy;
+      query.sortDir = sortDir;
+    }
+    return query;
+  }, [
+    appliedCondiciones,
+    appliedCreatedFrom,
+    appliedCreatedTo,
+    appliedUpdatedFrom,
+    appliedUpdatedTo,
+    estado,
+    modalidad,
+    sortBy,
+    sortDir,
+  ]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const query: ListInstancesParams = {};
-      if (appliedPlaca.trim()) query.placa = appliedPlaca.trim();
-      if (appliedVendedor.trim()) query.vendedor = appliedVendedor.trim();
-      if (appliedComprador.trim()) query.comprador = appliedComprador.trim();
-      if (appliedGestor.trim()) query.gestor = appliedGestor.trim();
-      if (appliedFirmado === 'true') query.firmado = true;
-      if (appliedFirmado === 'false') query.firmado = false;
-      // Estado y familia van al SERVIDOR, no al array ya traído: el listado devuelve como mucho
-      // SERVER_LIST_TAKE filas, así que filtrarlos en cliente respondía "los borradores que cupieron
-      // en la ventana" en vez de "los borradores del tenant". Con pocos trámites daba igual; con un
-      // tenant grande la respuesta era incompleta y nada lo delataba.
-      if (estado) query.estado = estado;
-      if (modalidad) query.modalidad = modalidad;
-      if (appliedOrganismo.trim()) query.organismoTransito = appliedOrganismo.trim();
-      if (appliedTipo.trim()) query.tipoCodigo = appliedTipo.trim();
-      if (appliedCreatedFrom.trim()) query.createdFrom = appliedCreatedFrom.trim();
-      if (appliedCreatedTo.trim()) query.createdTo = appliedCreatedTo.trim();
-      if (appliedUpdatedFrom.trim()) query.updatedFrom = appliedUpdatedFrom.trim();
-      if (appliedUpdatedTo.trim()) query.updatedTo = appliedUpdatedTo.trim();
-      if (sortBy) {
-        query.sortBy = sortBy;
-        query.sortDir = sortDir;
-      }
-      // Cualquier filtro/orden activa el camino server-side: pedir el tope del API.
-      if (Object.keys(query).length > 0) {
-        query.take = SERVER_LIST_TAKE;
-        query.skip = 0;
-      }
+      // Siempre con paginación: el camino POST no tiene ruta histórica que evitar, y sin `take` el
+      // servidor devolvería su tope por defecto sin decir cuántos hay en total.
+      const query = { ...buildListQuery(), take: SERVER_LIST_TAKE, skip: 0 };
       // Las dos llamadas van en paralelo: la tabla y la tira de KPIs son independientes y
       // encadenarlas solo sumaría latencia. Los conteos no pueden salir de `data` — esa es la
       // PÁGINA, y la tira habla del universo entero.
-      const [data, counts] = await Promise.all([
-        tramitesClient.listInstances(Object.keys(query).length > 0 ? query : undefined),
-        tramitesClient.listInstanceEstadoCounts(query),
+      const [page1, counts] = await Promise.all([
+        tramitesClient.searchInstances(query),
+        tramitesClient.searchEstadoCounts(query),
       ]);
-      setItems(data);
+      setItems(page1.items);
       setEstadoCounts(counts);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
-  }, [
-    appliedPlaca,
-    appliedVendedor,
-    appliedComprador,
-    appliedGestor,
-    appliedFirmado,
-    appliedCreatedFrom,
-    appliedCreatedTo,
-    appliedUpdatedFrom,
-    appliedUpdatedTo,
-    appliedOrganismo,
-    appliedTipo,
-    estado,
-    modalidad,
-    sortBy,
-    sortDir,
-  ]);
+  }, [buildListQuery]);
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -659,19 +600,21 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     return c;
   }, [estadoCounts]);
 
-  // Compañías presentes en el listado (para el filtro del SuperAdmin), ordenadas.
-  const companias = useMemo(() => {
-    const set = new Set<string>();
-    for (const it of items) if (it.companiaNombre) set.add(it.companiaNombre);
-    return [...set].sort((a, b) => a.localeCompare(b, 'es'));
-  }, [items]);
-
-  // Filtrado en cadena de lo que SIGUE siendo de cliente: búsqueda libre, compañía y prioritarios.
+  // Filtrado en cadena de lo que SIGUE siendo de cliente: búsqueda libre y prioritarios. La
+  // compañía se fue al servidor como un filtro más del catálogo (grupo «Alcance»): aquí solo podía
+  // mirar la página traída y ofrecer las compañías que aparecieran en ella, así que escondía filas
+  // en vez de acotar el listado, y el total y los contadores seguían contando las escondidas.
   // Estado y familia ya no están aquí — los resuelve el servidor (ver `load`), que es lo único que
   // puede verlos sobre el universo completo en vez de sobre la página traída.
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return items.filter((item) => {
+  /**
+   * Los criterios que NO viajan al servidor. Se aplican fila a fila, así que valen igual sobre la
+   * página que se está pintando y sobre cada página que trae el export (HU #12104) — que es la
+   * razón de que sea un predicado suelto y no un `filter` incrustado en el `useMemo`. Si el export
+   * no lo reaplicara, el Excel traería filas que la pantalla está escondiendo.
+   */
+  const coincideEnCliente = useCallback(
+    (item: InstanceSummary) => {
+      const q = search.trim().toLowerCase();
       if (q) {
         const haystack = [
           item.placa,
@@ -687,11 +630,103 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           .toLowerCase();
         if (!haystack.includes(q)) return false;
       }
-      if (compania && item.companiaNombre !== compania) return false;
       if (soloPrioritarios && !item.prioritario) return false;
       return true;
-    });
-  }, [items, search, compania, soloPrioritarios]);
+    },
+    [search, soloPrioritarios],
+  );
+
+  const filtered = useMemo(() => items.filter(coincideEnCliente), [items, coincideEnCliente]);
+
+  /**
+   * HU #12104 — descarga a Excel de TODO lo que cumple los filtros, no de la página a la vista.
+   *
+   * <p>Exportar solo las diez filas de pantalla sería una trampa: el archivo parecería completo y
+   * nadie lo comprobaría. Y exportar lo que la tabla tiene en memoria no serviría tampoco — el
+   * listado trae como mucho {@link SERVER_LIST_TAKE} filas, así que el archivo diría «los borradores
+   * que cupieron en la ventana» en vez de «los borradores del tenant».</p>
+   *
+   * <p>Por eso recorre el servidor de {@link SERVER_LIST_TAKE} en {@link SERVER_LIST_TAKE} —el tope
+   * DURO del endpoint, pedir más no trae más— hasta agotar el total, y reparte en archivos de
+   * {@link EXPORT_BATCH_SIZE} filas en vez de truncar. Cada archivo se dispara apenas se arma,
+   * dentro de la misma interacción del clic, para no depender de que el usuario pida «el resto».</p>
+   *
+   * <p>Se manda SIEMPRE `take`/`skip` aunque no haya ningún filtro: sin parámetros el endpoint cae
+   * en su ruta histórica, que devuelve el top-N sin paginar y sin `total` — el recorrido no tendría
+   * dónde parar.</p>
+   */
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    setExportNotice(null);
+    setExportError(null);
+    try {
+      const base = buildListQuery();
+      const campos = tramitesExportFields(effectiveColumns);
+      const columnasExcel: DataColumn<InstanceSummary>[] = campos.map((campo) => ({
+        id: campo.id,
+        label: campo.label,
+        group: 'Trámites',
+        value: campo.value,
+        raw: campo.raw,
+        width: campo.width,
+      }));
+      const idsVisibles = campos.map((c) => c.id);
+      const sello = selloDeArchivo(new Date());
+
+      // La primera página se pide aparte porque de ella sale el `total` con el que se sabe cuántas
+      // quedan. Se guarda para reusarla como página 1 del recorrido en vez de volver a pedirla.
+      const primeraPagina = await tramitesClient.searchInstances({
+        ...base,
+        skip: 0,
+        take: SERVER_LIST_TAKE,
+      });
+
+      // El `total` del servidor es el universo que cumple los filtros SERVER-SIDE. Los tres que solo
+      // viven en cliente (búsqueda libre, compañía y prioritarios) se reaplican página a página, así
+      // que lo exportado puede ser menos — por eso el aviso final cuenta filas REALES y no el total.
+      const { exportadas, archivos } = await exportarPorLotes<InstanceSummary>({
+        total: primeraPagina.total,
+        pageSize: SERVER_LIST_TAKE,
+        traerPagina: async (pagina, pageSize) => {
+          const filas =
+            pagina === 1
+              ? primeraPagina.items
+              : (
+                  await tramitesClient.searchInstances({
+                    ...base,
+                    skip: (pagina - 1) * pageSize,
+                    take: pageSize,
+                  })
+                ).items;
+          return filas.filter(coincideEnCliente);
+        },
+        volcar: (lote, parte) => {
+          download(
+            buildWorkbook('Trámites', columnasExcel, lote, idsVisibles),
+            nombreArchivoTramites(sello, parte),
+            XLSX_MIME,
+          );
+        },
+      });
+
+      if (exportadas === 0) {
+        setExportNotice('Ningún trámite cumple los filtros activos: no se descargó ningún archivo.');
+        return;
+      }
+      setExportNotice(
+        archivos > 1
+          ? `Se exportaron ${exportadas} trámites en ${archivos} archivos de hasta ${EXPORT_BATCH_SIZE} filas cada uno, con ${idsVisibles.length} columnas.`
+          : `Se exportaron ${exportadas} trámites con ${idsVisibles.length} columnas.`,
+      );
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? `No se pudo exportar: ${err.message}` : 'No se pudo exportar.',
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [buildListQuery, coincideEnCliente, effectiveColumns]);
+
 
   // HU #10536 — sin orden explicito por columna, el backend devuelve los prioritarios primero. Al
   // marcar uno desde la tabla se replica ESE mismo criterio en cliente, para que suba a la primera
@@ -729,10 +764,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   };
   const handleEstadoChange = (v: '' | InstanceStatus) => {
     setEstado(v);
-    setPage(1);
-  };
-  const handleCompaniaChange = (v: string) => {
-    setCompania(v);
     setPage(1);
   };
   const handlePrioritariosChange = (v: boolean) => {
@@ -849,13 +880,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   );
 
   const hasServerFilters =
-    appliedPlaca.trim() !== '' ||
-    appliedVendedor.trim() !== '' ||
-    appliedComprador.trim() !== '' ||
-    appliedGestor.trim() !== '' ||
-    appliedFirmado !== '' ||
-    appliedOrganismo.trim() !== '' ||
-    appliedTipo.trim() !== '' ||
+    appliedCondiciones.length > 0 ||
     appliedCreatedFrom.trim() !== '' ||
     appliedCreatedTo.trim() !== '' ||
     appliedUpdatedFrom.trim() !== '' ||
@@ -865,7 +890,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     search.trim() !== '' ||
     modalidad !== '' ||
     estado !== '' ||
-    compania !== '' ||
     soloPrioritarios ||
     hasServerFilters ||
     sortBy !== '';
@@ -876,19 +900,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
    * borrarlo también — si solo mirara lo aplicado, quedaban chips a la vista con el botón apagado.
    */
   const hasDraftFilters =
-    filtrosEspecificos.size > 0 ||
+    draftCondiciones.length > 0 ||
     periodo !== 'Sin periodo' ||
     rangoPropioDesde !== '' ||
     rangoPropioHasta !== '';
 
   const applyServerFilters = () => {
-    setAppliedPlaca(placaFilter);
-    setAppliedVendedor(vendedorFilter);
-    setAppliedComprador(compradorFilter);
-    setAppliedGestor(gestorFilter);
-    setAppliedFirmado(firmadoFilter);
-    setAppliedOrganismo(organismoFilter);
-    setAppliedTipo(tipoFilter);
+    setAppliedCondiciones(draftCondiciones);
 
     // "Periodo" → fechas: "Rango propio" usa lo que el usuario escribió en el popover; cualquier
     // otro periodo predefinido se calcula con rangoDePeriodo. "Sin periodo" no filtra (null).
@@ -918,48 +936,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setPage(1);
   };
 
-  // Al desmarcar un filtro específico se limpia su valor (draft Y aplicado): no puede quedar un
-  // filtro activo en el backend con el campo escondido (invisible para el usuario).
-  const handleToggleFiltroEspecifico = (key: FiltroEspecificoKey) => {
-    setFiltrosEspecificos((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-        switch (key) {
-          case 'placa':
-            setPlacaFilter('');
-            setAppliedPlaca('');
-            break;
-          case 'vendedor':
-            setVendedorFilter('');
-            setAppliedVendedor('');
-            break;
-          case 'comprador':
-            setCompradorFilter('');
-            setAppliedComprador('');
-            break;
-          case 'gestor':
-            setGestorFilter('');
-            setAppliedGestor('');
-            break;
-          case 'firmado':
-            setFirmadoFilter('');
-            setAppliedFirmado('');
-            break;
-          case 'organismo':
-            setOrganismoFilter('');
-            setAppliedOrganismo('');
-            break;
-          case 'tipo':
-            setTipoFilter('');
-            setAppliedTipo('');
-            break;
-        }
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
+  /**
+   * Quitar un chip retira la condición del borrador Y de lo aplicado, y recarga.
+   *
+   * <p>El chip habla de lo que está filtrando AHORA: quitarlo solo del borrador dejaría la tabla
+   * igual y el chip desaparecido, que se lee como que el filtro no hacía nada.</p>
+   */
+  const handleQuitarCondicion = (fieldId: string) => {
+    setDraftCondiciones((prev) => prev.filter((c) => c.fieldId !== fieldId));
+    setAppliedCondiciones((prev) => prev.filter((c) => c.fieldId !== fieldId));
     setPage(1);
   };
 
@@ -967,27 +952,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setSearch('');
     setModalidad('');
     setEstado('');
-    setCompania('');
     setSoloPrioritarios(false);
-    setFiltrosEspecificos(new Set());
-    setPlacaFilter('');
-    setVendedorFilter('');
-    setCompradorFilter('');
-    setGestorFilter('');
-    setFirmadoFilter('');
-    setOrganismoFilter('');
-    setTipoFilter('');
+    setDraftCondiciones([]);
     setRangoSobre('created');
     setPeriodo('Sin periodo');
     setRangoPropioDesde('');
     setRangoPropioHasta('');
-    setAppliedPlaca('');
-    setAppliedVendedor('');
-    setAppliedComprador('');
-    setAppliedGestor('');
-    setAppliedFirmado('');
-    setAppliedOrganismo('');
-    setAppliedTipo('');
+    setAppliedCondiciones([]);
     setAppliedCreatedFrom('');
     setAppliedCreatedTo('');
     setAppliedUpdatedFrom('');
@@ -1049,22 +1020,28 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               rangoPropioHasta={rangoPropioHasta}
               onRangoPropioDesdeChange={setRangoPropioDesde}
               onRangoPropioHastaChange={setRangoPropioHasta}
-              filtrosEspecificos={filtrosEspecificos}
-              onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
-              placa={placaFilter}
-              onPlacaChange={setPlacaFilter}
-              vendedor={vendedorFilter}
-              onVendedorChange={setVendedorFilter}
-              comprador={compradorFilter}
-              onCompradorChange={setCompradorFilter}
-              gestor={gestorFilter}
-              onGestorChange={setGestorFilter}
-              firmado={firmadoFilter}
-              onFirmadoChange={setFirmadoFilter}
-              organismo={organismoFilter}
-              onOrganismoChange={setOrganismoFilter}
-              tipo={tipoFilter}
-              onTipoChange={setTipoFilter}
+              condicionesCount={appliedCondiciones.length}
+              queryFields={queryFields}
+              draftCondiciones={draftCondiciones}
+              onDraftCondicionesChange={setDraftCondiciones}
+              filtrosTestIdPrefix="tramites"
+              fieldsError={
+                fieldsError ? (
+                  // Un catálogo que no carga NO deja la pantalla inservible: la tabla ya se pintó
+                  // con su listado y aquí solo se dice qué falta y cómo reintentarlo.
+                  <div className="px-1 py-2 text-xs text-[#162744]/70 dark:text-white/60">
+                    <p>No se pudieron cargar los filtros.</p>
+                    <button
+                      type="button"
+                      onClick={() => setFieldsKey((k) => k + 1)}
+                      className="mt-1 font-semibold text-[#557EFF] hover:underline"
+                      data-testid="tramites-filtros-reintentar"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : undefined
+              }
               search={search}
               onSearchChange={handleSearchChange}
               onAplicar={applyServerFilters}
@@ -1080,13 +1057,41 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                   buttonClassName={controlCls(columnasPersonalizadas)}
                 />
               }
-              isAdmin={isAdmin}
-              companias={companias}
-              compania={compania}
-              onCompaniaChange={handleCompaniaChange}
+              exportAction={
+                <button
+                  type="button"
+                  onClick={() => void handleExportExcel()}
+                  disabled={exporting || loading}
+                  aria-label="Exportar el listado de trámites a Excel"
+                  title="Exportar a Excel"
+                  className={controlCls(false)}
+                  data-testid="tramites-export-xlsx"
+                >
+                  <Download className={`h-3.5 w-3.5 ${exporting ? 'animate-pulse' : ''}`} aria-hidden="true" />
+                  {exporting ? 'Exportando…' : 'Exportar'}
+                </button>
+              }
             />
           }
         />
+
+        {/* HU #12104 — resultado de la exportación. El reparto en varios archivos necesita decirse:
+            tres descargas seguidas sin explicación se leen como un fallo, no como un archivo por
+            lote. `role="status"` para que un lector de pantalla lo anuncie sin robar el foco. */}
+        {exportError ? (
+          <InlineAlert tone="warning" title="No se pudo exportar">
+            {exportError}
+          </InlineAlert>
+        ) : null}
+        {exportNotice ? (
+          <p
+            role="status"
+            className="text-xs text-[#162744]/70 dark:text-white/60"
+            data-testid="tramites-export-aviso"
+          >
+            {exportNotice}
+          </p>
+        ) : null}
 
         {/* KPIs por estado (filtro) + CTA Nuevo trámite */}
         <div className="flex items-stretch gap-4">
@@ -1119,19 +1124,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           </button>
         </div>
 
-        {/* Tira de chips: SOLO existe si hay periodo o algún filtro específico activo */}
+        {/* Tira de chips: SOLO existe si hay periodo o alguna condición aplicada */}
         <TramitesFiltrosChips
           periodo={periodo}
-          filtrosEspecificos={filtrosEspecificos}
-          onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
           onQuitarPeriodo={handleQuitarPeriodo}
-          appliedPlaca={appliedPlaca}
-          appliedVendedor={appliedVendedor}
-          appliedComprador={appliedComprador}
-          appliedGestor={appliedGestor}
-          appliedFirmado={appliedFirmado}
-          appliedOrganismo={appliedOrganismo}
-          appliedTipo={appliedTipo}
+          condiciones={appliedCondiciones}
+          fields={queryFields}
+          onQuitarCondicion={handleQuitarCondicion}
         />
 
         {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
@@ -1358,38 +1357,154 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 }
 
 /**
- * Cabecera ordenable — mismo patrón que OT ClientProceduresTable. Se renderiza DENTRO del `<th>`
- * (que ya aporta el contexto de bloque): sin envolver en un `<div>` de más, para no duplicar
- * semántica sobre la propia celda de cabecera.
+ * Cabecera ordenable (HU #12108).
+ *
+ * <p>Tres columnas del listado son COMPUESTAS: «Radicado» apila las dos fechas, «Vehículo» la placa
+ * y el VIN, y «Trámite» el tipo y el estado. Un clic en la cabecera no puede expresar por cuál de
+ * ellos se ordena, así que la cabecera abre un desplegable con sus datos y los dos sentidos.</p>
+ *
+ * <p>TODAS las columnas ordenables usan el mismo desplegable, también las de un solo dato. La
+ * alternativa —clic que alterna cuando hay uno, menú cuando hay varios— hacía que dos cabeceras
+ * vecinas idénticas respondieran distinto al mismo gesto, sin nada que lo anunciara.</p>
+ *
+ * <p>Cada dato es UNA fila con su nombre y un par de botones de sentido, en vez de N×2 filas
+ * planas: con seis entradas seguidas que solo se diferencian por una flecha no se ve cuántos datos
+ * hay realmente. El sentido se rotula según el tipo —una fecha ascendente es «Más antigua», no
+ * «A-Z»—, porque si no hay que adivinar qué hace la flecha.</p>
+ *
+ * <p>Lo que se ofrece sale de `tramitesSortOptions`, la misma lista de subcampos que usa el Excel.
+ * Si el gestor enciende la columna de desglose de un dato, éste deja de ofrecerse desde la celda
+ * compuesta: si no, habría dos cabeceras distintas ordenando por lo mismo.</p>
  */
+const SENTIDO_ETIQUETA: Record<'texto' | 'fecha', { asc: string; desc: string }> = {
+  texto: { asc: 'A-Z', desc: 'Z-A' },
+  fecha: { asc: 'Más antigua', desc: 'Más reciente' },
+};
+
 function SortableHeaderCell({
   column,
+  visibleColumns,
   sortBy,
   sortDir,
   onSortChange,
 }: {
   column: TramitesColumnDef;
+  visibleColumns: readonly string[];
   sortBy: string;
   sortDir: 'asc' | 'desc';
   onSortChange: (sortBy: string, sortDir: 'asc' | 'desc') => void;
 }) {
-  if (!column.sortable) {
+  const opciones = tramitesSortOptions(column.key, visibleColumns);
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Cierra al pulsar fuera o con Escape, y devuelve el foco al disparador: sin esto, quien navega
+  // con teclado se queda dentro de un menú cerrado.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!panelRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  if (opciones.length === 0) {
     return <>{column.label}</>;
   }
-  const apiKey = tramitesColumnToSortBy(column.key);
-  const active = sortBy === apiKey;
-  const nextDir: 'asc' | 'desc' = active && sortDir === 'asc' ? 'desc' : 'asc';
-  const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+
+  const activa = opciones.find((o) => o.sort === sortBy);
+  const Icon = !activa ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+
   return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1 uppercase hover:opacity-80"
-      aria-label={`Ordenar por ${column.label}${active ? ` (${sortDir === 'asc' ? 'ascendente' : 'descendente'})` : ''}`}
-      onClick={() => onSortChange(apiKey, nextDir)}
-    >
-      {column.label}
-      <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
-    </button>
+    <div className="relative inline-block">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        // El nombre accesible dice por qué está ordenando AHORA, no solo que se puede ordenar: es
+        // la única forma de saberlo sin ver el icono.
+        aria-label={
+          activa
+            ? `Ordenar ${column.label}. Ahora: ${activa.label} ${sortDir === 'asc' ? 'ascendente' : 'descendente'}`
+            : `Ordenar ${column.label}`
+        }
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:bg-[#EEF5FF] dark:hover:bg-white/5 ${
+          activa ? 'text-[#2C6BED] dark:text-[#7FB0FF]' : ''
+        }`}
+      >
+        {column.label}
+        <Icon className={`h-3 w-3 ${activa ? 'opacity-100' : 'opacity-45'}`} aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <div
+          ref={panelRef}
+          role="menu"
+          aria-label={`Ordenar por, en ${column.label}`}
+          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-[#162744]"
+        >
+          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
+            Ordenar por
+          </p>
+          <div className="p-1.5">
+            {opciones.map((opcion) => (
+              <div
+                key={opcion.id}
+                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
+              >
+                <p className="mb-1.5 text-xs font-medium text-[#162744] dark:text-white">
+                  {opcion.label}
+                </p>
+                <span className="flex items-center gap-1.5">
+                  {(['asc', 'desc'] as const).map((dir) => {
+                    const seleccionada = sortBy === opcion.sort && sortDir === dir;
+                    const Flecha = dir === 'asc' ? ArrowUp : ArrowDown;
+                    return (
+                      <button
+                        key={dir}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={seleccionada}
+                        aria-label={`${opcion.label}: ${SENTIDO_ETIQUETA[opcion.kind][dir]}`}
+                        onClick={() => {
+                          onSortChange(opcion.sort, dir);
+                          setOpen(false);
+                        }}
+                        className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                          seleccionada
+                            ? 'border-[#2C6BED] bg-[#2C6BED] text-white'
+                            : 'border-[#DFE5ED] text-[#5A6B7F] hover:bg-[#EEF5FF] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        <Flecha className="h-3 w-3" aria-hidden="true" />
+                        {SENTIDO_ETIQUETA[opcion.kind][dir]}
+                      </button>
+                    );
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1600,6 +1715,7 @@ function TableBody({
                 >
                   <SortableHeaderCell
                     column={col}
+                    visibleColumns={visibleColumns}
                     sortBy={sortBy}
                     sortDir={sortDir}
                     onSortChange={onSortChange}

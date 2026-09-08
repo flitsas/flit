@@ -89,7 +89,7 @@ export const sanitizePlate = (v: string): string =>
 export const validatePlate = (value: string): string | null =>
   PLATE_PATTERN.test(value)
     ? null
-    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque) o MC029554 (maquinaria).";
+    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
 
 /** ¿El tipo de documento es pasaporte? (admite letras y números). */
 export const isPassport = (docType: string): boolean => docType.trim().toUpperCase() === "PAS";
@@ -104,3 +104,30 @@ export const validateDocNumber = (value: string, docType: string): string | null
     return /^[A-Za-z0-9]+$/.test(value) ? null : "El pasaporte solo admite letras y números.";
   return /^[0-9]+$/.test(value) ? null : "El número de documento solo admite dígitos.";
 };
+
+// --- HU #12127 — mensajes de ValidationErrorCode del backend -----------------
+//
+// `ValidationErrorCode` (procedure-parametrization.ts) nace en `ProcedureTypeValidator` del
+// backend para validar la PLANTILLA de un tipo de trámite al publicarla (config-time), no los
+// VALORES de un campo al radicar (runtime): hoy ningún endpoint de guardado de campos del OpenAPI
+// (`core-api.v1.yaml`) devuelve este código en su respuesta 422 — esa forma sigue siendo la
+// genérica `{ field, message, value }` de `ValidationError` (lib/api/types.ts). Se centraliza aquí
+// la traducción a español de todo el enum para que, en cuanto un endpoint runtime empiece a
+// anotar `code` (como ya hace `admin-personalized-documents.ts` con `PersonalizedDocumentValidationError`),
+// `DynamicFieldRenderer` (prop `serverErrorCode`) y cualquier otro consumidor solo necesiten leer
+// este mapa en vez de reinventar el texto.
+import type { ValidationErrorCode } from "@/lib/api/types/procedure-parametrization";
+
+export const VALIDATION_ERROR_CODE_MESSAGES: Record<ValidationErrorCode, string> = {
+  MISSING_REQUIRED_FIELD: "Este campo es obligatorio.",
+  VIN_PLATE_RULE: "El VIN o la placa no cumple el formato esperado. Verifica el valor ingresado.",
+  NIT_PERSON_TYPE:
+    "El NIT no coincide con el tipo de persona configurado. Verifica el número o selecciona el tipo correcto.",
+  MISSING_CONFORMATION: "Falta confirmar los datos de esta sección antes de continuar.",
+  LOCKED_FIELD_REMOVED: "Este campo bloqueado ya no aplica a la parametrización vigente.",
+  INCOMPLETE_CONSULTATION_FIELDS: "Faltan campos requeridos por la plantilla de consulta.",
+};
+
+/** Traduce un `ValidationErrorCode` a un mensaje descriptivo en español (AC4, HU #12127). */
+export const validationErrorCodeMessage = (code: ValidationErrorCode): string =>
+  VALIDATION_ERROR_CODE_MESSAGES[code] ?? "El valor ingresado no es válido.";

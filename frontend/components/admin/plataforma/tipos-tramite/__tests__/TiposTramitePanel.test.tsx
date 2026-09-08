@@ -57,6 +57,7 @@ const BLINDAJE = {
   isActive: true,
   wizardEnabled: false,
   publishedAt: null,
+  description: null as string | null,
 };
 
 const MATRICULA = { ...BLINDAJE, id: 'id-mat', code: 'MATRICULA_NUEVA', name: 'Matrícula inicial', family: 'MATRICULAS' as const, wizardEnabled: true };

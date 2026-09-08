@@ -6,8 +6,9 @@ import {
   hasListInstancesServerQuery,
 } from '../list-instances-query';
 import {
+  DEFAULT_TRAMITES_VISIBLE_COLUMNS,
   TRAMITES_COLUMNS,
-  tramitesColumnToSortBy,
+  tramitesSortOptions,
 } from '../tramites-table-columns';
 
 describe('list-instances-query', () => {
@@ -70,22 +71,80 @@ describe('list-instances-query', () => {
   });
 });
 
-describe('tramitesColumnToSortBy', () => {
-  it('mapea columnas UI a sortBy del API', () => {
-    expect(tramitesColumnToSortBy('fechaCreacion')).toBe('createdAt');
-    expect(tramitesColumnToSortBy('fechaActualizacion')).toBe('updatedAt');
-    expect(tramitesColumnToSortBy('comprador')).toBe('comprador');
-    expect(tramitesColumnToSortBy('gestor')).toBe('gestor');
-    expect(tramitesColumnToSortBy('placa')).toBe('placa');
-    expect(tramitesColumnToSortBy('vin')).toBe('vin');
+describe('tramitesSortOptions — HU #12108', () => {
+  it('una celda compuesta ofrece cada uno de sus datos con su clave de orden', () => {
+    // "Radicado" apila las dos fechas: un clic en la cabecera no podría decir por cuál se ordena.
+    // `kind` viaja con la opción para que la cabecera rotule el sentido según el tipo: una fecha
+    // ascendente es «Más antigua», no «A-Z».
+    expect(tramitesSortOptions('radicado', DEFAULT_TRAMITES_VISIBLE_COLUMNS)).toEqual([
+      { id: 'radicado', label: 'Radicado', sort: 'radicado', kind: 'texto' },
+      { id: 'fechaCreacion', label: 'Fecha de creación', sort: 'createdAt', kind: 'fecha' },
+      {
+        id: 'fechaActualizacion',
+        label: 'Fecha de actualización',
+        sort: 'updatedAt',
+        kind: 'fecha',
+      },
+    ]);
+    // "Vehículo" apila la placa y el VIN; marca/modelo no es ordenable en el API.
+    expect(tramitesSortOptions('placa', DEFAULT_TRAMITES_VISIBLE_COLUMNS).map((o) => o.sort)).toEqual([
+      'placa',
+      'vin',
+    ]);
+    // "Trámite / Estado" apila el tipo y el estado.
+    expect(tramitesSortOptions('tramite', DEFAULT_TRAMITES_VISIBLE_COLUMNS).map((o) => o.sort)).toEqual([
+      'tipo_tramite',
+      'estado',
+    ]);
   });
 
-  it('marca ordenables las columnas pedidas por negocio', () => {
-    const sortable = TRAMITES_COLUMNS.filter((c) => c.sortable).map((c) => c.key);
-    // Se compara el CONJUNTO, no el orden: el orden del catálogo es la disposición de la tabla
-    // y cambia cuando se reorganizan las columnas; qué columnas son ordenables, no.
-    expect([...sortable].sort()).toEqual(
-      ['comprador', 'fechaActualizacion', 'fechaCreacion', 'gestor', 'placa', 'vin'].sort(),
+  it('un dato deja de ofrecerse desde la celda compuesta si su columna dedicada está visible', () => {
+    // Si no, habría DOS cabeceras distintas ordenando por lo mismo.
+    const conVin = [...DEFAULT_TRAMITES_VISIBLE_COLUMNS, 'vin'];
+    expect(tramitesSortOptions('placa', conVin).map((o) => o.sort)).toEqual(['placa']);
+    expect(tramitesSortOptions('vin', conVin).map((o) => o.sort)).toEqual(['vin']);
+  });
+
+  it('una columna sin nada ordenable no ofrece opciones', () => {
+    // Ya no queda ninguna del catálogo: «Secretaría» era la última, y su ORDER BY resultó ser la
+    // misma subconsulta correlacionada que «Gestor» ya usaba, así que la precaución de dejarla
+    // fuera no se sostenía. Una columna desconocida sigue sin ofrecer nada.
+    expect(tramitesSortOptions('columna_que_no_existe', DEFAULT_TRAMITES_VISIBLE_COLUMNS)).toEqual(
+      [],
+    );
+  });
+
+  it('las claves ofrecidas son las que el backend acepta', () => {
+    const aceptadas = new Set([
+      'radicado', 'placa', 'vin', 'comprador', 'vendedor', 'organismo', 'compania', 'gestor',
+      'estado', 'tipo_tramite', 'fuente', 'createdAt', 'updatedAt',
+    ]);
+    for (const columna of TRAMITES_COLUMNS) {
+      for (const opcion of tramitesSortOptions(columna.key, DEFAULT_TRAMITES_VISIBLE_COLUMNS)) {
+        expect(aceptadas.has(opcion.sort)).toBe(true);
+      }
+    }
+  });
+});
+
+describe('columnas ordenables', () => {
+  it('son ordenables las columnas que tienen algún dato con clave de orden', () => {
+    // Ya no hay un flag `sortable` que mantener aparte: una columna es ordenable si alguno de sus
+    // datos lo es. Con el flag, `radicado`, `tramite`, `estado` y `fuente` se volvieron ordenables
+    // en el backend y el flag siguió diciendo que no — dos verdades sobre lo mismo.
+    const ordenables = TRAMITES_COLUMNS
+      .filter((c) => tramitesSortOptions(c.key, DEFAULT_TRAMITES_VISIBLE_COLUMNS).length > 0)
+      .map((c) => c.key);
+
+    // Se compara el CONJUNTO, no el orden: el orden del catálogo es la disposición de la tabla.
+    // `propietario` (Vendedor), `secretaria` y `gestor`/Compañía entraron después: eran las únicas
+    // cabeceras del listado sin desplegable, y el hueco venía de que el repositorio no tenía rama
+    // de orden para ellas, no de la UI.
+    expect([...ordenables].sort()).toEqual(
+      [
+        'radicado', 'placa', 'propietario', 'comprador', 'tramite', 'secretaria', 'gestor',
+        'fuente', 'vin', 'estado', 'fechaCreacion', 'fechaActualizacion',
+      ].sort(),
     );
   });
 });

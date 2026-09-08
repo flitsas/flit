@@ -1,3 +1,4 @@
+import type { QueryCondition } from '@/lib/api/queries';
 // Tipos espejo de los DTOs de instancia de trámite (runtime/operación).
 // La CONFIG dinámica (steps/sections/fields) se reutiliza desde
 // procedure-parametrization.ts — aquí solo se modelan instancias y el stub semáforo.
@@ -277,7 +278,16 @@ export interface ListInstancesParams {
   createdTo?: string;
   updatedFrom?: string;
   updatedTo?: string;
-  /** Whitelist backend: vin | placa | comprador | gestor | createdAt | updatedAt */
+  /**
+   * HU #12106 — condiciones de la gramática de Consultas (campo del catálogo, operador, valores).
+   * Viajan solo por el camino POST (`searchInstances`): una lista de placas pegada desde Excel no
+   * cabe en una query string, que es justo lo que estos campos admiten.
+   */
+  condiciones?: QueryCondition[];
+  /**
+   * Whitelist backend: vin | placa | comprador | gestor | createdAt | updatedAt y, desde la
+   * HU #12106, radicado | estado | tipo_tramite | fuente (los subcampos de las celdas compuestas).
+   */
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
   skip?: number;
@@ -843,6 +853,13 @@ export interface ProcedureAttachment {
    */
   source: string;
   uploadedAt: string;
+  /** Proveedor externo opcional (p. ej. `kyverum`). Ausente en cargas manuales del gestor. */
+  provider?: string | null;
+  /**
+   * HU #12116 — true si la impronta manual ya tiene firma digital de auditoría vigente.
+   * Reemplazar el archivo no es bloqueante; se firmará de nuevo al enviar a OT.
+   */
+  digitallySigned?: boolean;
 }
 
 /**
