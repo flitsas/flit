@@ -99,12 +99,20 @@ export function TramiteTrackingModal({
   );
 }
 
-/** Etiqueta de un dato de la ficha. Si no hay valor, lo dice: nunca deja un hueco sin explicar. */
+/**
+ * Un dato de la ficha: etiqueta ENCIMA del valor.
+ *
+ * <p>En línea no cabía. La ficha son tres columnas dentro de un modal, así que cada una dispone de
+ * unos 190px; con la etiqueta al lado le quedaban 78 al valor y un VIN se partía en cuatro líneas,
+ * el nombre de un organismo en siete. Apilada, el valor usa la columna entera.</p>
+ *
+ * <p>Si no hay valor, lo dice: nunca deja un hueco sin explicar.</p>
+ */
 function Dato({ etiqueta, valor, mono = false }: { etiqueta: string; valor?: string | null; mono?: boolean }) {
   const texto = valor?.trim();
   return (
-    <div className="flex min-w-0 gap-2">
-      <dt className="w-28 shrink-0 text-[11px] leading-5 text-[#162744]/55 dark:text-white/50">
+    <div className="min-w-0">
+      <dt className="text-[10px] uppercase leading-4 tracking-wide text-[#162744]/45 dark:text-white/40">
         {etiqueta}
       </dt>
       <dd
@@ -121,10 +129,10 @@ function Dato({ etiqueta, valor, mono = false }: { etiqueta: string; valor?: str
 function Bloque({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#162744]/45 dark:text-white/40">
+      <p className="mb-2 border-b border-[#DFE5ED] pb-1 text-[11px] font-bold uppercase tracking-wider text-[#162744]/70 dark:border-white/10 dark:text-white/60">
         {titulo}
       </p>
-      <dl className="space-y-0.5">{children}</dl>
+      <dl className="space-y-2">{children}</dl>
     </div>
   );
 }
@@ -143,7 +151,7 @@ function FichaTramite({ item }: { item: InstanceSummary }) {
   return (
     <section
       aria-label="Resumen del trámite"
-      className="grid gap-4 rounded-2xl border border-[#DFE5ED] bg-[#F8FAFC] p-4 sm:grid-cols-3 dark:border-white/10 dark:bg-white/[0.03]"
+      className="grid gap-x-6 gap-y-5 rounded-2xl border border-[#DFE5ED] bg-[#F8FAFC] p-4 sm:grid-cols-3 dark:border-white/10 dark:bg-white/[0.03]"
     >
       <Bloque titulo="Vehículo">
         <Dato etiqueta="Placa" valor={item.placa} mono />
