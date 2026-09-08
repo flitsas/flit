@@ -824,6 +824,74 @@ describe('PrendaForm — aviso RUNT sin gravamen (HU #12131)', () => {
     expect(dialog).not.toHaveTextContent(/vas a inscribir/i);
   });
 
+  /**
+   * Corrección QA — `acreedorReadOnly` bloqueaba el acreedor de forma incondicional para 'levantar'
+   * (asumiendo que el RUNT SIEMPRE lo precarga), dejando el campo vacío Y bloqueado justo cuando el
+   * RUNT no reporta gravamen — lo contrario de lo que promete esta misma modal ("captura manual").
+   */
+  it('AC1b — Levantar Prenda sin gravamen en RUNT: el acreedor queda editable (ya no bloqueado)', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['levantar']}
+        exigeEntidadLevantamiento
+        runtAvisoVariant="levantamiento"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+    await screen.findByRole('dialog', { name: 'RUNT sin gravamen registrado' });
+    fireEvent.click(screen.getByRole('button', { name: 'Entendido' }));
+
+    const nombreInput = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
+    const docInput = screen.getByLabelText('NIT / documento del acreedor', { exact: false });
+    expect(nombreInput).toBeEnabled();
+    expect(docInput).toBeEnabled();
+
+    fireEvent.change(nombreInput, { target: { value: 'Banco Manual SA' } });
+    fireEvent.change(docInput, { target: { value: '900777888' } });
+    expect(nombreInput).toHaveValue('Banco Manual SA');
+    expect(docInput).toHaveValue('900777888');
+  });
+
+  it('AC1c — Levantar Prenda CON gravamen confirmado en RUNT: el acreedor sigue bloqueado (dato verificado)', async () => {
+    client.getInstance.mockResolvedValue({
+      fieldValues: [
+        {
+          formFieldId: '',
+          fieldKey: 'runt_gravamenes',
+          valueText: null,
+          valueJson: JSON.stringify([
+            { nombreAcreedor: 'BANCO RUNT SA', numeroDocumentoAcreedor: '900123456' },
+          ]),
+          source: 'consultation',
+        },
+      ],
+    } as never);
+
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['levantar']}
+        exigeEntidadLevantamiento
+        runtAvisoVariant="levantamiento"
+        runtGravamenChecked
+        runtHasGravamen
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const nombreInput = await screen.findByLabelText('Acreedor (beneficiario)', { exact: false });
+    await waitFor(() => expect(nombreInput).toHaveValue('BANCO RUNT SA'));
+    expect(nombreInput).toBeDisabled();
+    expect(screen.getByLabelText('NIT / documento del acreedor', { exact: false })).toBeDisabled();
+    // Con gravamen confirmado, la modal informativa no aplica (mismo criterio que AC4).
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('AC2 — Inscribir Prenda sin gravamen en RUNT: aparece la modal con el texto de Inscripción', async () => {
     render(
       <PrendaForm
@@ -1098,7 +1166,7 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
     );
     await screen.findByText(/Este trámite es/);
 
-    const checkbox = screen.getByRole('checkbox', {
+    const checkbox = screen.getByRole('switch', {
       name: /¿También necesitas inscribir una prenda en esta radicación\?/i,
     });
     expect(checkbox).not.toBeChecked();
@@ -1130,7 +1198,7 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
     );
     await screen.findByText(/Este trámite es/);
 
-    const checkbox = screen.getByRole('checkbox', {
+    const checkbox = screen.getByRole('switch', {
       name: /¿También necesitas levantar una prenda en esta radicación\?/i,
     });
     fireEvent.click(checkbox);
@@ -1156,7 +1224,7 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
     );
     await screen.findByText(/Este trámite es/);
 
-    const checkbox = screen.getByRole('checkbox', {
+    const checkbox = screen.getByRole('switch', {
       name: /¿También necesitas levantar una prenda en esta radicación\?/i,
     });
     fireEvent.click(checkbox);
@@ -1185,7 +1253,7 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
     fireEvent.change(entidad, { target: { value: 'Notaría 5' } });
 
     fireEvent.click(
-      screen.getByRole('checkbox', {
+      screen.getByRole('switch', {
         name: /¿También necesitas inscribir una prenda en esta radicación\?/i,
       }),
     );
@@ -1221,7 +1289,7 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
     });
 
     fireEvent.click(
-      screen.getByRole('checkbox', {
+      screen.getByRole('switch', {
         name: /¿También necesitas levantar una prenda en esta radicación\?/i,
       }),
     );
@@ -1277,7 +1345,7 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
       target: { value: '900111111' },
     });
     fireEvent.click(
-      screen.getByRole('checkbox', {
+      screen.getByRole('switch', {
         name: /¿También necesitas levantar una prenda en esta radicación\?/i,
       }),
     );
@@ -1330,7 +1398,7 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
       />,
     );
 
-    const checkbox = await screen.findByRole('checkbox', {
+    const checkbox = await screen.findByRole('switch', {
       name: /¿También necesitas levantar una prenda en esta radicación\?/i,
     });
     await waitFor(() => expect(checkbox).toBeChecked());

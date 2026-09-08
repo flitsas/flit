@@ -84,7 +84,6 @@ import {
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
   isVehicleBodyTypeMissing,
-  isVehiclePrendaMissing,
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
 // HU #10806 — ¿la ruta de preasignación de placa está activa para esta compañía en el organismo
@@ -244,13 +243,6 @@ const ORGANISMO_NO_DISPONIBLE =
  */
 const CARROCERIA_NO_REGISTRADA =
   'Este vehículo no tiene carrocería registrada en el RUNT, así que no hay carrocería que cambiar. No es posible radicar un cambio de carrocería: verifica la placa o selecciona el tipo de trámite que corresponda.';
-
-/**
- * Levantamiento de prenda sobre un vehículo sin gravamen reportado. Tampoco es subsanable: no falta
- * un documento, falta el gravamen que el trámite viene a extinguir.
- */
-const PRENDA_NO_REGISTRADA =
-  'Este vehículo no tiene prenda registrada en el RUNT, así que no hay gravamen que levantar. No es posible radicar un levantamiento de prenda: verifica la placa o selecciona el tipo de trámite que corresponda.';
 
 /**
  * Subtítulo descriptivo por paso, mostrado UNA sola vez bajo el `h2` (título
@@ -3468,8 +3460,6 @@ function ConsultaStep({
         // El vehículo no tiene carrocería que cambiar. Se avisa aquí, con el trámite todavía sin
         // crear, para que el gestor pueda escoger otro tipo sin arrastrar un expediente abierto.
         setError(CARROCERIA_NO_REGISTRADA);
-      } else if (isVehiclePrendaMissing(err)) {
-        setError(PRENDA_NO_REGISTRADA);
       } else if (isTransitOfficeUnavailable(err)) {
         // HU #11199 (AC3) / HU #11200 (AC2/AC3) — el organismo no es utilizable. No es subsanable
         // desde el trámite: hasta que el administrador lo active y lo habilite no hay nada que hacer
@@ -3508,11 +3498,15 @@ function ConsultaStep({
   const hasResult = !!effectivePreflight?.overall;
 
   // CF-02 — editar el identificador invalida la consulta previa: el trámite solo puede crearse con
-  // una consulta vigente para los datos que están en pantalla.
+  // una consulta vigente para los datos que están en pantalla. `setFieldValues([])` también aquí:
+  // sin esto, la tarjeta de datos del vehículo (VIN/marca/color…) seguía pintando el vehículo
+  // ANTERIOR mientras el gestor editaba placa/VIN/documento para consultar uno distinto —
+  // `previewSnapshot` se limpiaba, pero `fieldValues` (lo que pinta esa tarjeta) no.
   const invalidatePreview = () => {
     if (!deferred) return;
     setPreviewSnapshot(null);
     setPendingPreview(null);
+    setFieldValues([]);
     onPreviewDone?.(null);
   };
 
@@ -3534,6 +3528,23 @@ function ConsultaStep({
     // bucle. Lo que gobierna la emisión es la consulta y el organismo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deferred, pendingPreview, eligeSecretaria, transitOfficeId]);
+
+  // Seguimiento post-HU #12131/#12129 — «sin prenda que levantar» ya no bloquea (backend: check
+  // `prenda_ausente` en warn), pero enterarse solo por la lista de "Advertencias de la verificación"
+  // pasaba desapercibido: se avisa con un modal apenas se resuelve la consulta del paso 1, igual que
+  // ya hace PrendaForm más adelante en el wizard para el mismo caso. Se abre en la TRANSICIÓN de
+  // "sin check" a "check presente" — no en cada re-render — para que reconsultar (otra placa) pueda
+  // volver a abrirlo si el nuevo vehículo también sale sin gravamen.
+  const prendaAusenteCheck = effectivePreflight?.checks?.find((c) => c.key === 'prenda_ausente');
+  const [avisoPrendaAusenteOpen, setAvisoPrendaAusenteOpen] = useState(false);
+  const hadPrendaAusenteCheckRef = useRef(false);
+  useEffect(() => {
+    const presente = Boolean(prendaAusenteCheck);
+    if (presente && !hadPrendaAusenteCheckRef.current) {
+      setAvisoPrendaAusenteOpen(true);
+    }
+    hadPrendaAusenteCheckRef.current = presente;
+  }, [prendaAusenteCheck]);
 
   /**
    * CF-02 — el paso 1 ofrece EXACTAMENTE los mismos controles que antes (condiciones del trámite,
@@ -4044,6 +4055,27 @@ function ConsultaStep({
           depende del vehículo y es requisito para gastarla. En matrícula la tarjeta sigue abajo,
           después de identificar el vehículo, que es el orden del diseño. */}
       {secretariaAntesDeConsultar && radicacionCard}
+
+      {/* Aviso NO bloqueante (ver efecto arriba): el gestor lo cierra y sigue con la radicación —
+          "Vehículo sin prenda registrada" ya no impide continuar, solo informa. */}
+      {avisoPrendaAusenteOpen && prendaAusenteCheck && (
+        <WizardModal
+          title={prendaAusenteCheck.label}
+          onClose={() => setAvisoPrendaAusenteOpen(false)}
+        >
+          <InlineAlert tone="warning">{prendaAusenteCheck.message}</InlineAlert>
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setAvisoPrendaAusenteOpen(false)}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-white"
+              style={{ background: WIZARD_CTA_GRADIENT }}
+            >
+              Entendido
+            </button>
+          </div>
+        </WizardModal>
+      )}
 
       {/* 2ª tarjeta: Consulta del Vehículo. En la propuesta la consulta tiene su propia tarjeta,
           con el identificador y el CTA en una línea. Los campos son los que pide cada modalidad:

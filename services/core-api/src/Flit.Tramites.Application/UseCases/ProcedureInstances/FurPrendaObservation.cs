@@ -47,10 +47,12 @@ public static class FurPrendaObservation
     /// </summary>
     /// <param name="levantamientoEntidad">
     /// Entidad ante la que se extinguió el gravamen. Cuando viene, el bloque de levantamiento declara
-    /// DÓNDE se hizo en vez de a favor de quién — el acreedor ya lo nombra el numeral 20 «A FAVOR DE»,
-    /// y repetirlo en el recuadro gastaba renglones sin añadir información. Solo lo captura el trámite
-    /// de levantamiento de prenda; en traspaso y matrícula llega <c>null</c> y el literal es el de
-    /// siempre, así que esos dos flujos no cambian.
+    /// ADEMÁS del beneficiario, DÓNDE se hizo — el numeral 20 «A FAVOR DE» solo tiene espacio para el
+    /// NOMBRE del acreedor (sin documento), así que el recuadro es el único lugar del FUR donde el NIT
+    /// del acreedor del levantamiento queda escrito (hallazgo QA: antes de esta corrección el bloque
+    /// se cortaba en la entidad y el NIT no aparecía en ningún sitio del formulario). Solo la captura
+    /// el trámite de levantamiento de prenda; en traspaso y matrícula llega <c>null</c> y, sin
+    /// acreedor persistido tampoco, el literal es el de siempre.
     /// </param>
     public static string? Compose(
         FurPrendaMarking marking,
@@ -69,7 +71,17 @@ public static class FurPrendaObservation
         {
             var entidad = levantamientoEntidad?.Trim();
             if (!string.IsNullOrEmpty(entidad))
-                return $"{EtiquetaLevantamientoEntidad} {entidad}";
+            {
+                var nombreLevanta = acreedorNombre?.Trim();
+                if (string.IsNullOrEmpty(nombreLevanta))
+                    return $"{EtiquetaLevantamientoEntidad} {entidad}";
+
+                var documentoLevanta = acreedorDocumento?.Trim();
+                var beneficiario = string.IsNullOrEmpty(documentoLevanta)
+                    ? nombreLevanta
+                    : $"{nombreLevanta}{SufijoDocumento} {documentoLevanta}";
+                return $"{EtiquetaLevantamientoEntidad} {entidad}, a favor de {beneficiario}";
+            }
         }
 
         var etiqueta = marking switch

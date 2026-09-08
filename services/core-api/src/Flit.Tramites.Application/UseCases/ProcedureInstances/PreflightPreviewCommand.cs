@@ -356,20 +356,14 @@ public sealed class RunPreflightPreviewHandler(
 
         // Levantamiento de prenda sobre un vehículo sin gravamen reportado. Se comprueba aquí, con el
         // trámite aún sin crear, porque es el momento en que el gestor todavía puede escoger otro
-        // tipo. Sin información de gravámenes no se bloquea (ver VehiclePrendaPolicy).
-        if (_validationPolicy.VehiclePrendaRequired != TramiteValidationMode.Off)
-        {
-            var prendaBlock = VehiclePrendaPolicy.Evaluar(
+        // tipo. HU #12131/#12129 — regla de NEGOCIO, no de ambiente: nunca bloquea, solo informa
+        // (check warn) y deja continuar la radicación con captura manual. Sin información de
+        // gravámenes tampoco avisa (ver VehiclePrendaPolicy).
+        if (VehiclePrendaPolicy.Evaluar(
                 procedureType?.Code,
-                RunPreflightHandler.EstadoDelCheck(checks, VehiclePrendaPolicy.GravamenCheckKey));
-
-            if (prendaBlock is not null)
-            {
-                if (_validationPolicy.VehiclePrendaRequired == TramiteValidationMode.Block)
-                    return (null, VehiclePrendaPolicy.ErrorCode, null, null);
-
-                checks.Add(RunPreflightHandler.BuildPrendaAusenteCheck());
-            }
+                RunPreflightHandler.EstadoDelCheck(checks, VehiclePrendaPolicy.GravamenCheckKey)))
+        {
+            checks.Add(RunPreflightHandler.BuildPrendaAusenteCheck());
         }
 
         // Segunda pasada: la llave pudo ocuparse mientras corría la consulta externa (otro operador

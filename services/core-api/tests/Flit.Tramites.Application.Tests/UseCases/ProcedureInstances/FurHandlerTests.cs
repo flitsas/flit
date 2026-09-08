@@ -601,9 +601,11 @@ public sealed class FurHandlerTests
         // Numeral 20 «A FAVOR DE»: sale del acreedor del gravamen que se levanta.
         data.AcreedorPrenda.Should().Be("BANCO XYZ S.A.");
         data.PrendaMarking.Should().Be(FurPrendaMarking.Levantamiento);
-        // Párrafo 23: el bloque que nombra a quién se le levanta.
-        // El acreedor lo nombra el numeral 20; el recuadro dice ante quién se levantó.
-        data.Observaciones.Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+        // Párrafo 23: el bloque que nombra a quién se le levanta. Corrección QA — el numeral 20 solo
+        // tiene espacio para el NOMBRE del acreedor (sin documento): el recuadro dice ante qué
+        // entidad se levantó Y a favor de quién, con el NIT que en ningún otro sitio del FUR aparece.
+        data.Observaciones.Should().Be(
+            "Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     [Fact]
@@ -671,11 +673,16 @@ public sealed class FurHandlerTests
         // Aquí, en Application, se verifica lo que SÍ produce esta HU: el dominio resuelve Ambos y el
         // párrafo 23 nombra a los DOS acreedores por separado.
         data.PrendaMarking.Should().Be(FurPrendaMarking.Ambos);
-        // El párrafo 23 nombra a los DOS acreedores, cada uno en su propio bloque, sin mezclar
-        // documento de uno con el nombre del otro.
-        data.Observaciones.Should().Contain("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+        // El párrafo 23 nombra a los DOS acreedores, cada uno en su propio bloque, sin mezclar el
+        // documento de uno con el nombre del otro. Corrección QA: el numeral 20 «A FAVOR DE» solo
+        // tiene espacio para el NOMBRE del acreedor (sin documento) — el NIT del levantamiento solo
+        // queda escrito aquí, junto a la entidad ante la que se levantó.
+        data.Observaciones.Should().Contain(
+            "Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de BANCO VIEJO S.A. identificado con número de documento 900333444");
         data.Observaciones.Should().Contain("Inscripción de prenda a favor de BANCO NUEVO S.A. identificado con número de documento 900111222");
-        data.Observaciones.Should().NotContain("BANCO VIEJO", "el acreedor del levantamiento no se imprime aquí porque se declaró la entidad; no debe filtrarse igual");
+        data.Observaciones.Should().NotContain(
+            "Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de BANCO NUEVO S.A.",
+            "el documento/nombre del acreedor de la constitución no debe filtrarse en el bloque del levantamiento");
     }
 
     /// <summary>Genera el FUR de un trámite del tipo <c>BLINDAJE</c> con los field_values indicados.</summary>

@@ -16,7 +16,7 @@ import type { RuntAvisoGravamenVariant } from './wizardCapabilities';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
-import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
+import { WizardCardHeader, WizardFieldToggle, WizardSegmented } from './wizard-atoms';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type PrendaFormHandle = WizardStepFormHandle;
@@ -512,7 +512,13 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   /** PDF ajuste P0: levantar muestra acreedor/doc pero inhabilitados (NO editable, no oculto). */
   const muestraAcreedor = decision !== '' && MUESTRA_ACREEDOR.has(decision);
-  const acreedorReadOnly = decision === 'levantar';
+  // Corrección QA (HU #12131) — el bloqueo original era incondicional para 'levantar', asumiendo que
+  // el RUNT SIEMPRE precarga el acreedor de un gravamen ya verificado (de ahí "no editable": no dejar
+  // que el gestor sobreescriba un dato confirmado). Pero cuando el RUNT NO reporta gravamen, el campo
+  // queda vacío Y bloqueado — justo lo contrario de lo que promete el aviso "RUNT sin gravamen
+  // registrado" (captura manual). Solo se bloquea cuando el RUNT SÍ confirmó el gravamen que se va a
+  // levantar; sin esa confirmación, el gestor puede escribir el acreedor a mano.
+  const acreedorReadOnly = decision === 'levantar' && runtHasGravamen;
   const requiereDocumento = decision !== '' && REQUIERE_DOCUMENTO.has(decision);
   const baseDocumentGateReady = !requiereDocumento || !documentRequired || docSatisfied;
   // AC1/AC3 — mientras la complementaria esté activa, su certificado también gatea Continuar: dos
@@ -1086,36 +1092,50 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                 </div>
               )}
 
+              {/* P1.10: upload de la decisión BASE pegado a sus propios campos (acreedor/entidad),
+                  antes de la sección de la acción complementaria — que quede junto evita que el
+                  gestor confunda este cargue con el de la acción complementaria de más abajo. */}
+              {requiereDocumento && decision && prendaDocTipoFor(decision) && (
+                <PrendaDocumentUpload
+                  instanceId={instanceId}
+                  decision={decision}
+                  docTipo={prendaDocTipoFor(decision)!}
+                  documentRequired={documentRequired}
+                  onSatisfiedChange={setDocSatisfied}
+                  onChanged={onSaved}
+                />
+              )}
+
               {/* ADR-0055/HU #12130 (AC1) — acción complementaria: solo existe para los tipos de
                   acción única que la admiten (PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA). AC2: no
-                  activarla deja intacto el comportamiento por defecto de `decisionFija` de arriba. */}
+                  activarla deja intacto el comportamiento por defecto de `decisionFija` de arriba.
+                  Sección propia, separada del bloque de la decisión base, para que el check no se
+                  confunda con el cargue del certificado de la decisión principal (feedback QA). El
+                  check reutiliza WizardFieldToggle, el mismo átomo de los checks de transformaciones
+                  (VehicleTransformationsCard) — único cambio pedido en el control; el cargue de la
+                  complementaria (más abajo) conserva su diseño actual. */}
               {complementariaDecision && (
-                <div className="mt-2 border-t pt-4" style={{ borderColor: '#DFE5ED' }}>
-                  <label className="flex items-start gap-2 text-xs font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={complementariaActiva}
-                      onChange={(e) => {
-                        pending.markDirty();
-                        const checked = e.target.checked;
-                        setComplementariaActiva(checked);
-                        setError(null);
-                        if (!checked) {
-                          // Desactivar la complementaria descarta sus errores de campo pendientes:
-                          // mismo criterio que el cambio de decisión base más arriba.
-                          setComplementariaFieldErrors({});
-                          setComplementariaDocSatisfied(false);
-                        }
-                      }}
-                      disabled={readOnly}
-                      className="mt-0.5"
-                      aria-controls="prenda-complementaria-subform"
-                    />
-                    <span>
-                      ¿También necesitas {complementariaDecision === 'levantar' ? 'levantar' : 'inscribir'}{' '}
-                      una prenda en esta radicación?
-                    </span>
-                  </label>
+                <div className="mt-2 rounded-2xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+                  <WizardCardHeader title="Acción complementaria de prenda" level="h4" />
+                  <WizardFieldToggle
+                    id="prenda-complementaria-toggle"
+                    label={`¿También necesitas ${complementariaDecision === 'levantar' ? 'levantar' : 'inscribir'} una prenda en esta radicación?`}
+                    checked={complementariaActiva}
+                    onChange={(checked) => {
+                      pending.markDirty();
+                      setComplementariaActiva(checked);
+                      setError(null);
+                      if (!checked) {
+                        // Desactivar la complementaria descarta sus errores de campo pendientes:
+                        // mismo criterio que el cambio de decisión base más arriba.
+                        setComplementariaFieldErrors({});
+                        setComplementariaDocSatisfied(false);
+                      }
+                    }}
+                    disabled={readOnly}
+                    labelOn="Sí, también"
+                    labelOff="No por ahora"
+                  />
 
                   {complementariaActiva && (
                     <div id="prenda-complementaria-subform" className="mt-3 grid grid-cols-1 gap-4">
@@ -1273,18 +1293,6 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                 </div>
               )}
             </>
-          )}
-
-          {/* Matrícula (2 decisiones): upload fuera del segmentado, a ancho completo */}
-          {decisions.length <= 2 && requiereDocumento && decision && prendaDocTipoFor(decision) && (
-            <PrendaDocumentUpload
-              instanceId={instanceId}
-              decision={decision}
-              docTipo={prendaDocTipoFor(decision)!}
-              documentRequired={documentRequired}
-              onSatisfiedChange={setDocSatisfied}
-              onChanged={onSaved}
-            />
           )}
         </div>
       </fieldset>
