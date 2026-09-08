@@ -28,8 +28,11 @@ import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
  */
 
 const FIELD_LABEL_CLS = 'block text-xs font-semibold text-[#162744] dark:text-white';
+// `ring-inset`: ver el mismo comentario en `AdminTramiteAcciones.tsx` — un ring hacia afuera se
+// recorta contra el `overflow-y-auto` del Modal (que fuerza `overflow-x: auto` también) cuando el
+// campo es `w-full` sin margen horizontal.
 const FIELD_CLS =
-  'w-full rounded-xl border px-3 py-2 text-sm text-[#162744] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent dark:text-white';
+  'w-full rounded-xl border px-3 py-2 text-sm text-[#162744] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent dark:text-white';
 const FIELD_BORDER = { borderColor: '#DFE5ED' };
 
 export const PARTE_LABEL: Record<string, string> = { vendedor: 'Vendedor', comprador: 'Comprador' };
