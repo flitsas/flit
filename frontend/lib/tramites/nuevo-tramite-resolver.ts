@@ -203,26 +203,68 @@ export const TIPOS_UI_MOCKUP: {
 ];
 
 /**
+ * Resuelve el tipo del catálogo (con su `description`) que corresponde a la selección actual del
+ * modal mockup, para la familia+variante indicadas. Misma lógica de preferencia de codes que
+ * {@link resolveNuevoTramiteCode}, pero sin mirar `bloqueadas`: una franja informativa no necesita
+ * ese chequeo — si la familia está bloqueada, la tarjeta ya está deshabilitada y `tipo` nunca llega
+ * a fijarse (ver `elegirEnTarjeta` en `NuevoTramiteModalContent`).
+ */
+function resolverTipoSeleccionado(
+  seleccion: NuevoTramiteSeleccion,
+  tipos: ProcedureTypeSummary[],
+): ProcedureTypeSummary | null {
+  if (seleccion.tipo === 'OTROS') {
+    const code = seleccion.subtipoOtrosCode?.trim();
+    if (!code) return null;
+    return tipos.find((t) => t.code === code && t.wizardEnabled && t.family === 'OTROS') ?? null;
+  }
+
+  if (seleccion.tipo === 'MATRICULAS') {
+    const familia = habilitadosDeFamilia(tipos, 'MATRICULAS');
+    const preferidos = seleccion.leasing ? CODES_MATRICULA_LEASING : CODES_MATRICULA_STD;
+    let code = primerCodeDisponible(familia, preferidos);
+    if (!code && seleccion.leasing) {
+      code = primerCodeDisponible(familia, CODES_MATRICULA_STD);
+    }
+    return code ? (familia.find((t) => t.code === code) ?? null) : null;
+  }
+
+  // TRASPASO
+  const familia = habilitadosDeFamilia(tipos, 'TRASPASO');
+  const modalidad = seleccion.modalidadTraspaso ?? 'bilateral';
+  if (modalidad === 'unilateral') {
+    const code = soloCodeExacto(familia, CODES_TRASPASO_UNILATERAL[0]);
+    return code ? (familia.find((t) => t.code === code) ?? null) : null;
+  }
+  const code = primerCodeDisponible(familia, CODES_TRASPASO_BILATERAL);
+  return code ? (familia.find((t) => t.code === code) ?? null) : null;
+}
+
+/**
  * Texto de la franja informativa del selector: explica en una línea qué implica la configuración
  * elegida. Null mientras no haya nada que aclarar — la franja se reserva igual (ver el modal), para
  * que el alto no salte al elegir.
  *
- * "Otros" no tiene texto: son quince tipos con explicaciones propias, y una frase genérica no diría
- * nada que el nombre del trámite ya elegido no diga mejor.
+ * El copy sale de `description` del tipo de trámite resuelto en el catálogo (HU #12126): antes
+ * Matrícula y Traspaso tenían texto fijo en código y "Otros" no mostraba nada. Ahora las tres
+ * familias dependen 100% de lo configurado — si el tipo elegido no tiene `description`, no hay
+ * franja (AC2), sin caer en un texto de relleno genérico.
  */
 export function infoTextNuevoTramite(
   tipo: NuevoTramiteTipoUi | null,
-  opciones: { leasing?: boolean; modalidadTraspaso?: ModalidadTraspasoUi },
+  opciones: { leasing?: boolean; modalidadTraspaso?: ModalidadTraspasoUi; subtipoOtrosCode?: string },
+  tipos: ProcedureTypeSummary[],
 ): string | null {
-  if (tipo === 'MATRICULAS') {
-    return opciones.leasing
-      ? 'Matrícula tipo Leasing: el vehículo queda registrado a nombre de la entidad financiera (arrendador), mientras lo usas como locatario según el contrato.'
-      : 'Matrícula tradicional: el vehículo nuevo será matriculado a nombre del comprador ante el organismo de tránsito elegido.';
-  }
-  if (tipo === 'TRASPASO') {
-    return opciones.modalidadTraspaso === 'unilateral'
-      ? 'Traspaso unilateral: traspaso realizado únicamente por el propietario actual, sin requerir la presencia del comprador en la sede de tránsito.'
-      : 'Traspaso bilateral: traspaso vehicular donde el comprador y el vendedor radican ante el organismo de tránsito.';
-  }
-  return null;
+  if (!tipo) return null;
+  const encontrado = resolverTipoSeleccionado(
+    {
+      tipo,
+      leasing: opciones.leasing,
+      modalidadTraspaso: opciones.modalidadTraspaso,
+      subtipoOtrosCode: opciones.subtipoOtrosCode,
+    },
+    tipos,
+  );
+  const descripcion = encontrado?.description?.trim();
+  return descripcion ? descripcion : null;
 }

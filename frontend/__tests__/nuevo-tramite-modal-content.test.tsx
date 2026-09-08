@@ -15,6 +15,7 @@ function tipo(
   name: string,
   family: ProcedureTypeSummary['family'],
   wizardEnabled = true,
+  description: string | null = null,
 ): ProcedureTypeSummary {
   return {
     id: code,
@@ -25,7 +26,7 @@ function tipo(
     isActive: true,
     wizardEnabled,
     publishedAt: null,
-    description: null,
+    description,
   };
 }
 
@@ -100,9 +101,26 @@ describe('NuevoTramiteModalContent', () => {
 
   // La franja informativa se reserva SIEMPRE para que el modal no salte 56px al elegir; lo que
   // cambia es si tiene texto. Por eso se comprueba el texto, no la presencia del bloque.
+  //
+  // HU #12126 — el copy ya no está fijo en código: sale del `description` del tipo resuelto en el
+  // catálogo. Por eso el fixture necesita DOS codes de matrícula, cada uno con su propia
+  // `description`, para comprobar que la franja cambia con la variante elegida (AC1).
   it('la franja informativa explica la configuración elegida y cambia con ella', async () => {
     mocks.listPublishedProcedureTypes.mockResolvedValue([
-      tipo('MATRICULA_NUEVA', 'Matrícula inicial', 'MATRICULAS'),
+      tipo(
+        'MATRICULA_NUEVA',
+        'Matrícula inicial',
+        'MATRICULAS',
+        true,
+        'Matrícula tradicional: el vehículo nuevo será matriculado a nombre del comprador.',
+      ),
+      tipo(
+        'MATRICULA_LEASING',
+        'Matrícula leasing',
+        'MATRICULAS',
+        true,
+        'Matrícula tipo Leasing: el vehículo queda a nombre de la entidad financiera.',
+      ),
     ]);
     const user = userEvent.setup();
 
@@ -119,6 +137,43 @@ describe('NuevoTramiteModalContent', () => {
     await user.click(screen.getByRole('option', { name: 'Matrícula Leasing' }));
     expect(screen.getByText(/Matrícula tipo Leasing:/)).toBeInTheDocument();
     expect(screen.queryByText(/Matrícula tradicional:/)).not.toBeInTheDocument();
+  });
+
+  // AC2 — sin `description` configurado, no hay franja: nada de texto de relleno genérico.
+  it('sin description configurado no muestra ninguna franja informativa', async () => {
+    mocks.listPublishedProcedureTypes.mockResolvedValue([
+      tipo('MATRICULA_NUEVA', 'Matrícula inicial', 'MATRICULAS'),
+    ]);
+    const user = userEvent.setup();
+
+    render(<NuevoTramiteModalContent onElegir={vi.fn()} tituloEnContenedor />);
+
+    await user.click(await screen.findByRole('button', { name: /Matrícula Inicial/ }));
+    await user.click(screen.getByRole('option', { name: 'Matrícula Tradicional' }));
+
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  // AC1/AC3 — Otros ya no está mudo por decisión de diseño: si el tipo elegido tiene `description`
+  // configurado, también se muestra. Antes esta familia siempre retornaba null.
+  it('Otros Trámites también muestra el copy configurado del subtipo elegido', async () => {
+    mocks.listPublishedProcedureTypes.mockResolvedValue([
+      tipo(
+        'BLINDAJE',
+        'Blindaje',
+        'OTROS',
+        true,
+        'Blindaje: registro del blindaje instalado sobre el vehículo.',
+      ),
+    ]);
+    const user = userEvent.setup();
+
+    render(<NuevoTramiteModalContent onElegir={vi.fn()} tituloEnContenedor />);
+
+    await user.click(await screen.findByRole('button', { name: /Otros Trámites/ }));
+    await user.click(screen.getByRole('option', { name: 'Blindaje' }));
+
+    expect(screen.getByText(/Blindaje: registro del blindaje/)).toBeInTheDocument();
   });
 
   // Configurar una tarjeta tiene que LIMPIAR la de las otras: si no, un leasing marcado antes
