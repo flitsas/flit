@@ -65,7 +65,9 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // El piso lo manda la línea más larga que apila, "Actualización: 2026/08/27": ~158px de texto
   // + los 32px de padding del `<td>`. Con 190px se cortaba a "Actualización: 2026/08…" — una
   // fecha a medias no dice nada, y a diferencia de un nombre no tiene dónde partirse bien.
-  { key: 'radicado', label: 'Radicado', minPx: 210, group: GRUPO_BASE },
+  // HU #12154 — el radicado pasa de TRM-2026-000123 a un numero pelado, asi que la columna
+  // deja de necesitar 210px. Dejarlos era regalar ancho en una tabla que va justa.
+  { key: 'radicado', label: 'Radicado', minPx: 120, group: GRUPO_BASE },
   // Vehículo = placa + VIN + marca/línea en UNA celda. Los tres identifican el mismo objeto y el
   // gestor los lee juntos; repartidos en tres columnas, la placa quedaba a dos columnas del VIN y
   // había que barrer la fila a lo ancho para reconocer un vehículo.
@@ -395,7 +397,9 @@ function apilado(campo: TramitesExportField, ownedBy: string): TramitesExportFie
  */
 const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   radicado: [
-    { ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 20), sort: 'radicado' },
+    // Ancho de la columna en el .xlsx. La celda va como TEXTO a proposito: como numero, Excel
+    // le mete separador de miles (4.571) y deja de leerse como un identificador.
+    { ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 12), sort: 'radicado' },
     apilado(CAMPO_FECHA_CREACION, 'fechaCreacion'),
     apilado(CAMPO_FECHA_ACTUALIZACION, 'fechaActualizacion'),
   ],
