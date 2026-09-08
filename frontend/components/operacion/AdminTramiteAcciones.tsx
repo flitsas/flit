@@ -1,7 +1,7 @@
 'use client';
 
-import { type ReactNode, useEffect, useState } from 'react';
-import { ArrowRightLeft, Ban, RefreshCcw, Send, UserCog } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { ArrowRightLeft, Ban, Paperclip, RefreshCcw, Send, UserCog } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type { ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -318,6 +318,7 @@ function ConsolidadoModal({
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const busy = busyLimpiar || busyCargar;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -391,17 +392,45 @@ function ConsolidadoModal({
               Registra un PDF externo como el expediente consolidado. Reemplaza cualquier
               consolidado vigente.
             </p>
-            <label className="sr-only" htmlFor={`admin-cargar-consolidado-${item.id}`}>
-              Archivo PDF del consolidado
-            </label>
             <input
+              ref={fileInputRef}
               id={`admin-cargar-consolidado-${item.id}`}
               type="file"
               accept="application/pdf"
+              aria-label="Archivo PDF del consolidado"
               disabled={busy}
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-xs text-[#162744] dark:text-white"
+              onChange={(e) => {
+                setFile(e.target.files?.[0] ?? null);
+                // Permite re-elegir el MISMO archivo dos veces seguidas (si el admin cancela la
+                // carga y quiere reintentar sin cambiar de archivo, el navegador no dispara
+                // `onChange` si el value no cambia).
+                e.target.value = '';
+              }}
+              className="hidden"
             />
+            {/* El input nativo ("Seleccionar archivo / Ningún archivo seleccionado") pasaba
+                desapercibido como punto de entrada — el admin probaba "Cargar PDF" primero y lo veía
+                deshabilitado sin entender por qué (hallazgo QA). Un botón explícito con el mismo
+                patrón "Adjuntar archivo" que ya usa el resto del wizard es la única acción que hace
+                falta entender para elegir el archivo. */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-[#557EFF]/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            >
+              <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+              {file ? 'Cambiar archivo' : 'Elegir archivo PDF'}
+            </button>
+            {file ? (
+              <p className="truncate text-xs text-[#162744]/70 dark:text-white/70">
+                Archivo seleccionado:{' '}
+                <span className="font-medium text-[#162744] dark:text-white">{file.name}</span>
+              </p>
+            ) : (
+              <p className="text-xs text-[#162744]/50 dark:text-white/50">Ningún archivo elegido todavía.</p>
+            )}
             <SecondaryButton onClick={() => void cargar()} disabled={busy || !file}>
               {busyCargar ? 'Cargando…' : 'Cargar PDF'}
             </SecondaryButton>
