@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Flit.Tramites.Domain\Flit.Tramites.Domain.csproj" />
+    <!-- La gramática de consultas (operadores, DTO de campo) se comparte con el módulo de Consultas:
+         el listado la reutiliza para filtrar, aunque NO usa su motor de ejecución. Ver HU #12106. -->
+    <ProjectReference Include="..\Flit.Queries.Domain\Flit.Queries.Domain.csproj" />
     <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
   </ItemGroup>
 

@@ -1,3 +1,5 @@
+using Flit.Queries.Domain;
+
 namespace Flit.Tramites.Domain.Repositories;
 
 /// <summary>
@@ -68,6 +70,24 @@ public sealed record ProcedureInstanceListFilter
     /// </summary>
     public string? TipoCodigo { get; init; }
 
+    /// <summary>
+    /// Condiciones armadas con la gramática de Consultas (HU #12106): campo del catálogo, operador y
+    /// valores. Es la vía por la que crece el filtro de aquí en adelante — cada campo nuevo se declara
+    /// en <c>TramitesQueryFieldCatalog</c> y se traduce en el repositorio, sin añadir una propiedad
+    /// más a este record ni un parámetro más al endpoint.
+    /// <para>
+    /// Convive con los campos sueltos de arriba en vez de reemplazarlos: los siguen mandando el
+    /// listado actual y el conteo por estado, y romper ese contrato obligaría a desplegar frontend y
+    /// backend a la vez. Cuando la barra de filtros migre del todo, los de arriba se podrán retirar.
+    /// </para>
+    /// <para>
+    /// Llegan YA VALIDADAS contra el catálogo: un campo o un operador desconocido se rechaza en el
+    /// endpoint con 400. El repositorio nunca ve un identificador que no conozca, y en ningún caso el
+    /// texto del cliente se concatena en SQL — solo viaja como parámetro.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
+
     /// <summary><c>true</c> si algún criterio está activo (evita armar WHERE de más en el caso común sin filtros).</summary>
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(Vin) || !string.IsNullOrWhiteSpace(Placa)
@@ -76,5 +96,6 @@ public sealed record ProcedureInstanceListFilter
         || CreatedFrom is not null || CreatedTo is not null
         || UpdatedFrom is not null || UpdatedTo is not null
         || Estados is { Count: > 0 } || !string.IsNullOrWhiteSpace(Modalidad)
-        || !string.IsNullOrWhiteSpace(OrganismoTransito) || !string.IsNullOrWhiteSpace(TipoCodigo);
+        || !string.IsNullOrWhiteSpace(OrganismoTransito) || !string.IsNullOrWhiteSpace(TipoCodigo)
+        || Condiciones is { Count: > 0 };
 }

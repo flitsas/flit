@@ -4,6 +4,7 @@ using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Middleware;
+using Flit.Queries.Domain;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
@@ -186,6 +187,74 @@ internal static class ProcedureInstanceEndpoints
             var (filteredItems, total) = await filteredHandler.HandleAsync(request, ct);
             return Results.Ok(new { items = filteredItems, total });
         }).WithName("ListProcedureInstances");
+
+        // ── Filtros con la gramática de Consultas (HU #12106) ────────────────────────────────────
+        //
+        // GET /instances/fields — por qué se puede filtrar. El constructor de filtros del listado se
+        // pinta a partir de esta respuesta, así que un campo nuevo aparece en pantalla sin desplegar
+        // frontend. Las opciones de 'organismo' y 'tipo_tramite' vienen resueltas con lo que esta
+        // empresa tiene de verdad: ofrecer un organismo con el que nunca ha tramitado sería ofrecer un
+        // filtro que solo puede devolver cero.
+        group.MapGet("/instances/fields", async (
+            HttpContext http,
+            GetTramitesQueryFieldsHandler handler,
+            CancellationToken ct) =>
+        {
+            var (tenantId, _) = ResolveTenantContext(http);
+            return Results.Ok(await handler.HandleAsync(tenantId, ct));
+        })
+            .WithName("TramitesFilterFields")
+            .WithSummary("Campos por los que se puede filtrar el listado de trámites")
+            .Produces<IReadOnlyList<QueryFieldDto>>(StatusCodes.Status200OK);
+
+        // POST /instances/search — el MISMO listado que el GET, pero aceptando condiciones.
+        //
+        // Es POST y no más parámetros del GET por una razón concreta: placa, VIN y radicado admiten
+        // pegar una lista completa desde Excel (`AdmiteLista` en el catálogo), y unos cientos de
+        // valores no caben en una query string. El GET se deja INTACTO —lo siguen usando el listado
+        // actual y el recorrido del export— en vez de romper su contrato.
+        group.MapPost("/instances/search", async (
+            HttpContext http,
+            ListProcedureInstancesFilteredHandler handler,
+            [FromBody] TramitesSearchRequest body,
+            CancellationToken ct) =>
+        {
+            var (tenantId, _) = ResolveTenantContext(http);
+
+            // Un campo o un operador fuera del catálogo se RECHAZA. Ignorarlo devolvería un listado más
+            // amplio del pedido con apariencia de estar filtrado, y nadie revisa un resultado que
+            // parece correcto.
+            if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
+                return Results.BadRequest(new { error = problema });
+
+            var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId), ct);
+            return Results.Ok(new { items, total });
+        })
+            .WithName("SearchProcedureInstances")
+            .WithSummary("Listado de trámites filtrado con la gramática de consultas")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest);
+
+        // POST /instances/estado-counts — la tira de KPIs bajo esas mismas condiciones. Endpoint
+        // aparte por lo mismo que su gemelo GET: los conteos se piden con un juego de filtros DISTINTO
+        // (sin `estado`), y mezclarlos obligaría a decidir a qué aplica el filtro de estado.
+        group.MapPost("/instances/estado-counts", async (
+            HttpContext http,
+            CountProcedureInstancesByStatusHandler handler,
+            [FromBody] TramitesSearchRequest body,
+            CancellationToken ct) =>
+        {
+            var (tenantId, _) = ResolveTenantContext(http);
+
+            if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
+                return Results.BadRequest(new { error = problema });
+
+            return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId), ct));
+        })
+            .WithName("SearchProcedureInstanceEstadoCounts")
+            .WithSummary("Conteo por estado del universo que cumple las condiciones")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest);
 
         // GET /api/v1/tramites/instances/estado-counts — conteo por estado del UNIVERSO que matchea los
         // filtros, para la tira de KPIs del listado.
@@ -1058,7 +1127,7 @@ internal static class ProcedureInstanceEndpoints
     /// queda ninguno, se devuelve null y el filtro no se aplica.
     /// </para>
     /// </summary>
-    private static List<string>? ParseEstados(string? estado)
+    internal static List<string>? ParseEstados(string? estado)
     {
         if (string.IsNullOrWhiteSpace(estado)) return null;
 
@@ -1198,3 +1267,62 @@ internal sealed record CreateFromConsultaBody(
     string? ProcedureTypeCode = null,
     string? EmpresaVinculadoraNit = null,
     string? EmpresaVinculadoraRazonSocial = null);
+
+/// <summary>
+/// Cuerpo de <c>POST /instances/search</c> y <c>POST /instances/estado-counts</c> (HU #12106).
+///
+/// <para>Conserva los filtros sueltos del GET además de <see cref="Condiciones"/> para que la
+/// migración del frontend pueda ser gradual: la barra de filtros nueva manda condiciones, y las
+/// pestañas de familia y la tarjeta de estado —que son navegación, no filtros— siguen viajando como
+/// hasta ahora sin tener que expresarse como condición.</para>
+/// </summary>
+internal sealed record TramitesSearchRequest
+{
+    public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
+
+    public string? Vin { get; init; }
+    public string? Placa { get; init; }
+    public string? Vendedor { get; init; }
+    public string? Comprador { get; init; }
+    public string? Gestor { get; init; }
+    public bool? Firmado { get; init; }
+    /// <summary>Estados separados por coma, igual que el query string del GET.</summary>
+    public string? Estado { get; init; }
+    public string? Modalidad { get; init; }
+    public string? OrganismoTransito { get; init; }
+    public string? TipoCodigo { get; init; }
+    public DateTimeOffset? CreatedFrom { get; init; }
+    public DateTimeOffset? CreatedTo { get; init; }
+    public DateTimeOffset? UpdatedFrom { get; init; }
+    public DateTimeOffset? UpdatedTo { get; init; }
+
+    public string? SortBy { get; init; }
+    public string? SortDir { get; init; }
+    public int? Skip { get; init; }
+    public int? Take { get; init; }
+
+    public ProcedureInstanceListRequest ToRequest(Guid? tenantId) => new()
+    {
+        TenantId = tenantId,
+        Skip = Skip ?? 0,
+        Take = Take ?? ListProcedureInstancesHandler.MaxItems,
+        Condiciones = Condiciones,
+        Vin = Vin,
+        Placa = Placa,
+        Vendedor = Vendedor,
+        Comprador = Comprador,
+        Gestor = Gestor,
+        Firmado = Firmado,
+        Estados = ProcedureInstanceEndpoints.ParseEstados(Estado),
+        Modalidad = Modalidad,
+        OrganismoTransito = OrganismoTransito,
+        TipoCodigo = TipoCodigo,
+        CreatedFrom = CreatedFrom,
+        CreatedTo = CreatedTo,
+        UpdatedFrom = UpdatedFrom,
+        UpdatedTo = UpdatedTo,
+        SortBy = SortBy,
+        // Default DESC, igual que el GET: solo "asc" invierte.
+        SortDescending = !string.Equals(SortDir, "asc", StringComparison.OrdinalIgnoreCase),
+    };
+}
