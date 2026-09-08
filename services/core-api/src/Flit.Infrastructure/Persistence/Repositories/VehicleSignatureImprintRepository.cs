@@ -60,7 +60,6 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
     }
 
     public async Task<IReadOnlyList<VehicleSignatureImprintListRow>> ListByPlacaAsync(
-        Guid tenantId,
         string placa,
         CancellationToken cancellationToken = default)
     {
@@ -69,13 +68,12 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
 
         var normalized = NormalizePlaca(placa);
 
+        // Sin filtro de tenant: la firma digital es del documento; el OT consulta por placa.
         return await (
                 from imp in db.VehicleSignatureImprints.IgnoreQueryFilters().AsNoTracking()
-                join pi in db.ProcedureInstances.AsNoTracking()
+                join pi in db.ProcedureInstances.IgnoreQueryFilters().AsNoTracking()
                     on imp.ProcedureInstanceId equals pi.Id
-                where imp.TenantId == tenantId
-                      && pi.Plate != null
-                      && pi.Plate.Trim().ToUpper() == normalized
+                where pi.Plate != null && pi.Plate.Trim().ToUpper() == normalized
                 orderby imp.SignedAt descending
                 select new VehicleSignatureImprintListRow
                 {

@@ -1075,8 +1075,9 @@ paths:
       operationId: adminOtListImprintSignatures
       summary: Lista improntas firmadas por placa (HU #12148)
       description: >
-        Consulta auditorías de firma digital de impronta manual asociadas a la placa.
-        No expone private_key. Requiere rol SuperAdmin u ot_admin.
+        Consulta auditorías de firma digital de impronta manual asociadas a la placa
+        (sin filtrar por tenant: la firma es del documento). No expone private_key.
+        Requiere rol SuperAdmin u ot_admin.
       security:
         - bearerAuth: []
       parameters:

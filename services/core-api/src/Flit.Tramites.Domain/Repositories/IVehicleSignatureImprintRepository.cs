@@ -30,11 +30,10 @@ public interface IVehicleSignatureImprintRepository
         DateTimeOffset deletedAt);
 
     /// <summary>
-    /// Improntas firmadas del <paramref name="tenantId"/> cuya instancia tiene la placa
-    /// indicada (Trim+Upper). Incluye soft-deleted.
+    /// Improntas firmadas cuya instancia tiene la placa indicada (Trim+Upper).
+    /// Incluye soft-deleted. Sin filtro de tenant: la firma es del documento, no del OT.
     /// </summary>
     Task<IReadOnlyList<VehicleSignatureImprintListRow>> ListByPlacaAsync(
-        Guid tenantId,
         string placa,
         CancellationToken cancellationToken = default);
 

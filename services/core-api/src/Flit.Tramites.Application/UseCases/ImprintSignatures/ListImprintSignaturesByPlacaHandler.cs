@@ -19,7 +19,7 @@ public sealed class ListImprintSignaturesByPlacaHandler
         ArgumentNullException.ThrowIfNull(query);
 
         var rows = await _imprintRepository
-            .ListByPlacaAsync(query.TenantId, query.Placa, cancellationToken)
+            .ListByPlacaAsync(query.Placa, cancellationToken)
             .ConfigureAwait(false);
 
         return new ListImprintSignaturesByPlacaResult

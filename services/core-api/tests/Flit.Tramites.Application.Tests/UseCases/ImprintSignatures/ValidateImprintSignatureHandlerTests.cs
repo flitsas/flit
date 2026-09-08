@@ -134,6 +134,60 @@ public sealed class ValidateImprintSignatureHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_ValidatesAcrossCompanyTenant_WhenCallerIsOtTenant()
+    {
+        var companyTenantId = Guid.NewGuid();
+        var otTenantId = Guid.NewGuid();
+        var imprintId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+
+        _imprints.GetByIdAsync(imprintId, Arg.Any<CancellationToken>())
+            .Returns(new VehicleSignatureImprint
+            {
+                Id = imprintId,
+                TenantId = companyTenantId,
+                ProcedureInstanceId = instanceId,
+                PublicKey = "pub",
+                DocumentHash = "hash",
+                Signature = "sig",
+                PrivateKey = "secret",
+                SignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+        _instances.GetByIdAsync(instanceId, companyTenantId, Arg.Any<CancellationToken>())
+            .Returns(new ProcedureInstance
+            {
+                Id = instanceId,
+                TenantId = companyTenantId,
+                ProcedureTypeId = Guid.NewGuid(),
+                ReferenceNumber = "FLIT-3",
+                Plate = "HHH123",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+        _verifier.Verify("pub", "hash", "sig").Returns(true);
+
+        ImprintSignatureValidation? captured = null;
+        _validations.When(v => v.Add(Arg.Any<ImprintSignatureValidation>()))
+            .Do(call => captured = call.Arg<ImprintSignatureValidation>());
+
+        var result = await _sut.HandleAsync(
+            new ValidateImprintSignatureCommand
+            {
+                TenantId = otTenantId,
+                VehicleSignatureImprintId = imprintId,
+                ValidatedBy = Guid.NewGuid(),
+            },
+            TestContext.Current.CancellationToken);
+
+        result.Result.Should().Be(ImprintSignatureValidationResults.Valid);
+        captured.Should().NotBeNull();
+        captured!.TenantId.Should().Be(otTenantId);
+        captured.Placa.Should().Be("HHH123");
+    }
+
+    [Fact]
     public async Task HandleAsync_NotFound_DoesNotPersistLog()
     {
         var tenantId = Guid.NewGuid();

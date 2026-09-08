@@ -38,7 +38,7 @@ public sealed class ValidateImprintSignatureHandler
             .GetByIdAsync(command.VehicleSignatureImprintId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (imprint is null || imprint.TenantId != command.TenantId)
+        if (imprint is null)
         {
             return new ValidateImprintSignatureResult
             {
@@ -58,14 +58,16 @@ public sealed class ValidateImprintSignatureHandler
             ? null
             : "La firma RSA no coincide con el hash del documento registrado.";
 
+        // Placa del documento: el trámite suele vivir en tenant compañía, no en el OT validador.
         var instance = await _instanceRepository
-            .GetByIdAsync(imprint.ProcedureInstanceId, command.TenantId, cancellationToken)
+            .GetByIdAsync(imprint.ProcedureInstanceId, imprint.TenantId, cancellationToken)
             .ConfigureAwait(false);
         var placa = NormalizePlacaSnapshot(instance?.Plate);
 
         var log = new ImprintSignatureValidation
         {
             Id = Guid.NewGuid(),
+            // Tenant del validador (OT/sesión) para RLS de la bitácora; la firma sigue ligada al documento.
             TenantId = command.TenantId,
             VehicleSignatureImprintId = imprint.Id,
             ProcedureInstanceId = imprint.ProcedureInstanceId,
