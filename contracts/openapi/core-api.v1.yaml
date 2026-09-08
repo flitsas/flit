@@ -1201,6 +1201,45 @@ paths:
         "503":
           description: Storage no disponible.
 
+  /api/v1/admin/ot/imprint-signatures/{id}/validations:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListImprintSignatureValidations
+      summary: Historial de validaciones de firma de impronta (HU #12176)
+      description: >
+        Lista la bitácora append-only de tramites.imprint_signature_validations
+        para la impronta, ordenada por validatedAt DESC.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Historial (puede ser vacío).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ImprintSignatureValidationSummary"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+        "404":
+          description: Impronta no encontrada.
+
   /api/v1/admin/transit-office-tenants/index:
     get:
       tags: [Admin · Tenants OT]
@@ -8430,9 +8469,28 @@ components:
         signedSizeBytes: { type: integer, format: int64, nullable: true }
         signedFilename: { type: string, nullable: true }
         deletedAt: { type: string, format: date-time, nullable: true }
+        lastValidation:
+          allOf:
+            - $ref: "#/components/schemas/ImprintSignatureValidationSummary"
+          nullable: true
+          description: Última fila de bitácora (HU #12176); null si nunca se validó.
       required:
         [id, tenantId, procedureInstanceId, placa, moduleCode, publicKey, documentHash,
          signature, signedAt, wasSignedWithoutOwnerSignature]
+
+    ImprintSignatureValidationSummary:
+      type: object
+      description: Fila de tramites.imprint_signature_validations (HU #12176).
+      properties:
+        id: { type: string, format: uuid }
+        result:
+          type: string
+          enum: [valid, invalid, not_found]
+        failureReason: { type: string, nullable: true }
+        validatedAt: { type: string, format: date-time }
+        validatedBy: { type: string, format: uuid }
+        placa: { type: string }
+      required: [id, result, validatedAt, validatedBy, placa]
 
     ImprintSignatureValidationResult:
       type: object

@@ -479,6 +479,15 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status503ServiceUnavailable);
 
+        group.MapGet("/imprint-signatures/{id:guid}/validations", ListImprintSignatureValidationsAsync)
+            .WithName("AdminOtListImprintSignatureValidations")
+            .WithSummary("Historial de validaciones de firma de una impronta (HU #12176)")
+            .WithDescription("Bitácora append-only ordenada por validated_at DESC.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
@@ -818,6 +827,33 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status503ServiceUnavailable),
             _ => Results.Ok(new { url = preview!.Url, expiresAt = preview.ExpiresAt }),
         };
+    }
+
+    private static async Task<IResult> ListImprintSignatureValidationsAsync(
+        HttpContext httpContext,
+        Guid id,
+        ListImprintSignatureValidationsHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (_, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var result = await handler.HandleAsync(
+            new ListImprintSignatureValidationsQuery { VehicleSignatureImprintId = id },
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Found)
+        {
+            return Results.NotFound(new { error = "Impronta firmada no encontrada" });
+        }
+
+        return Results.Ok(new { data = result.Data });
     }
 
     private static async Task<IResult> ListWebhooksAsync(

@@ -286,6 +286,7 @@ public static class DependencyInjection
         services.AddScoped<ListImprintSignaturesByPlacaHandler>();
         services.AddScoped<ValidateImprintSignatureHandler>();
         services.AddScoped<GetImprintSignaturePreviewUrlHandler>();
+        services.AddScoped<ListImprintSignatureValidationsHandler>();
 
         return services;
     }
