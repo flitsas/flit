@@ -4128,6 +4128,113 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/instances/{id}/prenda:
+    put:
+      operationId: registrarProcedureInstancePrenda
+      tags: [Tramites]
+      summary: Registrar/versionar la decisión de prenda del trámite (R4/R10/R17, ADR-0055)
+      description: >
+        No estaba documentado hasta ahora (brecha preexistente, cerrada en HU #12129/ADR-0055).
+        Registra la decisión de prenda (gravamen) vigente del trámite: `solicitar`/`registrar`
+        (constituye), `levantar` (levanta), `omitir` (asumo el riesgo, si el organismo lo permite) o
+        `sin_prenda` (declara ausencia de gravamen). Versionado por reemplazo: si ya hay una decisión
+        vigente de la MISMA familia (`constitucion`=solicitar/registrar, `levantamiento`=levantar), se
+        marca `reemplazada` y esta queda como la nueva vigente (R17, HU #10599).
+
+        **Captura dual (ADR-0055, HU #12129).** En `PRENDA_INSCRIPCION`/`LEVANTAMIENTO_PRENDA` este
+        endpoint admite hasta DOS llamadas idempotentes, una por familia: si ya hay vigente una
+        decisión de la familia CONTRARIA (p. ej. una constitución vigente y esta llamada registra un
+        levantamiento), esa otra familia NO se toca — ambas quedan vigentes a la vez, cada una con su
+        propio acreedor/documento. En cualquier otro tipo (Matrícula, Traspaso) la decisión sigue
+        siendo EXCLUYENTE: a lo sumo una vigente por instancia, sin importar la familia — un segundo
+        hecho vigente para estos tipos se rechaza explícitamente
+        (`prenda_segunda_decision_no_admitida`), no solo por el índice de BD.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador de la instancia (procedure_instance_id).
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistrarPrendaInput"
+      responses:
+        "200":
+          description: Decisión de prenda registrada/versionada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrendaDto"
+        "400":
+          description: Falta X-Tenant-Id o `decision` no es una de `solicitar|registrar|levantar|omitir|sin_prenda`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La instancia no existe para el tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            `prenda_omitir_no_admitido` (el organismo exige el certificado, CF-06/HU #10881),
+            `prenda_no_admitida_en_tipo` (el tipo no tiene dimensión de gravamen, ADR-0050),
+            `estado_final` (trámite en estado final, R17) o `prenda_segunda_decision_no_admitida`
+            (Matrícula/Traspaso: ya hay una vigente y el tipo no admite la acción complementaria,
+            ADR-0055).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: getProcedureInstancePrenda
+      tags: [Tramites]
+      summary: Listar las decisiones de prenda VIGENTES del trámite (ADR-0055)
+      description: >
+        No estaba documentado hasta ahora (brecha preexistente, cerrada en HU #12129/ADR-0055).
+        Devuelve un ARRAY de 0 a 2 elementos (una por familia `constitucion`/`levantamiento`) — antes
+        de HU #12128/#12129 el modelo solo admitía una fila vigente por instancia y este endpoint
+        devolvía un objeto nullable; con la captura dual el shape pasa a array. Matrícula/Traspaso
+        siguen devolviendo, en la práctica, 0 o 1 elemento (no admiten la acción complementaria).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Identificador de la instancia (procedure_instance_id).
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: 0, 1 o 2 decisiones vigentes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PrendaDto"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/identity/ensure:
     post:
       operationId: ensureProcedureInstanceIdentity
@@ -9178,6 +9285,56 @@ components:
           format: uuid
           nullable: true
           description: Id de la validación clonada cuando `outcome=reusada`.
+    RegistrarPrendaInput:
+      type: object
+      description: >
+        Input de `PUT /instances/{id}/prenda` (HU #10594, ampliado por ADR-0055/HU #12129). Cerrado en
+        `contracts/openapi/core-api.v1.yaml` como parte de la HU #12129 (brecha preexistente).
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [solicitar, registrar, levantar, omitir, sin_prenda]
+        acreedorNombre:
+          type: string
+          nullable: true
+          description: Beneficiario del gravamen de ESTE hecho (constitución o levantamiento, según `decision`).
+        acreedorDocumento:
+          type: string
+          nullable: true
+          description: >
+            Documento del acreedor de ESTE hecho. `@pii:medium` — con captura dual (ADR-0055) cada
+            familia trae el SUYO propio; no se mezcla con el de la familia contraria en ningún shape
+            de respuesta (Security, ADR-0055).
+        levantamientoEntidad:
+          type: string
+          nullable: true
+          description: Entidad/oficina ante la que se levantó el gravamen. Solo aplica a `decision=levantar`.
+        metadataJson:
+          type: string
+          nullable: true
+    PrendaDto:
+      type: object
+      description: >
+        Contrato congelado de una decisión de prenda (compartido con el front). Desde ADR-0055
+        (HU #12129), `GET /instances/{id}/prenda` devuelve un ARRAY de 0-2 de este DTO (uno por
+        familia `constitucion`/`levantamiento` vigente), no un objeto nullable.
+      required: [id, decision, estado, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        decision:
+          type: string
+          enum: [solicitar, registrar, levantar, omitir, sin_prenda]
+        estado:
+          type: string
+          enum: [vigente, reemplazada]
+        acreedorNombre: { type: string, nullable: true }
+        acreedorDocumento:
+          type: string
+          nullable: true
+          description: '@pii:medium — documento del acreedor de ESTE hecho (no se mezcla con el de la familia contraria).'
+        levantamientoEntidad: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
     IniciarBiometriaInput:
       type: object
       required: [nombre, tipoDoc, documento, email]

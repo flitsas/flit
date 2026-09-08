@@ -55,12 +55,6 @@ public sealed class TramiteValidationPolicyOptions
     /// sobre la que cambiar (422).
     /// </summary>
     public TramiteValidationSetting VehicleBodyTypeRequired { get; set; } = new();
-
-    /// <summary>
-    /// Precondición registral del levantamiento de prenda: el RUNT tiene que reportar el gravamen
-    /// que se va a levantar (422).
-    /// </summary>
-    public TramiteValidationSetting VehiclePrendaRequired { get; set; } = new();
 }
 
 /// <summary>
@@ -71,8 +65,7 @@ public sealed class TramiteValidationPolicyOptions
 public sealed class TramiteValidationPolicy(
     TramiteValidationMode duplicateActiveProcedure,
     TramiteValidationMode vehicleRegistrationState,
-    TramiteValidationMode vehicleBodyTypeRequired = TramiteValidationMode.Block,
-    TramiteValidationMode vehiclePrendaRequired = TramiteValidationMode.Block)
+    TramiteValidationMode vehicleBodyTypeRequired = TramiteValidationMode.Block)
 {
     /// <summary>CF-01 — modo efectivo del bloqueo de duplicidad.</summary>
     public TramiteValidationMode DuplicateActiveProcedure { get; } = duplicateActiveProcedure;
@@ -83,16 +76,13 @@ public sealed class TramiteValidationPolicy(
     /// <summary>Modo efectivo del bloqueo "sin carrocería que cambiar".</summary>
     public TramiteValidationMode VehicleBodyTypeRequired { get; } = vehicleBodyTypeRequired;
 
-    /// <summary>Modo efectivo del bloqueo "sin prenda que levantar".</summary>
-    public TramiteValidationMode VehiclePrendaRequired { get; } = vehiclePrendaRequired;
-
     /// <summary>
     /// Política por defecto: todas las validaciones en bloqueo duro. Es la que usan los handlers cuando
     /// no se les inyecta ninguna (tests que no ejercitan la configurabilidad) ⇒ comportamiento idéntico
     /// al previo a esta historia.
     /// </summary>
     public static TramiteValidationPolicy BlockAll { get; } =
-        new(TramiteValidationMode.Block, TramiteValidationMode.Block, TramiteValidationMode.Block, TramiteValidationMode.Block);
+        new(TramiteValidationMode.Block, TramiteValidationMode.Block, TramiteValidationMode.Block);
 
     /// <summary>
     /// Resuelve los modos efectivos desde la configuración. <paramref name="onUnrecognized"/> recibe
@@ -109,8 +99,7 @@ public sealed class TramiteValidationPolicy(
         return new TramiteValidationPolicy(
             ResolveOne(nameof(options.DuplicateActiveProcedure), options.DuplicateActiveProcedure, onUnrecognized),
             ResolveOne(nameof(options.VehicleRegistrationState), options.VehicleRegistrationState, onUnrecognized),
-            ResolveOne(nameof(options.VehicleBodyTypeRequired), options.VehicleBodyTypeRequired, onUnrecognized),
-            ResolveOne(nameof(options.VehiclePrendaRequired), options.VehiclePrendaRequired, onUnrecognized));
+            ResolveOne(nameof(options.VehicleBodyTypeRequired), options.VehicleBodyTypeRequired, onUnrecognized));
     }
 
     /// <summary>

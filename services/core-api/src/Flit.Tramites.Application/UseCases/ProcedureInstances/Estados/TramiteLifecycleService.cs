@@ -398,17 +398,10 @@ public sealed class TramiteLifecycleService(
                 return destinoError.Value;
         }
 
-        // Misma naturaleza para el levantamiento de prenda: se comprueba sobre el ÚLTIMO semáforo
-        // persistido, no sobre los field_values, porque es el check quien distingue «el RUNT dice que
-        // no tiene» de «el RUNT no trajo el dato». Cierra la puerta de atrás de un borrador abierto
-        // antes de que la guarda del paso 1 existiera.
-        if (_validationPolicy.VehiclePrendaRequired == TramiteValidationMode.Block
-            && VehiclePrendaPolicy.Evaluar(instance.TypeCode, EstadoGravamenDelSnapshot(instance)) is not null)
-        {
-            return (VehiclePrendaPolicy.ErrorCode,
-                "No se puede preparar el trámite: el RUNT no reporta prenda sobre este vehículo, así que "
-                + "no hay gravamen que levantar. Vuelve a consultar el vehículo o radica el trámite que corresponda.");
-        }
+        // HU #12131/#12129 — el levantamiento de prenda sobre un vehículo sin gravamen reportado NO
+        // bloquea la preparación (regla de negocio, sin interruptor por ambiente): el gestor captura
+        // el acreedor/entidad manualmente en el paso de prenda del asistente. Antes de esta corrección
+        // esta "puerta de atrás" replicaba el bloqueo duro que ya se quitó del preflight del paso 1.
 
         // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
         // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
@@ -552,39 +545,6 @@ public sealed class TramiteLifecycleService(
     private static string? FieldValue(ProcedureInstance instance, string fieldKey) =>
         instance.FieldValues.FirstOrDefault(f =>
             string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase))?.ValueText;
-
-    /// <summary>
-    /// Estado del check <c>gravamenes</c> en el último semáforo persistido, o <c>null</c> si no hay
-    /// snapshot o el check no está. Hermano de <see cref="HasGravamenWarn"/>, que responde lo
-    /// contrario (¿hay gravamen?) y no distingue «no tiene» de «no se sabe».
-    /// </summary>
-    private static string? EstadoGravamenDelSnapshot(ProcedureInstance instance)
-    {
-        var snapshot = instance.PreflightSnapshots
-            .OrderByDescending(s => s.CreatedAt)
-            .FirstOrDefault();
-        if (snapshot is null || string.IsNullOrWhiteSpace(snapshot.Checks))
-            return null;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(snapshot.Checks);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array)
-                return null;
-
-            foreach (var el in doc.RootElement.EnumerateArray())
-            {
-                if (JsonStringEquals(el, "key", VehiclePrendaPolicy.GravamenCheckKey))
-                    return JsonStringValue(el, "status");
-            }
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-
-        return null;
-    }
 
     /// <summary>
     /// FEATURE-08 / HU-BE-06 (AC-06) — gate de preparación para tipos dinámicos: computa los blockers
@@ -768,9 +728,25 @@ public sealed class TramiteLifecycleService(
         // `PrendaGate` ya tenía el núcleo preparado para esto; lo que faltaba era llamarlo.
         if (ProcedureTypeLayers.EsPrendaDeAccionUnica(instance.TypeCode))
         {
+            // ADR-0055 (HU #12129) — con la acción complementaria activa puede haber hasta DOS hechos
+            // vigentes (constitución + levantamiento); cada uno necesita su propio documento/acreedor
+            // completos, así que el gate evalúa el CONJUNTO, no un solo `prendaVigente` (que además
+            // con dos filas vigentes ya no identifica de forma determinística cuál es "la" decisión).
+            var vigentes = _prendaRepo is null
+                ? []
+                : await _prendaRepo.GetVigentesAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false)
+                    ?? [];
+
+            var accionUnicaError = PrendaGate.EvaluateAccionUnica(vigentes, docTipos);
+
+            // El detalle del mensaje (p. ej. "falta el acreedor") debe señalar CUÁL de los hasta dos
+            // hechos lo dispara — se ubica reevaluando cada uno con la misma regla de un solo hecho.
+            var prendaDelError = vigentes.FirstOrDefault(v =>
+                PrendaGate.EvaluateAccionUnica(v, docTipos) == accionUnicaError);
+
             return MapPrendaGateResult(
-                PrendaGate.EvaluateAccionUnica(prenda, docTipos),
-                prenda,
+                accionUnicaError,
+                prendaDelError,
                 // El certificado no es opcional aquí aunque el OT no lo exija por configuración: es
                 // el soporte del acto que se está radicando, no un requisito añadido del organismo.
                 documentoExigido: true,
@@ -853,21 +829,6 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>Compara (case-insensitive) una propiedad JSON con un valor, probando Pascal y camelCase.</summary>
-    /// <summary>
-    /// Valor de una propiedad de texto tolerando el casing con que se serializó el snapshot (los hay
-    /// en <c>camelCase</c> y en <c>PascalCase</c>), igual que <see cref="JsonStringEquals"/>.
-    /// </summary>
-    private static string? JsonStringValue(JsonElement el, string prop)
-    {
-        foreach (var name in new[] { prop, char.ToUpperInvariant(prop[0]) + prop[1..] })
-        {
-            if (el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String)
-                return v.GetString();
-        }
-
-        return null;
-    }
-
     private static bool JsonStringEquals(JsonElement el, string prop, string expected)
     {
         foreach (var name in new[] { prop, char.ToUpperInvariant(prop[0]) + prop[1..] })

@@ -1,7 +1,7 @@
 // HU #10596 (R4) — formulario declarativo de prenda en matrícula.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { createRef } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
   PrendaForm,
   type PrendaFormHandle,
@@ -15,7 +15,7 @@ import type { FieldValue } from '@/lib/api/types/procedure-runtime';
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
-    getPrenda: vi.fn().mockResolvedValue(null),
+    getPrenda: vi.fn().mockResolvedValue([]),
     getInstance: vi.fn().mockResolvedValue({ fieldValues: [] }),
     putPrenda: vi.fn().mockResolvedValue({
       id: '1',
@@ -458,15 +458,17 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
   });
 
   it('matrícula con decisión ya guardada — el default no la pisa', async () => {
-    client.getPrenda.mockResolvedValueOnce({
-      id: '1',
-      decision: 'registrar',
-      estado: 'vigente',
-      acreedorNombre: 'Banco XYZ',
-      acreedorDocumento: '900111222',
-      levantamientoEntidad: null,
-      createdAt: '2026-07-07T00:00:00Z',
-    } as never);
+    client.getPrenda.mockResolvedValueOnce([
+      {
+        id: '1',
+        decision: 'registrar',
+        estado: 'vigente',
+        acreedorNombre: 'Banco XYZ',
+        acreedorDocumento: '900111222',
+        levantamientoEntidad: null,
+        createdAt: '2026-07-07T00:00:00Z',
+      },
+    ] as never);
 
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
@@ -634,7 +636,7 @@ describe('parseRuntGravamenesJson / buildRuntPrendaSummary', () => {
 describe('PrendaForm — decisión fija del tipo (familia OTROS)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    client.getPrenda.mockResolvedValue(null);
+    client.getPrenda.mockResolvedValue([]);
     client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
     client.getAttachments.mockResolvedValue([]);
     client.putPrenda.mockResolvedValue({
@@ -698,7 +700,7 @@ describe('PrendaForm — decisión fija del tipo (familia OTROS)', () => {
 describe('PrendaForm — levantamiento como trámite propio', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    client.getPrenda.mockResolvedValue(null);
+    client.getPrenda.mockResolvedValue([]);
     client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
     client.getAttachments.mockResolvedValue([]);
     client.putPrenda.mockResolvedValue({
@@ -777,5 +779,631 @@ describe('PrendaForm — levantamiento como trámite propio', () => {
     expect(
       screen.queryByLabelText('Entidad ante la que se levantó', { exact: false }),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * HU #12131 — aviso «RUNT sin gravamen registrado» en los tipos prendarios de una sola acción
+ * (Inscribir / Levantar Prenda). No bloqueante: el gestor lo cierra y sigue con la captura manual
+ * que el formulario ya ofrece.
+ */
+describe('PrendaForm — aviso RUNT sin gravamen (HU #12131)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client.getPrenda.mockResolvedValue([]);
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+    client.getAttachments.mockResolvedValue([]);
+    client.putPrenda.mockResolvedValue({
+      id: '1',
+      decision: 'registrar',
+      estado: 'vigente',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: null,
+      createdAt: '2026-09-07T00:00:00Z',
+    } as never);
+  });
+
+  it('AC1 — Levantar Prenda sin gravamen en RUNT: aparece la modal con el texto de Levantamiento', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['levantar']}
+        exigeEntidadLevantamiento
+        runtAvisoVariant="levantamiento"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const dialog = await screen.findByRole('dialog', { name: 'RUNT sin gravamen registrado' });
+    expect(dialog).toHaveTextContent(/entidad ante la que se levantó/i);
+    // No debe mezclar el copy de la otra variante.
+    expect(dialog).not.toHaveTextContent(/vas a inscribir/i);
+  });
+
+  /**
+   * Corrección QA — `acreedorReadOnly` bloqueaba el acreedor de forma incondicional para 'levantar'
+   * (asumiendo que el RUNT SIEMPRE lo precarga), dejando el campo vacío Y bloqueado justo cuando el
+   * RUNT no reporta gravamen — lo contrario de lo que promete esta misma modal ("captura manual").
+   */
+  it('AC1b — Levantar Prenda sin gravamen en RUNT: el acreedor queda editable (ya no bloqueado)', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['levantar']}
+        exigeEntidadLevantamiento
+        runtAvisoVariant="levantamiento"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+    await screen.findByRole('dialog', { name: 'RUNT sin gravamen registrado' });
+    fireEvent.click(screen.getByRole('button', { name: 'Entendido' }));
+
+    const nombreInput = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
+    const docInput = screen.getByLabelText('NIT / documento del acreedor', { exact: false });
+    expect(nombreInput).toBeEnabled();
+    expect(docInput).toBeEnabled();
+
+    fireEvent.change(nombreInput, { target: { value: 'Banco Manual SA' } });
+    fireEvent.change(docInput, { target: { value: '900777888' } });
+    expect(nombreInput).toHaveValue('Banco Manual SA');
+    expect(docInput).toHaveValue('900777888');
+  });
+
+  it('AC1c — Levantar Prenda CON gravamen confirmado en RUNT: el acreedor sigue bloqueado (dato verificado)', async () => {
+    client.getInstance.mockResolvedValue({
+      fieldValues: [
+        {
+          formFieldId: '',
+          fieldKey: 'runt_gravamenes',
+          valueText: null,
+          valueJson: JSON.stringify([
+            { nombreAcreedor: 'BANCO RUNT SA', numeroDocumentoAcreedor: '900123456' },
+          ]),
+          source: 'consultation',
+        },
+      ],
+    } as never);
+
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['levantar']}
+        exigeEntidadLevantamiento
+        runtAvisoVariant="levantamiento"
+        runtGravamenChecked
+        runtHasGravamen
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const nombreInput = await screen.findByLabelText('Acreedor (beneficiario)', { exact: false });
+    await waitFor(() => expect(nombreInput).toHaveValue('BANCO RUNT SA'));
+    expect(nombreInput).toBeDisabled();
+    expect(screen.getByLabelText('NIT / documento del acreedor', { exact: false })).toBeDisabled();
+    // Con gravamen confirmado, la modal informativa no aplica (mismo criterio que AC4).
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('AC2 — Inscribir Prenda sin gravamen en RUNT: aparece la modal con el texto de Inscripción', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['registrar']}
+        runtAvisoVariant="inscripcion"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const dialog = await screen.findByRole('dialog', { name: 'RUNT sin gravamen registrado' });
+    expect(dialog).toHaveTextContent(/vas a inscribir/i);
+    expect(dialog).not.toHaveTextContent(/entidad ante la que se levantó/i);
+  });
+
+  it('AC3 — al cerrar la modal (botón "Entendido"), el gestor sigue capturando el acreedor a mano', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['registrar']}
+        runtAvisoVariant="inscripcion"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+    await screen.findByRole('dialog', { name: 'RUNT sin gravamen registrado' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Entendido' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    const nombreInput = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
+    const docInput = screen.getByLabelText('NIT / documento del acreedor', { exact: false });
+    expect(nombreInput).toBeEnabled();
+    expect(docInput).toBeEnabled();
+
+    fireEvent.change(nombreInput, { target: { value: 'Banco Manual SA' } });
+    fireEvent.change(docInput, { target: { value: '900777888' } });
+    expect(nombreInput).toHaveValue('Banco Manual SA');
+    expect(docInput).toHaveValue('900777888');
+  });
+
+  it('AC3 — Escape también cierra la modal sin bloquear el resto del formulario', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['registrar']}
+        runtAvisoVariant="inscripcion"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+    await screen.findByRole('dialog', { name: 'RUNT sin gravamen registrado' });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('AC4 — RUNT SÍ trae gravamen: no aparece la modal (se mantiene el automapeo, no el aviso)', async () => {
+    client.getInstance.mockResolvedValue({
+      fieldValues: [
+        {
+          formFieldId: '',
+          fieldKey: 'runt_gravamenes',
+          valueText: null,
+          valueJson: JSON.stringify([
+            { nombreAcreedor: 'BANCO RUNT SA', numeroDocumentoAcreedor: '900123456' },
+          ]),
+          source: 'consultation',
+        },
+      ],
+    } as never);
+
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['registrar']}
+        runtAvisoVariant="inscripcion"
+        runtGravamenChecked
+        runtHasGravamen
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    // El automapeo existente sigue intacto...
+    await waitFor(() =>
+      expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue(
+        'BANCO RUNT SA',
+      ),
+    );
+    // ...y la modal informativa no se muestra: el gravamen SÍ se encontró.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('edge — aún no se ha consultado el RUNT (`runtGravamenChecked=false`): tampoco aparece la modal', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['registrar']}
+        runtAvisoVariant="inscripcion"
+        runtGravamenChecked={false}
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('edge — fuera del alcance de esta HU (`runtAvisoVariant` nulo, p. ej. prenda complementaria): nunca se muestra', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        modalidad="traspaso"
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+        runtAvisoVariant={null}
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('la modal se abre una sola vez: un re-render posterior no la vuelve a abrir tras cerrarla', async () => {
+    const { rerender } = render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['registrar']}
+        runtAvisoVariant="inscripcion"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+    await screen.findByRole('dialog', { name: 'RUNT sin gravamen registrado' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Entendido' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // Mismo mount, mismas props (simula un re-render del wizard, p. ej. al reabrir el acordeón).
+    rerender(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['registrar']}
+        runtAvisoVariant="inscripcion"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('AC5 — el acreedor capturado a mano tras cerrar la modal se persiste igual que uno precargado por RUNT', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['registrar']}
+        runtAvisoVariant="inscripcion"
+        runtGravamenChecked
+        runtHasGravamen={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+    await screen.findByRole('dialog', { name: 'RUNT sin gravamen registrado' });
+    fireEvent.click(screen.getByRole('button', { name: 'Entendido' }));
+
+    fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)', { exact: false }), {
+      target: { value: 'Banco Manual SA' },
+    });
+    fireEvent.change(screen.getByLabelText('NIT / documento del acreedor', { exact: false }), {
+      target: { value: '900777888' },
+    });
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(true);
+    // Mismo payload/forma que el flujo con datos precargados por RUNT (ver suite de arriba): sin
+    // ninguna marca de "manual" — el backend no distingue el origen del dato.
+    expect(client.putPrenda).toHaveBeenCalledWith('abc', {
+      decision: 'registrar',
+      acreedorNombre: 'Banco Manual SA',
+      acreedorDocumento: '900777888',
+      levantamientoEntidad: null,
+    });
+  });
+});
+
+/**
+ * ADR-0055/HU #12130 — acción complementaria: declarar TAMBIÉN la acción contraria (levantar
+ * mientras se inscribe, o viceversa) en la MISMA radicación de `PRENDA_INSCRIPCION`/
+ * `LEVANTAMIENTO_PRENDA`. AC2 exige preservar `decisionFija` como comportamiento por defecto.
+ */
+describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client.getPrenda.mockResolvedValue([]);
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+    client.getAttachments.mockResolvedValue([]);
+    client.putPrenda.mockResolvedValue({
+      id: '1',
+      decision: 'registrar',
+      estado: 'vigente',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: null,
+      createdAt: '2026-09-07T00:00:00Z',
+    } as never);
+  });
+
+  it('AC2 — sin `permiteAccionComplementaria`, no aparece ninguna superficie adicional', async () => {
+    render(<PrendaForm instanceId="abc" decisions={['levantar']} embeddedInWizard />);
+    await screen.findByText(/Este trámite es/);
+
+    expect(
+      screen.queryByText(/¿También necesitas/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('AC2 — con la capacidad activa pero SIN marcar el checkbox, decisionFija se mantiene igual que antes', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        decisions={['levantar']}
+        embeddedInWizard
+        exigeEntidadLevantamiento
+        permiteAccionComplementaria
+      />,
+    );
+    const entidad = await screen.findByLabelText('Entidad ante la que se levantó', { exact: false });
+    fireEvent.change(entidad, { target: { value: 'Notaría 5' } });
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(true);
+    // Una sola llamada: la complementaria no se activó.
+    expect(client.putPrenda).toHaveBeenCalledTimes(1);
+    expect(client.putPrenda).toHaveBeenCalledWith(
+      'abc',
+      expect.objectContaining({ decision: 'levantar' }),
+    );
+  });
+
+  it('AC1 — LEVANTAMIENTO_PRENDA muestra el checkbox ofreciendo inscribir, y al activarlo despliega acreedor obligatorio', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        decisions={['levantar']}
+        embeddedInWizard
+        exigeEntidadLevantamiento
+        permiteAccionComplementaria
+      />,
+    );
+    await screen.findByText(/Este trámite es/);
+
+    const checkbox = screen.getByRole('switch', {
+      name: /¿También necesitas inscribir una prenda en esta radicación\?/i,
+    });
+    expect(checkbox).not.toBeChecked();
+    expect(screen.queryByRole('status', { name: /Acción complementaria/ })).not.toBeInTheDocument();
+
+    fireEvent.click(checkbox);
+
+    expect(checkbox).toBeChecked();
+    const subform = document.getElementById('prenda-complementaria-subform')!;
+    expect(within(subform).getByText(/Acción complementaria:/)).toHaveTextContent('registrar prenda');
+    const nombre = within(subform).getByLabelText('Acreedor (beneficiario)', { exact: false });
+    const doc = within(subform).getByLabelText('NIT / documento del acreedor', { exact: false });
+    expect(nombre).toBeRequired();
+    expect(doc).toBeRequired();
+    // No hay un segundo campo de entidad de levantamiento: la complementaria aquí es "registrar".
+    expect(
+      within(subform).queryByLabelText('Entidad ante la que se levantó', { exact: false }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('AC1 — PRENDA_INSCRIPCION muestra el checkbox ofreciendo levantar, con acreedor opcional y entidad obligatoria', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        decisions={['registrar']}
+        embeddedInWizard
+        permiteAccionComplementaria
+      />,
+    );
+    await screen.findByText(/Este trámite es/);
+
+    const checkbox = screen.getByRole('switch', {
+      name: /¿También necesitas levantar una prenda en esta radicación\?/i,
+    });
+    fireEvent.click(checkbox);
+
+    const subform = document.getElementById('prenda-complementaria-subform')!;
+    expect(within(subform).getByText(/Acción complementaria:/)).toHaveTextContent('levantar gravamen');
+    // El acreedor se muestra pero NO es obligatorio para la complementaria "levantar".
+    const nombre = within(subform).getByLabelText('Acreedor (beneficiario)', { exact: false });
+    expect(nombre).not.toBeRequired();
+    expect(
+      within(subform).getByLabelText('Entidad ante la que se levantó', { exact: false }),
+    ).toBeRequired();
+  });
+
+  it('AC1 — desactivar el checkbox oculta el subformulario y descarta sus errores de campo', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        decisions={['registrar']}
+        embeddedInWizard
+        permiteAccionComplementaria
+      />,
+    );
+    await screen.findByText(/Este trámite es/);
+
+    const checkbox = screen.getByRole('switch', {
+      name: /¿También necesitas levantar una prenda en esta radicación\?/i,
+    });
+    fireEvent.click(checkbox);
+    expect(screen.getByLabelText('Entidad ante la que se levantó', { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(checkbox);
+
+    expect(
+      screen.queryByLabelText('Entidad ante la que se levantó', { exact: false }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('AC1 — sin acreedor obligatorio en la complementaria "registrar", el guardado se bloquea y no llama al PUT', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        decisions={['levantar']}
+        embeddedInWizard
+        exigeEntidadLevantamiento
+        permiteAccionComplementaria
+      />,
+    );
+    const entidad = await screen.findByLabelText('Entidad ante la que se levantó', { exact: false });
+    fireEvent.change(entidad, { target: { value: 'Notaría 5' } });
+
+    fireEvent.click(
+      screen.getByRole('switch', {
+        name: /¿También necesitas inscribir una prenda en esta radicación\?/i,
+      }),
+    );
+    // No se completa el acreedor de la complementaria.
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(false);
+    expect(client.putPrenda).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.getByText(/acreedor \(nombre y documento\) de la acción complementaria/i),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('AC3 — con ambas acciones completas, guarda con DOS llamadas PUT secuenciales (base primero, complementaria después)', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        decisions={['registrar']}
+        embeddedInWizard
+        permiteAccionComplementaria
+      />,
+    );
+    fireEvent.change(await screen.findByLabelText('Acreedor (beneficiario)', { exact: false }), {
+      target: { value: 'Banco Base SA' },
+    });
+    fireEvent.change(screen.getByLabelText('NIT / documento del acreedor', { exact: false }), {
+      target: { value: '900111111' },
+    });
+
+    fireEvent.click(
+      screen.getByRole('switch', {
+        name: /¿También necesitas levantar una prenda en esta radicación\?/i,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('Entidad ante la que se levantó', { exact: false }), {
+      target: { value: 'Notaría 10' },
+    });
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledTimes(2);
+    expect(client.putPrenda).toHaveBeenNthCalledWith(1, 'abc', {
+      decision: 'registrar',
+      acreedorNombre: 'Banco Base SA',
+      acreedorDocumento: '900111111',
+      levantamientoEntidad: null,
+    });
+    expect(client.putPrenda).toHaveBeenNthCalledWith(2, 'abc', {
+      decision: 'levantar',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: 'Notaría 10',
+    });
+  });
+
+  it('AC3 — si la complementaria falla DESPUÉS de que la base ya se guardó, lo informa sin silenciarlo', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    client.putPrenda
+      .mockResolvedValueOnce({
+        id: '1',
+        decision: 'registrar',
+        estado: 'vigente',
+        acreedorNombre: 'Banco Base SA',
+        acreedorDocumento: '900111111',
+        levantamientoEntidad: null,
+        createdAt: '2026-09-07T00:00:00Z',
+      } as never)
+      .mockRejectedValueOnce(new Error('backend caído'));
+
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        decisions={['registrar']}
+        embeddedInWizard
+        permiteAccionComplementaria
+      />,
+    );
+    fireEvent.change(await screen.findByLabelText('Acreedor (beneficiario)', { exact: false }), {
+      target: { value: 'Banco Base SA' },
+    });
+    fireEvent.change(screen.getByLabelText('NIT / documento del acreedor', { exact: false }), {
+      target: { value: '900111111' },
+    });
+    fireEvent.click(
+      screen.getByRole('switch', {
+        name: /¿También necesitas levantar una prenda en esta radicación\?/i,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('Entidad ante la que se levantó', { exact: false }), {
+      target: { value: 'Notaría 10' },
+    });
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(false);
+    expect(client.putPrenda).toHaveBeenCalledTimes(2);
+    // El mensaje distingue explícitamente cuál acción SÍ quedó guardada y cuál NO.
+    await waitFor(() => {
+      const alerta = screen.getByRole('alert');
+      expect(alerta).toHaveTextContent(/se guardó/i);
+      expect(alerta).toHaveTextContent(/registrar prenda/i);
+      expect(alerta).toHaveTextContent(/no se guardó/i);
+      expect(alerta).toHaveTextContent(/levantar gravamen/i);
+    });
+  });
+
+  it('AC1 — reabrir un borrador con la complementaria ya guardada la rehidrata activa', async () => {
+    client.getPrenda.mockResolvedValue([
+      {
+        id: 'base-1',
+        decision: 'registrar',
+        estado: 'vigente',
+        acreedorNombre: 'Banco Base SA',
+        acreedorDocumento: '900111111',
+        levantamientoEntidad: null,
+        createdAt: '2026-09-07T00:00:00Z',
+      },
+      {
+        id: 'complementaria-1',
+        decision: 'levantar',
+        estado: 'vigente',
+        acreedorNombre: null,
+        acreedorDocumento: null,
+        levantamientoEntidad: 'Notaría 10',
+        createdAt: '2026-09-07T00:05:00Z',
+      },
+    ] as never);
+
+    render(
+      <PrendaForm
+        instanceId="abc"
+        decisions={['registrar']}
+        embeddedInWizard
+        permiteAccionComplementaria
+      />,
+    );
+
+    const checkbox = await screen.findByRole('switch', {
+      name: /¿También necesitas levantar una prenda en esta radicación\?/i,
+    });
+    await waitFor(() => expect(checkbox).toBeChecked());
+    expect(
+      await screen.findByLabelText('Entidad ante la que se levantó', { exact: false }),
+    ).toHaveValue('Notaría 10');
   });
 });

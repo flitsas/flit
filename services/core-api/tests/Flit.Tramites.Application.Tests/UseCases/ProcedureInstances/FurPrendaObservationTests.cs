@@ -143,15 +143,27 @@ public sealed class FurPrendaObservationTests
     // ── Levantamiento con entidad: el trámite dedicado declara DÓNDE se hizo ─────────────────────
 
     [Fact]
-    public void Compose_Levantamiento_ConEntidad_DeclaraDondeSeHizo()
+    public void Compose_Levantamiento_ConEntidadYAcreedor_DeclaraDondeYAFavorDeQuien()
     {
-        // El acreedor ya lo nombra el numeral 20 «A FAVOR DE»; repetirlo en el recuadro gastaba
-        // renglones sin añadir información. Lo que falta decir es ante quién se levantó.
+        // Corrección QA: el numeral 20 «A FAVOR DE» solo tiene espacio para el NOMBRE del acreedor,
+        // sin documento — antes el recuadro se cortaba en la entidad y el NIT no quedaba escrito en
+        // ningún lugar del FUR. Ahora el recuadro es quien lo declara.
         var texto = FurPrendaObservation.Compose(
             FurPrendaMarking.Levantamiento, "BANCO SANTANDER COLOMBIA S.A.", "890903938",
             levantamientoEntidad: "NOTARÍA 15 DE MEDELLÍN");
 
-        texto.Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+        texto.Should().Be(
+            "Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de BANCO SANTANDER COLOMBIA S.A. identificado con número de documento 890903938");
+    }
+
+    [Fact]
+    public void Compose_Levantamiento_ConEntidadYAcreedorSinDocumento_OmiteElSufijoVacio()
+    {
+        var texto = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, "FONDEICON", null,
+            levantamientoEntidad: "NOTARÍA 15 DE MEDELLÍN");
+
+        texto.Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de FONDEICON");
     }
 
     [Theory]
@@ -168,22 +180,23 @@ public sealed class FurPrendaObservationTests
     }
 
     [Fact]
-    public void Compose_Levantamiento_ConEntidadYSinAcreedor_SigueDeclarando()
+    public void Compose_Levantamiento_ConEntidadYSinAcreedor_SoloDeclaraLaEntidad()
     {
-        // La entidad basta para que el recuadro diga algo: la casilla 12 ya no queda muda aunque el
-        // acreedor falte (el gate lo exige aparte, pero el documento no debe salir en blanco).
+        // Sin acreedor persistido (dato legado o flujo que no lo captura), el recuadro conserva el
+        // literal de solo-entidad: no inventa un beneficiario que no existe.
         FurPrendaObservation.Compose(
             FurPrendaMarking.Levantamiento, null, null, "NOTARÍA 15 DE MEDELLÍN")
             .Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
     }
 
     [Fact]
-    public void Compose_Ambos_ConEntidad_UsaLaEntidadSoloEnElLevantamiento()
+    public void Compose_Ambos_ConEntidad_DeclaraElBeneficiarioEnAmbosBloques()
     {
         var texto = FurPrendaObservation.Compose(
             FurPrendaMarking.Ambos, "BANCO XYZ S.A.", "890900608", "NOTARÍA 15 DE MEDELLÍN");
 
-        texto.Should().StartWith("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+        texto.Should().StartWith(
+            "Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
         texto.Should().Contain("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 }

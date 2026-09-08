@@ -184,7 +184,7 @@ const DETALLE = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getInstance.mockResolvedValue(DETALLE);
-  mocks.getPrenda.mockResolvedValue(null);
+  mocks.getPrenda.mockResolvedValue([]);
   mocks.getActors.mockResolvedValue([
     { rol: 'vendedor', tipoDocumento: 'CC', numeroDocumento: '111222', nombreCompleto: 'Ana Vendedora', email: 'ana@example.com', telefono: '3001112233', direccion: 'Calle 1 # 2-3', ciudad: 'Medellín' },
     { rol: 'comprador', tipoDocumento: 'CC', numeroDocumento: '333444', nombreCompleto: 'Beto Comprador', email: 'beto@example.com', telefono: '3004445566', direccion: 'Carrera 10 # 20-30', ciudad: 'Bogotá' },

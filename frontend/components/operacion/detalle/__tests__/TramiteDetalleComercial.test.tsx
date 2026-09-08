@@ -50,15 +50,18 @@ describe('TramiteDetalleComercial — estado lleno', () => {
       derechos: 212400,
       metodoPago: 'PSE — Bancolombia',
     });
-    client.getPrenda.mockResolvedValue({
-      id: 'prenda-1',
-      decision: 'sin_prenda',
-      estado: 'vigente',
-      acreedorNombre: null,
-      acreedorDocumento: null,
-      levantamientoEntidad: null,
-      createdAt: '2026-05-17T10:38:00Z',
-    });
+    // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY (0-2, una por familia).
+    client.getPrenda.mockResolvedValue([
+      {
+        id: 'prenda-1',
+        decision: 'sin_prenda',
+        estado: 'vigente',
+        acreedorNombre: null,
+        acreedorDocumento: null,
+        levantamientoEntidad: null,
+        createdAt: '2026-05-17T10:38:00Z',
+      },
+    ]);
 
     renderSeccion();
 
@@ -76,7 +79,7 @@ describe('TramiteDetalleComercial — estado lleno', () => {
 describe('TramiteDetalleComercial — trámite sin datos comerciales', () => {
   it('usa el estado vacío en vez de pintar la tarjeta con todos los campos en "—"', async () => {
     client.getCommercial.mockResolvedValue(NULO_COMERCIAL);
-    client.getPrenda.mockResolvedValue(null);
+    client.getPrenda.mockResolvedValue([]);
 
     renderSeccion();
 
@@ -100,7 +103,7 @@ describe('TramiteDetalleComercial — trámite sin datos comerciales', () => {
       derechos: null,
       metodoPago: null,
     });
-    client.getPrenda.mockResolvedValue(null);
+    client.getPrenda.mockResolvedValue([]);
 
     renderSeccion();
 
@@ -142,15 +145,17 @@ describe('TramiteDetalleComercial — fallo de una sola llamada', () => {
       metodoPago: null,
     });
     client.getPrenda.mockRejectedValueOnce(new Error('fallo de red'));
-    client.getPrenda.mockResolvedValueOnce({
-      id: 'p1',
-      decision: 'registrar',
-      estado: 'vigente',
-      acreedorNombre: 'Banco XYZ',
-      acreedorDocumento: '900123456',
-      levantamientoEntidad: null,
-      createdAt: '2026-01-01T00:00:00Z',
-    });
+    client.getPrenda.mockResolvedValueOnce([
+      {
+        id: 'p1',
+        decision: 'registrar',
+        estado: 'vigente',
+        acreedorNombre: 'Banco XYZ',
+        acreedorDocumento: '900123456',
+        levantamientoEntidad: null,
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ]);
 
     renderSeccion();
 
@@ -171,7 +176,7 @@ describe('TramiteDetalleComercial — cancelación al desmontar', () => {
         resolverComercial = resolve;
       }),
     );
-    client.getPrenda.mockResolvedValue(null);
+    client.getPrenda.mockResolvedValue([]);
 
     const { unmount } = renderSeccion();
     unmount();

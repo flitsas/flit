@@ -74,6 +74,38 @@ public static class PrendaGate
         IReadOnlyCollection<string> docTipos)
         => EvaluateNucleo(prendaVigente, docTipos, exigeAcreedorEnLevantamiento: true);
 
+    /// <summary>
+    /// ADR-0055 (HU #12129/captura dual) — misma regla que <see cref="EvaluateAccionUnica(ProcedureInstancePrenda?, IReadOnlyCollection{string})"/>,
+    /// pero evaluando el CONJUNTO de hechos vigentes (0 a 2, una por <c>AccionFamilia</c>) en vez de
+    /// uno solo: con la acción complementaria activa, PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA pueden
+    /// tener constitución y levantamiento vigentes a la vez, y CADA UNA necesita su propio documento
+    /// y acreedor completos para preparar el trámite — no basta con que uno de los dos esté completo.
+    ///
+    /// <para>Sin ninguna vigente, exige la decisión (igual que la sobrecarga de un solo hecho). Con al
+    /// menos una, evalúa cada una por separado y devuelve el primer código de error que encuentre
+    /// (orden estable por <c>CreatedAt</c> de <paramref name="vigentes"/>, que es responsabilidad del
+    /// llamador). La sobrecarga de un solo <see cref="ProcedureInstancePrenda"/> NO se toca — sigue
+    /// siendo la que usan los tipos que no admiten la complementaria y los tests existentes.</para>
+    /// </summary>
+    public static string? EvaluateAccionUnica(
+        IReadOnlyList<ProcedureInstancePrenda> vigentes,
+        IReadOnlyCollection<string> docTipos)
+    {
+        ArgumentNullException.ThrowIfNull(vigentes);
+
+        if (vigentes.Count == 0)
+            return TramiteEstadoErrores.PrendaDecisionRequerida;
+
+        foreach (var vigente in vigentes)
+        {
+            var error = EvaluateNucleo(vigente, docTipos, exigeAcreedorEnLevantamiento: true);
+            if (error is not null)
+                return error;
+        }
+
+        return null;
+    }
+
     private static string? EvaluateNucleo(
         ProcedureInstancePrenda? prendaVigente,
         IReadOnlyCollection<string> docTipos,
