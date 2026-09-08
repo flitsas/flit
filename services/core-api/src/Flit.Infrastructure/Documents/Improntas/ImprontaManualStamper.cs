@@ -166,9 +166,12 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
 
         if (multiOwner)
         {
-            var sharedMetaY = topY + EstimatePerSignerColumnHeight(sigFieldH);
+            // Hashes apilados en vertical (no uno por columna) + metas compartidas.
+            var cursor = topY + EstimateRubricRowHeight(sigFieldH);
+            DrawOwnerHashesVertical(
+                gfx, signers, 24, ref cursor, leftWidth - 24, metaFont, greyBrush);
             DrawSharedMetadata(
-                gfx, context, hashImpronta, 24, sharedMetaY, leftWidth - 24, metaFont, greyBrush);
+                gfx, context, hashImpronta, 24, cursor, leftWidth - 24, metaFont, greyBrush);
         }
 
         // Zona 3 — título azul; cuerpo Base64 RSA (legacy wrap 50).
@@ -186,8 +189,13 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
 
     private const int FirmaDigitalWrapWidth = 50;
 
-    private static double EstimatePerSignerColumnHeight(double sigFieldH) =>
-        sigFieldH + 4 + (2 * 8);
+    /// <summary>Solo la banda de rúbricas (multi-propietario: sin hash en columna).</summary>
+    private static double EstimateRubricRowHeight(double sigFieldH) =>
+        sigFieldH + 4;
+
+    /// <summary>Cada hash completo puede ocupar ~2 líneas a ancho del bloque izquierdo.</summary>
+    private static double EstimateOwnerHashesHeight(int signerCount) =>
+        Math.Max(1, signerCount) * (2 * 8);
 
     private static double EstimateSharedMetadataHeight() =>
         4 + (1 * 8) + (4 * 8);
@@ -198,6 +206,8 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             : $"Hash propietario: {hashPropietario ?? "-"}";
 
     internal static bool UsesSharedMetadataBlock(int signerCount) => signerCount > 1;
+
+    internal static bool StacksOwnerHashesVertically(int signerCount) => signerCount > 1;
 
     internal static double EstimateLayoutHeightForTest(int signerCount)
     {
@@ -221,8 +231,11 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             return sigFieldH + 4 + (2 * 8) + EstimateSharedMetadataHeight();
         }
 
-        // Varias columnas: fila de rúbricas + hashes por propietario; metas una sola vez debajo.
-        return EstimatePerSignerColumnHeight(sigFieldH) + EstimateSharedMetadataHeight() + 2;
+        // Fila de rúbricas + lista vertical de hashes + metas una sola vez.
+        return EstimateRubricRowHeight(sigFieldH)
+               + EstimateOwnerHashesHeight(signerCount)
+               + EstimateSharedMetadataHeight()
+               + 2;
     }
 
     private static double EstimateRightBlockHeight(string firmaDigital) =>
@@ -251,13 +264,31 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         var drew = DrawFurStyleSignature(gfx, signer, x, cursor, width, sigFieldH, fourActorLayout, greyBrush);
         cursor += (drew ? sigFieldH : Math.Min(sigFieldH, 16)) + 4;
 
-        // Hashes completos (sin Trunc); el resto puede partirse por ancho de columna.
+        // Multi: hashes van apilados debajo de la fila (DrawOwnerHashesVertical). Uno: hash + metas aquí.
+        if (multiOwner)
+            return;
+
         var hashWrap = Math.Max(compactLayout ? 32 : 48, (int)(width / 3.2));
         var hashLabel = FormatOwnerHashLabel(signerIndex, totalSigners, signer.HashPropietario);
         DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor, hashLabel, hashWrap);
+        DrawSharedMetadata(gfx, context, hashImpronta, x, cursor, width, metaFont, greyBrush);
+    }
 
-        if (!multiOwner)
-            DrawSharedMetadata(gfx, context, hashImpronta, x, cursor, width, metaFont, greyBrush);
+    private static void DrawOwnerHashesVertical(
+        XGraphics gfx,
+        List<ImprontaManualSigner> signers,
+        double x,
+        ref double cursor,
+        double width,
+        XFont metaFont,
+        XBrush greyBrush)
+    {
+        var hashWrap = Math.Max(48, (int)(width / 3.2));
+        for (var i = 0; i < signers.Count; i++)
+        {
+            var label = FormatOwnerHashLabel(i, signers.Count, signers[i].HashPropietario);
+            DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor, label, hashWrap);
+        }
     }
 
     private static void DrawSharedMetadata(

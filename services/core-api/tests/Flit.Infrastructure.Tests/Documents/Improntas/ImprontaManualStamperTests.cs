@@ -58,6 +58,14 @@ public sealed class ImprontaManualStamperTests
     }
 
     [Fact]
+    public void StacksOwnerHashesVertically_IsTrueWhenMultipleSigners()
+    {
+        ImprontaManualStamper.StacksOwnerHashesVertically(1).Should().BeFalse();
+        ImprontaManualStamper.StacksOwnerHashesVertically(2).Should().BeTrue();
+        ImprontaManualStamper.StacksOwnerHashesVertically(4).Should().BeTrue();
+    }
+
+    [Fact]
     public void EstimateLayoutHeight_MultiOwner_IsShorterThanLegacyPerColumnRepeat()
     {
         ImprontaManualStamper.EstimateLayoutHeightForTest(2)
