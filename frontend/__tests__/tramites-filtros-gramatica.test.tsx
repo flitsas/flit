@@ -315,16 +315,24 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
     );
   });
 
-  it('el sentido se rotula según el tipo de dato: una fecha no se ordena de A a Z', async () => {
+  it('el sentido se rotula según el tipo de dato: ni una fecha ni un número se ordenan de A a Z', async () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
     await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
     const menu = screen.getByRole('menu', { name: /Ordenar por, en Radicado/ });
 
-    // El radicado es texto; las dos fechas apiladas, no. Rotularlas igual obliga a adivinar qué
-    // hace la flecha en cada fila del menú.
-    expect(within(menu).getByRole('menuitemradio', { name: 'Radicado: A-Z' })).toBeInTheDocument();
+    // Tres tipos de dato, tres rótulos. Rotularlos igual obliga a adivinar qué hace la flecha en
+    // cada fila del menú. Desde la HU #12154 el radicado es un NÚMERO: «A-Z» sobre un número no
+    // le dice al usuario si el 10 va antes o después del 9.
+    expect(
+      within(menu).getByRole('menuitemradio', { name: 'Radicado: Menor a mayor' }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole('menuitemradio', { name: 'Radicado: Mayor a menor' }),
+    ).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitemradio', { name: /Radicado: A-Z/ })).toBeNull();
+
     expect(
       within(menu).getByRole('menuitemradio', { name: 'Fecha de creación: Más antigua' }),
     ).toBeInTheDocument();

@@ -308,8 +308,10 @@ export interface TramitesExportField {
   /**
    * Cómo se LEE el sentido del orden en el desplegable de la cabecera. Una fecha ascendente no es
    * «A-Z», es «más antigua primero»: etiquetar las dos igual obliga a adivinar qué hace la flecha.
+   * Desde la HU #12154 hay un tercer caso: el radicado es un NÚMERO, y «A-Z» sobre un número no
+   * significa nada — se ordena de menor a mayor, no alfabéticamente.
    */
-  sortKind?: 'texto' | 'fecha';
+  sortKind?: 'texto' | 'fecha' | 'numero';
 }
 
 /** Texto para Excel: lo que la tabla pinta como «—» aquí es celda vacía, no un guion. */
@@ -399,7 +401,11 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   radicado: [
     // Ancho de la columna en el .xlsx. La celda va como TEXTO a proposito: como numero, Excel
     // le mete separador de miles (4.571) y deja de leerse como un identificador.
-    { ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 12), sort: 'radicado' },
+    {
+      ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 12),
+      sort: 'radicado',
+      sortKind: 'numero',
+    },
     apilado(CAMPO_FECHA_CREACION, 'fechaCreacion'),
     apilado(CAMPO_FECHA_ACTUALIZACION, 'fechaActualizacion'),
   ],
@@ -475,7 +481,7 @@ export interface TramitesSortOption {
   id: string;
   label: string;
   sort: string;
-  kind: 'texto' | 'fecha';
+  kind: 'texto' | 'fecha' | 'numero';
 }
 
 /**
