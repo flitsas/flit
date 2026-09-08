@@ -495,6 +495,36 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             rsa.ExportRSAPublicKeyPem());
     }
 
+    /// <summary>
+    /// Verifica la firma RSA-SHA256 PKCS#1 del hash del documento (HU #12148). Solo clave pública.
+    /// </summary>
+    public static bool VerifyFirmaDigital(string publicKeyPem, string documentHash, string signatureBase64)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(publicKeyPem);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentHash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(signatureBase64);
+
+        try
+        {
+            using var rsa = RSA.Create();
+            rsa.ImportFromPem(publicKeyPem);
+            var signature = Convert.FromBase64String(signatureBase64);
+            return rsa.VerifyData(
+                Encoding.UTF8.GetBytes(documentHash),
+                signature,
+                HashAlgorithmName.SHA256,
+                RSASignaturePadding.Pkcs1);
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
     private static string Sha256Hex(byte[] bytes) =>
         Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 

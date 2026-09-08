@@ -99,6 +99,7 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   [OT_ADM_DOCK.usuarios]: "usuarios",
   [OT_ADM_DOCK.reportes]: "reportes",
   [OT_ADM_DOCK.mandatos]: "administracion",
+  [OT_ADM_DOCK.imprintValidation]: "administracion",
   rbac: "administradores",
   auditoria: "administradores",
   "log-qx": "integraciones",

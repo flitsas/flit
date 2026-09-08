@@ -6974,9 +6974,11 @@ namespace Flit.Infrastructure.Migrations
 
                     b.Property<string>("ReferenceNumber")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
-                        .HasColumnName("reference_number");
+                        .HasColumnName("reference_number")
+                        .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')::text");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -7079,9 +7081,9 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId", "Plate")
                         .HasDatabaseName("ix_procedure_instances_tenant_id_plate");
 
-                    b.HasIndex("TenantId", "ReferenceNumber")
+                    b.HasIndex("ReferenceNumber")
                         .IsUnique()
-                        .HasDatabaseName("uq_procedure_instances_tenant_reference");
+                        .HasDatabaseName("uq_procedure_instances_reference");
 
                     b.HasIndex("TenantId", "UpdatedAt")
                         .HasDatabaseName("ix_procedure_instances_tenant_id_updated_at");

@@ -236,6 +236,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — auditoría de impronta manual firmada (HU #12116, paridad vehicle_signature_imprints)
     public DbSet<VehicleSignatureImprint> VehicleSignatureImprints => Set<VehicleSignatureImprint>();
 
+    // Trámites — log append-only de validaciones OT de firma de impronta (HU #12148)
+    public DbSet<ImprintSignatureValidation> ImprintSignatureValidations => Set<ImprintSignatureValidation>();
+
     // Trámites — outbox de eventos de validación de identidad (HU #10233, fase 2 event-driven)
     public DbSet<IdentityValidationOutbox> IdentityValidationOutbox => Set<IdentityValidationOutbox>();
 

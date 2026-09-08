@@ -1069,6 +1069,177 @@ paths:
         "200":
           description: Perfil actualizado.
 
+  /api/v1/admin/ot/imprint-signatures:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListImprintSignatures
+      summary: Lista improntas firmadas por placa (HU #12148)
+      description: >
+        Consulta auditorías de firma digital de impronta manual asociadas a la placa
+        (sin filtrar por tenant: la firma es del documento). No expone private_key.
+        Requiere rol SuperAdmin u ot_admin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: placa
+          in: query
+          required: true
+          schema: { type: string }
+          description: Placa del vehículo (normalización Trim+Upper en servidor).
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Obligatorio para SuperAdmin — resuelve el tenant OT dueño del organismo
+            (mismo patrón que /admin/ot/requirements). ot_admin ignora el parámetro.
+      responses:
+        "200":
+          description: Improntas firmadas encontradas.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ImprintSignatureItem"
+        "400":
+          description: Falta query placa.
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+
+  /api/v1/admin/ot/imprint-signatures/{id}/validate:
+    post:
+      tags: [Admin · OT]
+      operationId: adminOtValidateImprintSignature
+      summary: Valida firma digital de impronta manual (HU #12148)
+      description: >
+        Verifica la firma digital pegada (Base64 del PDF) contra public_key + document_hash
+        de la impronta y persiste el resultado en tramites.imprint_signature_validations.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de tramites.vehicle_signature_imprints.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Obligatorio para SuperAdmin — tenant OT del hub. ot_admin ignora el parámetro.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signature]
+              properties:
+                signature:
+                  type: string
+                  description: Firma digital Base64 pegada desde el PDF (se normalizan espacios/saltos).
+      responses:
+        "200":
+          description: Validación ejecutada (valid o invalid).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImprintSignatureValidationResult"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+        "404":
+          description: Impronta firmada no encontrada (not_found).
+
+  /api/v1/admin/ot/imprint-signatures/{id}/preview-url:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtGetImprintSignaturePreviewUrl
+      summary: URL de previsualización del PDF firmado de impronta (HU #12173)
+      description: >
+        Emite una URL presignada (Content-Disposition inline) del PDF firmado.
+        Prefiere signed_storage_path; si falta, usa el adjunto vigente (attachmentId).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id de tramites.vehicle_signature_imprints.
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Obligatorio para SuperAdmin — tenant OT del hub. ot_admin ignora el parámetro.
+      responses:
+        "200":
+          description: URL de previsualización.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expiresAt]
+                properties:
+                  url: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+        "404":
+          description: Impronta no encontrada o PDF no disponible.
+        "503":
+          description: Storage no disponible.
+
+  /api/v1/admin/ot/imprint-signatures/{id}/validations:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListImprintSignatureValidations
+      summary: Historial de validaciones de firma de impronta (HU #12176)
+      description: >
+        Lista la bitácora append-only de tramites.imprint_signature_validations
+        para la impronta, ordenada por validatedAt DESC.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Historial (puede ser vacío).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ImprintSignatureValidationSummary"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol SuperAdmin u ot_admin.
+        "404":
+          description: Impronta no encontrada.
+
   /api/v1/admin/transit-office-tenants/index:
     get:
       tags: [Admin · Tenants OT]
@@ -8382,6 +8553,67 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
       required: [data, totalCount, page, pageSize]
+
+    ImprintSignatureItem:
+      type: object
+      description: >
+        Auditoría de impronta manual firmada (tramites.vehicle_signature_imprints).
+        Deliberadamente NO incluye private_key (HU #12148).
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid }
+        placa: { type: string }
+        moduleCode: { type: string }
+        attachmentId: { type: string, format: uuid, nullable: true }
+        publicKey: { type: string }
+        documentHash: { type: string }
+        signature: { type: string }
+        signedAt: { type: string, format: date-time }
+        wasSignedWithoutOwnerSignature: { type: boolean }
+        signedStoragePath: { type: string, nullable: true }
+        signedSha256: { type: string, nullable: true }
+        signedSizeBytes: { type: integer, format: int64, nullable: true }
+        signedFilename: { type: string, nullable: true }
+        deletedAt: { type: string, format: date-time, nullable: true }
+        lastValidation:
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/ImprintSignatureValidationSummary"
+          nullable: true
+          description: Última fila de bitácora (HU #12176); null si nunca se validó.
+      required:
+        [id, tenantId, procedureInstanceId, placa, moduleCode, publicKey, documentHash,
+         signature, signedAt, wasSignedWithoutOwnerSignature]
+
+    ImprintSignatureValidationSummary:
+      type: object
+      description: Fila de tramites.imprint_signature_validations (HU #12176 / #12177).
+      properties:
+        id: { type: string, format: uuid }
+        result:
+          type: string
+          enum: [valid, invalid, not_found]
+        failureReason: { type: string, nullable: true }
+        validatedAt: { type: string, format: date-time }
+        validatedBy: { type: string, format: uuid }
+        placa: { type: string }
+        validatedByEmail: { type: string, nullable: true, description: Correo del validador (resuelto en lectura). }
+        validatedByRole: { type: string, nullable: true, description: Nombre/código de rol visible del validador. }
+      required: [id, result, validatedAt, validatedBy, placa]
+
+    ImprintSignatureValidationResult:
+      type: object
+      description: Resultado de POST /admin/ot/imprint-signatures/{id}/validate (HU #12148).
+      properties:
+        validationId: { type: string, format: uuid }
+        vehicleSignatureImprintId: { type: string, format: uuid }
+        result:
+          type: string
+          enum: [valid, invalid, not_found]
+        failureReason: { type: string, nullable: true }
+        validatedAt: { type: string, format: date-time }
+      required: [vehicleSignatureImprintId, result, validatedAt]
 
     ImprontaGenerationItem:
       type: object

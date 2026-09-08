@@ -107,6 +107,8 @@ public static class InfrastructureExtensions
             DeferredSignatureMarkRepository>();
         services.AddScoped<Flit.Tramites.Domain.Repositories.IVehicleSignatureImprintRepository,
             VehicleSignatureImprintRepository>();
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IImprintSignatureValidationRepository,
+            ImprintSignatureValidationRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
@@ -209,6 +211,8 @@ public static class InfrastructureExtensions
         services.AddSingleton<IFurTemplateResolver, Documents.Fur.VehicleClassificationFurResolver>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
         services.AddSingleton<IImprontaManualStamper, Documents.Improntas.ImprontaManualStamper>();
+        services.AddSingleton<Flit.Tramites.Application.Documents.IImprontaManualSignatureVerifier,
+            Documents.Improntas.ImprontaManualSignatureVerifier>();
         // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();

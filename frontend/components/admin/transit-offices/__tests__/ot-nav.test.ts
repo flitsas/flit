@@ -16,6 +16,13 @@ describe("ot-nav — refactor adminOT", () => {
     expect(tab?.label).toBe("Mandatos");
   });
 
+  it("incluye el tab 'imprint-validation' en OT_HUB_TABS", () => {
+    const tab = OT_HUB_TABS.find((t) => t.id === "imprint-validation");
+    expect(tab).toBeDefined();
+    expect(tab?.label).toBe("Validar impronta");
+    expect(tab?.segment).toBe("imprint-validation");
+  });
+
   it("incluye el tab 'usuarios' en OT_HUB_TABS", () => {
     const tab = OT_HUB_TABS.find((t) => t.id === "usuarios");
     expect(tab).toBeDefined();
@@ -27,6 +34,12 @@ describe("ot-nav — refactor adminOT", () => {
     expect(OT_HUB_TABS.find((t) => t.id === "client-procedures")?.label).toBe("Trámites");
     expect(OT_HUB_TABS.find((t) => t.id === "plate-ranges")?.label).toBe("Preasignación");
     expect(OT_HUB_TABS.find((t) => t.id === "reportes")?.label).toBe("Reportes");
+  });
+
+  it("otHubModulePath arma la ruta del tab imprint-validation", () => {
+    expect(otHubModulePath("ot-1", "imprint-validation")).toBe(
+      "/admin/transit-offices/ot-1/imprint-validation",
+    );
   });
 
   it("otHubModulePath arma la ruta del tab usuarios", () => {

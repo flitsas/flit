@@ -1,6 +1,7 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Infrastructure.Persistence.Schemas;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Flit.Infrastructure.Persistence.Configurations.Tramites;
@@ -23,7 +24,24 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
-        builder.Property(x => x.ReferenceNumber).HasMaxLength(30).IsRequired();
+        // HU #12151 — el radicado es un consecutivo GLOBAL que asigna Postgres
+        // (tramites.procedure_instance_reference_seq, ver DDL 103). Tres piezas, y las tres hacen falta:
+        //
+        //  · HasDefaultValueSql   → declara de dónde sale el valor.
+        //  · ValueGeneratedOnAdd  → hace que EF lo LEA de vuelta tras el INSERT (RETURNING).
+        //  · BeforeSaveBehavior=Ignore → hace que EF NUNCA mande la columna en el INSERT.
+        //
+        // El tercero es el que no es opcional y el que no se ve venir: `CreateProcedureInstanceCommand`
+        // construye la entidad con `ReferenceNumber = string.Empty`, y una cadena vacía NO es ausencia
+        // de valor para Postgres. Sin `Ignore`, EF enviaría '' , el DEFAULT no se dispararía, y el
+        // segundo trámite reventaría contra el índice único (además de violar el CHECK numérico).
+        // Verificado contra una copia de la base de dev antes de escribir esto.
+        builder.Property(x => x.ReferenceNumber)
+            .HasMaxLength(30)
+            .IsRequired()
+            .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')::text")
+            .ValueGeneratedOnAdd()
+            .Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
         // N 03 (ADR-0022): estados de negocio en español (TramiteEstado); default = borrador.
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("borrador");
 
@@ -125,9 +143,11 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasDatabaseName("ix_procedure_instances_mandate_signer_id")
             .HasFilter("mandate_signer_id IS NOT NULL");
 
-        builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
+        // HU #12151 — sin tenant_id en la llave. Esa era justo la causa de que dos compañías
+        // pudieran compartir radicado (137 filas de dev lo hacían).
+        builder.HasIndex(x => x.ReferenceNumber)
             .IsUnique()
-            .HasDatabaseName("uq_procedure_instances_tenant_reference");
+            .HasDatabaseName("uq_procedure_instances_reference");
 
         // ICT — origen/referencia externa para materialización idempotente. Columnas agregadas por
         // migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapean para el modelo

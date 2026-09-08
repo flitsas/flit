@@ -185,6 +185,17 @@ describe('HU #12104 — AC4: los valores llegan tipados', () => {
     expect(raw).toEqual({ year: 2026, month: 6, day: 17 });
   });
 
+  it('HU #12154 — el consecutivo va como TEXTO, no como número', () => {
+    // Decisión consciente: como número, Excel le mete separador de miles y el 4571 se lee «4.571»,
+    // que ya no parece un identificador. Como texto sale exacto. Si alguien lo «mejora» a numérico
+    // para que ordene en Excel, esta prueba se lo dice.
+    const conConsecutivo = makeInstance(1, { referenceNumber: '4571' });
+
+    expect(campo('radicado').raw(conConsecutivo)).toBe('4571');
+    expect(campo('radicado').value(conConsecutivo)).toBe('4571');
+    expect(typeof campo('radicado').raw(conConsecutivo)).toBe('string');
+  });
+
   it('una celda sin dato va VACÍA, nunca con un guion', () => {
     const sinVin = makeInstance(1, { vin: null, updatedAt: null });
     expect(campo('vin').raw(sinVin)).toBeNull();

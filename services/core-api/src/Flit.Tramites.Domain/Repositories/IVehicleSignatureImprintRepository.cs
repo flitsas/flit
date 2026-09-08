@@ -28,4 +28,19 @@ public interface IVehicleSignatureImprintRepository
     IReadOnlySet<string> SoftDeleteByAttachmentIds(
         IEnumerable<Guid> attachmentIds,
         DateTimeOffset deletedAt);
+
+    /// <summary>
+    /// Improntas firmadas cuya instancia tiene la placa indicada (Trim+Upper).
+    /// Incluye soft-deleted. Sin filtro de tenant: la firma es del documento, no del OT.
+    /// </summary>
+    Task<IReadOnlyList<VehicleSignatureImprintListRow>> ListByPlacaAsync(
+        string placa,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene una fila por id, incluyendo soft-deleted (validación histórica).
+    /// </summary>
+    Task<VehicleSignatureImprint?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 }

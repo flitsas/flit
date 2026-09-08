@@ -1,6 +1,7 @@
 using Flit.Tramites.Application.UseCases.Catalogs;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
 using Flit.Tramites.Domain.Services;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -280,6 +281,12 @@ public static class DependencyInjection
         // HU #11462 — resolución de destinatarios del aviso de cambio de estado (ADR-0045).
         services.AddScoped<Notifications.ITramiteNotificationRecipientResolver,
             Notifications.TramiteNotificationRecipientResolver>();
+
+        // HU #12148 — validación OT de firma digital de impronta manual.
+        services.AddScoped<ListImprintSignaturesByPlacaHandler>();
+        services.AddScoped<ValidateImprintSignatureHandler>();
+        services.AddScoped<GetImprintSignaturePreviewUrlHandler>();
+        services.AddScoped<ListImprintSignatureValidationsHandler>();
 
         return services;
     }
