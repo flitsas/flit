@@ -278,6 +278,7 @@ app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar conso
 app.MapAdminTramiteEstadoEndpoints(); // HU #12159 — cambiar estado sin restricción de flujo (admin)
 app.MapAdminTramiteAnularEndpoints(); // HU #12160 — anular desde cualquier estado salvo Aprobado/Revocado
 app.MapAdminTramiteReenviarValidacionEndpoints(); // HU #12161 — reenviar validación de identidad (admin, correo opcional)
+app.MapAdminTramiteReasignarGestorEndpoints(); // HU #12162 — reasignar gestor (AssignedToUserId) + selector de disponibles
 app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();

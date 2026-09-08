@@ -59,7 +59,12 @@ public sealed record InstanceSummaryDto(
                                               // carga ListWithSummaryGraphAsync; lo único que cuesta una consulta extra es el
                                               // nombre del gestor (resuelto en lote, nunca por fila).
     DateTimeOffset? UpdatedAt = null,         // última modificación; null si nunca se modificó tras crearse
-    string? GestorNombre = null,              // persona que radica (created_by_user_id → DisplayName)
+                                              // HU #12162 — "Gestor" ahora prioriza a QUIEN ES RESPONSABLE
+                                              // HOY (assigned_to_user_id); solo cae a QUIEN RADICÓ
+                                              // (created_by_user_id) cuando el trámite nunca se reasignó.
+                                              // Ver la nota de colisión terminológica en
+                                              // ListProcedureInstancesHandler.HandleAsync.
+    string? GestorNombre = null,
     string Fuente = TramiteFuente.Dashboard,  // dashboard | integracion | migrado (ver TramiteFuente)
                                               // Cómo queda ACREDITADA cada parte (ajuste del PO): pendiente | firmado |
                                               // rechazado, por validación de identidad o firma del baúl — NO por la firma
@@ -102,6 +107,18 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     /// "Gestor" lo necesita en los dos listados. El aislamiento por compañía lo sigue garantizando
     /// <paramref name="tenantId"/>, que es lo único que llega al <c>WHERE</c>.
     /// </para>
+    /// <para>
+    /// <b>HU #12162 — colisión terminológica de "gestor" (nota del database-agent, resuelta en la capa
+    /// de aplicación):</b> antes de la HU #12162 esta columna solo existía como "quien radica"
+    /// (<c>CreatedByUserId</c>, auditoría inmutable). Con la reasignación administrativa aparece
+    /// <c>ProcedureInstance.AssignedToUserId</c> — quien es responsable HOY —, y "gestor" pasa a tener
+    /// dos acepciones posibles. Se resuelve así: si <c>AssignedToUserId</c> tiene valor, ESE es el
+    /// "gestor" que expone <c>GestorNombre</c>; si es <c>null</c> (trámite nunca reasignado), la columna
+    /// sigue cayendo a <c>CreatedByUserId</c> como fallback de PRESENTACIÓN — el mismo criterio que ya
+    /// fijó la migración de esquema al no backfillear la columna nueva (ver XML doc de
+    /// <c>ProcedureInstance.AssignedToUserId</c>). La reasignación en sí (<c>AdminReasignarGestorHandler</c>,
+    /// HU #12162) SIEMPRE opera sobre <c>AssignedToUserId</c>, nunca sobre <c>CreatedByUserId</c>.
+    /// </para>
     /// </summary>
     public async Task<IReadOnlyList<InstanceSummaryDto>> HandleAsync(
         Guid? tenantId, CancellationToken ct = default)
@@ -114,9 +131,12 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         IReadOnlyDictionary<Guid, string> nombres =
             await repo.GetTenantNamesAsync(instances.Select(i => i.TenantId).ToList(), ct) ?? EmptyNames;
 
-        // Nombre de la persona que radica, en lote por los created_by_user_id del listado (sin N+1).
+        // Nombre del "gestor" efectivo de cada fila (HU #12162 — ver nota de colisión terminológica de
+        // arriba): AssignedToUserId si el trámite ya fue reasignado, si no CreatedByUserId (quien
+        // radica). En lote por los ids EFECTIVOS del listado (sin N+1).
         IReadOnlyDictionary<Guid, string> gestores =
-            await repo.GetUserDisplayNamesAsync(instances.Select(i => i.CreatedByUserId).ToList(), ct)
+            await repo.GetUserDisplayNamesAsync(
+                instances.Select(i => i.AssignedToUserId ?? i.CreatedByUserId).ToList(), ct)
             ?? EmptyNames;
 
         // Identidad PER-PERSONA (documento) para los chips/progreso: se referencia la identidad vigente de
@@ -140,7 +160,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
                 e,
                 IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
-                gestores.GetValueOrDefault(e.CreatedByUserId),
+                // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
+                gestores.GetValueOrDefault(e.AssignedToUserId ?? e.CreatedByUserId),
                 firmaBaul))
             .ToList();
     }
