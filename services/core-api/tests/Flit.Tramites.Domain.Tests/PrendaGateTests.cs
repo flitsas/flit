@@ -410,4 +410,60 @@ public sealed class PrendaGateTests
             Prenda(PrendaDecision.Levantar), docTipos: [PrendaDocTipos.Levantamiento])
             .Should().BeNull();
     }
+
+    // ── ADR-0055 (HU #12129) — captura dual: EvaluateAccionUnica sobre el CONJUNTO de vigentes ──
+
+    [Fact]
+    public void AccionUnicaLista_SinVigentes_Bloquea()
+    {
+        PrendaGate.EvaluateAccionUnica(vigentes: [], docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void AccionUnicaLista_UnaVigenteCompleta_EquivaleALaSobrecargaDeUnaSola()
+    {
+        // Con un solo hecho vigente, la lista debe comportarse exactamente igual que la sobrecarga
+        // original — no es un camino nuevo, es el mismo núcleo aplicado a 1 elemento.
+        var vigente = PrendaConAcreedor(PrendaDecision.Registrar, "BANCO XYZ", "890900608");
+
+        PrendaGate.EvaluateAccionUnica([vigente], docTipos: [PrendaDocTipos.Registro])
+            .Should().BeNull()
+            .And.Be(PrendaGate.EvaluateAccionUnica(vigente, docTipos: [PrendaDocTipos.Registro]));
+    }
+
+    [Fact]
+    public void AccionUnicaLista_DosVigentesCompletas_Avanza()
+    {
+        // El escenario central de la captura dual: constitución Y levantamiento vigentes a la vez,
+        // cada una con su propio acreedor y su propio documento. Ninguna de las dos "tapa" a la otra.
+        var constitucion = PrendaConAcreedor(PrendaDecision.Registrar, "BANCO XYZ", "890900608");
+        var levantamiento = PrendaLevantamientoCompleta("NOTARÍA 15 DE MEDELLÍN");
+
+        PrendaGate.EvaluateAccionUnica(
+            [constitucion, levantamiento],
+            docTipos: [PrendaDocTipos.Registro, PrendaDocTipos.Levantamiento])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void AccionUnicaLista_SegundaVigenteIncompleta_Bloquea()
+    {
+        // La primera está completa; la segunda (levantamiento) no trae acreedor. El gate debe
+        // detectar el hueco del SEGUNDO hecho, no darse por satisfecho porque el primero ya pasó.
+        var constitucion = PrendaConAcreedor(PrendaDecision.Registrar, "BANCO XYZ", "890900608");
+        var levantamientoIncompleto = Prenda(PrendaDecision.Levantar);
+
+        PrendaGate.EvaluateAccionUnica(
+            [constitucion, levantamientoIncompleto],
+            docTipos: [PrendaDocTipos.Registro, PrendaDocTipos.Levantamiento])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Fact]
+    public void AccionUnicaLista_LanzaSiLaListaEsNull()
+    {
+        Action act = () => PrendaGate.EvaluateAccionUnica(vigentes: null!, docTipos: []);
+        act.Should().Throw<ArgumentNullException>();
+    }
 }

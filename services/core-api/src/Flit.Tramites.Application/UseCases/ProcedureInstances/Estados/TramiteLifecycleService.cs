@@ -768,9 +768,25 @@ public sealed class TramiteLifecycleService(
         // `PrendaGate` ya tenía el núcleo preparado para esto; lo que faltaba era llamarlo.
         if (ProcedureTypeLayers.EsPrendaDeAccionUnica(instance.TypeCode))
         {
+            // ADR-0055 (HU #12129) — con la acción complementaria activa puede haber hasta DOS hechos
+            // vigentes (constitución + levantamiento); cada uno necesita su propio documento/acreedor
+            // completos, así que el gate evalúa el CONJUNTO, no un solo `prendaVigente` (que además
+            // con dos filas vigentes ya no identifica de forma determinística cuál es "la" decisión).
+            var vigentes = _prendaRepo is null
+                ? []
+                : await _prendaRepo.GetVigentesAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false)
+                    ?? [];
+
+            var accionUnicaError = PrendaGate.EvaluateAccionUnica(vigentes, docTipos);
+
+            // El detalle del mensaje (p. ej. "falta el acreedor") debe señalar CUÁL de los hasta dos
+            // hechos lo dispara — se ubica reevaluando cada uno con la misma regla de un solo hecho.
+            var prendaDelError = vigentes.FirstOrDefault(v =>
+                PrendaGate.EvaluateAccionUnica(v, docTipos) == accionUnicaError);
+
             return MapPrendaGateResult(
-                PrendaGate.EvaluateAccionUnica(prenda, docTipos),
-                prenda,
+                accionUnicaError,
+                prendaDelError,
                 // El certificado no es opcional aquí aunque el OT no lo exija por configuración: es
                 // el soporte del acto que se está radicando, no un requisito añadido del organismo.
                 documentoExigido: true,
