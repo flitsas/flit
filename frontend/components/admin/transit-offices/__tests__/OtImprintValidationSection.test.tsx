@@ -271,6 +271,8 @@ describe("OtImprintValidationSection", () => {
         validatedAt: "2026-09-08T10:00:00Z",
         validatedBy: "22222222-2222-2222-2222-222222222222",
         placa: "ABC123",
+        validatedByEmail: "ot.admin@example.com",
+        validatedByRole: "Administrador OT",
       },
     ]);
 
@@ -287,5 +289,7 @@ describe("OtImprintValidationSection", () => {
     });
     expect(screen.getByLabelText("Estado: Inválida")).toBeInTheDocument();
     expect(screen.getByText("no coincide")).toBeInTheDocument();
+    expect(screen.getByText("ot.admin@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Administrador OT")).toBeInTheDocument();
   });
 });

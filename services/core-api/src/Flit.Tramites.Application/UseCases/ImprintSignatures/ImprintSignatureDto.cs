@@ -1,13 +1,15 @@
 namespace Flit.Tramites.Application.UseCases.ImprintSignatures;
 
-/// <summary>Resumen de una fila de bitácora (sin PII extra).</summary>
+/// <summary>Resumen de una fila de bitácora (sin PII extra más allá de email/rol del validador).</summary>
 public sealed record ImprintSignatureValidationSummaryDto(
     Guid Id,
     string Result,
     string? FailureReason,
     DateTimeOffset ValidatedAt,
     Guid ValidatedBy,
-    string Placa);
+    string Placa,
+    string? ValidatedByEmail = null,
+    string? ValidatedByRole = null);
 
 /// <summary>DTO de listado OT — nunca expone <c>private_key</c>.</summary>
 public sealed record ImprintSignatureDto(

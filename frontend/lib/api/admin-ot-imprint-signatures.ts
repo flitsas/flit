@@ -13,6 +13,8 @@ export interface ImprintSignatureValidationSummary {
   validatedAt: string;
   validatedBy: string;
   placa: string;
+  validatedByEmail?: string | null;
+  validatedByRole?: string | null;
 }
 
 /** Auditoría de impronta manual firmada. Deliberadamente NO incluye privateKey. */

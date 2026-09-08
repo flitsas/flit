@@ -8480,7 +8480,7 @@ components:
 
     ImprintSignatureValidationSummary:
       type: object
-      description: Fila de tramites.imprint_signature_validations (HU #12176).
+      description: Fila de tramites.imprint_signature_validations (HU #12176 / #12177).
       properties:
         id: { type: string, format: uuid }
         result:
@@ -8490,6 +8490,8 @@ components:
         validatedAt: { type: string, format: date-time }
         validatedBy: { type: string, format: uuid }
         placa: { type: string }
+        validatedByEmail: { type: string, nullable: true, description: Correo del validador (resuelto en lectura). }
+        validatedByRole: { type: string, nullable: true, description: Nombre/código de rol visible del validador. }
       required: [id, result, validatedAt, validatedBy, placa]
 
     ImprintSignatureValidationResult:

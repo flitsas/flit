@@ -360,10 +360,27 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
       {
         key: "validatedBy",
         header: "Usuario",
-        cellClassName: "font-mono text-[11px]",
-        render: (row) => (
-          <span title={row.validatedBy}>{shortHash(row.validatedBy.replaceAll("-", ""))}</span>
-        ),
+        render: (row) => {
+          const email = row.validatedByEmail?.trim();
+          const role = row.validatedByRole?.trim();
+          if (email || role) {
+            return (
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate text-xs text-[#162244] dark:text-white" title={email ?? undefined}>
+                  {email || "—"}
+                </span>
+                <span className="truncate text-[11px] text-[#59677D] dark:text-white/60" title={role ?? undefined}>
+                  {role || "—"}
+                </span>
+              </div>
+            );
+          }
+          return (
+            <span className="font-mono text-[11px]" title={row.validatedBy}>
+              {shortHash(row.validatedBy.replaceAll("-", ""))}
+            </span>
+          );
+        },
       },
     ],
     [],

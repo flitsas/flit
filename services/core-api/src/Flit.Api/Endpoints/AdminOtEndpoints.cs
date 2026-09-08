@@ -738,7 +738,10 @@ public static class AdminOtEndpoints
             },
             cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(new { data = result.Data });
+        var data = await EnrichImprintListLastValidationsAsync(
+            db, tenantId, result.Data, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data });
     }
 
     private static async Task<IResult> ValidateImprintSignatureAsync(
@@ -837,7 +840,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        var (_, scopeError) = await ResolveOtUserScopeAsync(
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
             httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
         if (scopeError is not null)
         {
@@ -853,7 +856,87 @@ public static class AdminOtEndpoints
             return Results.NotFound(new { error = "Impronta firmada no encontrada" });
         }
 
-        return Results.Ok(new { data = result.Data });
+        var data = await EnrichValidationSummariesAsync(
+            db, tenantId, result.Data, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data });
+    }
+
+    /// <summary>
+    /// Resuelve email y rol visible del validador para la bitácora OT (HU #12177).
+    /// Prefiere el rol del tenant OT del hub; si no hay, cualquier rol activo (p. ej. SuperAdmin).
+    /// </summary>
+    private static async Task<IReadOnlyList<ImprintSignatureValidationSummaryDto>> EnrichValidationSummariesAsync(
+        FlitDbContext db,
+        Guid scopeTenantId,
+        IReadOnlyList<ImprintSignatureValidationSummaryDto> rows,
+        CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0)
+            return rows;
+
+        var userIds = rows.Select(r => r.ValidatedBy).Where(id => id != Guid.Empty).Distinct().ToArray();
+        if (userIds.Length == 0)
+            return rows;
+
+        var emails = await db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var emailById = emails.ToDictionary(u => u.Id, u => u.Email);
+
+        var roleRows = await (
+            from a in db.UserRoleAssignments.AsNoTracking()
+            join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+            where a.DeletedAt == null && userIds.Contains(a.UserId)
+            select new { a.UserId, a.TenantId, RoleLabel = r.Name ?? r.Code, r.Code }
+        ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var roleByUser = new Dictionary<Guid, string>();
+        foreach (var group in roleRows.GroupBy(x => x.UserId))
+        {
+            var preferred = group.FirstOrDefault(x => x.TenantId == scopeTenantId)
+                ?? group.FirstOrDefault(x => string.Equals(x.Code, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+                ?? group.FirstOrDefault(x => string.Equals(x.Code, "ot_admin", StringComparison.OrdinalIgnoreCase))
+                ?? group.FirstOrDefault();
+            if (preferred is not null)
+                roleByUser[group.Key] = preferred.RoleLabel;
+        }
+
+        return rows.Select(row => row with
+        {
+            ValidatedByEmail = emailById.TryGetValue(row.ValidatedBy, out var email) ? email : null,
+            ValidatedByRole = roleByUser.TryGetValue(row.ValidatedBy, out var role) ? role : null,
+        }).ToList();
+    }
+
+    private static async Task<IReadOnlyList<ImprintSignatureDto>> EnrichImprintListLastValidationsAsync(
+        FlitDbContext db,
+        Guid scopeTenantId,
+        IReadOnlyList<ImprintSignatureDto> rows,
+        CancellationToken cancellationToken)
+    {
+        var summaries = rows
+            .Select(r => r.LastValidation)
+            .Where(v => v is not null)
+            .Cast<ImprintSignatureValidationSummaryDto>()
+            .ToList();
+        if (summaries.Count == 0)
+            return rows;
+
+        var enriched = await EnrichValidationSummariesAsync(db, scopeTenantId, summaries, cancellationToken)
+            .ConfigureAwait(false);
+        var byId = enriched.ToDictionary(v => v.Id);
+
+        return rows.Select(row =>
+        {
+            if (row.LastValidation is null)
+                return row;
+            return byId.TryGetValue(row.LastValidation.Id, out var last)
+                ? row with { LastValidation = last }
+                : row;
+        }).ToList();
     }
 
     private static async Task<IResult> ListWebhooksAsync(
