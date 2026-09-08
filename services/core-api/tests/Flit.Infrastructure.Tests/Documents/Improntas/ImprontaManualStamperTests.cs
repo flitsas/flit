@@ -217,4 +217,24 @@ public sealed class ImprontaManualStamperTests
         var b = ImprontaManualStamper.BuildFirmaDigital(hash);
         a.SignatureBase64.Should().NotBe(b.SignatureBase64);
     }
+
+    [Fact]
+    public void VerifyFirmaDigital_RoundTripWithBuildFirmaDigital_ReturnsTrue()
+    {
+        var hash = Convert.ToHexString(SHA256.HashData("round-trip-doc"u8.ToArray())).ToLowerInvariant();
+        var firma = ImprontaManualStamper.BuildFirmaDigital(hash);
+
+        ImprontaManualStamper.VerifyFirmaDigital(firma.PublicKeyPem, hash, firma.SignatureBase64)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void VerifyFirmaDigital_TamperedSignature_ReturnsFalse()
+    {
+        var hash = Convert.ToHexString(SHA256.HashData("tamper"u8.ToArray())).ToLowerInvariant();
+        var firma = ImprontaManualStamper.BuildFirmaDigital(hash);
+
+        ImprontaManualStamper.VerifyFirmaDigital(firma.PublicKeyPem, hash, firma.SignatureBase64 + "X")
+            .Should().BeFalse();
+    }
 }

@@ -1379,9 +1379,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
  * Si el gestor enciende la columna de desglose de un dato, éste deja de ofrecerse desde la celda
  * compuesta: si no, habría dos cabeceras distintas ordenando por lo mismo.</p>
  */
-const SENTIDO_ETIQUETA: Record<'texto' | 'fecha', { asc: string; desc: string }> = {
+const SENTIDO_ETIQUETA: Record<'texto' | 'fecha' | 'numero', { asc: string; desc: string }> = {
   texto: { asc: 'A-Z', desc: 'Z-A' },
   fecha: { asc: 'Más antigua', desc: 'Más reciente' },
+  // HU #12154 — el radicado dejó de ser TRM-2026-000123 para ser un número. «A-Z» sobre un número
+  // no dice nada: el usuario no sabe si el 10 va antes o después del 9.
+  numero: { asc: 'Menor a mayor', desc: 'Mayor a menor' },
 };
 
 function SortableHeaderCell({

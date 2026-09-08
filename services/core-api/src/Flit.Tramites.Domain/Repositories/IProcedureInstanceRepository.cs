@@ -348,14 +348,13 @@ public interface IProcedureInstanceRepository
     Task<int> CountByTenantAndYearAsync(Guid tenantId, int year, CancellationToken ct = default);
 
     /// <summary>
-    /// Inserta la instancia generando un <c>ReferenceNumber</c> único con formato
-    /// <c>TRM-{year}-{seq:D6}</c> a partir de MAX(seq) + 1 por (tenant, year). Si el insert
-    /// colisiona contra el constraint <c>uq_procedure_instances_tenant_reference</c> (creaciones
-    /// concurrentes), regenera el siguiente seq y reintenta. Si una FK no existe
-    /// (tenant/usuario/tipo) devuelve <c>ReferencedEntityMissing</c> (→ 422); si se agotan los
-    /// reintentos de referencia devuelve <c>ReferenceConflict</c> (→ 409).
+    /// Inserta la instancia. El <c>ReferenceNumber</c> NO se calcula aquí: desde la HU #12151 lo
+    /// asigna el <c>DEFAULT</c> de la columna, un consecutivo GLOBAL servido por la secuencia
+    /// <c>tramites.procedure_instance_reference_seq</c>. Al ser atómico no hay colisión que
+    /// reintentar. Si una FK no existe (tenant/usuario/tipo) devuelve
+    /// <c>ReferencedEntityMissing</c> (→ 422).
     /// </summary>
-    Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, int year, CancellationToken ct = default);
+    Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, CancellationToken ct = default);
 
     /// <summary>
     /// Resuelve el <c>FormField.Id</c> de un <paramref name="fieldKey"/> dentro del grafo

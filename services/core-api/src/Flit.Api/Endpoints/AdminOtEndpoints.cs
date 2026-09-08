@@ -22,6 +22,7 @@ using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
@@ -449,6 +450,44 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status429TooManyRequests);
 
+        group.MapGet("/imprint-signatures", ListImprintSignaturesAsync)
+            .WithName("AdminOtListImprintSignatures")
+            .WithSummary("Lista improntas firmadas por placa (HU #12148)")
+            .WithDescription("Consulta las auditorías de firma digital de impronta manual asociadas a la placa. "
+                + "No expone private_key.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/imprint-signatures/{id:guid}/validate", ValidateImprintSignatureAsync)
+            .WithName("AdminOtValidateImprintSignature")
+            .WithSummary("Valida la firma digital de una impronta manual (HU #12148)")
+            .WithDescription("Verifica RSA-SHA256 del hash registrado y persiste el resultado en bitácora append-only.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/imprint-signatures/{id:guid}/preview-url", GetImprintSignaturePreviewUrlAsync)
+            .WithName("AdminOtGetImprintSignaturePreviewUrl")
+            .WithSummary("URL de previsualización del PDF firmado de una impronta (HU #12173)")
+            .WithDescription("Presigned GET inline desde signed_storage_path o el adjunto vigente. No expone private_key.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status503ServiceUnavailable);
+
+        group.MapGet("/imprint-signatures/{id:guid}/validations", ListImprintSignatureValidationsAsync)
+            .WithName("AdminOtListImprintSignatureValidations")
+            .WithSummary("Historial de validaciones de firma de una impronta (HU #12176)")
+            .WithDescription("Bitácora append-only ordenada por validated_at DESC.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
@@ -667,6 +706,237 @@ public static class AdminOtEndpoints
     {
         var sub = user.FindFirstValue("sub");
         return Guid.TryParse(sub, out var userId) ? userId : null;
+    }
+
+    private static async Task<IResult> ListImprintSignaturesAsync(
+        HttpContext httpContext,
+        ListImprintSignaturesByPlacaHandler handler,
+        FlitDbContext db,
+        [FromQuery] string? placa,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        // SuperAdmin opera el hub OT con tenant de compañía en el JWT; el scope real es el
+        // tenant OT dueño del organismo (?transitOfficeId=), igual que requisitos/usuarios.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        if (string.IsNullOrWhiteSpace(placa))
+        {
+            return Results.BadRequest(new { error = "placa es obligatoria" });
+        }
+
+        var result = await handler.HandleAsync(
+            new ListImprintSignaturesByPlacaQuery
+            {
+                TenantId = tenantId,
+                Placa = placa,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var data = await EnrichImprintListLastValidationsAsync(
+            db, tenantId, result.Data, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data });
+    }
+
+    private static async Task<IResult> ValidateImprintSignatureAsync(
+        HttpContext httpContext,
+        Guid id,
+        ValidateImprintSignatureHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        [FromBody] ValidateImprintSignatureRequest? body,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var validatedBy = ResolveUserId(httpContext.User);
+        if (validatedBy is null)
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim sub" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Signature))
+        {
+            return Results.BadRequest(new { error = "signature es obligatoria (firma digital pegada desde el PDF)." });
+        }
+
+        var result = await handler.HandleAsync(
+            new ValidateImprintSignatureCommand
+            {
+                TenantId = tenantId,
+                VehicleSignatureImprintId = id,
+                ValidatedBy = validatedBy.Value,
+                ProvidedSignature = body.Signature,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Found)
+        {
+            return Results.NotFound(new
+            {
+                vehicleSignatureImprintId = result.VehicleSignatureImprintId,
+                result = result.Result,
+                failureReason = result.FailureReason,
+                validatedAt = result.ValidatedAt,
+            });
+        }
+
+        return Results.Ok(new
+        {
+            validationId = result.ValidationId,
+            vehicleSignatureImprintId = result.VehicleSignatureImprintId,
+            result = result.Result,
+            failureReason = result.FailureReason,
+            validatedAt = result.ValidatedAt,
+        });
+    }
+
+    private static async Task<IResult> GetImprintSignaturePreviewUrlAsync(
+        HttpContext httpContext,
+        Guid id,
+        GetImprintSignaturePreviewUrlHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (_, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var (preview, error) = await handler.HandleAsync(id, cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Impronta firmada no encontrada" }),
+            "file_missing" => Results.NotFound(new { error = "PDF de impronta no disponible" }),
+            "storage_unavailable" => Results.Json(
+                new { error = "storage_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            _ => Results.Ok(new { url = preview!.Url, expiresAt = preview.ExpiresAt }),
+        };
+    }
+
+    private static async Task<IResult> ListImprintSignatureValidationsAsync(
+        HttpContext httpContext,
+        Guid id,
+        ListImprintSignatureValidationsHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var result = await handler.HandleAsync(
+            new ListImprintSignatureValidationsQuery { VehicleSignatureImprintId = id },
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Found)
+        {
+            return Results.NotFound(new { error = "Impronta firmada no encontrada" });
+        }
+
+        var data = await EnrichValidationSummariesAsync(
+            db, tenantId, result.Data, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data });
+    }
+
+    /// <summary>
+    /// Resuelve email y rol visible del validador para la bitácora OT (HU #12177).
+    /// Prefiere el rol del tenant OT del hub; si no hay, cualquier rol activo (p. ej. SuperAdmin).
+    /// </summary>
+    private static async Task<IReadOnlyList<ImprintSignatureValidationSummaryDto>> EnrichValidationSummariesAsync(
+        FlitDbContext db,
+        Guid scopeTenantId,
+        IReadOnlyList<ImprintSignatureValidationSummaryDto> rows,
+        CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0)
+            return rows;
+
+        var userIds = rows.Select(r => r.ValidatedBy).Where(id => id != Guid.Empty).Distinct().ToArray();
+        if (userIds.Length == 0)
+            return rows;
+
+        var emails = await db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var emailById = emails.ToDictionary(u => u.Id, u => u.Email);
+
+        var roleRows = await (
+            from a in db.UserRoleAssignments.AsNoTracking()
+            join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+            where a.DeletedAt == null && userIds.Contains(a.UserId)
+            select new { a.UserId, a.TenantId, RoleLabel = r.Name ?? r.Code, r.Code }
+        ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var roleByUser = new Dictionary<Guid, string>();
+        foreach (var group in roleRows.GroupBy(x => x.UserId))
+        {
+            var preferred = group.FirstOrDefault(x => x.TenantId == scopeTenantId)
+                ?? group.FirstOrDefault(x => string.Equals(x.Code, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+                ?? group.FirstOrDefault(x => string.Equals(x.Code, "ot_admin", StringComparison.OrdinalIgnoreCase))
+                ?? group.FirstOrDefault();
+            if (preferred is not null)
+                roleByUser[group.Key] = preferred.RoleLabel;
+        }
+
+        return rows.Select(row => row with
+        {
+            ValidatedByEmail = emailById.TryGetValue(row.ValidatedBy, out var email) ? email : null,
+            ValidatedByRole = roleByUser.TryGetValue(row.ValidatedBy, out var role) ? role : null,
+        }).ToList();
+    }
+
+    private static async Task<IReadOnlyList<ImprintSignatureDto>> EnrichImprintListLastValidationsAsync(
+        FlitDbContext db,
+        Guid scopeTenantId,
+        IReadOnlyList<ImprintSignatureDto> rows,
+        CancellationToken cancellationToken)
+    {
+        var summaries = rows
+            .Select(r => r.LastValidation)
+            .Where(v => v is not null)
+            .Cast<ImprintSignatureValidationSummaryDto>()
+            .ToList();
+        if (summaries.Count == 0)
+            return rows;
+
+        var enriched = await EnrichValidationSummariesAsync(db, scopeTenantId, summaries, cancellationToken)
+            .ConfigureAwait(false);
+        var byId = enriched.ToDictionary(v => v.Id);
+
+        return rows.Select(row =>
+        {
+            if (row.LastValidation is null)
+                return row;
+            return byId.TryGetValue(row.LastValidation.Id, out var last)
+                ? row with { LastValidation = last }
+                : row;
+        }).ToList();
     }
 
     private static async Task<IResult> ListWebhooksAsync(
@@ -2437,6 +2707,8 @@ public static class AdminOtEndpoints
 
         return (targetTenantId, null);
     }
+
+    private sealed record ValidateImprintSignatureRequest(string Signature);
 
     // RoleIds opcional: si viene vacío se conserva el comportamiento histórico (ot_admin
     // forzado); si trae roles, deben pertenecer al catálogo TRANSIT_OFFICE.
