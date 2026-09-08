@@ -12,7 +12,11 @@ public sealed record StatusHistoryItemDto(
     DateTimeOffset ChangedAt,
     Guid? ChangedByUserId,
     string? ChangedByName,
-    string? Reason);
+    string? Reason,
+    // HU #12184 — compañía a la que pertenecía quien ejecutó el movimiento. No es el tenant del
+    // trámite (ese es el mismo en todas las filas): es quién hizo cada paso. `null` cuando lo movió
+    // un proceso automático, cuando el usuario ya no existe, o en movimientos anteriores a esta HU.
+    string? ChangedByCompania = null);
 
 /// <summary>Página del historial: más reciente primero.</summary>
 public sealed record StatusHistoryPageDto(
@@ -49,7 +53,8 @@ public sealed class GetStatusHistoryHandler(IProcedureInstanceRepository repo)
         var (entries, total) = pageData.Value;
         var items = entries
             .Select(e => new StatusHistoryItemDto(
-                e.Id, e.FromStatus, e.ToStatus, e.ChangedAt, e.ChangedByUserId, ResolveActorName(e), e.Reason))
+                e.Id, e.FromStatus, e.ToStatus, e.ChangedAt, e.ChangedByUserId, ResolveActorName(e), e.Reason,
+                e.ChangedByCompania))
             .ToList();
 
         return (new StatusHistoryPageDto(items, total, page, pageSize), null);

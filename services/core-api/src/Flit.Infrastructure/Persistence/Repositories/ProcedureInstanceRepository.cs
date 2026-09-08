@@ -1594,7 +1594,85 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             })
             .ToListAsync(ct);
 
-        return (items, total);
+        // HU #12184 — la compañía de quien movió cada estado, en DOS consultas para toda la página
+        // (no una por fila). Va después de materializar y no dentro de la proyección: resolver el
+        // tenant efectivo exige un fallback (`home_tenant_id` y, si falta, la asignación de rol más
+        // antigua) que anidado en el SELECT dependería de cómo cada provider traduzca el `??`.
+        var companias = await ResolveCompaniasDeUsuariosAsync(
+            items.Where(i => i.ChangedByUserId is not null).Select(i => i.ChangedByUserId!.Value).ToList(), ct);
+
+        var conCompania = items
+            .Select(i => i.ChangedByUserId is { } uid && companias.TryGetValue(uid, out var compania)
+                ? i with { ChangedByCompania = compania }
+                : i)
+            .ToList();
+
+        return (conCompania, total);
+    }
+
+    /// <summary>
+    /// HU #12184 — razón social de la compañía de cada usuario indicado.
+    ///
+    /// <para>El tenant EFECTIVO de un usuario es su <c>HomeTenantId</c> y, si falta, el de su
+    /// asignación de rol activa más antigua: mismo criterio que <c>UserRoleAssignmentRepository</c>
+    /// y que el emisor del JWT. Mirar solo <c>home_tenant_id</c> dejaría sin compañía a usuarios
+    /// legítimos que no lo tienen.</para>
+    ///
+    /// <para>Los usuarios sin compañía resoluble se omiten del mapa; el historial los muestra sin
+    /// ella en vez de inventarle una.</para>
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, string>> ResolveCompaniasDeUsuariosAsync(
+        List<Guid> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = userIds.Distinct().ToList();
+
+        var homes = await db.Users.AsNoTracking()
+            .Where(u => distinct.Contains(u.Id))
+            .Select(u => new { u.Id, u.HomeTenantId })
+            .ToListAsync(ct);
+
+        var sinHome = homes.Where(h => h.HomeTenantId is null).Select(h => h.Id).ToList();
+
+        var asignaciones = sinHome.Count == 0
+            ? []
+            : await db.UserRoleAssignments.AsNoTracking()
+                .Where(a => sinHome.Contains(a.UserId) && a.DeletedAt == null)
+                .OrderBy(a => a.AssignedAt)
+                .Select(a => new { a.UserId, a.TenantId })
+                .ToListAsync(ct);
+
+        var tenantPorUsuario = new Dictionary<Guid, Guid>();
+        foreach (var home in homes)
+        {
+            if (home.HomeTenantId is { } tid)
+                tenantPorUsuario[home.Id] = tid;
+        }
+
+        foreach (var asignacion in asignaciones)
+            tenantPorUsuario.TryAdd(asignacion.UserId, asignacion.TenantId);
+
+        if (tenantPorUsuario.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var tenantIds = tenantPorUsuario.Values.Distinct().ToList();
+        var razones = await db.Tenants.AsNoTracking()
+            .Where(t => tenantIds.Contains(t.Id))
+            .Select(t => new { t.Id, t.LegalName })
+            .ToListAsync(ct);
+
+        var razonPorTenant = razones.ToDictionary(r => r.Id, r => r.LegalName);
+
+        var resultado = new Dictionary<Guid, string>();
+        foreach (var (userId, tenantId) in tenantPorUsuario)
+        {
+            if (razonPorTenant.TryGetValue(tenantId, out var razon) && !string.IsNullOrWhiteSpace(razon))
+                resultado[userId] = razon;
+        }
+
+        return resultado;
     }
 
     public async Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(

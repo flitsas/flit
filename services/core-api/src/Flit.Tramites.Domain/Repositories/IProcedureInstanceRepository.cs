@@ -557,6 +557,20 @@ public sealed record ProcedureInstanceStatusHistoryEntry(
     string? Reason)
 {
     /// <summary>
+    /// HU #12184 — razón social de la compañía a la que pertenecía quien ejecutó el movimiento.
+    ///
+    /// <para>No es el tenant del trámite, que ya se conoce y es el mismo en todas las filas: es
+    /// <b>quién hizo cada paso</b>. Un trámite lo abre una compañía y lo mueve, después, quien lo
+    /// revisa. Sin este dato el historial dice «Preparado · Laura Restrepo» y no distingue si Laura
+    /// es de la empresa dueña o del organismo.</para>
+    ///
+    /// <para><c>null</c> si el movimiento lo hizo un proceso automático, si el usuario ya no existe
+    /// o si no se le puede resolver compañía. Es opcional a propósito: los movimientos anteriores a
+    /// esta HU no la traen y el historial tiene que seguir leyéndose igual.</para>
+    /// </summary>
+    public string? ChangedByCompania { get; init; }
+
+    /// <summary>
     /// Metadata jsonb crudo del evento. En eventos de migración V1→V2 conserva el actor REAL de V1
     /// (<c>usuario</c>/<c>usuario_rol</c>/<c>usuario_email</c>) y el marcador <c>origen=migration_v1</c>,
     /// que la capa de aplicación usa para mostrar el usuario real en vez del sistema "Migración V1".
