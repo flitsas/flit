@@ -172,6 +172,7 @@ export function ReenviarValidacionIdentidadModal({
   // bloqueado.
   const emailTrimmed = email.trim();
   const emailInvalido = emailTrimmed !== '' && !esCorreoConFormatoValido(emailTrimmed);
+  const selectedValidation = validations.find((v) => v.id === validationId);
 
   const confirmar = async () => {
     if (!validationId || emailInvalido) return;
@@ -226,24 +227,34 @@ export function ReenviarValidacionIdentidadModal({
         ) : null}
         {!loading && !loadError && validations.length > 0 ? (
           <div className="space-y-3">
-            <label className={FIELD_LABEL_CLS} htmlFor={`admin-reenviar-validacion-${instanceId}`}>
-              Validación a reenviar
-            </label>
-            <select
-              id={`admin-reenviar-validacion-${instanceId}`}
-              value={validationId}
-              onChange={(e) => setValidationId(e.target.value)}
-              disabled={busy}
-              className={FIELD_CLS}
-              style={FIELD_BORDER}
-            >
-              {validations.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {(v.partyRole ? `${PARTE_LABEL[v.partyRole] ?? v.partyRole} · ` : '') +
-                    `${v.name} · ${v.email}`}
-                </option>
-              ))}
-            </select>
+            {/* Con 1 sola validación (matrícula inicial, otros trámites: solo comprador) no hay nada
+                que elegir — el selector solo aporta valor en traspaso (vendedor + comprador). */}
+            {validations.length > 1 ? (
+              <>
+                <label className={FIELD_LABEL_CLS} htmlFor={`admin-reenviar-validacion-${instanceId}`}>
+                  Validación a reenviar
+                </label>
+                <select
+                  id={`admin-reenviar-validacion-${instanceId}`}
+                  value={validationId}
+                  onChange={(e) => setValidationId(e.target.value)}
+                  disabled={busy}
+                  className={FIELD_CLS}
+                  style={FIELD_BORDER}
+                >
+                  {validations.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {(v.partyRole ? `${PARTE_LABEL[v.partyRole] ?? v.partyRole} · ` : '') + v.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedValidation ? (
+                  <p className="text-xs text-[#162744]/60 dark:text-white/60">
+                    Correo registrado: <span className="font-medium">{selectedValidation.email}</span>
+                  </p>
+                ) : null}
+              </>
+            ) : null}
 
             <label className={FIELD_LABEL_CLS} htmlFor={`admin-reenviar-email-${instanceId}`}>
               Nuevo correo (opcional)

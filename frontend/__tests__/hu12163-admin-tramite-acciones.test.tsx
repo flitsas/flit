@@ -463,7 +463,8 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Reenviar validación' }));
 
     const dialog = await screen.findByRole('dialog', { name: /Reenviar validación/ });
-    await screen.findByText(/Juan Pérez/);
+    // Con una sola validación (no traspaso) no hay nada que elegir: sin selector, se reenvía directo.
+    expect(within(dialog).queryByLabelText('Validación a reenviar')).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reenviar' }));
 
     expect(mocks.adminReenviarValidacionIdentidad).toHaveBeenCalledWith(
@@ -473,6 +474,60 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
       undefined,
     );
     expect(await screen.findByText('Validación de identidad reenviada.')).toBeInTheDocument();
+  });
+
+  it('en traspaso (2 validaciones) sí muestra el selector, con rol y nombre completos', async () => {
+    mocks.listInstances.mockResolvedValue([makeInstance()]);
+    mocks.listBiometricExpediente.mockResolvedValue({
+      validations: [
+        {
+          id: 'val-vendedor',
+          partyRole: 'vendedor',
+          name: 'Ana Gómez',
+          documentType: 'CC',
+          documentNumber: '111',
+          email: 'ana@example.com',
+          status: 'entregado',
+          intentos: 1,
+          maxIntentos: 3,
+          score: null,
+          expiresAt: '2026-09-09T00:00:00Z',
+          validatedAt: null,
+          expired: false,
+          provider: 'kyverum',
+          captureUrl: null,
+        },
+        {
+          id: 'val-comprador',
+          partyRole: 'comprador',
+          name: 'Juan Pérez',
+          documentType: 'CC',
+          documentNumber: '123',
+          email: 'juan@example.com',
+          status: 'entregado',
+          intentos: 1,
+          maxIntentos: 3,
+          score: null,
+          expiresAt: '2026-09-09T00:00:00Z',
+          validatedAt: null,
+          expired: false,
+          provider: 'kyverum',
+          captureUrl: null,
+        },
+      ],
+      firmaBaulPartes: [],
+    });
+    renderTable();
+    await screen.findByText('P0001');
+    await abrirAcciones();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Reenviar validación' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Reenviar validación/ });
+    const select = await within(dialog).findByLabelText('Validación a reenviar');
+    // Rol + nombre completos, sin el correo (lo que causaba el recorte visual reportado).
+    expect(within(select).getByRole('option', { name: 'Vendedor · Ana Gómez' })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: 'Comprador · Juan Pérez' })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Correo registrado:/)).toBeInTheDocument();
   });
 });
 

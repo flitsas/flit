@@ -1488,7 +1488,8 @@ describe('HU #12164 — reenvío administrativo de una validación de trámite (
     await user.click(screen.getByRole('menuitem', { name: /^reenviar$/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /reenviar validación de identidad/i });
-    await within(dialog).findByText(/Carlos Vendedor/);
+    // Una sola validación (la fila ya la identificó vía `initialValidationId`): sin selector.
+    expect(within(dialog).queryByLabelText('Validación a reenviar')).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Reenviar' }));
 
     await waitFor(() =>
