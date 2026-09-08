@@ -1505,6 +1505,22 @@ describe('HU #12164 — reenvío administrativo de una validación de trámite (
     expect(await screen.findByText('Validación de identidad reenviada.')).toBeInTheDocument();
   });
 
+  /**
+   * Corrección QA — regresión del bug real: la condición original reutilizaba `estadoAdmiteReenvio`
+   * (diseñada para el mecanismo STANDALONE, que excluye 'en_proceso' porque ahí reenviar invalidaría
+   * el enlace que la persona ya está usando). Para el reenvío ADMINISTRATIVO esa exclusión no aplica —
+   * el propio backend (`AdminReenviarValidacionIdentidadHandler`) solo bloquea `Status == Aprobado` —
+   * y 'en_proceso' es precisamente el caso de negocio central de esta HU (correo equivocado en una
+   * validación que sigue en curso). `ROW_PENDIENTE_TRAMITE` (status 'enviado') no ejercitaba este caso.
+   */
+  it('AC1 (regresión) — validación de trámite EN PROCESO también ofrece "Reenviar" administrativo', async () => {
+    mocks.hasPermission.mockReturnValue(true);
+
+    await abrirAccionesFila(ROW_EN_PROCESO);
+
+    expect(screen.getByRole('menuitem', { name: /^reenviar$/i })).toBeInTheDocument();
+  });
+
   it('AC2: el correo es opcional, pero si se escribe debe tener formato válido para habilitar "Reenviar"', async () => {
     mocks.hasPermission.mockReturnValue(true);
     mocks.listBiometricExpediente.mockResolvedValue(EXPEDIENTE_UNA_VALIDACION);

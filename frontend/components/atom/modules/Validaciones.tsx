@@ -1903,11 +1903,17 @@ function ValidacionRow({
           ? 'La fila no identifica la parte del trámite: hazlo desde el trámite.'
           : undefined,
       });
-    } else if (admiteReenvio && canAdminReenviar) {
-      // HU #12164 (AC1) — validación de trámite PENDIENTE (enviada o pendiente de envío, sin llegar a
-      // un estado terminal): antes solo se podía reenviar desde el Dashboard de Trámites. Aquí abre
-      // EXACTAMENTE el mismo modal/endpoint administrativo (HU #12161), no el reintento por parte de
-      // arriba (D12 solo bloquea el mecanismo STANDALONE por id, no este endpoint admin dedicado).
+    } else if (!isApproved && canAdminReenviar) {
+      // HU #12164 (AC1) — validación de trámite PENDIENTE (enviada, en proceso o pendiente de envío,
+      // sin llegar a un estado terminal): antes solo se podía reenviar desde el Dashboard de Trámites.
+      // Aquí abre EXACTAMENTE el mismo modal/endpoint administrativo (HU #12161), no el reintento por
+      // parte de arriba (D12 solo bloquea el mecanismo STANDALONE por id, no este endpoint admin
+      // dedicado). Corrección QA: la condición usaba `admiteReenvio` (= `estadoAdmiteReenvio`), que
+      // excluye deliberadamente 'en_proceso' para el mecanismo STANDALONE (reenviar invalidaría el
+      // enlace que la persona ya está usando) — pero ese criterio no aplica aquí: el propio backend
+      // (`AdminReenviarValidacionIdentidadHandler`) solo bloquea `validation.Status == Aprobado`, nada
+      // más, así que 'en_proceso' es precisamente el caso central de esta HU (correo equivocado en una
+      // validación que sigue en curso).
       actionItems.push({
         key: 'admin-reenviar',
         label: 'Reenviar',
