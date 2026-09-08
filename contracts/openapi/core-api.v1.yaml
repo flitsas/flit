@@ -8577,6 +8577,7 @@ components:
         signedFilename: { type: string, nullable: true }
         deletedAt: { type: string, format: date-time, nullable: true }
         lastValidation:
+          type: object
           allOf:
             - $ref: "#/components/schemas/ImprintSignatureValidationSummary"
           nullable: true
