@@ -8,6 +8,7 @@ import type { ImprintSignatureDto } from "@/lib/api/admin-ot-imprint-signatures"
 const fetchListImprintSignatures = vi.fn();
 const validateImprintSignature = vi.fn();
 const fetchImprintSignaturePreviewUrl = vi.fn();
+const fetchImprintSignatureValidations = vi.fn();
 const openPdfBlobInNewTab = vi.fn();
 
 vi.mock("@/lib/api/admin-ot-imprint-signatures", async () => {
@@ -19,6 +20,8 @@ vi.mock("@/lib/api/admin-ot-imprint-signatures", async () => {
     fetchListImprintSignatures: (...args: unknown[]) => fetchListImprintSignatures(...args),
     validateImprintSignature: (...args: unknown[]) => validateImprintSignature(...args),
     fetchImprintSignaturePreviewUrl: (...args: unknown[]) => fetchImprintSignaturePreviewUrl(...args),
+    fetchImprintSignatureValidations: (...args: unknown[]) =>
+      fetchImprintSignatureValidations(...args),
   };
 });
 
@@ -44,6 +47,7 @@ function imprintRow(overrides: Partial<ImprintSignatureDto> = {}): ImprintSignat
     signedSizeBytes: null,
     signedFilename: null,
     deletedAt: null,
+    lastValidation: null,
     ...overrides,
   };
 }
@@ -61,6 +65,7 @@ describe("OtImprintValidationSection", () => {
     fetchListImprintSignatures.mockReset();
     validateImprintSignature.mockReset();
     fetchImprintSignaturePreviewUrl.mockReset();
+    fetchImprintSignatureValidations.mockReset();
     openPdfBlobInNewTab.mockReset();
     openPdfBlobInNewTab.mockImplementation(async (fn: () => Promise<Blob>) => {
       await fn();
@@ -232,5 +237,55 @@ describe("OtImprintValidationSection", () => {
     });
     expect(openPdfBlobInNewTab).toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalledWith("https://s3.test/view/snap/impronta.pdf");
+  });
+
+  it("muestra badge desde lastValidation del listado (persistido)", async () => {
+    fetchListImprintSignatures.mockResolvedValue([
+      imprintRow({
+        lastValidation: {
+          id: "val-persist",
+          result: "valid",
+          failureReason: null,
+          validatedAt: "2026-09-08T11:00:00Z",
+          validatedBy: "11111111-1111-1111-1111-111111111111",
+          placa: "ABC123",
+        },
+      }),
+    ]);
+    renderSection();
+    await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Estado: Válida")).toBeInTheDocument();
+    });
+  });
+
+  it("abre historial de bitácora", async () => {
+    fetchListImprintSignatures.mockResolvedValue([imprintRow()]);
+    fetchImprintSignatureValidations.mockResolvedValue([
+      {
+        id: "val-1",
+        result: "invalid",
+        failureReason: "no coincide",
+        validatedAt: "2026-09-08T10:00:00Z",
+        validatedBy: "22222222-2222-2222-2222-222222222222",
+        placa: "ABC123",
+      },
+    ]);
+
+    renderSection();
+    await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
+    await userEvent.click(await screen.findByTestId("ot-imprint-history-imp-1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ot-imprint-history-modal")).toBeInTheDocument();
+    });
+    expect(fetchImprintSignatureValidations).toHaveBeenCalledWith("imp-1", undefined, {
+      transitOfficeId: "ot-1",
+    });
+    expect(screen.getByLabelText("Estado: Inválida")).toBeInTheDocument();
+    expect(screen.getByText("no coincide")).toBeInTheDocument();
   });
 });

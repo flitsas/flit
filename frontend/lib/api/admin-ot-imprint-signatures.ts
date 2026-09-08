@@ -1,7 +1,19 @@
-// Cliente admin OT — improntas firmadas y validación de firma (HU #12148 / #12149).
+// Cliente admin OT — improntas firmadas y validación de firma (HU #12148 / #12149 / #12176).
 import { apiFetch } from "./client";
 
 const base = "/api/v1/admin/ot";
+
+export type ImprintSignatureValidationResultKind = "valid" | "invalid" | "not_found";
+
+/** Fila de bitácora tramites.imprint_signature_validations. */
+export interface ImprintSignatureValidationSummary {
+  id: string;
+  result: ImprintSignatureValidationResultKind;
+  failureReason: string | null;
+  validatedAt: string;
+  validatedBy: string;
+  placa: string;
+}
 
 /** Auditoría de impronta manual firmada. Deliberadamente NO incluye privateKey. */
 export interface ImprintSignatureDto {
@@ -21,9 +33,8 @@ export interface ImprintSignatureDto {
   signedSizeBytes: number | null;
   signedFilename: string | null;
   deletedAt: string | null;
+  lastValidation?: ImprintSignatureValidationSummary | null;
 }
-
-export type ImprintSignatureValidationResultKind = "valid" | "invalid" | "not_found";
 
 export interface ImprintSignatureValidationResult {
   validationId?: string;
@@ -35,6 +46,10 @@ export interface ImprintSignatureValidationResult {
 
 interface ImprintSignaturesListResponse {
   data: ImprintSignatureDto[];
+}
+
+interface ImprintSignatureValidationsListResponse {
+  data: ImprintSignatureValidationSummary[];
 }
 
 export interface OtImprintSignatureScope {
@@ -68,6 +83,18 @@ export function validateImprintSignature(
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
+}
+
+/** Historial append-only de validaciones de una impronta (HU #12176 / #12177). */
+export function fetchImprintSignatureValidations(
+  id: string,
+  signal?: AbortSignal,
+  scope?: OtImprintSignatureScope,
+): Promise<ImprintSignatureValidationSummary[]> {
+  return apiFetch<ImprintSignatureValidationsListResponse>(`${base}/imprint-signatures/${id}/validations`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  }).then((response) => response.data);
 }
 
 /** Indica si la fila tiene PDF firmado (snapshot o adjunto vigente). */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { FileText, ShieldCheck } from "lucide-react";
+import { FileText, History, ShieldCheck } from "lucide-react";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -9,22 +9,42 @@ import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   fetchImprintSignaturePreviewUrl,
+  fetchImprintSignatureValidations,
   fetchListImprintSignatures,
   imprintHasPdf,
   validateImprintSignature,
   type ImprintSignatureDto,
   type ImprintSignatureValidationResultKind,
+  type ImprintSignatureValidationSummary,
 } from "@/lib/api/admin-ot-imprint-signatures";
 import { ApiError } from "@/lib/api/types";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 
 type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
+type HistoryPhase = "idle" | "loading" | "error" | "empty" | "ready";
 
 const INPUT_CLS =
   "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
 
 const TEXTAREA_CLS =
   "w-full min-h-[8rem] rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 font-mono text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+
+function hydrateValidationMap(
+  data: ImprintSignatureDto[],
+): Record<string, { result: ImprintSignatureValidationResultKind; failureReason: string | null }> {
+  const map: Record<
+    string,
+    { result: ImprintSignatureValidationResultKind; failureReason: string | null }
+  > = {};
+  for (const row of data) {
+    if (!row.lastValidation) continue;
+    map[row.id] = {
+      result: row.lastValidation.result,
+      failureReason: row.lastValidation.failureReason,
+    };
+  }
+  return map;
+}
 
 export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeId: string }) {
   const { show } = useToast();
@@ -42,6 +62,11 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
   const [signatureInput, setSignatureInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [historyRow, setHistoryRow] = useState<ImprintSignatureDto | null>(null);
+  const [historyPhase, setHistoryPhase] = useState<HistoryPhase>("idle");
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyRows, setHistoryRows] = useState<ImprintSignatureValidationSummary[]>([]);
+
   const load = useCallback(
     async (placa: string) => {
       const trimmed = placa.trim();
@@ -49,6 +74,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         setPhase("idle");
         setRows([]);
         setAppliedPlaca("");
+        setValidationById({});
         return;
       }
 
@@ -58,10 +84,11 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         const data = await fetchListImprintSignatures(trimmed, undefined, { transitOfficeId });
         setRows(data);
         setAppliedPlaca(trimmed);
-        setValidationById({});
+        setValidationById(hydrateValidationMap(data));
         setPhase(data.length === 0 ? "empty" : "ready");
       } catch (err) {
         setRows([]);
+        setValidationById({});
         setPhase("error");
         setErrorMessage(
           err instanceof ApiError ? err.message : "No se pudieron consultar las improntas firmadas.",
@@ -85,6 +112,33 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
     if (submitting) return;
     setModalRow(null);
     setSignatureInput("");
+  };
+
+  const openHistoryModal = useCallback(
+    async (row: ImprintSignatureDto) => {
+      setHistoryRow(row);
+      setHistoryPhase("loading");
+      setHistoryError(null);
+      setHistoryRows([]);
+      try {
+        const data = await fetchImprintSignatureValidations(row.id, undefined, { transitOfficeId });
+        setHistoryRows(data);
+        setHistoryPhase(data.length === 0 ? "empty" : "ready");
+      } catch (err) {
+        setHistoryPhase("error");
+        setHistoryError(
+          err instanceof ApiError ? err.message : "No se pudo cargar la bitácora de validaciones.",
+        );
+      }
+    },
+    [transitOfficeId],
+  );
+
+  const closeHistoryModal = () => {
+    setHistoryRow(null);
+    setHistoryPhase("idle");
+    setHistoryError(null);
+    setHistoryRows([]);
   };
 
   const handleViewPdf = useCallback(
@@ -133,6 +187,23 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         ...prev,
         [rowId]: { result: result.result, failureReason: result.failureReason },
       }));
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === rowId
+            ? {
+                ...row,
+                lastValidation: {
+                  id: result.validationId ?? row.lastValidation?.id ?? rowId,
+                  result: result.result,
+                  failureReason: result.failureReason,
+                  validatedAt: result.validatedAt,
+                  validatedBy: row.lastValidation?.validatedBy ?? "",
+                  placa: row.placa,
+                },
+              }
+            : row,
+        ),
+      );
       // Cerrar primero: el toast (z-100) queda tapado por el overlay del Modal (mismo z-index).
       setModalRow(null);
       setSignatureInput("");
@@ -192,7 +263,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         key: "validation",
         header: "Validación",
         render: (row) => {
-          const validation = validationById[row.id];
+          const validation = validationById[row.id] ?? row.lastValidation;
           if (!validation) return "—";
           if (validation.result === "valid") {
             return <StatusBadge label="Válida" tone="success" />;
@@ -239,6 +310,16 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
               </button>
               <button
                 type="button"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#162244] dark:border-white/15 dark:text-white"
+                aria-label={`Ver bitácora de impronta ${row.placa}`}
+                onClick={() => void openHistoryModal(row)}
+                data-testid={`ot-imprint-history-${row.id}`}
+              >
+                <History className="h-3.5 w-3.5" aria-hidden />
+                Historial
+              </button>
+              <button
+                type="button"
                 className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
                 style={{ background: "#557EFF" }}
                 aria-label={`Validar firma de impronta ${row.placa}`}
@@ -252,7 +333,40 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         },
       },
     ],
-    [handleViewPdf, openingPdfId, validationById],
+    [handleViewPdf, openHistoryModal, openingPdfId, validationById],
+  );
+
+  const historyColumns: DataTableColumn<ImprintSignatureValidationSummary>[] = useMemo(
+    () => [
+      {
+        key: "validatedAt",
+        header: "Fecha",
+        render: (row) => formatDateTime(row.validatedAt),
+      },
+      {
+        key: "result",
+        header: "Resultado",
+        render: (row) => {
+          if (row.result === "valid") return <StatusBadge label="Válida" tone="success" />;
+          if (row.result === "invalid") return <StatusBadge label="Inválida" tone="danger" />;
+          return <StatusBadge label="No encontrada" tone="neutral" />;
+        },
+      },
+      {
+        key: "failureReason",
+        header: "Motivo",
+        render: (row) => row.failureReason?.trim() || "—",
+      },
+      {
+        key: "validatedBy",
+        header: "Usuario",
+        cellClassName: "font-mono text-[11px]",
+        render: (row) => (
+          <span title={row.validatedBy}>{shortHash(row.validatedBy.replaceAll("-", ""))}</span>
+        ),
+      },
+    ],
+    [],
   );
 
   const boundaryStatus =
@@ -266,6 +380,17 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
             ? "ready"
             : "empty";
 
+  const historyBoundary =
+    historyPhase === "loading"
+      ? "loading"
+      : historyPhase === "error"
+        ? "error"
+        : historyPhase === "empty"
+          ? "empty"
+          : historyPhase === "ready"
+            ? "ready"
+            : "empty";
+
   return (
     <div className="flex flex-col gap-4" data-testid="ot-imprint-validation-section">
       <div>
@@ -273,8 +398,8 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           Validación de firma de impronta
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
-          Consulte por placa, abra el PDF firmado y pegue la firma digital para confirmar si
-          corresponde a esa impronta.
+          Consulte por placa, abra el PDF firmado, valide la firma digital y revise el historial de
+          intentos.
         </p>
       </div>
 
@@ -333,7 +458,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
               rows={rows}
               getRowKey={(row) => row.id}
               ariaLabel="Improntas firmadas por placa"
-              minWidth={1040}
+              minWidth={1120}
             />
           </div>
         </UiStateBoundary>
@@ -387,6 +512,37 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
               {submitting ? "Validando…" : "Aceptar"}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={historyRow !== null}
+        onClose={closeHistoryModal}
+        title="Bitácora de validaciones"
+        icon={History}
+        description={
+          historyRow
+            ? `Placa ${historyRow.placa} · intentos registrados para esta impronta.`
+            : undefined
+        }
+        size="lg"
+      >
+        <div className="p-1" data-testid="ot-imprint-history-modal">
+          <UiStateBoundary
+            status={historyBoundary}
+            onRetry={historyRow ? () => void openHistoryModal(historyRow) : undefined}
+            skeletonRows={3}
+            emptyMessage="Aún no hay validaciones registradas para esta impronta."
+            errorMessage={historyError ?? "No se pudo cargar la bitácora de validaciones."}
+          >
+            <DataTable
+              columns={historyColumns}
+              rows={historyRows}
+              getRowKey={(row) => row.id}
+              ariaLabel="Historial de validaciones de impronta"
+              minWidth={640}
+            />
+          </UiStateBoundary>
         </div>
       </Modal>
     </div>
