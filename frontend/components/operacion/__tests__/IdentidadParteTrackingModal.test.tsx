@@ -115,8 +115,12 @@ describe('IdentidadParteTrackingModal', () => {
     expect(within(panel).getByText('Laura Restrepo Ossa')).toBeInTheDocument();
     expect(within(panel).getByText(/CC 1020998455 · comprador/)).toBeInTheDocument();
     // «Identidad aprobada» sale dos veces —la píldora de la cabecera y el hito del historial— y las
-    // dos son correctas: la cabecera responde de un vistazo y el hito dice cuándo pasó.
-    expect(within(panel).getAllByText('Identidad aprobada')).toHaveLength(2);
+    // dos son correctas: la cabecera responde de un vistazo y el hito dice cuándo pasó. Se espera,
+    // porque el hito depende de la bitácora y la píldora no: comprobarlo sin esperar cuenta una sola
+    // en cuanto la máquina va cargada.
+    await waitFor(() =>
+      expect(within(panel).getAllByText('Identidad aprobada')).toHaveLength(2),
+    );
   });
 
   it('el historial nombra a la persona y mide su respuesta contra el envío', async () => {

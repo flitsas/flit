@@ -46,14 +46,16 @@ export function IdentidadLecturaHumana({
     }
   }, [validation.id]);
 
+  // No hace falta reponer `cargando` al cambiar de validación: el padre monta un componente por
+  // validación (`key={v.id}`), así que otra validación es otra instancia y arranca en `true`.
   useEffect(() => {
     let cancelado = false;
-    setCargando(true);
-    void cargar().then((res) => {
+    void (async () => {
+      const res = await cargar();
       if (cancelado) return;
       setEventos(res);
       setCargando(false);
-    });
+    })();
     return () => {
       cancelado = true;
     };

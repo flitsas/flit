@@ -283,6 +283,17 @@ export interface ListInstancesParams {
   organismoTransito?: string;
   /** Código del TIPO concreto, no la familia: "OTROS" agrupa quince tipos distintos. */
   tipoCodigo?: string;
+  /**
+   * HU #12187 — búsqueda de texto libre, transversal a radicado, placa, VIN, nombre y documento de
+   * las partes, organismo y compañía. El RADICADO casa exacto; el resto, por subcadena.
+   *
+   * Dejó de resolverse en el cliente: se filtraba sobre las filas ya traídas, así que buscar un
+   * trámite que existe pero quedó fuera de la página respondía «sin resultados» — una respuesta
+   * falsa, no una limitación visible.
+   */
+  busqueda?: string;
+  /** HU #12187 — solo los marcados como prioritarios. Misma razón que `busqueda`. */
+  prioritario?: boolean;
   /** ISO-8601 / fecha `YYYY-MM-DD` (el cliente normaliza a inicio/fin de día). */
   createdFrom?: string;
   createdTo?: string;
