@@ -117,6 +117,11 @@ export function Modal({
       onMouseDown={(e) => {
         if (closeOnBackdrop && e.target === e.currentTarget) requestClose();
       }}
+      // El portal saca este árbol del DOM del contenedor (p. ej. el `<tr onClick={...}>` de una
+      // fila de tabla), pero React sigue burbujeando el evento sintético por el árbol de React, no
+      // el del DOM. Sin este corte, cerrar con la X o con clic en el backdrop reactiva el onClick
+      // del ancestro (por ejemplo, abre el trámite de la fila que montó el modal).
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         className={`flex max-h-[calc(100dvh-3rem)] w-full ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-[#162744] shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white ${panelClassName}`}
