@@ -1,6 +1,20 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, FolderOpen, Star, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Check,
+  Eye,
+  FileStack,
+  FolderOpen,
+  Paperclip,
+  Pencil,
+  Star,
+  Tag,
+  Undo2,
+  X,
+} from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   TABLA_CELDA_SECUNDARIA_CLS,
@@ -174,6 +188,7 @@ export function ClientProceduresTable({
       items.push({
         key: "asignar-placa",
         label: "Asignar placa",
+        icon: Tag,
         onSelect: () => onAssignPlate(row),
       });
     }
@@ -183,13 +198,13 @@ export function ClientProceduresTable({
       showApprovalActions &&
       onRevoke
     ) {
-      items.push({ key: "revocar", label: "Revocar", onSelect: () => onRevoke(row) });
+      items.push({ key: "revocar", label: "Revocar", icon: Undo2, onSelect: () => onRevoke(row) });
     }
 
     // HU #12168 AC1 — "Revocar" (la aprobación) solo existe en Aprobado: es la única transición que
     // la máquina de estados permite desde ahí (aprobado→revocado), y solo el OT puede dispararla.
     if (row.status === "aprobado" && onRevokeAprobacion) {
-      items.push({ key: "revocar-aprobacion", label: "Revocar", onSelect: () => onRevokeAprobacion(row) });
+      items.push({ key: "revocar-aprobacion", label: "Revocar", icon: Undo2, onSelect: () => onRevokeAprobacion(row) });
     }
 
     // HU #12168 AC2/AC3 — "Actualizar placa" existe mientras haya una placa asignada por este flujo
@@ -201,6 +216,7 @@ export function ClientProceduresTable({
       items.push({
         key: "actualizar-placa",
         label: ventana.disabled ? "Actualizar placa" : `Actualizar placa (${ventana.minutosRestantes} min)`,
+        icon: Pencil,
         disabled: ventana.disabled,
         disabledReason: ventana.disabledReason,
         onSelect: () => onUpdatePlate(row),
@@ -208,13 +224,14 @@ export function ClientProceduresTable({
     }
 
     if (row.status === "aprobado" && onAdjuntarLt) {
-      items.push({ key: "adjuntar-lt", label: "Adjuntar LT", onSelect: () => onAdjuntarLt(row) });
+      items.push({ key: "adjuntar-lt", label: "Adjuntar LT", icon: Paperclip, onSelect: () => onAdjuntarLt(row) });
     }
 
     if ((row.status === "entregado" || row.status === "aprobado") && onConsolidado) {
       items.push({
         key: "consolidado",
         label: consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado",
+        icon: FileStack,
         // Se deshabilita mientras se abre: el consolidado puede tener que generarse, y un segundo
         // clic dispararía una segunda generación del mismo expediente.
         disabled: consolidadoActingId === row.id,
@@ -236,6 +253,7 @@ export function ClientProceduresTable({
       items.push({
         key: "detalle",
         label: "Detalle del trámite",
+        icon: Eye,
         onSelect: () => onVerDetalle(row),
       });
     }
