@@ -95,7 +95,7 @@ interface TransferenciaFormState {
 }
 
 const ESTADO_INICIAL: TransferenciaFormState = {
-  // DECLARADO POR DEFECTO, por decisión del PO (2026-09-09): el control «Régimen aplicable a la
+  // DECLARADO POR DEFECTO (HU #12229, decisión del PO 2026-09-09): el control «Régimen aplicable a la
   // operación» se retiró de la pantalla y el formulario envía siempre «ninguna aplica».
   //
   // Conviene saber qué se cambió, porque no es un campo cualquiera: era la declaración del USUARIO
@@ -379,7 +379,7 @@ export function TransferenciaFormPanel() {
           tieneLevantamientoOAutorizacion: form.tieneLevantamientoOAutorizacion,
         },
         // CF-24 — la declaración y su fecha viajan al servidor, que las conserva en input_summary.
-        // Desde la decisión del PO del 2026-09-09 esta declaración es IMPLÍCITA: el usuario no la
+        // Desde la HU #12229 esta declaración es IMPLÍCITA: el usuario no la
         // responde y `declaredAt` marca el momento de la generación, no el de una respuesta suya.
         regimenAplicable: {
           ningunaAplica: form.regimen === REGIMEN_NINGUNA_APLICA,

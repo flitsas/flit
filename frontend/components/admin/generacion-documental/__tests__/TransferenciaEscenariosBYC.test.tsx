@@ -1,5 +1,5 @@
 // HU #12208 (Feature #12201) — escenarios B y C, y el régimen aplicable ya retirado de la
-// pantalla: se declara por debajo (decisión del PO, 2026-09-09).
+// pantalla: se declara por debajo (HU #12229).
 // Uso de ejemplo: render(<TransferenciaFormPanel />), elegir escenario B y enviar el formulario.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -21,7 +21,7 @@ async function elegirEscenario(escenario: "A" | "B" | "C") {
   await userEvent.click(screen.getByLabelText(new RegExp(`^${escenario} —`)));
 }
 
-describe("Régimen aplicable — retirado de la pantalla (decisión del PO, 2026-09-09)", () => {
+describe("Régimen aplicable — retirado de la pantalla (HU #12229)", () => {
   beforeEach(() => {
     generateTransferenciaDocument.mockReset();
     generateTransferenciaDocument.mockResolvedValue({
