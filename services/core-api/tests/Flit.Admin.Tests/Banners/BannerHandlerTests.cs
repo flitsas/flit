@@ -445,5 +445,11 @@ public sealed class BannerHandlerTests
 
             return Task.FromResult(new StoredBannerImage(path, hash, bytes.LongLength));
         }
+
+        public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException(
+                "Este fake solo cubre el flujo de escritura del CRUD (HU #12239); la lectura del " +
+                "endpoint publico (HU #12240) se prueba en GetBannerImageHandlerTests con el fake " +
+                "de BannerTestDoubles.cs.");
     }
 }

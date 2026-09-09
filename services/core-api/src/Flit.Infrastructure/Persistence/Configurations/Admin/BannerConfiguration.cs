@@ -35,7 +35,10 @@ internal sealed class BannerConfiguration : IEntityTypeConfiguration<Banner>
         builder.Property(x => x.DeletedAt).HasColumnName("deleted_at");
         builder.Property(x => x.DeletedBy).HasColumnName("deleted_by");
 
+        // Refleja el indice parcial del DDL (ix_banners_activo_vigencia); no lo crea (la
+        // entidad esta ExcludeFromMigrations).
         builder.HasIndex(x => new { x.IsActive, x.ValidFrom, x.ValidUntil })
-            .HasDatabaseName("ix_banners_activo_vigencia");
+            .HasDatabaseName("ix_banners_activo_vigencia")
+            .HasFilter("deleted_at IS NULL");
     }
 }

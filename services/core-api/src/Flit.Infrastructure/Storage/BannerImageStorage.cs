@@ -3,6 +3,12 @@ using Flit.Tramites.Application.Storage;
 
 namespace Flit.Infrastructure.Storage;
 
+/// <summary>
+/// Adaptador del puerto <see cref="IBannerImageStorage"/> (Feature #12236, HU #12239/#12240,
+/// ADR-0057-banners-imagen-endpoint-propio-sin-presigned): delega en
+/// <see cref="IAttachmentStorage"/> (file-manager / S3), igual que
+/// <see cref="StandaloneDocumentStorage"/>.
+/// </summary>
 internal sealed class BannerImageStorage : IBannerImageStorage
 {
     private readonly IAttachmentStorage _storage;
@@ -28,5 +34,12 @@ internal sealed class BannerImageStorage : IBannerImageStorage
             .ConfigureAwait(false);
 
         return new StoredBannerImage(stored.StoragePath, stored.Sha256, stored.SizeBytes);
+    }
+
+    public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken cancellationToken = default)
+    {
+        return string.IsNullOrWhiteSpace(storagePath)
+            ? Task.FromResult<Stream?>(null)
+            : _storage.OpenReadAsync(storagePath, cancellationToken);
     }
 }
