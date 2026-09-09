@@ -12,6 +12,8 @@ import type { OtClientProcedure } from "@/lib/api/types-ot";
 
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtClientProcedures: vi.fn(),
+  searchOtClientProcedures: vi.fn(),
+  fetchOtBandejaFilterFields: vi.fn(),
   fetchOtBandejaHealth: vi.fn(),
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
@@ -44,6 +46,8 @@ vi.mock("@/lib/api/tramites-client", () => ({
 import {
   fetchOtBandejaHealth,
   fetchOtClientProcedures,
+  searchOtClientProcedures,
+  fetchOtBandejaFilterFields,
   fetchOtProfile,
 } from "@/lib/api/admin-ot";
 
@@ -92,7 +96,8 @@ describe("ClientProceduresSection — error al asignar placa", () => {
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
     });
-    vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
+    vi.mocked(searchOtClientProcedures).mockResolvedValue({
       data: [preasignado],
       totalCount: 1,
       page: 1,

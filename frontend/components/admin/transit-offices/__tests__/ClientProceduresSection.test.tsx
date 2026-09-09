@@ -12,6 +12,8 @@ import type { OtClientProcedure } from "@/lib/api/types-ot";
 
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtClientProcedures: vi.fn(),
+  searchOtClientProcedures: vi.fn(),
+  fetchOtBandejaFilterFields: vi.fn(),
   fetchOtBandejaHealth: vi.fn(),
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
@@ -59,6 +61,8 @@ import {
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaHealth,
   fetchOtClientProcedures,
+  searchOtClientProcedures,
+  fetchOtBandejaFilterFields,
   fetchOtProfile,
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
@@ -107,7 +111,8 @@ describe("ClientProceduresSection — HU #10220", () => {
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
     });
-    vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
+    vi.mocked(searchOtClientProcedures).mockResolvedValue({
       data: [procedure],
       totalCount: 1,
       page: 1,
@@ -210,24 +215,54 @@ describe("ClientProceduresSection — HU #10220", () => {
     );
   });
 
-  it("AC4 aplica filtro por estado entregado (pendiente OT, N 03)", async () => {
+  // AC4 — la bandeja abre por la cola de decisión, y filtrar se hace desde el panel «Filtros», que
+  // se pinta con el catálogo del servidor (HU #12218). Antes esta prueba manejaba el formulario
+  // «Búsqueda avanzada» y su <select> de tipo de trámite; ese formulario ya no existe.
+  it("AC4 abre en pendiente OT y aplica una condición del catálogo", async () => {
     const user = userEvent.setup();
+    // El catálogo se pide al montar, así que se fija ANTES del render.
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([
+      {
+        id: "tipo_tramite",
+        label: "Tipo de trámite",
+        kind: "opcion",
+        group: "Trámite",
+        operators: ["es_alguno", "no_es_ninguno"],
+        options: [{ value: "matricula_inicial-type-id", label: "Matrícula inicial" }],
+        hint: null,
+        admiteLista: true,
+      },
+    ]);
     renderSection();
+
     await waitFor(() =>
-      expect(fetchOtClientProcedures).toHaveBeenCalledWith(
+      expect(searchOtClientProcedures).toHaveBeenCalledWith(
         expect.objectContaining({ status: "entregado", pageSize: 20 }),
         expect.anything(),
         undefined,
       ),
     );
-    await user.click(screen.getByRole("button", { name: /Búsqueda avanzada/i }));
-    await user.selectOptions(screen.getByLabelText(/Filtrar por tipo de trámite/i), "matricula_inicial-type-id");
-    await user.click(screen.getByRole("button", { name: /^Buscar$/i }));
+
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+    await user.click(
+      within(screen.getByTestId("ot-bandeja-filtros-campos")).getByRole("button", {
+        name: "Tipo de trámite",
+      }),
+    );
+    await user.click(await screen.findByRole("checkbox", { name: /Matrícula inicial/ }));
+    // El editor confirma LA CONDICIÓN; el pie del panel aplica LA BANDEJA.
+    await user.click(screen.getByTestId("ot-bandeja-filtros-aplicar-tipo_tramite"));
+    await user.click(screen.getByRole("button", { name: /^Aplicar$/ }));
+
     await waitFor(() =>
-      expect(fetchOtClientProcedures).toHaveBeenCalledWith(
+      expect(searchOtClientProcedures).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: "entregado",
-          procedureTypeId: "matricula_inicial-type-id",
+          condiciones: [
+            expect.objectContaining({
+              fieldId: "tipo_tramite",
+              values: ["matricula_inicial-type-id"],
+            }),
+          ],
         }),
         expect.anything(),
         undefined,
@@ -238,7 +273,7 @@ describe("ClientProceduresSection — HU #10220", () => {
   it("N03 fix — con transitOfficeId scope-a la lista y el perfil (vista SuperAdmin)", async () => {
     renderSection("aaaaaaaa-0001-4000-8000-000000000001");
     await waitFor(() =>
-      expect(fetchOtClientProcedures).toHaveBeenCalledWith(
+      expect(searchOtClientProcedures).toHaveBeenCalledWith(
         expect.objectContaining({ status: "entregado" }),
         expect.anything(),
         { transitOfficeId: "aaaaaaaa-0001-4000-8000-000000000001" },
@@ -330,7 +365,7 @@ describe("ClientProceduresSection — HU #10220", () => {
   });
 
   it("fila aprobada ofrece 'Adjuntar LT' para el OT admin", async () => {
-    vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+    vi.mocked(searchOtClientProcedures).mockResolvedValue({
       data: [{ ...procedure, status: "aprobado" }],
       totalCount: 1,
       page: 1,
@@ -576,7 +611,7 @@ describe("ClientProceduresSection — cotejo en la modal (HU #12043)", () => {
       deliveredWithoutGrant: 0,
       hasDeliveredWithoutGrant: false,
     });
-    vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+    vi.mocked(searchOtClientProcedures).mockResolvedValue({
       data: [{ ...procedure, vin: "LRWYGCEK7TC769623", placa: "OCR001" }],
       totalCount: 1,
       page: 1,

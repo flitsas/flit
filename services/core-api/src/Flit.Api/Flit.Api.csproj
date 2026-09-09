@@ -21,6 +21,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Feature #12201 — Flit.Admin.Tests invoca los delegates internos de
+         AdminGeneracionDocumentalEndpoints para verificar el contrato de respuesta
+         ({ id, status } en application/json, nunca application/pdf). -->
+    <InternalsVisibleTo Include="Flit.Admin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Grpc.AspNetCore" />
     <PackageReference Include="Swashbuckle.AspNetCore" />

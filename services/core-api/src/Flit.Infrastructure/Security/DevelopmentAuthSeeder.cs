@@ -105,6 +105,7 @@ public static class DevelopmentAuthSeeder
         await SeedIctPiiRevealPermissionAsync(db, cancellationToken);
         await SeedHistorialPlacaPermissionsAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
+        await SeedGeneracionDocumentalPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
@@ -1493,6 +1494,118 @@ public static class DevelopmentAuthSeeder
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Generación documental autónoma (Feature #12201, HU #12205, ADR-0056-generacion-documental-standalone)
+    /// — módulo <c>generacion-documental</c> + permisos <c>generacion-documental.read</c> y
+    /// <c>generacion-documental.generate</c>, concedidos a SuperAdmin y AdminCompany.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Método propio e idempotente, DELIBERADAMENTE separado de <see cref="SeedBaseModulesAsync"/>: ese
+    /// método hace early-return en cuanto existe el módulo <c>dashboard</c>, de modo que agregar una
+    /// entrada a su array NO crearía el módulo en ninguna base ya sembrada (DEV/QA/PDN). Mismo patrón que
+    /// <see cref="SeedLogQxPermissionsAsync"/>, <see cref="SeedIctLogsPermissionsAsync"/> y
+    /// <see cref="SeedResetPasswordPermissionsAsync"/>.
+    /// </para>
+    /// <para>
+    /// A diferencia de <c>logqx</c> / <c>ict-*</c> (herramientas de soporte FLIT), aquí el permiso SÍ se
+    /// concede a AdminCompany: la generación documental es una función de negocio del administrador de la
+    /// compañía. SuperAdmin además bypassa por rol en runtime; el grant deja el permiso visible y
+    /// administrable en RBAC.
+    /// </para>
+    /// <para>
+    /// La autorización de las rutas del módulo se resuelve por permiso
+    /// (<c>RequirePermission("generacion-documental.*")</c>) y nunca por
+    /// <c>AdminAuthorization.SuperAdminPolicy</c>: una policy de grupo dejaría a AdminCompany fuera del
+    /// módulo pese a tener el permiso concedido aquí.
+    /// </para>
+    /// <para>
+    /// Idempotencia en ambos sentidos: el módulo, cada permiso y cada grant se crean solo si faltan, de
+    /// forma que un segundo arranque sobre la misma base no duplica filas ni lanza excepción.
+    /// </para>
+    /// </remarks>
+    // internal (no private): Flit.Infrastructure.Tests (InternalsVisibleTo) verifica la idempotencia
+    // del seeder sobre una base donde SeedBaseModulesAsync ya hizo early-return, que es el escenario
+    // real de DEV/QA/PDN y no se puede reproducir llamando a SeedAsync (ejecuta DDL crudo).
+    internal static async Task SeedGeneracionDocumentalPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        const string moduleCode = "generacion-documental";
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == moduleCode && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = moduleCode,
+                Name = "Generación documental",
+                SortOrder = 10,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // (slug, nombre, método HTTP, ruta canónica que protege)
+        var permissions = new[]
+        {
+            (Slug: "generacion-documental.read",
+             Name: "Ver generación documental",
+             HttpMethod: "GET",
+             RoutePattern: "/api/v1/admin/generacion-documental"),
+            (Slug: "generacion-documental.generate",
+             Name: "Generar documentos sin trámite",
+             HttpMethod: "POST",
+             RoutePattern: "/api/v1/admin/generacion-documental/rues/generate"),
+        };
+
+        foreach (var permission in permissions)
+        {
+            var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == permission.Slug, ct);
+            if (action is null)
+            {
+                action = new RbacAction
+                {
+                    Id = Guid.CreateVersion7(),
+                    ModuleId = module.Id,
+                    Slug = permission.Slug,
+                    Name = permission.Name,
+                    HttpMethod = permission.HttpMethod,
+                    RoutePattern = permission.RoutePattern,
+                    IsActive = true,
+                    CreatedAt = now,
+                };
+                db.RbacActions.Add(action);
+                await db.SaveChangesAsync(ct);
+            }
+
+            foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+            {
+                var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+                foreach (var role in roles)
+                {
+                    var alreadyGranted = await db.RoleGrants
+                        .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                    if (!alreadyGranted)
+                    {
+                        db.RoleGrants.Add(new RoleGrant
+                        {
+                            Id = Guid.CreateVersion7(),
+                            RoleId = role.Id,
+                            PermissionId = action.Id,
+                            CreatedAt = now,
+                        });
+                    }
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     /// <summary>

@@ -10,6 +10,8 @@ import type { OtClientProcedure } from "@/lib/api/types-ot";
 
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtClientProcedures: vi.fn(),
+  searchOtClientProcedures: vi.fn(),
+  fetchOtBandejaFilterFields: vi.fn(),
   fetchOtBandejaHealth: vi.fn(),
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
@@ -43,6 +45,8 @@ vi.mock("@/lib/api/tramites-client", () => ({
 import {
   fetchOtBandejaHealth,
   fetchOtClientProcedures,
+  searchOtClientProcedures,
+  fetchOtBandejaFilterFields,
   fetchOtProfile,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
@@ -106,7 +110,8 @@ describe("ClientProceduresSection — rechazo con causales del catálogo", () =>
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
     });
-    vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
+    vi.mocked(searchOtClientProcedures).mockResolvedValue({
       data: [entregado],
       totalCount: 1,
       page: 1,

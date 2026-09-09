@@ -51,6 +51,11 @@ using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
 using Flit.Admin.Application.DocumentTypes.PurgeDocumentType;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
+using Flit.Admin.Application.GeneracionDocumental.Download;
+using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
+using Flit.Admin.Application.GeneracionDocumental.GenerateTransferencia;
+using Flit.Admin.Application.GeneracionDocumental.List;
+using Flit.Admin.Application.GeneracionDocumental.Prefill;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
 using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
@@ -326,6 +331,7 @@ public static class DependencyInjection
 
         // HU #10217 — trámites de clientes OT (tenant admin).
         services.AddScoped<ListOtClientProceduresHandler>();
+        services.AddScoped<GetOtBandejaFilterFieldsHandler>();
         services.AddScoped<GetOtClientProcedureHandler>();
         services.AddScoped<ApproveOtClientProcedureHandler>();
         services.AddScoped<RejectOtClientProcedureHandler>();
@@ -351,6 +357,47 @@ public static class DependencyInjection
         // IImprontaExternalClient (HU #10465) e IImprontaRepository (HU #10466) se registran en
         // Flit.Infrastructure (InfrastructureExtensions/AddAdminInfrastructure).
         services.AddScoped<GenerarImprontaHandler>();
+
+        // HU #12203 (Feature #12201) — generación documental SIN trámite. Los puertos
+        // (IStandaloneDocumentStorage / IStandaloneRuesCertificateRenderer /
+        // IStandaloneRuesCompanyLookup) y el repositorio se registran en
+        // Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<GenerateRuesDocumentHandler>();
+        services.AddScoped<PreviewRuesCompanyHandler>();
+
+        // HU #12204 (Feature #12201) — historial tenant-scoped y redescarga presignada auditada.
+        services.AddScoped<ListStandaloneDocumentsHandler>();
+        services.AddScoped<GetStandaloneDocumentDownloadHandler>();
+
+        // HU #12206 (Feature #12201) — fachadas standalone de prellenado (CF-25). Ninguno de estos
+        // handlers recibe repositorio ni storage: el prellenado NO persiste. Los puertos
+        // (IStandaloneVehiclePrefill / IStandaloneRuntPersonPrefill / IStandaloneActorContactLookup)
+        // se registran en Flit.Infrastructure.AddAdminInfrastructure; el directorio de representantes
+        // (ILegalRepresentativeReader) ya está registrado para el módulo de compañías.
+        services.AddScoped<PrefillVehiculoHandler>();
+        services.AddScoped<PrefillPersonaJuridicaHandler>();
+        services.AddScoped<PrefillPersonaNaturalHandler>();
+
+        // HU #12207 (Feature #12201) — Documento de Transferencia de Dominio, escenario A. La
+        // política de validaciones (TransferValidationPolicy) es una función pura sin estado y no
+        // se registra: HU-06 la extiende con VB-B-*, VB-C-* y VB-07 en ese mismo archivo. El puerto
+        // IStandaloneTransferGenerator se registra en Flit.Infrastructure; NO se inyecta ningún
+        // lector del baúl de firmas (modo MANUSCRITA fijo, anexo §9.0).
+        services.AddScoped<GenerateTransferenciaHandler>();
+
+        // HU #12210 (Feature #12201, I3) — carga masiva XLSX. El runner del lote se registra scoped
+        // porque arrastra repositorios y handlers scoped; el BackgroundService de Infrastructure
+        // abre un scope por ciclo y lo resuelve ahí. Los puertos del parser y de la plantilla se
+        // registran en Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<GeneracionDocumental.Batches.CreateBatchHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.StandaloneDocumentBatchRunner>();
+
+        // HU #12211 (Feature #12201, I3) — seguimiento del lote y descarga ZIP. Los tres consultan
+        // por tenant y ninguno persiste nada: el ZIP se arma contra el cuerpo de la respuesta y no
+        // llega a storage ni a base de datos (CF-15).
+        services.AddScoped<GeneracionDocumental.Batches.GetBatchStatusHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.ListBatchItemsHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.DownloadBatchZipHandler>();
 
         return services;
     }

@@ -19,7 +19,8 @@ export const OT_PROCEDURES_COLUMNS: readonly OtProceduresColumnDef[] = [
   { key: "placa", label: "Placa", sortable: true },
   { key: "vendedor", label: "Propietario / vendedor", sortable: true },
   { key: "comprador", label: "Comprador", sortable: true },
-  { key: "tipoTramite", label: "Tipo trámite" },
+  // Ordenable desde la HU #12217: el backend ya resuelve el ORDER BY por nombre del tipo.
+  { key: "tipoTramite", label: "Tipo trámite", sortable: true },
   // Empresa y gestor en UNA celda: los dos identifican a quien radicó el trámite, y separados
   // obligaban a barrer la fila de lado a lado para saber de dónde venía. Ordena por GESTOR, que es
   // lo único de los dos que el API sabe ordenar; el control de orden lo dice en su nombre.
@@ -32,6 +33,35 @@ export const OT_PROCEDURES_COLUMNS: readonly OtProceduresColumnDef[] = [
 export const DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS: readonly string[] = OT_PROCEDURES_COLUMNS.map(
   (c) => c.key,
 );
+
+/** Una opción de orden ofrecida por la cabecera de una columna (HU #12219). */
+export interface OtProceduresSortOption {
+  id: string;
+  label: string;
+  /** Clave de orden del API. */
+  sort: string;
+  kind: "texto" | "fecha";
+}
+
+/**
+ * Por cuáles de sus datos se puede ordenar una columna (HU #12219).
+ *
+ * <p>«Empresa / Gestor» apila DOS datos en una celda y un clic en la cabecera no puede decir por
+ * cuál ordena: hasta ahora ordenaba siempre por el gestor, así que la cabecera prometía un orden
+ * por empresa que no existía. Devolviendo la lista, la cabecera ofrece un desplegable cuando hay
+ * más de un dato y conserva el clic simple cuando hay uno solo.</p>
+ */
+export function otProceduresSortOptions(columnKey: string): OtProceduresSortOption[] {
+  switch (columnKey) {
+    case "empresaGestor":
+      return [
+        { id: "empresa", label: "Empresa cliente", sort: "empresa", kind: "texto" },
+        { id: "gestor", label: "Gestor", sort: "gestor", kind: "texto" },
+      ];
+    default:
+      return [];
+  }
+}
 
 /** Mapea la clave de columna UI → sortBy del API. */
 export function otColumnToSortBy(columnKey: string): string {
@@ -48,6 +78,8 @@ export function otColumnToSortBy(columnKey: string): string {
       return "comprador";
     case "empresaGestor":
       return "gestor";
+    case "tipoTramite":
+      return "tipo_tramite";
     case "estado":
       return "estado";
     case "fechaRadicacion":

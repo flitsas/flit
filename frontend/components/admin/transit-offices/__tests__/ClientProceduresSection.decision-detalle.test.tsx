@@ -11,6 +11,8 @@ import type { OtClientProcedure } from "@/lib/api/types-ot";
 
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtClientProcedures: vi.fn(),
+  searchOtClientProcedures: vi.fn(),
+  fetchOtBandejaFilterFields: vi.fn(),
   fetchOtBandejaHealth: vi.fn(),
   fetchOtBandejaCounters: vi.fn(),
   fetchOtProfile: vi.fn(),
@@ -53,6 +55,8 @@ import {
   fetchOtBandejaHealth,
   fetchOtClientProcedure,
   fetchOtClientProcedures,
+  searchOtClientProcedures,
+  fetchOtBandejaFilterFields,
   fetchOtDocuments,
   fetchOtProfile,
 } from "@/lib/api/admin-ot";
@@ -71,7 +75,8 @@ const ENTREGADO: OtClientProcedure = {
 };
 
 function prepararBandeja(row: OtClientProcedure) {
-  vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+  vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
+  vi.mocked(searchOtClientProcedures).mockResolvedValue({
     data: [row],
     totalCount: 1,
     page: 1,
@@ -385,11 +390,11 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     renderSection();
 
     await screen.findByText("RAD-2026-101");
-    const llamadasIniciales = vi.mocked(fetchOtClientProcedures).mock.calls.length;
+    const llamadasIniciales = vi.mocked(searchOtClientProcedures).mock.calls.length;
 
     await user.click(screen.getByRole("button", { name: "Actualizar la bandeja de trámites" }));
     await waitFor(() =>
-      expect(vi.mocked(fetchOtClientProcedures).mock.calls.length).toBeGreaterThan(
+      expect(vi.mocked(searchOtClientProcedures).mock.calls.length).toBeGreaterThan(
         llamadasIniciales,
       ),
     );

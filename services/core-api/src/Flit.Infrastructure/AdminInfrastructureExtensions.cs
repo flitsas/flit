@@ -313,6 +313,47 @@ public static class AdminInfrastructureExtensions
         // HU #10650 (Feature #10587) — inventario de rangos de placas de preasignación.
         services.AddScoped<IPlateRangeRepository, PlateRangeRepository>();
 
+        // HU #12203 (Feature #12201, ADR-0056-generacion-documental-standalone) — generación
+        // documental SIN trámite. Repositorio tenant-scoped (WHERE tenant_id explícito; la RLS de
+        // la tabla es decorativa) y los tres puertos acotados del módulo, implementados aquí para
+        // que Flit.Admin.Application no tenga que nombrar ningún tipo de Flit.Tramites.* (C6):
+        //   · storage    -> delega en IAttachmentStorage pasando el tenantId como agrupación
+        //   · renderer   -> delega en IRuesCertificateGenerator, que NO se modifica
+        //   · lookup     -> reusa RuesActorJuridicalLookup con Guid.Empty (sin instancia)
+        services.AddScoped<Flit.Admin.Domain.GeneracionDocumental.IStandaloneDocumentRepository,
+            Flit.Infrastructure.Persistence.Repositories.StandaloneDocumentRepository>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneDocumentStorage,
+            Flit.Infrastructure.Storage.StandaloneDocumentStorage>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneRuesCertificateRenderer,
+            Flit.Infrastructure.Documents.Standalone.StandaloneRuesCertificateRenderer>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneRuesCompanyLookup,
+            Flit.Infrastructure.Consultations.StandaloneRuesCompanyLookup>();
+        // HU #12207 — generador del Documento de Transferencia de Dominio (QuestPDF + membrete
+        // FLIT). Sin dependencias del baúl de firmas: el modo de firma vigente es MANUSCRITA.
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneTransferGenerator,
+            Flit.Infrastructure.Documents.Standalone.StandaloneTransferDocumentGenerator>();
+
+        // HU #12206 — prellenado standalone (CF-25). Los tres adaptadores consultan y nada más: no
+        // persisten documentos, no crean instancias y no evalúan ningún gate de trámite. El de
+        // vehículo NO reutiliza RunPreflightPreviewHandler: un trámite activo sobre la placa no puede
+        // impedir prellenar un documento.
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneVehiclePrefill,
+            Flit.Infrastructure.Consultations.StandaloneVehiclePrefillAdapter>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneRuntPersonPrefill,
+            Flit.Infrastructure.Consultations.StandalonePersonPrefillAdapter>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneActorContactLookup,
+            Flit.Infrastructure.Consultations.StandaloneActorContactLookupAdapter>();
+
+        // HU #12210 — lotes XLSX (I3). El parser y el generador de plantilla son SIN ESTADO y van
+        // singleton. Van sobre DocumentFormat.OpenXml crudo (SAX): NO se añadió ClosedXML ni EPPlus,
+        // porque una dependencia nueva exige auditoría previa (regla FLIT 18).
+        services.AddSingleton<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneDocumentXlsxParser,
+            Flit.Infrastructure.Documents.Standalone.StandaloneDocumentXlsxParser>();
+        services.AddSingleton<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneDocumentXlsxTemplate,
+            Flit.Infrastructure.Documents.Standalone.StandaloneDocumentXlsxTemplate>();
+        services.AddScoped<Flit.Admin.Domain.GeneracionDocumental.IStandaloneDocumentBatchRepository,
+            Flit.Infrastructure.Persistence.Repositories.StandaloneDocumentBatchRepository>();
+
         return services;
     }
 }

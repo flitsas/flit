@@ -4,25 +4,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { tramitesClient } from "@/lib/api/tramites-client";
-import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 import {
   adjuntarOtLicenciaTransito,
   type AdjuntarLtResult,
   approveOtClientProcedure,
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaCounters,
+  fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
-  fetchOtClientProcedures,
   fetchOtDocuments,
   fetchOtProfile,
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
   revokeOtClientProcedure,
+  searchOtClientProcedures,
 } from "@/lib/api/admin-ot";
 import type {
   OtBandejaCounters,
   OtBandejaHealth,
   OtClientProcedure,
+  OtClientProceduresParams,
   OtProfile,
   RejectionReason,
 } from "@/lib/api/types-ot";
@@ -33,7 +34,7 @@ import { getToken } from "@/lib/api/client";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
-import { ChevronDown, ChevronUp, RefreshCw, Search } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import {
   ClientProcedureDetailModal,
@@ -46,7 +47,7 @@ import {
   updateProcedurePlate,
   type PlateDetail,
 } from "@/lib/api/admin-plate-ranges";
-import { OT_FILTER_FORM_CLS, OT_FILTER_LABEL_CLS, OT_INPUT_CLS } from "./ot-form-styles";
+import { OT_INPUT_CLS } from "./ot-form-styles";
 import { plateUpdateRemainingLabel } from "./ot-utils";
 import {
   OtBandejaCountersStrip,
@@ -54,8 +55,37 @@ import {
   type OtCounterKey,
 } from "./OtBandejaCounters";
 import { formatDocumentWithType } from "@/lib/display/document-number";
+import { ColumnSelector } from "@/components/atom/ColumnSelector";
+import { useUiPreferences } from "@/hooks/useUiPreferences";
+import {
+  TramitesFiltrosBar,
+  TramitesFiltrosChips,
+  rangoDePeriodo,
+  type RangoSobre,
+} from "@/components/operacion/TramitesFiltrosBar";
+import { controlCls } from "@/components/operacion/tramites-control-styles";
+import type { QueryCondition, QueryField } from "@/lib/api/queries";
+import {
+  OT_PROCEDURES_COLUMNS,
+  DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS,
+} from "@/lib/admin/ot-procedures-columns";
+import {
+  otProceduresExportFields,
+  nombreArchivoBandejaOt,
+} from "@/lib/admin/ot-procedures-export";
+import { buildWorkbook, type DataColumn } from "@/components/consultas/columns";
+import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from "@/components/consultas/export";
+import { selloDeArchivo } from "@/components/operacion/tramites-export";
+import { XLSX_MIME } from "@/lib/xlsx";
 
 const PAGE_SIZE = 20;
+
+/**
+ * Tamaño de página del recorrido del export: el tope DURO del endpoint
+ * (`ListOtClientProceduresHandler.MaxPageSize`). Pedir más no trae más, así que subirlo solo haría
+ * que el servidor devolviera menos de lo pedido y el recorrido diera vueltas de más.
+ */
+const EXPORT_PAGE_SIZE = 100;
 
 /**
  * Estados que el organismo puede filtrar en su bandeja (HU #11946).
@@ -355,23 +385,54 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [plateFlowFilter, setPlateFlowFilter] = useState("");
   const [counters, setCounters] = useState<OtBandejaCounters | null>(null);
   const [contadorActivo, setContadorActivo] = useState<OtCounterKey | "">("");
-  const [typeFilter, setTypeFilter] = useState("");
-  // Borradores del formulario; se aplican al listado solo con "Aplicar filtros".
-  const [vinFilter, setVinFilter] = useState("");
-  const [placaFilter, setPlacaFilter] = useState("");
-  const [vendedorFilter, setVendedorFilter] = useState("");
-  const [compradorFilter, setCompradorFilter] = useState("");
-  const [gestorFilter, setGestorFilter] = useState("");
-  const [appliedVin, setAppliedVin] = useState("");
-  const [appliedPlaca, setAppliedPlaca] = useState("");
-  const [appliedVendedor, setAppliedVendedor] = useState("");
-  const [appliedComprador, setAppliedComprador] = useState("");
-  const [appliedGestor, setAppliedGestor] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  /** Panel de filtros colapsado por defecto para no saturar la bandeja. */
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
+
+  // ── Filtros con la gramática de Consultas (HU #12218) ───────────────────────────────────────
+  //
+  // Sustituyen a los siete campos sueltos del antiguo formulario «Búsqueda avanzada». Se conserva
+  // la separación borrador/aplicado: el panel se edita sin que la bandeja se mueva, y solo
+  // «Aplicar» la recarga. En tiempo real, cada tecla serían dos llamadas (bandeja y contadores).
+  const [queryFields, setQueryFields] = useState<QueryField[]>([]);
+  const [fieldsError, setFieldsError] = useState(false);
+  const [fieldsKey, setFieldsKey] = useState(0);
+  const [draftCondiciones, setDraftCondiciones] = useState<QueryCondition[]>([]);
+  const [appliedCondiciones, setAppliedCondiciones] = useState<QueryCondition[]>([]);
+
+  const [search, setSearch] = useState("");
+  const [busquedaAplicada, setBusquedaAplicada] = useState("");
+
+  const [rangoSobre, setRangoSobre] = useState<RangoSobre>("created");
+  const [periodo, setPeriodo] = useState<string>("Sin periodo");
+  const [rangoPropioDesde, setRangoPropioDesde] = useState("");
+  const [rangoPropioHasta, setRangoPropioHasta] = useState("");
+  const [appliedCreatedFrom, setAppliedCreatedFrom] = useState("");
+  const [appliedCreatedTo, setAppliedCreatedTo] = useState("");
+  const [appliedUpdatedFrom, setAppliedUpdatedFrom] = useState("");
+  const [appliedUpdatedTo, setAppliedUpdatedTo] = useState("");
+
+  // Selector de columnas (HU #12218 AC7). El scope `ot.procedures.columns` ya existía sin usarse.
+  // Degrada con elegancia: si la preferencia no carga o falla al guardar, la tabla sigue con todas
+  // las columnas y el usuario no se queda sin bandeja.
+  const {
+    visible: visibleColumns,
+    saving: savingColumns,
+    setVisible: setVisibleColumns,
+  } = useUiPreferences("ot.procedures.columns", DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS, {
+    catalog: OT_PROCEDURES_COLUMNS.map((c) => c.key),
+  });
+
+  /** ¿La selección de columnas se apartó del default? Es lo que marca el control en azul. */
+  const columnasPersonalizadas = useMemo(() => {
+    const actual = [...visibleColumns].sort();
+    const base = [...DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS].sort();
+    return actual.length !== base.length || actual.some((k, i) => k !== base[i]);
+  }, [visibleColumns]);
+
+  // Export (HU #12220).
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
   // ADR-0036 §D9 (HU #10916) — cuando la aprobación devuelve 409 mandatario_requerido, se elige el
@@ -490,12 +551,35 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     return () => controller.abort();
   }, [transitOfficeId]);
 
+  // El respiro tras la última tecla. La búsqueda se aplica SOLA, igual que en el listado del
+  // gestor: la caja se ve idéntica en las dos pantallas y tiene que responder igual — obligar aquí
+  // a abrir «Filtros» y pulsar «Aplicar» para que surtiera efecto era la clase de diferencia que
+  // solo se descubre probando. 350 ms es el rango en que una pausa se lee como «terminé de
+  // escribir» sin que la tabla se sienta perezosa.
   useEffect(() => {
-    tramitesClient
-      .listPublishedProcedureTypes()
-      .then(setProcedureTypes)
-      .catch(() => setProcedureTypes([]));
-  }, []);
+    // El setState va dentro del temporizador, no en el cuerpo del efecto: es diferido.
+    const id = setTimeout(() => {
+      setBusquedaAplicada(search);
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(id);
+  }, [search]);
+
+  // HU #12218 — catálogo de campos filtrables. Degrada con elegancia (AC8): si no carga, la
+  // bandeja se pinta igual con su listado y el panel ofrece reintentar. Nunca bloquea el render.
+  useEffect(() => {
+    const c = new AbortController();
+    fetchOtBandejaFilterFields(c.signal, transitOfficeId ? { transitOfficeId } : undefined)
+      .then((fields) => {
+        if (c.signal.aborted) return;
+        setQueryFields(fields);
+        setFieldsError(false);
+      })
+      .catch(() => {
+        if (!c.signal.aborted) setFieldsError(true);
+      });
+    return () => c.abort();
+  }, [transitOfficeId, fieldsKey]);
 
   // Deep-link desde el drill-down de reportes OT (?placa=/?vin=/?status=): abrir la lista de un
   // bloque del panel debe aterrizar ya filtrado en el trámite, no en la bandeja completa. Se lee
@@ -509,42 +593,71 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     const statusParam = params.get("status")?.trim();
     if (!placaParam && !vinParam && !statusParam) return;
     /* eslint-disable react-hooks/set-state-in-effect -- siembra desde la URL al montar: no hay otro momento para leerla */
-    if (placaParam) {
-      setPlacaFilter(placaParam);
-      setAppliedPlaca(placaParam);
-    }
-    if (vinParam) {
-      setVinFilter(vinParam);
-      setAppliedVin(vinParam);
+    // La placa y el VIN entran como CONDICIONES aplicadas, no como campos sueltos: desde la
+    // HU #12218 ese es el único camino de filtrado, y así el enlace profundo deja además su chip
+    // a la vista — quien aterriza aquí ve por qué la lista viene acotada y puede quitarlo.
+    const sembradas: QueryCondition[] = [];
+    if (placaParam)
+      sembradas.push({ fieldId: "placa", operator: "es_alguno", values: [placaParam] });
+    if (vinParam) sembradas.push({ fieldId: "vin", operator: "es_alguno", values: [vinParam] });
+    if (sembradas.length > 0) {
+      setDraftCondiciones(sembradas);
+      setAppliedCondiciones(sembradas);
     }
     // Un estado fuera de la bandeja (p. ej. `?status=borrador`) se ignora en vez de sembrarse:
     // el backend ya lo devuelve vacío, pero el <select> se quedaría en un valor sin <option> que
     // lo represente — se vería en blanco junto a una lista vacía, y eso se lee como un fallo de
     // carga en vez de como un filtro que no existe.
     if (statusParam && esEstadoDeBandeja(statusParam)) setStatusFilter(statusParam);
-    setFiltersOpen(true);
     setPage(1);
     /* eslint-enable react-hooks/set-state-in-effect */
     // Solo al montar: es una precarga desde la URL de entrada, no una sincronización continua.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Los criterios que resuelve el SERVIDOR, tal y como están aplicados ahora mismo.
+   *
+   * Vive aparte de `load` porque tiene DOS consumidores: la bandeja y el recorrido del export
+   * (HU #12220). Con una copia en cada sitio, el día que se añada un filtro habría que acordarse
+   * de ponerlo también en el export — y hasta que alguien lo notara, el Excel traería filas que
+   * la pantalla no está mostrando. NO incluye la paginación: eso es cosa de cada consumidor.
+   */
+  const buildListQuery = useCallback(
+    (): OtClientProceduresParams => ({
+      status: statusFilter || undefined,
+      plateFlowStatus: plateFlowFilter || undefined,
+      condiciones: appliedCondiciones.length > 0 ? appliedCondiciones : undefined,
+      busqueda: busquedaAplicada.trim() || undefined,
+      createdFrom: appliedCreatedFrom || undefined,
+      createdTo: appliedCreatedTo || undefined,
+      updatedFrom: appliedUpdatedFrom || undefined,
+      updatedTo: appliedUpdatedTo || undefined,
+      sortBy: sortBy || undefined,
+      sortDir,
+    }),
+    [
+      statusFilter,
+      plateFlowFilter,
+      appliedCondiciones,
+      busquedaAplicada,
+      appliedCreatedFrom,
+      appliedCreatedTo,
+      appliedUpdatedFrom,
+      appliedUpdatedTo,
+      sortBy,
+      sortDir,
+    ],
+  );
 
   const load = useCallback(
     async (signal?: AbortSignal, targetPage = page) => {
       setStatus("loading");
       try {
-        const result = await fetchOtClientProcedures(
+        // Por POST: las condiciones no caben en una query string cuando alguien pega una lista de
+        // placas desde Excel.
+        const result = await searchOtClientProcedures(
           {
-            status: statusFilter || undefined,
-            plateFlowStatus: plateFlowFilter || undefined,
-            procedureTypeId: typeFilter || undefined,
-            vin: appliedVin.trim() || undefined,
-            placa: appliedPlaca.trim() || undefined,
-            vendedor: appliedVendedor.trim() || undefined,
-            comprador: appliedComprador.trim() || undefined,
-            gestor: appliedGestor.trim() || undefined,
-            sortBy: sortBy || undefined,
-            sortDir,
+            ...buildListQuery(),
             page: targetPage,
             pageSize: PAGE_SIZE,
           },
@@ -582,7 +695,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [statusFilter, plateFlowFilter, typeFilter, appliedVin, appliedPlaca, appliedVendedor, appliedComprador, appliedGestor, sortBy, sortDir, page, transitOfficeId],
+    [buildListQuery, page, transitOfficeId],
   );
 
   useEffect(() => {
@@ -592,23 +705,64 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     return () => c.abort();
   }, [load, page]);
 
-  const applyFilters = () => {
-    setAppliedVin(vinFilter);
-    setAppliedPlaca(placaFilter);
-    setAppliedVendedor(vendedorFilter);
-    setAppliedComprador(compradorFilter);
-    setAppliedGestor(gestorFilter);
-    setPage(1);
-  };
+  /**
+   * Pasa el borrador a aplicado: condiciones, búsqueda y periodo a la vez. El periodo se traduce
+   * aquí a un rango concreto sobre la fecha elegida, que es lo que el servidor entiende.
+   */
+  const applyFilters = useCallback(() => {
+    setAppliedCondiciones(draftCondiciones);
+    setBusquedaAplicada(search);
 
-  const hasAdvancedFilters =
-    appliedVin.trim() !== "" ||
-    appliedPlaca.trim() !== "" ||
-    appliedVendedor.trim() !== "" ||
-    appliedComprador.trim() !== "" ||
-    appliedGestor.trim() !== "" ||
-    typeFilter !== "" ||
-    statusFilter !== "entregado";
+    // Filtrar el estado a mano MANDA sobre la tarjeta y sobre el estado por defecto de la bandeja.
+    // Son dos formas de acotar por lo mismo, y sin esta regla se combinarían con AND: pedir
+    // «Aprobado» con la bandeja abierta en «Pendiente de decisión» devolvería siempre cero, sin
+    // nada en pantalla que explicara por qué. Es la misma precedencia que ya tenía el desplegable
+    // de estado del formulario retirado.
+    if (draftCondiciones.some((c) => c.fieldId === "estado")) {
+      setStatusFilter("");
+      setPlateFlowFilter("");
+      setContadorActivo("");
+    }
+
+    const rango =
+      periodo === "Rango propio"
+        ? { desde: rangoPropioDesde, hasta: rangoPropioHasta }
+        : rangoDePeriodo(periodo, new Date());
+
+    const desde = rango?.desde ?? "";
+    const hasta = rango?.hasta ?? "";
+    // El rango aplica a UNA de las dos fechas: la otra se limpia, o quedarían dos periodos
+    // activos a la vez tras cambiar de «Rango sobre».
+    setAppliedCreatedFrom(rangoSobre === "created" ? desde : "");
+    setAppliedCreatedTo(rangoSobre === "created" ? hasta : "");
+    setAppliedUpdatedFrom(rangoSobre === "updated" ? desde : "");
+    setAppliedUpdatedTo(rangoSobre === "updated" ? hasta : "");
+    setPage(1);
+  }, [draftCondiciones, search, periodo, rangoPropioDesde, rangoPropioHasta, rangoSobre]);
+
+  const hasActiveFilters =
+    appliedCondiciones.length > 0 ||
+    busquedaAplicada.trim() !== "" ||
+    periodo !== "Sin periodo" ||
+    statusFilter !== ESTADO_POR_DEFECTO;
+
+  /** Quitar un chip aplica el cambio de inmediato: el chip describe lo que ya está filtrando. */
+  const quitarCondicion = useCallback((fieldId: string) => {
+    setDraftCondiciones((prev) => prev.filter((c) => c.fieldId !== fieldId));
+    setAppliedCondiciones((prev) => prev.filter((c) => c.fieldId !== fieldId));
+    setPage(1);
+  }, []);
+
+  const quitarPeriodo = useCallback(() => {
+    setPeriodo("Sin periodo");
+    setRangoPropioDesde("");
+    setRangoPropioHasta("");
+    setAppliedCreatedFrom("");
+    setAppliedCreatedTo("");
+    setAppliedUpdatedFrom("");
+    setAppliedUpdatedTo("");
+    setPage(1);
+  }, []);
 
   /**
    * Pulsar una tarjeta fija SU juego de filtros y suelta el de la anterior. El panel de búsqueda no
@@ -623,25 +777,103 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setPage(1);
   };
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setContadorActivo("");
     setPlateFlowFilter("");
-    setStatusFilter("entregado");
-    setTypeFilter("");
-    setVinFilter("");
-    setPlacaFilter("");
-    setVendedorFilter("");
-    setCompradorFilter("");
-    setGestorFilter("");
-    setAppliedVin("");
-    setAppliedPlaca("");
-    setAppliedVendedor("");
-    setAppliedComprador("");
-    setAppliedGestor("");
+    setStatusFilter(ESTADO_POR_DEFECTO);
+    setDraftCondiciones([]);
+    setAppliedCondiciones([]);
+    setSearch("");
+    setBusquedaAplicada("");
+    setPeriodo("Sin periodo");
+    setRangoPropioDesde("");
+    setRangoPropioHasta("");
+    setAppliedCreatedFrom("");
+    setAppliedCreatedTo("");
+    setAppliedUpdatedFrom("");
+    setAppliedUpdatedTo("");
     setSortBy("createdAt");
     setSortDir("desc");
     setPage(1);
-  };
+  }, []);
+
+  /**
+   * HU #12220 — descarga a Excel de TODO lo que cumple los filtros, no de la página a la vista.
+   *
+   * <p>Exportar solo las filas de pantalla sería una trampa: el archivo parecería completo y nadie
+   * lo comprobaría. Por eso recorre el servidor página a página hasta agotar el total —el mismo
+   * `total` que ya alimenta el pie— y reparte en archivos de {@link EXPORT_BATCH_SIZE} filas en vez
+   * de truncar. Cada archivo se dispara apenas se arma, dentro de la misma interacción del clic.</p>
+   *
+   * <p>El recorrido usa {@link buildListQuery}, el MISMO que pinta la tabla: así un filtro nuevo
+   * llega al archivo sin tocar el export, y el Excel no puede traer filas que la pantalla no está
+   * mostrando.</p>
+   */
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    setExportNotice(null);
+    setExportError(null);
+    try {
+      const base = buildListQuery();
+      const campos = otProceduresExportFields(visibleColumns);
+      const columnasExcel: DataColumn<OtClientProcedure>[] = campos.map((campo) => ({
+        id: campo.id,
+        label: campo.label,
+        group: "Bandeja",
+        value: campo.value,
+        raw: campo.raw,
+        width: campo.width,
+      }));
+      const idsVisibles = campos.map((c) => c.id);
+      const sello = selloDeArchivo(new Date());
+
+      // La primera página se pide aparte porque de ella sale el `total` con el que se sabe cuántas
+      // quedan. Se guarda para reusarla como página 1 en vez de volver a pedirla.
+      const primeraPagina = await searchOtClientProcedures(
+        { ...base, page: 1, pageSize: EXPORT_PAGE_SIZE },
+        undefined,
+        transitOfficeId ? { transitOfficeId } : undefined,
+      );
+
+      const { exportadas, archivos } = await exportarPorLotes<OtClientProcedure>({
+        total: primeraPagina.totalCount,
+        pageSize: EXPORT_PAGE_SIZE,
+        traerPagina: async (pagina, pageSize) =>
+          pagina === 1
+            ? primeraPagina.data
+            : (
+                await searchOtClientProcedures(
+                  { ...base, page: pagina, pageSize },
+                  undefined,
+                  transitOfficeId ? { transitOfficeId } : undefined,
+                )
+              ).data,
+        volcar: (lote, parte) => {
+          download(
+            buildWorkbook("Bandeja OT", columnasExcel, lote, idsVisibles),
+            nombreArchivoBandejaOt(sello, parte),
+            XLSX_MIME,
+          );
+        },
+      });
+
+      if (exportadas === 0) {
+        setExportNotice("Ningún trámite cumple los filtros activos: no se descargó ningún archivo.");
+        return;
+      }
+      setExportNotice(
+        archivos > 1
+          ? `Se exportaron ${exportadas} trámites en ${archivos} archivos de hasta ${EXPORT_BATCH_SIZE} filas cada uno, con ${idsVisibles.length} columnas.`
+          : `Se exportaron ${exportadas} trámites con ${idsVisibles.length} columnas.`,
+      );
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? `No se pudo exportar: ${err.message}` : "No se pudo exportar.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [buildListQuery, visibleColumns, transitOfficeId]);
 
   const handleSortChange = (nextSortBy: string, nextSortDir: "asc" | "desc") => {
     setSortBy(nextSortBy);
@@ -1081,206 +1313,137 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         </div>
       )}
       {/*
-        Cabecera de trabajo: la tira de contadores ocupa el ancho y "Búsqueda avanzada" va a su
-        derecha, del mismo alto, como en el diseño. Buscar es la acción con la que el organismo
-        empieza, no un ajuste secundario escondido en un enlace.
-      */}
-      <div className="flex items-stretch gap-3">
-        <div className="min-w-0 flex-1">
-          <OtBandejaCountersStrip
-            counters={counters}
-            selected={contadorActivo}
-            onSelect={handleContadorSelect}
-            loading={status === "loading"}
-          />
-        </div>
-        {/* Actualizar, el mismo gesto que el listado del gestor: la bandeja cambia por lo que
-            hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
-            perder los filtros puestos. */}
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={status === "loading"}
-          aria-label="Actualizar la bandeja de trámites"
-          title="Actualizar"
-          className="flex w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl border text-sm font-semibold leading-tight transition hover:bg-[#557EFF]/10 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-          style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${status === "loading" ? "animate-spin" : ""}`}
-            aria-hidden="true"
-          />
-          <span aria-hidden="true">Actualizar</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setFiltersOpen((o) => !o)}
-          aria-expanded={filtersOpen}
-          aria-controls="ot-filtros-panel"
-          // El rótulo se parte en dos líneas para caber en el bloque, y eso deja el nombre
-          // accesible pegado ("Búsquedaavanzada"). Se declara explícito para que lectores de
-          // pantalla y dictado por voz oigan lo que se ve.
-          aria-label="Búsqueda avanzada"
-          className="flex w-28 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg, #00D2FE 0%, #557EFF 100%)" }}
-        >
-          <Search className="h-4 w-4" aria-hidden="true" />
-          <span aria-hidden="true">Búsqueda</span>
-          <span aria-hidden="true">avanzada</span>
-        </button>
-      </div>
+        Cabecera de trabajo (HU #12218): PRIMERO la fila de controles y después la tira de
+        contadores, el mismo orden que el listado del gestor («tabs + filtros ANTES de KPIs», la
+        convención de flit-tramites-chrome). Los controles son con lo que se empieza a trabajar; los
+        contadores describen lo que hay. Con la fila debajo, buscar quedaba escondido tras un bloque
+        de seis tarjetas.
 
-      <div className="rounded-2xl border bg-white dark:bg-[#0B0F14]">
-        {hasAdvancedFilters || filtersOpen ? (
-          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-            <button
-              type="button"
-              onClick={() => setFiltersOpen((o) => !o)}
-              aria-controls="ot-filtros-panel"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#557EFF]"
-            >
-              {filtersOpen ? (
-                <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
-              {filtersOpen ? "Ocultar filtros" : "Ver filtros"}
-            </button>
-            {hasAdvancedFilters ? (
-              <span
-                className="rounded-full bg-[#557EFF]/15 px-2 py-0.5 text-[10px] font-bold text-[#557EFF]"
-                role="status"
+        Antes había aquí un botón «Búsqueda avanzada» que desplegaba una tarjeta con ocho campos
+        sueltos: ocupaba media pantalla en reposo y no se parecía en nada a la barra que el mismo
+        producto ya usa al otro lado del trámite.
+      */}
+      <div className="flex min-w-0 flex-col">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <TramitesFiltrosBar
+            rangoSobre={rangoSobre}
+            onRangoSobreChange={setRangoSobre}
+            periodo={periodo}
+            onPeriodoChange={setPeriodo}
+            rangoPropioDesde={rangoPropioDesde}
+            rangoPropioHasta={rangoPropioHasta}
+            onRangoPropioDesdeChange={setRangoPropioDesde}
+            onRangoPropioHastaChange={setRangoPropioHasta}
+            queryFields={queryFields}
+            draftCondiciones={draftCondiciones}
+            onDraftCondicionesChange={setDraftCondiciones}
+            condicionesCount={appliedCondiciones.length}
+            filtrosTestIdPrefix="ot-bandeja-filtros"
+            fieldsError={
+              fieldsError ? (
+                <div className="p-1 text-xs">
+                  <p className="mb-2 text-[#C2410C]">
+                    No se pudieron cargar los filtros disponibles.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setFieldsKey((k) => k + 1)}
+                    className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              ) : undefined
+            }
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Buscar radicado, placa, VIN..."
+            searchAriaLabel="Buscar en la bandeja de trámites"
+            onAplicar={applyFilters}
+            onEmpezarDeCero={clearFilters}
+            empezarDeCeroDisabled={!hasActiveFilters && draftCondiciones.length === 0}
+            columnSelector={
+              <ColumnSelector
+                columns={OT_PROCEDURES_COLUMNS.map((c) => ({ key: c.key, label: c.label }))}
+                visible={visibleColumns}
+                onChange={setVisibleColumns}
+                label="Columnas"
+                disabled={savingColumns}
+                buttonClassName={controlCls(columnasPersonalizadas)}
+              />
+            }
+            exportAction={
+              <button
+                type="button"
+                onClick={() => void handleExportExcel()}
+                disabled={exporting || status === "loading" || totalCount === 0}
+                aria-label="Exportar la bandeja de trámites a Excel"
+                title="Exportar a Excel"
+                className={controlCls(false)}
+                data-testid="ot-bandeja-export-xlsx"
               >
-                Filtros activos
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-        {filtersOpen ? (
-      <form
-        id="ot-filtros-panel"
-        className={`${OT_FILTER_FORM_CLS} border-0 border-t rounded-none rounded-b-2xl`}
-        onSubmit={(e) => {
-          e.preventDefault();
-          applyFilters();
-        }}
-        aria-label="Filtros de trámites de clientes"
-      >
-        <label className={OT_FILTER_LABEL_CLS}>
-          Estado
-          <select
-            aria-label="Filtrar por estado"
-            className={`mt-1 ${OT_INPUT_CLS}`}
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              // Elegir el estado a mano deshace la selección de la tarjeta: si no, quedaría una
-              // marcada mientras la lista muestra otra cosa.
-              setContadorActivo("");
-              setPlateFlowFilter("");
-            }}
-          >
-            {FILTROS_ESTADO_OT.map((f) => (
-              <option key={f.value} value={f.value}>
-                {f.label}
-              </option>
-            ))}
-            <option value="">Todos los recibidos</option>
-          </select>
-        </label>
-        <label className={OT_FILTER_LABEL_CLS}>
-          Tipo de trámite
-          <select
-            aria-label="Filtrar por tipo de trámite"
-            className={`mt-1 ${OT_INPUT_CLS}`}
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {procedureTypes.map((pt) => (
-              <option key={pt.id} value={pt.id}>
-                {pt.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={OT_FILTER_LABEL_CLS}>
-          VIN
-          <input
-            type="search"
-            aria-label="Filtrar por VIN"
-            className={`mt-1 ${OT_INPUT_CLS}`}
-            value={vinFilter}
-            onChange={(e) => setVinFilter(e.target.value)}
-            placeholder="Buscar VIN"
+                <Download
+                  className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
+                  aria-hidden="true"
+                />
+                {exporting ? "Exportando…" : "Exportar"}
+              </button>
+            }
           />
-        </label>
-        <label className={OT_FILTER_LABEL_CLS}>
-          Placa
-          <input
-            type="search"
-            aria-label="Filtrar por placa"
-            className={`mt-1 ${OT_INPUT_CLS}`}
-            value={placaFilter}
-            onChange={(e) => setPlacaFilter(e.target.value)}
-            placeholder="Buscar placa"
-          />
-        </label>
-        <label className={OT_FILTER_LABEL_CLS}>
-          Propietario / vendedor
-          <input
-            type="search"
-            aria-label="Filtrar por propietario o vendedor"
-            className={`mt-1 ${OT_INPUT_CLS}`}
-            value={vendedorFilter}
-            onChange={(e) => setVendedorFilter(e.target.value)}
-            placeholder="Buscar propietario"
-          />
-        </label>
-        <label className={OT_FILTER_LABEL_CLS}>
-          Comprador
-          <input
-            type="search"
-            aria-label="Filtrar por comprador"
-            className={`mt-1 ${OT_INPUT_CLS}`}
-            value={compradorFilter}
-            onChange={(e) => setCompradorFilter(e.target.value)}
-            placeholder="Buscar comprador"
-          />
-        </label>
-        <label className={OT_FILTER_LABEL_CLS}>
-          Gestor
-          <input
-            type="search"
-            aria-label="Filtrar por gestor"
-            className={`mt-1 ${OT_INPUT_CLS}`}
-            value={gestorFilter}
-            onChange={(e) => setGestorFilter(e.target.value)}
-            placeholder="Buscar gestor"
-          />
-        </label>
-        <div className="flex items-end gap-2">
+          {/* Actualizar cierra la fila, como en el listado del gestor: la bandeja cambia por lo que
+              hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
+              perder los filtros puestos. */}
           <button
             type="button"
-            onClick={clearFilters}
-            disabled={!hasAdvancedFilters && sortBy === "createdAt" && sortDir === "desc"}
-            className="h-9 flex-1 rounded-xl border text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ borderColor: "#DFE5ED" }}
-            aria-label="Limpiar filtros de trámites OT"
+            onClick={() => void load()}
+            disabled={status === "loading"}
+            aria-label="Actualizar la bandeja de trámites"
+            title="Actualizar"
+            className={controlCls(false)}
           >
-            Limpiar
-          </button>
-          <button
-            type="submit"
-            className="h-9 flex-1 rounded-xl text-xs font-semibold text-white transition hover:opacity-90"
-            style={{ background: "#557EFF" }}
-          >
-            Buscar
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
+            Actualizar
           </button>
         </div>
-      </form>
-        ) : null}
+
+        <TramitesFiltrosChips
+          periodo={periodo}
+          onQuitarPeriodo={quitarPeriodo}
+          condiciones={appliedCondiciones}
+          fields={queryFields}
+          onQuitarCondicion={quitarCondicion}
+        />
       </div>
+
+      {/* HU #12220 — resultado de la exportación. El reparto en varios archivos necesita decirse:
+          tres descargas seguidas sin explicación se leen como un fallo, no como un archivo por
+          lote. */}
+      {exportError ? (
+        <div
+          role="alert"
+          className="rounded-xl px-4 py-3 text-xs"
+          style={{ background: "#FFF4EC", color: "#7A2E00", border: "1px solid #FFD9C2" }}
+        >
+          {exportError}
+        </div>
+      ) : null}
+      {exportNotice ? (
+        <p role="status" className="text-xs opacity-70">
+          {exportNotice}
+        </p>
+      ) : null}
+
+      {/* La tira de contadores ocupa ya todo el ancho: su acompañante de la derecha era el botón
+          Actualizar, que se mudó a la fila de controles. */}
+      <OtBandejaCountersStrip
+        counters={counters}
+        selected={contadorActivo}
+        onSelect={handleContadorSelect}
+        loading={status === "loading"}
+      />
 
       <UiStateBoundary
         status={status}
@@ -1295,6 +1458,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           page={page}
           pageSize={PAGE_SIZE}
           onPageChange={setPage}
+          visibleColumns={visibleColumns}
           sortBy={sortBy}
           sortDir={sortDir}
           onSortChange={handleSortChange}

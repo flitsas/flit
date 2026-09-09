@@ -147,6 +147,19 @@ export function canManageIctClients(payload: JwtPayload | null): boolean {
   return isSuperAdmin(payload) || hasPermission(payload, ICT_CLIENTS_MANAGE_PERMISSION);
 }
 
+/** Permiso de lectura del módulo "Generación documental" (Feature #12201). */
+export const GENERACION_DOCUMENTAL_READ_PERMISSION = "generacion-documental.read";
+
+/**
+ * Puede entrar al módulo de generación documental: permiso `generacion-documental.read` o
+ * SuperAdmin (bypass total, igual que el gate del backend). Se usa en el borde
+ * (middleware) para no redirigir a /403 a un AdminCompany que sí tiene el módulo; la
+ * visibilidad del dock y el gate de la página se resuelven por módulos accesibles.
+ */
+export function canReadGeneracionDocumental(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, GENERACION_DOCUMENTAL_READ_PERMISSION);
+}
+
 /** Permiso de reset administrativo de contraseña en el propio tenant (HU #10170). */
 export const RESET_PASSWORD_PERMISSION = "security.users.reset_password";
 

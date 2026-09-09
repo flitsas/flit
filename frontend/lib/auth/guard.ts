@@ -1,6 +1,6 @@
 // Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6; HU #10218 OT admin).
 // Extraída del middleware para poder probarla sin el runtime de Next.js.
-import { decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin } from "./jwt";
+import { canReadGeneracionDocumental, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin } from "./jwt";
 
 export const FORBIDDEN_PATH = "/403";
 
@@ -20,7 +20,8 @@ export interface AdminAccessDecision {
  * - Sin token, token malformado o token expirado → no renderizar, redirigir a /403.
  * - SuperAdmin → permitido en todo /admin/*.
  * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
- * - AdminCompany → permitido solo en /admin/companies/* (HU #11228; la página redirige a su tenant).
+ * - AdminCompany → permitido en /admin/companies/* (HU #11228; la página redirige a su tenant).
+ * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
  * - Otros roles → redirigir a /403.
  */
 export function evaluateAdminAccess(
@@ -49,6 +50,17 @@ export function evaluateAdminAccess(
     pathname?.startsWith("/admin/companies") &&
     payload &&
     isAdminCompany(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  // Generación documental (Feature #12201): el módulo NO es exclusivo de SuperAdmin. El
+  // acceso se gobierna por el permiso `generacion-documental.read` del JWT, no por rol —
+  // si se dejara solo el gate SuperAdmin de arriba, un AdminCompany con el módulo
+  // habilitado sería redirigido a /403 antes de renderizar nada.
+  if (
+    pathname?.startsWith("/admin/generacion-documental") &&
+    canReadGeneracionDocumental(payload)
   ) {
     return { allowed: true };
   }
