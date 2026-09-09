@@ -172,7 +172,6 @@ describe("TransferenciaFormPanel — prellenado del vehículo por placa (CF-25)"
     expect(screen.getByLabelText("Marca")).toHaveValue("MAZDA");
 
     // Y no impide generar el documento.
-    await userEvent.click(screen.getByLabelText(/ninguna de las anteriores aplica/i));
     const generar = screen.getByRole("button", { name: /generar documento/i });
     expect(generar).toBeEnabled();
     await userEvent.click(generar);
@@ -265,7 +264,6 @@ describe("TransferenciaFormPanel — encadenamiento por parte (CF-25)", () => {
     expect(screen.getByTestId("tf-transferente-dv")).toHaveTextContent(/DV 8/);
     expect(screen.queryByLabelText(/dígito de verificación/i)).not.toBeInTheDocument();
     // Y no viaja en el payload: el backend es la fuente de verdad.
-    await userEvent.click(screen.getByLabelText(/ninguna de las anteriores aplica/i));
     await userEvent.click(screen.getByRole("button", { name: /generar documento/i }));
     await waitFor(() => expect(generateTransferenciaDocument).toHaveBeenCalled());
     expect(generateTransferenciaDocument.mock.calls[0][0].transferente).not.toHaveProperty(

@@ -1,4 +1,5 @@
-// HU #12208 (Feature #12201) — control de régimen aplicable (CF-24 / VB-07) y escenarios B y C.
+// HU #12208 (Feature #12201) — escenarios B y C, y el régimen aplicable ya retirado de la
+// pantalla: se declara por debajo (decisión del PO, 2026-09-09).
 // Uso de ejemplo: render(<TransferenciaFormPanel />), elegir escenario B y enviar el formulario.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -20,11 +21,7 @@ async function elegirEscenario(escenario: "A" | "B" | "C") {
   await userEvent.click(screen.getByLabelText(new RegExp(`^${escenario} —`)));
 }
 
-async function responderRegimen() {
-  await userEvent.click(screen.getByLabelText(/ninguna de las anteriores aplica/i));
-}
-
-describe("Régimen aplicable a la operación (CF-24 / VB-07)", () => {
+describe("Régimen aplicable — retirado de la pantalla (decisión del PO, 2026-09-09)", () => {
   beforeEach(() => {
     generateTransferenciaDocument.mockReset();
     generateTransferenciaDocument.mockResolvedValue({
@@ -35,89 +32,40 @@ describe("Régimen aplicable a la operación (CF-24 / VB-07)", () => {
   });
 
   /**
-   * El control es un gate: va antes del selector de escenario porque el anexo §4.0 lo pone antes.
-   * Si estuviera después, el usuario habría clasificado su operación en A, B o C antes de saber que
-   * su caso no pertenece a ninguno de los tres.
+   * Lo que se retiró no era un campo más: era la declaración del USUARIO de que su operación no es
+   * ninguno de los once traspasos especiales de los arts. 5.3.2.3 a 5.3.2.13. Ahora la hace el
+   * sistema por él. Estos casos fijan las dos mitades del cambio —no se ve, y se envía igual— para
+   * que ninguna de las dos se pierda por accidente.
    */
-  it("aparece antes del selector de escenario A/B/C", () => {
+  it("la sección ya no se muestra, ni entera ni a trozos", () => {
     render(<TransferenciaFormPanel />);
 
-    const control = screen.getByTestId("transferencia-regimen-aplicable");
-    const selector = screen.getByTestId("transferencia-escenario");
+    expect(screen.queryByTestId("transferencia-regimen-aplicable")).not.toBeInTheDocument();
+    expect(screen.queryByText(/régimen aplicable a la operación/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/ninguna de las anteriores aplica/i)).not.toBeInTheDocument();
 
-    // Node.DOCUMENT_POSITION_FOLLOWING = 4: el selector viene DESPUÉS del control.
-    expect(control.compareDocumentPosition(selector) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  /** Las once, una por una, con su artículo: ni resumidas ni agrupadas. */
-  it("enumera las 11 condiciones de los arts. 5.3.2.3 a 5.3.2.13 con su artículo", () => {
-    render(<TransferenciaFormPanel />);
-
-    const control = screen.getByTestId("transferencia-regimen-aplicable");
-    expect(REGIMEN_ESPECIAL_CONDICIONES).toHaveLength(11);
-
+    // Y ni una de las once condiciones queda suelta por la pantalla.
     for (const condicion of REGIMEN_ESPECIAL_CONDICIONES) {
-      const opcion = within(control).getByLabelText(new RegExp(condicion.titulo, "i"));
-      expect(opcion).toBeInTheDocument();
-      expect(control.textContent).toContain(condicion.articulo);
+      expect(screen.queryByLabelText(new RegExp(condicion.titulo, "i"))).not.toBeInTheDocument();
     }
-
-    // Y ofrece la salida que permite continuar.
-    expect(within(control).getByLabelText(/ninguna de las anteriores aplica/i)).toBeInTheDocument();
   });
 
-  /**
-   * El art. 5.3.2.14 (expedición de la nueva licencia) NO es una condición especial: es el paso
-   * final común a todo traspaso. Ofrecerlo bloquearía trámites ordinarios.
-   */
-  it("no ofrece el art. 5.3.2.14 como condición especial", () => {
+  it("el botón Generar ya no espera una respuesta que nadie va a dar", () => {
     render(<TransferenciaFormPanel />);
 
-    const control = screen.getByTestId("transferencia-regimen-aplicable");
-    expect(control.textContent).not.toContain("5.3.2.14");
-    expect(control.textContent).not.toContain("nueva licencia de tránsito");
-  });
-
-  it("mantiene el botón Generar deshabilitado hasta que se elija una opción", async () => {
-    render(<TransferenciaFormPanel />);
-
-    expect(boton()).toBeDisabled();
-    expect(screen.getByText(/responde primero el régimen aplicable/i)).toBeInTheDocument();
-
-    await responderRegimen();
-
+    // Antes nacía deshabilitado con «responde primero el régimen aplicable».
     expect(boton()).toBeEnabled();
+    expect(screen.queryByText(/responde primero el régimen aplicable/i)).not.toBeInTheDocument();
   });
 
   /**
-   * Declarar una condición bloquea con un mensaje que cita el artículo y explica el motivo. El
-   * bloqueo no se comunica solo por color (CF-22): hay `role="alert"`, icono y texto, y el botón
-   * queda deshabilitado con su explicación.
+   * La mitad que no se ve: el cuerpo sigue llevando la declaración. Si esto se rompiera, el
+   * servidor rechazaría CADA generación con VB-07 —«no respondida»— y el formulario no tendría
+   * dónde decírselo al usuario, porque el control que lo explicaba ya no está.
    */
-  it("declarar una condición especial bloquea citando el artículo, y no solo por color", async () => {
+  it("envía «ninguna aplica» por debajo, con su fecha", async () => {
     render(<TransferenciaFormPanel />);
 
-    await userEvent.click(screen.getByLabelText(/vehículo blindado/i));
-
-    const bloqueo = screen.getByTestId("transferencia-regimen-bloqueo");
-    expect(bloqueo).toHaveAttribute("role", "alert");
-    expect(bloqueo.textContent).toContain("art. 5.3.2.6");
-    expect(bloqueo.textContent).toMatch(/no produce ni acredita/i);
-
-    expect(boton()).toBeDisabled();
-    expect(boton()).toHaveAttribute("aria-describedby", "tf-generar-ayuda");
-    expect(screen.getByText(/impide generar este documento/i)).toBeInTheDocument();
-
-    // Y no se intenta generar.
-    await userEvent.click(boton());
-    expect(generateTransferenciaDocument).not.toHaveBeenCalled();
-  });
-
-  /** La declaración y su fecha viajan al backend, que las conserva en `input_summary`. */
-  it("envía la declaración de régimen con su fecha", async () => {
-    render(<TransferenciaFormPanel />);
-
-    await responderRegimen();
     await userEvent.click(boton());
 
     await waitFor(() => expect(generateTransferenciaDocument).toHaveBeenCalledTimes(1));
@@ -128,13 +76,22 @@ describe("Régimen aplicable a la operación (CF-24 / VB-07)", () => {
     expect(payload.regimenAplicable.declaredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  /** El flujo de Certificado RUES no clasifica ningún traspaso: el control no existe ahí. */
-  it("el formulario de Certificado RUES no muestra el control de régimen aplicable", () => {
+  /**
+   * El catálogo normativo se sigue vigilando aunque hoy no lo pinte nadie: `VB-07` lo evalúa en el
+   * servidor con los mismos códigos, y es lo que permite devolver el control a la pantalla sin
+   * reconstruirlo. El art. 5.3.2.14 sigue fuera —es el paso final común a todo traspaso, no una
+   * condición especial—.
+   */
+  it("conserva íntegro el catálogo de las once condiciones", () => {
+    expect(REGIMEN_ESPECIAL_CONDICIONES).toHaveLength(11);
+    expect(REGIMEN_ESPECIAL_CONDICIONES.map((c) => c.articulo)).not.toContain("art. 5.3.2.14");
+  });
+
+  it("el formulario de Certificado RUES tampoco lo muestra", () => {
     render(<RuesFormPanel status="ready" />);
 
     expect(screen.queryByTestId("transferencia-regimen-aplicable")).not.toBeInTheDocument();
     expect(screen.queryByText(/régimen aplicable a la operación/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/ninguna de las anteriores aplica/i)).not.toBeInTheDocument();
   });
 });
 
@@ -184,7 +141,6 @@ describe("Escenario B — transferencia unilateral de leasing (art. 5.3.2.2)", (
   it("captura el antecedente de leasing y lo envía sin adquirente ni precio", async () => {
     render(<TransferenciaFormPanel />);
 
-    await responderRegimen();
     await elegirEscenario("B");
 
     await userEvent.click(screen.getByLabelText(/establecimiento bancario, compañía de financiamiento/i));
@@ -242,7 +198,6 @@ describe("Escenario B — transferencia unilateral de leasing (art. 5.3.2.2)", (
     );
 
     render(<TransferenciaFormPanel />);
-    await responderRegimen();
     await elegirEscenario("B");
     await userEvent.click(boton());
 
@@ -291,7 +246,6 @@ describe("Escenario C — entidad financiera a un tercero (sin exenciones)", () 
   it("conserva adquirente y negocio, y advierte que no hereda exenciones", async () => {
     render(<TransferenciaFormPanel />);
 
-    await responderRegimen();
     await elegirEscenario("C");
 
     expect(screen.getByLabelText("Título jurídico")).toBeInTheDocument();

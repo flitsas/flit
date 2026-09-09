@@ -1,5 +1,5 @@
 // HU #12207 y #12208 (Feature #12201) — formulario de Transferencia de dominio.
-// Uso de ejemplo: render(<TransferenciaFormPanel />), responder el régimen y enviar el formulario.
+// Uso de ejemplo: render(<TransferenciaFormPanel />) y enviar el formulario.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -12,14 +12,6 @@ vi.mock("@/lib/api/admin-generacion-documental", () => ({
   GENERACION_DOCUMENTAL_API_BASE: "/api/v1/admin/generacion-documental",
   generateTransferenciaDocument: (...args: unknown[]) => generateTransferenciaDocument(...args),
 }));
-
-/**
- * CF-24 — desde HU #12208 el botón de generar nace deshabilitado: hay que responder antes el
- * control de régimen aplicable. Todos los casos que envían el formulario pasan por aquí.
- */
-async function responderRegimen() {
-  await userEvent.click(screen.getByLabelText(/ninguna de las anteriores aplica/i));
-}
 
 describe("TransferenciaFormPanel — escenario A", () => {
   beforeEach(() => {
@@ -56,7 +48,6 @@ describe("TransferenciaFormPanel — escenario A", () => {
 
     await userEvent.type(screen.getByLabelText("Placa"), "abc123");
     await userEvent.type(screen.getByLabelText("Ciudad de firma"), "Medellín");
-    await responderRegimen();
     await userEvent.click(screen.getByRole("button", { name: /generar documento/i }));
 
     await waitFor(() => expect(generateTransferenciaDocument).toHaveBeenCalledTimes(1));
@@ -92,7 +83,6 @@ describe("TransferenciaFormPanel — escenario A", () => {
 
     render(<TransferenciaFormPanel />);
     await userEvent.type(screen.getByLabelText("Placa"), "XX");
-    await responderRegimen();
     await userEvent.click(screen.getByRole("button", { name: /generar documento/i }));
 
     const errores = await screen.findByTestId("transferencia-errores");
@@ -120,7 +110,6 @@ describe("TransferenciaFormPanel — escenario A", () => {
     });
 
     render(<TransferenciaFormPanel />);
-    await responderRegimen();
     await userEvent.click(screen.getByRole("button", { name: /generar documento/i }));
 
     const resultado = await screen.findByTestId("transferencia-resultado");
@@ -146,7 +135,6 @@ describe("TransferenciaFormPanel — escenario A", () => {
     expect(screen.queryByLabelText("Asume el impuesto sobre vehículos")).not.toBeInTheDocument();
     expect(screen.getByTestId("transferencia-exencion-impuesto")).toHaveTextContent(/Ley 488 de 1998/);
 
-    await responderRegimen();
     await userEvent.click(screen.getByRole("button", { name: /generar documento/i }));
     await waitFor(() => expect(generateTransferenciaDocument).toHaveBeenCalled());
 
@@ -163,7 +151,6 @@ describe("TransferenciaFormPanel — escenario A", () => {
 
     expect(screen.getByLabelText(/se adjunta el levantamiento/i)).toBeInTheDocument();
 
-    await responderRegimen();
     await userEvent.click(screen.getByRole("button", { name: /generar documento/i }));
     await waitFor(() => expect(generateTransferenciaDocument).toHaveBeenCalled());
 

@@ -19,7 +19,6 @@ import type {
   TransferValidationIssue,
   TransferVehiculoInput,
 } from "@/lib/api/types-generacion-documental";
-import { RegimenAplicableControl } from "./RegimenAplicableControl";
 import { ParteFields, type ParteId } from "./ParteFields";
 import { VehiculoPrefillFields, type PropietarioConsultaInput } from "./VehiculoPrefillFields";
 import {
@@ -76,7 +75,14 @@ const OPCIONES_COMPRA: { value: string; label: string }[] = [
 
 /** Estado del formulario. Cadena vacía = «sin capturar», nunca `undefined`. */
 interface TransferenciaFormState {
-  /** Declaración del gate de régimen aplicable (CF-24). `""` = sin responder. */
+  /**
+   * Declaración del gate de régimen aplicable (CF-24). `""` = sin responder.
+   *
+   * <p><b>Ya no lo responde el usuario.</b> Ver la nota de `ESTADO_INICIAL`: el control se retiró
+   * de la pantalla y este campo nace declarado. Se conserva —en vez de eliminarlo y fijar el valor
+   * en el envío— porque es lo que hace que devolver el control sea volver a pintarlo, sin rehacer
+   * el estado ni el guardián del botón.</p>
+   */
   regimen: RegimenSeleccion;
   escenario: StandaloneDocumentScenario;
   vehiculo: Required<Pick<TransferVehiculoInput, "placa">> & TransferVehiculoInput;
@@ -89,8 +95,19 @@ interface TransferenciaFormState {
 }
 
 const ESTADO_INICIAL: TransferenciaFormState = {
-  // Sin responder: el botón de generar nace deshabilitado (CF-24).
-  regimen: "",
+  // DECLARADO POR DEFECTO, por decisión del PO (2026-09-09): el control «Régimen aplicable a la
+  // operación» se retiró de la pantalla y el formulario envía siempre «ninguna aplica».
+  //
+  // Conviene saber qué se cambió, porque no es un campo cualquiera: era la declaración del USUARIO
+  // de que su operación no es ninguno de los once traspasos especiales de los arts. 5.3.2.3 a
+  // 5.3.2.13 —los que exigen soportes que este módulo no produce ni acredita—. Al ocultarlo, esa
+  // afirmación la hace el sistema en su nombre, y el documento queda registrado como si la hubiera
+  // respondido. VB-07 sigue INTACTO en el servidor: no se relajó la regla, se le da siempre la
+  // respuesta que la satisface.
+  //
+  // Para devolver el control: volver a pintar `<RegimenAplicableControl>` (el componente y su
+  // catálogo normativo siguen en el repo, sin tocar) y devolver este valor a `""`.
+  regimen: REGIMEN_NINGUNA_APLICA,
   escenario: "A",
   vehiculo: {
     placa: "",
@@ -323,7 +340,8 @@ export function TransferenciaFormPanel() {
 
   const esUnilateral = form.escenario === "B";
 
-  // CF-24 — sin declaración de régimen no se genera, y declarar una condición especial tampoco.
+  // CF-24 — se conserva como guardián aunque hoy sea siempre `true`: si el control vuelve a la
+  // pantalla, el botón vuelve a bloquearse solo, sin tener que acordarse de restaurar esto.
   const regimenPermiteGenerar = permiteGenerar(form.regimen);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -361,6 +379,8 @@ export function TransferenciaFormPanel() {
           tieneLevantamientoOAutorizacion: form.tieneLevantamientoOAutorizacion,
         },
         // CF-24 — la declaración y su fecha viajan al servidor, que las conserva en input_summary.
+        // Desde la decisión del PO del 2026-09-09 esta declaración es IMPLÍCITA: el usuario no la
+        // responde y `declaredAt` marca el momento de la generación, no el de una respuesta suya.
         regimenAplicable: {
           ningunaAplica: form.regimen === REGIMEN_NINGUNA_APLICA,
           condicionesDeclaradas:
@@ -471,14 +491,9 @@ export function TransferenciaFormPanel() {
       ) : null}
 
       {/*
-        CF-24 / VB-07 — el gate de régimen aplicable va ANTES del selector de escenario, como en el
-        anexo §4.0: primero se descarta que la operación sea un traspaso especial, y solo después
-        tiene sentido preguntar cuál de los tres escenarios del art. 5.3.2.1/5.3.2.2 aplica.
+        Aquí iba el gate de régimen aplicable (CF-24 / VB-07), antes del selector de escenario como
+        lo pone el anexo §4.0. Retirado por decisión del PO: ver la nota de `ESTADO_INICIAL`.
       */}
-      <RegimenAplicableControl
-        seleccion={form.regimen}
-        onChange={(regimen) => setForm((prev) => ({ ...prev, regimen }))}
-      />
 
       <fieldset className="rounded-2xl border p-4" data-testid="transferencia-escenario">
         <legend className="px-1 text-[11px] font-semibold uppercase opacity-70">
@@ -837,9 +852,8 @@ export function TransferenciaFormPanel() {
 
       <div className="flex items-center gap-3">
         {/*
-          CF-24 — el botón permanece deshabilitado hasta que se responda el control de régimen, y
-          sigue deshabilitado si se declaró una condición especial. El motivo va en texto enlazado
-          por aria-describedby: el estado no se comunica solo por color ni por opacidad (CF-22).
+          El texto de ayuda sigue enlazado por aria-describedby: el estado no se comunica solo por
+          color ni por opacidad (CF-22). Ya no explica el gate de régimen porque el gate no se ve.
         */}
         <button
           type="submit"
@@ -851,11 +865,7 @@ export function TransferenciaFormPanel() {
           {enviando ? "Generando…" : "Generar documento"}
         </button>
         <p id="tf-generar-ayuda" className="text-[11px] opacity-70">
-          {form.regimen === ""
-            ? "Para habilitar la generación, responde primero el régimen aplicable a la operación."
-            : regimenPermiteGenerar
-              ? "El documento se genera en el servidor y se descarga desde el historial."
-              : "La condición especial declarada impide generar este documento: adelanta el trámite por la vía especial de su artículo."}
+          El documento se genera en el servidor y se descarga desde el historial.
         </p>
       </div>
     </form>
