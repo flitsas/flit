@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.GeneracionDocumental.Download;
 using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
 using Flit.Admin.Application.GeneracionDocumental.List;
+using Flit.Admin.Application.GeneracionDocumental.Prefill;
 using Flit.Admin.Domain.GeneracionDocumental;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,8 +12,9 @@ namespace Flit.Api.Endpoints;
 
 /// <summary>
 /// Generación documental autónoma (Feature #12201, ADR-0056-generacion-documental-standalone):
-/// emisión de documentos SIN abrir un trámite. Este archivo cubre el Certificado RUES (I1); el
-/// historial, la descarga presignada y la transferencia llegan en HUs posteriores.
+/// emisión de documentos SIN abrir un trámite. Este archivo cubre el Certificado RUES, el historial,
+/// la descarga presignada y el prellenado standalone (CF-25); la transferencia A/B/C y los lotes
+/// llegan en HUs posteriores.
 ///
 /// <para><b>Autorización POR PERMISO</b> (<c>generacion-documental.generate</c>), nunca por una
 /// policy de grupo de SuperAdmin: eso dejaría fuera a AdminCompany, que es justamente el usuario del
@@ -66,6 +68,58 @@ public static class AdminGeneracionDocumentalEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .Produces(StatusCodes.Status502BadGateway)
             .Produces(StatusCodes.Status503ServiceUnavailable);
+
+        // Prellenado (CF-25, HU #12206). Tres rutas que SOLO consultan: ninguna crea fila en
+        // admin.standalone_documents ni escribe archivo. Van con el permiso .generate porque gastan
+        // consultas de pago al proveedor, igual que /rues/preview.
+        group.MapPost("/prefill/vehiculo", PrefillVehiculoAsync)
+            .RequirePermission("generacion-documental.generate")
+            .WithName("AdminGeneracionDocumentalPrefillVehiculo")
+            .WithSummary("Prellena el bloque de vehiculo a partir de la placa (RUNT)")
+            .WithDescription("Consulta la placa en la cadena de proveedores RUNT y devuelve 12 de "
+                + "las 13 variables de vehiculo del anexo normativo, cada una con su fuente. La "
+                + "restante (no_licencia_transito) no la entrega ninguna consulta y se captura a "
+                + "mano. Un tramite ACTIVO sobre la placa NO bloquea: no se evalua duplicidad ni "
+                + "gate de organismo, y no se reutiliza el preflight del wizard. Una placa sin "
+                + "antecedente responde 200 con found=false, nunca 404. No persiste nada. Requiere "
+                + "el permiso generacion-documental.generate.")
+            .Produces<PrefillResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status502BadGateway);
+
+        group.MapPost("/prefill/persona-juridica", PrefillPersonaJuridicaAsync)
+            .RequirePermission("generacion-documental.generate")
+            .WithName("AdminGeneracionDocumentalPrefillPersonaJuridica")
+            .WithSummary("Prellena una parte juridica por NIT (directorio primero, RUES de respaldo)")
+            .WithDescription("Precedencia: el directorio de representantes legales de la compania "
+                + "PRIMERO y el RUES solo si el directorio no responde. La respuesta declara la "
+                + "fuente efectiva por campo. El digito de verificacion se CALCULA (modulo 11 DIAN) "
+                + "y viaja con fuente CALCULADO: no se consulta ni se captura. Sin coincidencia en "
+                + "ninguna fuente responde 200 con found=false. No persiste nada. Requiere el "
+                + "permiso generacion-documental.generate.")
+            .Produces<PrefillResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status502BadGateway);
+
+        group.MapPost("/prefill/persona-natural", PrefillPersonaNaturalAsync)
+            .RequirePermission("generacion-documental.generate")
+            .WithName("AdminGeneracionDocumentalPrefillPersonaNatural")
+            .WithSummary("Prellena una parte natural por documento (RUNT primero, contacto de respaldo)")
+            .WithDescription("Precedencia: la cadena RUNT persona PRIMERO —sin instancia, con "
+                + "guardado de cache de instancia nula— y contact-lookup como respaldo. El "
+                + "domicilio siempre sale de contact-lookup: el RUNT no lo entrega. La respuesta "
+                + "declara la fuente efectiva por campo. Sin coincidencia responde 200 con "
+                + "found=false, nunca 404. No persiste nada. Requiere el permiso "
+                + "generacion-documental.generate.")
+            .Produces<PrefillResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status502BadGateway);
 
         // Historial: la RAIZ del grupo, no una sub-ruta /documentos. Es lo que declara el diseno
         // 7.1 y lo que consume el frontend (GENERACION_DOCUMENTAL_API_BASE).
@@ -136,6 +190,31 @@ public static class AdminGeneracionDocumentalEndpoints
 
     /// <summary>Respuesta de la descarga: URL firmada y su vencimiento. Nada mas.</summary>
     public sealed record StandaloneDocumentDownloadResponse(string Url, DateTimeOffset ExpiresAt);
+
+    /// <summary>Cuerpo del prellenado de vehiculo. La placa manda; el documento del propietario es opcional.</summary>
+    public sealed record PrefillVehiculoRequest(string? Placa, string? OwnerDocumentType, string? OwnerDocumentNumber);
+
+    /// <summary>Cuerpo del prellenado de una parte juridica.</summary>
+    public sealed record PrefillPersonaJuridicaRequest(string? Nit);
+
+    /// <summary>Cuerpo del prellenado de una parte natural.</summary>
+    public sealed record PrefillPersonaNaturalRequest(string? DocumentType, string? DocumentNumber);
+
+    /// <summary>Un campo prellenado con su FUENTE. La fuente es por campo, no por respuesta.</summary>
+    public sealed record PrefillFieldResponse(string Key, string? Value, string Source);
+
+    /// <summary>Intento contra una fuente: deja ver que una se cayo sin invalidar el resto.</summary>
+    public sealed record PrefillAttemptResponse(string Source, string Outcome, string? ErrorCode);
+
+    /// <summary>
+    /// Respuesta comun de los tres prellenados. Sin coincidencia: <c>found = false</c> y
+    /// <c>fields</c> vacio, con 200. Nunca trae id de documento porque no se crea ninguno.
+    /// </summary>
+    public sealed record PrefillResponse(
+        bool Found,
+        string? Source,
+        IReadOnlyList<PrefillFieldResponse> Fields,
+        IReadOnlyList<PrefillAttemptResponse> Attempts);
 
     // internal (no private): Flit.Admin.Tests verifica el contrato de la respuesta invocando el
     // delegate directamente (que sea application/json y nunca application/pdf).
@@ -218,6 +297,89 @@ public static class AdminGeneracionDocumentalEndpoints
                 statusCode: StatusCodes.Status502BadGateway),
         };
     }
+
+    internal static async Task<IResult> PrefillVehiculoAsync(
+        HttpContext httpContext,
+        PrefillVehiculoRequest request,
+        [FromServices] PrefillVehiculoHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Unauthorized("Token invalido: falta claim tenant_id");
+        }
+
+        var result = await handler
+            .HandleAsync(
+                new PrefillVehiculoCommand(
+                    tenantId,
+                    request?.Placa,
+                    request?.OwnerDocumentType,
+                    request?.OwnerDocumentNumber),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return ToPrefillResult(result, "placa");
+    }
+
+    internal static async Task<IResult> PrefillPersonaJuridicaAsync(
+        HttpContext httpContext,
+        PrefillPersonaJuridicaRequest request,
+        [FromServices] PrefillPersonaJuridicaHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Unauthorized("Token invalido: falta claim tenant_id");
+        }
+
+        var result = await handler
+            .HandleAsync(new PrefillPersonaJuridicaCommand(tenantId, request?.Nit), cancellationToken)
+            .ConfigureAwait(false);
+
+        return ToPrefillResult(result, "nit");
+    }
+
+    internal static async Task<IResult> PrefillPersonaNaturalAsync(
+        HttpContext httpContext,
+        PrefillPersonaNaturalRequest request,
+        [FromServices] PrefillPersonaNaturalHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Unauthorized("Token invalido: falta claim tenant_id");
+        }
+
+        var result = await handler
+            .HandleAsync(
+                new PrefillPersonaNaturalCommand(tenantId, request?.DocumentType, request?.DocumentNumber),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return ToPrefillResult(result, "documento");
+    }
+
+    /// <summary>
+    /// Traduccion unica de los tres prellenados. <c>found = false</c> es un 200 con cuerpo vacio de
+    /// campos —degradar, no fallar—; el 502 queda para cuando NINGUNA fuente contesto.
+    /// </summary>
+    private static IResult ToPrefillResult(PrefillResult result, string field) => result.Error switch
+    {
+        null => Results.Ok(new PrefillResponse(
+            result.Found,
+            result.Source,
+            [.. result.Fields.Select(f => new PrefillFieldResponse(f.Key, f.Value, f.Source))],
+            [.. result.Attempts.Select(a => new PrefillAttemptResponse(a.Source, a.Outcome, a.ErrorCode))])),
+
+        "invalid_request" => Results.Json(
+            new { error = "invalid_request", field },
+            statusCode: StatusCodes.Status400BadRequest),
+
+        _ => Results.Json(
+            new { error = result.Error, field },
+            statusCode: StatusCodes.Status502BadGateway),
+    };
 
     internal static async Task<IResult> ListDocumentosAsync(
         HttpContext httpContext,

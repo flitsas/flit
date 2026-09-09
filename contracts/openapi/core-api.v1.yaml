@@ -6233,6 +6233,167 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/generacion-documental/prefill/vehiculo:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPrefillVehiculo
+      summary: Prellena el bloque de vehículo a partir de la placa (RUNT)
+      description: >
+        Consulta la placa en la cadena de proveedores RUNT existente (el mismo
+        IConsultationProviderChainResolver del expediente, con KyverumRuntVehicleResultMapper) y
+        devuelve 12 de las 13 variables de vehículo del anexo normativo, cada una con su fuente. La
+        restante, no_licencia_transito, no la entrega ninguna consulta y se captura a mano.
+        Un trámite ACTIVO sobre la placa NO bloquea el prellenado: no se evalúa duplicidad de
+        trámite ni el gate de organismo, y no se reutiliza el preflight del wizard (CF-25). Una
+        placa sin antecedente responde 200 con found=false, nunca 404. NO persiste nada: no crea
+        fila en admin.standalone_documents ni escribe archivo. Requiere el permiso
+        generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandalonePrefillVehiculoRequest"
+      responses:
+        "200":
+          description: Campos hidratados con su fuente (found=false si la placa no tiene antecedente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandalonePrefillResult"
+        "400":
+          description: Placa ausente o vacía. No se gasta consulta al proveedor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Ninguna fuente respondió. Sin coincidencia no hay 502; eso es 200 con found=false.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/prefill/persona-juridica:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPrefillPersonaJuridica
+      summary: Prellena una parte jurídica por NIT (directorio primero, RUES de respaldo)
+      description: >
+        Precedencia explícita (CF-25): el directorio de representantes legales del tenant
+        (admin.company_legal_representatives) PRIMERO, y el RUES SOLO si el directorio no responde
+        —sea porque el NIT no está o porque la lectura falló—. La respuesta declara la fuente
+        efectiva por campo. El dígito de verificación se CALCULA (módulo 11 DIAN) y viaja con fuente
+        CALCULADO: no se consulta a ningún proveedor y no lo captura el usuario. Sin coincidencia en
+        ninguna fuente: 200 con found=false, nunca 404. NO persiste nada. Requiere el permiso
+        generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandaloneRuesRequest"
+      responses:
+        "200":
+          description: Campos hidratados con su fuente (DIRECTORIO o RUES; el DV, CALCULADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandalonePrefillResult"
+        "400":
+          description: NIT ausente o sin dígitos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Ninguna de las dos fuentes respondió.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/prefill/persona-natural:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPrefillPersonaNatural
+      summary: Prellena una parte natural por documento (RUNT primero, contacto de respaldo)
+      description: >
+        Precedencia explícita (CF-25): la cadena RUNT persona PRIMERO —sin instancia de trámite, con
+        el guardado de caché de consultas externas usando instancia nula— y contact-lookup
+        (histórico de actores del tenant) como respaldo. El domicilio SIEMPRE declara CONTACT_LOOKUP:
+        el RUNT no lo entrega. El respaldo nunca inventa el nombre, porque contact-lookup no
+        devuelve nombre ni documento por contrato. Sin coincidencia en ninguna fuente: 200 con
+        found=false, nunca 404. NO persiste nada. Requiere el permiso
+        generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandalonePrefillPersonaNaturalRequest"
+      responses:
+        "200":
+          description: Campos hidratados con su fuente (RUNT o CONTACT_LOOKUP).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandalonePrefillResult"
+        "400":
+          description: Tipo o número de documento ausente, o tipo no admitido (NIT va por persona-juridica).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Ninguna de las dos fuentes respondió.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/generacion-documental:
     get:
       tags: [Admin · Generación documental]
@@ -7500,6 +7661,98 @@ components:
           type: string
           nullable: true
           enum: [invalid_request, provider_unavailable, provider_not_found]
+    StandalonePrefillVehiculoRequest:
+      type: object
+      required: [placa]
+      properties:
+        placa:
+          type: string
+          minLength: 5
+          maxLength: 10
+          description: Placa del vehículo. Se normaliza a mayúsculas antes de consultar.
+        ownerDocumentType:
+          type: string
+          nullable: true
+          description: >
+            Documento del propietario inscrito. OPCIONAL aquí, a diferencia del wizard: para
+            prellenar un documento el usuario puede tener solo la placa.
+        ownerDocumentNumber:
+          type: string
+          nullable: true
+    StandalonePrefillPersonaNaturalRequest:
+      type: object
+      required: [documentType, documentNumber]
+      properties:
+        documentType:
+          type: string
+          enum: [CC, CE, PAS, TI]
+          description: NIT no se admite aquí; una persona jurídica va por /prefill/persona-juridica.
+        documentNumber:
+          type: string
+          minLength: 3
+          maxLength: 20
+    StandalonePrefillField:
+      type: object
+      description: >
+        Un campo prellenado con su FUENTE EFECTIVA. La fuente es por campo y no por respuesta: una
+        misma parte puede hidratarse de dos sitios a la vez (el nombre del RUNT y el domicilio del
+        histórico de actores).
+      required: [key, source]
+      properties:
+        key:
+          type: string
+          description: >
+            Variable del anexo normativo (docs/plantilla-transferencia-dominio.md secciones 5.1 a
+            5.3): placa, marca, linea, modelo_anio, clase_vehiculo, tipo_carroceria, color,
+            no_motor, no_chasis, no_serie, servicio, organismo_transito; razon_social, tipo_doc,
+            no_doc, digito_verificacion, domicilio, representante_legal, cc_rl;
+            nombre_razon_social.
+        value:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [RUNT, DIRECTORIO, RUES, CONTACT_LOOKUP, CALCULADO]
+    StandalonePrefillAttempt:
+      type: object
+      description: >
+        Intento contra una fuente, en orden de precedencia. Permite ver que una fuente se cayó sin
+        que eso invalide el resto de la respuesta.
+      required: [source, outcome]
+      properties:
+        source:
+          type: string
+          enum: [RUNT, DIRECTORIO, RUES, CONTACT_LOOKUP, CALCULADO]
+        outcome:
+          type: string
+          enum: [found, not_found, error]
+        errorCode:
+          type: string
+          nullable: true
+    StandalonePrefillResult:
+      type: object
+      description: >
+        Respuesta común de los tres prellenados. NUNCA trae id de documento porque no se crea
+        ninguno: el prellenado no persiste (cero filas en admin.standalone_documents) y los valores
+        viajan solo hacia el formulario.
+      required: [found, fields, attempts]
+      properties:
+        found:
+          type: boolean
+          description: false cuando ninguna fuente tuvo coincidencia. Sigue siendo 200.
+        source:
+          type: string
+          nullable: true
+          enum: [RUNT, DIRECTORIO, RUES, CONTACT_LOOKUP]
+          description: Fuente que resolvió la identidad. null cuando no hubo coincidencia.
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandalonePrefillField"
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandalonePrefillAttempt"
     StandaloneDocumentListItem:
       type: object
       description: >

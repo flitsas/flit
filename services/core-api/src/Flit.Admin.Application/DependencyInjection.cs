@@ -54,6 +54,7 @@ using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Application.GeneracionDocumental.Download;
 using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
 using Flit.Admin.Application.GeneracionDocumental.List;
+using Flit.Admin.Application.GeneracionDocumental.Prefill;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
 using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
@@ -362,6 +363,15 @@ public static class DependencyInjection
         // HU #12204 (Feature #12201) — historial tenant-scoped y redescarga presignada auditada.
         services.AddScoped<ListStandaloneDocumentsHandler>();
         services.AddScoped<GetStandaloneDocumentDownloadHandler>();
+
+        // HU #12206 (Feature #12201) — fachadas standalone de prellenado (CF-25). Ninguno de estos
+        // handlers recibe repositorio ni storage: el prellenado NO persiste. Los puertos
+        // (IStandaloneVehiclePrefill / IStandaloneRuntPersonPrefill / IStandaloneActorContactLookup)
+        // se registran en Flit.Infrastructure.AddAdminInfrastructure; el directorio de representantes
+        // (ILegalRepresentativeReader) ya está registrado para el módulo de compañías.
+        services.AddScoped<PrefillVehiculoHandler>();
+        services.AddScoped<PrefillPersonaJuridicaHandler>();
+        services.AddScoped<PrefillPersonaNaturalHandler>();
 
         return services;
     }

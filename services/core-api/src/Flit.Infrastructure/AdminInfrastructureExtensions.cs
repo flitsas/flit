@@ -329,6 +329,17 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneRuesCompanyLookup,
             Flit.Infrastructure.Consultations.StandaloneRuesCompanyLookup>();
 
+        // HU #12206 — prellenado standalone (CF-25). Los tres adaptadores consultan y nada más: no
+        // persisten documentos, no crean instancias y no evalúan ningún gate de trámite. El de
+        // vehículo NO reutiliza RunPreflightPreviewHandler: un trámite activo sobre la placa no puede
+        // impedir prellenar un documento.
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneVehiclePrefill,
+            Flit.Infrastructure.Consultations.StandaloneVehiclePrefillAdapter>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneRuntPersonPrefill,
+            Flit.Infrastructure.Consultations.StandalonePersonPrefillAdapter>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneActorContactLookup,
+            Flit.Infrastructure.Consultations.StandaloneActorContactLookupAdapter>();
+
         return services;
     }
 }
