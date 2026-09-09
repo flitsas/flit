@@ -91,7 +91,21 @@ beforeEach(() => {
     blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
   });
   mocks.listInstances.mockResolvedValue([instancia(1)]);
-  mocks.searchInstances.mockImplementation(async () => ({ items: [instancia(1)], total: 1 }));
+  // HU #12188 — el doble se comporta como el servidor también con la BÚSQUEDA: es él quien la
+  // resuelve desde esta HU, así que un doble que devolviera siempre la misma fila haría creer que
+  // el estado «Sin resultados» no se alcanza nunca.
+  mocks.searchInstances.mockImplementation(async (params?: { busqueda?: string }) => {
+    const texto = params?.busqueda?.trim().toLowerCase();
+    const fila = instancia(1);
+    const casa =
+      !texto ||
+      [fila.placa, fila.vin, fila.referenceNumber, fila.compradorNombre]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(texto);
+    return casa ? { items: [fila], total: 1 } : { items: [], total: 0 };
+  });
   mocks.searchEstadoCounts.mockResolvedValue({});
   mocks.listInstanceEstadoCounts.mockResolvedValue({});
   mocks.listFilterFields.mockResolvedValue([]);
@@ -238,6 +252,7 @@ describe('HU #12107 — AC8: sin resultados se distingue de un error', () => {
     // que se lee como una cuenta recién creada y no como un filtro demasiado estrecho.
     await userEvent.type(screen.getByPlaceholderText(/buscar/i), 'ZZZ');
 
+    // La búsqueda va al servidor tras un respiro (HU #12188): hay que esperar su respuesta.
     expect(await screen.findByText('Sin resultados')).toBeInTheDocument();
     expect(screen.getByText(/Ningún trámite coincide/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Limpiar filtros' })).toBeInTheDocument();

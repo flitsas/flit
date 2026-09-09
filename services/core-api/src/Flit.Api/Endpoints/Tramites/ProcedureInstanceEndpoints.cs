@@ -126,6 +126,8 @@ internal static class ProcedureInstanceEndpoints
             [FromQuery] string? modalidad,
             [FromQuery] string? organismoTransito,
             [FromQuery] string? tipoCodigo,
+            [FromQuery] string? busqueda,
+            [FromQuery] bool? prioritario,
             [FromQuery] DateTimeOffset? createdFrom,
             [FromQuery] DateTimeOffset? createdTo,
             [FromQuery] DateTimeOffset? updatedFrom,
@@ -148,6 +150,7 @@ internal static class ProcedureInstanceEndpoints
                 || !string.IsNullOrWhiteSpace(gestor) || firmado is not null
                 || !string.IsNullOrWhiteSpace(estado) || !string.IsNullOrWhiteSpace(modalidad)
                 || !string.IsNullOrWhiteSpace(organismoTransito) || !string.IsNullOrWhiteSpace(tipoCodigo)
+                || !string.IsNullOrWhiteSpace(busqueda) || prioritario is not null
                 || createdFrom is not null || createdTo is not null
                 || updatedFrom is not null || updatedTo is not null
                 || !string.IsNullOrWhiteSpace(sortBy) || !string.IsNullOrWhiteSpace(sortDir)
@@ -174,6 +177,8 @@ internal static class ProcedureInstanceEndpoints
                 Modalidad = modalidad,
                 OrganismoTransito = organismoTransito,
                 TipoCodigo = tipoCodigo,
+                Busqueda = busqueda,
+                Prioritario = prioritario,
                 CreatedFrom = createdFrom,
                 CreatedTo = createdTo,
                 UpdatedFrom = updatedFrom,
@@ -275,6 +280,8 @@ internal static class ProcedureInstanceEndpoints
             [FromQuery] string? modalidad,
             [FromQuery] string? organismoTransito,
             [FromQuery] string? tipoCodigo,
+            [FromQuery] string? busqueda,
+            [FromQuery] bool? prioritario,
             [FromQuery] DateTimeOffset? createdFrom,
             [FromQuery] DateTimeOffset? createdTo,
             [FromQuery] DateTimeOffset? updatedFrom,
@@ -297,6 +304,8 @@ internal static class ProcedureInstanceEndpoints
                 Modalidad = modalidad,
                 OrganismoTransito = organismoTransito,
                 TipoCodigo = tipoCodigo,
+                Busqueda = busqueda,
+                Prioritario = prioritario,
                 CreatedFrom = createdFrom,
                 CreatedTo = createdTo,
                 UpdatedFrom = updatedFrom,
@@ -1286,6 +1295,10 @@ internal sealed record TramitesSearchRequest
     public string? Modalidad { get; init; }
     public string? OrganismoTransito { get; init; }
     public string? TipoCodigo { get; init; }
+    /// <summary>HU #12187 — texto libre transversal (radicado exacto; el resto por subcadena).</summary>
+    public string? Busqueda { get; init; }
+    /// <summary>HU #12187 — <c>true</c> = solo los marcados como prioritarios.</summary>
+    public bool? Prioritario { get; init; }
     public DateTimeOffset? CreatedFrom { get; init; }
     public DateTimeOffset? CreatedTo { get; init; }
     public DateTimeOffset? UpdatedFrom { get; init; }
@@ -1312,6 +1325,8 @@ internal sealed record TramitesSearchRequest
         Modalidad = Modalidad,
         OrganismoTransito = OrganismoTransito,
         TipoCodigo = TipoCodigo,
+        Busqueda = Busqueda,
+        Prioritario = Prioritario,
         CreatedFrom = CreatedFrom,
         CreatedTo = CreatedTo,
         UpdatedFrom = UpdatedFrom,

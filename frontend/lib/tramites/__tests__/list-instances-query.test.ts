@@ -75,9 +75,12 @@ describe('tramitesSortOptions — HU #12108', () => {
   it('una celda compuesta ofrece cada uno de sus datos con su clave de orden', () => {
     // "Radicado" apila las dos fechas: un clic en la cabecera no podría decir por cuál se ordena.
     // `kind` viaja con la opción para que la cabecera rotule el sentido según el tipo: una fecha
-    // ascendente es «Más antigua», no «A-Z».
+    // ascendente es «Más antigua», no «A-Z», y un número «Menor a mayor».
+    //
+    // El radicado es `numero` desde el Feature #12150, que lo convirtió en un consecutivo: esta
+    // aserción se quedó en `texto` al mergear aquel PR y llevaba roja desde entonces.
     expect(tramitesSortOptions('radicado', DEFAULT_TRAMITES_VISIBLE_COLUMNS)).toEqual([
-      { id: 'radicado', label: 'Radicado', sort: 'radicado', kind: 'texto' },
+      { id: 'radicado', label: 'Radicado', sort: 'radicado', kind: 'numero' },
       { id: 'fechaCreacion', label: 'Fecha de creación', sort: 'createdAt', kind: 'fecha' },
       {
         id: 'fechaActualizacion',
