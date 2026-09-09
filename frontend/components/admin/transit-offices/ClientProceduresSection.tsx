@@ -1589,8 +1589,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Revocar trámite"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>¿Revocar este trámite aprobado?</h2>
-            <p className="mt-2 text-sm opacity-80">{revokeAprobacionTarget.referenceNumber}</p>
+            <h2 className="text-lg font-semibold" style={{ color: "#557EFF" }}>¿Revocar este trámite aprobado?</h2>
+            <p className="mt-2 text-sm opacity-80">Trámite {revokeAprobacionTarget.referenceNumber}</p>
             <p className="mt-2 text-xs opacity-70">
               Se libera la placa/VIN para una nueva radicación y el FUR/certificados vigentes quedan
               marcados como históricos. Esta acción no se puede deshacer desde aquí.
@@ -1622,9 +1622,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Actualizar placa"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Corregir placa</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "#557EFF" }}>Corregir placa</h2>
             <p className="mt-2 text-sm opacity-80">
-              {updatePlateTarget.referenceNumber} · placa actual {updatePlateTarget.placa?.trim() || "—"}
+              Trámite {updatePlateTarget.referenceNumber} · placa actual {updatePlateTarget.placa?.trim() || "—"}
             </p>
             <p className="mt-2 text-xs opacity-70">
               Solo se puede usar una vez, dentro de la hora siguiente a la asignación original.
