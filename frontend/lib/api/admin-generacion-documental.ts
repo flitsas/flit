@@ -6,7 +6,10 @@
  * descarga se resuelve después con `requestStandaloneDocumentDownload`.
  */
 import { apiFetch } from "./client";
+import { downloadFile } from "./download";
 import type {
+  StandaloneBatchItemsPagedResult,
+  StandaloneBatchStatusResult,
   StandaloneDocumentDownloadLink,
   StandaloneDocumentGenerateResult,
   StandaloneDocumentsListParams,
@@ -144,6 +147,52 @@ export function prefillPersonaNatural(
   return apiFetch<PrefillResult>(`${GENERACION_DOCUMENTAL_API_BASE}/prefill/persona-natural`, {
     method: "POST",
     body: request,
+    signal,
+  });
+}
+
+// ── Lotes XLSX: seguimiento y descarga (CF-13/CF-14/CF-15, HU #12211) ───────────────────────
+
+/**
+ * `GET /lotes/{batchId}` — avance del lote. Es la llamada del polling: barata, sin storage y sin
+ * proveedores externos. Un lote ajeno responde 404 y llega como `ApiError`, nunca como un cuerpo
+ * que revele que existe.
+ */
+export function fetchStandaloneBatch(
+  batchId: string,
+  signal?: AbortSignal,
+): Promise<StandaloneBatchStatusResult> {
+  return apiFetch<StandaloneBatchStatusResult>(
+    `${GENERACION_DOCUMENTAL_API_BASE}/lotes/${batchId}`,
+    { signal },
+  );
+}
+
+/** `GET /lotes/{batchId}/items` — filas del lote con el detalle de sus errores (CF-13). */
+export function fetchStandaloneBatchItems(
+  batchId: string,
+  params: { page?: number; pageSize?: number } = {},
+  signal?: AbortSignal,
+): Promise<StandaloneBatchItemsPagedResult> {
+  return apiFetch<StandaloneBatchItemsPagedResult>(
+    `${GENERACION_DOCUMENTAL_API_BASE}/lotes/${batchId}/items`,
+    { query: { ...params }, signal },
+  );
+}
+
+/**
+ * `GET /lotes/{batchId}/zip` — descarga los documentos generados del lote.
+ *
+ * Va por `downloadFile` y no por `apiFetch` porque la respuesta es binaria y llega por streaming.
+ * **La descarga se fuerza en el cliente** (enlace con `download`): el puerto de storage solo
+ * expone presigned *inline*, así que no se depende de que el servidor imponga `attachment`.
+ *
+ * Un lote sin ningún documento generado responde 409 y llega como `ApiError` con el mensaje del
+ * backend — hay que mostrarlo, porque es justamente la explicación de que no hay nada que bajar.
+ */
+export function downloadStandaloneBatchZip(batchId: string, signal?: AbortSignal): Promise<void> {
+  return downloadFile(`${GENERACION_DOCUMENTAL_API_BASE}/lotes/${batchId}/zip`, {
+    fallbackFilename: `lote-${batchId}.zip`,
     signal,
   });
 }

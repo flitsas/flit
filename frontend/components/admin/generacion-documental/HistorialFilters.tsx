@@ -13,6 +13,11 @@ export interface HistorialFiltersValue {
   dateFrom: string;
   dateTo: string;
   userId: string;
+  /**
+   * Identificador del lote XLSX (CF-18 en I3, HU #12211). Es un filtro MÁS: convive con los de
+   * tipo, fecha, usuario y estado, y todos se aplican a la vez.
+   */
+  batchId: string;
 }
 
 export const HISTORIAL_FILTERS_EMPTY: HistorialFiltersValue = {
@@ -21,6 +26,7 @@ export const HISTORIAL_FILTERS_EMPTY: HistorialFiltersValue = {
   dateFrom: "",
   dateTo: "",
   userId: "",
+  batchId: "",
 };
 
 export function hasHistorialFilters(value: HistorialFiltersValue): boolean {
@@ -68,7 +74,7 @@ export function HistorialFilters({ value, onChange, users, disabled = false }: H
         Filtros
       </h2>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div>
           <label htmlFor="historial-filtro-tipo" className="mb-1 block text-[11px] font-medium">
             Tipo de documento
@@ -157,6 +163,26 @@ export function HistorialFilters({ value, onChange, users, disabled = false }: H
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label htmlFor="historial-filtro-lote" className="mb-1 block text-[11px] font-medium">
+            Lote
+          </label>
+          <input
+            id="historial-filtro-lote"
+            type="text"
+            inputMode="text"
+            placeholder="Identificador del lote"
+            className={FIELD_CLASS}
+            value={value.batchId}
+            disabled={disabled}
+            aria-describedby="historial-filtro-lote-ayuda"
+            onChange={(e) => set("batchId", e.target.value.trim())}
+          />
+          <p id="historial-filtro-lote-ayuda" className="mt-1 text-[10px] opacity-60">
+            Filtra las filas generadas por una carga masiva. Se combina con los demás filtros.
+          </p>
         </div>
       </div>
 

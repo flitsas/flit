@@ -388,6 +388,13 @@ public static class DependencyInjection
         services.AddScoped<GeneracionDocumental.Batches.CreateBatchHandler>();
         services.AddScoped<GeneracionDocumental.Batches.StandaloneDocumentBatchRunner>();
 
+        // HU #12211 (Feature #12201, I3) — seguimiento del lote y descarga ZIP. Los tres consultan
+        // por tenant y ninguno persiste nada: el ZIP se arma contra el cuerpo de la respuesta y no
+        // llega a storage ni a base de datos (CF-15).
+        services.AddScoped<GeneracionDocumental.Batches.GetBatchStatusHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.ListBatchItemsHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.DownloadBatchZipHandler>();
+
         return services;
     }
 }

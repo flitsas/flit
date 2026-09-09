@@ -9,7 +9,10 @@
  * `document_snapshot` (PII alta) no se modela aquí a propósito: no se expone en listados y
  * el detalle de HU-01 no lo consume.
  */
-import type { StandaloneDocumentStatus } from "@/components/admin/generacion-documental/status-labels";
+import type {
+  StandaloneBatchStatus,
+  StandaloneDocumentStatus,
+} from "@/components/admin/generacion-documental/status-labels";
 
 export type StandaloneDocumentType = "certificado_rues" | "transferencia_dominio_generada";
 
@@ -51,6 +54,11 @@ export interface StandaloneDocumentsListParams {
   userId?: string;
   /** Solo SuperAdmin: metadata global de otro tenant (CF-20). Nunca devuelve contenido. */
   tenantId?: string;
+  /**
+   * Lote XLSX del que provienen las filas (CF-18 en I3, HU #12211). Es un filtro MÁS: se aplica
+   * con AND junto a los de tipo, estado, fechas y usuario, no los sustituye.
+   */
+  batchId?: string;
   page?: number;
   pageSize?: number;
 }
@@ -266,4 +274,62 @@ export interface PrefillPersonaJuridicaRequest {
 export interface PrefillPersonaNaturalRequest {
   documentType: string;
   documentNumber: string;
+}
+
+// ── Lotes XLSX: seguimiento y descarga (CF-13/CF-14/CF-15, HU #12211) ───────────────────────
+
+/**
+ * Avance de un lote (`GET /lotes/{batchId}`). Es lo que el seguimiento sondea cada 4 segundos.
+ *
+ * `isTerminal` lo manda el backend y NO se deduce en el cliente: es la señal con la que el
+ * polling se detiene. Si el contrato gana un estado terminal nuevo, el frontend deja de sondear
+ * sin necesidad de una versión nueva.
+ */
+export interface StandaloneBatchStatusResult {
+  batchId: string;
+  status: StandaloneBatchStatus;
+  /** Filas de datos del XLSX, sin contar el encabezado. */
+  total: number;
+  generated: number;
+  errors: number;
+  /** Filas ya materializadas (generadas + en error). */
+  processed: number;
+  isTerminal: boolean;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+/** Un error de una fila del XLSX. `message` nunca refleja el valor capturado (CF-13). */
+export interface StandaloneBatchItemError {
+  code?: string | null;
+  field?: string | null;
+  message?: string | null;
+}
+
+/**
+ * Una fila del lote (`GET /lotes/{batchId}/items`).
+ *
+ * **`documentType` miente en algunas filas.** Los CHECK de la tabla solo admiten dos literales,
+ * así que una fila con un tipo desconocido —o una transferencia sin escenario válido— se
+ * persiste como `certificado_rues` con escenario nulo. En esas filas el error real vive en
+ * `validationErrors`, y es eso lo que la tabla muestra.
+ */
+export interface StandaloneBatchItem {
+  id: string;
+  rowNumber: number | null;
+  documentType: StandaloneDocumentType;
+  scenario: StandaloneDocumentScenario | null;
+  status: StandaloneDocumentStatus;
+  errorCode?: string | null;
+  errorField?: string | null;
+  validationErrors: StandaloneBatchItemError[];
+  filename?: string | null;
+  createdAt: string;
+}
+
+export interface StandaloneBatchItemsPagedResult {
+  items: StandaloneBatchItem[];
+  page: number;
+  pageSize: number;
+  total: number;
 }

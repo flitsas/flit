@@ -227,7 +227,11 @@ public sealed class StandaloneDocumentAuthorizationTests
         System.Text.RegularExpressions.Regex
             .Matches(fuente, @"\.RequirePermission\(""generacion-documental\.read""\)")
             // HU #12210 suma GET /lotes/plantilla: descargar la plantilla es leer, no generar.
-            .Should().HaveCount(3, "el listado, la descarga y la plantilla del lote son de .read");
+            // HU #12211 suma las tres del seguimiento: estado, items y ZIP del lote. Consultar el
+            // avance y bajar lo ya generado es leer; generar es lo que exige .generate.
+            .Should().HaveCount(
+                6,
+                "el listado, la descarga, la plantilla y las tres rutas de seguimiento del lote son de .read");
 
         fuente.Should().NotContain("SuperAdminPolicy");
     }

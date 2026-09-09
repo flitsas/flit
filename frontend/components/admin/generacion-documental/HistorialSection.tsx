@@ -17,7 +17,10 @@ import {
   type HistorialFiltersValue,
   type HistorialUserOption,
 } from "./HistorialFilters";
-import { generacionDocumentalTabPath } from "./generacion-documental-nav";
+import {
+  GENERACION_DOCUMENTAL_BASE_PATH,
+  generacionDocumentalTabPath,
+} from "./generacion-documental-nav";
 import { standaloneDocumentStatusQuery } from "./status-labels";
 
 const PAGE_SIZE = 20;
@@ -67,6 +70,8 @@ export function HistorialSection() {
             dateFrom: current.dateFrom || undefined,
             dateTo: current.dateTo || undefined,
             userId: current.userId || undefined,
+            // CF-18 en I3: el lote es un filtro mas, en AND con los cuatro anteriores.
+            batchId: current.batchId || undefined,
           },
           signal,
         );
@@ -163,6 +168,19 @@ export function HistorialSection() {
   return (
     <div className="flex flex-1 flex-col gap-4">
       <HistorialFilters value={filters} onChange={applyFilters} users={userOptions} />
+
+      {/* Puente al seguimiento del lote (CF-14): la vista de avance es un detalle al que se
+          llega desde aqui, no una cuarta pestana del modulo. */}
+      {filters.batchId && (
+        <button
+          type="button"
+          onClick={() => router.push(`${GENERACION_DOCUMENTAL_BASE_PATH}/lotes/${filters.batchId}`)}
+          className="w-fit rounded-xl border px-3 py-1.5 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
+        >
+          Ver seguimiento de este lote
+        </button>
+      )}
 
       {downloadError && (
         <p role="alert" className="rounded-xl border px-4 py-2 text-xs" style={{ borderColor: "#FF4E00" }}>

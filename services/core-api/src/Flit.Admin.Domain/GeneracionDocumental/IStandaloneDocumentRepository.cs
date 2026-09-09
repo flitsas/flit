@@ -92,6 +92,35 @@ public interface IStandaloneDocumentRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Filas de un lote para el seguimiento (CF-13 en la interfaz, HU #12211), paginadas y
+    /// ordenadas por número de fila ascendente — que es como el usuario mira su XLSX.
+    ///
+    /// <para>Devuelve la PROYECCIÓN pobre en PII de <see cref="StandaloneDocumentBatchItem"/>: sin
+    /// snapshots y sin ruta de storage. La pertenencia del lote al tenant se comprueba ANTES, en el
+    /// handler; este filtro por <c>tenant_id</c> es la segunda cerradura, no la única.</para>
+    /// </summary>
+    Task<StandaloneDocumentBatchItemsPage> ListBatchItemsAsync(
+        Guid tenantId,
+        Guid batchId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Entradas del ZIP del lote (CF-15): SOLO las filas en <c>generated</c> que además conservan
+    /// binario. El filtro por estado va en SQL —no en el streamer— para que «un lote de 9 generadas
+    /// y 1 en error produce 9 entradas» no dependa de recordar filtrar al armar el ZIP.
+    ///
+    /// <para>La lista es de metadata: nombre de archivo y ruta opaca. Los binarios NO se leen aquí;
+    /// los abre el streamer uno por uno, que es lo que sostiene la cota de memoria de un PDF a la
+    /// vez.</para>
+    /// </summary>
+    Task<IReadOnlyList<StandaloneDocumentBatchZipEntry>> ListBatchGeneratedFilesAsync(
+        Guid tenantId,
+        Guid batchId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Escribe <c>validation_errors</c> de una fila de lote (CF-13). Columna EXENTA del trigger de
     /// inmutabilidad, como <c>downloaded_at</c>: se puede escribir después de que el handler haya
     /// dejado la fila en <c>error</c>.

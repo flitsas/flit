@@ -196,6 +196,79 @@ internal sealed class StandaloneDocumentRepository : IStandaloneDocumentReposito
     }
 
     /// <summary>
+    /// Filas de un lote para el seguimiento (HU #12211), ordenadas por número de fila ascendente.
+    /// La proyección se arma en SQL y <b>no selecciona snapshots ni <c>storage_path</c></b>.
+    /// </summary>
+    public async Task<StandaloneDocumentBatchItemsPage> ListBatchItemsAsync(
+        Guid tenantId,
+        Guid batchId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var pagina = page < 1 ? 1 : page;
+        var tamano = pageSize switch
+        {
+            < 1 => 20,
+            > 100 => 100,
+            _ => pageSize,
+        };
+
+        var query = Scoped(tenantId).Where(x => x.BatchId == batchId);
+
+        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+
+        var items = await query
+            .OrderBy(x => x.RowNumber)
+            .ThenBy(x => x.Id)
+            .Skip((pagina - 1) * tamano)
+            .Take(tamano)
+            .Select(x => new StandaloneDocumentBatchItem
+            {
+                Id = x.Id,
+                RowNumber = x.RowNumber,
+                DocumentType = x.DocumentType,
+                Scenario = x.Scenario,
+                Status = x.Status,
+                ErrorCode = x.ErrorCode,
+                ErrorField = x.ErrorField,
+                ValidationErrors = x.ValidationErrors,
+                Filename = x.Filename,
+                CreatedAt = x.CreatedAt,
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new StandaloneDocumentBatchItemsPage(items, pagina, tamano, total);
+    }
+
+    /// <summary>
+    /// Entradas del ZIP del lote (CF-15). El <c>WHERE status = 'generated'</c> va aquí, en SQL, y no
+    /// en el streamer: así «solo los generados entran al ZIP» es una propiedad de la consulta y no
+    /// un filtro que alguien pueda olvidar al armar el archivo. Se descartan además las filas sin
+    /// binario, que el CHECK <c>ck_standalone_documents_generated_completo</c> ya hace imposibles.
+    /// <para>Apoyada en el índice parcial <c>ix_standalone_documents_batch_status</c>.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<StandaloneDocumentBatchZipEntry>> ListBatchGeneratedFilesAsync(
+        Guid tenantId,
+        Guid batchId,
+        CancellationToken cancellationToken = default)
+    {
+        var filas = await Scoped(tenantId)
+            .Where(x => x.BatchId == batchId
+                && x.Status == StandaloneDocumentStatus.Generated
+                && x.StoragePath != null
+                && x.Filename != null)
+            .OrderBy(x => x.RowNumber)
+            .ThenBy(x => x.Id)
+            .Select(x => new { x.RowNumber, Filename = x.Filename!, StoragePath = x.StoragePath! })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. filas.Select(f => new StandaloneDocumentBatchZipEntry(f.RowNumber, f.Filename, f.StoragePath))];
+    }
+
+    /// <summary>
     /// Detalle de errores de una fila del lote (CF-13). Columna EXENTA del trigger de inmutabilidad
     /// —como <c>downloaded_at</c>—, así que se puede escribir después de que el handler haya cerrado
     /// la fila en <c>error</c>. Tocar aquí cualquier columna congelada haría fallar el UPDATE con
@@ -265,6 +338,13 @@ internal sealed class StandaloneDocumentRepository : IStandaloneDocumentReposito
         if (filter.CreatedByUserId is { } autor)
         {
             query = query.Where(x => x.CreatedByUserId == autor);
+        }
+
+        // CF-18 en I3: el filtro por lote es un WHERE mas, con AND sobre los anteriores. No excluye
+        // ni sustituye a los de tipo, fecha, usuario o estado.
+        if (filter.BatchId is { } lote)
+        {
+            query = query.Where(x => x.BatchId == lote);
         }
 
         var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);

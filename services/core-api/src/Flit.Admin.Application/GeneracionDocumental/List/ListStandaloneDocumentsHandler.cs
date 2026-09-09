@@ -50,6 +50,8 @@ public sealed class ListStandaloneDocumentsHandler
             DateFrom = query.DateFrom,
             DateTo = query.DateTo,
             CreatedByUserId = query.CreatedByUserId == Guid.Empty ? null : query.CreatedByUserId,
+            // CF-18 en I3 (HU #12211): filtro por lote, en AND con los demás.
+            BatchId = query.BatchId == Guid.Empty ? null : query.BatchId,
             Page = query.Page,
             PageSize = query.PageSize,
         };
@@ -99,6 +101,9 @@ public sealed record ListStandaloneDocumentsQuery
     public DateTimeOffset? DateTo { get; init; }
 
     public Guid? CreatedByUserId { get; init; }
+
+    /// <summary>Lote del que provienen las filas (CF-18 en I3). <c>null</c> = todos.</summary>
+    public Guid? BatchId { get; init; }
 
     public int Page { get; init; } = 1;
 

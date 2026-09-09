@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using System.Text.Json;
 using Flit.Admin.Application.GeneracionDocumental.Batches;
 using Flit.Admin.Application.GeneracionDocumental.Download;
 using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
@@ -9,6 +10,7 @@ using Flit.Admin.Application.GeneracionDocumental.Prefill;
 using Flit.Admin.Application.GeneracionDocumental.Ports;
 using Flit.Admin.Domain.GeneracionDocumental;
 using Flit.Api.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -213,6 +215,63 @@ public static class AdminGeneracionDocumentalEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .DisableAntiforgery();
 
+        // Seguimiento del lote y descarga ZIP (CF-13/CF-14/CF-15, HU #12211). Las tres rutas van
+        // DESPUES de /lotes/plantilla y no chocan con ella: la restriccion :guid del segmento hace
+        // que "plantilla" no encaje aqui.
+        group.MapGet("/lotes/{batchId:guid}", ObtenerEstadoLoteAsync)
+            .RequirePermission("generacion-documental.read")
+            .WithName("AdminGeneracionDocumentalEstadoLote")
+            .WithSummary("Avance de un lote para el seguimiento in-app (CF-14)")
+            .WithDescription("Devuelve el estado del lote, el total de filas y cuantas van "
+                + "generadas y en error. Los contadores se cuentan sobre las filas ya "
+                + "materializadas, no se leen de la cabecera: esta solo los escribe al cerrar el "
+                + "lote y el progreso quedaria clavado en cero durante todo el procesamiento. El "
+                + "campo isTerminal viaja explicito porque es la senal con la que el cliente "
+                + "detiene el polling. No hay correo ni notificacion push: el avance se consulta, "
+                + "no se empuja. Un lote de otra compania responde 404 sin revelar su existencia. "
+                + "Requiere el permiso generacion-documental.read.")
+            .Produces<StandaloneBatchStatusResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/lotes/{batchId:guid}/items", ListarItemsLoteAsync)
+            .RequirePermission("generacion-documental.read")
+            .WithName("AdminGeneracionDocumentalItemsLote")
+            .WithSummary("Filas de un lote con el detalle de sus errores (CF-13)")
+            .WithDescription("Listado paginado de las filas del lote, ordenado por numero de fila. "
+                + "Cada fila trae numero, tipo, escenario, estado y sus validationErrors con "
+                + "codigo, campo y mensaje. El mensaje NUNCA refleja el valor capturado que produjo "
+                + "el error: la fila puede traer una cedula o una direccion. Ojo con documentType: "
+                + "en una fila cuyo tipo el usuario tecleo mal, los CHECK de la tabla no permiten "
+                + "persistir el valor real y la columna dice certificado_rues; el error verdadero "
+                + "esta en validationErrors, que es lo que la interfaz debe mostrar. No expone "
+                + "snapshots ni rutas de storage. Un lote de otra compania responde 404. Requiere "
+                + "el permiso generacion-documental.read.")
+            .Produces<StandaloneBatchItemsPageResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/lotes/{batchId:guid}/zip", DescargarZipLoteAsync)
+            .RequirePermission("generacion-documental.read")
+            .WithName("AdminGeneracionDocumentalZipLote")
+            .WithSummary("Descarga por streaming los documentos generados del lote (CF-15)")
+            .WithDescription("Devuelve application/zip armado al vuelo sobre el cuerpo de la "
+                + "respuesta, con UNA entrada por fila en estado generated: un lote de nueve "
+                + "generadas y una en error produce nueve entradas. El ZIP no se persiste en "
+                + "storage ni en base de datos, y la memoria del proceso sostiene un PDF a la vez "
+                + "porque cada binario se abre, se copia por bloques y se cierra antes del "
+                + "siguiente. Un lote sin ninguna fila generada responde 409 con una explicacion "
+                + "explicita, nunca un ZIP vacio. Un lote de otra compania responde 404 sin "
+                + "revelar su existencia ni entregar presigned URLs. Requiere el permiso "
+                + "generacion-documental.read.")
+            .Produces<byte[]>(StatusCodes.Status200OK, "application/zip")
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         group.MapGet("/{id:guid}/download", DownloadDocumentoAsync)
             .RequirePermission("generacion-documental.read")
             .WithName("AdminGeneracionDocumentalDownload")
@@ -381,6 +440,46 @@ public static class AdminGeneracionDocumentalEndpoints
     /// contiene los datos completos de las partes y no se refleja en el contrato.
     /// </summary>
     public sealed record StandaloneBatchCreateResponse(Guid BatchId, string Status, int Total);
+
+    /// <summary>
+    /// Avance de un lote (CF-14). <c>isTerminal</c> es explicito para que el cliente detenga el
+    /// polling sin tener que conocer la lista de estados terminales.
+    /// </summary>
+    public sealed record StandaloneBatchStatusResponse(
+        Guid BatchId,
+        string Status,
+        int Total,
+        int Generated,
+        int Errors,
+        int Processed,
+        bool IsTerminal,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset? CompletedAt);
+
+    /// <summary>
+    /// Una fila del lote en el seguimiento (CF-13). <c>ValidationErrors</c> llega como JSON crudo de
+    /// la columna —<c>[{code, field, message}]</c>—; el mensaje NUNCA trae el valor capturado.
+    /// </summary>
+    public sealed record StandaloneBatchItemResponse(
+        Guid Id,
+        int? RowNumber,
+        string DocumentType,
+        string? Scenario,
+        string Status,
+        string? ErrorCode,
+        string? ErrorField,
+        IReadOnlyList<StandaloneBatchItemErrorResponse> ValidationErrors,
+        string? Filename,
+        DateTimeOffset CreatedAt);
+
+    /// <summary>Error de una fila: codigo, campo y mensaje. Sin el valor que lo produjo.</summary>
+    public sealed record StandaloneBatchItemErrorResponse(string? Code, string? Field, string? Message);
+
+    public sealed record StandaloneBatchItemsPageResponse(
+        IReadOnlyList<StandaloneBatchItemResponse> Items,
+        int Page,
+        int PageSize,
+        int Total);
 
     /// <summary>Cuerpo del prellenado de vehiculo. La placa manda; el documento del propietario es opcional.</summary>
     public sealed record PrefillVehiculoRequest(string? Placa, string? OwnerDocumentType, string? OwnerDocumentNumber);
@@ -768,6 +867,189 @@ public static class AdminGeneracionDocumentalEndpoints
         };
     }
 
+    /// <summary>
+    /// Avance del lote (CF-14). Es la ruta que el frontend sondea cada 4 segundos: no consulta
+    /// storage, no firma nada y no toca ningun proveedor externo.
+    /// </summary>
+    internal static async Task<IResult> ObtenerEstadoLoteAsync(
+        HttpContext httpContext,
+        Guid batchId,
+        [FromServices] GetBatchStatusHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Unauthorized("Token invalido: falta claim tenant_id");
+        }
+
+        var estado = await handler.HandleAsync(tenantId, batchId, cancellationToken).ConfigureAwait(false);
+
+        // 404 escueto e identico para "no existe" y "es de otra compania" (CF-20/R3).
+        return estado is null
+            ? Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound)
+            : Results.Ok(new StandaloneBatchStatusResponse(
+                estado.BatchId,
+                estado.Status,
+                estado.Total,
+                estado.Generated,
+                estado.Errors,
+                estado.Processed,
+                estado.IsTerminal,
+                estado.CreatedAt,
+                estado.CompletedAt));
+    }
+
+    /// <summary>Filas del lote con el detalle de sus errores (CF-13 en la interfaz).</summary>
+    internal static async Task<IResult> ListarItemsLoteAsync(
+        HttpContext httpContext,
+        Guid batchId,
+        [FromServices] ListBatchItemsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Unauthorized("Token invalido: falta claim tenant_id");
+        }
+
+        var q = httpContext.Request.Query;
+        var page = int.TryParse(q["page"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var p) ? p : 1;
+        var pageSize = int.TryParse(q["pageSize"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var ps)
+            ? ps
+            : 20;
+
+        var pagina = await handler
+            .HandleAsync(tenantId, batchId, page, pageSize, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (pagina is null)
+        {
+            return Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound);
+        }
+
+        return Results.Ok(new StandaloneBatchItemsPageResponse(
+            [.. pagina.Items.Select(ToBatchItemResponse)],
+            pagina.Page,
+            pagina.PageSize,
+            pagina.Total));
+    }
+
+    /// <summary>
+    /// ZIP del lote por streaming (CF-15).
+    ///
+    /// <para><b>Primero se decide, despues se escribe.</b> El plan (404 / 409 / lista de entradas)
+    /// se resuelve ANTES de <c>Results.Stream</c>: en cuanto empieza el cuerpo, el status ya viajo y
+    /// un fallo posterior solo puede cortar la conexion.</para>
+    ///
+    /// <para><b>AllowSynchronousIO</b>: <c>ZipArchive</c> no tiene API asincrona para cerrar el
+    /// directorio central y Kestrel prohibe por defecto la escritura sincrona sobre el cuerpo de la
+    /// respuesta. Sin esta linea la descarga muere en el <c>Dispose</c> del archivo con "Synchronous
+    /// operations are disallowed". Se habilita SOLO en esta peticion y no afecta la cota de memoria:
+    /// el contenido se sigue copiando por bloques, un binario a la vez.</para>
+    /// </summary>
+    internal static async Task<IResult> DescargarZipLoteAsync(
+        HttpContext httpContext,
+        Guid batchId,
+        [FromServices] DownloadBatchZipHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Unauthorized("Token invalido: falta claim tenant_id");
+        }
+
+        var plan = await handler.PrepareAsync(tenantId, batchId, cancellationToken).ConfigureAwait(false);
+
+        if (plan.Outcome == StandaloneBatchZipOutcome.NotFound)
+        {
+            return Results.Json(new { error = "not_found" }, statusCode: StatusCodes.Status404NotFound);
+        }
+
+        if (plan.Outcome == StandaloneBatchZipOutcome.NoDocuments)
+        {
+            // Respuesta EXPLICITA: el lote existe y no tiene nada descargable. Un ZIP vacio pasaria
+            // por descarga corrupta y no explicaria que todas las filas quedaron en error.
+            return Results.Json(
+                new
+                {
+                    error = "no_documents",
+                    message = "El lote no tiene documentos generados para descargar.",
+                },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var cuerpo = httpContext.Features.Get<IHttpBodyControlFeature>();
+        if (cuerpo is not null)
+        {
+            cuerpo.AllowSynchronousIO = true;
+        }
+
+        var entradas = plan.Entries;
+
+        return Results.Stream(
+            stream => handler.WriteAsync(entradas, stream, cancellationToken),
+            "application/zip",
+            plan.Filename);
+    }
+
+    /// <summary>
+    /// Traduce una fila del lote al contrato HTTP. <c>validation_errors</c> se parsea con
+    /// <c>JsonDocument</c> —sin serializador reflexivo— y un JSON corrupto degrada a lista vacia:
+    /// una columna mal escrita no puede tumbar el seguimiento del lote entero.
+    /// </summary>
+    private static StandaloneBatchItemResponse ToBatchItemResponse(StandaloneDocumentBatchItem item) => new(
+        item.Id,
+        item.RowNumber,
+        item.DocumentType,
+        item.Scenario,
+        item.Status,
+        item.ErrorCode,
+        item.ErrorField,
+        ParseValidationErrors(item.ValidationErrors),
+        item.Filename,
+        item.CreatedAt);
+
+    private static List<StandaloneBatchItemErrorResponse> ParseValidationErrors(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var documento = JsonDocument.Parse(json);
+            if (documento.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var errores = new List<StandaloneBatchItemErrorResponse>();
+            foreach (var elemento in documento.RootElement.EnumerateArray())
+            {
+                if (elemento.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                errores.Add(new StandaloneBatchItemErrorResponse(
+                    Texto(elemento, "code"),
+                    Texto(elemento, "field"),
+                    Texto(elemento, "message")));
+            }
+
+            return errores;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+
+        static string? Texto(JsonElement elemento, string propiedad) =>
+            elemento.TryGetProperty(propiedad, out var valor) && valor.ValueKind == JsonValueKind.String
+                ? valor.GetString()
+                : null;
+    }
+
     internal static async Task<IResult> ListDocumentosAsync(
         HttpContext httpContext,
         [FromServices] ListStandaloneDocumentsHandler handler,
@@ -796,6 +1078,8 @@ public static class AdminGeneracionDocumentalEndpoints
 
         Guid? requestedTenantId = Guid.TryParse(q["tenantId"], out var otroTenant) ? otroTenant : null;
         Guid? userId = Guid.TryParse(q["userId"], out var autor) ? autor : null;
+        // CF-18 en I3: filtro por lote. Convive con los de tipo, fecha, usuario y estado (AND).
+        Guid? batchId = Guid.TryParse(q["batchId"], out var lote) ? lote : null;
         var documentType = q["documentType"].ToString();
 
         var page = await handler
@@ -810,6 +1094,7 @@ public static class AdminGeneracionDocumentalEndpoints
                     DateFrom = dateFrom,
                     DateTo = dateTo,
                     CreatedByUserId = userId,
+                    BatchId = batchId,
                     Page = int.TryParse(q["page"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var p) ? p : 1,
                     PageSize = int.TryParse(q["pageSize"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var ps) ? ps : 20,
                 },

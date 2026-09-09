@@ -33,6 +33,17 @@ public sealed record StandaloneDocumentFilter
     /// <summary>Autor de la generación (<c>created_by_user_id</c>). <c>null</c> = todos.</summary>
     public Guid? CreatedByUserId { get; init; }
 
+    /// <summary>
+    /// Lote al que pertenece la fila (CF-18 en I3, HU #12211). <c>null</c> = todos los documentos,
+    /// individuales y de lote.
+    ///
+    /// <para>Es un filtro MÁS, no un modo aparte: convive con el de tipo, el de fechas, el de
+    /// usuario y el de estado, y todos se aplican a la vez con AND. La sub-decisión §3.c del diseño
+    /// —una fila del XLSX ES una fila de <c>admin.standalone_documents</c>— es justamente lo que
+    /// permite que filtrar por lote sea un <c>WHERE</c> más y no una consulta a otra tabla.</para>
+    /// </summary>
+    public Guid? BatchId { get; init; }
+
     public int Page { get; init; } = 1;
 
     public int PageSize { get; init; } = 20;

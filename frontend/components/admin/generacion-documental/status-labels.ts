@@ -86,3 +86,61 @@ export function standaloneDocumentStatusQuery(
   }
   return FILTER_STATUSES[filter];
 }
+
+// ── Estados del LOTE (CF-21 en I3, HU #12211) ───────────────────────────────────────────────
+//
+// El lote tiene su propia máquina de cinco estados, distinta de la de los documentos. Sus
+// etiquetas viven aquí, en el mismo y único archivo, por la misma razón: si mañana cambia
+// «En proceso», cambia en un sitio y no en cinco componentes.
+
+/** Los cinco estados internos de `admin.standalone_document_batches.status`. */
+export const STANDALONE_BATCH_STATUSES = [
+  "queued",
+  "processing",
+  "completed",
+  "partial_failure",
+  "failed",
+] as const;
+
+export type StandaloneBatchStatus = (typeof STANDALONE_BATCH_STATUSES)[number];
+
+const BATCH_STATUS_VIEW: Record<StandaloneBatchStatus, { label: string; tone: StatusTone }> = {
+  // `queued` y `processing` colapsan igual que `pending`/`processing` en un documento: para el
+  // usuario «en cola» y «procesando» no son dos cosas distintas, son la misma espera.
+  queued: { label: "En proceso", tone: "info" },
+  processing: { label: "En proceso", tone: "info" },
+  completed: { label: "Completado", tone: "success" },
+  // `partial_failure` es un RESULTADO del lote, no un fallo: se acompaña siempre del conteo de
+  // generados y de errores, que es lo que el AC exige mostrar.
+  partial_failure: { label: "Completado con errores", tone: "warning" },
+  failed: { label: "Sin documentos generados", tone: "danger" },
+};
+
+export function isStandaloneBatchStatus(value: string): value is StandaloneBatchStatus {
+  return (STANDALONE_BATCH_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * Presentación de un estado de lote. Un valor desconocido se muestra como «En proceso» en tono
+ * neutro: no se inventa una etiqueta ni se afirma un resultado que no consta.
+ */
+export function standaloneBatchStatusView(status: string): { label: string; tone: StatusTone } {
+  if (isStandaloneBatchStatus(status)) {
+    return BATCH_STATUS_VIEW[status];
+  }
+  return { label: "En proceso", tone: "neutral" };
+}
+
+/** Etiqueta de usuario de un estado de lote. */
+export function standaloneBatchStatusLabel(status: string): string {
+  return standaloneBatchStatusView(status).label;
+}
+
+/**
+ * Estados terminales del lote. El backend además manda `isTerminal` explícito en la respuesta y
+ * ESE es el que manda para detener el polling; esta lista es el respaldo cuando aún no hay
+ * respuesta o cuando el contrato no trae la bandera.
+ */
+export function isStandaloneBatchTerminal(status: string | undefined): boolean {
+  return status === "completed" || status === "partial_failure" || status === "failed";
+}

@@ -85,6 +85,61 @@ internal sealed class FakeStandaloneDocumentRepository : IStandaloneDocumentRepo
                 .Where(r => r.TenantId == tenantId && r.BatchId == batchId && r.RowNumber != null)
                 .Select(r => new StandaloneDocumentBatchRowState(r.RowNumber!.Value, r.Status))]);
 
+    /// <summary>
+    /// Filas del lote paginadas, con el mismo orden que el SQL real (número de fila ascendente).
+    /// Devuelve la proyección pobre en PII: sin snapshots y sin ruta de storage.
+    /// </summary>
+    public Task<StandaloneDocumentBatchItemsPage> ListBatchItemsAsync(
+        Guid tenantId, Guid batchId, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var pagina = page < 1 ? 1 : page;
+        var tamano = pageSize < 1 ? 20 : pageSize;
+
+        var todas = Rows
+            .Where(r => r.TenantId == tenantId && r.BatchId == batchId)
+            .OrderBy(r => r.RowNumber)
+            .ThenBy(r => r.Id)
+            .ToList();
+
+        var items = todas
+            .Skip((pagina - 1) * tamano)
+            .Take(tamano)
+            .Select(r => new StandaloneDocumentBatchItem
+            {
+                Id = r.Id,
+                RowNumber = r.RowNumber,
+                DocumentType = r.DocumentType,
+                Scenario = r.Scenario,
+                Status = r.Status,
+                ErrorCode = r.ErrorCode,
+                ErrorField = r.ErrorField,
+                ValidationErrors = r.ValidationErrors,
+                Filename = r.Filename,
+                CreatedAt = r.CreatedAt,
+            })
+            .ToList();
+
+        return Task.FromResult(
+            new StandaloneDocumentBatchItemsPage(items, pagina, tamano, todas.Count));
+    }
+
+    /// <summary>
+    /// Entradas del ZIP: SOLO las filas generadas y con binario, igual que el WHERE del SQL real.
+    /// El filtro vive aquí, no en el streamer.
+    /// </summary>
+    public Task<IReadOnlyList<StandaloneDocumentBatchZipEntry>> ListBatchGeneratedFilesAsync(
+        Guid tenantId, Guid batchId, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<StandaloneDocumentBatchZipEntry>>(
+            [.. Rows
+                .Where(r => r.TenantId == tenantId
+                    && r.BatchId == batchId
+                    && r.Status == StandaloneDocumentStatus.Generated
+                    && r.StoragePath is not null
+                    && r.Filename is not null)
+                .OrderBy(r => r.RowNumber)
+                .ThenBy(r => r.Id)
+                .Select(r => new StandaloneDocumentBatchZipEntry(r.RowNumber, r.Filename!, r.StoragePath!))]);
+
     public Task SaveValidationErrorsAsync(
         Guid tenantId, Guid id, string validationErrorsJson, CancellationToken cancellationToken = default)
     {
@@ -140,6 +195,11 @@ internal sealed class FakeStandaloneDocumentRepository : IStandaloneDocumentRepo
         if (filter.CreatedByUserId is { } autor)
         {
             query = query.Where(r => r.CreatedByUserId == autor);
+        }
+
+        if (filter.BatchId is { } lote)
+        {
+            query = query.Where(r => r.BatchId == lote);
         }
 
         var ordered = query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).ToList();
@@ -332,11 +392,98 @@ internal sealed class FakeStandaloneDocumentStorage : IStandaloneDocumentStorage
     /// <summary>Binarios guardados por ruta, para que el worker pueda releer el XLSX fuente.</summary>
     public Dictionary<string, byte[]> Contenidos { get; } = [];
 
+    /// <summary>Rutas abiertas con <see cref="OpenReadAsync"/>, en orden.</summary>
+    public List<string> Abiertos { get; } = [];
+
+    /// <summary>Binarios abiertos y NO cerrados en este instante.</summary>
+    public int AbiertosAhora { get; private set; }
+
+    /// <summary>
+    /// Máximo de binarios abiertos a la vez durante toda la prueba. Es la medida de la cota de
+    /// memoria del ZIP (CF-15): si el streamer cargara el lote entero, este número sería el total
+    /// de documentos en vez de 1.
+    /// </summary>
+    public int MaximoAbiertosSimultaneos { get; private set; }
+
     public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken cancellationToken = default)
-        => Task.FromResult<Stream?>(
-            Contenidos.TryGetValue(storagePath, out var bytes)
-                ? new MemoryStream(bytes, writable: false)
-                : null);
+    {
+        if (!Contenidos.TryGetValue(storagePath, out var bytes))
+        {
+            return Task.FromResult<Stream?>(null);
+        }
+
+        Abiertos.Add(storagePath);
+        AbiertosAhora++;
+        MaximoAbiertosSimultaneos = Math.Max(MaximoAbiertosSimultaneos, AbiertosAhora);
+
+        return Task.FromResult<Stream?>(
+            new StreamContado(new MemoryStream(bytes, writable: false), () => AbiertosAhora--));
+    }
+
+    /// <summary>
+    /// Stream que avisa al cerrarse. Sin esto no se puede distinguir «abrí diez binarios uno tras
+    /// otro» de «tuve diez binarios abiertos a la vez», que es justo lo que el AC exige demostrar.
+    /// </summary>
+    private sealed class StreamContado : Stream
+    {
+        private readonly Stream _inner;
+        private readonly Action _alCerrar;
+        private bool _cerrado;
+
+        public StreamContado(Stream inner, Action alCerrar)
+        {
+            _inner = inner;
+            _alCerrar = alCerrar;
+        }
+
+        public override bool CanRead => _inner.CanRead;
+
+        public override bool CanSeek => _inner.CanSeek;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _inner.Length;
+
+        public override long Position
+        {
+            get => _inner.Position;
+            set => _inner.Position = value;
+        }
+
+        public override void Flush() => _inner.Flush();
+
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && !_cerrado)
+            {
+                _cerrado = true;
+                _alCerrar();
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            if (!_cerrado)
+            {
+                _cerrado = true;
+                _alCerrar();
+                await _inner.DisposeAsync().ConfigureAwait(false);
+            }
+
+            await base.DisposeAsync().ConfigureAwait(false);
+        }
+    }
 
     public Task<StandaloneDocumentDownloadLink?> GetPresignedViewUrlAsync(
         string storagePath, CancellationToken cancellationToken = default)

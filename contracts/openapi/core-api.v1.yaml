@@ -6528,6 +6528,14 @@ paths:
           required: false
           schema: { type: string, format: uuid }
           description: Autor de la generación (created_by_user_id).
+        - name: batchId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Lote XLSX del que provienen las filas (CF-18 en I3). Convive con los filtros de tipo,
+            fecha, usuario y estado: todos se aplican a la vez con AND. Un batchId de otra compañía
+            devuelve cero resultados, porque el filtro por tenant se aplica igual.
         - name: tenantId
           in: query
           required: false
@@ -6737,6 +6745,170 @@ paths:
           description: >
             Archivo rechazado entero (too_many_rows, template_invalid o invalid_file). El XLSX no se
             persistió en storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/lotes/{batchId}:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalEstadoLote
+      summary: Avance de un lote para el seguimiento in-app (CF-14)
+      description: >
+        Devuelve el estado del lote, el total de filas y cuántas van generadas y en error. Es la
+        ruta que la interfaz sondea cada 4 segundos: no consulta storage, no firma ninguna URL y no
+        toca proveedores externos. Los contadores se cuentan sobre las filas ya materializadas y no
+        se leen de la cabecera del lote, que solo los escribe al cerrar: leerlos ahí dejaría el
+        progreso clavado en cero durante todo el procesamiento. isTerminal viaja EXPLÍCITO porque es
+        la señal con la que el cliente detiene el polling; si el contrato gana un estado terminal
+        nuevo, el cliente deja de sondear sin cambiar de versión. No se envía correo ni notificación
+        push: el avance se consulta, no se empuja. Un lote de otra compañía responde 404 sin revelar
+        su existencia. Requiere el permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Avance del lote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentBatchStatus"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o no pertenece a la compañía del JWT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/lotes/{batchId}/items:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalItemsLote
+      summary: Filas de un lote con el detalle de sus errores (CF-13)
+      description: >
+        Listado paginado de las filas del lote, ordenado por número de fila ascendente —que es como
+        el usuario mira su XLSX—. Cada fila trae número, tipo, escenario, estado y validationErrors
+        con código, campo y mensaje. El mensaje NUNCA refleja el valor capturado que produjo el
+        error: la fila puede traer un documento de identidad o una dirección, y el listado los
+        enseñaría a cualquiera con permiso de lectura. OJO con documentType, que en algunas filas
+        MIENTE por una limitación del esquema: los CHECK de admin.standalone_documents solo admiten
+        dos literales, así que una fila con un tipo desconocido —o una transferencia sin escenario
+        válido— se persiste como certificado_rues con escenario nulo y el error verdadero vive en
+        validationErrors, que es lo que la interfaz debe mostrar. No expone document_snapshot,
+        rues_snapshot ni rutas de storage. Un lote de otra compañía responde 404. Requiere el
+        permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página de filas del lote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentBatchItemsPage"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o no pertenece a la compañía del JWT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/lotes/{batchId}/zip:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalZipLote
+      summary: Descarga por streaming los documentos generados del lote (CF-15)
+      description: >
+        Devuelve application/zip armado AL VUELO sobre el cuerpo de la respuesta, con una entrada
+        por cada fila en estado generated: un lote de nueve generadas y una en error produce un ZIP
+        de nueve entradas, y la fila fallida no aparece. El filtro por estado va en SQL, no en el
+        streamer, para que «solo los generados» sea una propiedad de la consulta y no un if que
+        alguien pueda olvidar. El ZIP NO se persiste en storage ni en base de datos, y la memoria del
+        proceso sostiene un PDF a la vez: cada binario se abre, se copia por bloques y se cierra
+        antes de abrir el siguiente. Las entradas van prefijadas con el número de fila del XLSX
+        porque dos filas pueden producir el mismo nombre de archivo y un ZIP con nombres repetidos
+        pierde entradas al descomprimirse. Un lote cuyas filas quedaron TODAS en error responde 409
+        con una explicación explícita, nunca un ZIP vacío que parecería una descarga corrupta. Un
+        lote de otra compañía responde 404 sin revelar su existencia ni entregar presigned URLs.
+        Requiere el permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: ZIP por streaming con los documentos generados del lote.
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o no pertenece a la compañía del JWT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            El lote existe pero ninguna fila llegó a generated: no hay nada que descargar
+            (code no_documents). No se entrega un ZIP vacío.
           content:
             application/json:
               schema:
@@ -8237,6 +8409,101 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StandaloneDocumentListItem"
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    StandaloneDocumentBatchStatus:
+      type: object
+      description: >
+        Avance de un lote para el seguimiento in-app (CF-14). Sin nombre de archivo fuente, sin ruta
+        de storage y sin nada del contenido del XLSX.
+      required: [batchId, status, total, generated, errors, processed, isTerminal, createdAt]
+      properties:
+        batchId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, processing, completed, partial_failure, failed]
+          description: >
+            La interfaz colapsa queued y processing en «En proceso» (CF-21); partial_failure es un
+            RESULTADO visible del lote —con su conteo de generados y de errores—, no un fallo.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Filas de datos declaradas por el XLSX, sin contar el encabezado.
+        generated:
+          type: integer
+          minimum: 0
+          description: Filas que llegaron a generated. Se cuentan, no se leen de la cabecera.
+        errors:
+          type: integer
+          minimum: 0
+          description: Filas que quedaron en error.
+        processed:
+          type: integer
+          minimum: 0
+          description: Filas ya materializadas (generadas + en error + en curso).
+        isTerminal:
+          type: boolean
+          description: >
+            true en completed, partial_failure y failed. Es la señal con la que el cliente DETIENE
+            el polling; viaja explícita para que un estado terminal nuevo no exija una versión nueva
+            del frontend.
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+    StandaloneDocumentBatchItemError:
+      type: object
+      description: >
+        Error de una fila del XLSX (CF-13): código, campo y mensaje. El mensaje NUNCA refleja el
+        valor capturado que produjo el error — se nombra el campo, no su contenido.
+      properties:
+        code: { type: string, nullable: true }
+        field: { type: string, nullable: true }
+        message: { type: string, nullable: true }
+    StandaloneDocumentBatchItem:
+      type: object
+      description: >
+        Una fila del lote en el seguimiento. Proyección pobre en PII: sin snapshots y sin ruta de
+        storage.
+      required: [id, documentType, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        rowNumber:
+          type: integer
+          nullable: true
+          description: Número de la fila en el XLSX (1 = primera fila de datos).
+        documentType:
+          type: string
+          enum: [certificado_rues, transferencia_dominio_generada]
+          description: >
+            ATENCIÓN: en una fila cuyo tipo el usuario tecleó mal, este valor dice certificado_rues
+            aunque no lo sea — los CHECK de la tabla solo admiten dos literales y no hay dónde
+            guardar el tipo real. En esas filas el error verdadero está en validationErrors, y es
+            eso lo que la interfaz debe mostrar.
+        scenario:
+          type: string
+          nullable: true
+          enum: [A, B, C]
+        status:
+          type: string
+          enum: [pending, processing, generated, error]
+          description: Estado INTERNO. La interfaz colapsa pending y processing en «En proceso» (CF-21).
+        errorCode: { type: string, nullable: true }
+        errorField: { type: string, nullable: true }
+        validationErrors:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandaloneDocumentBatchItemError"
+        filename: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    StandaloneDocumentBatchItemsPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandaloneDocumentBatchItem"
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
