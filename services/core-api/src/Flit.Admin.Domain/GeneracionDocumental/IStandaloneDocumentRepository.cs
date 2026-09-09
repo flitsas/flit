@@ -61,6 +61,18 @@ public interface IStandaloneDocumentRepository
         string ruesSnapshotJson,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Escribe el snapshot COMPLETO del documento de transferencia (CF-26). Igual que
+    /// <see cref="SaveRuesSnapshotAsync"/>, solo puede ejecutarse una vez por fila: la capa 1 del
+    /// trigger <c>tr_standalone_documents_immutable</c> congela <c>document_snapshot</c> en cuanto
+    /// deja de ser nulo.
+    /// </summary>
+    Task SaveDocumentSnapshotAsync(
+        Guid tenantId,
+        Guid id,
+        string documentSnapshotJson,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Cierra la fila en <c>generated</c> con el binario ya persistido en storage.</summary>
     Task MarkGeneratedAsync(
         Guid tenantId,

@@ -1,0 +1,113 @@
+namespace Flit.Admin.Application.GeneracionDocumental.Ports;
+
+/// <summary>
+/// Rol de una parte dentro del documento. Es también el <b>rótulo del bloque de firma</b> cuando esa
+/// parte firma (anexo §9.1 y §9.3).
+/// </summary>
+public static class TransferPartyRole
+{
+    public const string Transferente = "TRANSFERENTE";
+
+    public const string Adquirente = "ADQUIRENTE";
+}
+
+/// <summary>Las 13 variables de vehículo del anexo §5.1, ya resueltas a texto.</summary>
+public sealed record TransferDocumentVehicle(
+    string Placa,
+    string? Marca,
+    string? Linea,
+    string? ModeloAnio,
+    string? ClaseVehiculo,
+    string? TipoCarroceria,
+    string? Color,
+    string? NoMotor,
+    string? NoChasis,
+    string? NoSerie,
+    string? Servicio,
+    string? NoLicenciaTransito,
+    string? OrganismoTransito);
+
+/// <summary>
+/// Una parte compareciente, con su rol. El <see cref="Rol"/> es lo que decide el rótulo del bloque
+/// de firma; el generador no infiere «el primero es el vendedor».
+/// </summary>
+public sealed record TransferDocumentParty(
+    string Rol,
+    string NombreRazonSocial,
+    string TipoDoc,
+    string NumeroDoc,
+    string? DigitoVerificacion = null,
+    string? Domicilio = null,
+    string? RepresentanteLegal = null,
+    string? CcRepresentanteLegal = null,
+    string? RolEtiqueta = null)
+{
+    /// <summary>Rótulo visible del bloque de firma. Por defecto, el propio rol.</summary>
+    public string Etiqueta => string.IsNullOrWhiteSpace(RolEtiqueta) ? Rol : RolEtiqueta;
+
+    /// <summary>Identificación en una línea: <c>NIT No. 900123456, DV 8</c>.</summary>
+    public string Identificacion => string.IsNullOrWhiteSpace(DigitoVerificacion)
+        ? $"{TipoDoc} No. {NumeroDoc}"
+        : $"{TipoDoc} No. {NumeroDoc}, DV {DigitoVerificacion}";
+}
+
+/// <summary>
+/// Variables del negocio ya resueltas (anexo §5.4), incluidas las tres fiscales que imprime la
+/// cláusula SEXTA de §8.1.
+/// </summary>
+public sealed record TransferDocumentBusiness(
+    string TituloJuridico,
+    string TituloRedaccion,
+    string? DescripcionTitulo,
+    string? PrecioLetras,
+    string? PrecioNumeros,
+    string? ContraprestacionDescripcion,
+    string? FormaPago,
+    string AsumeRetencionFuente,
+    string AsumeDerechosTramite,
+    string? AsumeImpuestoVehiculo);
+
+/// <summary>Declaración de gravamen que alimenta el inciso final de la cláusula segunda (§8.1).</summary>
+public sealed record TransferDocumentEncumbrance(
+    bool GravamenActivo,
+    bool TieneLevantamientoOAutorizacion);
+
+/// <summary>
+/// Payload completo y ya resuelto que alimenta al generador del Documento de Transferencia de
+/// Dominio. Es también, campo por campo, lo que se congela en <c>document_snapshot</c> (CF-26).
+///
+/// <para><b><see cref="Partes"/> es una lista, no un par transferente/adquirente.</b> El anexo
+/// §9.0.3 lo exige: «el escenario decide cuántos bloques de firma existen; el modo de firma solo
+/// decide qué va dentro de un bloque que ya existe». En el escenario A la lista trae dos partes; en
+/// el escenario B (HU-06) traerá una sola y el bloque del adquirente no podrá instanciarse ni por
+/// descuido, porque no habrá nada que instanciar — no existe un campo opcional que dejar en
+/// blanco.</para>
+/// </summary>
+public sealed record TransferDocumentModel(
+    string Scenario,
+    string SignatureMode,
+    TransferDocumentVehicle Vehiculo,
+    IReadOnlyList<TransferDocumentParty> Partes,
+    TransferDocumentBusiness? Negocio,
+    TransferDocumentEncumbrance Gravamen,
+    string CiudadFirma,
+    DateOnly FechaFirma,
+    string ReferenceNumber)
+{
+    public TransferDocumentParty? ParteConRol(string rol) =>
+        Partes.FirstOrDefault(p => string.Equals(p.Rol, rol, StringComparison.Ordinal));
+}
+
+/// <summary>
+/// Puerto del generador del Documento de Transferencia de Dominio (Feature #12201, I2).
+///
+/// <para><b>No recibe ningún lector de firmas.</b> El modo de firma vigente es <c>MANUSCRITA</c>
+/// (anexo §9.0, adenda 15.4 del diseño): líneas en blanco con nombre y documento, sin leyenda de
+/// firma electrónica, sin sello del baúl y sin sello de validación de identidad, aunque la parte
+/// tenga firma custodiada vigente. La ausencia del puerto es la garantía: el generador no puede
+/// estampar lo que no puede consultar.</para>
+/// </summary>
+public interface IStandaloneTransferGenerator
+{
+    RenderedStandaloneDocument Render(TransferDocumentModel model);
+}

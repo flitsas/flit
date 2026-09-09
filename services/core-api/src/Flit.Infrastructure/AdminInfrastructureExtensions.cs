@@ -328,6 +328,10 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Documents.Standalone.StandaloneRuesCertificateRenderer>();
         services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneRuesCompanyLookup,
             Flit.Infrastructure.Consultations.StandaloneRuesCompanyLookup>();
+        // HU #12207 — generador del Documento de Transferencia de Dominio (QuestPDF + membrete
+        // FLIT). Sin dependencias del baúl de firmas: el modo de firma vigente es MANUSCRITA.
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneTransferGenerator,
+            Flit.Infrastructure.Documents.Standalone.StandaloneTransferDocumentGenerator>();
 
         // HU #12206 — prellenado standalone (CF-25). Los tres adaptadores consultan y nada más: no
         // persisten documentos, no crean instancias y no evalúan ningún gate de trámite. El de

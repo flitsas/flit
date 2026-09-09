@@ -79,3 +79,106 @@ export interface StandaloneRuesPreviewResult {
   nit: string;
   fields: StandaloneRuesPreviewField[];
 }
+
+// ── Transferencia de dominio (HU #12207, Feature #12201) ────────────────────────────────────
+//
+// Contrato normativo: `docs/plantilla-transferencia-dominio.md`. Este incremento cubre el
+// ESCENARIO A (traspaso ordinario, art. 5.3.2.1); los escenarios B y C, el control de régimen
+// aplicable (VB-07) y los lotes llegan después.
+
+/** Las 13 variables de vehículo del anexo §5.1. Todas son texto: el documento transcribe. */
+export interface TransferVehiculoInput {
+  placa: string;
+  marca?: string;
+  linea?: string;
+  modeloAnio?: string;
+  claseVehiculo?: string;
+  tipoCarroceria?: string;
+  color?: string;
+  noMotor?: string;
+  noChasis?: string;
+  noSerie?: string;
+  servicio?: string;
+  noLicenciaTransito?: string;
+  organismoTransito?: string;
+}
+
+/**
+ * Una parte compareciente (anexo §5.2 y §5.3). `digitoVerificacion` no se envía: el backend lo
+ * calcula (módulo 11 DIAN) para que un NIT y su DV no puedan discrepar dentro del mismo PDF.
+ */
+export interface TransferParteInput {
+  tipoPersona?: "PN" | "PJ";
+  nombreRazonSocial?: string;
+  tipoDoc?: string;
+  numeroDoc?: string;
+  domicilio?: string;
+  representanteLegal?: string;
+  ccRepresentanteLegal?: string;
+}
+
+export type TransferTituloJuridico =
+  | "COMPRAVENTA"
+  | "DACION_EN_PAGO"
+  | "PERMUTA"
+  | "DONACION"
+  | "OTRO";
+
+/** Variables del negocio (§5.4), incluidas las tres fiscales que imprime la cláusula SEXTA. */
+export interface TransferNegocioInput {
+  tituloJuridico?: TransferTituloJuridico | "";
+  descripcionTitulo?: string;
+  precioLetras?: string;
+  precioNumeros?: string;
+  contraprestacionDescripcion?: string;
+  formaPago?: string;
+  asumeRetencionFuente?: "TRANSFERENTE" | "ADQUIRENTE" | "SEGUN_LEY";
+  asumeDerechosTramite?: "TRANSFERENTE" | "ADQUIRENTE" | "COMPARTIDOS";
+  asumeImpuestoVehiculo?: "TRANSFERENTE" | "ADQUIRENTE" | "SEGUN_LEY" | null;
+  ciudadFirma?: string;
+  fechaFirma?: string;
+}
+
+/** Declaración de gravamen del usuario (VB-A-04). FLIT no consulta el registro de garantías. */
+export interface TransferGravamenInput {
+  gravamenActivo: boolean;
+  tieneLevantamientoOAutorizacion: boolean;
+}
+
+/** Declaración de régimen aplicable (§4.0, CF-24). Se persiste; el bloqueo VB-07 llega después. */
+export interface TransferRegimenInput {
+  ningunaAplica?: boolean | null;
+  condicionesDeclaradas?: string[];
+  declaredAt?: string | null;
+}
+
+/**
+ * Cuerpo de `POST /transferencia/generate`. `escenarios` es una LISTA porque VB-05 exige
+ * «exactamente uno»: con un escalar, el caso «más de un escenario» no existiría.
+ */
+export interface TransferGenerateRequest {
+  escenarios: StandaloneDocumentScenario[];
+  vehiculo: TransferVehiculoInput;
+  transferente: TransferParteInput;
+  adquirente?: TransferParteInput;
+  negocio: TransferNegocioInput;
+  gravamen?: TransferGravamenInput;
+  regimenAplicable?: TransferRegimenInput;
+}
+
+/**
+ * Hallazgo de validación del anexo §6. El mensaje NUNCA repite el valor capturado: llega así del
+ * backend y la interfaz tampoco lo reconstruye.
+ */
+export interface TransferValidationIssue {
+  code: string;
+  field: string;
+  message: string;
+}
+
+/** Respuesta de la generación: id, estado y las prevalidaciones advisory (avisos, no errores). */
+export interface TransferGenerateResult {
+  id: string;
+  status: StandaloneDocumentStatus;
+  advisories: TransferValidationIssue[];
+}

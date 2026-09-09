@@ -45,6 +45,21 @@ internal sealed class FakeStandaloneDocumentRepository : IStandaloneDocumentRepo
         return Task.CompletedTask;
     }
 
+    /// <summary>Snapshots completos de transferencia escritos (CF-26), en orden.</summary>
+    public List<(Guid Id, string Snapshot)> DocumentSnapshots { get; } = [];
+
+    public Task SaveDocumentSnapshotAsync(
+        Guid tenantId, Guid id, string documentSnapshotJson, CancellationToken cancellationToken = default)
+    {
+        DocumentSnapshots.Add((id, documentSnapshotJson));
+        Replace(id, r => r with
+        {
+            Status = StandaloneDocumentStatus.Processing,
+            DocumentSnapshot = documentSnapshotJson,
+        });
+        return Task.CompletedTask;
+    }
+
     public Task MarkGeneratedAsync(
         Guid tenantId, Guid id, StandaloneDocumentFile file, CancellationToken cancellationToken = default)
     {

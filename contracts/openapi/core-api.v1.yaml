@@ -6233,6 +6233,78 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/generacion-documental/transferencia/generate:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalGenerateTransferencia
+      summary: Genera el Documento de Transferencia de Dominio (escenario A)
+      description: >
+        Emite el instrumento privado de transferencia de dominio SIN abrir un trámite, conforme al
+        anexo normativo docs/plantilla-transferencia-dominio.md (Resolución 20233040017145 de 2023).
+        En este incremento se emite el ESCENARIO A (traspaso ordinario, art. 5.3.2.1); los
+        escenarios B y C se reconocen y responden 422 con scenario_not_implemented hasta que llegue
+        su generador. El escenario es obligatorio y ÚNICO: cero o más de uno responde 422 con el
+        código VB-05. Las validaciones bloqueantes (VB-02 placa, VB-06 partes distintas, VB-A-04
+        gravamen, VB-A-06 precio de la compraventa, VB-A-07 título jurídico) responden 422 con
+        código, campo y mensaje, y NUNCA reflejan el valor capturado. Las prevalidaciones advisory
+        (VB-01, VB-03, VB-04, VB-A-01 a VB-A-03, VB-A-05 y VB-A-08 a VB-A-10) viajan en la respuesta
+        200 como aviso y no bloquean nunca: las verifica el Organismo de Tránsito. El modo de firma
+        es MANUSCRITA fijo: el PDF lleva líneas de firma con nombre y documento y no contiene
+        leyenda de firma electrónica ni sello alguno. NO devuelve el PDF: responde
+        { id, status, advisories } en application/json con cualquier Accept, y la descarga va por
+        GET /{id}/download. Requiere el permiso generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 120 }
+          description: >
+            Repetir la misma clave dentro del tenant devuelve el documento existente sin renderizar
+            de nuevo ni escribir otro archivo (CF-16).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandaloneTransferenciaRequest"
+      responses:
+        "200":
+          description: Documento generado (o recuperado por idempotencia), con las advisory.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneTransferGenerateResult"
+        "400":
+          description: >
+            Cuerpo incompleto o fuera de catálogo (nombres, documentos, ciudad de firma o las
+            variables fiscales de la cláusula sexta). No es una validación normativa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin los claims tenant_id / sub.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Al menos una validación bloqueante del anexo falló, o el escenario declarado todavía no
+            se emite. No se persiste ninguna fila ni se escribe archivo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneTransferValidationError"
+
   /api/v1/admin/generacion-documental/prefill/vehiculo:
     post:
       tags: [Admin · Generación documental]
@@ -7661,6 +7733,186 @@ components:
           type: string
           nullable: true
           enum: [invalid_request, provider_unavailable, provider_not_found]
+    StandaloneTransferParte:
+      type: object
+      description: >
+        Una parte compareciente (anexo §5.2 y §5.3). El dígito de verificación se admite pero el
+        servidor lo RECALCULA cuando el documento es un NIT: un NIT y su DV no pueden discrepar
+        dentro del mismo PDF.
+      required: [nombreRazonSocial, tipoDoc, numeroDoc]
+      properties:
+        tipoPersona:
+          type: string
+          nullable: true
+          enum: [PN, PJ]
+        nombreRazonSocial: { type: string }
+        tipoDoc:
+          type: string
+          description: CC / CE / NIT / Pasaporte, según el catálogo RUNT.
+        numeroDoc: { type: string }
+        digitoVerificacion:
+          type: string
+          nullable: true
+          description: Se ignora y se recalcula cuando tipoDoc es NIT.
+        domicilio: { type: string, nullable: true }
+        representanteLegal: { type: string, nullable: true }
+        ccRepresentanteLegal: { type: string, nullable: true }
+    StandaloneTransferVehiculo:
+      type: object
+      description: Las 13 variables de vehículo del anexo §5.1.
+      required: [placa]
+      properties:
+        placa:
+          type: string
+          description: 5 a 7 caracteres alfanuméricos tras quitar guiones y espacios (VB-02).
+        marca: { type: string, nullable: true }
+        linea: { type: string, nullable: true }
+        modeloAnio: { type: string, nullable: true }
+        claseVehiculo:
+          type: string
+          nullable: true
+          description: >
+            Si contiene REMOLQUE (o SEMIRREMOLQUE) no se pide quién asume el impuesto sobre
+            vehículos: están exentos (Ley 488/1998, art. 5.3.2.1 num. 5.º inciso final).
+        tipoCarroceria: { type: string, nullable: true }
+        color: { type: string, nullable: true }
+        noMotor: { type: string, nullable: true }
+        noChasis: { type: string, nullable: true }
+        noSerie: { type: string, nullable: true }
+        servicio: { type: string, nullable: true }
+        noLicenciaTransito: { type: string, nullable: true }
+        organismoTransito: { type: string, nullable: true }
+    StandaloneTransferNegocio:
+      type: object
+      description: >
+        Variables del negocio (anexo §5.4), incluidas las tres fiscales que imprime la cláusula
+        SEXTA. El modo de firma no se captura: es MANUSCRITA fijo (§9.0).
+      required: [tituloJuridico, asumeRetencionFuente, asumeDerechosTramite, ciudadFirma]
+      properties:
+        tituloJuridico:
+          type: string
+          enum: [COMPRAVENTA, DACION_EN_PAGO, PERMUTA, DONACION, OTRO]
+          description: >
+            VB-A-07. El precio NO es requisito universal: lo exige la compraventa (VB-A-06), no
+            todos los títulos traslaticios del art. 5.3.2.1 num. 1.º.
+        descripcionTitulo:
+          type: string
+          nullable: true
+          description: Obligatorio cuando tituloJuridico es OTRO; si falta, 422 con VB-A-07.
+        precioLetras: { type: string, nullable: true }
+        precioNumeros: { type: string, nullable: true }
+        contraprestacionDescripcion: { type: string, nullable: true }
+        formaPago: { type: string, nullable: true }
+        asumeRetencionFuente:
+          type: string
+          enum: [TRANSFERENTE, ADQUIRENTE, SEGUN_LEY]
+        asumeDerechosTramite:
+          type: string
+          enum: [TRANSFERENTE, ADQUIRENTE, COMPARTIDOS]
+        asumeImpuestoVehiculo:
+          type: string
+          nullable: true
+          enum: [TRANSFERENTE, ADQUIRENTE, SEGUN_LEY]
+          description: No aplica a remolques ni semirremolques (exentos).
+        ciudadFirma: { type: string }
+        fechaFirma:
+          type: string
+          format: date
+          nullable: true
+          description: Sin valor, el día de hoy en Colombia (UTC-05:00).
+    StandaloneTransferGravamen:
+      type: object
+      description: >
+        Declaración del usuario sobre el gravamen (VB-A-04). FLIT no consulta el Registro de
+        Garantías Mobiliarias; el OT verifica.
+      properties:
+        gravamenActivo: { type: boolean, default: false }
+        tieneLevantamientoOAutorizacion: { type: boolean, default: false }
+    StandaloneTransferRegimen:
+      type: object
+      description: >
+        Declaración de régimen aplicable (anexo §4.0, CF-24). En este incremento se PERSISTE en
+        input_summary pero no se evalúa: el bloqueo VB-07 con las once condiciones de los
+        arts. 5.3.2.3 a 5.3.2.13 llega con los escenarios B y C.
+      properties:
+        ningunaAplica: { type: boolean, nullable: true }
+        condicionesDeclaradas:
+          type: array
+          items: { type: string }
+        declaredAt: { type: string, format: date-time, nullable: true }
+    StandaloneTransferenciaRequest:
+      type: object
+      description: >
+        Cuerpo de la generación de transferencia. escenarios es una LISTA para que VB-05 sea
+        comprobable: con un escalar, «más de un escenario» sería irrepresentable. escenario se
+        admite como atajo de un solo valor; si llegan los dos, se suman.
+      required: [vehiculo, transferente, negocio]
+      properties:
+        escenarios:
+          type: array
+          items:
+            type: string
+            enum: [A, B, C]
+        escenario:
+          type: string
+          nullable: true
+          enum: [A, B, C]
+        vehiculo:
+          $ref: "#/components/schemas/StandaloneTransferVehiculo"
+        transferente:
+          $ref: "#/components/schemas/StandaloneTransferParte"
+        adquirente:
+          $ref: "#/components/schemas/StandaloneTransferParte"
+        negocio:
+          $ref: "#/components/schemas/StandaloneTransferNegocio"
+        gravamen:
+          $ref: "#/components/schemas/StandaloneTransferGravamen"
+        regimenAplicable:
+          $ref: "#/components/schemas/StandaloneTransferRegimen"
+    StandaloneTransferIssue:
+      type: object
+      description: >
+        Código del anexo §6, campo del formulario y mensaje. El mensaje NUNCA repite el valor
+        capturado: un 422 termina en logs de acceso y capturas de pantalla de soporte.
+      required: [code, field, message]
+      properties:
+        code:
+          type: string
+          description: VB-01 a VB-07 y VB-A-01 a VB-A-10 del anexo normativo.
+        field: { type: string }
+        message: { type: string }
+    StandaloneTransferGenerateResult:
+      type: object
+      description: >
+        Respuesta de la generación. NUNCA transporta el PDF: el binario se descarga después por
+        GET /{id}/download.
+      required: [id, status, advisories]
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [generated, error]
+        advisories:
+          type: array
+          description: >
+            Prevalidaciones VA que la interfaz muestra como AVISO, nunca como error bloqueante.
+          items:
+            $ref: "#/components/schemas/StandaloneTransferIssue"
+    StandaloneTransferValidationError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [validation_failed, scenario_not_implemented]
+        field:
+          type: string
+          nullable: true
+        errors:
+          type: array
+          description: Todas las VB bloqueantes que fallaron, no solo la primera.
+          items:
+            $ref: "#/components/schemas/StandaloneTransferIssue"
     StandalonePrefillVehiculoRequest:
       type: object
       required: [placa]

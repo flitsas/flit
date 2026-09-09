@@ -272,7 +272,7 @@ public sealed class PrefillVehiculoHandlerTests
 
         System.Text.RegularExpressions.Regex
             .Matches(fuente, @"\.RequirePermission\(""generacion-documental\.generate""\)")
-            .Should().HaveCount(5, "preview, generate y los tres prellenados");
+            .Should().HaveCount(6, "preview, generate, los tres prellenados y la transferencia (HU #12207)");
     }
 
     private static DefaultHttpContext NewContext()

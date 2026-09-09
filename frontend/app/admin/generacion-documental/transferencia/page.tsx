@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { GeneracionDocumentalTabs } from "@/components/admin/generacion-documental/GeneracionDocumentalTabs";
 import { TransferenciaPanel } from "@/components/admin/generacion-documental/TransferenciaPanel";
+import { TransferenciaFormPanel } from "@/components/admin/generacion-documental/TransferenciaFormPanel";
 
-// Pestaña "Transferencia" del módulo (HU-01, CF-01). Shell: el régimen aplicable (CF-24),
-// el escenario A/B/C y el formulario son HU-05/HU-06/HU-10.
+// Pestaña "Transferencia" del módulo (HU-01, CF-01). HU #12207 monta el formulario del
+// ESCENARIO A dentro del shell; el régimen aplicable (CF-24) y el selector A/B/C son HU-06,
+// y el prellenado «placa primero» es HU-10.
 export default function AdminGeneracionDocumentalTransferenciaPage() {
   const router = useRouter();
 
@@ -31,7 +33,9 @@ export default function AdminGeneracionDocumentalTransferenciaPage() {
       <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
         <GeneracionDocumentalTabs activeId="transferencia" />
         <div className="mt-4">
-          <TransferenciaPanel />
+          <TransferenciaPanel status="ready">
+            <TransferenciaFormPanel />
+          </TransferenciaPanel>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using Flit.Admin.Application.GeneracionDocumental.Download;
 using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
+using Flit.Admin.Application.GeneracionDocumental.GenerateTransferencia;
 using Flit.Admin.Application.GeneracionDocumental.List;
 using Flit.Admin.Application.GeneracionDocumental.Prefill;
 using Flit.Admin.Domain.GeneracionDocumental;
@@ -68,6 +69,29 @@ public static class AdminGeneracionDocumentalEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .Produces(StatusCodes.Status502BadGateway)
             .Produces(StatusCodes.Status503ServiceUnavailable);
+
+        // Transferencia de dominio (CF-06/CF-07/CF-09/CF-26, HU #12207). Esta HU emite el
+        // ESCENARIO A (traspaso ordinario, art. 5.3.2.1); B y C llegan en HU-06.
+        group.MapPost("/transferencia/generate", GenerateTransferenciaAsync)
+            .RequirePermission("generacion-documental.generate")
+            .WithName("AdminGeneracionDocumentalGenerateTransferencia")
+            .WithSummary("Genera el Documento de Transferencia de Dominio (escenario A)")
+            .WithDescription("Emite el instrumento privado de transferencia de dominio SIN abrir un "
+                + "tramite, conforme al anexo normativo docs/plantilla-transferencia-dominio.md. El "
+                + "escenario es obligatorio y unico: cero o mas de uno responde 422 con el codigo "
+                + "VB-05. Las validaciones bloqueantes (VB-02, VB-06, VB-A-04, VB-A-06, VB-A-07) "
+                + "responden 422 con codigo, campo y mensaje, y NUNCA reflejan el valor capturado. "
+                + "Las prevalidaciones advisory (VB-01, VB-03, VB-04, VB-A-01..03, VB-A-05, "
+                + "VB-A-08..10) viajan en la respuesta 200 como aviso y no bloquean nunca. El modo "
+                + "de firma es MANUSCRITA fijo: el PDF lleva lineas de firma con nombre y documento "
+                + "y no contiene leyenda de firma electronica ni sello alguno. NO devuelve el PDF: "
+                + "responde { id, status, advisories } en application/json y la descarga va por "
+                + "GET /{id}/download. Requiere el permiso generacion-documental.generate.")
+            .Produces<StandaloneTransferGenerateResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // Prellenado (CF-25, HU #12206). Tres rutas que SOLO consultan: ninguna crea fila en
         // admin.standalone_documents ni escribe archivo. Van con el permiso .generate porque gastan
@@ -157,6 +181,97 @@ public static class AdminGeneracionDocumentalEndpoints
 
         return app;
     }
+
+    /// <summary>
+    /// Cuerpo de <c>POST /transferencia/generate</c>.
+    ///
+    /// <para><b><see cref="Escenarios"/> es una lista</b> para que VB-05 sea comprobable de verdad:
+    /// con un solo campo escalar, "mas de un escenario" seria irrepresentable y ese 422 no podria
+    /// probarse nunca. <see cref="Escenario"/> se admite como atajo de un solo valor; si llegan los
+    /// dos, se suman y la politica rechaza el conjunto.</para>
+    /// </summary>
+    public sealed record TransferenciaRequest(
+        IReadOnlyList<string>? Escenarios,
+        string? Escenario,
+        TransferenciaVehiculoRequest? Vehiculo,
+        TransferenciaParteRequest? Transferente,
+        TransferenciaParteRequest? Adquirente,
+        TransferenciaNegocioRequest? Negocio,
+        TransferenciaGravamenRequest? Gravamen,
+        TransferenciaRegimenRequest? RegimenAplicable);
+
+    /// <summary>Las 13 variables de vehiculo del anexo normativo (seccion 5.1).</summary>
+    public sealed record TransferenciaVehiculoRequest(
+        string? Placa,
+        string? Marca,
+        string? Linea,
+        string? ModeloAnio,
+        string? ClaseVehiculo,
+        string? TipoCarroceria,
+        string? Color,
+        string? NoMotor,
+        string? NoChasis,
+        string? NoSerie,
+        string? Servicio,
+        string? NoLicenciaTransito,
+        string? OrganismoTransito);
+
+    /// <summary>
+    /// Una parte del negocio. El digito de verificacion se admite pero se RECALCULA en el servidor
+    /// cuando el documento es un NIT: el PDF no puede llevar un NIT y un DV que no se correspondan.
+    /// </summary>
+    public sealed record TransferenciaParteRequest(
+        string? TipoPersona,
+        string? NombreRazonSocial,
+        string? TipoDoc,
+        string? NumeroDoc,
+        string? DigitoVerificacion,
+        string? Domicilio,
+        string? RepresentanteLegal,
+        string? CcRepresentanteLegal);
+
+    /// <summary>
+    /// Variables del negocio (seccion 5.4), incluidas las tres fiscales que imprime la clausula
+    /// SEXTA. El modo de firma NO se captura: es MANUSCRITA fijo.
+    /// </summary>
+    public sealed record TransferenciaNegocioRequest(
+        string? TituloJuridico,
+        string? DescripcionTitulo,
+        string? PrecioLetras,
+        string? PrecioNumeros,
+        string? ContraprestacionDescripcion,
+        string? FormaPago,
+        string? AsumeRetencionFuente,
+        string? AsumeDerechosTramite,
+        string? AsumeImpuestoVehiculo,
+        string? CiudadFirma,
+        DateOnly? FechaFirma);
+
+    /// <summary>Declaracion de gravamen del usuario (VB-A-04). FLIT no consulta el registro de garantias.</summary>
+    public sealed record TransferenciaGravamenRequest(
+        bool GravamenActivo,
+        bool TieneLevantamientoOAutorizacion);
+
+    /// <summary>
+    /// Declaracion de regimen aplicable (seccion 4.0, CF-24). En esta HU se PERSISTE en
+    /// input_summary pero no se evalua: el bloqueo VB-07 con las once condiciones es de HU-06.
+    /// </summary>
+    public sealed record TransferenciaRegimenRequest(
+        bool? NingunaAplica,
+        IReadOnlyList<string>? CondicionesDeclaradas,
+        DateTimeOffset? DeclaredAt);
+
+    /// <summary>Codigo, campo y mensaje. Nunca el valor capturado (requisito de PII).</summary>
+    public sealed record TransferValidationIssueResponse(string Code, string Field, string Message);
+
+    /// <summary>
+    /// Respuesta de la generacion de transferencia: id, estado y las prevalidaciones advisory que
+    /// la interfaz debe mostrar como AVISO. Sin PDF y sin snapshot.
+    /// </summary>
+    public sealed record StandaloneTransferGenerateResponse(
+        Guid Id,
+        string Status,
+        IReadOnlyList<TransferValidationIssueResponse> Advisories);
 
     /// <summary>Cuerpo de ambas rutas del Certificado RUES.</summary>
     public sealed record RuesRequest(string? Nit);
@@ -297,6 +412,108 @@ public static class AdminGeneracionDocumentalEndpoints
                 statusCode: StatusCodes.Status502BadGateway),
         };
     }
+
+    internal static async Task<IResult> GenerateTransferenciaAsync(
+        HttpContext httpContext,
+        TransferenciaRequest request,
+        [FromServices] GenerateTransferenciaHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Unauthorized("Token invalido: falta claim tenant_id");
+        }
+
+        var userId = ResolveUserId(httpContext.User);
+        if (userId is null)
+        {
+            return Unauthorized("Token invalido: falta claim sub");
+        }
+
+        var idempotencyKey = httpContext.Request.Headers["Idempotency-Key"].ToString();
+
+        List<string> escenarios = [.. request?.Escenarios ?? []];
+        if (!string.IsNullOrWhiteSpace(request?.Escenario))
+        {
+            escenarios.Add(request.Escenario);
+        }
+
+        var result = await handler
+            .HandleAsync(
+                new GenerateTransferenciaCommand(
+                    tenantId,
+                    userId.Value,
+                    escenarios,
+                    ToVehiculo(request?.Vehiculo),
+                    ToParte(request?.Transferente),
+                    ToParte(request?.Adquirente),
+                    ToNegocio(request?.Negocio),
+                    request?.Gravamen is { } gravamen
+                        ? new TransferEncumbranceInput(
+                            gravamen.GravamenActivo, gravamen.TieneLevantamientoOAutorizacion)
+                        : null,
+                    request?.RegimenAplicable is { } regimen
+                        ? new RegimenDeclarationInput(
+                            regimen.NingunaAplica, regimen.CondicionesDeclaradas, regimen.DeclaredAt)
+                        : null,
+                    string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            // 200 { id, status, advisories } en application/json. Nunca application/pdf.
+            GenerateTransferenciaOutcome.Generated => Results.Ok(new StandaloneTransferGenerateResponse(
+                result.Id!.Value,
+                result.Status!,
+                [.. result.Advisories.Select(ToIssueResponse)])),
+
+            // 422 con la lista COMPLETA de VB bloqueantes: corregir de a un error por viaje es
+            // inaceptable en un formulario de 35 campos.
+            GenerateTransferenciaOutcome.ValidationFailed => Results.Json(
+                new
+                {
+                    error = "validation_failed",
+                    errors = result.Errors.Select(ToIssueResponse).ToArray(),
+                },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+
+            GenerateTransferenciaOutcome.ScenarioNotImplemented => Results.Json(
+                new
+                {
+                    error = GenerateTransferenciaHandler.ErrorScenarioNotImplemented,
+                    field = result.ErrorField,
+                },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+
+            // Cuerpo incompleto: no es una validacion normativa, es un contrato roto.
+            _ => Results.Json(
+                new { error = GenerateTransferenciaHandler.ErrorInvalidRequest, field = result.ErrorField },
+                statusCode: StatusCodes.Status400BadRequest),
+        };
+    }
+
+    private static TransferValidationIssueResponse ToIssueResponse(TransferValidationIssue issue) =>
+        new(issue.Code, issue.Field, issue.Message);
+
+    private static TransferVehicleInput? ToVehiculo(TransferenciaVehiculoRequest? v) => v is null
+        ? null
+        : new TransferVehicleInput(
+            v.Placa, v.Marca, v.Linea, v.ModeloAnio, v.ClaseVehiculo, v.TipoCarroceria, v.Color,
+            v.NoMotor, v.NoChasis, v.NoSerie, v.Servicio, v.NoLicenciaTransito, v.OrganismoTransito);
+
+    private static TransferPartyInput? ToParte(TransferenciaParteRequest? p) => p is null
+        ? null
+        : new TransferPartyInput(
+            p.TipoPersona, p.NombreRazonSocial, p.TipoDoc, p.NumeroDoc, p.DigitoVerificacion,
+            p.Domicilio, p.RepresentanteLegal, p.CcRepresentanteLegal);
+
+    private static TransferBusinessInput? ToNegocio(TransferenciaNegocioRequest? n) => n is null
+        ? null
+        : new TransferBusinessInput(
+            n.TituloJuridico, n.DescripcionTitulo, n.PrecioLetras, n.PrecioNumeros,
+            n.ContraprestacionDescripcion, n.FormaPago, n.AsumeRetencionFuente,
+            n.AsumeDerechosTramite, n.AsumeImpuestoVehiculo, n.CiudadFirma, n.FechaFirma);
 
     internal static async Task<IResult> PrefillVehiculoAsync(
         HttpContext httpContext,

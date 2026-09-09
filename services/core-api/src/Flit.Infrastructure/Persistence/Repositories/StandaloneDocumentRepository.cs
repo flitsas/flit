@@ -111,6 +111,20 @@ internal sealed class StandaloneDocumentRepository : IStandaloneDocumentReposito
                     .SetProperty(x => x.UpdatedAt, DateTimeOffset.UtcNow),
                 cancellationToken);
 
+    public Task SaveDocumentSnapshotAsync(
+        Guid tenantId,
+        Guid id,
+        string documentSnapshotJson,
+        CancellationToken cancellationToken = default)
+        => Scoped(tenantId)
+            .Where(x => x.Id == id)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(x => x.DocumentSnapshot, documentSnapshotJson)
+                    .SetProperty(x => x.Status, StandaloneDocumentStatus.Processing)
+                    .SetProperty(x => x.UpdatedAt, DateTimeOffset.UtcNow),
+                cancellationToken);
+
     public Task MarkGeneratedAsync(
         Guid tenantId,
         Guid id,

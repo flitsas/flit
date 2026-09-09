@@ -12,6 +12,8 @@ import type {
   StandaloneDocumentsListParams,
   StandaloneDocumentsPagedResult,
   StandaloneRuesPreviewResult,
+  TransferGenerateRequest,
+  TransferGenerateResult,
 } from "./types-generacion-documental";
 
 export const GENERACION_DOCUMENTAL_API_BASE = "/api/v1/admin/generacion-documental";
@@ -67,4 +69,21 @@ export function generateRuesDocument(
     body: { nit },
     signal,
   });
+}
+
+/**
+ * `POST /transferencia/generate` — emite el Documento de Transferencia de Dominio (escenario A).
+ *
+ * Devuelve `{ id, status, advisories }` en `application/json`; jamás `application/pdf`. Un 422
+ * llega como `ApiValidationError` con `errors[]`, donde cada elemento trae `code`, `field` y
+ * `message` del anexo normativo y **nunca** el valor capturado.
+ */
+export function generateTransferenciaDocument(
+  request: TransferGenerateRequest,
+  signal?: AbortSignal,
+): Promise<TransferGenerateResult> {
+  return apiFetch<TransferGenerateResult>(
+    `${GENERACION_DOCUMENTAL_API_BASE}/transferencia/generate`,
+    { method: "POST", body: request, signal },
+  );
 }

@@ -53,6 +53,7 @@ using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Application.GeneracionDocumental.Download;
 using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
+using Flit.Admin.Application.GeneracionDocumental.GenerateTransferencia;
 using Flit.Admin.Application.GeneracionDocumental.List;
 using Flit.Admin.Application.GeneracionDocumental.Prefill;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
@@ -372,6 +373,13 @@ public static class DependencyInjection
         services.AddScoped<PrefillVehiculoHandler>();
         services.AddScoped<PrefillPersonaJuridicaHandler>();
         services.AddScoped<PrefillPersonaNaturalHandler>();
+
+        // HU #12207 (Feature #12201) — Documento de Transferencia de Dominio, escenario A. La
+        // política de validaciones (TransferValidationPolicy) es una función pura sin estado y no
+        // se registra: HU-06 la extiende con VB-B-*, VB-C-* y VB-07 en ese mismo archivo. El puerto
+        // IStandaloneTransferGenerator se registra en Flit.Infrastructure; NO se inyecta ningún
+        // lector del baúl de firmas (modo MANUSCRITA fijo, anexo §9.0).
+        services.AddScoped<GenerateTransferenciaHandler>();
 
         return services;
     }
