@@ -93,24 +93,128 @@ public sealed class GenerateTransferenciaHandlerTests
         _storage.Saved.Should().BeEmpty();
     }
 
-    /// <summary>Escenarios B y C: reconocidos por VB-05, pero su generador llega en HU-06.</summary>
-    [Theory]
-    [InlineData(TransferScenario.UnilateralLeasing)]
-    [InlineData(TransferScenario.FinancieraATercero)]
-    public async Task EscenariosBYC_SeRechazanSinPersistirNada(string escenario)
+    /// <summary>
+    /// HU #12208 — <b>este caso reemplaza al de HU #12207</b>, que fijaba el rechazo de B y C
+    /// mientras su generador no existía. Ahora ambos escenarios se emiten y persisten con su
+    /// escenario en la fila.
+    /// </summary>
+    [Fact]
+    public async Task EscenarioB_GeneraYPersisteConUnaSolaParte()
     {
         var result = await Handler().HandleAsync(
-            TransferTestData.Comando(escenarios: [escenario]), TestContext.Current.CancellationToken);
+            TransferTestData.ComandoEscenarioB(), TestContext.Current.CancellationToken);
 
-        result.Outcome.Should().Be(GenerateTransferenciaOutcome.ScenarioNotImplemented);
+        result.Outcome.Should().Be(GenerateTransferenciaOutcome.Generated);
+        _repository.Rows.Should().ContainSingle();
+        _repository.Rows[0].Scenario.Should().Be(TransferScenario.UnilateralLeasing);
+
+        // La garantía estructural (§9.0.3 y §9.2): UNA parte en el modelo ⇒ UN bloque de firma.
+        var modelo = _generator.LastModel!;
+        modelo.Partes.Should().ContainSingle();
+        modelo.Partes[0].Rol.Should().Be(TransferPartyRole.Transferente);
+        modelo.Partes[0].Etiqueta.Should().Be(TransferPartyRole.EtiquetaEntidadFinanciera);
+        modelo.ParteConRol(TransferPartyRole.Adquirente).Should().BeNull();
+
+        // Y sin negocio: el acto unilateral no declara precio (VB-B-05, §10 regla #3).
+        modelo.Negocio.Should().BeNull();
+        modelo.Leasing!.NoContrato.Should().Be("LSG-2020-000123");
+        modelo.SignatureMode.Should().Be(TransferSignatureMode.Manuscrita);
+    }
+
+    /// <summary>
+    /// El escenario B no exige adquirente en el cuerpo. Si el handler siguiera pidiéndolo, un
+    /// payload correcto del art. 5.3.2.2 se rechazaría por «falta el adquirente».
+    /// </summary>
+    [Fact]
+    public async Task EscenarioBSinAdquirenteEnElCuerpo_GeneraIgual()
+    {
+        var result = await Handler().HandleAsync(
+            TransferTestData.ComandoEscenarioB() with { Adquirente = null },
+            TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(GenerateTransferenciaOutcome.Generated);
+    }
+
+    [Fact]
+    public async Task EscenarioC_GeneraConDosPartesYSusRotulos()
+    {
+        var result = await Handler().HandleAsync(
+            TransferTestData.ComandoEscenarioC(), TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(GenerateTransferenciaOutcome.Generated);
+        _repository.Rows[0].Scenario.Should().Be(TransferScenario.FinancieraATercero);
+
+        var modelo = _generator.LastModel!;
+        modelo.Partes.Should().HaveCount(2);
+        modelo.Partes[0].Etiqueta.Should().Be(TransferPartyRole.EtiquetaTransferenteFinanciero);
+        modelo.Partes[1].Etiqueta.Should().Be(TransferPartyRole.EtiquetaAdquirenteTercero);
+        modelo.Negocio.Should().NotBeNull();
+
+        // El antecedente de leasing no viaja al documento del escenario C: solo sirvió a VB-C-01.
+        modelo.Leasing.Should().BeNull();
+    }
+
+    /// <summary>
+    /// CF-24 — VB-07 rechaza en el handler con 422 y sin escribir fila, aunque el cliente se salte
+    /// el control del formulario.
+    /// </summary>
+    [Fact]
+    public async Task CondicionEspecialDeclarada_RechazaConVb07YNoEscribeFila()
+    {
+        var result = await Handler().HandleAsync(
+            TransferTestData.Comando(
+                regimen: TransferTestData.Regimen(
+                    ningunaAplica: false,
+                    condiciones: [TransferSpecialRegime.VehiculoBlindado])),
+            TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(GenerateTransferenciaOutcome.ValidationFailed);
+        result.Errors.Should().ContainSingle(e => e.Code == TransferValidationCodes.RegimenAplicable);
+        result.Errors[0].Message.Should().Contain("art. 5.3.2.6");
         _repository.Rows.Should().BeEmpty();
         _generator.Calls.Should().Be(0);
     }
 
     /// <summary>
-    /// CF-26 — <c>document_snapshot</c> guarda TODO lo que se usó para renderizar: partes, vehículo,
-    /// negocio, documentos de identidad y domicilios.
+    /// CF-24 — la declaración de régimen y su fecha se conservan en <c>input_summary</c>, sin PII.
     /// </summary>
+    [Fact]
+    public async Task InputSummary_ConservaLaDeclaracionDeRegimenYSuFechaSinPii()
+    {
+        await Handler().HandleAsync(
+            TransferTestData.Comando(), TestContext.Current.CancellationToken);
+
+        using var resumen = JsonDocument.Parse(_repository.Rows[0].InputSummary!);
+        var regimen = resumen.RootElement.GetProperty("regimenAplicable");
+
+        regimen.GetProperty("ningunaAplica").GetBoolean().Should().BeTrue();
+        regimen.GetProperty("declaredAt").GetString().Should().NotBeNullOrWhiteSpace();
+        regimen.GetProperty("condicionesDeclaradas").GetArrayLength().Should().Be(0);
+
+        // Y el resumen sigue sin PII por este motivo: la declaración son categorías normativas.
+        _repository.Rows[0].InputSummary.Should().NotContain("PERSONA ADQUIRENTE DE PRUEBA");
+        _repository.Rows[0].InputSummary.Should().NotContain("CIUDAD DE PRUEBA");
+    }
+
+    /// <summary>
+    /// El escenario B no lleva nombre ni documento del locatario a <c>input_summary</c> —es PII—,
+    /// pero sí al <c>document_snapshot</c>, que es la evidencia de qué datos produjeron el PDF.
+    /// </summary>
+    [Fact]
+    public async Task EscenarioB_ElLocatarioVaAlSnapshotYNoAlResumen()
+    {
+        await Handler().HandleAsync(
+            TransferTestData.ComandoEscenarioB(), TestContext.Current.CancellationToken);
+
+        _repository.Rows[0].InputSummary.Should().NotContain("COMPANIA DESTINATARIA DE PRUEBA SAS");
+        _repository.Rows[0].InputSummary.Should().NotContain("901555444");
+
+        using var snapshot = JsonDocument.Parse(_repository.DocumentSnapshots.Single().Snapshot);
+        var leasing = snapshot.RootElement.GetProperty("leasing");
+        leasing.GetProperty("locatarioNombre").GetString().Should().Be("COMPANIA DESTINATARIA DE PRUEBA SAS");
+        leasing.GetProperty("tipoOpcionCompra").GetString().Should().Be(TransferPurchaseOption.Ejercida);
+    }
+
     [Fact]
     public async Task DocumentSnapshot_ContieneTodoLoUsadoParaRenderizar()
     {

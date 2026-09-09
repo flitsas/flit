@@ -12,9 +12,10 @@ namespace Flit.Infrastructure.Documents.Standalone;
 /// PDF del Documento de Transferencia de Dominio con QuestPDF y el membrete institucional FLIT, el
 /// mismo camino de los demás documentos generados del repositorio.
 ///
-/// <para><b>Esta HU implementa el escenario A.</b> B y C llegan en HU-06 y se enchufan en el
-/// <c>switch</c> de <see cref="Compose"/> con sus propias clases de escenario; los bloques
-/// reutilizables ya están listos para ellos.</para>
+/// <para><b>Los tres escenarios del anexo están registrados</b> en el <c>switch</c> de
+/// <see cref="Compose"/>: A (§8.1), B (§8.2) y C (§8.3). Cada uno decide qué cláusulas existen y
+/// <b>cuántas partes comparecen</b>, y con eso cuántos bloques de firma se instancian: el generador
+/// no compone un documento genérico al que luego se le apagan piezas (§9.0.3).</para>
 ///
 /// <para><b>No depende de ningún lector de firmas.</b> No se inyecta <c>ISignatureVaultReader</c> y
 /// no se usa <c>FlitFirmaBlock</c>: el modo de firma es <c>MANUSCRITA</c> fijo (anexo §9.0) y el PDF
@@ -69,9 +70,17 @@ internal sealed class StandaloneTransferDocumentGenerator : IStandaloneTransferG
                 TransferEscenarioA.Compose(col, model);
                 break;
 
+            case TransferScenario.UnilateralLeasing:
+                TransferEscenarioB.Compose(col, model);
+                break;
+
+            case TransferScenario.FinancieraATercero:
+                TransferEscenarioC.Compose(col, model);
+                break;
+
             default:
-                // HU-06 registra aquí TransferEscenarioB y TransferEscenarioC. Hasta entonces, el
-                // handler ya rechaza B y C: llegar hasta acá sería un contrato roto, no una opción.
+                // Un escenario nuevo del anexo debe fallar aquí de forma explícita: el handler ya lo
+                // habría rechazado antes, así que llegar hasta acá es un contrato roto, no una opción.
                 throw new NotSupportedException(
                     $"Escenario de transferencia no implementado: {model.Scenario}.");
         }

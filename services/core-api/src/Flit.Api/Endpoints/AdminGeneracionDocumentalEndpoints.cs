@@ -70,19 +70,26 @@ public static class AdminGeneracionDocumentalEndpoints
             .Produces(StatusCodes.Status502BadGateway)
             .Produces(StatusCodes.Status503ServiceUnavailable);
 
-        // Transferencia de dominio (CF-06/CF-07/CF-09/CF-26, HU #12207). Esta HU emite el
-        // ESCENARIO A (traspaso ordinario, art. 5.3.2.1); B y C llegan en HU-06.
+        // Transferencia de dominio (CF-06/CF-07/CF-08/CF-09/CF-24/CF-26, HU #12207 y #12208). Los
+        // tres escenarios del anexo: A traspaso ordinario, B unilateral de leasing y C a tercero.
         group.MapPost("/transferencia/generate", GenerateTransferenciaAsync)
             .RequirePermission("generacion-documental.generate")
             .WithName("AdminGeneracionDocumentalGenerateTransferencia")
-            .WithSummary("Genera el Documento de Transferencia de Dominio (escenario A)")
+            .WithSummary("Genera el Documento de Transferencia de Dominio (escenarios A, B y C)")
             .WithDescription("Emite el instrumento privado de transferencia de dominio SIN abrir un "
                 + "tramite, conforme al anexo normativo docs/plantilla-transferencia-dominio.md. El "
                 + "escenario es obligatorio y unico: cero o mas de uno responde 422 con el codigo "
-                + "VB-05. Las validaciones bloqueantes (VB-02, VB-06, VB-A-04, VB-A-06, VB-A-07) "
-                + "responden 422 con codigo, campo y mensaje, y NUNCA reflejan el valor capturado. "
-                + "Las prevalidaciones advisory (VB-01, VB-03, VB-04, VB-A-01..03, VB-A-05, "
-                + "VB-A-08..10) viajan en la respuesta 200 como aviso y no bloquean nunca. El modo "
+                + "VB-05. VB-07 es un GATE PREVIO: mientras no se declare que ninguna de las once "
+                + "condiciones especiales de traspaso de los arts. 5.3.2.3 a 5.3.2.13 aplica, la "
+                + "generacion se rechaza con 422 y el codigo VB-07; declarar cualquiera de las once "
+                + "tambien rechaza, con el articulo citado en el mensaje. El art. 5.3.2.14 "
+                + "(expedicion de la nueva licencia) NO es una condicion especial y no bloquea. Las "
+                + "validaciones bloqueantes (VB-02, VB-06, VB-07, VB-A-04, VB-A-06, VB-A-07, "
+                + "VB-B-01..05, VB-C-01) responden 422 con codigo, campo y mensaje, y NUNCA reflejan "
+                + "el valor capturado. El escenario B no admite precio ni contraprestacion: si el "
+                + "cuerpo los trae, 422 con VB-B-05. Las prevalidaciones advisory (VB-01, VB-03, "
+                + "VB-04, VB-A-01..03, VB-A-05, VB-A-08..10, VB-B-06, VB-C-02..06, VB-C-08..10) "
+                + "viajan en la respuesta 200 como aviso y no bloquean nunca. El modo "
                 + "de firma es MANUSCRITA fijo: el PDF lleva lineas de firma con nombre y documento "
                 + "y no contiene leyenda de firma electronica ni sello alguno. NO devuelve el PDF: "
                 + "responde { id, status, advisories } en application/json y la descarga va por "
@@ -198,7 +205,8 @@ public static class AdminGeneracionDocumentalEndpoints
         TransferenciaParteRequest? Adquirente,
         TransferenciaNegocioRequest? Negocio,
         TransferenciaGravamenRequest? Gravamen,
-        TransferenciaRegimenRequest? RegimenAplicable);
+        TransferenciaRegimenRequest? RegimenAplicable,
+        TransferenciaLeasingRequest? Leasing);
 
     /// <summary>Las 13 variables de vehiculo del anexo normativo (seccion 5.1).</summary>
     public sealed record TransferenciaVehiculoRequest(
@@ -247,14 +255,32 @@ public static class AdminGeneracionDocumentalEndpoints
         string? CiudadFirma,
         DateOnly? FechaFirma);
 
+    /// <summary>
+    /// Antecedente de leasing (seccion 5.5 del anexo). Obligatorio en el escenario B; en el C es
+    /// opcional y solo alimenta VB-C-01 —comparar al adquirente con el locatario historico—.
+    ///
+    /// <para>No hay campo de precio: el acto del art. 5.3.2.2 es unilateral y no declara precio
+    /// entre las partes del instrumento (VB-B-05).</para>
+    /// </summary>
+    public sealed record TransferenciaLeasingRequest(
+        bool TransferenteEsEntidadFinanciera,
+        string? NoContratoLeasing,
+        string? TipoOpcionCompra,
+        DateOnly? FechaTerminacion,
+        string? LocatarioNombre,
+        string? LocatarioTipoDoc,
+        string? LocatarioNoDoc);
+
     /// <summary>Declaracion de gravamen del usuario (VB-A-04). FLIT no consulta el registro de garantias.</summary>
     public sealed record TransferenciaGravamenRequest(
         bool GravamenActivo,
         bool TieneLevantamientoOAutorizacion);
 
     /// <summary>
-    /// Declaracion de regimen aplicable (seccion 4.0, CF-24). En esta HU se PERSISTE en
-    /// input_summary pero no se evalua: el bloqueo VB-07 con las once condiciones es de HU-06.
+    /// Declaracion de regimen aplicable (seccion 4.0, CF-24). Es el GATE previo a la seleccion de
+    /// escenario y lo evalua VB-07: se rechaza tanto declarar una de las once condiciones de los
+    /// arts. 5.3.2.3 a 5.3.2.13 como no responder. La declaracion y su fecha quedan en
+    /// input_summary, sin PII.
     /// </summary>
     public sealed record TransferenciaRegimenRequest(
         bool? NingunaAplica,
@@ -455,6 +481,16 @@ public static class AdminGeneracionDocumentalEndpoints
                     request?.RegimenAplicable is { } regimen
                         ? new RegimenDeclarationInput(
                             regimen.NingunaAplica, regimen.CondicionesDeclaradas, regimen.DeclaredAt)
+                        : null,
+                    request?.Leasing is { } leasing
+                        ? new TransferLeasingInput(
+                            leasing.TransferenteEsEntidadFinanciera,
+                            leasing.NoContratoLeasing,
+                            leasing.TipoOpcionCompra,
+                            leasing.FechaTerminacion,
+                            leasing.LocatarioNombre,
+                            leasing.LocatarioTipoDoc,
+                            leasing.LocatarioNoDoc)
                         : null,
                     string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey),
                 cancellationToken)

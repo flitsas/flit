@@ -12,8 +12,10 @@ namespace Flit.Admin.Application.GeneracionDocumental.GenerateTransferencia;
 /// el 422 correspondiente jamás podría probarse. La lista deja que el cuerpo declare cero, uno o
 /// tres escenarios y que la política los rechace con su código.</para>
 ///
-/// <para>Esta HU implementa ÚNICAMENTE el escenario A. B y C llegan en HU-06 con sus VB propias y
-/// con el control de régimen aplicable (VB-07).</para>
+/// <para>Los tres escenarios del anexo están implementados: A (traspaso ordinario), B
+/// (transferencia unilateral de leasing al locatario, art. 5.3.2.2) y C (entidad financiera a un
+/// tercero, art. 5.3.2.1 sin exenciones). <see cref="Leasing"/> solo tiene sentido en B —y en C
+/// únicamente para el documento del locatario histórico que alimenta VB-C-01—.</para>
 /// </summary>
 public sealed record GenerateTransferenciaCommand(
     Guid TenantId,
@@ -25,6 +27,7 @@ public sealed record GenerateTransferenciaCommand(
     TransferBusinessInput? Negocio = null,
     TransferEncumbranceInput? Gravamen = null,
     RegimenDeclarationInput? RegimenAplicable = null,
+    TransferLeasingInput? Leasing = null,
     string? IdempotencyKey = null)
 {
     /// <summary>Escenario efectivo cuando hay exactamente uno; <c>null</c> si hay cero o varios.</summary>
@@ -93,10 +96,32 @@ public sealed record TransferEncumbranceInput(
     bool TieneLevantamientoOAutorizacion = false);
 
 /// <summary>
-/// Declaración de régimen aplicable (anexo §4.0, CF-24). <b>En esta HU se PERSISTE pero no se
-/// evalúa</b>: el bloqueo VB-07 con las once condiciones de los arts. 5.3.2.3 a 5.3.2.13 es alcance
-/// de HU-06. Se captura ya para que <c>input_summary</c> conserve la declaración y su fecha (CF-26)
-/// sin incorporar PII.
+/// Antecedente de leasing (anexo §5.5). En el <b>escenario B</b> es obligatorio: identifica el
+/// contrato, la causal de transferencia y al locatario destinatario del acto unilateral. En el
+/// <b>escenario C</b> es opcional y solo se usa para VB-C-01 —comparar el documento del adquirente
+/// con el del locatario histórico, si se conoce—.
+///
+/// <para><b>No hay campo de precio aquí ni lo habrá</b>: el acto del art. 5.3.2.2 es unilateral y
+/// no declara precio entre las partes del instrumento (§10 regla #3, VB-B-05).</para>
+/// </summary>
+public sealed record TransferLeasingInput(
+    bool TransferenteEsEntidadFinanciera = false,
+    string? NoContratoLeasing = null,
+    string? TipoOpcionCompra = null,
+    DateOnly? FechaTerminacion = null,
+    string? LocatarioNombre = null,
+    string? LocatarioTipoDoc = null,
+    string? LocatarioNoDoc = null);
+
+/// <summary>
+/// Declaración de régimen aplicable (anexo §4.0, CF-24). Es un <b>gate previo</b> a la selección de
+/// escenario: hasta que el usuario responda, no hay documento. La evalúa <c>VB-07</c> contra las
+/// once condiciones de los arts. 5.3.2.3 a 5.3.2.13, y su resultado —con la fecha— se conserva en
+/// <c>input_summary</c> sin incorporar PII (CF-26).
+///
+/// <para>Los tres campos son anulables a propósito: «no respondió» y «respondió que ninguna aplica»
+/// son estados distintos, y solo el segundo permite generar. Un booleano no anulable haría
+/// irrepresentable el primero y convertiría el silencio en un sí.</para>
 /// </summary>
 public sealed record RegimenDeclarationInput(
     bool? NingunaAplica = null,
@@ -115,7 +140,11 @@ public enum GenerateTransferenciaOutcome
     /// <summary>Al menos una VB bloqueante falló. 422 con la lista de códigos.</summary>
     ValidationFailed = 2,
 
-    /// <summary>Escenario B o C: fuera del alcance de esta HU. 422.</summary>
+    /// <summary>
+    /// Escenario reconocido por el catálogo pero sin generador registrado. Hoy no se produce —A, B y
+    /// C están implementados— y se conserva porque un escenario nuevo del anexo debe fallar con un
+    /// 422 explícito y no con una excepción a mitad del render.
+    /// </summary>
     ScenarioNotImplemented = 3,
 }
 

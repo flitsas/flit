@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
 using Flit.Admin.Application.GeneracionDocumental.GenerateTransferencia;
+using Flit.Admin.Domain.GeneracionDocumental;
 using Flit.Api.Endpoints;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -41,7 +43,8 @@ public sealed class AdminGeneracionDocumentalTransferenciaEndpointTests
         string? precioNumeros = "20.000.000",
         string? documentoAdquirente = "10000002",
         bool gravamenActivo = false,
-        bool tieneLevantamiento = false) => new(
+        bool tieneLevantamiento = false,
+        AdminGeneracionDocumentalEndpoints.TransferenciaLeasingRequest? leasing = null) => new(
         escenarios ?? ["A"],
         null,
         new AdminGeneracionDocumentalEndpoints.TransferenciaVehiculoRequest(
@@ -59,7 +62,25 @@ public sealed class AdminGeneracionDocumentalTransferenciaEndpointTests
             "TRANSFERENTE", "COMPARTIDOS", "ADQUIRENTE", "CIUDAD DE PRUEBA", new DateOnly(2026, 9, 9)),
         new AdminGeneracionDocumentalEndpoints.TransferenciaGravamenRequest(
             gravamenActivo, tieneLevantamiento),
-        new AdminGeneracionDocumentalEndpoints.TransferenciaRegimenRequest(true, [], null));
+        new AdminGeneracionDocumentalEndpoints.TransferenciaRegimenRequest(true, [], null),
+        leasing);
+
+    /// <summary>
+    /// Cuerpo válido del escenario B (art. 5.3.2.2): antecedente de leasing, sin adquirente y
+    /// <b>sin precio</b> — el formulario del escenario B no tiene ese campo (VB-B-05).
+    /// </summary>
+    private static AdminGeneracionDocumentalEndpoints.TransferenciaRequest RequestEscenarioB() =>
+        Request(
+            ["B"],
+            tituloJuridico: null,
+            precioLetras: null,
+            precioNumeros: null,
+            leasing: new AdminGeneracionDocumentalEndpoints.TransferenciaLeasingRequest(
+                true, "LSG-2020-000123", "EJERCIDA", new DateOnly(2026, 8, 31),
+                "COMPANIA DESTINATARIA DE PRUEBA SAS", "NIT", "901555444")) with
+        {
+            Adquirente = null,
+        };
 
     /// <summary>La generación responde JSON con cualquier Accept; nunca el binario (decisión del PO).</summary>
     [Theory]
@@ -190,9 +211,13 @@ public sealed class AdminGeneracionDocumentalTransferenciaEndpointTests
         body.Should().NotContain("\"errors\"");
     }
 
-    /// <summary>El escenario B se reconoce pero todavía no se emite: es alcance de HU-06.</summary>
+    /// <summary>
+    /// HU #12208 — <b>reemplaza al caso de HU #12207</b> que esperaba
+    /// <c>scenario_not_implemented</c>. El escenario B ya se emite; lo que ahora responde 422 es su
+    /// propia VB: el payload de un escenario A enviado como B trae precio y no trae leasing.
+    /// </summary>
     [Fact]
-    public async Task EscenarioB_Responde422SinPersistirNada()
+    public async Task EscenarioBConPayloadDeCompraventa_Responde422ConSusVb()
     {
         var ctx = NewContext();
 
@@ -202,7 +227,109 @@ public sealed class AdminGeneracionDocumentalTransferenciaEndpointTests
         var body = await Execute(result, ctx);
 
         ctx.Response.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
-        body.Should().Contain("scenario_not_implemented");
+        body.Should().NotContain("scenario_not_implemented");
+        body.Should().Contain("VB-B-01");
+        body.Should().Contain("VB-B-02");
+        body.Should().Contain("VB-B-03");
+        body.Should().Contain("VB-B-04");
+        body.Should().Contain("VB-B-05");
+        _repo.Rows.Should().BeEmpty();
+    }
+
+    /// <summary>El escenario B válido responde 200 con el aviso fiscal VB-B-06 y ningún error.</summary>
+    [Fact]
+    public async Task EscenarioBValido_Responde200ConElAvisoFiscal()
+    {
+        var ctx = NewContext();
+
+        var result = await AdminGeneracionDocumentalEndpoints.GenerateTransferenciaAsync(
+            ctx, RequestEscenarioB(), Generar, TestContext.Current.CancellationToken);
+
+        var body = await Execute(result, ctx);
+
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        body.Should().Contain("VB-B-06");
+        body.Should().NotContain("\"errors\"");
+        _repo.Rows.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// CF-24 / VB-07 — <b>las once condiciones, una por una</b>: el backend rechaza el mismo payload
+    /// con 422 y el código VB-07 aunque el frontend se salte el control, y el mensaje cita el
+    /// artículo aplicable. Un test parametrizado de muestra no cumpliría el criterio: cada condición
+    /// tiene su artículo y sus soportes propios.
+    /// </summary>
+    [Theory]
+    [InlineData(TransferSpecialRegime.ServicioPublicoPasajerosOMixto, "art. 5.3.2.3")]
+    [InlineData(TransferSpecialRegime.AseguradoraPorHurto, "art. 5.3.2.4")]
+    [InlineData(TransferSpecialRegime.AseguradoraPorPerdidaParcial, "art. 5.3.2.5")]
+    [InlineData(TransferSpecialRegime.VehiculoBlindado, "art. 5.3.2.6")]
+    [InlineData(TransferSpecialRegime.DecisionJudicialOAdministrativa, "art. 5.3.2.7")]
+    [InlineData(TransferSpecialRegime.Sucesion, "art. 5.3.2.8")]
+    [InlineData(TransferSpecialRegime.ImportacionTemporalSustitucionImportador, "art. 5.3.2.9")]
+    [InlineData(TransferSpecialRegime.DecomisoDianOAdjudicacionNacion, "art. 5.3.2.10")]
+    [InlineData(TransferSpecialRegime.ComisoFiscalia, "art. 5.3.2.11")]
+    [InlineData(TransferSpecialRegime.DeclaratoriaDeAbandono, "art. 5.3.2.12")]
+    [InlineData(TransferSpecialRegime.CargaPbvSuperior10500Kg, "art. 5.3.2.13")]
+    public async Task CadaUnaDeLasOnceCondiciones_Responde422ConVb07YSuArticulo(
+        string condicion,
+        string articulo)
+    {
+        var ctx = NewContext();
+        var request = Request() with
+        {
+            RegimenAplicable = new AdminGeneracionDocumentalEndpoints.TransferenciaRegimenRequest(
+                false, [condicion], DateTimeOffset.Parse("2026-09-09T12:00:00Z", CultureInfo.InvariantCulture)),
+        };
+
+        var result = await AdminGeneracionDocumentalEndpoints.GenerateTransferenciaAsync(
+            ctx, request, Generar, TestContext.Current.CancellationToken);
+
+        var body = await Execute(result, ctx);
+
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
+        body.Should().Contain("VB-07");
+        body.Should().Contain(articulo);
+        body.Should().Contain("no produce ni acredita");
+        _repo.Rows.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// El art. 5.3.2.14 no es una condición especial (nota de alcance del anexo §4.0): declararlo
+    /// junto con «ninguna aplica» no bloquea, y el documento se emite.
+    /// </summary>
+    [Fact]
+    public async Task ElArticulo5_3_2_14_NoBloqueaLaGeneracion()
+    {
+        var ctx = NewContext();
+        var request = Request() with
+        {
+            RegimenAplicable = new AdminGeneracionDocumentalEndpoints.TransferenciaRegimenRequest(
+                true, ["ART_5_3_2_14"], null),
+        };
+
+        var result = await AdminGeneracionDocumentalEndpoints.GenerateTransferenciaAsync(
+            ctx, request, Generar, TestContext.Current.CancellationToken);
+
+        await Execute(result, ctx);
+
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+    }
+
+    /// <summary>Sin responder el control de régimen, el backend rechaza con VB-07.</summary>
+    [Fact]
+    public async Task SinDeclaracionDeRegimen_Responde422ConVb07()
+    {
+        var ctx = NewContext();
+        var request = Request() with { RegimenAplicable = null };
+
+        var result = await AdminGeneracionDocumentalEndpoints.GenerateTransferenciaAsync(
+            ctx, request, Generar, TestContext.Current.CancellationToken);
+
+        var body = await Execute(result, ctx);
+
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
+        body.Should().Contain("VB-07");
         _repo.Rows.Should().BeEmpty();
     }
 

@@ -13,10 +13,10 @@ export interface TransferenciaPanelProps {
 /**
  * Panel de la pestaña "Transferencia" (HU-01, CF-01/CF-22).
  *
- * Cascarón: el control de régimen aplicable (CF-24), el selector de escenario A/B/C y el
- * formulario de 35 campos son alcance de HU-05, HU-06 y HU-10. Esta HU deja la pestaña
- * montada con sus cuatro estados de UI para que la navegación entre paneles sea real y no
- * lleve a un 404.
+ * Contenedor de la pestaña con sus cuatro estados de UI (CF-22). El contenido —control de
+ * régimen aplicable (CF-24), selector de escenario A/B/C y formulario— lo aporta
+ * `TransferenciaFormPanel` como hijo: este panel decide cómo se ve la pestaña vacía, cargando
+ * o en error, no qué campos existen. El prellenado «placa primero» llega en HU-10.
  */
 export function TransferenciaPanel({ status = "empty", onRetry, children }: TransferenciaPanelProps) {
   return (

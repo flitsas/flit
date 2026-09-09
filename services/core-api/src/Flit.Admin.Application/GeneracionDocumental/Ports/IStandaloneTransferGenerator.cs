@@ -9,6 +9,17 @@ public static class TransferPartyRole
     public const string Transferente = "TRANSFERENTE";
 
     public const string Adquirente = "ADQUIRENTE";
+
+    /// <summary>
+    /// Rótulo del único bloque de firma del escenario B (anexo §9.2). No es un rol nuevo: la entidad
+    /// financiera comparece como TRANSFERENTE y este es el rótulo con el que el anexo la nombra.
+    /// </summary>
+    public const string EtiquetaEntidadFinanciera = "LA ENTIDAD FINANCIERA";
+
+    /// <summary>Rótulos del escenario C (anexo §9.3), que distinguen quién es quién.</summary>
+    public const string EtiquetaTransferenteFinanciero = "TRANSFERENTE (entidad financiera)";
+
+    public const string EtiquetaAdquirenteTercero = "ADQUIRENTE (tercero)";
 }
 
 /// <summary>Las 13 variables de vehículo del anexo §5.1, ya resueltas a texto.</summary>
@@ -67,6 +78,29 @@ public sealed record TransferDocumentBusiness(
     string AsumeDerechosTramite,
     string? AsumeImpuestoVehiculo);
 
+/// <summary>
+/// Antecedente de leasing del escenario B (anexo §5.5 y §8.2, cláusulas segunda, tercera y quinta).
+///
+/// <para><b>El locatario vive aquí y no en <c>Partes</c>.</b> Es una decisión estructural, no de
+/// comodidad: <c>Partes</c> es la lista de firmantes y el locatario no firma (§9.2). Si estuviera
+/// en <c>Partes</c> con una bandera «no firma», el bloque de su firma existiría y bastaría un
+/// descuido en la cascada para pintarlo —exactamente lo que §10 regla #4 prohibe—. Sus datos sí
+/// aparecen en las cláusulas declarativas, que es donde el anexo los quiere.</para>
+/// </summary>
+public sealed record TransferDocumentLeasing(
+    string NoContrato,
+    string TipoOpcionCompra,
+    DateOnly? FechaTerminacion,
+    string LocatarioNombre,
+    string? LocatarioTipoDoc,
+    string LocatarioNoDoc)
+{
+    /// <summary>Identificación del locatario en una línea, para la cláusula segunda.</summary>
+    public string LocatarioIdentificacion => string.IsNullOrWhiteSpace(LocatarioTipoDoc)
+        ? $"documento No. {LocatarioNoDoc}"
+        : $"{LocatarioTipoDoc} No. {LocatarioNoDoc}";
+}
+
 /// <summary>Declaración de gravamen que alimenta el inciso final de la cláusula segunda (§8.1).</summary>
 public sealed record TransferDocumentEncumbrance(
     bool GravamenActivo,
@@ -78,10 +112,14 @@ public sealed record TransferDocumentEncumbrance(
 ///
 /// <para><b><see cref="Partes"/> es una lista, no un par transferente/adquirente.</b> El anexo
 /// §9.0.3 lo exige: «el escenario decide cuántos bloques de firma existen; el modo de firma solo
-/// decide qué va dentro de un bloque que ya existe». En el escenario A la lista trae dos partes; en
-/// el escenario B (HU-06) traerá una sola y el bloque del adquirente no podrá instanciarse ni por
-/// descuido, porque no habrá nada que instanciar — no existe un campo opcional que dejar en
-/// blanco.</para>
+/// decide qué va dentro de un bloque que ya existe». En los escenarios A y C la lista trae dos
+/// partes; en el <b>escenario B trae exactamente una</b> —la entidad financiera— y el bloque del
+/// adquirente/locatario no puede instanciarse ni por descuido, porque no hay nada que instanciar:
+/// no existe un campo opcional que dejar en blanco ni una columna que ocultar.</para>
+
+/// <para><see cref="Negocio"/> es anulable por la misma razón: el escenario B <b>no tiene negocio
+/// con precio</b> (§10 regla #3, VB-B-05), y un objeto de negocio vacío invitaría a imprimir una
+/// contraprestación que el acto unilateral no tiene.</para>
 /// </summary>
 public sealed record TransferDocumentModel(
     string Scenario,
@@ -92,7 +130,8 @@ public sealed record TransferDocumentModel(
     TransferDocumentEncumbrance Gravamen,
     string CiudadFirma,
     DateOnly FechaFirma,
-    string ReferenceNumber)
+    string ReferenceNumber,
+    TransferDocumentLeasing? Leasing = null)
 {
     public TransferDocumentParty? ParteConRol(string rol) =>
         Partes.FirstOrDefault(p => string.Equals(p.Rol, rol, StringComparison.Ordinal));

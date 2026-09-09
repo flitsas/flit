@@ -157,6 +157,25 @@ internal static class TransferDocumentBlocks
     }
 
     /// <summary>
+    /// Nota al pie del bloque de firmas: el régimen bajo el que actúan los firmantes (anexo §9.2
+    /// para el escenario B y §9.3 para el C).
+    ///
+    /// <para><b>No es un bloque de firma ni lo simula.</b> Es un párrafo de régimen bajo el único
+    /// bloque —o los dos— que el escenario instanció: no lleva línea, ni rótulo de parte, ni
+    /// espacio reservado. Confundirlo con un hueco de firma sería reintroducir por la puerta de
+    /// atrás lo que §10 regla #4 prohíbe.</para>
+    /// </summary>
+    public static void NotaDeFirmas(ColumnDescriptor col, string texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto))
+        {
+            return;
+        }
+
+        col.Item().PaddingTop(12).Text(t => t.Span(texto).FontSize(9).Italic());
+    }
+
+    /// <summary>
     /// Advertencia del anexo §1, exigida por el checklist §13.5. Va en el propio documento para que
     /// sobreviva a la descarga: un aviso que solo vive en la pantalla desaparece en cuanto el PDF
     /// cambia de manos.

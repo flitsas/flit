@@ -69,6 +69,42 @@ internal static class PdfTextExtractor
     public static bool Contains(string extracted, string literal) =>
         Flatten(extracted).Contains(Flatten(literal), StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// ¿Aparece el literal <b>respetando mayúsculas</b>? (HU #12208).
+    ///
+    /// <para>Existe por el escenario B. Lo que §9.2 prohíbe es el <b>rótulo</b> «ADQUIRENTE» o
+    /// «LOCATARIO» en el bloque de firmas; la palabra «locatario» en minúscula sí aparece —y debe
+    /// aparecer— en las cláusulas declarativas y en la propia nota de firmas del anexo, que dice
+    /// «el locatario no firma el Formato Único». Una comparación insensible a mayúsculas haría
+    /// imposible cumplir a la vez §8.2 y §13.2.</para>
+    /// </summary>
+    public static bool ContainsLiteral(string extracted, string literal) =>
+        Flatten(extracted).Contains(Flatten(literal), StringComparison.Ordinal);
+
+    /// <summary>
+    /// Texto del <b>bloque de firmas</b>: desde el encabezado «En …, a los N días del mes de …»
+    /// hasta el final del documento (anexo §9.1 a §9.3). Devuelto aplanado.
+    ///
+    /// <para>La verificación de §13.2 está <b>acotada al bloque de firmas</b>: el nombre del
+    /// locatario sí puede aparecer en la cláusula segunda. Recortar aquí es lo que hace que el test
+    /// compruebe lo que el anexo pide y no otra cosa más laxa o más estricta.</para>
+    /// </summary>
+    public static string SignatureBlock(string extracted)
+    {
+        var plano = Flatten(extracted);
+        var marca = Flatten("días del mes de");
+        var at = plano.IndexOf(marca, StringComparison.Ordinal);
+
+        if (at < 0)
+        {
+            throw new InvalidOperationException(
+                "No se encontró el encabezado del bloque de firmas en el texto extraído: sin él, "
+                + "cualquier aserción sobre «el bloque de firmas» sería sobre el documento entero.");
+        }
+
+        return plano[at..];
+    }
+
     private sealed record PdfObject(int Number, string Dictionary, byte[]? Data);
 
     private static Dictionary<int, PdfObject> ReadObjects(byte[] pdf)

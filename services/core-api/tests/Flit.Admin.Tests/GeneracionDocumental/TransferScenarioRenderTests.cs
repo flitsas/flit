@@ -241,13 +241,14 @@ public sealed class TransferScenarioRenderTests
     }
 
     /// <summary>
-    /// El generador solo compone el escenario A en esta HU. B y C se rechazan antes en el handler;
-    /// si por un contrato roto llegaran hasta aquí, el fallo debe ser explícito y no un PDF a medias.
+    /// Un escenario fuera del catálogo debe fallar de forma explícita y no producir un PDF a
+    /// medias. (En HU #12207 este caso cubría a B y C; desde HU #12208 ambos se componen y sus
+    /// pruebas viven en <c>TransferEscenariosBYCRenderTests</c>.)
     /// </summary>
     [Theory]
-    [InlineData("B")]
-    [InlineData("C")]
-    public void EscenariosBYC_TodaviaNoSeComponen(string escenario)
+    [InlineData("Z")]
+    [InlineData("")]
+    public void EscenarioFueraDelCatalogo_NoSeCompone(string escenario)
     {
         var accion = () => Generator.Render(TransferTestData.Modelo() with { Scenario = escenario });
 

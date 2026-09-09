@@ -6237,22 +6237,33 @@ paths:
     post:
       tags: [Admin · Generación documental]
       operationId: adminGeneracionDocumentalGenerateTransferencia
-      summary: Genera el Documento de Transferencia de Dominio (escenario A)
+      summary: Genera el Documento de Transferencia de Dominio (escenarios A, B y C)
       description: >
         Emite el instrumento privado de transferencia de dominio SIN abrir un trámite, conforme al
         anexo normativo docs/plantilla-transferencia-dominio.md (Resolución 20233040017145 de 2023).
-        En este incremento se emite el ESCENARIO A (traspaso ordinario, art. 5.3.2.1); los
-        escenarios B y C se reconocen y responden 422 con scenario_not_implemented hasta que llegue
-        su generador. El escenario es obligatorio y ÚNICO: cero o más de uno responde 422 con el
-        código VB-05. Las validaciones bloqueantes (VB-02 placa, VB-06 partes distintas, VB-A-04
-        gravamen, VB-A-06 precio de la compraventa, VB-A-07 título jurídico) responden 422 con
-        código, campo y mensaje, y NUNCA reflejan el valor capturado. Las prevalidaciones advisory
-        (VB-01, VB-03, VB-04, VB-A-01 a VB-A-03, VB-A-05 y VB-A-08 a VB-A-10) viajan en la respuesta
-        200 como aviso y no bloquean nunca: las verifica el Organismo de Tránsito. El modo de firma
-        es MANUSCRITA fijo: el PDF lleva líneas de firma con nombre y documento y no contiene
-        leyenda de firma electrónica ni sello alguno. NO devuelve el PDF: responde
-        { id, status, advisories } en application/json con cualquier Accept, y la descarga va por
-        GET /{id}/download. Requiere el permiso generacion-documental.generate.
+        Los tres escenarios están disponibles: A traspaso ordinario (art. 5.3.2.1), B transferencia
+        unilateral de leasing al locatario (art. 5.3.2.2) y C entidad financiera a un tercero
+        (art. 5.3.2.1 SIN las exenciones del 5.3.2.2). El escenario es obligatorio y ÚNICO: cero o
+        más de uno responde 422 con el código VB-05.
+        VB-07 es un GATE PREVIO a la selección de escenario: mientras no se declare que ninguna de
+        las once condiciones especiales de traspaso de los arts. 5.3.2.3 a 5.3.2.13 aplica, la
+        generación se rechaza con 422 y el código VB-07; declarar cualquiera de las once también
+        rechaza, con el artículo citado en el mensaje. El art. 5.3.2.14 (expedición de la nueva
+        licencia de tránsito) NO es una condición especial y no bloquea.
+        En el ESCENARIO B el locatario no es una parte del documento: no se envía adquirente, no hay
+        campo de precio (si el cuerpo trae precio o contraprestación, 422 con VB-B-05) y el PDF se
+        emite con UN solo bloque de firma, el de la entidad financiera.
+        Validaciones bloqueantes: VB-02 placa, VB-06 partes distintas, VB-07 régimen aplicable,
+        VB-A-04 gravamen, VB-A-06 precio de la compraventa, VB-A-07 título jurídico, VB-B-01 a
+        VB-B-05 del escenario B y VB-C-01 del escenario C. Todas responden 422 con código, campo y
+        mensaje, y NUNCA reflejan el valor capturado.
+        Prevalidaciones advisory (VB-01, VB-03, VB-04, VB-A-01 a VB-A-03, VB-A-05, VB-A-08 a
+        VB-A-10, VB-B-06 y VB-C-02 a VB-C-10): viajan en la respuesta 200 como aviso y no bloquean
+        nunca; las verifica el Organismo de Tránsito. El modo de firma es MANUSCRITA fijo: el PDF
+        lleva líneas de firma con nombre y documento y no contiene leyenda de firma electrónica ni
+        sello alguno. NO devuelve el PDF: responde { id, status, advisories } en application/json
+        con cualquier Accept, y la descarga va por GET /{id}/download. Requiere el permiso
+        generacion-documental.generate.
       security:
         - bearerAuth: []
       parameters:
@@ -6298,8 +6309,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: >
-            Al menos una validación bloqueante del anexo falló, o el escenario declarado todavía no
-            se emite. No se persiste ninguna fila ni se escribe archivo.
+            Al menos una validación bloqueante del anexo falló —incluido el gate VB-07 de régimen
+            aplicable—. No se persiste ninguna fila ni se escribe archivo.
           content:
             application/json:
               schema:
@@ -7831,21 +7842,75 @@ components:
     StandaloneTransferRegimen:
       type: object
       description: >
-        Declaración de régimen aplicable (anexo §4.0, CF-24). En este incremento se PERSISTE en
-        input_summary pero no se evalúa: el bloqueo VB-07 con las once condiciones de los
-        arts. 5.3.2.3 a 5.3.2.13 llega con los escenarios B y C.
+        Declaración de régimen aplicable (anexo §4.0, CF-24). Es el GATE previo a elegir escenario y
+        lo evalúa VB-07: se rechaza tanto declarar una de las once condiciones de los
+        arts. 5.3.2.3 a 5.3.2.13 como NO responder —el silencio no es un «ninguna aplica»—. La
+        declaración y su fecha se conservan en input_summary, sin PII.
       properties:
-        ningunaAplica: { type: boolean, nullable: true }
+        ningunaAplica:
+          type: boolean
+          nullable: true
+          description: >
+            true = ninguna de las once condiciones aplica y puede generarse. null = sin responder,
+            que bloquea con VB-07.
         condicionesDeclaradas:
           type: array
-          items: { type: string }
+          description: >
+            Códigos de las once condiciones especiales. Declarar al menos una bloquea con VB-07 y el
+            mensaje cita su artículo. El art. 5.3.2.14 no pertenece a esta lista.
+          items:
+            type: string
+            enum:
+              - SERVICIO_PUBLICO_PASAJEROS_O_MIXTO
+              - ASEGURADORA_POR_HURTO
+              - ASEGURADORA_POR_PERDIDA_PARCIAL
+              - VEHICULO_BLINDADO
+              - DECISION_JUDICIAL_O_ADMINISTRATIVA
+              - SUCESION
+              - IMPORTACION_TEMPORAL_SUSTITUCION_IMPORTADOR
+              - DECOMISO_DIAN_O_ADJUDICACION_NACION
+              - COMISO_FISCALIA
+              - DECLARATORIA_DE_ABANDONO
+              - CARGA_PBV_SUPERIOR_10500_KG
         declaredAt: { type: string, format: date-time, nullable: true }
+    StandaloneTransferLeasing:
+      type: object
+      description: >
+        Antecedente de leasing (anexo §5.5). OBLIGATORIO en el escenario B; en el C es opcional y
+        solo alimenta VB-C-01 —comparar al adquirente con el locatario histórico—. No tiene campo
+        de precio: el acto del art. 5.3.2.2 es unilateral y no declara precio entre las partes del
+        instrumento (VB-B-05). Los datos del locatario alimentan las cláusulas declarativas del PDF
+        y NUNCA su bloque de firmas (§9.2).
+      properties:
+        transferenteEsEntidadFinanciera:
+          type: boolean
+          description: >
+            Declaración de que el transferente es establecimiento bancario, compañía de
+            financiamiento o de leasing. false bloquea con VB-B-01.
+        noContratoLeasing: { type: string, nullable: true }
+        tipoOpcionCompra:
+          type: string
+          nullable: true
+          enum: [EJERCIDA, AUTOMATICA, TERMINACION_CONTRATO]
+          description: >
+            Causal de la transferencia. Con AUTOMATICA basta la copia del contrato (art. 5.3.2.2,
+            Parágrafo 1.º); con las otras dos se aporta además la declaración. Fuera del catálogo,
+            422 con VB-B-03.
+        fechaTerminacion: { type: string, format: date, nullable: true }
+        locatarioNombre: { type: string, nullable: true }
+        locatarioTipoDoc: { type: string, nullable: true }
+        locatarioNoDoc: { type: string, nullable: true }
     StandaloneTransferenciaRequest:
       type: object
       description: >
         Cuerpo de la generación de transferencia. escenarios es una LISTA para que VB-05 sea
         comprobable: con un escalar, «más de un escenario» sería irrepresentable. escenario se
         admite como atajo de un solo valor; si llegan los dos, se suman.
+        En el ESCENARIO A y en el C viajan adquirente y negocio completo. En el ESCENARIO B viaja
+        leasing, NO viaja adquirente —el locatario no es parte del instrumento— y negocio solo
+        aporta ciudad y fecha de firma: cualquier campo de precio o contraprestación responde 422
+        con VB-B-05.
+        regimenAplicable debe venir respondido en los tres escenarios (VB-07).
       required: [vehiculo, transferente, negocio]
       properties:
         escenarios:
@@ -7869,6 +7934,8 @@ components:
           $ref: "#/components/schemas/StandaloneTransferGravamen"
         regimenAplicable:
           $ref: "#/components/schemas/StandaloneTransferRegimen"
+        leasing:
+          $ref: "#/components/schemas/StandaloneTransferLeasing"
     StandaloneTransferIssue:
       type: object
       description: >
@@ -7878,7 +7945,10 @@ components:
       properties:
         code:
           type: string
-          description: VB-01 a VB-07 y VB-A-01 a VB-A-10 del anexo normativo.
+          description: >
+            VB-01 a VB-07, VB-A-01 a VB-A-10, VB-B-01 a VB-B-06 y VB-C-01 a VB-C-10 del anexo
+            normativo. VB-C-07 se verifica sobre la plantilla del escenario C, no sobre el
+            formulario, y por eso no viaja en esta lista.
         field: { type: string }
         message: { type: string }
     StandaloneTransferGenerateResult:

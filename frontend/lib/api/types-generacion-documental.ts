@@ -82,9 +82,10 @@ export interface StandaloneRuesPreviewResult {
 
 // ── Transferencia de dominio (HU #12207, Feature #12201) ────────────────────────────────────
 //
-// Contrato normativo: `docs/plantilla-transferencia-dominio.md`. Este incremento cubre el
-// ESCENARIO A (traspaso ordinario, art. 5.3.2.1); los escenarios B y C, el control de régimen
-// aplicable (VB-07) y los lotes llegan después.
+// Contrato normativo: `docs/plantilla-transferencia-dominio.md`. Cubre los TRES escenarios:
+// A traspaso ordinario (art. 5.3.2.1), B transferencia unilateral de leasing al locatario
+// (art. 5.3.2.2) y C entidad financiera a un tercero (art. 5.3.2.1 sin exenciones), más el control
+// previo de régimen aplicable (VB-07). Los lotes llegan después.
 
 /** Las 13 variables de vehículo del anexo §5.1. Todas son texto: el documento transcribe. */
 export interface TransferVehiculoInput {
@@ -145,11 +146,35 @@ export interface TransferGravamenInput {
   tieneLevantamientoOAutorizacion: boolean;
 }
 
-/** Declaración de régimen aplicable (§4.0, CF-24). Se persiste; el bloqueo VB-07 llega después. */
+/**
+ * Declaración de régimen aplicable (§4.0, CF-24). Es el gate previo a elegir escenario y lo evalúa
+ * `VB-07`: el backend rechaza con 422 tanto declarar una de las once condiciones de los
+ * arts. 5.3.2.3 a 5.3.2.13 como no responder, aunque el formulario se salte el control.
+ */
 export interface TransferRegimenInput {
   ningunaAplica?: boolean | null;
   condicionesDeclaradas?: string[];
   declaredAt?: string | null;
+}
+
+/** Causal de la transferencia unilateral (§5.5). Fuera del catálogo: 422 con `VB-B-03`. */
+export type TransferTipoOpcionCompra = "EJERCIDA" | "AUTOMATICA" | "TERMINACION_CONTRATO";
+
+/**
+ * Antecedente de leasing del escenario B (§5.5). **No tiene campo de precio**: el acto del
+ * art. 5.3.2.2 es unilateral y no declara precio entre las partes del instrumento (`VB-B-05`).
+ *
+ * Los datos del locatario alimentan las cláusulas declarativas del PDF; **nunca** el bloque de
+ * firmas, que en el escenario B tiene un solo bloque: el de la entidad financiera (§9.2).
+ */
+export interface TransferLeasingInput {
+  transferenteEsEntidadFinanciera: boolean;
+  noContratoLeasing?: string;
+  tipoOpcionCompra?: TransferTipoOpcionCompra | "";
+  fechaTerminacion?: string | null;
+  locatarioNombre?: string;
+  locatarioTipoDoc?: string;
+  locatarioNoDoc?: string;
 }
 
 /**
@@ -160,10 +185,13 @@ export interface TransferGenerateRequest {
   escenarios: StandaloneDocumentScenario[];
   vehiculo: TransferVehiculoInput;
   transferente: TransferParteInput;
+  /** Ausente en el escenario B: el locatario no es parte del instrumento (§9.2). */
   adquirente?: TransferParteInput;
   negocio: TransferNegocioInput;
   gravamen?: TransferGravamenInput;
   regimenAplicable?: TransferRegimenInput;
+  /** Obligatorio en el escenario B; en el C solo alimenta `VB-C-01`. */
+  leasing?: TransferLeasingInput;
 }
 
 /**

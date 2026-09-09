@@ -279,8 +279,11 @@ public sealed class TransferValidationPolicyTests
     [Fact]
     public void NingunMensajeDeErrorRefleljaElValorCapturado()
     {
+        // HU #12208: el escenario viaja declarado. Las VB propias de un escenario solo se evalúan en
+        // su escenario —exigirle a un payload de B el título jurídico del art. 5.3.2.1 sería inventar
+        // un requisito—, así que sin escenario único no habría VB-A-* que inspeccionar aquí.
         var outcome = TransferValidationPolicy.Evaluate(TransferTestData.Comando(
-            escenarios: [],
+            escenarios: [TransferScenario.TraspasoOrdinario],
             vehiculo: TransferTestData.Vehiculo("PL@CA!"),
             transferente: TransferTestData.Transferente("80000001"),
             adquirente: TransferTestData.Adquirente("80000001"),
@@ -302,10 +305,10 @@ public sealed class TransferValidationPolicyTests
             issue.Message.Should().NotContain("PERSONA ADQUIRENTE DE PRUEBA");
         }
 
-        // Los cinco bloqueantes del escenario A conviven en una sola respuesta.
+        // Los cuatro bloqueantes del escenario A conviven en una sola respuesta: corregir de a un
+        // error por viaje es inaceptable en un formulario de 35 campos.
         Codigos(outcome.Blocking).Should().Contain(
         [
-            TransferValidationCodes.EscenarioUnico,
             TransferValidationCodes.PlacaFormato,
             TransferValidationCodes.PartesDistintas,
             TransferValidationCodes.TituloJuridicoDeclarado,
@@ -313,20 +316,324 @@ public sealed class TransferValidationPolicyTests
         ]);
     }
 
+    // ── VB-07 — régimen aplicable (§4.0). Este bloque REEMPLAZA a propósito al de HU #12207, que
+    //    fijaba el comportamiento anterior («todavía no bloquea»). Ahora sí bloquea. ─────────────
+
     /// <summary>
-    /// VB-07 (régimen aplicable, arts. 5.3.2.3 a 5.3.2.13) es alcance de HU-06: esta HU no lo
-    /// evalúa. El test lo deja escrito para que el día que HU-06 lo implemente, este caso cambie
-    /// deliberadamente y no por accidente.
+    /// Las <b>once</b> condiciones de los arts. 5.3.2.3 a 5.3.2.13, una por una. No es un test
+    /// parametrizado de muestra: el criterio de aceptación pide verificarlas todas, porque cada una
+    /// tiene su artículo y su juego de soportes, y basta que una quede fuera de la matriz para que
+    /// el módulo emita un documento normativamente insuficiente con la marca de FLIT.
     /// </summary>
-    [Fact]
-    public void RegimenEspecialDeclarado_TodaviaNoBloquea()
+    [Theory]
+    [InlineData(TransferSpecialRegime.ServicioPublicoPasajerosOMixto, "art. 5.3.2.3")]
+    [InlineData(TransferSpecialRegime.AseguradoraPorHurto, "art. 5.3.2.4")]
+    [InlineData(TransferSpecialRegime.AseguradoraPorPerdidaParcial, "art. 5.3.2.5")]
+    [InlineData(TransferSpecialRegime.VehiculoBlindado, "art. 5.3.2.6")]
+    [InlineData(TransferSpecialRegime.DecisionJudicialOAdministrativa, "art. 5.3.2.7")]
+    [InlineData(TransferSpecialRegime.Sucesion, "art. 5.3.2.8")]
+    [InlineData(TransferSpecialRegime.ImportacionTemporalSustitucionImportador, "art. 5.3.2.9")]
+    [InlineData(TransferSpecialRegime.DecomisoDianOAdjudicacionNacion, "art. 5.3.2.10")]
+    [InlineData(TransferSpecialRegime.ComisoFiscalia, "art. 5.3.2.11")]
+    [InlineData(TransferSpecialRegime.DeclaratoriaDeAbandono, "art. 5.3.2.12")]
+    [InlineData(TransferSpecialRegime.CargaPbvSuperior10500Kg, "art. 5.3.2.13")]
+    public void CadaCondicionEspecialDeclarada_BloqueaConVb07YCitaSuArticulo(
+        string condicion,
+        string articulo)
     {
         var outcome = TransferValidationPolicy.Evaluate(TransferTestData.Comando(
-            regimen: new RegimenDeclarationInput(
-                NingunaAplica: false,
-                CondicionesDeclaradas: ["art. 5.3.2.6"],
-                DeclaredAt: DateTimeOffset.Parse("2026-09-09T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture))));
+            regimen: TransferTestData.Regimen(ningunaAplica: false, condiciones: [condicion])));
+
+        var issue = outcome.Blocking.Single(i => i.Code == TransferValidationCodes.RegimenAplicable);
+
+        issue.Field.Should().Be("regimenAplicable");
+        issue.Message.Should().Contain(articulo);
+        issue.Message.Should().Contain("no produce ni acredita");
+    }
+
+    /// <summary>
+    /// Declarar «ninguna aplica» Y a la vez una condición es una contradicción, y se resuelve del
+    /// lado seguro: manda la condición declarada.
+    /// </summary>
+    [Fact]
+    public void NingunaAplicaJuntoAUnaCondicion_BloqueaIgual()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.Comando(
+            regimen: TransferTestData.Regimen(
+                ningunaAplica: true, condiciones: [TransferSpecialRegime.Sucesion])));
+
+        Codigos(outcome.Blocking).Should().Contain(TransferValidationCodes.RegimenAplicable);
+    }
+
+    /// <summary>
+    /// El silencio no es un «no aplica»: el gate es previo a elegir escenario (§4.0) y el checklist
+    /// §13.1 exige que la declaración «fue respondida».
+    /// </summary>
+    [Fact]
+    public void SinDeclaracionDeRegimen_BloqueaConVb07()
+    {
+        var comando = TransferTestData.Comando() with { RegimenAplicable = null };
+
+        var outcome = TransferValidationPolicy.Evaluate(comando);
+
+        Codigos(outcome.Blocking).Should().Contain(TransferValidationCodes.RegimenAplicable);
+    }
+
+    [Fact]
+    public void DeclaracionSinResponder_BloqueaConVb07()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.Comando(
+            regimen: TransferTestData.Regimen(ningunaAplica: null)));
+
+        Codigos(outcome.Blocking).Should().Contain(TransferValidationCodes.RegimenAplicable);
+    }
+
+    [Fact]
+    public void DeclararQueNingunaAplica_NoBloquea()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.Comando(
+            regimen: TransferTestData.Regimen(ningunaAplica: true)));
 
         Codigos(outcome.Blocking).Should().NotContain(TransferValidationCodes.RegimenAplicable);
+    }
+
+    /// <summary>
+    /// El art. 5.3.2.14 (expedición de la nueva licencia de tránsito) <b>no</b> es una condición
+    /// especial: es el paso final común a todo traspaso. No está en la matriz de bloqueo y por eso
+    /// un código que lo nombre no impide generar.
+    /// </summary>
+    [Fact]
+    public void ElArticulo5_3_2_14_NoEsCondicionEspecialYNoBloquea()
+    {
+        TransferSpecialRegime.IsKnown("ART_5_3_2_14").Should().BeFalse();
+
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.Comando(
+            regimen: TransferTestData.Regimen(
+                ningunaAplica: true, condiciones: ["ART_5_3_2_14"])));
+
+        Codigos(outcome.Blocking).Should().NotContain(TransferValidationCodes.RegimenAplicable);
+        outcome.IsBlocked.Should().BeFalse();
+    }
+
+    // ── VB-B-01..05 — escenario B (art. 5.3.2.2) ─────────────────────────────────────
+
+    [Fact]
+    public void PayloadValidoDeEscenarioB_NoBloquea()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB());
+
+        outcome.IsBlocked.Should().BeFalse();
+        outcome.Blocking.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EscenarioBSinDeclararEntidadFinanciera_BloqueaConVbB01()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB(
+            leasing: TransferTestData.Leasing(esEntidadFinanciera: false)));
+
+        outcome.Blocking.Single(i => i.Code == TransferValidationCodes.TransferenteEsEntidadFinanciera)
+            .Field.Should().Be("leasing.transferenteEsEntidadFinanciera");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void EscenarioBSinContratoDeLeasing_BloqueaConVbB02(string? contrato)
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB(
+            leasing: TransferTestData.Leasing(contrato: contrato)));
+
+        outcome.Blocking.Single(i => i.Code == TransferValidationCodes.ContratoDeLeasingDeclarado)
+            .Field.Should().Be("leasing.noContratoLeasing");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("PACTADA")]
+    [InlineData("OPCION_DE_COMPRA")]
+    public void EscenarioBConOpcionDeCompraFueraDelCatalogo_BloqueaConVbB03(string? opcion)
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB(
+            leasing: TransferTestData.Leasing(tipoOpcion: opcion)));
+
+        outcome.Blocking.Single(i => i.Code == TransferValidationCodes.TipoOpcionDeCompraDeclarado)
+            .Field.Should().Be("leasing.tipoOpcionCompra");
+    }
+
+    [Theory]
+    [InlineData(TransferPurchaseOption.Ejercida)]
+    [InlineData(TransferPurchaseOption.Automatica)]
+    [InlineData(TransferPurchaseOption.TerminacionContrato)]
+    public void LasTresCausalesDelCatalogo_NoBloquean(string opcion)
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB(
+            leasing: TransferTestData.Leasing(tipoOpcion: opcion)));
+
+        outcome.IsBlocked.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EscenarioBSinNombreDelLocatario_BloqueaConVbB04()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB(
+            leasing: TransferTestData.Leasing(locatarioNombre: null)));
+
+        outcome.Blocking.Single(i => i.Code == TransferValidationCodes.LocatarioDestinatarioDeclarado)
+            .Field.Should().Be("leasing.locatarioNombre");
+    }
+
+    [Fact]
+    public void EscenarioBSinDocumentoDelLocatario_BloqueaConVbB04()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB(
+            leasing: TransferTestData.Leasing(locatarioNoDoc: null)));
+
+        outcome.Blocking.Single(i => i.Code == TransferValidationCodes.LocatarioDestinatarioDeclarado)
+            .Field.Should().Be("leasing.locatarioNoDoc");
+    }
+
+    /// <summary>§10 regla #1 — el locatario recibe el dominio; no puede ser el transferente.</summary>
+    [Fact]
+    public void EscenarioBConElLocatarioComoTransferente_BloqueaConVbB04()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB(
+            leasing: TransferTestData.Leasing(locatarioNoDoc: "900.123.456")));
+
+        Codigos(outcome.Blocking).Should()
+            .Contain(TransferValidationCodes.LocatarioDestinatarioDeclarado);
+    }
+
+    /// <summary>
+    /// VB-B-05 — el formulario del escenario B no tiene campo de precio y el backend no lo acepta
+    /// aunque el cliente lo mande: un precio descartado en silencio dejaría al usuario creyendo que
+    /// quedó en el documento.
+    /// </summary>
+    [Theory]
+    [InlineData("negocio.precioLetras")]
+    [InlineData("negocio.precioNumeros")]
+    [InlineData("negocio.contraprestacionDescripcion")]
+    public void EscenarioBConPrecioEnElPayload_BloqueaConVbB05(string campo)
+    {
+        var negocio = TransferTestData.NegocioSinPrecio();
+        negocio = campo switch
+        {
+            "negocio.precioLetras" => negocio with { PrecioLetras = "VEINTE MILLONES DE PESOS" },
+            "negocio.precioNumeros" => negocio with { PrecioNumeros = "20.000.000" },
+            _ => negocio with { ContraprestacionDescripcion = "Un inmueble" },
+        };
+
+        var outcome = TransferValidationPolicy.Evaluate(
+            TransferTestData.ComandoEscenarioB(negocio: negocio));
+
+        outcome.Blocking.Single(i => i.Code == TransferValidationCodes.SinPrecioEnEscenarioB)
+            .Field.Should().Be(campo);
+    }
+
+    /// <summary>
+    /// El escenario B no exige título jurídico ni catálogos fiscales: son requisitos del negocio del
+    /// art. 5.3.2.1 y el acto unilateral no los tiene. Exigírselos sería inventar una regla.
+    /// </summary>
+    [Fact]
+    public void EscenarioBNoExigeTituloJuridicoNiPrecioDeCompraventa()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB());
+
+        Codigos(outcome.Blocking).Should().NotContain(TransferValidationCodes.TituloJuridicoDeclarado);
+        Codigos(outcome.Blocking).Should().NotContain(TransferValidationCodes.PrecioCompraventa);
+    }
+
+    /// <summary>
+    /// VB-B-06 — el art. 5.3.2.2 NO exime lo fiscal (hallazgo del dictamen, §6.3). Y no aparecen los
+    /// avisos de RTM ni de QR/improntas, que sí están exentos.
+    /// </summary>
+    [Fact]
+    public void EscenarioB_EmiteElAvisoFiscalYNoLosDeRtmNiImprontas()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioB());
+
+        var aviso = outcome.Advisories.Single(
+            i => i.Code == TransferValidationCodes.CargasFiscalesEnLeasing);
+
+        aviso.Message.Should().Contain("no exime el numeral 5");
+        Codigos(outcome.Advisories).Should().NotContain(TransferValidationCodes.RtmVigenteC);
+        Codigos(outcome.Advisories).Should().NotContain(TransferValidationCodes.QrGuarismosImprontas);
+        Codigos(outcome.Advisories).Should().NotContain(TransferValidationCodes.AdquirenteEnRunt);
+    }
+
+    // ── Escenario C — sin exenciones (art. 5.3.2.1 íntegro) ────────────────────────────
+
+    [Fact]
+    public void PayloadValidoDeEscenarioC_NoBloquea()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioC());
+
+        outcome.IsBlocked.Should().BeFalse();
+    }
+
+    /// <summary>VB-C-01 — si el adquirente es el locatario histórico, la operación es la del B.</summary>
+    [Fact]
+    public void EscenarioCConElLocatarioHistoricoComoAdquirente_BloqueaConVbC01()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioC(
+            adquirente: TransferTestData.Adquirente("901555444"),
+            leasing: TransferTestData.Leasing()));
+
+        outcome.Blocking.Single(i => i.Code == TransferValidationCodes.AdquirenteNoEsElLocatario)
+            .Field.Should().Be("adquirente.numeroDoc");
+    }
+
+    /// <summary>
+    /// El escenario C no hereda exenciones: emite los avisos de RTM y de QR/improntas, que el
+    /// escenario B no tiene.
+    /// </summary>
+    [Fact]
+    public void EscenarioC_EmiteLosAvisosPlenosDelArticulo5321()
+    {
+        var outcome = TransferValidationPolicy.Evaluate(TransferTestData.ComandoEscenarioC());
+
+        Codigos(outcome.Advisories).Should().Contain(
+        [
+            TransferValidationCodes.AdquirenteEnRuntC,
+            TransferValidationCodes.SoatVigenteC,
+            TransferValidationCodes.RtmVigenteC,
+            TransferValidationCodes.SinMedidasJudicialesC,
+            TransferValidationCodes.QrGuarismosImprontas,
+            TransferValidationCodes.RetencionEnLaFuenteC,
+            TransferValidationCodes.DerechosDeTramiteC,
+            TransferValidationCodes.ImpuestoVehiculoC,
+        ]);
+
+        Codigos(outcome.Advisories).Should().NotContain(TransferValidationCodes.CargasFiscalesEnLeasing);
+    }
+
+    /// <summary>
+    /// Ningún mensaje de las VB nuevas refleja el valor capturado (CF-09), tampoco los del régimen ni
+    /// los del leasing.
+    /// </summary>
+    [Fact]
+    public void LosMensajesDeLasVbNuevas_NoReflejanElValorCapturado()
+    {
+        var comando = TransferTestData.ComandoEscenarioB(
+            leasing: TransferTestData.Leasing(
+                esEntidadFinanciera: false,
+                contrato: null,
+                tipoOpcion: "PACTADA-SECRETA",
+                locatarioNombre: null,
+                locatarioNoDoc: "9995551111"),
+            negocio: TransferTestData.NegocioSinPrecio() with { PrecioNumeros = "77.777.777" });
+
+        var mensajes = TransferValidationPolicy.Evaluate(comando).Blocking
+            .Select(i => i.Message)
+            .ToList();
+
+        foreach (var mensaje in mensajes)
+        {
+            mensaje.Should().NotContain("PACTADA-SECRETA");
+            mensaje.Should().NotContain("9995551111");
+            mensaje.Should().NotContain("77.777.777");
+        }
     }
 }

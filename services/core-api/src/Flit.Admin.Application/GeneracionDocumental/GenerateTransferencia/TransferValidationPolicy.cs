@@ -32,7 +32,7 @@ public static class TransferValidationCodes
     public const string TransferentePjEnRues = "VB-04";          // advisory
     public const string EscenarioUnico = "VB-05";                // bloqueante
     public const string PartesDistintas = "VB-06";               // bloqueante
-    public const string RegimenAplicable = "VB-07";              // bloqueante — HU-06, NO en esta HU
+    public const string RegimenAplicable = "VB-07";              // bloqueante — gate previo (§4.0)
 
     // §6.2 — escenario A.
     public const string AdquirenteEnRunt = "VB-A-01";            // advisory
@@ -45,6 +45,33 @@ public static class TransferValidationCodes
     public const string RetencionEnLaFuente = "VB-A-08";         // advisory
     public const string DerechosDeTramite = "VB-A-09";           // advisory
     public const string ImpuestoVehiculo = "VB-A-10";            // advisory
+
+    // §6.3 — escenario B (transferencia unilateral de leasing, art. 5.3.2.2).
+    public const string TransferenteEsEntidadFinanciera = "VB-B-01";   // bloqueante
+    public const string ContratoDeLeasingDeclarado = "VB-B-02";       // bloqueante
+    public const string TipoOpcionDeCompraDeclarado = "VB-B-03";      // bloqueante
+    public const string LocatarioDestinatarioDeclarado = "VB-B-04";   // bloqueante
+    public const string SinPrecioEnEscenarioB = "VB-B-05";            // bloqueante
+    public const string CargasFiscalesEnLeasing = "VB-B-06";          // advisory
+
+    // §6.4 — escenario C (entidad financiera a tercero, art. 5.3.2.1 SIN exenciones).
+    public const string AdquirenteNoEsElLocatario = "VB-C-01";        // bloqueante
+    public const string AdquirenteEnRuntC = "VB-C-02";                // advisory
+    public const string SoatVigenteC = "VB-C-03";                     // advisory
+    public const string RtmVigenteC = "VB-C-04";                      // advisory
+    public const string SinMedidasJudicialesC = "VB-C-05";            // advisory
+    public const string QrGuarismosImprontas = "VB-C-06";             // advisory
+
+    /// <summary>
+    /// VB-C-07 — se comprueba sobre la PLANTILLA del escenario C, no sobre el formulario: el
+    /// documento no puede invocar exenciones del art. 5.3.2.2 porque el tercero no las hereda. Lo
+    /// verifica el generador (<c>TransferEscenarioC.VerificarSinExenciones</c>) antes de emitir.
+    /// </summary>
+    public const string SinExencionesDelArticulo5322 = "VB-C-07";     // bloqueante — de plantilla
+
+    public const string RetencionEnLaFuenteC = "VB-C-08";             // advisory
+    public const string DerechosDeTramiteC = "VB-C-09";               // advisory
+    public const string ImpuestoVehiculoC = "VB-C-10";                // advisory
 }
 
 /// <summary>
@@ -58,9 +85,14 @@ public static class TransferValidationCodes
 /// confirmarlas y quien las verifica es el Organismo de Tránsito al recibir el trámite, así que se
 /// emiten SIEMPRE como aviso y jamás impiden generar (§6, párrafo introductorio).</para>
 ///
-/// <para><b>VB-07 no está aquí.</b> El control de régimen aplicable con las once condiciones de los
-/// arts. 5.3.2.3 a 5.3.2.13 es alcance de HU-06; el código se declara arriba para que HU-06 lo
-/// añada a esta misma política sin renombrar nada.</para>
+/// <para><b>VB-07 es un gate previo, no una validación más.</b> El anexo §4.0 lo coloca ANTES de
+/// elegir escenario: mientras el usuario no declare que ninguna de las once condiciones especiales
+/// de los arts. 5.3.2.3 a 5.3.2.13 aplica, no hay documento. Por eso el silencio bloquea igual que
+/// la declaración afirmativa: «no respondió» no es «no aplica».</para>
+
+/// <para><b>Las VB propias de cada escenario se evalúan solo en su escenario.</b> Exigirle a un
+/// payload de escenario B el título jurídico del art. 5.3.2.1 sería inventar un requisito que la
+/// norma no impone al acto unilateral, y exigirle a A el contrato de leasing, otro tanto.</para>
 /// </summary>
 public static class TransferValidationPolicy
 {
@@ -84,9 +116,34 @@ public static class TransferValidationPolicy
         EvaluateEscenario(command, blocking);
         EvaluatePlaca(command, blocking);
         EvaluatePartes(command, blocking);
-        EvaluateTituloYPrecio(command, blocking);
-        EvaluateGravamen(command, blocking);
-        CollectAdvisories(command, advisories);
+        EvaluateRegimenAplicable(command, blocking);
+
+        var escenario = command.SingleScenario;
+
+        switch (escenario)
+        {
+            case TransferScenario.TraspasoOrdinario:
+                EvaluateTituloYPrecio(command, blocking);
+                EvaluateGravamen(command, blocking);
+                break;
+
+            case TransferScenario.UnilateralLeasing:
+                EvaluateLeasingUnilateral(command, blocking);
+                break;
+
+            case TransferScenario.FinancieraATercero:
+                EvaluateTituloYPrecio(command, blocking);
+                EvaluateGravamen(command, blocking);
+                EvaluateTerceroNoEsLocatario(command, blocking);
+                break;
+
+            default:
+                // Sin escenario único no hay reglas aplicables: VB-05 ya bloqueó y añadir errores de
+                // un escenario que el usuario no eligió solo ensuciaría el 422.
+                break;
+        }
+
+        CollectAdvisories(command, escenario, advisories);
 
         return new TransferValidationOutcome(blocking, advisories);
     }
@@ -218,12 +275,204 @@ public static class TransferValidationPolicy
     }
 
     /// <summary>
-    /// Prevalidaciones VA (§6.1 y §6.2). Se emiten SIEMPRE: este módulo no tiene interoperabilidad
-    /// en vivo con RUNT, RUES, SOAT ni SIMIT para el documento de transferencia, así que el estado
-    /// honesto de todas es «pendiente de verificación por el Organismo de Tránsito».
+    /// VB-07 — <b>gate de régimen aplicable</b> (anexo §4.0, §11 y §13.1). Bloquea en dos casos, y
+    /// los dos son deliberados:
+    ///
+    /// <para>(1) El usuario declaró al menos una de las <b>once</b> condiciones especiales de los
+    /// arts. 5.3.2.3 a 5.3.2.13: la operación no se rige por el art. 5.3.2.1 y exige soportes o
+    /// exenciones propios de su artículo que este documento no captura, no declara y no puede
+    /// acreditar. Se emite un error por condición declarada, <b>citando su artículo</b>: un mensaje
+    /// genérico obligaría al usuario a adivinar por cuál de las once se le rechazó.</para>
+    ///
+    /// <para>(2) El usuario no respondió el control. El anexo lo pone antes de elegir escenario y el
+    /// checklist §13.1 exige que la declaración «fue respondida»; tratar el silencio como un «no
+    /// aplica» convertiría el gate en una casilla decorativa que el cliente podría omitir.</para>
+    ///
+    /// <para><b>El art. 5.3.2.14 no participa de esta matriz</b> (expedición de la nueva licencia de
+    /// tránsito): es el paso final común a todo traspaso, no una condición especial. No está en
+    /// <c>TransferSpecialRegime.All</c> y por eso un código que lo nombre no bloquea por sí mismo.</para>
+    /// </summary>
+    private static void EvaluateRegimenAplicable(
+        GenerateTransferenciaCommand command,
+        List<TransferValidationIssue> blocking)
+    {
+        var declaracion = command.RegimenAplicable;
+
+        var condiciones = (declaracion?.CondicionesDeclaradas ?? [])
+            .Select(TransferSpecialRegime.Find)
+            .Where(c => c is not null)
+            .Select(c => c!)
+            .DistinctBy(c => c.Codigo)
+            .ToList();
+
+        if (condiciones.Count > 0)
+        {
+            foreach (var condicion in condiciones)
+            {
+                blocking.Add(new TransferValidationIssue(
+                    TransferValidationCodes.RegimenAplicable,
+                    "regimenAplicable",
+                    $"La operación declarada corresponde a un traspaso especial del {condicion.Articulo} "
+                    + $"({condicion.Titulo}): ese trámite exige requisitos y soportes adicionales que "
+                    + "este módulo no produce ni acredita. Adelántelo por la vía especial de ese "
+                    + "artículo, con los soportes propios de la norma."));
+            }
+
+            return;
+        }
+
+        if (declaracion?.NingunaAplica != true)
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.RegimenAplicable,
+                "regimenAplicable",
+                "Debe declararse el régimen aplicable a la operación antes de generar: si ninguna de "
+                + "las once condiciones especiales de traspaso de los arts. 5.3.2.3 a 5.3.2.13 aplica, "
+                + "debe indicarse expresamente."));
+        }
+    }
+
+    /// <summary>
+    /// VB-B-01 a VB-B-05 — escenario B (anexo §6.3). El acto del art. 5.3.2.2 solo puede otorgarlo
+    /// una entidad financiera propietaria registrada, sobre un contrato de leasing identificado, con
+    /// una causal del catálogo y a favor de un destinatario declarado.
+    ///
+    /// <para><b>VB-B-05 no es una validación de rango, es una prohibición de campo.</b> El acto es
+    /// unilateral y no hay precio entre las partes del instrumento (§10 regla #3): el formulario no
+    /// ofrece el campo y, si el cuerpo lo trae de todos modos, se rechaza en vez de ignorarlo —un
+    /// precio silenciosamente descartado dejaría al usuario creyendo que quedó en el documento—.</para>
+    /// </summary>
+    private static void EvaluateLeasingUnilateral(
+        GenerateTransferenciaCommand command,
+        List<TransferValidationIssue> blocking)
+    {
+        var leasing = command.Leasing;
+
+        if (leasing?.TransferenteEsEntidadFinanciera != true)
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.TransferenteEsEntidadFinanciera,
+                "leasing.transferenteEsEntidadFinanciera",
+                "La transferencia unilateral del art. 5.3.2.2 solo puede otorgarla un establecimiento "
+                + "bancario, una compañía de financiamiento o una compañía de leasing: debe declararse "
+                + "esa calidad del transferente."));
+        }
+
+        if (string.IsNullOrWhiteSpace(leasing?.NoContratoLeasing))
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.ContratoDeLeasingDeclarado,
+                "leasing.noContratoLeasing",
+                "Debe declararse el número del contrato de leasing que soporta la transferencia "
+                + "(art. 5.3.2.2 párrafo 1.º)."));
+        }
+
+        if (!TransferPurchaseOption.IsKnown(leasing?.TipoOpcionCompra?.Trim().ToUpperInvariant()))
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.TipoOpcionDeCompraDeclarado,
+                "leasing.tipoOpcionCompra",
+                "El tipo de causal debe ser uno del catálogo: opción de compra EJERCIDA, AUTOMATICA o "
+                + "TERMINACION_CONTRATO. De él dependen los soportes que exige el art. 5.3.2.2, "
+                + "Parágrafo 1.º."));
+        }
+
+        if (string.IsNullOrWhiteSpace(leasing?.LocatarioNombre))
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.LocatarioDestinatarioDeclarado,
+                "leasing.locatarioNombre",
+                "Debe declararse el nombre o la razón social del locatario destinatario de la "
+                + "transferencia unilateral."));
+        }
+
+        if (string.IsNullOrWhiteSpace(leasing?.LocatarioNoDoc))
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.LocatarioDestinatarioDeclarado,
+                "leasing.locatarioNoDoc",
+                "Debe declararse el número de documento del locatario destinatario de la "
+                + "transferencia unilateral."));
+        }
+
+        // §10 regla #1 — el locatario es el destinatario, jamás el origen del acto unilateral.
+        var transferente = Normalize(command.Transferente?.NumeroDoc);
+        var locatario = Normalize(leasing?.LocatarioNoDoc);
+
+        if (transferente is not null && transferente == locatario)
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.LocatarioDestinatarioDeclarado,
+                "leasing.locatarioNoDoc",
+                "El locatario destinatario no puede ser la misma entidad transferente: en el "
+                + "art. 5.3.2.2 el locatario recibe el dominio, no lo transfiere."));
+        }
+
+        EvaluatePrecioProhibido(command, blocking);
+    }
+
+    /// <summary>VB-B-05 — ningún campo de precio ni de contraprestación viaja en el escenario B.</summary>
+    private static void EvaluatePrecioProhibido(
+        GenerateTransferenciaCommand command,
+        List<TransferValidationIssue> blocking)
+    {
+        (string Campo, string? Valor)[] prohibidos =
+        [
+            ("negocio.precioLetras", command.Negocio?.PrecioLetras),
+            ("negocio.precioNumeros", command.Negocio?.PrecioNumeros),
+            ("negocio.contraprestacionDescripcion", command.Negocio?.ContraprestacionDescripcion),
+        ];
+
+        foreach (var (campo, _) in prohibidos.Where(p => !string.IsNullOrWhiteSpace(p.Valor)))
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.SinPrecioEnEscenarioB,
+                campo,
+                "La transferencia unilateral del art. 5.3.2.2 es un acto unilateral y no declara "
+                + "precio ni contraprestación entre las partes del instrumento: este campo no "
+                + "corresponde al escenario B."));
+        }
+    }
+
+    /// <summary>
+    /// VB-C-01 — el adquirente del escenario C no puede ser el locatario histórico. Si lo es, la
+    /// operación es la del art. 5.3.2.2 y debe reclasificarse al escenario B (anexo §11): emitirla
+    /// como C le negaría al locatario las exenciones que la norma sí le concede.
+    ///
+    /// <para>Solo se comprueba cuando el documento del locatario histórico se declaró: FLIT no
+    /// conoce el contrato de leasing y no puede inventarse la comparación.</para>
+    /// </summary>
+    private static void EvaluateTerceroNoEsLocatario(
+        GenerateTransferenciaCommand command,
+        List<TransferValidationIssue> blocking)
+    {
+        var locatario = Normalize(command.Leasing?.LocatarioNoDoc);
+        var adquirente = Normalize(command.Adquirente?.NumeroDoc);
+
+        if (locatario is not null && locatario == adquirente)
+        {
+            blocking.Add(new TransferValidationIssue(
+                TransferValidationCodes.AdquirenteNoEsElLocatario,
+                "adquirente.numeroDoc",
+                "El adquirente coincide con el locatario histórico declarado: la operación es la "
+                + "transferencia unilateral del art. 5.3.2.2 y debe emitirse como escenario B."));
+        }
+    }
+
+    /// <summary>
+    /// Prevalidaciones VA (§6.1, §6.2, §6.3 y §6.4). Se emiten SIEMPRE: este módulo no tiene
+    /// interoperabilidad en vivo con RUNT, RUES, SOAT ni SIMIT para el documento de transferencia,
+    /// así que el estado honesto de todas es «pendiente de verificación por el Organismo de
+    /// Tránsito».
+    ///
+    /// <para><b>Los avisos son los del escenario elegido.</b> El escenario B no lleva los de RTM ni
+    /// QR/improntas —el art. 5.3.2.2 los exime— pero sí los fiscales (VB-B-06): sus cinco exenciones
+    /// son RTM, QR/improntas, paz y salvo, presentación del locatario y firma del FUR, y ninguna
+    /// toca el numeral 5.º del art. 5.3.2.1. El escenario C no hereda ninguna exención.</para>
     /// </summary>
     private static void CollectAdvisories(
         GenerateTransferenciaCommand command,
+        string? escenario,
         List<TransferValidationIssue> advisories)
     {
         advisories.Add(new TransferValidationIssue(
@@ -245,6 +494,29 @@ public static class TransferValidationPolicy
                 + "Tránsito; no se exige certificado físico (art. 5.1.5)."));
         }
 
+        switch (escenario)
+        {
+            case TransferScenario.TraspasoOrdinario:
+                CollectAdvisoriesEscenarioA(command, advisories);
+                break;
+
+            case TransferScenario.UnilateralLeasing:
+                CollectAdvisoriesEscenarioB(advisories);
+                break;
+
+            case TransferScenario.FinancieraATercero:
+                CollectAdvisoriesEscenarioC(command, advisories);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private static void CollectAdvisoriesEscenarioA(
+        GenerateTransferenciaCommand command,
+        List<TransferValidationIssue> advisories)
+    {
         advisories.Add(new TransferValidationIssue(
             TransferValidationCodes.AdquirenteEnRunt,
             "adquirente.numeroDoc",
@@ -271,10 +543,7 @@ public static class TransferValidationPolicy
         advisories.Add(new TransferValidationIssue(
             TransferValidationCodes.SoatVigente,
             "vehiculo.placa",
-            EsRemolque(command.Vehiculo?.ClaseVehiculo)
-                ? "En remolques y semirremolques la exigibilidad del SOAT la resuelve el Organismo de "
-                  + "Tránsito: el art. 5.3.2.1 no consagra exención textual."
-                : "La vigencia del SOAT la verifica el Organismo de Tránsito."));
+            SoatMensaje(command)));
 
         advisories.Add(new TransferValidationIssue(
             TransferValidationCodes.RetencionEnLaFuente,
@@ -301,6 +570,91 @@ public static class TransferValidationPolicy
                 + "ante la entidad territorial (art. 5.3.2.1 numeral 5.º)."));
         }
     }
+
+    /// <summary>
+    /// VB-B-06 — el hallazgo del dictamen: <b>el art. 5.3.2.2 NO exime lo fiscal</b>. Sus cinco
+    /// exenciones son RTM, QR/improntas, paz y salvo, presentación del locatario y firma del FUR; el
+    /// numeral 5.º del art. 5.3.2.1 —retención en la fuente, impuesto y derechos del trámite— sigue
+    /// verificándose. Por eso el escenario B emite este aviso y no una lista vacía.
+    /// </summary>
+    private static void CollectAdvisoriesEscenarioB(List<TransferValidationIssue> advisories)
+    {
+        advisories.Add(new TransferValidationIssue(
+            TransferValidationCodes.CargasFiscalesEnLeasing,
+            "vehiculo.placa",
+            "El art. 5.3.2.2 no exime el numeral 5.º del art. 5.3.2.1: el Organismo de Tránsito "
+            + "verifica el pago de la retención en la fuente, del impuesto sobre vehículos y de los "
+            + "derechos del trámite. Sus cinco exenciones son revisión técnico-mecánica, "
+            + "QR/certificación/improntas, paz y salvo de infracciones, presentación del locatario y "
+            + "firma del Formato Único."));
+    }
+
+    private static void CollectAdvisoriesEscenarioC(
+        GenerateTransferenciaCommand command,
+        List<TransferValidationIssue> advisories)
+    {
+        advisories.Add(new TransferValidationIssue(
+            TransferValidationCodes.AdquirenteEnRuntC,
+            "adquirente.numeroDoc",
+            "La inscripción del adquirente en el RUNT la verifica el Organismo de Tránsito."));
+
+        advisories.Add(new TransferValidationIssue(
+            TransferValidationCodes.SoatVigenteC,
+            "vehiculo.placa",
+            SoatMensaje(command)));
+
+        advisories.Add(new TransferValidationIssue(
+            TransferValidationCodes.RtmVigenteC,
+            "vehiculo.placa",
+            "La revisión técnico-mecánica debe estar vigente para el tipo de vehículo: el adquirente "
+            + "no es el locatario y NO hereda la exención del art. 5.3.2.2. La verifica el Organismo "
+            + "de Tránsito."));
+
+        advisories.Add(new TransferValidationIssue(
+            TransferValidationCodes.SinMedidasJudicialesC,
+            "vehiculo.placa",
+            "La ausencia de medidas judiciales que impidan el traspaso la verifica el Organismo de "
+            + "Tránsito en el RUNT (art. 5.3.2.1 numeral 3.º)."));
+
+        advisories.Add(new TransferValidationIssue(
+            TransferValidationCodes.QrGuarismosImprontas,
+            "vehiculo.noChasis",
+            "La imagen del código QR, la certificación de guarismos o las improntas se exigen sin "
+            + "exención (art. 5.3.2.1 numeral 1.º): las verifica el Organismo de Tránsito."));
+
+        advisories.Add(new TransferValidationIssue(
+            TransferValidationCodes.RetencionEnLaFuenteC,
+            "negocio.asumeRetencionFuente",
+            "El pago de la retención en la fuente por la enajenación lo acredita el interesado ante el "
+            + "Organismo de Tránsito con copia de los recibos; FLIT no lo liquida ni lo verifica "
+            + "(art. 5.3.2.1 numeral 5.º)."));
+
+        advisories.Add(new TransferValidationIssue(
+            TransferValidationCodes.DerechosDeTramiteC,
+            "negocio.asumeDerechosTramite",
+            "El pago de los derechos del trámite —Ministerio de Transporte, tarifa RUNT y derechos del "
+            + "Organismo de Tránsito— lo valida el Organismo de Tránsito en el RUNT "
+            + "(art. 5.3.2.1 numeral 5.º)."));
+
+        if (!EsRemolque(command.Vehiculo?.ClaseVehiculo))
+        {
+            advisories.Add(new TransferValidationIssue(
+                TransferValidationCodes.ImpuestoVehiculoC,
+                "negocio.asumeImpuestoVehiculo",
+                "El pago del impuesto sobre vehículos automotores lo verifica el Organismo de Tránsito "
+                + "ante la entidad territorial (art. 5.3.2.1 numeral 5.º)."));
+        }
+    }
+
+    /// <summary>
+    /// Mensaje del aviso de SOAT. En remolques y semirremolques la no exigibilidad la resuelve el OT
+    /// y <b>no</b> se invoca la Ley 488/1998, que en el art. 5.3.2.1 exime impuesto y no SOAT.
+    /// </summary>
+    private static string SoatMensaje(GenerateTransferenciaCommand command) =>
+        EsRemolque(command.Vehiculo?.ClaseVehiculo)
+            ? "En remolques y semirremolques la exigibilidad del SOAT la resuelve el Organismo de "
+              + "Tránsito: el art. 5.3.2.1 no consagra exención textual."
+            : "La vigencia del SOAT la verifica el Organismo de Tránsito.";
 
     /// <summary>Remolque o semirremolque por la clase declarada. «SEMIRREMOLQUE» contiene «REMOLQUE».</summary>
     public static bool EsRemolque(string? claseVehiculo) =>
