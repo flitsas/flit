@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
 import {
@@ -52,6 +52,7 @@ import { tramitesExportFields } from '@/lib/tramites/tramites-table-columns';
 import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
+  marcasDe,
   stepLabel,
   tramiteLabel,
   vehiculo,
@@ -252,8 +253,48 @@ function shortDate(iso: string): string {
 // visibles, y tanto la cabecera como cada fila lo reciben ya calculado: quedan alineadas por
 // construcción sin importar cuántas columnas se oculten.
 
-/** Filas por página en el listado (paginación client-side sobre `filtered`). */
-const PAGE_SIZE = 10;
+/**
+ * HU #12188 — tamaños de página que ofrece el selector, y el de arranque.
+ *
+ * <p>Hasta esta HU la tabla hacía UNA llamada de 200 filas y paginaba en memoria. Con 5.000
+ * trámites llegaban 200 y punto: cambiar de página no volvía a pedir nada, y la búsqueda filtraba
+ * sobre esas 200 —devolviendo «sin resultados» para trámites que sí existen— mientras los
+ * contadores de estado, que sí salían del servidor, reportaban el universo completo. La pantalla
+ * se contradecía sola.</p>
+ *
+ * <p>El tope de 100 no es una preferencia: es el techo que admite el endpoint por página razonable.
+ * Pedir más no acerca a nadie a su trámite —para eso están los filtros y la búsqueda— y sí alarga
+ * cada carga.</p>
+ */
+const TAMANOS_DE_PAGINA = [10, 25, 50, 100] as const;
+const PAGE_SIZE_POR_DEFECTO = 10;
+
+/**
+ * Dónde se recuerda el tamaño de página. El requerimiento pide «durante la sesión», así que va en
+ * `sessionStorage` y no en la preferencia de usuario del servidor: es una comodidad del rato, no
+ * una decisión que deba seguir a la persona a otro equipo. Se lee con guarda porque en una ventana
+ * privada el acceso puede lanzar.
+ */
+const CLAVE_PAGE_SIZE = 'tramites.pageSize';
+
+/**
+ * `useSyncExternalStore` exige una suscripción; aquí no hay ninguna a la que suscribirse —
+ * `sessionStorage` solo lo cambia esta misma pantalla, y cuando lo hace ya actualiza su estado.
+ */
+function suscripcionInerte(): () => void {
+  return () => {};
+}
+
+function leerPageSizeGuardado(): number {
+  try {
+    const guardado = Number(sessionStorage.getItem(CLAVE_PAGE_SIZE));
+    return TAMANOS_DE_PAGINA.includes(guardado as (typeof TAMANOS_DE_PAGINA)[number])
+      ? guardado
+      : PAGE_SIZE_POR_DEFECTO;
+  } catch {
+    return PAGE_SIZE_POR_DEFECTO;
+  }
+}
 
 interface TramitesTableProps {
   /** Cambia (incrementa) para forzar un refetch — p. ej. al volver del wizard. */
@@ -278,8 +319,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     traspaso: false,
   });
 
-  // Filtros client-side.
+  // Lo que el gestor está tecleando, y lo que ya se le pidió al servidor.
   const [search, setSearch] = useState('');
+  /**
+   * HU #12188 — el texto que de verdad viaja en la consulta, con un respiro tras la última tecla.
+   *
+   * <p>La búsqueda dejó de resolverse en el navegador, así que cada tecla sería una consulta: para
+   * escribir «KYU631» irían seis, y las cinco primeras se descartan al llegar. El respiro no es una
+   * optimización cosmética — sin él, la respuesta de una búsqueda a medias puede llegar DESPUÉS de
+   * la completa y pintar un resultado que ya no corresponde a lo que se ve en el campo.</p>
+   */
+  const [busquedaAplicada, setBusquedaAplicada] = useState('');
   // Selector de modalidad del botón general "Nuevo trámite". La modalidad elegida se guarda
   // aparte del filtro `modalidad` del listado: son cosas distintas (crear vs filtrar).
   // ADR-0050 — el campo `modalidad` de la fila transporta ya la FAMILIA del tipo.
@@ -415,12 +465,38 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  // Paginación client-side (1-based).
+  // Paginación contra el SERVIDOR (1-based): `page` y `pageSize` viajan como `skip`/`take`.
   const [page, setPage] = useState(1);
+  /** Total del universo filtrado, tal y como lo cuenta el servidor. */
+  const [total, setTotal] = useState(0);
+
+  /**
+   * El tamaño de página: lo que el gestor eligió en ESTA pantalla, y si no, lo que dejó guardado.
+   *
+   * <p>El guardado se lee con `useSyncExternalStore` y no en el inicializador de un `useState`
+   * porque `sessionStorage` no existe en el render del servidor: leerlo ahí daría una hidratación
+   * distinta a la del cliente. Es el primitivo previsto para esto —tiene una lectura para el
+   * servidor y otra para el cliente— y evita tener que arreglarlo después con un efecto.</p>
+   */
+  const pageSizeGuardado = useSyncExternalStore(
+    suscripcionInerte,
+    leerPageSizeGuardado,
+    () => PAGE_SIZE_POR_DEFECTO,
+  );
+  const [pageSizeElegido, setPageSizeElegido] = useState<number | null>(null);
+  const pageSize = pageSizeElegido ?? pageSizeGuardado;
   /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
   // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  // El respiro tras la última tecla. 350 ms es el rango en que una pausa se lee como «terminé de
+  // escribir» sin que la tabla se sienta perezosa.
+  useEffect(() => {
+    // El setState va dentro del temporizador, no en el cuerpo del efecto: es diferido.
+    const id = setTimeout(() => setBusquedaAplicada(search), 350);
+    return () => clearTimeout(id);
+  }, [search]);
 
   // HU #12107 — catálogo de campos filtrables. Degrada con elegancia: si no carga, la tabla se
   // pinta igual con su listado y la barra ofrece reintentar (AC7). Nunca bloquea el render.
@@ -527,6 +603,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     // tenant grande la respuesta era incompleta y nada lo delataba.
     if (estado) query.estado = estado;
     if (modalidad) query.modalidad = modalidad;
+    // HU #12187/#12188 — la búsqueda libre y el marcado prioritario también van al servidor. En el
+    // cliente miraban solo las filas traídas: la búsqueda devolvía «sin resultados» para trámites
+    // que sí existen, y el prioritario, con paginación real, habría pasado de mirar 200 filas a
+    // mirar las diez de la página a la vista.
+    if (busquedaAplicada.trim()) query.busqueda = busquedaAplicada.trim();
+    if (soloPrioritarios) query.prioritario = true;
     if (appliedCreatedFrom.trim()) query.createdFrom = appliedCreatedFrom.trim();
     if (appliedCreatedTo.trim()) query.createdTo = appliedCreatedTo.trim();
     if (appliedUpdatedFrom.trim()) query.updatedFrom = appliedUpdatedFrom.trim();
@@ -542,8 +624,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     appliedCreatedTo,
     appliedUpdatedFrom,
     appliedUpdatedTo,
+    busquedaAplicada,
     estado,
     modalidad,
+    soloPrioritarios,
     sortBy,
     sortDir,
   ]);
@@ -552,9 +636,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setLoading(true);
     setError(null);
     try {
-      // Siempre con paginación: el camino POST no tiene ruta histórica que evitar, y sin `take` el
-      // servidor devolvería su tope por defecto sin decir cuántos hay en total.
-      const query = { ...buildListQuery(), take: SERVER_LIST_TAKE, skip: 0 };
+      // HU #12188 — se pide LA PÁGINA, no una ventana fija. Antes iba `take: 200, skip: 0` y la
+      // tabla paginaba en memoria: con más de 200 trámites, las páginas siguientes sencillamente
+      // no existían.
+      const query = { ...buildListQuery(), take: pageSize, skip: (page - 1) * pageSize };
       // Las dos llamadas van en paralelo: la tabla y la tira de KPIs son independientes y
       // encadenarlas solo sumaría latencia. Los conteos no pueden salir de `data` — esa es la
       // PÁGINA, y la tira habla del universo entero.
@@ -563,13 +648,21 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         tramitesClient.searchEstadoCounts(query),
       ]);
       setItems(page1.items);
+      setTotal(page1.total);
       setEstadoCounts(counts);
+
+      // Red de seguridad: si el universo encogió por debajo de la página en la que estaba el gestor
+      // —al volver del asistente, o porque otro usuario cerró trámites— la respuesta llega vacía y
+      // la tabla diría «sin resultados» estando llena. Los once puntos que cambian un criterio ya
+      // vuelven a la página 1; esto cubre lo que cambia SIN que nadie toque un filtro.
+      const ultimaPagina = Math.max(1, Math.ceil(page1.total / pageSize));
+      if (page > ultimaPagina) setPage(ultimaPagina);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
-  }, [buildListQuery]);
+  }, [buildListQuery, page, pageSize]);
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -600,43 +693,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     return c;
   }, [estadoCounts]);
 
-  // Filtrado en cadena de lo que SIGUE siendo de cliente: búsqueda libre y prioritarios. La
-  // compañía se fue al servidor como un filtro más del catálogo (grupo «Alcance»): aquí solo podía
-  // mirar la página traída y ofrecer las compañías que aparecieran en ella, así que escondía filas
-  // en vez de acotar el listado, y el total y los contadores seguían contando las escondidas.
-  // Estado y familia ya no están aquí — los resuelve el servidor (ver `load`), que es lo único que
-  // puede verlos sobre el universo completo en vez de sobre la página traída.
-  /**
-   * Los criterios que NO viajan al servidor. Se aplican fila a fila, así que valen igual sobre la
-   * página que se está pintando y sobre cada página que trae el export (HU #12104) — que es la
-   * razón de que sea un predicado suelto y no un `filter` incrustado en el `useMemo`. Si el export
-   * no lo reaplicara, el Excel traería filas que la pantalla está escondiendo.
-   */
-  const coincideEnCliente = useCallback(
-    (item: InstanceSummary) => {
-      const q = search.trim().toLowerCase();
-      if (q) {
-        const haystack = [
-          item.placa,
-          item.vin,
-          item.referenceNumber,
-          item.compradorNombre,
-          item.vendedorNombre,
-          item.organismoTransito,
-          item.companiaNombre,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-      if (soloPrioritarios && !item.prioritario) return false;
-      return true;
-    },
-    [search, soloPrioritarios],
-  );
-
-  const filtered = useMemo(() => items.filter(coincideEnCliente), [items, coincideEnCliente]);
+  // HU #12188 — YA NO QUEDA NINGÚN FILTRO EN EL CLIENTE.
+  //
+  // Los tres que sobrevivían aquí se fueron al servidor por la misma razón, en tres tandas: la
+  // compañía (filtro del catálogo), el estado y la familia, y ahora la búsqueda libre y el
+  // marcado prioritario. Un filtro aplicado sobre las filas ya traídas no responde «los borradores
+  // del tenant» sino «los borradores que cupieron», que es una respuesta distinta y silenciosamente
+  // incompleta — y con paginación real habría empeorado: la ventana pasa de 200 filas a las diez de
+  // la página a la vista.
+  //
+  // La consecuencia para la exportación es que ya no tiene nada que reaplicar: lo que el servidor
+  // devuelve ES lo que la pantalla muestra.
 
   /**
    * HU #12104 — descarga a Excel de TODO lo que cumple los filtros, no de la página a la vista.
@@ -681,9 +748,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         take: SERVER_LIST_TAKE,
       });
 
-      // El `total` del servidor es el universo que cumple los filtros SERVER-SIDE. Los tres que solo
-      // viven en cliente (búsqueda libre, compañía y prioritarios) se reaplican página a página, así
-      // que lo exportado puede ser menos — por eso el aviso final cuenta filas REALES y no el total.
+      // Desde la HU #12188 no queda ningún filtro en el cliente: el `total` del servidor ES el
+      // universo exportado, y no hay nada que reaplicar página a página. El aviso sigue contando
+      // filas REALES —es lo honesto— pero ya no puede diferir del total por filtros escondidos.
       const { exportadas, archivos } = await exportarPorLotes<InstanceSummary>({
         total: primeraPagina.total,
         pageSize: SERVER_LIST_TAKE,
@@ -698,7 +765,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                     take: pageSize,
                   })
                 ).items;
-          return filas.filter(coincideEnCliente);
+          return filas;
         },
         volcar: (lote, parte) => {
           download(
@@ -725,7 +792,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     } finally {
       setExporting(false);
     }
-  }, [buildListQuery, coincideEnCliente, effectiveColumns]);
+  }, [buildListQuery, effectiveColumns]);
 
 
   // HU #10536 — sin orden explicito por columna, el backend devuelve los prioritarios primero. Al
@@ -735,20 +802,19 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // backend. Con un orden explicito por cabecera (`sortBy`) NO se reordena: ahi manda lo que pidio
   // el usuario, y colar los prioritarios arriba contradiria la columna que acaba de elegir.
   const ordenados = useMemo(() => {
-    if (sortBy) return filtered;
-    return [...filtered].sort(
+    if (sortBy) return items;
+    return [...items].sort(
       (a, b) => Number(b.prioritario ?? false) - Number(a.prioritario ?? false),
     );
-  }, [filtered, sortBy]);
+  }, [items, sortBy]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  // Página segura: si los filtros/refetch reducen los resultados por debajo de
-  // la página actual, se clampa al último rango válido.
+  // El total lo cuenta el SERVIDOR sobre el universo filtrado: es lo que hace que la cuenta de la
+  // paginación y las tarjetas de estado digan lo mismo que la tabla puede alcanzar.
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
-  const paginated = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE;
-    return ordenados.slice(start, start + PAGE_SIZE);
-  }, [ordenados, safePage]);
+  // Lo que se pinta es la página que trajo el servidor, tal cual: ya viene acotada y del tamaño
+  // pedido. Recortarla aquí otra vez solo podría esconder filas que el servidor sí contó.
+  const paginated = ordenados;
 
   // Al cambiar cualquier filtro se vuelve a la primera página: la combinación
   // de criterios redefine el conjunto, así que arrancar desde el inicio es lo
@@ -769,6 +835,21 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const handlePrioritariosChange = (v: boolean) => {
     setSoloPrioritarios(v);
     setPage(1);
+  };
+
+  /**
+   * HU #12188 — cambiar el tamaño de página vuelve al principio: con otro tamaño, «la página 5» no
+   * describe el mismo tramo, así que quedarse en ella llevaría a un sitio que el gestor no eligió.
+   */
+  const handlePageSizeChange = (v: number) => {
+    setPageSizeElegido(v);
+    setPage(1);
+    try {
+      sessionStorage.setItem(CLAVE_PAGE_SIZE, String(v));
+    } catch {
+      // Ventana privada o almacenamiento bloqueado: el tamaño vale para esta pantalla y no se
+      // recuerda. Es una comodidad, no un dato: no merece un aviso.
+    }
   };
 
   // HU #10536 — marca/desmarca la prioridad con actualización optimista; revierte si el backend falla.
@@ -1170,9 +1251,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         <TableBody
           loading={loading}
           error={error}
-          items={items}
-          filtered={filtered}
           paginated={paginated}
+          total={total}
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
           visibleColumns={effectiveColumns}
           gridLayout={gridLayout}
           page={safePage}
@@ -1236,16 +1318,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         }}
       />
 
+      {/* HU #12185 — la fila entera, no solo su id: la ficha del panel se arma con campos que ya
+          viajan en el listado, así que abrirlo no cuesta ninguna consulta más que el historial. */}
       <TramiteTrackingModal
         open={trackingTramite !== null}
         onClose={() => setTrackingTramite(null)}
-        instanceId={trackingTramite?.id ?? null}
+        item={trackingTramite}
         tenantId={isAdmin ? trackingTramite?.tenantId : undefined}
-        titleHint={
-          trackingTramite
-            ? [trackingTramite.referenceNumber, trackingTramite.placa].filter(Boolean).join(' · ')
-            : null
-        }
       />
 
       <IdentidadParteTrackingModal
@@ -1515,9 +1594,10 @@ function SortableHeaderCell({
 function TableBody({
   loading,
   error,
-  items,
-  filtered,
   paginated,
+  total,
+  pageSize,
+  onPageSizeChange,
   visibleColumns,
   gridLayout,
   page,
@@ -1546,9 +1626,11 @@ function TableBody({
 }: {
   loading: boolean;
   error: string | null;
-  items: InstanceSummary[];
-  filtered: InstanceSummary[];
   paginated: InstanceSummary[];
+  /** Total del universo filtrado, contado por el SERVIDOR (no `paginated.length`). */
+  total: number;
+  pageSize: number;
+  onPageSizeChange: (pageSize: number) => void;
   /** Selector de columnas: claves visibles, en el mismo orden que TRAMITES_COLUMNS. */
   visibleColumns: readonly string[];
   /** `gridTemplateColumns` + ancho mínimo, calculados UNA vez a partir de `visibleColumns` — la
@@ -1612,8 +1694,12 @@ function TableBody({
     );
   }
 
-  // Vacío sin filtros: no hay ningún trámite todavía.
-  if (items.length === 0) {
+  // HU #12188 — los dos vacíos se distinguen por si hay criterios activos, NO por el largo de la
+  // página. Antes `items` era la ventana entera sin filtrar, así que un resultado vacío llegaba con
+  // filas en memoria y bastaba mirarlas; ahora `items` ES la página, y una página vacía con un
+  // filtro puesto se leía como «aún no hay trámites» — que suena a cuenta recién creada y no a un
+  // filtro demasiado estrecho.
+  if (total === 0 && !hasActiveFilters) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
         <p className="text-sm font-bold">Aún no hay trámites</p>
@@ -1625,8 +1711,8 @@ function TableBody({
     );
   }
 
-  // Vacío con filtros: hay trámites pero ninguno coincide.
-  if (filtered.length === 0) {
+  // Vacío con filtros: hay trámites, pero ninguno coincide.
+  if (total === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
         <p className="text-sm font-bold">Sin resultados</p>
@@ -1762,13 +1848,37 @@ function TableBody({
       </div>
 
       {/* Fuera del contenedor con scroll horizontal: la paginación no se desplaza con la tabla. */}
-      <PageNav
-        page={page}
-        totalPages={totalPages}
-        resumen={`Mostrando ${paginated.length} de ${filtered.length}`}
-        ariaLabel="Paginación de trámites"
-        onPageChange={onPageChange}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
+          Filas por página
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            className={controlCls(false)}
+            aria-label="Filas por página"
+          >
+            {TAMANOS_DE_PAGINA.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* «Mostrando 26–50 de 300»: con paginación de servidor el rango dice DÓNDE está el gestor
+            dentro del universo, cosa que «25 de 300» no distingue de la primera página. */}
+        <PageNav
+          page={page}
+          totalPages={totalPages}
+          resumen={
+            total === 0
+              ? 'Sin trámites que mostrar'
+              : `Mostrando ${(page - 1) * pageSize + 1}–${(page - 1) * pageSize + paginated.length} de ${total}`
+          }
+          ariaLabel="Paginación de trámites"
+          onPageChange={onPageChange}
+          className="flex-1"
+        />
+      </div>
     </div>
   );
 }
@@ -2354,6 +2464,34 @@ function TramiteRow({
     fuente: (
       <span className="block truncate text-xs text-[#162744]/90 dark:text-white/80">
         {FUENTE_LABEL[item.fuente ?? 'dashboard']}
+      </span>
+    ),
+    // HU #12183 — marcas de prenda y transformación. INFORMATIVAS: no son botones, no filtran y no
+    // ordenan (la cabecera de esta columna tampoco lleva orden, ver `sort` en la definición).
+    //
+    // El guion no es decoración: una celda vacía se lee como un dato que falta —o como una fila que
+    // no cargó bien— y no como «este trámite no tiene ninguna de las dos».
+    //
+    // Cada ícono lleva su rótulo en `alt` y en `title`: el color es lo único que los distingue a
+    // simple vista, y el color no puede ser el único portador del significado.
+    marcas: (
+      <span className="flex items-center gap-1.5">
+        {marcasDe(item).length === 0 ? (
+          <span className="text-xs text-[#162744]/45 dark:text-white/40">—</span>
+        ) : (
+          marcasDe(item).map((marca) => (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              key={marca.id}
+              src={marca.src}
+              alt={marca.label}
+              title={marca.label}
+              width={26}
+              height={26}
+              className="h-[26px] w-[26px] shrink-0"
+            />
+          ))
+        )}
       </span>
     ),
   };

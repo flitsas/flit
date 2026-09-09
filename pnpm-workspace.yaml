@@ -10,7 +10,9 @@ allowBuilds:
 # ESTE es el sitio de los overrides. pnpm 11 ya NO lee el campo `pnpm` de package.json, así que
 # escribirlos allí no hace nada y solo avisa por consola. Si un override no surte efecto, mirar aquí.
 #
-# next@16.2.x pinnea sharp ^0.34.5 (CVE libvips). Forzar parche hasta que Next actualice.
+# next pinnea sharp ^0.34.5 (CVE libvips). Forzar parche hasta que Next actualice. El aviso se volvio
+#   a ampliar (GHSA-rgj7-g3m4-5g8c, libheif): la version PARCHEADA es ahora >=0.35.4, asi que 0.35.3
+#   —que era lo que aqui mantenia el check en verde— pasa a reportarse como alta. Se sube a 0.35.4.
 # next@16.2.x pinnea postcss 8.4.31 (GHSA-6g55-p6wh-862q). El aviso se amplió después: la corrección
 #   de la serie 8.5.x era incompleta y exige >=8.5.23, así que 8.5.22 sigue reportando el aviso
 #   moderado. Se sube a 8.5.23, verificado con build de producción del frontend en verde.
@@ -21,7 +23,7 @@ allowBuilds:
 # next → styled-jsx → @babel/core → browserslist <=4.28.6 (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g).
 #   Parche >=4.28.7. Es transitiva; se fuerza aquí para que `dependency-audit --audit-level high` pase.
 overrides:
-  sharp: 0.35.3
+  sharp: 0.35.4
   postcss: 8.5.23
   nanoid: 3.3.18
   browserslist: 4.28.7
