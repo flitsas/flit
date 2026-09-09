@@ -33,6 +33,18 @@ public enum PlateAssignmentFailure
     /// <see cref="PlateAlreadyAssigned"/>, que habla del inventario de rangos de este OT.
     /// </summary>
     PlateInUseByAnotherProcedure,
+
+    /// <summary>
+    /// HU #12167 (Feature #12156) — la ventana de 1 hora para corregir la placa ya cerró (o nunca se
+    /// asignó placa por este flujo, <c>plate_assigned_at</c> nulo).
+    /// </summary>
+    PlateUpdateWindowExpired,
+
+    /// <summary>
+    /// HU #12167 (AC3) — la única corrección permitida dentro de la ventana ya se usó
+    /// (<c>plate_updated_at</c> no nulo), aunque la hora siga vigente.
+    /// </summary>
+    PlateUpdateAlreadyUsed,
 }
 
 /// <summary>

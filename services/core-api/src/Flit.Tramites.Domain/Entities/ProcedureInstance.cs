@@ -67,6 +67,25 @@ public sealed class ProcedureInstance
     public string? PlateFlowStatus { get; set; }
 
     /// <summary>
+    /// HU #12165 (Feature #12156) — momento exacto en que el OT asignó/actualizó por última vez la
+    /// placa (<see cref="Plate"/>) vía <c>AssignPlateAsync</c>/<c>UpdatePlateAsync</c>. Base confiable
+    /// para calcular la ventana de 1 hora de HU #12167: a diferencia de <see cref="UpdatedAt"/>, no lo
+    /// pisa ninguna otra escritura sobre la instancia. <c>null</c> si nunca se asignó placa por este
+    /// flujo. Columna agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí
+    /// solo se mapea al modelo EF.
+    /// </summary>
+    public DateTimeOffset? PlateAssignedAt { get; set; }
+
+    /// <summary>
+    /// HU #12165/#12167 — momento en que el OT usó su ÚNICA oportunidad de corregir la placa dentro de
+    /// la ventana de 1 hora. <c>null</c> = todavía no la ha usado (independientemente de si la ventana
+    /// ya cerró). Distinguir "no usada" de "ventana cerrada" es lo que permite el AC3 de HU #12167
+    /// ("una única oportunidad", rechaza un segundo intento aunque siga dentro de la hora). Columna
+    /// agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea.
+    /// </summary>
+    public DateTimeOffset? PlateUpdatedAt { get; set; }
+
+    /// <summary>
     /// Marca de "borrador finalizado" (HU #10349, fase 2). El gestor finaliza la captura de datos
     /// (actores, documentos, organismo) y el trámite queda en <c>draft</c> a la espera de la validación
     /// de identidad async del cliente. Cuando llega <c>IdentityValidationCompleted</c> (aprobado), el

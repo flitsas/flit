@@ -57,12 +57,13 @@ public sealed class WizardMigradoReadonlyTests
         result!.TotalSteps.Should().Be(6);
         result.Steps.Should().OnlyContain(s => s.Status == "complete");
         result.Steps.Should().OnlyContain(s => s.Reasons.Count == 0);
-        // Terminal ⇒ sin acciones: no se puede radicar y no hay blockers pendientes.
+        // Terminal ⇒ sin acciones de RADICACIÓN: no se puede reenviar y no hay blockers pendientes.
         result.CanSubmit.Should().BeFalse();
         result.Blockers.Should().BeEmpty();
-        // El estado de negocio y la ausencia de transiciones se preservan (aprobado es final).
+        // El estado de negocio se preserva, foto o no: Aprobado sigue admitiendo la transición que el
+        // organismo de tránsito controla (HU #12165/#12166) — revocar su propia aprobación.
         result.Status.Should().Be(TramiteEstado.Aprobado);
-        result.AllowedTransitions.Should().BeEmpty();
+        result.AllowedTransitions.Should().BeEquivalentTo([TramiteEstado.Revocado]);
     }
 
     [Fact]

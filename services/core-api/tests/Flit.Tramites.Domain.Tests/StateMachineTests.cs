@@ -26,6 +26,8 @@ public sealed class StateMachineTests
         (TramiteEstado.Rechazado, TramiteEstado.Anulado),
         // Re-radicar tras activar flag de subsanación (lifecycle exige el flag).
         (TramiteEstado.Rechazado, TramiteEstado.Entregado),
+        // HU #12166 (Feature #12156) — única salida de 'aprobado': el OT revoca su propia aprobación.
+        (TramiteEstado.Aprobado, TramiteEstado.Revocado),
     ];
 
     [Theory]
@@ -37,6 +39,7 @@ public sealed class StateMachineTests
     [InlineData("rechazado", "borrador")]
     [InlineData("rechazado", "anulado")]
     [InlineData("rechazado", "entregado")]
+    [InlineData("aprobado", "revocado")]
     public void Negocio_TransicionesValidasRf02(string from, string to)
     {
         TramiteStateMachine.IsValidTransition(from, to).Should().BeTrue();
@@ -60,11 +63,16 @@ public sealed class StateMachineTests
     [Fact]
     public void Negocio_AprobadoYAnuladoSonTerminales()
     {
-        // RF04 — estados finales: sin transiciones posteriores.
-        TramiteStateMachine.TransitionsFrom(TramiteEstado.Aprobado).Should().BeEmpty();
+        // RF04 — finales por EDICIÓN DE DATOS y ciclo de vida NORMAL del trámite: el único movimiento
+        // posterior a 'aprobado' es la revocación del OT (HU #12166), que no reabre el trámite ni sus
+        // datos, así que 'aprobado' se sigue tratando como terminal a efectos de negocio (EsFinal).
+        TramiteStateMachine.TransitionsFrom(TramiteEstado.Aprobado)
+            .Should().BeEquivalentTo([TramiteEstado.Revocado]);
         TramiteStateMachine.TransitionsFrom(TramiteEstado.Anulado).Should().BeEmpty();
+        TramiteStateMachine.TransitionsFrom(TramiteEstado.Revocado).Should().BeEmpty();
         TramiteEstado.EsFinal(TramiteEstado.Aprobado).Should().BeTrue();
         TramiteEstado.EsFinal(TramiteEstado.Anulado).Should().BeTrue();
+        TramiteEstado.EsFinal(TramiteEstado.Revocado).Should().BeTrue();
         TramiteEstado.EsFinal(TramiteEstado.Borrador).Should().BeFalse();
         TramiteEstado.EsFinal(TramiteEstado.Preparado).Should().BeFalse();
         TramiteEstado.EsFinal(TramiteEstado.Entregado).Should().BeFalse();
@@ -95,8 +103,9 @@ public sealed class StateMachineTests
     [Fact]
     public void Negocio_EsValidoReconoceLosEstadosDelCicloDeVida()
     {
-        // 6 estados de negocio: la subsanación es flag sobre rechazado, no un 7º estado.
-        TramiteEstado.Todos.Should().HaveCount(6);
+        // 7 estados de negocio (HU #12165 agrega 'revocado'): la subsanación es flag sobre rechazado,
+        // no un estado propio.
+        TramiteEstado.Todos.Should().HaveCount(7);
         foreach (var estado in TramiteEstado.Todos)
             TramiteEstado.EsValido(estado).Should().BeTrue();
         TramiteEstado.EsValido("subsanacion").Should().BeFalse();

@@ -32,9 +32,13 @@ namespace Flit.Admin.Domain.OtClientProcedures;
 /// Entregados que el organismo no ha tocado: sin decisión y sin haber entrado en la ruta de placa.
 /// Es el trabajo que nadie ha empezado, y por eso la tarjeta que más urge mirar.
 /// </param>
+/// <param name="Revocados">
+/// HU #12166 (Feature #12156) — Aprobados que el organismo revocó (deshizo su propia aprobación).
+/// </param>
 public sealed record OtBandejaCounters(
     int SinAsignarPlaca,
     int ConPlacaAsignada,
     int Aprobados,
     int Rechazados,
-    int SinGestion);
+    int SinGestion,
+    int Revocados);

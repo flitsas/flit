@@ -12,9 +12,8 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// <summary>
 /// HU #12160 — anulación administrativa: anula desde CUALQUIER estado (AC1), salvo dos excepciones
 /// duras que son autoridad exclusiva del organismo de tránsito: <c>aprobado</c> (AC2) y <c>revocado</c>
-/// (AC3, comparado por string porque ese estado todavía no existe en el dominio — HU #12165). AC4
-/// (confirmación previa) es responsabilidad del frontend (HU #12163); la contribución de este handler
-/// es no aplicar NINGÚN cambio cuando la validación falla.
+/// (AC3, HU #12165/#12166). AC4 (confirmación previa) es responsabilidad del frontend (HU #12163); la
+/// contribución de este handler es no aplicar NINGÚN cambio cuando la validación falla.
 /// </summary>
 public sealed class AdminAnularHandlerTests
 {
@@ -152,24 +151,15 @@ public sealed class AdminAnularHandlerTests
         await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());
     }
 
-    // ── AC3 — Revocado (string, el enum aún no existe — HU #12165) como origen: rechazado (422) ────
+    // ── AC3 — Revocado como origen: rechazado siempre (422) ───────────────────────────────────────
 
-    [Theory]
-    [InlineData("revocado")]
-    [InlineData("REVOCADO")]
-    [InlineData("Revocado")]
-    public async Task AC3_Revocado_SeRechazaSinImportarElCasing_AunSinExistirComoEnum(string origen)
+    [Fact]
+    public async Task AC3_Revocado_SeRechazaSinAplicarNingunCambio()
     {
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, origen);
+        var instance = Instance(id, tenantId, TramiteEstado.Revocado);
         _repo.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
-
-        // El estado "revocado" NO existe en TramiteEstado.Todos: si algún día se agrega el enum real
-        // (HU #12165) y este assert empieza a fallar, es la señal de venir a limpiar la comparación
-        // por string en AdminAnularHandler (ver su XML doc).
-        TramiteEstado.EsValido("revocado").Should().BeFalse(
-            "revocado' todavía no es un estado de negocio conocido (HU #12165 lo introducirá)");
 
         var command = new AdminAnularCommand(id, tenantId, null, null);
         var (result, error, errorDetail) = await Handler().HandleAsync(command, CancellationToken.None);
@@ -177,7 +167,7 @@ public sealed class AdminAnularHandlerTests
         error.Should().Be(TramiteEstadoErrores.CannotAnnulRevoked);
         errorDetail.Should().NotBeNullOrWhiteSpace();
         result.Should().BeNull();
-        instance.Status.Should().Be(origen, "el rechazo no debe aplicar ningún cambio");
+        instance.Status.Should().Be(TramiteEstado.Revocado, "el rechazo no debe aplicar ningún cambio");
         _recorder.Records.Should().BeEmpty();
         await _repo.DidNotReceive().SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());

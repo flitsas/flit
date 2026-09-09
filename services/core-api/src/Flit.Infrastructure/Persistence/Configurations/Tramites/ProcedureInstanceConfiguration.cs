@@ -124,6 +124,15 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("plate_flow_status")
             .HasMaxLength(20);
 
+        // HU #12165 (Feature #12156) — ventana de 1 hora de corrección de placa por el OT (HU
+        // #12167). Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations);
+        // aquí solo se mapean para el modelo EF.
+        builder.Property(x => x.PlateAssignedAt)
+            .HasColumnName("plate_assigned_at");
+
+        builder.Property(x => x.PlateUpdatedAt)
+            .HasColumnName("plate_updated_at");
+
         // Migración V1→V2 — marca de trámite histórico importado (foto de solo lectura). Columna
         // agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea
         // para el modelo EF. Default false = trámite nativo de V2.
