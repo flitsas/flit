@@ -2,12 +2,19 @@
 //
 // Estos casos cubren el hueco que dejó la descomposición: la HU #12203 es `[BACKEND]` y ninguna
 // HU pidió el formulario, así que la pestaña mostraba encabezado y ningún control.
+//
+// Las respuestas simuladas siguen el esquema `StandaloneRuesPreviewResult` de
+// `contracts/openapi/core-api.v1.yaml`: el array se llama `campos`, sus elementos solo traen
+// `key` y `value`, y `error` viaja con HTTP 200. La primera versión de este fichero inventó un
+// `fields` con `label` que no existe, y por eso los diez casos pasaban mientras la pantalla
+// reventaba con un TypeError en runtime.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RuesGeneracionForm } from "../RuesGeneracionForm";
 import { previewRuesCompany, generateRuesDocument } from "@/lib/api/admin-generacion-documental";
 import { ApiValidationError } from "@/lib/api/types";
+import type { StandaloneRuesPreviewResult } from "@/lib/api/types-generacion-documental";
 
 vi.mock("@/lib/api/admin-generacion-documental", () => ({
   previewRuesCompany: vi.fn(),
@@ -16,6 +23,20 @@ vi.mock("@/lib/api/admin-generacion-documental", () => ({
 
 const previewMock = vi.mocked(previewRuesCompany);
 const generateMock = vi.mocked(generateRuesDocument);
+
+const HALLAZGO: StandaloneRuesPreviewResult = {
+  found: true,
+  nit: "900123456",
+  campos: [
+    { key: "rues_razon_social", value: "TRANSPORTES ACME S.A.S." },
+    { key: "rues_estado", value: null },
+  ],
+};
+
+async function consultar(nit = "900123456") {
+  await userEvent.type(screen.getByLabelText(/NIT de la compañía/i), nit);
+  await userEvent.click(screen.getByRole("button", { name: /revisar antes de generar/i }));
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -39,55 +60,118 @@ describe("RuesGeneracionForm — la pestaña tiene por fin dónde escribir y qu�
 });
 
 describe("RuesGeneracionForm — revisión previa (no persiste nada)", () => {
-  it("consulta con el NIT sin espacios y pinta los campos devueltos", async () => {
-    previewMock.mockResolvedValue({
-      found: true,
-      nit: "900123456",
-      fields: [
-        { key: "razonSocial", label: "Razón social", value: "TRANSPORTES ACME S.A.S." },
-        { key: "estadoMatricula", label: "Estado de la matrícula", value: null },
-      ],
-    });
+  it("consulta con el NIT sin espacios y traduce las claves del RUES a etiquetas", async () => {
+    previewMock.mockResolvedValue(HALLAZGO);
 
     render(<RuesGeneracionForm />);
-    await userEvent.type(screen.getByLabelText(/NIT de la compañía/i), "  900123456  ");
-    await userEvent.click(screen.getByRole("button", { name: /revisar antes de generar/i }));
+    await consultar("  900123456  ");
 
     await waitFor(() => expect(previewMock).toHaveBeenCalledWith("900123456"));
     expect(await screen.findByText("TRANSPORTES ACME S.A.S.")).toBeInTheDocument();
+    // La clave cruda del contrato no se le enseña al usuario.
+    expect(screen.getByText("Razón social")).toBeInTheDocument();
+    expect(screen.queryByText("rues_razon_social")).not.toBeInTheDocument();
     // Un campo sin valor se pinta como guion, no como "null" ni como hueco mudo.
     expect(screen.getByText("—")).toBeInTheDocument();
     // La revisión previa no genera: el endpoint de generación no se toca.
     expect(generateMock).not.toHaveBeenCalled();
   });
 
-  it("un NIT sin coincidencia lo dice, y no finge una tabla vacía", async () => {
-    previewMock.mockResolvedValue({ found: false, nit: "999999999", fields: [] });
+  it("una clave que el mapa no conoce se muestra legible, no cruda ni desaparecida", async () => {
+    previewMock.mockResolvedValue({
+      found: true,
+      nit: "900123456",
+      campos: [{ key: "rues_campo_nuevo_del_proveedor", value: "algo" }],
+    });
 
     render(<RuesGeneracionForm />);
-    await userEvent.type(screen.getByLabelText(/NIT de la compañía/i), "999999999");
-    await userEvent.click(screen.getByRole("button", { name: /revisar antes de generar/i }));
+    await consultar();
+
+    expect(await screen.findByText("Campo nuevo del proveedor")).toBeInTheDocument();
+  });
+
+  it("no enseña el JSON crudo de actividades", async () => {
+    previewMock.mockResolvedValue({
+      found: true,
+      nit: "900123456",
+      campos: [
+        { key: "rues_razon_social", value: "TRANSPORTES ACME S.A.S." },
+        { key: "rues_actividades_json", value: '[{"code":"H4923"}]' },
+      ],
+    });
+
+    render(<RuesGeneracionForm />);
+    await consultar();
+
+    expect(await screen.findByText("TRANSPORTES ACME S.A.S.")).toBeInTheDocument();
+    expect(screen.queryByText(/H4923/)).not.toBeInTheDocument();
+  });
+
+  it("un NIT sin coincidencia lo dice, y no finge una tabla vacía", async () => {
+    previewMock.mockResolvedValue({ found: false, nit: "999999999", campos: [] });
+
+    render(<RuesGeneracionForm />);
+    await consultar("999999999");
 
     expect(await screen.findByText(/no tiene coincidencia en el RUES/i)).toBeInTheDocument();
     expect(screen.queryByText(/datos que quedarán congelados/i)).not.toBeInTheDocument();
   });
 
+  it("una respuesta sin `campos` no tumba la pantalla", async () => {
+    // Regresión del TypeError que vio el PO: el tipo decía `fields` y el servidor mandaba
+    // `campos`, así que `preview.fields.map` reventaba. Aquí falta el array por completo.
+    previewMock.mockResolvedValue({ found: true, nit: "900123456" } as StandaloneRuesPreviewResult);
+
+    render(<RuesGeneracionForm />);
+    await expect(consultar()).resolves.not.toThrow();
+
+    await waitFor(() => expect(previewMock).toHaveBeenCalled());
+    expect(screen.queryByText(/datos que quedarán congelados/i)).not.toBeInTheDocument();
+  });
+
   it("editar el NIT invalida la revisión previa en pantalla", async () => {
+    previewMock.mockResolvedValue(HALLAZGO);
+
+    render(<RuesGeneracionForm />);
+    await consultar();
+    expect(await screen.findByText("TRANSPORTES ACME S.A.S.")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/NIT de la compañía/i), "7");
+
+    expect(screen.queryByText("TRANSPORTES ACME S.A.S.")).not.toBeInTheDocument();
+  });
+});
+
+describe("RuesGeneracionForm — una avería del proveedor no es un veredicto sobre el NIT", () => {
+  it("`provider_unavailable` llega con HTTP 200 y se anuncia como avería, no como NIT inexistente", async () => {
     previewMock.mockResolvedValue({
-      found: true,
+      found: false,
       nit: "900123456",
-      fields: [{ key: "razonSocial", label: "Razón social", value: "TRANSPORTES ACME S.A.S." }],
+      campos: [],
+      error: "provider_unavailable",
     });
 
     render(<RuesGeneracionForm />);
-    const input = screen.getByLabelText(/NIT de la compañía/i);
-    await userEvent.type(input, "900123456");
-    await userEvent.click(screen.getByRole("button", { name: /revisar antes de generar/i }));
-    expect(await screen.findByText("TRANSPORTES ACME S.A.S.")).toBeInTheDocument();
+    await consultar();
 
-    await userEvent.type(input, "7");
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(/no es un problema del NIT/i);
+    // Lo que NO puede pasar: culpar al número que escribió el usuario.
+    expect(screen.queryByText(/no tiene coincidencia en el RUES/i)).not.toBeInTheDocument();
+  });
 
-    expect(screen.queryByText("TRANSPORTES ACME S.A.S.")).not.toBeInTheDocument();
+  it("`provider_not_found` dice que reintentar no sirve", async () => {
+    previewMock.mockResolvedValue({
+      found: false,
+      nit: "900123456",
+      campos: [],
+      error: "provider_not_found",
+    });
+
+    render(<RuesGeneracionForm />);
+    await consultar();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se resuelve reintentando/i);
   });
 });
 

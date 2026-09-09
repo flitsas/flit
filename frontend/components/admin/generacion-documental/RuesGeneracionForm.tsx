@@ -10,8 +10,10 @@ import {
 import { ApiError, ApiValidationError, type ValidationError } from "@/lib/api/types";
 import type {
   StandaloneDocumentGenerateResult,
+  StandaloneRuesPreviewError,
   StandaloneRuesPreviewResult,
 } from "@/lib/api/types-generacion-documental";
+import { esCampoRuesVisible, etiquetaDeCampoRues } from "./rues-campos";
 
 /**
  * Captura del NIT, revisión previa y generación del Certificado RUES (CF-04).
@@ -26,7 +28,7 @@ import type {
  * `TransferenciaPanel`: el panel decide cómo se ve la pestaña vacía, cargando o en error; este
  * componente decide qué campos existen.
  *
- * Dos decisiones que conviene no deshacer:
+ * Tres decisiones que conviene no deshacer:
  *
  * - **La revisión previa no es un paso obligatorio.** El AC de #12203 la define como consulta que
  *   «no persiste ninguna fila», pensada para revisar antes de gastar una generación. Obligarla
@@ -34,7 +36,26 @@ import type {
  *   (CF-16) intenta evitar.
  * - **Nunca se pinta el `value` de un error de validación.** `ValidationError` lo trae opcional,
  *   pero el NIT es dato de un tercero: se muestran `field` y `message`, jamás lo capturado.
+ * - **`error` y `found: false` NO son lo mismo**, aunque los dos lleguen con HTTP 200. Ver
+ *   `mensajeDeAveria`.
  */
+
+/**
+ * Traduce el motivo normalizado del servidor. Los tres llegan con HTTP 200, así que sin este
+ * mapeo una caída del proveedor se leería como «ese NIT no existe»: un diagnóstico falso sobre un
+ * dato del usuario, que es peor que no decir nada.
+ */
+function mensajeDeAveria(error: StandaloneRuesPreviewError): string {
+  switch (error) {
+    case "provider_unavailable":
+      return "El servicio del RUES no respondió. No es un problema del NIT: vuelve a intentarlo en unos minutos.";
+    case "provider_not_found":
+      return "Esta compañía no tiene configurado un proveedor de consulta del RUES. Escala a soporte: no se resuelve reintentando.";
+    case "invalid_request":
+      return "El NIT enviado no es válido. Revísalo y vuelve a consultar.";
+  }
+}
+
 export function RuesGeneracionForm() {
   const nitInputId = useId();
   const ayudaId = useId();
@@ -50,6 +71,11 @@ export function RuesGeneracionForm() {
   const nitNormalizado = nit.trim();
   const enVuelo = revisando || generando;
   const puedeConsultar = nitNormalizado.length > 0 && !enVuelo;
+
+  // El contrato marca `campos` como requerido, pero un array ausente no debe tumbar la pantalla:
+  // ya ocurrió una vez, cuando el tipo del cliente decía `fields` y el servidor mandaba `campos`.
+  const camposVisibles = (preview?.campos ?? []).filter((campo) => esCampoRuesVisible(campo.key));
+  const averia = preview?.error ? mensajeDeAveria(preview.error) : null;
 
   function limpiarResultados() {
     setErrores([]);
@@ -156,21 +182,29 @@ export function RuesGeneracionForm() {
         </p>
       </div>
 
-      {preview && !preview.found && (
+      {/* Una avería del proveedor no dice nada sobre el NIT: se anuncia como alerta, no como
+          «sin coincidencia». */}
+      {averia && (
+        <p role="alert" className="text-[11px] font-semibold text-red-700">
+          {averia}
+        </p>
+      )}
+
+      {preview && !preview.found && !averia && (
         <p role="status" className="text-[11px] font-semibold text-amber-700">
           El NIT consultado no tiene coincidencia en el RUES. Verifica el número antes de generar.
         </p>
       )}
 
-      {preview?.found && (
+      {preview?.found && camposVisibles.length > 0 && (
         <section aria-labelledby="rues-preview-titulo" className="rounded-xl border p-3">
           <h4 id="rues-preview-titulo" className="text-xs font-semibold" style={{ color: "#162744" }}>
             Revisión previa — datos que quedarán congelados en el certificado
           </h4>
           <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {preview.fields.map((campo) => (
+            {camposVisibles.map((campo) => (
               <div key={campo.key} className="flex flex-col">
-                <dt className="text-[11px] opacity-70">{campo.label}</dt>
+                <dt className="text-[11px] opacity-70">{etiquetaDeCampoRues(campo.key)}</dt>
                 <dd className="text-xs font-medium">{campo.value ?? "—"}</dd>
               </div>
             ))}

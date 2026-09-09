@@ -129,7 +129,7 @@ describe("requestStandaloneDocumentDownload", () => {
 describe("previewRuesCompany / generateRuesDocument", () => {
   it("preview: POST con el NIT en el cuerpo", async () => {
     global.fetch = vi.fn().mockResolvedValue(
-      jsonResponse({ found: true, nit: "900123456", fields: [] }),
+      jsonResponse({ found: true, nit: "900123456", campos: [] }),
     ) as never;
 
     await previewRuesCompany("900123456");

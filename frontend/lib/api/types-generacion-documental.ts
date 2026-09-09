@@ -75,17 +75,41 @@ export interface StandaloneDocumentDownloadLink {
   expiresAt: string;
 }
 
-/** Campo devuelto por la revisión previa de RUES (`POST /rues/preview`). */
+/**
+ * Campo devuelto por la revisión previa de RUES (`POST /rues/preview`).
+ *
+ * El servidor entrega la CLAVE del campo mercantil (`rues_razon_social`, `rues_estado`…), no una
+ * etiqueta legible: el esquema `StandaloneRuesPreviewField` del contrato solo declara `key` y
+ * `value`. La traducción a español vive en el frontend, en `etiquetaDeCampoRues`.
+ */
 export interface StandaloneRuesPreviewField {
   key: string;
-  label: string;
-  value: string | null;
+  value?: string | null;
 }
 
+/** Motivos normalizados que el servidor devuelve CON HTTP 200, no como error HTTP. */
+export type StandaloneRuesPreviewError =
+  | "invalid_request"
+  | "provider_unavailable"
+  | "provider_not_found";
+
+/**
+ * Respuesta de `POST /rues/preview`.
+ *
+ * Ojo con dos trampas que ya costaron un `TypeError` en runtime:
+ *
+ * 1. El array se llama **`campos`**, en español, no `fields`. Es lo que declara
+ *    `StandaloneRuesPreviewResult` en `contracts/openapi/core-api.v1.yaml` y lo que serializa el
+ *    record `PreviewRuesCompanyResult` del backend.
+ * 2. **`error` viaja con HTTP 200.** Una caída del proveedor no llega como 5xx: llega como
+ *    `found: false` con `error: "provider_unavailable"`. Tratar `found: false` a secas como «el
+ *    NIT no existe» convierte una avería en un diagnóstico falso sobre el NIT del usuario.
+ */
 export interface StandaloneRuesPreviewResult {
   found: boolean;
   nit: string;
-  fields: StandaloneRuesPreviewField[];
+  campos: StandaloneRuesPreviewField[];
+  error?: StandaloneRuesPreviewError | null;
 }
 
 // ── Transferencia de dominio (HU #12207, Feature #12201) ────────────────────────────────────
