@@ -34,6 +34,12 @@ public sealed record OtClientProcedure
     /// </summary>
     public string? PlateFlowStatus { get; init; }
 
+    /// <summary>HU #12165/#12167 (Feature #12156) — base de la ventana de 1 hora para corregir la placa.</summary>
+    public DateTimeOffset? PlateAssignedAt { get; init; }
+
+    /// <summary>HU #12167 — no nulo si ya se usó la única corrección permitida dentro de la ventana.</summary>
+    public DateTimeOffset? PlateUpdatedAt { get; init; }
+
     /// <summary>
     /// HU #10804 (Feature #10587) — estado del SOAT del vehículo (field_value <c>soat_estado</c>) en la
     /// ruta de placa: <c>null</c>/<c>unknown</c>/<c>vencido</c> = sin evidencia; <c>vigente</c> = registrado.

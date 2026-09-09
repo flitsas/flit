@@ -24,8 +24,12 @@ public static class TramiteStateMachine
             // Rechazado → entregado: re-radicación tras activar subsanación (flag). El lifecycle
             // exige subsanacion_activa; sin el flag la transición se rechaza.
             [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado, TramiteEstado.Entregado],
-            [TramiteEstado.Aprobado] = [],
+            // HU #12166 (Feature #12156) — única salida de 'aprobado': el OT revoca su propia
+            // aprobación. El admin de FLIT NO tiene esta transición disponible (su "Cambiar estado" y
+            // "Anular" excluyen 'aprobado' explícitamente); solo el endpoint OT de revocación la usa.
+            [TramiteEstado.Aprobado] = [TramiteEstado.Revocado],
             [TramiteEstado.Anulado] = [],
+            [TramiteEstado.Revocado] = [],
         };
 
     /// <summary>¿La transición <paramref name="from"/> → <paramref name="to"/> está permitida (RF02)?</summary>

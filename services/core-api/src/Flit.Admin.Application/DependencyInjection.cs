@@ -72,6 +72,7 @@ using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.RevokeOtClientProcedure;
 using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentTags.CreateOtDocumentTag;
@@ -328,6 +329,8 @@ public static class DependencyInjection
         services.AddScoped<GetOtClientProcedureHandler>();
         services.AddScoped<ApproveOtClientProcedureHandler>();
         services.AddScoped<RejectOtClientProcedureHandler>();
+        // HU #12166 (Feature #12156) — el OT revoca su propia aprobación.
+        services.AddScoped<RevokeOtClientProcedureHandler>();
         // HU #10540 (R09) — diagnóstico de bandeja OT (entregados con/sin grant).
         services.AddScoped<GetOtBandejaHealthHandler>();
         services.AddScoped<GetOtBandejaCountersHandler>();

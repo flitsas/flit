@@ -134,6 +134,11 @@ export function revokeProcedurePlate(instanceId: string, reason: string): Promis
   return apiFetch(`${base}/procedures/${instanceId}/revoke`, { method: "POST", body: { reason } });
 }
 
+/** HU #12167 (Feature #12156) — corrige la placa dentro de la hora siguiente a la asignación (una única vez). */
+export function updateProcedurePlate(instanceId: string, plate: string): Promise<unknown> {
+  return apiFetch(`${base}/procedures/${instanceId}/update-plate`, { method: "POST", body: { plate } });
+}
+
 /** Placas DISPONIBLES para la compañía en el OT elegido (company-facing, para el wizard). */
 export function listAvailablePlatesForCompany(
   transitOfficeId: string,

@@ -4,6 +4,7 @@ import { estadoLabel } from '@/lib/tramites/estados';
 import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
+  marcasLabel,
   stepLabel,
   tramiteLabel,
   vehiculo,
@@ -92,6 +93,9 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   { key: 'propietario', label: 'Vendedor', minPx: 170, group: GRUPO_BASE },
   { key: 'comprador', label: 'Comprador', minPx: 170, group: GRUPO_BASE },
   { key: 'tramite', label: 'Trámite / Estado', minPx: 160, group: GRUPO_BASE },
+  // HU #12183 — dos íconos como mucho, de 20px, y nunca texto: el piso cubre los dos más el
+  // padding de la celda. Fija por eso mismo: no tiene nada que hacer con el ancho sobrante.
+  { key: 'marcas', label: 'Marcas', minPx: 84, fixed: true, group: GRUPO_BASE },
   // Sin truncar: el nombre del organismo es la mitad del valor de la columna ("SECRETARIA
   // DISTRITAL DE MOVILIDAD DE BOGOTA" cortado a "SECRETARIA DISTRITAL DE…" no distingue nada).
   // Envuelve en varias líneas, así que es de las que mejor aprovecha el ancho sobrante.
@@ -131,7 +135,12 @@ export const TRAMITES_COLUMN_KEYS: readonly string[] = TRAMITES_COLUMNS.map((c) 
  * cuanto el usuario guarda una vez su preferencia pasa a llevar `known` y la deducción se vuelve
  * exacta; esta lista solo cubre el salto desde el formato viejo.
  */
-export const TRAMITES_COLUMNS_ADDED_SINCE_LEGACY: readonly string[] = [];
+export const TRAMITES_COLUMNS_ADDED_SINCE_LEGACY: readonly string[] = [
+  // HU #12183 — la columna de marcas. Sin esto, para quien guardó su selección antes de que
+  // existiera `known`, la columna nacería invisible: vería el listado igual que antes y desde el
+  // selector parecería un dato que falta, no una columna que él ocultó.
+  'marcas',
+];
 
 
 /**
@@ -153,6 +162,9 @@ export const DEFAULT_TRAMITES_VISIBLE_COLUMNS: readonly string[] = [
   'propietario',
   'comprador',
   'tramite',
+  // HU #12183 — visible de salida: la prenda y la transformación no se ven en ninguna otra
+  // columna, y una marca que hay que activar a mano no informa a quien no sabe que existe.
+  'marcas',
   'secretaria',
 ] as const;
 
@@ -421,6 +433,11 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   comprador: [
     { ...campoTexto('comprador', 'Comprador', (row) => row.compradorNombre, 28), sort: 'comprador' },
     campoFirma('compradorFirma', 'Firma del comprador', (r) => r.compradorNombre, (r) => r.firmaCompradorEstado),
+  ],
+  marcas: [
+    // El .xlsx no puede llevar el ícono: va el texto. Sin esta columna el dato desaparecería justo
+    // en el archivo, que es donde nadie puede contrastarlo con la pantalla.
+    campoTexto('marcas', 'Marcas', (row) => marcasLabel(row), 18),
   ],
   tramite: [
     { ...campoTexto('tramite', 'Trámite', (row) => tramiteLabel(row), 22), sort: 'tipo_tramite' },

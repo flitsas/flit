@@ -46,6 +46,10 @@ public static class AdminPlateRangesEndpoints
         group.MapPost("/procedures/{instanceId:guid}/revoke", RevokeProcedurePlateAsync)
             .WithName("AdminPlateRevokeProcedure");
 
+        // HU #12167 (Feature #12156) — el OT corrige la placa dentro de la ventana de 1 hora.
+        group.MapPost("/procedures/{instanceId:guid}/update-plate", UpdateProcedurePlateAsync)
+            .WithName("AdminPlateUpdateProcedure");
+
         return app;
     }
 
@@ -220,6 +224,85 @@ public static class AdminPlateRangesEndpoints
         return Results.Ok(result);
     }
 
+    // HU #12167 (Feature #12156) — corrección de placa dentro de la ventana de 1 hora. Sin
+    // regeneración de documentos ni correo de aviso: a diferencia de la asignación inicial (Flujo B),
+    // esto es una corrección de digitación sobre un trámite que ya pudo haber avanzado; regenerar
+    // documentos/avisar al comprador en cada corrección no está pedido por ningún AC de la HU y
+    // duplicaría el aviso que ya salió con la asignación original.
+    private static async Task<IResult> UpdateProcedurePlateAsync(
+        Guid instanceId, UpdatePlateRequest request, HttpContext http,
+        IOtClientProcedureRepository otRepo, ILoggerFactory loggerFactory, CancellationToken ct)
+    {
+        var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
+        if (!Guid.TryParse(tenantClaim, out var otTenantId))
+        {
+            return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Plate))
+        {
+            return Results.Problem(statusCode: 422, title: "Unprocessable", detail: "La placa es obligatoria.");
+        }
+
+        if (!PlateRangeRules.IsValidPlate(request.Plate.Trim().ToUpperInvariant()))
+        {
+            return Results.Problem(statusCode: 422, title: "Unprocessable",
+                detail: "La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
+        }
+
+        PlateAssignmentOutcome outcome;
+        try
+        {
+            outcome = await otRepo.UpdatePlateAsync(
+                otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", ct)
+                .ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex)
+        {
+            AdminPlateRegenLog.AsignacionPlacaConflicto(
+                loggerFactory.CreateLogger("AdminPlate.UpdatePlate"), ex, instanceId);
+            return Results.Problem(
+                statusCode: 409,
+                title: "Conflict",
+                detail: $"No se pudo corregir la placa {request.Plate.Trim().ToUpperInvariant()}: el trámite o la placa cambiaron durante la operación. Verifique el estado del trámite e intente de nuevo.");
+        }
+
+        if (!outcome.Succeeded)
+        {
+            var plate = request.Plate.Trim().ToUpperInvariant();
+            var detail = outcome.Detail ?? outcome.Failure switch
+            {
+                PlateAssignmentFailure.PlateInUseByAnotherProcedure =>
+                    $"La placa {plate} ya está registrada en otro trámite abierto. Elija una placa diferente.",
+                PlateAssignmentFailure.ProcedureNotAccessible =>
+                    "El trámite no existe o el organismo de tránsito no tiene acceso vigente a él.",
+                PlateAssignmentFailure.PlateUpdateWindowExpired =>
+                    "Pasó más de 1 hora desde la asignación de la placa: ya no se puede corregir por este medio.",
+                PlateAssignmentFailure.PlateUpdateAlreadyUsed =>
+                    "Este trámite ya usó su única oportunidad de corregir la placa.",
+                _ => "La placa es obligatoria.",
+            };
+
+            var statusCode = outcome.Failure switch
+            {
+                PlateAssignmentFailure.PlateInUseByAnotherProcedure => 409,
+                PlateAssignmentFailure.ProcedureNotAccessible => 404,
+                PlateAssignmentFailure.PlateUpdateWindowExpired => 409,
+                PlateAssignmentFailure.PlateUpdateAlreadyUsed => 409,
+                _ => 422,
+            };
+            var title = statusCode switch
+            {
+                409 => "Conflict",
+                404 => "Not Found",
+                _ => "Unprocessable",
+            };
+            return Results.Problem(statusCode: statusCode, title: title, detail: detail);
+        }
+
+        return Results.Ok(outcome.Procedure);
+    }
+
     private static async Task<IResult> ListRangesAsync(
         Guid companyTenantId, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
     {
@@ -367,6 +450,9 @@ public sealed record AssignPlateToProcedureRequest(string Plate, bool OutOfRange
 
 /// <summary>Payload para revocar la preasignación de un trámite.</summary>
 public sealed record RevokePlateRequest(string Reason);
+
+/// <summary>HU #12167 (Feature #12156) — payload para corregir la placa dentro de la ventana de 1 hora.</summary>
+public sealed record UpdatePlateRequest(string Plate);
 
 /// <summary>Logging source-generated (CA1848) de la regeneración documental tras asignar placa. Sin PII.</summary>
 internal static partial class AdminPlateRegenLog

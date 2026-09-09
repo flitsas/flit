@@ -28,6 +28,8 @@ vi.mock('@/lib/api/client', () => ({ getToken: () => null }));
 vi.mock('@/lib/auth/jwt', () => ({
   decodeJwtPayload: () => null,
   isSuperAdmin: () => false,
+  // HU #12164 — permiso `AdminTramiteReenviarValidacion`; sin token no hay permisos.
+  hasPermission: () => false,
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -70,6 +72,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
 }));
 
 // ── Imports después de los mocks ────────────────────────────────────────────
+import { ToastProvider } from '@/components/admin/Toast';
 import { PrevalidacionForm } from '@/components/atom/modules/PrevalidacionForm';
 import { Validaciones } from '@/components/atom/modules/Validaciones';
 import type {
@@ -77,6 +80,15 @@ import type {
   TenantBiometricPersonsResponse,
   TenantBiometricValidation,
 } from '@/lib/api/types/procedure-runtime';
+
+// `useToast` (HU #12164) exige un `<ToastProvider>` ancestro — igual que en la app real.
+function renderValidaciones() {
+  return render(
+    <ToastProvider>
+      <Validaciones />
+    </ToastProvider>,
+  );
+}
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -487,7 +499,7 @@ describe('Validaciones null-safety (HU #10869)', () => {
   it('renderiza una prevalidación standalone (instanceId null) sin crash', async () => {
     mocks.listTenantBiometricPersons.mockResolvedValueOnce(personsResponse([RESULT_STANDALONE]));
 
-    render(<Validaciones />);
+    renderValidaciones();
 
     await waitFor(() => {
       // La fila de la persona debe aparecer
@@ -504,7 +516,7 @@ describe('Validaciones null-safety (HU #10869)', () => {
   it('renderiza una fila con trámite (instanceId != null) mostrando su referencia', async () => {
     mocks.listTenantBiometricPersons.mockResolvedValueOnce(personsResponse([RESULT_TRAMITE]));
 
-    render(<Validaciones />);
+    renderValidaciones();
 
     await waitFor(() => {
       expect(screen.getByText('Ana Compradora')).toBeInTheDocument();
@@ -519,7 +531,7 @@ describe('Validaciones null-safety (HU #10869)', () => {
       personsResponse([RESULT_STANDALONE, RESULT_TRAMITE]),
     );
 
-    render(<Validaciones />);
+    renderValidaciones();
 
     await waitFor(() => {
       expect(screen.getByText('Juan Prevalidado')).toBeInTheDocument();
@@ -535,7 +547,7 @@ describe('Validaciones null-safety (HU #10869)', () => {
     const user = userEvent.setup();
     mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([RESULT_STANDALONE]));
 
-    render(<Validaciones />);
+    renderValidaciones();
     await screen.findByText('Juan Prevalidado');
 
     await user.click(
@@ -566,7 +578,7 @@ describe('Validaciones null-safety (HU #10869)', () => {
       resent: true,
     });
 
-    render(<Validaciones />);
+    renderValidaciones();
     await screen.findByText('Juan Prevalidado');
 
     await user.click(

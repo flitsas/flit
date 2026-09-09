@@ -30,6 +30,8 @@ internal sealed class ProcedureInstanceAttachmentConfiguration : IEntityTypeConf
         builder.Property(x => x.SourceDeedId).HasColumnName("source_deed_id");
         // HU #11313/#11316 — versión de documento personalizado utilizada (espejo de SourceDeedId).
         builder.Property(x => x.SourcePersonalizedDocumentId).HasColumnName("source_personalized_document_id");
+        // HU #12166 (Feature #12156) — FUR/certificados marcados como históricos al revocar (OT).
+        builder.Property(x => x.IsHistorico).HasColumnName("is_historico").IsRequired().HasDefaultValue(false);
 
         builder.HasIndex(x => new { x.TenantId, x.ProcedureInstanceId })
             .HasDatabaseName("ix_procedure_instance_attachments_tenant_id_instance");

@@ -49,6 +49,9 @@ public sealed class DuplicateActiveProcedurePolicyTests
     [InlineData(TramiteEstado.Aprobado)]
     [InlineData(TramiteEstado.Rechazado)]
     [InlineData(TramiteEstado.Anulado)]
+    // HU #12165/#12166 (Feature #12156) — un Aprobado revocado por el OT libera la llave igual que
+    // los demás finales (AC2 de HU #12165: el CF-01 no lo cuenta como bloqueo).
+    [InlineData(TramiteEstado.Revocado)]
     public void FindActiveDuplicate_EstadoFinal_Null_LiberaLaLlave(string estado)
     {
         var existentes = new List<(Guid Id, string Estado, bool SubsanacionActiva)>

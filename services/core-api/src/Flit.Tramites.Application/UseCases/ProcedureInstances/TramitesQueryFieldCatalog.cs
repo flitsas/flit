@@ -17,10 +17,17 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// ver todo lo suyo.</para>
 ///
 /// <para><b>Solo entra lo que SQL puede resolver.</b> Esa es la línea que decide qué campo cabe aquí.
-/// Consultas ofrece además prenda, licencia de tránsito, transformaciones, leasing o método de pago,
-/// que viven en tablas hijas y se resuelven en memoria; ofrecerlos aquí obligaría a cargar el universo
-/// y sería exactamente el motor que se descartó. Quien necesite esas preguntas tiene la pestaña
-/// Consultas, que para eso está.</para>
+/// Vivir en una tabla hija no descalifica a un campo: <c>EXISTS</c> resuelve eso sin traer nada a
+/// memoria, y así entran el organismo (un <c>field_value</c>), prenda y transformación (HU #12199).
+/// Lo que queda fuera es lo que exige recorrer el universo o replicar lógica de C# fila a fila —el
+/// estado compuesto que se muestra junto a cada actor, por ejemplo—. Quien necesite esas preguntas
+/// tiene la pestaña Consultas, que para eso está.</para>
+///
+/// <para><b>Prenda y transformación no son un campo cualquiera.</b> Cada una tiene DOS disparadores:
+/// el trámite puede <i>llevar</i> la capa encima o <i>ser</i> la capa (ADR-0050). La regla la fija
+/// <c>TramiteMarcas</c> sobre objetos, y el repositorio la vuelve a escribir en <c>WHERE</c>; ambas
+/// leen los mismos códigos y los mismos valores afirmativos justamente para no poder discrepar del
+/// ícono que pinta el listado.</para>
 ///
 /// <para><b>Firma de compraventa, no «Firmado».</b> El nombre viejo prometía el estado compuesto que
 /// el gestor ve junto a cada actor —que además considera identidad acreditada y firma del baúl, y no
@@ -42,6 +49,8 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
     public const string FirmaCompraventa = "firma_compraventa";
     public const string Prioritario = "prioritario";
     public const string EnSubsanacion = "en_subsanacion";
+    public const string Prenda = "prenda";
+    public const string Transformacion = "transformacion";
     public const string MetodoPago = "metodo_pago";
     public const string Compania = "compania";
 
@@ -148,6 +157,18 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
         new(EnSubsanacion, "En subsanación", QueryFieldKind.Booleano, GrupoCaracteristicas,
             BooleanoOperators, SiNoOptions,
             "Si el organismo lo devolvió y sigue pendiente de corregir.", AdmiteLista: false),
+
+        // Las dos marcas que el listado ya pinta como ícono (HU #12183). Van en el mismo grupo y con
+        // la misma forma de Sí/No que las otras características: para el gestor son la misma clase de
+        // pregunta, y ya sabe reconocerlas porque las tiene delante en la tabla.
+        new(Prenda, "Prenda", QueryFieldKind.Booleano, GrupoCaracteristicas,
+            BooleanoOperators, SiNoOptions,
+            "Los que llevan un gravamen vigente y también los trámites que SON de prenda "
+            + "(inscribir, levantar, cambio de acreedor).", AdmiteLista: false),
+        new(Transformacion, "Transformación", QueryFieldKind.Booleano, GrupoCaracteristicas,
+            BooleanoOperators, SiNoOptions,
+            "Cambio de color, de carrocería, de combustible o blindaje: tanto los declarados dentro "
+            + "de otro trámite como los que son el trámite mismo.", AdmiteLista: false),
 
         // Del repositorio: los métodos de pago realmente usados. Es texto libre en la base, así que
         // una lista fija se quedaría corta o sobraría según el cliente.

@@ -32,7 +32,10 @@ export function buildListInstancesSearchParams(
   set('modalidad', params.modalidad?.trim());
   set('organismoTransito', params.organismoTransito?.trim());
   set('tipoCodigo', params.tipoCodigo?.trim());
+  // HU #12187 — búsqueda de texto libre y marcado prioritario, resueltos ahora en el servidor.
+  set('busqueda', params.busqueda?.trim());
   if (params.firmado !== undefined) set('firmado', params.firmado);
+  if (params.prioritario !== undefined) set('prioritario', params.prioritario);
   if (params.createdFrom?.trim()) set('createdFrom', dayStartIso(params.createdFrom.trim()));
   if (params.createdTo?.trim()) set('createdTo', dayEndIso(params.createdTo.trim()));
   if (params.updatedFrom?.trim()) set('updatedFrom', dayStartIso(params.updatedFrom.trim()));

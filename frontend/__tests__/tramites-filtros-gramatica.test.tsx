@@ -48,6 +48,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { TramitesTable } from '@/components/operacion/TramitesTable';
+// HU #12163 — el menú de acciones avanzadas del admin usa `useToast`: la tabla necesita
+// `<ToastProvider>` en el árbol, igual que en producción.
+import { ToastProvider } from '@/components/admin/Toast';
 
 function instancia(i: number): InstanceSummary {
   const num = String(i).padStart(4, '0');
@@ -88,7 +91,21 @@ beforeEach(() => {
     blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
   });
   mocks.listInstances.mockResolvedValue([instancia(1)]);
-  mocks.searchInstances.mockImplementation(async () => ({ items: [instancia(1)], total: 1 }));
+  // HU #12188 — el doble se comporta como el servidor también con la BÚSQUEDA: es él quien la
+  // resuelve desde esta HU, así que un doble que devolviera siempre la misma fila haría creer que
+  // el estado «Sin resultados» no se alcanza nunca.
+  mocks.searchInstances.mockImplementation(async (params?: { busqueda?: string }) => {
+    const texto = params?.busqueda?.trim().toLowerCase();
+    const fila = instancia(1);
+    const casa =
+      !texto ||
+      [fila.placa, fila.vin, fila.referenceNumber, fila.compradorNombre]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(texto);
+    return casa ? { items: [fila], total: 1 } : { items: [], total: 0 };
+  });
   mocks.searchEstadoCounts.mockResolvedValue({});
   mocks.listInstanceEstadoCounts.mockResolvedValue({});
   mocks.listFilterFields.mockResolvedValue([]);
@@ -97,7 +114,7 @@ beforeEach(() => {
 describe('HU #12107 — AC2: el catálogo lo manda el servidor', () => {
   it('un campo que el frontend no conoce aparece en la barra sin tocar el frontend', async () => {
     mocks.listFilterFields.mockResolvedValue([CAMPO_INVENTADO]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // UN clic. El panel ES el listado de campos: antes había que pulsar "Filtros" y luego un
@@ -110,7 +127,7 @@ describe('HU #12107 — AC2: el catálogo lo manda el servidor', () => {
   });
 
   it('sin catálogo no hay filtros que ofrecer, pero la tabla se pinta igual', async () => {
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await abrirFiltros();
@@ -122,7 +139,7 @@ describe('HU #12107 — AC2: el catálogo lo manda el servidor', () => {
 describe('el panel de filtros es de un solo nivel', () => {
   it('elegir un campo cambia el contenido del panel, y "Volver" devuelve a la lista', async () => {
     mocks.listFilterFields.mockResolvedValue([CAMPO_INVENTADO]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await abrirFiltros();
@@ -143,7 +160,7 @@ describe('el panel de filtros es de un solo nivel', () => {
 
   it('mientras se edita un campo no hay dos "Aplicar" a la vez', async () => {
     mocks.listFilterFields.mockResolvedValue([CAMPO_INVENTADO]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await abrirFiltros();
@@ -166,7 +183,7 @@ describe('el panel de filtros es de un solo nivel', () => {
 describe('HU #12107 — AC7: un catálogo que no carga no deja la pantalla inservible', () => {
   it('avisa y permite reintentar sin recargar la página', async () => {
     mocks.listFilterFields.mockRejectedValueOnce(new Error('503'));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     // La tabla NO depende del catálogo: sus filas están ahí.
     await screen.findByText('P0001');
@@ -191,7 +208,7 @@ describe('HU #12107 — AC7: un catálogo que no carga no deja la pantalla inser
 describe('HU #12107 — los chips hablan de lo APLICADO', () => {
   it('quitar un chip re-acota la tabla en el acto', async () => {
     mocks.listFilterFields.mockResolvedValue([CAMPO_INVENTADO]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await abrirFiltros();
@@ -228,13 +245,14 @@ describe('HU #12107 — los chips hablan de lo APLICADO', () => {
 describe('HU #12107 — AC8: sin resultados se distingue de un error', () => {
   it('dice que ningún trámite coincide y ofrece limpiar los filtros', async () => {
     mocks.listFilterFields.mockResolvedValue([CAMPO_INVENTADO]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // Hay trámites, pero ninguno casa: es el caso que hay que distinguir de "aún no hay trámites",
     // que se lee como una cuenta recién creada y no como un filtro demasiado estrecho.
     await userEvent.type(screen.getByPlaceholderText(/buscar/i), 'ZZZ');
 
+    // La búsqueda va al servidor tras un respiro (HU #12188): hay que esperar su respuesta.
     expect(await screen.findByText('Sin resultados')).toBeInTheDocument();
     expect(screen.getByText(/Ningún trámite coincide/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Limpiar filtros' })).toBeInTheDocument();
@@ -243,7 +261,7 @@ describe('HU #12107 — AC8: sin resultados se distingue de un error', () => {
 
 describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
   it('AC1: la cabecera de una celda compuesta ofrece sus datos, en los dos sentidos', async () => {
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // "Radicado" apila las dos fechas: un clic no podría decir por cuál se ordena.
@@ -256,7 +274,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
   });
 
   it('AC4: elegir un criterio lo pide al servidor y vuelve a la primera página', async () => {
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
@@ -275,7 +293,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
   });
 
   it('AC3: solo hay un criterio activo, y la cabecera lo dice', async () => {
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
@@ -297,7 +315,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
   });
 
   it('AC2: una columna con un solo dato ordenable abre el MISMO menú', async () => {
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // "Comprador" lleva un solo dato, pero la cabecera se comporta igual que las compuestas. Con
@@ -316,7 +334,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
   });
 
   it('el sentido se rotula según el tipo de dato: ni una fecha ni un número se ordenan de A a Z', async () => {
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
@@ -340,7 +358,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
   });
 
   it('toda columna ordenable ofrece su menú, también Vendedor y Secretaría', async () => {
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // Se quedaron sin desplegable hasta que el catálogo del backend admitió ordenar por ellas:
@@ -355,7 +373,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
   });
 
   it('AC6: el menú se cierra con Escape y devuelve el foco a la cabecera', async () => {
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     const cabecera = screen.getByRole('button', { name: /^Ordenar Radicado$/ });

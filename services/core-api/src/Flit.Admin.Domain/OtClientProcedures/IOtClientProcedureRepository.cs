@@ -130,4 +130,39 @@ public interface IOtClientProcedureRepository
         Guid? changedBy,
         string source,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12167 (Feature #12156) — el OT corrige la placa asignada dentro de la hora siguiente a
+    /// <c>plate_assigned_at</c> (una única oportunidad, <c>plate_updated_at</c> nulo). Reutiliza el
+    /// mismo mecanismo de escritura de <see cref="AssignPlateAsync"/> (field_value <c>plate</c>,
+    /// denormalizado por trigger) y dispara <see cref="PlateAssignmentFailure.PlateUpdateWindowExpired"/>
+    /// o <see cref="PlateAssignmentFailure.PlateUpdateAlreadyUsed"/> según cuál de las dos condiciones
+    /// falle. Registra un <c>ProcedureInstanceEvent</c> (placa anterior/nueva/usuario/fecha) — no hay
+    /// transición de estado, así que no aplica <c>procedure_instance_status_history</c>.
+    /// </summary>
+    Task<PlateAssignmentOutcome> UpdatePlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string plate,
+        Guid? changedBy,
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12166 (Feature #12156) — el OT deshace su propia aprobación: <c>aprobado → revocado</c>
+    /// (única salida de <c>aprobado</c> en <see cref="Domain.Tramites.Estados.TramiteStateMachine"/>,
+    /// alcanzable SOLO por este método). En la misma transacción: libera la placa (Revocado entra en
+    /// <c>EstadosQueLiberanPlaca</c>, así que no hace falta tocar <c>plate_range_details</c> aparte) y
+    /// marca el FUR/certificados vigentes como históricos (<c>ProcedureInstanceAttachment.IsHistorico</c>).
+    /// Devuelve <c>null</c> si el trámite no es accesible o no está en <c>aprobado</c> (409
+    /// <c>INVALID_STATE</c>, mismo patrón que <see cref="ApproveAsync"/>/<see cref="RejectAsync"/>).
+    /// </summary>
+    Task<OtClientProcedure?> RevokeAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string? reason,
+        Guid? changedBy,
+        string source,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
 }
