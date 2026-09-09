@@ -106,6 +106,7 @@ public static class DevelopmentAuthSeeder
         await SeedHistorialPlacaPermissionsAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedGeneracionDocumentalPermissionsAsync(db, cancellationToken);
+        await SeedBannersPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
@@ -1606,6 +1607,77 @@ public static class DevelopmentAuthSeeder
 
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    /// <summary>
+    /// HU #12239 (Feature #12236) -- banners promocionales
+    /// (ADR-0058-banners-tabla-global-sin-tenant-excepcion) -- modulo banners + permiso
+    /// banners.manage, concedido a SuperAdmin y AdminCompany. Metodo propio e idempotente,
+    /// separado de SeedBaseModulesAsync por el mismo motivo que SeedGeneracionDocumentalPermissionsAsync
+    /// (ese metodo hace early-return si el modulo dashboard ya existe).
+    /// </summary>
+    internal static async Task SeedBannersPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        const string moduleCode = "banners";
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == moduleCode && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = moduleCode,
+                Name = "Banners promocionales",
+                SortOrder = 11,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        const string slug = "banners.manage";
+        var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = slug,
+                Name = "Gestionar banners promocionales",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/admin/banners",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var alreadyGranted = await db.RoleGrants
+                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                if (!alreadyGranted)
+                {
+                    db.RoleGrants.Add(new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = action.Id,
+                        CreatedAt = now,
+                    });
+                }
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>

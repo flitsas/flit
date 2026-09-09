@@ -259,6 +259,14 @@ public static class DependencyInjection
         services.AddScoped<PurgeDocumentTypeHandler>();
         services.AddScoped<ReactivateDocumentTypeHandler>();
 
+        // HU #12239 (Feature #12236) -- CRUD de banners promocionales (admin.banners, ADR-0058).
+        // IBannerRepository e IBannerImageStorage se registran en Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<Banners.CreateBanner.CreateBannerHandler>();
+        services.AddScoped<Banners.UpdateBanner.UpdateBannerHandler>();
+        services.AddScoped<Banners.ListBanners.ListBannersHandler>();
+        services.AddScoped<Banners.SetBannerActive.SetBannerActiveHandler>();
+        services.AddScoped<Banners.DeleteBanner.DeleteBannerHandler>();
+
         // Causales de rechazo — catálogo global (CRUD SuperAdmin). Sustituye al motivo escrito a
         // mano como dato agregable del reporte de motivos del organismo y de la empresa.
         services.AddScoped<ListRejectionReasonsHandler>();

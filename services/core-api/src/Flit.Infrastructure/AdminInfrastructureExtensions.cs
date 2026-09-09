@@ -202,6 +202,14 @@ public static class AdminInfrastructureExtensions
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 
+        // HU #12239 (Feature #12236) -- CRUD de banners promocionales. admin.banners es global
+        // (ADR-0058, sin tenant_id). El puerto de imagen delega en IAttachmentStorage con clave
+        // de agrupacion fija (ADR-0057).
+        services.AddScoped<Flit.Admin.Domain.Banners.IBannerRepository,
+            Flit.Infrastructure.Persistence.Repositories.BannerRepository>();
+        services.AddScoped<Flit.Admin.Application.Banners.Ports.IBannerImageStorage,
+            Flit.Infrastructure.Storage.BannerImageStorage>();
+
         // Causales de rechazo — catálogo global (CRUD SuperAdmin) y validación de las causales
         // que llegan en el rechazo del organismo.
         services.AddScoped<Flit.Admin.Domain.RejectionReasons.IRejectionReasonRepository,
