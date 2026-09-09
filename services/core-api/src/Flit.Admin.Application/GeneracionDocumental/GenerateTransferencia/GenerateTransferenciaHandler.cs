@@ -49,12 +49,6 @@ public sealed class GenerateTransferenciaHandler
     /// </summary>
     public const string ErrorScenarioNotImplemented = "scenario_not_implemented";
 
-    /// <summary>Catálogo de <c>{{asume_retencion_fuente}}</c> y <c>{{asume_impuesto_vehiculo}}</c> (§5.4).</summary>
-    private static readonly string[] AsuncionConLey = ["TRANSFERENTE", "ADQUIRENTE", "SEGUN_LEY"];
-
-    /// <summary>Catálogo de <c>{{asume_derechos_tramite}}</c> (§5.4): aquí no existe «según la ley».</summary>
-    private static readonly string[] AsuncionDerechos = ["TRANSFERENTE", "ADQUIRENTE", "COMPARTIDOS"];
-
     private readonly IStandaloneDocumentRepository _repository;
     private readonly IStandaloneTransferGenerator _generator;
     private readonly IStandaloneDocumentStorage _storage;
@@ -318,14 +312,14 @@ public sealed class GenerateTransferenciaHandler
         var entrada = command.Negocio;
         var esRemolque = TransferValidationPolicy.EsRemolque(command.Vehiculo?.ClaseVehiculo);
 
-        var retencion = NormalizeCatalog(entrada?.AsumeRetencionFuente, AsuncionConLey);
+        var retencion = NormalizeCatalog(entrada?.AsumeRetencionFuente, TransferFiscalAssumption.ConLey);
         if (retencion is null)
         {
             invalidField = "negocio.asumeRetencionFuente";
             return false;
         }
 
-        var derechos = NormalizeCatalog(entrada?.AsumeDerechosTramite, AsuncionDerechos);
+        var derechos = NormalizeCatalog(entrada?.AsumeDerechosTramite, TransferFiscalAssumption.Derechos);
         if (derechos is null)
         {
             invalidField = "negocio.asumeDerechosTramite";
@@ -338,7 +332,7 @@ public sealed class GenerateTransferenciaHandler
         string? impuesto = null;
         if (!esRemolque)
         {
-            impuesto = NormalizeCatalog(entrada?.AsumeImpuestoVehiculo, AsuncionConLey);
+            impuesto = NormalizeCatalog(entrada?.AsumeImpuestoVehiculo, TransferFiscalAssumption.ConLey);
             if (impuesto is null)
             {
                 invalidField = "negocio.asumeImpuestoVehiculo";
@@ -628,7 +622,7 @@ public sealed class GenerateTransferenciaHandler
         }.ToJsonString();
     }
 
-    private static string? NormalizeCatalog(string? value, string[] catalog)
+    private static string? NormalizeCatalog(string? value, IReadOnlyList<string> catalog)
     {
         var normalized = value?.Trim().ToUpperInvariant();
         return normalized is not null && catalog.Contains(normalized, StringComparer.Ordinal)

@@ -329,6 +329,36 @@ export interface StandaloneBatchStatusResult {
   completedAt?: string | null;
 }
 
+/**
+ * Rechazos de `POST /lotes` que describen el ARCHIVO COMPLETO, no una fila. Cuando llega uno de
+ * estos no se procesó ninguna fila y nada quedó en storage: el lote no llegó a existir.
+ *
+ * Es un catálogo cerrado a propósito. La pantalla traduce cada código a una instrucción concreta
+ * —qué hizo mal y qué hacer ahora—, que es lo que un código crudo en pantalla no da.
+ */
+export type StandaloneBatchCreateErrorCode =
+  | "too_many_rows"
+  | "template_invalid"
+  | "invalid_file"
+  | "invalid_request";
+
+/**
+ * Respuesta de `POST /lotes` (CF-11/CF-16, HU #12224). El procesamiento es asíncrono: esto confirma que el
+ * lote quedó encolado, no que los documentos existan.
+ */
+export interface StandaloneBatchCreateResult {
+  batchId: string;
+  status: StandaloneBatchStatus;
+  /** Filas de datos detectadas en el XLSX, sin contar el encabezado. */
+  total: number;
+  /**
+   * `true` cuando el backend devolvió un lote que YA existía en vez de crear uno (CF-16, respuesta
+   * 200 en lugar de 202). Se deduce del código de estado, que es lo único que los distingue: el
+   * cuerpo es idéntico.
+   */
+  alreadyExisted: boolean;
+}
+
 /** Un error de una fila del XLSX. `message` nunca refleja el valor capturado (CF-13). */
 export interface StandaloneBatchItemError {
   code?: string | null;

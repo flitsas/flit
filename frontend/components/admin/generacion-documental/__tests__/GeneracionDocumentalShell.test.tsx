@@ -41,15 +41,18 @@ beforeEach(() => {
 });
 
 describe("GeneracionDocumentalTabs (CF-01)", () => {
-  it("expone las tres pestañas del módulo con semántica de tablist", () => {
+  it("expone las cuatro pestañas del módulo con semántica de tablist", () => {
     render(<GeneracionDocumentalTabs activeId="rues" />);
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Certificado RUES",
       "Transferencia",
+      "Carga masiva",
       "Historial",
     ]);
-    expect(GENERACION_DOCUMENTAL_TABS).toHaveLength(3);
+    // Cuatro desde HU #12224: la carga masiva es una forma de generar, no una vista de
+    // detalle, y sin pestaña propia el XLSX no tenía por dónde entrar a la aplicación.
+    expect(GENERACION_DOCUMENTAL_TABS).toHaveLength(4);
   });
 
   it("marca la pestaña activa con aria-selected", () => {

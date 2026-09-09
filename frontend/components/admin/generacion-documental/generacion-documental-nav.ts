@@ -13,7 +13,7 @@ export const GENERACION_DOCUMENTAL_MODULE_CODE = "generacion-documental";
 /** Raíz de las rutas del módulo. */
 export const GENERACION_DOCUMENTAL_BASE_PATH = "/admin/generacion-documental";
 
-export type GeneracionDocumentalTabId = "rues" | "transferencia" | "historial";
+export type GeneracionDocumentalTabId = "rues" | "transferencia" | "lotes" | "historial";
 
 export interface GeneracionDocumentalTab {
   id: GeneracionDocumentalTabId;
@@ -23,6 +23,10 @@ export interface GeneracionDocumentalTab {
 export const GENERACION_DOCUMENTAL_TABS: GeneracionDocumentalTab[] = [
   { id: "rues", label: "Certificado RUES" },
   { id: "transferencia", label: "Transferencia" },
+  // Cuarta pestaña (HU #12224). Las tres primeras son las de CF-01; esta es la tercera FORMA DE
+  // GENERAR, no una vista de detalle —por eso sí es pestaña y el seguimiento de un lote concreto
+  // no lo es: aquel cuelga de esta, como una ficha cuelga de un listado.
+  { id: "lotes", label: "Carga masiva" },
   { id: "historial", label: "Historial" },
 ];
 

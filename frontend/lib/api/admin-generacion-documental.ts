@@ -5,9 +5,11 @@
  * en los componentes. La generación NO devuelve el PDF: responde `{ id, status }` y la
  * descarga se resuelve después con `requestStandaloneDocumentDownload`.
  */
-import { apiFetch } from "./client";
+import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
 import { downloadFile } from "./download";
+import { ApiError } from "./types";
 import type {
+  StandaloneBatchCreateResult,
   StandaloneBatchItemsPagedResult,
   StandaloneBatchStatusResult,
   StandaloneDocumentDownloadLink,
@@ -149,6 +151,78 @@ export function prefillPersonaNatural(
     body: request,
     signal,
   });
+}
+
+// ── Lotes XLSX: plantilla y carga (CF-11/CF-16, HU #12224) ──────────────────────────────────
+
+/**
+ * `GET /lotes/plantilla` — descarga la plantilla XLSX v1.
+ *
+ * La genera el servidor a partir de la MISMA lista de columnas con la que después valida la carga
+ * (`StandaloneBatchTemplate`), así que no puede entregarse una plantilla que luego se rechace. No
+ * se sirve como archivo estático por eso mismo: un .xlsx en `public/` envejecería en silencio en
+ * cuanto el contrato cambiara.
+ */
+export function downloadStandaloneBatchTemplate(signal?: AbortSignal): Promise<void> {
+  return downloadFile(`${GENERACION_DOCUMENTAL_API_BASE}/lotes/plantilla`, {
+    fallbackFilename: "plantilla-generacion-documental-v1.xlsx",
+    signal,
+  });
+}
+
+/**
+ * `POST /lotes` — sube el XLSX y encola el lote (CF-11).
+ *
+ * Va por `fetch` directo y no por `apiFetch`, que es JSON-only: el cuerpo es `multipart/form-data`
+ * y el navegador tiene que poner el `Content-Type` con su propio *boundary*. Fijarlo a mano rompe
+ * la petición.
+ *
+ * `idempotencyKey` NO es opcional aquí (el backend sí lo admite vacío): sin ella, un doble clic o
+ * un reintento tras un error de red crean dos lotes con los mismos documentos, y borrarlos después
+ * es trabajo manual. Con ella, la segunda petición devuelve el lote que ya existía (CF-16).
+ *
+ * Los rechazos del archivo completo llegan como `ApiError` con `detail.error` en el catálogo de
+ * `StandaloneBatchCreateErrorCode`; el llamador los traduce. **El mensaje nunca incluye contenido
+ * del archivo**: los datos de las partes son PII y no tienen por qué aparecer en una alerta.
+ */
+export async function createStandaloneBatch(
+  file: File,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<StandaloneBatchCreateResult> {
+  const origin =
+    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(`${GENERACION_DOCUMENTAL_API_BASE}/lotes`, origin);
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const token = getToken();
+  const headers: Record<string, string> = { "Idempotency-Key": idempotencyKey };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers,
+    body: formData,
+    signal,
+  });
+
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      detail = await response.json();
+    } catch {
+      /* error sin cuerpo JSON */
+    }
+    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
+  }
+
+  const body = (await response.json()) as Omit<StandaloneBatchCreateResult, "alreadyExisted">;
+
+  // 202 = lote nuevo; 200 = el mismo Idempotency-Key ya había creado uno. El cuerpo es idéntico en
+  // los dos casos y el código de estado es lo único que los separa.
+  return { ...body, alreadyExisted: response.status === 200 };
 }
 
 // ── Lotes XLSX: seguimiento y descarga (CF-13/CF-14/CF-15, HU #12211) ───────────────────────
