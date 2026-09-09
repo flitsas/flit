@@ -79,6 +79,7 @@ import {
 } from './TramiteDocumentosModal';
 import { TramiteDetalleModal } from './TramiteDetalleModal';
 import { TramiteTrackingModal } from './TramiteTrackingModal';
+import { useAdminTramiteAcciones } from './AdminTramiteAcciones';
 import type {
   BiometricParte,
   FirmaParteEstado,
@@ -1198,6 +1199,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           onOpenDetalle={setDetalleTramite}
           onOpenTrackingTramite={setTrackingTramite}
           onOpenIdentidadTracking={setIdentidadTracking}
+          isAdmin={isAdmin}
+          onAdminActionSuccess={() => void load()}
         />
       </div>
 
@@ -1543,6 +1546,8 @@ function TableBody({
   onOpenDetalle,
   onOpenTrackingTramite,
   onOpenIdentidadTracking,
+  isAdmin,
+  onAdminActionSuccess,
 }: {
   loading: boolean;
   error: string | null;
@@ -1583,6 +1588,11 @@ function TableBody({
     parte: BiometricParte;
     rotulo: string;
   }) => void;
+  /** HU #12163 — SuperAdmin viendo trámites de otra compañía (X-Tenant-Id de la fila en las
+   *  acciones administrativas avanzadas). */
+  isAdmin: boolean;
+  /** HU #12163 — refresca la tabla tras una acción administrativa avanzada exitosa. */
+  onAdminActionSuccess: () => void;
 }) {
   if (loading) {
     // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
@@ -1755,6 +1765,8 @@ function TableBody({
                 onOpenDetalle={onOpenDetalle}
                 onOpenTrackingTramite={onOpenTrackingTramite}
                 onOpenIdentidadTracking={onOpenIdentidadTracking}
+                isAdmin={isAdmin}
+                onAdminActionSuccess={onAdminActionSuccess}
               />
             ))}
           </tbody>
@@ -1868,6 +1880,8 @@ function TramiteRow({
   onOpenDetalle,
   onOpenTrackingTramite,
   onOpenIdentidadTracking,
+  isAdmin,
+  onAdminActionSuccess,
 }: {
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
@@ -1893,6 +1907,9 @@ function TramiteRow({
     parte: BiometricParte;
     rotulo: string;
   }) => void;
+  /** HU #12163 — ver doc de `TableBody`. */
+  isAdmin: boolean;
+  onAdminActionSuccess: () => void;
 }) {
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
@@ -1918,6 +1935,13 @@ function TramiteRow({
   const plateHint = plateFlowHint(item.plateFlowStatus);
   const puedeProcesar =
     item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
+  // HU #12163 — acciones avanzadas del administrador (Cambiar estado, Anular, Consolidado,
+  // Reenviar validación, Reasignar gestor), gateadas por permiso (AC1) y por estado (AC2).
+  const { items: adminActionItems, modals: adminActionModals } = useAdminTramiteAcciones({
+    item,
+    isAdmin,
+    onChanged: onAdminActionSuccess,
+  });
   const actionItems: ActionsMenuItem[] = [
     {
       key: 'abrir',
@@ -1967,6 +1991,8 @@ function TramiteRow({
           },
         ]
       : []),
+    // HU #12163 — gestión avanzada del administrador, anexada al final del menú de la fila.
+    ...adminActionItems,
   ];
   const motivoRechazo = item.ultimoRechazoMotivo?.trim() || null;
   const subsanacionCount = item.subsanacionCount ?? 0;
@@ -2465,6 +2491,11 @@ function TramiteRow({
           </button>
         </div>
       </Modal>
+
+      {/* HU #12163 — modales de las acciones administrativas avanzadas (Cambiar estado, Anular,
+          Consolidado, Reenviar validación, Reasignar gestor). Igual que `Modal` arriba, se portan a
+          `document.body` (createPortal): no rompen la validez de la tabla. */}
+      {adminActionModals}
     </tr>
   );
 }

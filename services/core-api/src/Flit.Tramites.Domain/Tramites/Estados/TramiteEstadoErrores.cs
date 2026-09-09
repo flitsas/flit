@@ -112,4 +112,36 @@ public static class TramiteEstadoErrores
     /// false) ⇒ cero impacto en trámites de plataforma (409).
     /// </summary>
     public const string TramitePausado = "tramite_pausado";
+
+    /// <summary>
+    /// HU #12159 — cambio de estado ADMINISTRATIVO (fuera de <see cref="TramiteStateMachine"/>): la
+    /// única regla dura de este endpoint es que <c>aprobado</c> nunca participa, ni como origen ni
+    /// como destino. La aprobación exige el flujo formal (gates de entrega, resolución de mandatario,
+    /// efectos en cascada) que este endpoint deliberadamente NO reproduce (422).
+    /// </summary>
+    public const string AdminAprobadoExcluido = "admin_aprobado_excluido";
+
+    /// <summary>
+    /// HU #12160 — anulación ADMINISTRATIVA: el trámite está en <c>aprobado</c> y no puede anularse
+    /// (422). Código ESTABLE definido por el AC de la HU (formato distinto al resto de este catálogo
+    /// a propósito: es el contrato literal acordado con frontend/QA para esta acción).
+    /// </summary>
+    public const string CannotAnnulApproved = "CANNOT_ANNUL_APPROVED";
+
+    /// <summary>
+    /// HU #12160 — anulación ADMINISTRATIVA: el trámite está en <c>revocado</c> y no puede anularse
+    /// (422). El estado <c>revocado</c> TODAVÍA NO EXISTE como miembro de <see cref="TramiteEstado"/>
+    /// (lo agrega la Feature hermana #12156, HU #12165); ver <c>AdminAnularHandler</c> (capa
+    /// Application) para la comparación por string mientras tanto. Código ESTABLE definido por el AC
+    /// de la HU (mismo criterio de formato que <see cref="CannotAnnulApproved"/>).
+    /// </summary>
+    public const string CannotAnnulRevoked = "CANNOT_ANNUL_REVOKED";
+
+    /// <summary>
+    /// HU #12161 — reenvío ADMINISTRATIVO de la validación de identidad de un trámite: el trámite está en
+    /// <c>aprobado</c>, <c>anulado</c> o "revocado" (string, HU #12165 aún no existe como enum — ver
+    /// <c>AdminReenviarValidacionIdentidadHandler</c>, capa Application) y la identidad ya no es
+    /// accionable, sin importar el estado de la validación en sí (422).
+    /// </summary>
+    public const string IdentidadReenvioNoDisponible = "identidad_reenvio_no_disponible";
 }

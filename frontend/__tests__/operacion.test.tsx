@@ -50,6 +50,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { OperacionView } from '@/components/operacion/OperacionView';
+// HU #12163 — el menú de acciones avanzadas del admin usa `useToast`: la tabla necesita
+// `<ToastProvider>` en el árbol, igual que en producción (`app/tramites/layout.tsx`).
+import { ToastProvider } from '@/components/admin/Toast';
 
 /**
  * Filas de datos de "Trámites en curso": la tabla ahora es un `<table>` semántico, así que
@@ -185,14 +188,14 @@ const INSTANCE_SUBMITTED: InstanceSummary = {
 
 describe('M6 — tabla de trámites en curso', () => {
   it('muestra el estado vacío cuando no hay instancias', async () => {
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
     expect(await screen.findByText('Aún no hay trámites')).toBeInTheDocument();
     expect(mocks.listInstances).toHaveBeenCalledTimes(1);
   });
 
   it('renderiza una fila por instancia con placa, comprador, VIN, paso y chip de estado', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     const rows = await findTramitesBodyRows();
     expect(rows).toHaveLength(2);
@@ -216,7 +219,7 @@ describe('M6 — tabla de trámites en curso', () => {
   it('al hacer clic en una fila navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     const row = await screen.findByRole('button', { name: /Abrir trámite TR-001/ });
     await user.click(row);
@@ -230,7 +233,7 @@ describe('M0 — entrada al asistente (flujo del diseño)', () => {
   it('el botón general entra al asistente sin decidir la modalidad', async () => {
     const onNew = vi.fn();
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={onNew} />);
+    render(<ToastProvider><OperacionView onNewTramite={onNew} /></ToastProvider>);
 
     await user.click(await screen.findByRole('button', { name: /Nuevos*trámite/ }));
 
@@ -242,7 +245,7 @@ describe('M0 — entrada al asistente (flujo del diseño)', () => {
   });
 
   it('ya no ofrece un selector de modalidad en el listado', async () => {
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
     await screen.findByRole('button', { name: /Nuevos*trámite/ });
 
     expect(screen.queryByRole('radio', { name: /Matrícula inicial/ })).toBeNull();
@@ -253,7 +256,7 @@ describe('M0 — entrada al asistente (flujo del diseño)', () => {
 describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('renderiza los chips de filtro de modalidad y estado', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     // Espera a que cargue el listado (sale del estado "Cargando…").
     await screen.findByRole('table', { name: /Trámites en curso/ });
@@ -275,7 +278,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la búsqueda por placa reduce las filas visibles', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     const initialRows = await findTramitesBodyRows();
     expect(initialRows).toHaveLength(2);
@@ -291,7 +294,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la búsqueda por VIN reduce las filas visibles', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     await findTramitesBodyRows();
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'VIN-NEW-002');
@@ -306,7 +309,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la acción Continuar de una fila borrador navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     await user.click(
       await screen.findByRole('button', { name: /Acciones del trámite TR-001/ }),
@@ -322,7 +325,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la acción Ver de una fila submitted abre el modal de detalle sin navegar', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     await user.click(
       await screen.findByRole('button', { name: /Acciones del trámite MA-002/ }),
@@ -339,7 +342,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('el estado vacío con filtros activos muestra "Limpiar filtros" y al limpiar reaparecen las filas', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     await findTramitesBodyRows();
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ZZZ-SIN-MATCH');

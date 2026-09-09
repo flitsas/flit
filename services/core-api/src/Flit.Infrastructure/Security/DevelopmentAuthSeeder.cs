@@ -105,6 +105,7 @@ public static class DevelopmentAuthSeeder
         await SeedIctPiiRevealPermissionAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
+        await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -1459,6 +1460,111 @@ public static class DevelopmentAuthSeeder
                     });
                 }
             }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Feature #12155 (HU #12157) — módulo <c>admin-tramites-avanzado</c> + 6 permisos granulares
+    /// para las acciones de gestión avanzada del administrador sobre trámites en el Dashboard:
+    /// cambiar estado, anular, limpiar/cargar consolidado, reenviar validación de identidad y
+    /// reasignar gestor. Mismo patrón e idempotencia que
+    /// <see cref="SeedDetailedReportPermissionsAsync"/>: crea módulo y permisos si faltan.
+    ///
+    /// Catálogo cerrado por defecto (AC3 — slugs independientes entre sí): solo se concede a
+    /// SuperAdmin (que además bypassa por rol en runtime), igual que
+    /// <see cref="SeedIctPiiRevealPermissionAsync"/>. Ningún rol de empresa recibe estos permisos
+    /// por seed; asignarlos a un rol concreto es una decisión explícita de quien administra RBAC,
+    /// que es justamente el propósito de que cada acción tenga su propio slug.
+    ///
+    /// Esta HU no implementa los endpoints de negocio (los protegen las HUs dependientes
+    /// #12158-#12162 con <c>.RequirePermission(...)</c>); el <c>RoutePattern</c> queda como
+    /// referencia del endpoint planeado para el catálogo RBAC.
+    /// </summary>
+    private static async Task SeedAdminTramiteAdvancedPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "admin-tramites-avanzado" && m.DeletedAt == null, ct);
+
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "admin-tramites-avanzado",
+                Name = "Gestión avanzada de trámites (Admin)",
+                SortOrder = 11,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var slugs = new (string Slug, string Name, string RoutePattern, string Method)[]
+        {
+            ("AdminTramiteCambiarEstado",       "Cambiar estado de un trámite",              "/api/v1/admin/tramites/{id}/estado",                 "PUT"),
+            ("AdminTramiteAnular",              "Anular un trámite",                         "/api/v1/admin/tramites/{id}/anular",                 "POST"),
+            ("AdminTramiteLimpiarConsolidado",  "Limpiar el consolidado de un trámite",      "/api/v1/admin/tramites/{id}/consolidado/limpiar",    "POST"),
+            ("AdminTramiteCargarConsolidado",   "Cargar el consolidado de un trámite",       "/api/v1/admin/tramites/{id}/consolidado/cargar",     "POST"),
+            ("AdminTramiteReenviarValidacion",  "Reenviar validación de identidad",          "/api/v1/admin/tramites/{id}/reenviar-validacion",    "POST"),
+            ("AdminTramiteReasignarGestor",     "Reasignar gestor de un trámite",            "/api/v1/admin/tramites/{id}/gestor",                 "PUT"),
+        };
+
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .Select(a => a.Slug)
+            .ToListAsync(ct);
+
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Method,
+                RoutePattern = s.RoutePattern,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length > 0)
+        {
+            db.RbacActions.AddRange(newActions);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var allActions = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .ToListAsync(ct);
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene. Sin grant a AdminCompany u
+        // otros roles de empresa — abrir cada permiso a un rol concreto es un acto explícito de
+        // RBAC posterior a este seed (AC3).
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var existingGrants = await db.RoleGrants
+                .Where(g => g.RoleId == role.Id)
+                .Select(g => g.PermissionId)
+                .ToListAsync(ct);
+
+            db.RoleGrants.AddRange(allActions
+                .Where(a => !existingGrants.Contains(a.Id))
+                .Select(a => new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = a.Id,
+                    CreatedAt = now,
+                }));
         }
 
         await db.SaveChangesAsync(ct);

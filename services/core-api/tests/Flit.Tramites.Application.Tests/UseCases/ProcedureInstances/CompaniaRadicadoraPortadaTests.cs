@@ -360,7 +360,10 @@ public sealed class CompaniaRadicadoraPortadaTests
                 SizeBytes = content.Length,
                 Sha256 = $"sha-{tipo}",
                 StoragePath = path,
-                Source = "user",
+                // HU #12158 (AC2) — "consolidado"/"consolidado_maestro" son SISTEMA por defecto en
+                // este fixture: la producción SIEMPRE los crea con Source="system", y un valor "user"
+                // aquí dispararía por accidente la protección nueva de GenerarConsolidadoHandler.
+                Source = tipo is "consolidado" or "consolidado_maestro" ? "system" : "user",
                 UploadedAt = DateTimeOffset.UtcNow,
             });
         }

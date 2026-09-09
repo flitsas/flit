@@ -50,6 +50,10 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { TramitesTable } from '@/components/operacion/TramitesTable';
+// HU #12163 — el menú de acciones avanzadas del admin usa `useToast` (feedback de las 5 acciones
+// nuevas): la tabla ahora necesita `<ToastProvider>` en el árbol, igual que en producción
+// (`app/page.tsx` y `app/tramites/layout.tsx` ya envuelven la pantalla con él).
+import { ToastProvider } from '@/components/admin/Toast';
 
 /** Genera n instancias draft con placa única (P0001, P0002, …). */
 /**
@@ -143,7 +147,7 @@ beforeEach(() => {
 describe('TramitesTable — paginación', () => {
   it('no muestra botones de página cuando todo cabe en una página, pero sí el conteo', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(10));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     const nav = screen.getByRole('navigation', { name: 'Paginación de trámites' });
@@ -156,7 +160,7 @@ describe('TramitesTable — paginación', () => {
 
   it('pagina a 10 filas por página y navega entre páginas', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(23));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     // Página 1: P0001..P0010 visibles, P0011 no.
     await screen.findByText('P0001');
@@ -193,7 +197,7 @@ describe('TramitesTable — paginación', () => {
 
   it('vuelve a la primera página al aplicar un filtro de búsqueda', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(23));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const nav = await screen.findByRole('navigation', {
       name: 'Paginación de trámites',
@@ -229,7 +233,7 @@ describe('TramitesTable — filtro por estado en el slider KPI', () => {
       params?.estado === 'entregado' ? [entregado] : [borrador, entregado],
     );
     mocks.listInstanceEstadoCounts.mockResolvedValue({ borrador: 1, entregado: 1 });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('AAA111');
     expect(screen.getByText('BBB222')).toBeInTheDocument();
@@ -259,7 +263,7 @@ describe('TramitesTable — filtro por estado en el slider KPI', () => {
     const [a] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([{ ...a, estado: 'borrador', placa: 'AAA111' }]);
     mocks.listInstanceEstadoCounts.mockResolvedValue({ borrador: 340, entregado: 12 });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('AAA111');
     expect(
@@ -283,7 +287,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         identityValidationStatus: 'en_proceso',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const row = (await screen.findByText('PEND01')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
@@ -307,7 +311,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         signaturePending: true,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const row = (await screen.findByText('FIRM01')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Pendiente firma')).toBeInTheDocument();
@@ -326,7 +330,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         canSubmit: true,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const row = (await screen.findByText('RDY001')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
@@ -344,7 +348,7 @@ describe('TramitesTable — organismo de tránsito', () => {
       { ...base, id: 'a', placa: 'BOG001', organismoTransito: 'Secretaría de Movilidad Bogotá' },
       { ...base, id: 'b', placa: 'CAL001', organismoTransito: 'Cali — STTMP' },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('BOG001');
     expect(screen.getByText('Secretaría de Movilidad Bogotá')).toBeInTheDocument();
@@ -369,7 +373,7 @@ describe('TramitesTable — HU #10536 prioridad', () => {
       { ...base, id: 'p1', placa: 'PRI001', prioritario: false },
     ]);
     mocks.setPriority.mockResolvedValue({ id: 'p1', prioritario: true });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const star = await screen.findByRole('button', {
       name: /Marcar como prioritario el trámite/,
@@ -391,7 +395,7 @@ describe('TramitesTable — HU #10536 prioridad', () => {
       { ...base, id: 'x2', referenceNumber: 'TR-X2', placa: 'BBB222', prioritario: false },
     ]);
     mocks.setPriority.mockResolvedValue({ id: 'x2', prioritario: true });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('AAA111');
     const filas = () =>
@@ -417,7 +421,7 @@ describe('TramitesTable — HU #10536 prioridad', () => {
       { ...base, id: 'x2', referenceNumber: 'TR-X2', placa: 'BBB222', prioritario: false },
     ]);
     mocks.setPriority.mockResolvedValue({ id: 'x2', prioritario: true });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('AAA111');
     const filas = () =>
@@ -442,7 +446,7 @@ describe('TramitesTable — HU #10536 prioridad', () => {
       { ...base, id: 'a', placa: 'PRIO01', prioritario: true },
       { ...base, id: 'b', placa: 'NORM01', prioritario: false },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('PRIO01');
     expect(screen.getByText('NORM01')).toBeInTheDocument();
@@ -492,7 +496,7 @@ describe('TramitesTable — subsanación / motivo de rechazo', () => {
         ultimoRechazoMotivo: null,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const row = (await screen.findByText('SUB001')).closest('tr') as HTMLElement;
     expect(within(row).queryByText('En subsanación')).not.toBeInTheDocument();
@@ -522,7 +526,7 @@ describe('TramitesTable — subsanación / motivo de rechazo', () => {
         ultimoRechazoMotivo: 'Falta certificado de tradición',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('REJ001');
     expect(screen.queryByText('Falta certificado de tradición')).not.toBeInTheDocument();
@@ -566,7 +570,7 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
       instance({ id: 'a', placa: 'AAA111', tenantId: 'ten-a', companiaNombre: 'Empresa A' }),
       instance({ id: 'b', placa: 'BBB222', tenantId: 'ten-b', companiaNombre: 'Empresa B' }),
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('AAA111');
     // Gestor está fuera del default de la pantalla: el gestor la enciende desde "Columnas".
@@ -600,7 +604,7 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
 describe('TramitesTable — actores del traspaso (HU #11020)', () => {
   it('muestra las columnas de vendedor y comprador con sus valores', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     // La cabecera dice "Vendedor" a secas: la celda solo pinta `vendedorNombre`. El filtro
@@ -616,7 +620,7 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
     mocks.listInstances.mockResolvedValue([
       { ...item, modalidad: 'MATRICULAS', vendedorNombre: null, vendedorDocumento: null },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
@@ -628,7 +632,7 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
 describe('TramitesTable — columnas del listado (HU #11057)', () => {
   it('muestra por defecto las columnas esenciales (sin scroll de catálogo completo)', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     // `getByRole('row')` ya no es único (cabecera + una fila por `<tr>`): se acota a la cabecera.
@@ -664,7 +668,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
   it('permite activar columnas opcionales desde el selector', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     // Preferencias: sin backend en test, setVisible actualiza estado local.
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
@@ -683,7 +687,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     mocks.listInstances.mockResolvedValue([
       { ...item, vehiculoMarca: 'RENAULT', vehiculoLinea: 'STEPWAY' },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     const rows = () => screen.getByRole('table', { name: 'Trámites en curso' });
@@ -709,7 +713,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
         updatedAt: '2026-07-20T15:00:00Z',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     // Ninguna de las tres viene en el default: Gestor y Fuente están fuera por decisión de
@@ -735,7 +739,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
         firmaCompradorEstado: 'rechazado',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     // Sin encender nada: las dos columnas de actor vienen en el default y cada una trae su firma.
@@ -764,7 +768,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
       { ...uno, modalidad: 'MATRICULAS' },
       { ...dos, modalidad: 'TRASPASO' },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     const header = () =>
@@ -794,7 +798,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
         firmaCompradorEstado: null,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
@@ -823,7 +827,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
         firmaCompradorEstado: null,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
@@ -853,7 +857,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
         uploadedAt: '2026-07-01T00:00:00Z',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -869,7 +873,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
   it('informa cuando el trámite no tiene documentos', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     mocks.getAttachments.mockResolvedValue([]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -882,7 +886,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
 
   it('sin consolidado generado la fila NO ofrece la acción', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -900,7 +904,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
       url: 'https://s3.local/consolidado.pdf',
       expiresAt: '2026-07-29T00:10:00Z',
     });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -931,7 +935,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     mocks.getInstance.mockResolvedValue({ id: 'rad-1', statusHistory: [] });
     mocks.getAttachments.mockResolvedValue([]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByText('RAD001'));
 
@@ -950,7 +954,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'rad-p', referenceNumber: 'TR-P', placa: 'PASO01', estado: 'entregado' },
     ]);
-    const { unmount } = render(<TramitesTable />);
+    const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
     await userEvent.click(await screen.findByText('PASO01'));
     // Se comparan los NOMBRES ACCESIBLES: llevan el ordinal, el rótulo y el estado del paso, que
     // es justo el contrato que hay que blindar. El número visible lo pinta el círculo del stepper,
@@ -977,7 +981,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
         modalidad: 'MATRICULAS',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await userEvent.click(await screen.findByText('PASO02'));
     const tabsMatricula = within(
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
@@ -996,7 +1000,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     mocks.getInstance.mockResolvedValue({ id: 'rad-2', statusHistory: [] });
     mocks.getAttachments.mockResolvedValue([]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD2' }));
 
@@ -1010,7 +1014,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     mocks.getInstance.mockResolvedValue({ id: 'rad-3', statusHistory: [] });
     mocks.getAttachments.mockResolvedValue([]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('RAD003');
     await abrirAcciones('TR-RAD3');
@@ -1024,7 +1028,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'brw-1', referenceNumber: 'TR-BRW1', placa: 'BRW001', estado: 'borrador' },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByText('BRW001'));
 
@@ -1045,7 +1049,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
       ],
     });
     mocks.getAttachments.mockResolvedValue([]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByText('RAD004'));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
@@ -1064,7 +1068,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
         { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
       ],
     });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(
       await screen.findByRole('button', { name: /Ver trazabilidad del trámite TR-TL/i }),
@@ -1093,7 +1097,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
       validations: [],
       firmaBaulPartes: ['comprador'],
     });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('RADID1');
     await userEvent.click(
@@ -1133,7 +1137,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
         uploadedAt: '2026-07-04T00:00:00Z',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByText('RAD005'));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
@@ -1160,7 +1164,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
       }),
     );
     mocks.getAttachments.mockResolvedValue([]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByText('RAD006'));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
@@ -1178,7 +1182,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     mocks.getInstance.mockRejectedValueOnce(new Error('Fallo de red'));
     mocks.getAttachments.mockResolvedValue([]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByText('RAD007'));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
@@ -1205,7 +1209,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     mocks.listInstances.mockResolvedValue([
       { ...item, isPaused: true, pausedObservation: 'En espera de liquidación' },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     const badge = screen.getByLabelText('Trámite pausado: En espera de liquidación');
@@ -1215,7 +1219,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
 
   it('no muestra el badge "Pausado" cuando el trámite no está pausado (default)', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1)); // isPaused undefined ⇒ sin badge
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     expect(screen.queryByText('Pausado')).toBeNull();
@@ -1227,7 +1231,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
       { ...item, id: 'ict1', referenceNumber: 'TR-ICT', placa: 'ICT001', origin: 'ict', estado: 'borrador', isPaused: false },
     ]);
     mocks.pauseInstance.mockResolvedValue({ id: 'ict1', isPaused: true, pausedObservation: null });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-ICT' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Pausar' }));
@@ -1241,7 +1245,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
   it('un trámite de plataforma (sin origin ict) no ofrece "Pausar" en el menú ni checkbox de selección', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([{ ...item, referenceNumber: 'TR-PLT', placa: 'PLT001', estado: 'borrador' }]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('PLT001');
     expect(screen.queryByRole('checkbox')).toBeNull();
@@ -1254,7 +1258,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     mocks.listInstances.mockResolvedValue([
       { ...item, id: 'pz', referenceNumber: 'TR-PZ', placa: 'PZ0001', origin: 'ict', estado: 'borrador', isPaused: true },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-PZ' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Continuar' }));
@@ -1286,7 +1290,7 @@ describe('TramitesTable — advertencias al procesar (SOAT no vigente)', () => {
 
   it('cuando hay alerta de procesar, el menú destaca la opción Procesar', async () => {
     mocks.listInstances.mockResolvedValue([procesable()]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(
       await screen.findByRole('button', {
@@ -1299,7 +1303,7 @@ describe('TramitesTable — advertencias al procesar (SOAT no vigente)', () => {
 
   async function procesar() {
     mocks.listInstances.mockResolvedValue([procesable()]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     // Con la fila pendiente por procesar, ActionsMenu añade el hint al nombre accesible.
     await userEvent.click(
       await screen.findByRole('button', { name: /Acciones del trámite TR-PROC/ }),
@@ -1347,7 +1351,7 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
       { ...b, id: 'm2', placa: 'MAS002', origin: 'ict', estado: 'borrador' },
     ]);
     mocks.pauseInstancesMassive.mockResolvedValue({ total: 2, processed: 2, detail: [] });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('MAS001');
     const checks = screen.getAllByRole('checkbox');
@@ -1413,7 +1417,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
   it('aplica condiciones y un rango de creación al listado, y las muestra como chips', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     mocks.listFilterFields.mockResolvedValue(CATALOGO);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // La condición se arma eligiendo campo, operador y valores — no hay un input fijo por campo.
@@ -1452,7 +1456,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
 
   it('aplica un rango de fechas propio sobre la última actualización', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await abrirPopoverPeriodo();
@@ -1475,7 +1479,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
   it('empieza sin condiciones y "Empezar de cero" las retira todas', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     mocks.listFilterFields.mockResolvedValue(CATALOGO);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await abrirPopoverFiltro();
@@ -1506,7 +1510,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
 
   it('ordena por placa y por VIN desde la cabecera de Vehículo (HU #12108)', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // "Vehículo" apila placa y VIN: la cabecera abre un menú en vez de alternar a ciegas.
@@ -1544,7 +1548,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
 
   it('ordena por comprador y fecha de creación desde cabeceras visibles', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // Toda cabecera ordenable abre el mismo menú, tenga uno o varios datos dentro.
@@ -1599,7 +1603,7 @@ describe('TramitesTable — rótulo del trámite', () => {
 
   it('en OTROS muestra el nombre del tipo, no la familia', async () => {
     mocks.listInstances.mockResolvedValue(conTipo('OTROS', 'Levantamiento de prenda'));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     expect(await screen.findByText('Levantamiento de prenda')).toBeInTheDocument();
     expect(screen.queryByText('Otros')).not.toBeInTheDocument();
@@ -1608,20 +1612,20 @@ describe('TramitesTable — rótulo del trámite', () => {
   it('sin nombre de tipo cae a la familia y nunca deja la celda vacía', async () => {
     // Expediente servido por un backend anterior al campo.
     mocks.listInstances.mockResolvedValue(conTipo('OTROS', null));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     expect(await screen.findByText('Otros')).toBeInTheDocument();
   });
 
   it('matrícula y traspaso conservan el rótulo de familia (regresión)', async () => {
     mocks.listInstances.mockResolvedValue(conTipo('MATRICULAS', 'Matrícula Leasing'));
-    const { unmount } = render(<TramitesTable />);
+    const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
     expect(await screen.findByText('Matrícula')).toBeInTheDocument();
     expect(screen.queryByText('Matrícula Leasing')).not.toBeInTheDocument();
     unmount();
 
     mocks.listInstances.mockResolvedValue(conTipo('TRASPASO', 'Traspaso Unilateral'));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     expect(await screen.findByText('Traspaso')).toBeInTheDocument();
   });
 });
@@ -1642,7 +1646,7 @@ describe('TramitesTable — paso en curso', () => {
 
   it('muestra el nombre del paso que manda el servidor', async () => {
     mocks.listInstances.mockResolvedValue(conPaso('OTROS', 'Decisión de prenda'));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     // Acotado al bloque del progreso: hay otros «—» en la fila (vehículo, organismo).
     const progreso = await screen.findByText('2/5');
@@ -1652,7 +1656,7 @@ describe('TramitesTable — paso en curso', () => {
   it('sin nombre del servidor cae al respaldo por familia', async () => {
     // Expediente de un backend anterior al campo: matrícula sí tiene lista de respaldo.
     mocks.listInstances.mockResolvedValue(conPaso('MATRICULAS', null, 1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const progreso = await screen.findByText('1/5');
     expect(progreso.parentElement).toHaveTextContent('Consulta VIN');
@@ -1660,7 +1664,7 @@ describe('TramitesTable — paso en curso', () => {
 
   it('sin nombre y sin respaldo no rompe: muestra un guion', async () => {
     mocks.listInstances.mockResolvedValue(conPaso('OTROS', null));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     const progreso = screen.getByText('2/5');
@@ -1683,7 +1687,7 @@ describe('TramitesTable — abrir un trámite en subsanación', () => {
 
   it('con la subsanación activa abre el asistente de pasos, no el detalle', async () => {
     mocks.listInstances.mockResolvedValue([rechazado(true)]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await userEvent.click(screen.getByRole('button', { name: 'Abrir trámite TR-0001' }));
@@ -1697,7 +1701,7 @@ describe('TramitesTable — abrir un trámite en subsanación', () => {
     mocks.getInstance.mockResolvedValue({ statusHistory: [], fieldValues: [], actors: [] });
     mocks.getAttachments.mockResolvedValue([]);
     mocks.listBiometricExpediente.mockResolvedValue({ validations: [], firmaBaulPartes: [] });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await userEvent.click(screen.getByRole('button', { name: 'Abrir trámite TR-0001' }));
@@ -1708,7 +1712,7 @@ describe('TramitesTable — abrir un trámite en subsanación', () => {
 
   it('la acción de la fila se llama "Continuar" en subsanación, no "Ver"', async () => {
     mocks.listInstances.mockResolvedValue([rechazado(true)]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();

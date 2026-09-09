@@ -212,6 +212,17 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.HasIndex(x => new { x.TenantId, x.CreatedByUserId })
             .HasDatabaseName("ix_procedure_instances_tenant_id_created_by_user_id");
 
+        // HU #12162 — gestor asignado (reasignable por admin), distinto de CreatedByUserId (quién
+        // radicó). Columna agregada por migración SQL cruda (la tabla está ExcludeFromMigrations);
+        // aquí solo se mapea para el modelo EF. La FK a identity.users (ON DELETE SET NULL) y el
+        // índice parcial se declaran en el DDL, no en EF (tabla excluida de migraciones).
+        builder.Property(x => x.AssignedToUserId)
+            .HasColumnName("assigned_to_user_id");
+
+        builder.HasIndex(x => new { x.TenantId, x.AssignedToUserId })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_assigned_to_user_id")
+            .HasFilter("assigned_to_user_id IS NOT NULL");
+
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 
