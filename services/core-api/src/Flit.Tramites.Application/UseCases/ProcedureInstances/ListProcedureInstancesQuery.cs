@@ -142,7 +142,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         // radica). En lote por los ids EFECTIVOS del listado (sin N+1).
         IReadOnlyDictionary<Guid, string> gestores =
             await repo.GetUserDisplayNamesAsync(
-                instances.Select(i => i.AssignedToUserId ?? i.CreatedByUserId).ToList(), ct)
+                instances.Select(i => i.GestorEfectivoUserId).ToList(), ct)
             ?? EmptyNames;
 
         // Identidad PER-PERSONA (documento) para los chips/progreso: se referencia la identidad vigente de
@@ -173,7 +173,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
                 IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
                 // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
-                gestores.GetValueOrDefault(e.AssignedToUserId ?? e.CreatedByUserId),
+                gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
                 conPrenda.Contains(e.Id)))
             .ToList();

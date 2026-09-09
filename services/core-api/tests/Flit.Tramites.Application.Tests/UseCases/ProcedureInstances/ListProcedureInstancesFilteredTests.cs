@@ -154,4 +154,107 @@ public sealed class ListProcedureInstancesFilteredHandlerTests
             tenantId, 0, ListProcedureInstancesHandler.MaxItems,
             Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), ct);
     }
+
+    // ── HU #12162 — el gestor efectivo también en la ruta FILTRADA ───────────────────────────
+    //
+    // La HU #12162 puso el gestor efectivo (AssignedToUserId ?? CreatedByUserId) en el listado sin
+    // filtros, pero esta ruta se quedó con el creador. Como las dos comparten `ToSummary` y pintan la
+    // MISMA columna, la consecuencia era que un trámite reasignado cambiaba de gestor en pantalla en
+    // cuanto se aplicaba cualquier filtro. Estas pruebas son el espejo de las de
+    // `ListProcedureInstancesTests` para que las dos rutas no puedan volver a separarse.
+
+    [Fact]
+    public async Task HandleAsync_TramiteReasignado_GestorNombreEsElAsignadoNoElCreador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var creador = Guid.NewGuid();
+        var asignado = Guid.NewGuid();
+        var instancia = Instancia(tenantId, "R1");
+        instancia.CreatedByUserId = creador;
+        instancia.AssignedToUserId = asignado;
+
+        _repo.ListWithSummaryGraphFilteredAsync(
+                Arg.Any<Guid?>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<ProcedureInstanceSortBy>(),
+                Arg.Any<SortDirection>(), ct)
+            .Returns(((IReadOnlyList<ProcedureInstance>)[instancia], 1));
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string>
+            {
+                [creador] = "Quien Radicó",
+                [asignado] = "Gestor Reasignado",
+            });
+
+        var (items, _) = await _sut.HandleAsync(new ProcedureInstanceListRequest { TenantId = tenantId }, ct);
+
+        items[0].GestorNombre.Should().Be("Gestor Reasignado");
+        // El lote se pide por el id EFECTIVO, igual que en la ruta sin filtros.
+        await _repo.Received(1).GetUserDisplayNamesAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(asignado)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_TramiteNuncaReasignado_GestorNombreCaeAlCreador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var creador = Guid.NewGuid();
+        var instancia = Instancia(tenantId, "R1");
+        instancia.CreatedByUserId = creador;
+        instancia.AssignedToUserId = null;
+
+        _repo.ListWithSummaryGraphFilteredAsync(
+                Arg.Any<Guid?>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<ProcedureInstanceSortBy>(),
+                Arg.Any<SortDirection>(), ct)
+            .Returns(((IReadOnlyList<ProcedureInstance>)[instancia], 1));
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [creador] = "Quien Radicó" });
+
+        var (items, _) = await _sut.HandleAsync(new ProcedureInstanceListRequest { TenantId = tenantId }, ct);
+
+        items[0].GestorNombre.Should().Be("Quien Radicó");
+    }
+
+    [Fact]
+    public async Task HandleAsync_LasDosRutasResuelvenElMismoGestor()
+    {
+        // El punto de la HU: la columna no puede depender de si hay filtros aplicados. Se corre la
+        // MISMA instancia por las dos rutas y se exige el mismo nombre.
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var creador = Guid.NewGuid();
+        var asignado = Guid.NewGuid();
+        var nombres = new Dictionary<Guid, string>
+        {
+            [creador] = "Quien Radicó",
+            [asignado] = "Gestor Reasignado",
+        };
+
+        ProcedureInstance NuevaInstancia()
+        {
+            var i = Instancia(tenantId, "R1");
+            i.CreatedByUserId = creador;
+            i.AssignedToUserId = asignado;
+            return i;
+        }
+
+        _repo.ListWithSummaryGraphFilteredAsync(
+                Arg.Any<Guid?>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<ProcedureInstanceSortBy>(),
+                Arg.Any<SortDirection>(), ct)
+            .Returns(((IReadOnlyList<ProcedureInstance>)[NuevaInstancia()], 1));
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct)
+            .Returns([NuevaInstancia()]);
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct).Returns(nombres);
+
+        var (conFiltros, _) = await _sut.HandleAsync(
+            new ProcedureInstanceListRequest { TenantId = tenantId }, ct);
+        var sinFiltros = await new ListProcedureInstancesHandler(_repo).HandleAsync(tenantId, ct);
+
+        conFiltros[0].GestorNombre.Should().Be(sinFiltros[0].GestorNombre);
+        conFiltros[0].GestorNombre.Should().Be("Gestor Reasignado");
+    }
 }

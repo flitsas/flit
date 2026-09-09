@@ -24,24 +24,42 @@ import type { BiometricValidation, IdentityAuditEvent } from '@/lib/api/types/pr
 export function IdentidadLecturaHumana({
   validation,
   rolLabel,
+  tenantId,
 }: {
   validation: BiometricValidation;
   /** «Comprador», «Vendedor»… El rol lo sabe quien abre el modal, no la validación. */
   rolLabel?: string | null;
+  /**
+   * Compañía DUEÑA del trámite.
+   *
+   * <p>No es opcional por comodidad: el endpoint de la bitácora compara el tenant de la validación
+   * con el header `X-Tenant-Id` y responde <b>404</b> si no coinciden. Sin esto, quien mira un
+   * trámite de otra compañía —el SuperAdmin, todos los días— recibía un 404 y la línea de tiempo
+   * salía vacía, mientras las tarjetas de al lado sí cargaban porque el expediente sí lo mandaba.
+   * Las dos llamadas del mismo modal tienen que hablar de la misma compañía.</p>
+   */
+  tenantId?: string | null;
 }) {
   const [eventos, setEventos] = useState<IdentityAuditEvent[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [fallo, setFallo] = useState(false);
+  const [reintento, setReintento] = useState(0);
 
   const cargar = useCallback(async () => {
     try {
-      const res = await tramitesClient.getBiometricAuditByValidation(validation.id);
-      return res.events ?? [];
+      const res = await tramitesClient.getBiometricAuditByValidation(
+        validation.id,
+        tenantId ?? undefined,
+      );
+      return { eventos: res.events ?? [], fallo: false };
     } catch {
-      // Sin bitácora la lectura no se cae: el estado y el motivo salen de la validación misma, y
-      // son lo que responde la pregunta. Los hitos son el detalle, no el titular.
-      return [];
+      // La lectura no se cae: el estado y el motivo salen de la validación misma, y son lo que
+      // responde la pregunta. Pero el fallo SE DICE. Devolver lista vacía en silencio hacía que un
+      // error se leyera como «esta persona no tiene historial», que es una afirmación falsa — y fue
+      // exactamente lo que escondió durante semanas el 404 por tenant.
+      return { eventos: [] as IdentityAuditEvent[], fallo: true };
     }
-  }, [validation.id]);
+  }, [validation.id, tenantId]);
 
   // No hace falta reponer `cargando` al cambiar de validación: el padre monta un componente por
   // validación (`key={v.id}`), así que otra validación es otra instancia y arranca en `true`.
@@ -50,13 +68,15 @@ export function IdentidadLecturaHumana({
     void (async () => {
       const res = await cargar();
       if (cancelado) return;
-      setEventos(res);
+      setEventos(res.eventos);
+      setFallo(res.fallo);
       setCargando(false);
     })();
     return () => {
       cancelado = true;
     };
-  }, [cargar]);
+    // `reintento` no lo usa `cargar`: es lo que vuelve a disparar ESTE efecto al pulsar el botón.
+  }, [cargar, reintento]);
 
   const estado = estadoDeIdentidad(validation);
   const hitos = hitosDeIdentidad(validation, eventos);
@@ -99,6 +119,26 @@ export function IdentidadLecturaHumana({
           <p className="text-xs text-[#162744]/55 dark:text-white/50" role="status" aria-live="polite">
             Cargando el historial…
           </p>
+        ) : fallo ? (
+          /* Un fallo NO se disfraza de «no hay nada»: son cosas distintas y el gestor tiene que
+             poder distinguirlas. Con el reintento a mano, además, se resuelve solo el caso más
+             común, que es un corte de red pasajero. */
+          <div role="alert">
+            <p className="text-xs text-[#162744]/70 dark:text-white/60">
+              No se pudo cargar el historial de esta validación.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setCargando(true);
+                setFallo(false);
+                setReintento((n) => n + 1);
+              }}
+              className="mt-1 text-xs font-semibold text-[#3B4FD6] underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:text-[#8FA8FF]"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : hitos.length === 0 ? (
           <p className="text-xs text-[#162744]/55 dark:text-white/50">
             Todavía no hay movimientos que mostrar.

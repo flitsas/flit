@@ -249,3 +249,37 @@ describe('tiempos en relativo', () => {
     expect(transcurridoEntre('no-es-fecha', '2026-08-27T11:42:00Z')).toBe('');
   });
 });
+
+describe('avisos repetidos del proveedor', () => {
+  // Kyverum notifica varias veces el mismo hecho —reintentos de entrega, un aviso por paso— y cada
+  // uno deja fila en la bitácora. En dev se veía «X completó la validación» tres veces con el mismo
+  // minuto: para el gestor es UN hito, no tres.
+
+  it('varios avisos seguidos de la misma etapa se cuentan como un solo hito', () => {
+    const hitos = hitosDeIdentidad(validacion(), [
+      evento('send', '2026-08-27T11:42:00Z'),
+      evento('webhook_received', '2026-08-27T11:51:00Z', { outcome: 'received' }),
+      evento('webhook_received', '2026-08-27T11:51:00Z', { outcome: 'received' }),
+      evento('webhook_received', '2026-08-27T11:51:30Z', { outcome: 'received' }),
+    ]);
+
+    expect(hitos.filter((h) => h.titulo === 'Laura completó la validación')).toHaveLength(1);
+    // El envío no se pierde por el camino.
+    expect(hitos.map((h) => h.titulo)).toContain('Se envió el enlace');
+  });
+
+  it('dos respuestas separadas por un reenvío SÍ son dos intentos distintos', () => {
+    // El colapso es solo de avisos consecutivos: si en medio pasó algo, son hechos distintos y los
+    // dos cuentan. Colapsarlos borraría un reintento real de la persona.
+    const hitos = hitosDeIdentidad(validacion(), [
+      evento('send', '2026-08-27T11:42:00Z'),
+      evento('webhook_received', '2026-08-27T11:51:00Z', { outcome: 'received' }),
+      evento('resend', '2026-08-27T12:10:00Z'),
+      evento('webhook_received', '2026-08-27T12:20:00Z', { outcome: 'received' }),
+    ]);
+
+    expect(hitos.filter((h) => h.titulo === 'Laura completó la validación')).toHaveLength(2);
+    expect(hitos.map((h) => h.titulo)).toContain('Se reenvió el enlace');
+  });
+});
+

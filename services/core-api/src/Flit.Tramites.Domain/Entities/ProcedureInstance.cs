@@ -248,6 +248,27 @@ public sealed class ProcedureInstance
     /// SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
     /// </summary>
     public Guid? AssignedToUserId { get; set; }
+
+    /// <summary>
+    /// Quién es el «gestor» del trámite a efectos de PRESENTACIÓN: el responsable de hoy si el
+    /// trámite se reasignó alguna vez, y si no quien lo radicó.
+    /// </summary>
+    /// <remarks>
+    /// <para>La regla la fijó la HU #12162 y estaba escrita a mano en cada sitio que la necesitaba.
+    /// Se separaron: el listado sin filtros mostraba al reasignado y el listado FILTRADO —el mismo
+    /// trámite, otra consulta— seguía mostrando a quien radicó, y ni el filtro «Gestor» ni el orden
+    /// por esa columna se habían enterado. Tener un nombre para la regla es lo que impide que vuelva
+    /// a pasar.</para>
+    /// <para><b>No se puede usar en LINQ contra la base:</b> es una propiedad calculada, sin columna
+    /// detrás, y EF no la traduce. En el repositorio la misma regla se escribe como
+    /// <c>(x.AssignedToUserId ?? x.CreatedByUserId)</c>, que Npgsql resuelve con <c>COALESCE</c>;
+    /// esta propiedad es para lo que ya está materializado en memoria. La equivalencia entre las dos
+    /// formas la sostiene una prueba, no el compilador.</para>
+    /// <para>Es solo presentación: la auditoría de quién radicó sigue siendo
+    /// <see cref="CreatedByUserId"/>, y la reasignación nunca lo toca.</para>
+    /// </remarks>
+    public Guid GestorEfectivoUserId => AssignedToUserId ?? CreatedByUserId;
+
     public DateTimeOffset? RulesSnapshotAt { get; set; }
     public long RowVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
