@@ -1,8 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, Info, ShieldAlert } from "lucide-react";
-import { generateTransferenciaDocument } from "@/lib/api/admin-generacion-documental";
+import {
+  generateTransferenciaDocument,
+  prefillPersonaJuridica,
+  prefillPersonaNatural,
+  prefillVehiculo,
+} from "@/lib/api/admin-generacion-documental";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 import type {
   StandaloneDocumentScenario,
@@ -15,6 +20,13 @@ import type {
   TransferVehiculoInput,
 } from "@/lib/api/types-generacion-documental";
 import { RegimenAplicableControl } from "./RegimenAplicableControl";
+import { ParteFields, type ParteId } from "./ParteFields";
+import { VehiculoPrefillFields } from "./VehiculoPrefillFields";
+import {
+  CAMPOS_VEHICULO_SIEMPRE_EDITABLES,
+  CAMPOS_VEHICULO_SIEMPRE_MANUALES,
+} from "./prefill-hidratacion";
+import { usePrefillBloque } from "./useEncadenamientoPrefill";
 import {
   REGIMEN_NINGUNA_APLICA,
   permiteGenerar,
@@ -235,6 +247,58 @@ export function TransferenciaFormPanel() {
   const setLeasing = (key: keyof TransferLeasingInput, value: string | boolean) =>
     setForm((prev) => ({ ...prev, leasing: { ...prev.leasing, [key]: value } }));
 
+  // ── Prellenado encadenado (CF-25) ─────────────────────────────────────────────────────────────
+  //
+  // Un bloque, una consulta, un estado de error. El vehículo se hidrata por PLACA; cada parte, por
+  // su documento y con la cadena que corresponde a su tipo de persona. Que una fuente falle no
+  // apaga las demás y, sobre todo, no impide generar el documento.
+
+  const aplicarVehiculo = useCallback(
+    (parche: Record<string, string>) =>
+      setForm((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, ...parche } })),
+    [],
+  );
+  const aplicarParte = useCallback(
+    (parte: ParteId) => (parche: Record<string, string>) =>
+      setForm((prev) => ({ ...prev, [parte]: { ...prev[parte], ...parche } })),
+    [],
+  );
+
+  const prefillVehiculoBloque = usePrefillBloque({
+    consultar: () => prefillVehiculo({ placa: form.vehiculo.placa.trim().toUpperCase() }),
+    valores: form.vehiculo,
+    onAplicar: aplicarVehiculo,
+    siempreEditables: CAMPOS_VEHICULO_SIEMPRE_EDITABLES,
+    siempreManuales: CAMPOS_VEHICULO_SIEMPRE_MANUALES,
+  });
+
+  // La cadena la elige el TIPO de parte, no el endpoint: jurídica → directorio de representantes
+  // legales y luego RUES; natural → RUNT persona y luego contact-lookup.
+  const consultaDeParte = (parte: ParteId) => () => {
+    const datos = form[parte];
+    const documento = (datos.numeroDoc ?? "").trim();
+    return datos.tipoPersona === "PJ"
+      ? prefillPersonaJuridica({ nit: documento })
+      : prefillPersonaNatural({
+          documentType: datos.tipoDoc ?? "CC",
+          documentNumber: documento,
+        });
+  };
+
+  const prefillTransferente = usePrefillBloque({
+    consultar: consultaDeParte("transferente"),
+    valores: form.transferente,
+    onAplicar: aplicarParte("transferente"),
+  });
+
+  const prefillAdquirente = usePrefillBloque({
+    consultar: consultaDeParte("adquirente"),
+    valores: form.adquirente,
+    onAplicar: aplicarParte("adquirente"),
+  });
+
+  const prefillDeParte = { transferente: prefillTransferente, adquirente: prefillAdquirente };
+
   const esUnilateral = form.escenario === "B";
 
   // CF-24 — sin declaración de régimen no se genera, y declarar una condición especial tampoco.
@@ -425,68 +489,16 @@ export function TransferenciaFormPanel() {
         </div>
       </fieldset>
 
-      <fieldset className="rounded-2xl border p-4">
-        <legend className="px-1 text-[11px] font-semibold uppercase opacity-70">Vehículo</legend>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <CampoBase id="tf-placa" label="Placa" issues={errorDe("vehiculo.placa")}>
-            <input
-              id="tf-placa"
-              className={FIELD_CLASS}
-              value={form.vehiculo.placa}
-              onChange={(e) => setVehiculo("placa", e.target.value.toUpperCase())}
-              aria-describedby={errorDe("vehiculo.placa").length ? "tf-placa-error" : undefined}
-            />
-          </CampoBase>
-          <CampoBase id="tf-marca" label="Marca" issues={[]}>
-            <input id="tf-marca" className={FIELD_CLASS} value={form.vehiculo.marca}
-              onChange={(e) => setVehiculo("marca", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-linea" label="Línea" issues={[]}>
-            <input id="tf-linea" className={FIELD_CLASS} value={form.vehiculo.linea}
-              onChange={(e) => setVehiculo("linea", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-modelo" label="Año modelo" issues={[]}>
-            <input id="tf-modelo" className={FIELD_CLASS} value={form.vehiculo.modeloAnio}
-              onChange={(e) => setVehiculo("modeloAnio", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-clase" label="Clase" issues={[]}>
-            <input id="tf-clase" className={FIELD_CLASS} value={form.vehiculo.claseVehiculo}
-              onChange={(e) => setVehiculo("claseVehiculo", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-carroceria" label="Carrocería" issues={[]}>
-            <input id="tf-carroceria" className={FIELD_CLASS} value={form.vehiculo.tipoCarroceria}
-              onChange={(e) => setVehiculo("tipoCarroceria", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-color" label="Color(es)" issues={[]}>
-            <input id="tf-color" className={FIELD_CLASS} value={form.vehiculo.color}
-              onChange={(e) => setVehiculo("color", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-motor" label="Motor No." issues={[]}>
-            <input id="tf-motor" className={FIELD_CLASS} value={form.vehiculo.noMotor}
-              onChange={(e) => setVehiculo("noMotor", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-chasis" label="Chasis / VIN No." issues={[]}>
-            <input id="tf-chasis" className={FIELD_CLASS} value={form.vehiculo.noChasis}
-              onChange={(e) => setVehiculo("noChasis", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-serie" label="Serie No." issues={[]}>
-            <input id="tf-serie" className={FIELD_CLASS} value={form.vehiculo.noSerie}
-              onChange={(e) => setVehiculo("noSerie", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-servicio" label="Servicio" issues={[]}>
-            <input id="tf-servicio" className={FIELD_CLASS} value={form.vehiculo.servicio}
-              onChange={(e) => setVehiculo("servicio", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-licencia" label="Licencia de tránsito No." issues={[]}>
-            <input id="tf-licencia" className={FIELD_CLASS} value={form.vehiculo.noLicenciaTransito}
-              onChange={(e) => setVehiculo("noLicenciaTransito", e.target.value)} />
-          </CampoBase>
-          <CampoBase id="tf-organismo" label="Organismo de tránsito" issues={[]}>
-            <input id="tf-organismo" className={FIELD_CLASS} value={form.vehiculo.organismoTransito}
-              onChange={(e) => setVehiculo("organismoTransito", e.target.value)} />
-          </CampoBase>
-        </div>
-      </fieldset>
+      {/*
+        CF-25 — captura «placa primero». El bloque conoce sus 13 variables, cuál no la devuelve
+        ninguna consulta y cuáles quedan editables por decisión del PO (adenda §15.1).
+      */}
+      <VehiculoPrefillFields
+        valores={form.vehiculo}
+        onChange={setVehiculo}
+        errorDe={errorDe}
+        prefill={prefillVehiculoBloque}
+      />
 
       {/*
         §9.2 — en el escenario B el bloque del adquirente NO se declara. No es un bloque oculto ni
@@ -494,71 +506,15 @@ export function TransferenciaFormPanel() {
         solo bloque de firma. Los datos del destinatario se capturan como antecedente de leasing.
       */}
       {(esUnilateral ? (["transferente"] as const) : (["transferente", "adquirente"] as const)).map((parte) => (
-        <fieldset key={parte} className="rounded-2xl border p-4">
-          <legend className="px-1 text-[11px] font-semibold uppercase opacity-70">
-            {parte === "transferente" ? "Transferente" : "Adquirente"}
-          </legend>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <CampoBase id={`tf-${parte}-tipopersona`} label="Tipo de persona" issues={[]}>
-              <select
-                id={`tf-${parte}-tipopersona`}
-                className={FIELD_CLASS}
-                value={form[parte].tipoPersona}
-                onChange={(e) => setParte(parte, "tipoPersona", e.target.value)}
-              >
-                <option value="PN">Persona natural</option>
-                <option value="PJ">Persona jurídica</option>
-              </select>
-            </CampoBase>
-            <CampoBase id={`tf-${parte}-nombre`} label="Nombre o razón social" issues={errorDe(`${parte}.nombreRazonSocial`)}>
-              <input id={`tf-${parte}-nombre`} className={FIELD_CLASS} value={form[parte].nombreRazonSocial}
-                onChange={(e) => setParte(parte, "nombreRazonSocial", e.target.value)} />
-            </CampoBase>
-            <CampoBase id={`tf-${parte}-tipodoc`} label="Tipo de documento" issues={[]}>
-              <select
-                id={`tf-${parte}-tipodoc`}
-                className={FIELD_CLASS}
-                value={form[parte].tipoDoc}
-                onChange={(e) => setParte(parte, "tipoDoc", e.target.value)}
-              >
-                <option value="CC">CC</option>
-                <option value="CE">CE</option>
-                <option value="PAS">Pasaporte</option>
-                <option value="NIT">NIT</option>
-              </select>
-            </CampoBase>
-            <CampoBase id={`tf-${parte}-numerodoc`} label="Número de documento" issues={errorDe(`${parte}.numeroDoc`)}>
-              <input
-                id={`tf-${parte}-numerodoc`}
-                className={FIELD_CLASS}
-                value={form[parte].numeroDoc}
-                onChange={(e) => setParte(parte, "numeroDoc", e.target.value)}
-                aria-describedby={
-                  errorDe(`${parte}.numeroDoc`).length ? `tf-${parte}-numerodoc-error` : undefined
-                }
-              />
-            </CampoBase>
-            <CampoBase id={`tf-${parte}-domicilio`} label="Ciudad de domicilio" issues={[]}>
-              <input id={`tf-${parte}-domicilio`} className={FIELD_CLASS} value={form[parte].domicilio}
-                onChange={(e) => setParte(parte, "domicilio", e.target.value)} />
-            </CampoBase>
-            {form[parte].tipoPersona === "PJ" ? (
-              <>
-                <CampoBase id={`tf-${parte}-rl`} label="Representante legal" issues={[]}>
-                  <input id={`tf-${parte}-rl`} className={FIELD_CLASS} value={form[parte].representanteLegal}
-                    onChange={(e) => setParte(parte, "representanteLegal", e.target.value)} />
-                </CampoBase>
-                <CampoBase id={`tf-${parte}-ccrl`} label="C.C. del representante legal" issues={[]}>
-                  <input id={`tf-${parte}-ccrl`} className={FIELD_CLASS} value={form[parte].ccRepresentanteLegal}
-                    onChange={(e) => setParte(parte, "ccRepresentanteLegal", e.target.value)} />
-                </CampoBase>
-                <p className="self-end text-[11px] opacity-70">
-                  El dígito de verificación del NIT lo calcula el sistema.
-                </p>
-              </>
-            ) : null}
-          </div>
-        </fieldset>
+        <ParteFields
+          key={parte}
+          parte={parte}
+          titulo={parte === "transferente" ? "Transferente" : "Adquirente"}
+          valores={form[parte]}
+          onChange={(key, valor) => setParte(parte, key, valor)}
+          errorDe={errorDe}
+          prefill={prefillDeParte[parte]}
+        />
       ))}
 
       {esUnilateral ? (
@@ -720,7 +676,7 @@ export function TransferenciaFormPanel() {
       ) : null}
 
       {esUnilateral ? null : (
-      <fieldset className="rounded-2xl border p-4">
+      <fieldset className="rounded-2xl border p-4" data-testid="transferencia-negocio">
         <legend className="px-1 text-[11px] font-semibold uppercase opacity-70">Negocio</legend>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <CampoBase id="tf-titulo" label="Título jurídico" issues={errorDe("negocio.tituloJuridico")}>

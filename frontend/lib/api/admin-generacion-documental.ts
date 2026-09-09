@@ -12,6 +12,10 @@ import type {
   StandaloneDocumentsListParams,
   StandaloneDocumentsPagedResult,
   StandaloneRuesPreviewResult,
+  PrefillPersonaJuridicaRequest,
+  PrefillPersonaNaturalRequest,
+  PrefillResult,
+  PrefillVehiculoRequest,
   TransferGenerateRequest,
   TransferGenerateResult,
 } from "./types-generacion-documental";
@@ -86,4 +90,60 @@ export function generateTransferenciaDocument(
     `${GENERACION_DOCUMENTAL_API_BASE}/transferencia/generate`,
     { method: "POST", body: request, signal },
   );
+}
+
+// ── Prellenado standalone (CF-25) ───────────────────────────────────────────────────────────────
+//
+// Los tres endpoints devuelven `200 { found, source, fields[] }` incluso sin coincidencia
+// (`found: false`), así que "no hay antecedente" NO llega como excepción: llega como respuesta.
+// Solo un fallo real de la fuente (502 `provider_unavailable`) lanza `ApiError`, y ni siquiera eso
+// impide generar el documento: el formulario queda utilizable con todos los campos editables.
+
+/** `POST /prefill/vehiculo` — RUNT por placa, sin los gates del wizard de trámites. */
+export function prefillVehiculo(
+  request: PrefillVehiculoRequest,
+  signal?: AbortSignal,
+): Promise<PrefillResult> {
+  return apiFetch<PrefillResult>(`${GENERACION_DOCUMENTAL_API_BASE}/prefill/vehiculo`, {
+    method: "POST",
+    body: request,
+    signal,
+  });
+}
+
+/**
+ * `POST /prefill/persona-juridica` — cadena: directorio de representantes legales y, solo si el
+ * directorio no responde, RUES.
+ *
+ * <b>El RUES no devuelve al representante legal.</b> Lo que certifica es la *facultad* de
+ * representación, no la persona: cuando la fuente efectiva es RUES llegan razón social, domicilio y
+ * matrícula mercantil, y el representante legal y su documento quedan de captura manual.
+ */
+export function prefillPersonaJuridica(
+  request: PrefillPersonaJuridicaRequest,
+  signal?: AbortSignal,
+): Promise<PrefillResult> {
+  return apiFetch<PrefillResult>(`${GENERACION_DOCUMENTAL_API_BASE}/prefill/persona-juridica`, {
+    method: "POST",
+    body: request,
+    signal,
+  });
+}
+
+/**
+ * `POST /prefill/persona-natural` — cadena: RUNT persona y, si el RUNT no responde,
+ * `contact-lookup`.
+ *
+ * <b>`contact-lookup` nunca devuelve nombre ni documento</b> por contrato: si la fuente efectiva es
+ * esa, el nombre queda manual.
+ */
+export function prefillPersonaNatural(
+  request: PrefillPersonaNaturalRequest,
+  signal?: AbortSignal,
+): Promise<PrefillResult> {
+  return apiFetch<PrefillResult>(`${GENERACION_DOCUMENTAL_API_BASE}/prefill/persona-natural`, {
+    method: "POST",
+    body: request,
+    signal,
+  });
 }

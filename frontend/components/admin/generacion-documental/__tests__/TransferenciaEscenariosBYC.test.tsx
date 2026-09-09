@@ -130,7 +130,7 @@ describe("Régimen aplicable a la operación (CF-24 / VB-07)", () => {
 
   /** El flujo de Certificado RUES no clasifica ningún traspaso: el control no existe ahí. */
   it("el formulario de Certificado RUES no muestra el control de régimen aplicable", () => {
-    render(<RuesFormPanel status="full" />);
+    render(<RuesFormPanel status="ready" />);
 
     expect(screen.queryByTestId("transferencia-regimen-aplicable")).not.toBeInTheDocument();
     expect(screen.queryByText(/régimen aplicable a la operación/i)).not.toBeInTheDocument();

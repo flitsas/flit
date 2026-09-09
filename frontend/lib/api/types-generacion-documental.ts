@@ -210,3 +210,60 @@ export interface TransferGenerateResult {
   status: StandaloneDocumentStatus;
   advisories: TransferValidationIssue[];
 }
+
+// ── Prellenado standalone «placa primero» (HU #12209 frontend / #12208 backend, CF-25) ──────────
+//
+// Tres endpoints separados de la generación: `POST /prefill/vehiculo`, `/prefill/persona-juridica`
+// y `/prefill/persona-natural`. **No persisten nada**: devuelven valores hacia el formulario.
+// Sin coincidencia responden `200 { found: false }` — nunca 404 ni 502 (§7.1).
+
+/**
+ * Fuentes que pueden hidratar un campo. La declara el backend **por campo**, no por bloque: en una
+ * persona jurídica la razón social puede venir del directorio de representantes legales y el
+ * domicilio de RUES en la misma respuesta.
+ */
+export type PrefillFuente =
+  | "RUNT"
+  | "RUES"
+  | "DIRECTORIO_RL"
+  | "CONTACT_LOOKUP"
+  | (string & {});
+
+/** Un campo hidratado. `key` es el nombre del campo del formulario, no el del proveedor. */
+export interface PrefillField {
+  key: string;
+  value: string | null;
+  /** Fuente declarada para ESTE campo. Si falta, se usa la fuente efectiva del bloque. */
+  source?: PrefillFuente | null;
+}
+
+/** Respuesta común de los tres endpoints de prellenado. */
+export interface PrefillResult {
+  found: boolean;
+  /** Fuente efectiva del bloque: la primera de la cadena que respondió. */
+  source?: PrefillFuente | null;
+  fields?: PrefillField[] | null;
+  /**
+   * Solo en `/prefill/persona-juridica`: DV del NIT calculado por el backend (módulo 11 DIAN).
+   * El formulario no lo captura ni lo reenvía.
+   */
+  dv?: string | null;
+}
+
+/** Cuerpo de `POST /prefill/vehiculo`. La placa es la llave de la consulta (CF-25). */
+export interface PrefillVehiculoRequest {
+  placa: string;
+  ownerDocumentType?: string;
+  ownerDocumentNumber?: string;
+}
+
+/** Cuerpo de `POST /prefill/persona-juridica`. */
+export interface PrefillPersonaJuridicaRequest {
+  nit: string;
+}
+
+/** Cuerpo de `POST /prefill/persona-natural`. */
+export interface PrefillPersonaNaturalRequest {
+  documentType: string;
+  documentNumber: string;
+}
