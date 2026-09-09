@@ -320,7 +320,11 @@ public sealed class IniciarBiometriaHandler(
                 return "Los datos personales no coinciden con el documento.";
         }
 
-        return "La validación de identidad no fue aprobada por el proveedor.";
+        // Sin nombrar al proveedor: este texto lo lee el gestor en el listado y en el expediente, y
+        // para él la validación la hace Flit (decisión de producto del Feature #12180). Que por
+        // dentro la resuelva un tercero es un detalle de integración que vive en la bitácora
+        // técnica, no en la explicación de por qué un trámite está detenido.
+        return "No se pudo verificar la identidad con las imágenes recibidas.";
     }
 
     /// <summary>

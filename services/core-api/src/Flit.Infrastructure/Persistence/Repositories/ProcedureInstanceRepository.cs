@@ -2001,8 +2001,11 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         if (!string.IsNullOrWhiteSpace(filter.Gestor))
         {
+            // Gestor EFECTIVO, como la columna, la gramática y el orden (HU #12162).
             var term = filter.Gestor.Trim().ToLowerInvariant();
-            query = query.Where(x => db.Users.Any(u => u.Id == x.CreatedByUserId && u.DisplayName.ToLower().Contains(term)));
+            query = query.Where(x => db.Users.Any(u =>
+                u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
+                && u.DisplayName.ToLower().Contains(term)));
         }
 
         if (filter.Firmado is { } firmadoCompleto)
@@ -2255,18 +2258,30 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
             // Gestor = quien creó el trámite. El nombre vive en `identity.users` y NO se denormaliza
             // (ver Ddl/47-tramites-campos-busqueda.sql), así que va por subconsulta correlacionada.
+            // Gestor EFECTIVO, no quien radicó: `AssignedToUserId ?? CreatedByUserId`, la misma regla
+            // que muestra la columna desde la HU #12162 (ver `ProcedureInstance.GestorEfectivoUserId`).
+            // Escrita aquí con el `??` porque una propiedad calculada no se traduce a SQL; Npgsql lo
+            // resuelve con COALESCE. Mientras esto miró solo a `CreatedByUserId`, filtrar por el
+            // nombre del nuevo responsable no encontraba el trámite, y filtrar por el anterior
+            // devolvía una fila que en pantalla mostraba a otra persona.
             TramitesQueryFieldCatalog.Gestor => op switch
             {
                 QueryOperator.EsAlguno => query.Where(x => db.Users.Any(u =>
-                    u.Id == x.CreatedByUserId && valores.Contains(u.DisplayName.ToUpper()))),
+                    u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
+                    && valores.Contains(u.DisplayName.ToUpper()))),
                 QueryOperator.NoEsNinguno => query.Where(x => !db.Users.Any(u =>
-                    u.Id == x.CreatedByUserId && valores.Contains(u.DisplayName.ToUpper()))),
+                    u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
+                    && valores.Contains(u.DisplayName.ToUpper()))),
                 QueryOperator.Contiene => query.Where(x => db.Users.Any(u =>
-                    u.Id == x.CreatedByUserId && u.DisplayName.ToUpper().Contains(valores[0]))),
-                // "Sin gestor" no es una columna nula —`CreatedByUserId` siempre trae un id— sino un
-                // usuario que ya no se puede resolver, que es justo cuando la fila muestra "—".
-                QueryOperator.EstaVacio => query.Where(x => !db.Users.Any(u => u.Id == x.CreatedByUserId)),
-                QueryOperator.NoEstaVacio => query.Where(x => db.Users.Any(u => u.Id == x.CreatedByUserId)),
+                    u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
+                    && u.DisplayName.ToUpper().Contains(valores[0]))),
+                // "Sin gestor" no es una columna nula —el id efectivo siempre trae valor, porque cae
+                // a `CreatedByUserId`— sino un usuario que ya no se puede resolver, que es justo
+                // cuando la fila muestra "—".
+                QueryOperator.EstaVacio => query.Where(x =>
+                    !db.Users.Any(u => u.Id == (x.AssignedToUserId ?? x.CreatedByUserId))),
+                QueryOperator.NoEstaVacio => query.Where(x =>
+                    db.Users.Any(u => u.Id == (x.AssignedToUserId ?? x.CreatedByUserId))),
                 _ => query,
             },
 
@@ -2570,10 +2585,16 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             ProcedureInstanceSortBy.CreatedAt => descending
                 ? query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
                 : query.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            // Por el gestor EFECTIVO, igual que la columna y el filtro (HU #12162): ordenar por quien
+            // radicó dejaba la lista ordenada por un nombre que la pantalla ya no muestra.
             ProcedureInstanceSortBy.Gestor => descending
-                ? query.OrderByDescending(x => db.Users.Where(u => u.Id == x.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault())
+                ? query.OrderByDescending(x => db.Users
+                        .Where(u => u.Id == (x.AssignedToUserId ?? x.CreatedByUserId))
+                        .Select(u => u.DisplayName).FirstOrDefault())
                     .ThenByDescending(x => x.Id)
-                : query.OrderBy(x => db.Users.Where(u => u.Id == x.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault())
+                : query.OrderBy(x => db.Users
+                        .Where(u => u.Id == (x.AssignedToUserId ?? x.CreatedByUserId))
+                        .Select(u => u.DisplayName).FirstOrDefault())
                     .ThenBy(x => x.Id),
             // HU #12153 — el radicado es un número guardado como texto, así que ordenarlo como
             // texto da 1, 10, 100, 2. Antes coincidía con el orden correcto por accidente, porque

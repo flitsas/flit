@@ -291,7 +291,7 @@ describe('TramitesTable — paginación', () => {
     // Es el defecto que motiva la HU: con la búsqueda en el cliente, un trámite que existe pero
     // quedó fuera de la página respondía «sin resultados» — una respuesta falsa, no una limitación.
     mocks.listInstances.mockResolvedValue(makeInstances(23));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // P0023 está en la tercera página: en el navegador no se ha cargado nunca.
@@ -307,7 +307,7 @@ describe('TramitesTable — paginación', () => {
 
   it('el tamaño de página se elige, vuelve a la primera y se recuerda en la sesión', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(23));
-    const { unmount } = render(<TramitesTable />);
+    const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     await userEvent.selectOptions(screen.getByLabelText('Filas por página'), '25');
@@ -321,7 +321,7 @@ describe('TramitesTable — paginación', () => {
 
     // Se recuerda «durante la sesión»: al volver a la pantalla sigue en 25.
     unmount();
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     expect(await screen.findByLabelText('Filas por página')).toHaveValue('25');
   });
 });
@@ -1883,7 +1883,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
 
   it('pinta el ícono de prenda con su rótulo accesible', async () => {
     mocks.listInstances.mockResolvedValue(conMarcas(true, false));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const icono = await screen.findByAltText('Con prenda');
     expect(icono).toHaveAttribute('src', '/assets/marcas/prenda.svg');
@@ -1892,7 +1892,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
 
   it('pinta el ícono de transformación con su rótulo accesible', async () => {
     mocks.listInstances.mockResolvedValue(conMarcas(false, true));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const icono = await screen.findByAltText('Con transformación');
     expect(icono).toHaveAttribute('src', '/assets/marcas/transformacion.svg');
@@ -1901,7 +1901,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
 
   it('un trámite con las dos muestra los dos íconos, no uno', async () => {
     mocks.listInstances.mockResolvedValue(conMarcas(true, true));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     expect(await screen.findByAltText('Con prenda')).toBeInTheDocument();
     expect(screen.getByAltText('Con transformación')).toBeInTheDocument();
@@ -1911,7 +1911,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
     // Una celda vacía se lee como un dato que falta —o como una fila que no cargó— y no como
     // «este trámite no tiene ninguna de las dos».
     mocks.listInstances.mockResolvedValue(conMarcas(false, false));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
@@ -1923,7 +1923,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
     // Backend anterior al campo: `tienePrenda`/`tieneTransformacion` llegan indefinidos.
     const [base] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([base]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
@@ -1931,7 +1931,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
 
   it('los íconos son informativos: no son botones ni enlaces', async () => {
     mocks.listInstances.mockResolvedValue(conMarcas(true, true));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const prenda = await screen.findByAltText('Con prenda');
     expect(prenda.closest('button')).toBeNull();
@@ -1940,7 +1940,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
 
   it('la cabecera de Marcas no ofrece ordenar', async () => {
     mocks.listInstances.mockResolvedValue(conMarcas(true, false));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByAltText('Con prenda');
     const cabecera = screen.getByRole('columnheader', { name: /Marcas/i });

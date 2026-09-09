@@ -124,6 +124,28 @@ export function estadoDeIdentidad(v: BiometricValidation, ahora: Date = new Date
 }
 
 /**
+ * El proveedor puede notificar VARIAS veces el mismo hecho —reintentos de entrega, una notificación
+ * por paso— y cada aviso deja su fila en la bitácora. Para quien gestiona eso es un solo hito: la
+ * persona completó la validación una vez. Sin colapsarlos, el panel repetía «X completó la
+ * validación» tres veces con el mismo minuto, que es ruido de integración disfrazado de historia.
+ *
+ * <p>Se colapsan solo los avisos CONSECUTIVOS de la misma etapa: si entre dos hay un reenvío o un
+ * resultado, son intentos distintos de verdad y los dos cuentan.</p>
+ */
+function colapsarRepetidos(eventos: readonly IdentityAuditEvent[]): IdentityAuditEvent[] {
+  const orden = [...eventos].sort(
+    (a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime(),
+  );
+  const salida: IdentityAuditEvent[] = [];
+  for (const e of orden) {
+    const anterior = salida[salida.length - 1];
+    if (anterior && anterior.stage === e.stage && e.stage === 'webhook_received') continue;
+    salida.push(e);
+  }
+  return salida;
+}
+
+/**
  * Los hitos, del más reciente al más antiguo.
  *
  * <p>Cada uno nombra a una persona, no a una etapa. Los tiempos van en relativo donde ayudan
@@ -134,7 +156,7 @@ export function hitosDeIdentidad(
   v: BiometricValidation,
   eventos: readonly IdentityAuditEvent[],
 ): HitoIdentidad[] {
-  const visibles = eventos.filter((e) => ETAPAS_VISIBLES.has(e.stage));
+  const visibles = colapsarRepetidos(eventos.filter((e) => ETAPAS_VISIBLES.has(e.stage)));
   const envio = [...visibles]
     .reverse()
     .find((e) => e.stage === 'send' || e.stage === 'resend')?.occurredAt;

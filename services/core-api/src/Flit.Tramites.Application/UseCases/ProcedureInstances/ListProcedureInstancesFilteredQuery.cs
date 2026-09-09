@@ -216,8 +216,13 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         IReadOnlyDictionary<Guid, string> nombres =
             await repo.GetTenantNamesAsync(instances.Select(i => i.TenantId).ToList(), ct) ?? EmptyNames;
 
+        // HU #12162 — el «gestor» que se muestra es el EFECTIVO (responsable de hoy, o quien radicó
+        // si nunca se reasignó), igual que en el listado sin filtros. Esta ruta se quedó con
+        // `CreatedByUserId` cuando entró la reasignación, así que la misma fila cambiaba de gestor
+        // en cuanto se aplicaba cualquier filtro. Ver `ProcedureInstance.GestorEfectivoUserId`.
         IReadOnlyDictionary<Guid, string> gestores =
-            await repo.GetUserDisplayNamesAsync(instances.Select(i => i.CreatedByUserId).ToList(), ct)
+            await repo.GetUserDisplayNamesAsync(
+                instances.Select(i => i.GestorEfectivoUserId).ToList(), ct)
             ?? EmptyNames;
 
         var now = DateTimeOffset.UtcNow;
@@ -240,7 +245,7 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
                 e,
                 IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
-                gestores.GetValueOrDefault(e.CreatedByUserId),
+                gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
                 conPrenda.Contains(e.Id)))
             .ToList();

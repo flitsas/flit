@@ -754,4 +754,96 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         total.Should().Be(3); // el total NO se pagina, es el conteo del filtro completo.
         items.Should().ContainSingle(i => i.Vin == "B");
     }
+
+    // ── HU #12162 — el gestor EFECTIVO manda también en el WHERE y en el ORDER BY ────────────
+    //
+    // Las pruebas de arriba solo siembran `createdBy`, así que pasaban igual mirando al creador: el
+    // fallback y el valor efectivo coinciden cuando no hay reasignación. Estas siembran la
+    // reasignación, que es el único caso donde las dos lecturas se separan.
+
+    [Fact]
+    public async Task FiltraPorGestor_EncuentraPorElReasignadoNoPorElCreador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("filtro-gestor-reasignado");
+        var (creador, asignado) = (Guid.NewGuid(), Guid.NewGuid());
+        db.Users.AddRange(
+            new User { Id = creador, Email = "ana@flit.io", DisplayName = "Ana Gestora" },
+            new User { Id = asignado, Email = "beto@flit.io", DisplayName = "Beto Gestor" });
+        var reasignado = Instancia(TenantId, "R1", createdBy: creador);
+        reasignado.AssignedToUserId = asignado;
+        db.ProcedureInstances.AddRange(reasignado, Instancia(TenantId, "R2", createdBy: creador));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (porElNuevo, totalNuevo) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20, new ProcedureInstanceListFilter { Gestor = "Beto" },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+
+        // Buscar al responsable de hoy lo encuentra…
+        totalNuevo.Should().Be(1);
+        porElNuevo.Should().ContainSingle(i => i.ReferenceNumber == "R1");
+
+        var (porElCreador, totalCreador) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20, new ProcedureInstanceListFilter { Gestor = "Ana" },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+
+        // …y buscar a quien radicó ya NO devuelve el reasignado: la pantalla muestra a Beto, así que
+        // devolverlo bajo "Ana" sería una fila que contradice su propia columna.
+        totalCreador.Should().Be(1);
+        porElCreador.Should().ContainSingle(i => i.ReferenceNumber == "R2");
+    }
+
+    [Fact]
+    public async Task OrdenaPorGestor_UsaElReasignadoNoElCreador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("orden-gestor-reasignado");
+        var (creador, asignado) = (Guid.NewGuid(), Guid.NewGuid());
+        db.Users.AddRange(
+            // El creador ordena PRIMERO por nombre y el asignado ÚLTIMO: si el ORDER BY mirara al
+            // creador, R1 saldría antes que R2 y esta prueba lo vería.
+            new User { Id = creador, Email = "ana@flit.io", DisplayName = "Ana Gestora" },
+            new User { Id = asignado, Email = "zoe@flit.io", DisplayName = "Zoe Gestora" });
+        var reasignado = Instancia(TenantId, "R1", createdBy: creador);
+        reasignado.AssignedToUserId = asignado;
+        var normal = Instancia(TenantId, "R2", createdBy: creador);
+        db.ProcedureInstances.AddRange(reasignado, normal);
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (items, _) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20, new ProcedureInstanceListFilter(),
+            ProcedureInstanceSortBy.Gestor, SortDirection.Ascending, ct);
+
+        items.Select(i => i.ReferenceNumber).Should().ContainInOrder("R2", "R1");
+    }
+
+    [Fact]
+    public async Task ElIdEfectivoDelDominioYElCoalesceDeSqlCoinciden()
+    {
+        // `ProcedureInstance.GestorEfectivoUserId` no se traduce a SQL, así que el repositorio repite
+        // la regla como `AssignedToUserId ?? CreatedByUserId`. Esta prueba es lo que sostiene que las
+        // dos formas digan lo mismo — el compilador no puede.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("gestor-efectivo-equivalencia");
+        var (creador, asignado) = (Guid.NewGuid(), Guid.NewGuid());
+        var reasignado = Instancia(TenantId, "R1", createdBy: creador);
+        reasignado.AssignedToUserId = asignado;
+        db.ProcedureInstances.AddRange(reasignado, Instancia(TenantId, "R2", createdBy: creador));
+        await db.SaveChangesAsync(ct);
+
+        var segunSql = await db.ProcedureInstances
+            .Where(x => x.TenantId == TenantId)
+            .OrderBy(x => x.ReferenceNumber)
+            .Select(x => x.AssignedToUserId ?? x.CreatedByUserId)
+            .ToListAsync(ct);
+        var segunElDominio = await db.ProcedureInstances
+            .Where(x => x.TenantId == TenantId)
+            .OrderBy(x => x.ReferenceNumber)
+            .ToListAsync(ct);
+
+        segunSql.Should().Equal(segunElDominio.Select(i => i.GestorEfectivoUserId));
+        segunSql.Should().Equal(asignado, creador);
+    }
 }
