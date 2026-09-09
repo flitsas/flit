@@ -175,8 +175,9 @@ function CambiarEstadoModal({ open, onClose, item, tenantId, onSuccess, onError 
       open={open}
       onClose={onClose}
       title="Cambiar estado"
+      titleClassName="text-base font-bold text-[#557EFF]"
       icon={ArrowRightLeft}
-      description={`${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
+      description={`Trámite ${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
       size="sm"
       busy={busy}
     >
@@ -268,9 +269,10 @@ function AnularModal({ open, onClose, item, tenantId, onSuccess, onError }: Moda
       open={open}
       onClose={onClose}
       title="Anular trámite"
+      titleClassName="text-base font-bold text-[#557EFF]"
       icon={Ban}
       iconBg={DANGER_COLOR}
-      description={`${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
+      description={`Trámite ${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
       size="sm"
       busy={busy}
     >
@@ -368,8 +370,9 @@ function ConsolidadoModal({
       open={open}
       onClose={onClose}
       title="Gestionar consolidado"
+      titleClassName="text-base font-bold text-[#557EFF]"
       icon={RefreshCcw}
-      description={item.referenceNumber}
+      description={`Trámite ${item.referenceNumber}`}
       size="sm"
       busy={busy}
     >
@@ -504,8 +507,9 @@ function ReasignarGestorModal({ open, onClose, item, tenantId, onSuccess, onErro
       open={open}
       onClose={onClose}
       title="Reasignar gestor"
+      titleClassName="text-base font-bold text-[#557EFF]"
       icon={UserCog}
-      description={item.referenceNumber}
+      description={`Trámite ${item.referenceNumber}`}
       size="sm"
       busy={busy}
     >

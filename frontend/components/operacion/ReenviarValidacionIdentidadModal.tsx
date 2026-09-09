@@ -208,8 +208,9 @@ export function ReenviarValidacionIdentidadModal({
       open={open}
       onClose={onClose}
       title="Reenviar validación de identidad"
+      titleClassName="text-base font-bold text-[#557EFF]"
       icon={Send}
-      description={referenceNumber}
+      description={`Trámite ${referenceNumber}`}
       size="sm"
       busy={busy}
     >
