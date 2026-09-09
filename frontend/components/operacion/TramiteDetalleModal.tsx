@@ -147,6 +147,14 @@ export interface TramiteDetalleModalProps {
    * simplemente no ofrece la acción de subsanar.
    */
   onAbrirAsistente?: (item: InstanceSummary) => void;
+  /**
+   * HU #12195 — modo consulta. El detalle es de solo lectura salvo por una excepción: la CTA de
+   * subsanación (`POST /subsanar`), que ya está condicionada a `onAbrirAsistente`. Con `readOnly`
+   * esa acción queda apagada aunque el consumidor pase el callback por descuido, que es lo que se
+   * exige al abrir el detalle desde el historial por placa (decisión D3 del PO). No se elimina del
+   * módulo de Trámites: allí sigue siendo la salida del estado `rechazado`.
+   */
+  readOnly?: boolean;
 }
 
 export function TramiteDetalleModal({
@@ -156,6 +164,7 @@ export function TramiteDetalleModal({
   tenantId,
   item,
   onAbrirAsistente,
+  readOnly = false,
 }: TramiteDetalleModalProps) {
   const [detail, setDetail] = useState<ProcedureInstanceDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -288,7 +297,7 @@ export function TramiteDetalleModal({
   // retoma. Sin `onAbrirAsistente` no se ofrece nada, porque activar sin poder editar deja peor.
   const subsanacionActiva = !!item?.subsanacionActiva;
   const puedeSubsanar =
-    !!onAbrirAsistente && !!item && !!instanceId && item.estado === 'rechazado';
+    !readOnly && !!onAbrirAsistente && !!item && !!instanceId && item.estado === 'rechazado';
   const ofreceActivar = puedeSubsanar && !subsanacionActiva;
   const ofreceRetomar = puedeSubsanar && subsanacionActiva;
 

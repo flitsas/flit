@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -66,7 +67,7 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
         if (string.IsNullOrWhiteSpace(placa))
             return Array.Empty<VehicleSignatureImprintListRow>();
 
-        var normalized = NormalizePlaca(placa);
+        var normalized = PlacaNormalizer.Normalize(placa);
 
         // Sin filtro de tenant: la firma digital es del documento; el OT consulta por placa.
         return await (
@@ -105,7 +106,4 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
             .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-    private static string NormalizePlaca(string placa) =>
-        placa.Trim().ToUpperInvariant();
 }
