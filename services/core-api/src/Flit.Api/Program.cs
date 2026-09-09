@@ -245,6 +245,7 @@ app.MapAdminCompanyNotificationDeliveryLogsEndpoints();
 app.MapAdminLegalRepresentativeIdentityEndpoints();
 app.MapAdminIdentityVigenciaEndpoints();
 app.MapAdminDocumentTypesEndpoints();
+app.MapAdminBannersEndpoints();
 app.MapAdminRejectionReasonsEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();
