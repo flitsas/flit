@@ -206,8 +206,9 @@ public sealed class AdminGeneracionDocumentalEndpointsTests
         System.Text.RegularExpressions.Regex
             .Matches(fuente, @"\.RequirePermission\(""generacion-documental\.generate""\)")
             // HU #12206 sumo los tres /prefill/*, que tambien gastan consultas de pago;
-            // HU #12207 suma /transferencia/generate.
-            .Should().HaveCount(6, "preview, generate, los tres prellenados y la transferencia");
+            // HU #12207 suma /transferencia/generate; HU #12210 suma POST /lotes, que genera en
+            // volumen y por tanto gasta consultas y produce documentos.
+            .Should().HaveCount(7, "preview, generate, los tres prellenados, la transferencia y el lote");
 
         // El módulo lo usa AdminCompany: una policy de grupo de SuperAdmin lo dejaría fuera.
         fuente.Should().NotContain("SuperAdminPolicy");

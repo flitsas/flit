@@ -344,6 +344,16 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneActorContactLookup,
             Flit.Infrastructure.Consultations.StandaloneActorContactLookupAdapter>();
 
+        // HU #12210 — lotes XLSX (I3). El parser y el generador de plantilla son SIN ESTADO y van
+        // singleton. Van sobre DocumentFormat.OpenXml crudo (SAX): NO se añadió ClosedXML ni EPPlus,
+        // porque una dependencia nueva exige auditoría previa (regla FLIT 18).
+        services.AddSingleton<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneDocumentXlsxParser,
+            Flit.Infrastructure.Documents.Standalone.StandaloneDocumentXlsxParser>();
+        services.AddSingleton<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneDocumentXlsxTemplate,
+            Flit.Infrastructure.Documents.Standalone.StandaloneDocumentXlsxTemplate>();
+        services.AddScoped<Flit.Admin.Domain.GeneracionDocumental.IStandaloneDocumentBatchRepository,
+            Flit.Infrastructure.Persistence.Repositories.StandaloneDocumentBatchRepository>();
+
         return services;
     }
 }

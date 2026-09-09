@@ -81,6 +81,28 @@ public interface IStandaloneDocumentRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Números de fila del XLSX que YA tienen documento en el lote (Feature #12201, I3). El worker
+    /// los consulta antes de procesar para no rehacer lo hecho cuando el reaper devuelve un lote
+    /// atascado. Es una optimización, no el control: el control duro es el índice único
+    /// <c>uq_standalone_documents_batch_row</c>.
+    /// </summary>
+    Task<IReadOnlyList<StandaloneDocumentBatchRowState>> ListBatchRowStatesAsync(
+        Guid tenantId,
+        Guid batchId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Escribe <c>validation_errors</c> de una fila de lote (CF-13). Columna EXENTA del trigger de
+    /// inmutabilidad, como <c>downloaded_at</c>: se puede escribir después de que el handler haya
+    /// dejado la fila en <c>error</c>.
+    /// </summary>
+    Task SaveValidationErrorsAsync(
+        Guid tenantId,
+        Guid id,
+        string validationErrorsJson,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Cierra la fila en <c>error</c> con código identificable (el CHECK
     /// <c>ck_standalone_documents_error_con_codigo</c> prohíbe un error sin código).
     /// </summary>
@@ -91,3 +113,6 @@ public interface IStandaloneDocumentRepository
         string? errorField = null,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>Estado de una fila ya materializada de un lote: su número en el XLSX y su resultado.</summary>
+public sealed record StandaloneDocumentBatchRowState(int RowNumber, string Status);

@@ -718,6 +718,10 @@ public static class InfrastructureExtensions
             PlateAssignmentEmailModelProjectorService>();
         // HU #11487 — worker de la cola de avisos de correo al asignar placa (ADR-0046).
         services.AddHostedService<PlateAssignmentEmailDispatchProcessor>();
+        // HU #12210 (Feature #12201, I3) — worker de lotes XLSX de generación documental. Reclama
+        // lotes queued (y los processing atascados: reaper R5) y delega el recorrido en el runner de
+        // Application, que invoca los MISMOS handlers de la generación individual.
+        services.AddHostedService<StandaloneDocumentBatchProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.

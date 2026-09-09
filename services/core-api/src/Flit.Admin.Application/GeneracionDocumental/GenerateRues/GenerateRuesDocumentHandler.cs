@@ -111,6 +111,10 @@ public sealed class GenerateRuesDocumentHandler
                 ["documentType"] = StandaloneDocumentType.CertificadoRues,
             }.ToJsonString(),
             CreatedAt = now,
+            // I3 — vínculo con el lote. En la generación individual ambos son nulos y el CHECK
+            // ck_standalone_documents_batch_row exige justamente eso: o los dos o ninguno.
+            BatchId = command.BatchId,
+            RowNumber = command.RowNumber,
         };
 
         await _repository.InsertAsync(document, cancellationToken).ConfigureAwait(false);

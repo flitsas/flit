@@ -75,6 +75,24 @@ internal sealed class FakeStandaloneDocumentRepository : IStandaloneDocumentRepo
         return Task.CompletedTask;
     }
 
+    /// <summary>Errores por fila escritos con <c>SaveValidationErrorsAsync</c> (CF-13, lotes).</summary>
+    public List<(Guid Id, string Json)> ValidationErrors { get; } = [];
+
+    public Task<IReadOnlyList<StandaloneDocumentBatchRowState>> ListBatchRowStatesAsync(
+        Guid tenantId, Guid batchId, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<StandaloneDocumentBatchRowState>>(
+            [.. Rows
+                .Where(r => r.TenantId == tenantId && r.BatchId == batchId && r.RowNumber != null)
+                .Select(r => new StandaloneDocumentBatchRowState(r.RowNumber!.Value, r.Status))]);
+
+    public Task SaveValidationErrorsAsync(
+        Guid tenantId, Guid id, string validationErrorsJson, CancellationToken cancellationToken = default)
+    {
+        ValidationErrors.Add((id, validationErrorsJson));
+        Replace(id, r => r with { ValidationErrors = validationErrorsJson });
+        return Task.CompletedTask;
+    }
+
     public Task MarkErrorAsync(
         Guid tenantId, Guid id, string errorCode, string? errorField = null,
         CancellationToken cancellationToken = default)
@@ -205,12 +223,16 @@ internal sealed record StandaloneDocumentSnapshot(
     string? DocumentSnapshot,
     DateTimeOffset? DownloadedAt,
     int DownloadCount,
-    DateTimeOffset CreatedAt)
+    DateTimeOffset CreatedAt,
+    Guid? BatchId,
+    int? RowNumber,
+    string ValidationErrors)
 {
     public static StandaloneDocumentSnapshot From(StandaloneDocument d) => new(
         d.Id, d.TenantId, d.CreatedByUserId, d.DocumentType, d.Scenario, d.Status, d.ErrorCode,
         d.ErrorField, d.StoragePath, d.StorageSha256, d.SizeBytes, d.Filename, d.IdempotencyKey,
-        d.InputSummary, d.RuesSnapshot, d.DocumentSnapshot, d.DownloadedAt, d.DownloadCount, d.CreatedAt);
+        d.InputSummary, d.RuesSnapshot, d.DocumentSnapshot, d.DownloadedAt, d.DownloadCount, d.CreatedAt,
+        d.BatchId, d.RowNumber, d.ValidationErrors);
 
     public StandaloneDocument ToDocument() => new()
     {
@@ -233,6 +255,9 @@ internal sealed record StandaloneDocumentSnapshot(
         DownloadedAt = DownloadedAt,
         DownloadCount = DownloadCount,
         CreatedAt = CreatedAt,
+        BatchId = BatchId,
+        RowNumber = RowNumber,
+        ValidationErrors = ValidationErrors,
     };
 }
 
@@ -289,12 +314,29 @@ internal sealed class FakeStandaloneDocumentStorage : IStandaloneDocumentStorage
         Guid tenantId, string tipo, string filename, Stream content,
         CancellationToken cancellationToken = default)
     {
-        Saved.Add((tenantId, tipo, filename, content.Length));
+        using var copia = new MemoryStream();
+        content.CopyTo(copia);
+        var bytes = copia.ToArray();
+
+        Saved.Add((tenantId, tipo, filename, bytes.LongLength));
+
+        var path = $"fm://{tenantId}/{tipo}/{Saved.Count}/{filename}";
+        Contenidos[path] = bytes;
+
         return Task.FromResult(new StoredStandaloneDocument(
-            $"fm://{tenantId}/{filename}",
+            path,
             "9f2b1c0a5d4e6f7a8b9c0d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
-            content.Length));
+            bytes.LongLength));
     }
+
+    /// <summary>Binarios guardados por ruta, para que el worker pueda releer el XLSX fuente.</summary>
+    public Dictionary<string, byte[]> Contenidos { get; } = [];
+
+    public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken cancellationToken = default)
+        => Task.FromResult<Stream?>(
+            Contenidos.TryGetValue(storagePath, out var bytes)
+                ? new MemoryStream(bytes, writable: false)
+                : null);
 
     public Task<StandaloneDocumentDownloadLink?> GetPresignedViewUrlAsync(
         string storagePath, CancellationToken cancellationToken = default)

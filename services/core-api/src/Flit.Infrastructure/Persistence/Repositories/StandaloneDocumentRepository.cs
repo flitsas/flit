@@ -87,6 +87,13 @@ internal sealed class StandaloneDocumentRepository : IStandaloneDocumentReposito
             DownloadCount = 0,
             CreatedAt = document.CreatedAt == default ? DateTimeOffset.UtcNow : document.CreatedAt,
             CreatedBy = document.CreatedByUserId,
+            // I3 — vínculo con el lote. Va en el INSERT y nunca en un UPDATE: la capa 2 del trigger
+            // (DDL 106) congela batch_id y row_number, incluido el paso de nulo a valor.
+            BatchId = document.BatchId,
+            RowNumber = document.RowNumber,
+            ValidationErrors = string.IsNullOrWhiteSpace(document.ValidationErrors)
+                ? "[]"
+                : document.ValidationErrors,
         };
 
         _context.StandaloneDocuments.Add(entity);
@@ -164,6 +171,49 @@ internal sealed class StandaloneDocumentRepository : IStandaloneDocumentReposito
                     .SetProperty(x => x.Status, StandaloneDocumentStatus.Error)
                     .SetProperty(x => x.ErrorCode, errorCode)
                     .SetProperty(x => x.ErrorField, errorField)
+                    .SetProperty(x => x.UpdatedAt, DateTimeOffset.UtcNow),
+                cancellationToken);
+    }
+
+    /// <summary>
+    /// Filas ya materializadas del lote (Feature #12201, I3). El worker las consulta antes de
+    /// procesar para no rehacer lo hecho cuando el reaper devuelve un lote atascado (R5). Es una
+    /// optimización: el control duro sigue siendo el índice único
+    /// <c>uq_standalone_documents_batch_row</c>.
+    /// </summary>
+    public async Task<IReadOnlyList<StandaloneDocumentBatchRowState>> ListBatchRowStatesAsync(
+        Guid tenantId,
+        Guid batchId,
+        CancellationToken cancellationToken = default)
+    {
+        var filas = await Scoped(tenantId)
+            .Where(x => x.BatchId == batchId && x.RowNumber != null)
+            .Select(x => new { Numero = x.RowNumber!.Value, x.Status })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. filas.Select(f => new StandaloneDocumentBatchRowState(f.Numero, f.Status))];
+    }
+
+    /// <summary>
+    /// Detalle de errores de una fila del lote (CF-13). Columna EXENTA del trigger de inmutabilidad
+    /// —como <c>downloaded_at</c>—, así que se puede escribir después de que el handler haya cerrado
+    /// la fila en <c>error</c>. Tocar aquí cualquier columna congelada haría fallar el UPDATE con
+    /// <c>check_violation</c>.
+    /// </summary>
+    public Task SaveValidationErrorsAsync(
+        Guid tenantId,
+        Guid id,
+        string validationErrorsJson,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(validationErrorsJson);
+
+        return Scoped(tenantId)
+            .Where(x => x.Id == id)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(x => x.ValidationErrors, validationErrorsJson)
                     .SetProperty(x => x.UpdatedAt, DateTimeOffset.UtcNow),
                 cancellationToken);
     }
@@ -297,5 +347,8 @@ internal sealed class StandaloneDocumentRepository : IStandaloneDocumentReposito
         DownloadedAt = e.DownloadedAt,
         DownloadCount = e.DownloadCount,
         CreatedAt = e.CreatedAt,
+        BatchId = e.BatchId,
+        RowNumber = e.RowNumber,
+        ValidationErrors = e.ValidationErrors,
     };
 }

@@ -226,7 +226,8 @@ public sealed class StandaloneDocumentAuthorizationTests
 
         System.Text.RegularExpressions.Regex
             .Matches(fuente, @"\.RequirePermission\(""generacion-documental\.read""\)")
-            .Should().HaveCount(2, "el listado y la descarga son ambos de .read");
+            // HU #12210 suma GET /lotes/plantilla: descargar la plantilla es leer, no generar.
+            .Should().HaveCount(3, "el listado, la descarga y la plantilla del lote son de .read");
 
         fuente.Should().NotContain("SuperAdminPolicy");
     }

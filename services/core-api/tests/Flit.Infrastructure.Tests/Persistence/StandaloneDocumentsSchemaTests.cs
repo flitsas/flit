@@ -260,15 +260,17 @@ public sealed class StandaloneDocumentsSchemaTests
     }
 
     [Fact]
-    public void ElEsquemaDeLotesSigueSiendoDeI3YNoLoTocaEsteIncremento()
+    public void ElEsquemaDeLotesLlegaConHu07YAhoraSiTieneCodigoQueLoUsa()
     {
-        // El par de migración de I3 viaja con HU-07. Este incremento no lo referencia: ninguna
-        // entidad EF mapea la tabla de lotes, así que no hay código de I1 que dependa de él.
+        // Este test era la guarda inversa en I1 —«ninguna entidad mapea la tabla de lotes»— y su
+        // vuelta es justamente el criterio de aceptación de HU-07: el par de migración de I3 viaja
+        // con esta HU y ya hay código que lo usa, así que la tabla DEBE estar en el modelo. Dejarlo
+        // como estaba habría obligado a desplegar el esquema sin worker, o el worker sin esquema.
         using var db = NewContext();
         db.Model.GetEntityTypes()
             .Select(e => e.GetTableName())
-            .Should().NotContain("standalone_document_batches",
-                "el esquema de lotes no tiene código que lo use hasta HU-07");
+            .Should().Contain("standalone_document_batches",
+                "desde HU-07 el worker de lotes consume la cabecera");
     }
 
     // ── Modelo EF — aquí sí se verifica comportamiento ────────────────────────────────

@@ -61,6 +61,21 @@ public sealed class StandaloneDocumentEntity
     /// <summary>Contador de auditoría de descargas (CF-19). No es un cupo: no limita descargas.</summary>
     public int DownloadCount { get; set; }
 
+    /// <summary>
+    /// Lote XLSX de origen (DDL 106). <c>null</c> en la generación individual. INMUTABLE: la capa 2
+    /// del trigger rechaza cualquier UPDATE que lo toque, incluido pasarlo de nulo a un valor.
+    /// </summary>
+    public Guid? BatchId { get; set; }
+
+    /// <summary>Número de fila en el XLSX (1-based, sin encabezado). Inmutable, como <see cref="BatchId"/>.</summary>
+    public int? RowNumber { get; set; }
+
+    /// <summary>
+    /// jsonb <c>[{ code, field, message }]</c> con los errores de la fila del XLSX (CF-13). NOT NULL
+    /// con default <c>[]</c>. Exenta del trigger de inmutabilidad, igual que <c>downloaded_at</c>.
+    /// </summary>
+    public string ValidationErrors { get; set; } = "[]";
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

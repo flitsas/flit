@@ -140,6 +140,10 @@ public sealed class GenerateTransferenciaHandler
             IdempotencyKey = idempotencyKey,
             InputSummary = BuildInputSummary(command, model, scenario, now),
             CreatedAt = now,
+            // I3 — vínculo con el lote (nulos en la generación individual). Inmutables por trigger:
+            // por eso viajan en el INSERT y no en un UPDATE posterior.
+            BatchId = command.BatchId,
+            RowNumber = command.RowNumber,
         };
 
         await _repository.InsertAsync(document, cancellationToken).ConfigureAwait(false);

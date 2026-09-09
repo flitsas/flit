@@ -1,10 +1,12 @@
 using System.Globalization;
 using System.Security.Claims;
+using Flit.Admin.Application.GeneracionDocumental.Batches;
 using Flit.Admin.Application.GeneracionDocumental.Download;
 using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
 using Flit.Admin.Application.GeneracionDocumental.GenerateTransferencia;
 using Flit.Admin.Application.GeneracionDocumental.List;
 using Flit.Admin.Application.GeneracionDocumental.Prefill;
+using Flit.Admin.Application.GeneracionDocumental.Ports;
 using Flit.Admin.Domain.GeneracionDocumental;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -169,6 +171,48 @@ public static class AdminGeneracionDocumentalEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // Lotes XLSX (CF-11/CF-12/CF-13/CF-16, HU #12210). El seguimiento por polling y la descarga
+        // ZIP del lote NO viven aqui: son de la HU siguiente.
+        group.MapGet("/lotes/plantilla", DescargarPlantillaLoteAsync)
+            .RequirePermission("generacion-documental.read")
+            .WithName("AdminGeneracionDocumentalPlantillaLote")
+            .WithSummary("Descarga la plantilla XLSX v1 de carga masiva")
+            .WithDescription("Devuelve el XLSX de la plantilla v1 con TODAS las columnas declaradas "
+                + "como texto. Que sean texto no es cosmetica: es lo que evita que Excel guarde una "
+                + "fecha como serial numerico, que el parser rechaza en vez de convertir. El "
+                + "encabezado de este archivo es exactamente el que exige POST /lotes. Requiere el "
+                + "permiso generacion-documental.read.")
+            .Produces<byte[]>(
+                StatusCodes.Status200OK,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/lotes", CrearLoteAsync)
+            .RequirePermission("generacion-documental.generate")
+            .WithName("AdminGeneracionDocumentalCrearLote")
+            .WithSummary("Carga un XLSX de hasta 100 filas y encola el lote")
+            .WithDescription("Recibe multipart/form-data con el campo file. Responde 202 con "
+                + "{ batchId, status: queued, total } y el procesamiento ocurre en segundo plano: "
+                + "cada fila se genera con el handler de su tipo (certificado_rues o "
+                + "transferencia_dominio_generada con su escenario). Una fila invalida NO cancela el "
+                + "lote: queda en error con validation_errors (codigo, campo y mensaje, nunca el "
+                + "valor capturado) y el lote termina en partial_failure. Una fila que declare "
+                + "cualquiera de las once condiciones de los arts. 5.3.2.3 a 5.3.2.13 queda en error "
+                + "con el codigo VB-07 y el articulo citado, y el resto del lote continua. Rechazos "
+                + "del archivo completo (422, y el archivo NO se persiste): too_many_rows con mas de "
+                + "100 filas, template_invalid si el encabezado no es el de la v1 e invalid_file si "
+                + "el contenido real no es un XLSX. La cabecera Idempotency-Key repetida dentro del "
+                + "mismo tenant devuelve el lote existente sin crear lote, ni filas, ni archivo "
+                + "fuente nuevo. Requiere el permiso generacion-documental.generate.")
+            .Produces<StandaloneBatchCreateResponse>(StatusCodes.Status202Accepted)
+            .Produces<StandaloneBatchCreateResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity)
+            .DisableAntiforgery();
+
         group.MapGet("/{id:guid}/download", DownloadDocumentoAsync)
             .RequirePermission("generacion-documental.read")
             .WithName("AdminGeneracionDocumentalDownload")
@@ -331,6 +375,12 @@ public static class AdminGeneracionDocumentalEndpoints
 
     /// <summary>Respuesta de la descarga: URL firmada y su vencimiento. Nada mas.</summary>
     public sealed record StandaloneDocumentDownloadResponse(string Url, DateTimeOffset ExpiresAt);
+
+    /// <summary>
+    /// Respuesta de la carga de un lote. Sin nombre de archivo ni ruta de storage: el XLSX fuente
+    /// contiene los datos completos de las partes y no se refleja en el contrato.
+    /// </summary>
+    public sealed record StandaloneBatchCreateResponse(Guid BatchId, string Status, int Total);
 
     /// <summary>Cuerpo del prellenado de vehiculo. La placa manda; el documento del propietario es opcional.</summary>
     public sealed record PrefillVehiculoRequest(string? Placa, string? OwnerDocumentType, string? OwnerDocumentNumber);
@@ -633,6 +683,90 @@ public static class AdminGeneracionDocumentalEndpoints
             new { error = result.Error, field },
             statusCode: StatusCodes.Status502BadGateway),
     };
+
+    /// <summary>
+    /// Plantilla XLSX v1 (CF-11). Se genera al vuelo desde la MISMA lista de encabezados que valida
+    /// la carga: la plantilla entregada y la exigida no pueden divergir.
+    /// </summary>
+    internal static IResult DescargarPlantillaLoteAsync(
+        [FromServices] IStandaloneDocumentXlsxTemplate template)
+    {
+        var archivo = template.Build();
+        return Results.File(archivo.Content, archivo.Mimetype, archivo.Filename);
+    }
+
+    /// <summary>
+    /// Carga de lote (CF-11/CF-16). El archivo se lee del multipart a mano —y no como parametro
+    /// IFormFile— para no arrastrar el binder de formularios a un grupo que por lo demas es JSON.
+    /// </summary>
+    internal static async Task<IResult> CrearLoteAsync(
+        HttpContext httpContext,
+        [FromServices] CreateBatchHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Unauthorized("Token invalido: falta claim tenant_id");
+        }
+
+        var userId = ResolveUserId(httpContext.User);
+        if (userId is null)
+        {
+            return Unauthorized("Token invalido: falta claim sub");
+        }
+
+        if (!httpContext.Request.HasFormContentType)
+        {
+            return Results.Json(
+                new { error = "invalid_request", field = "file" },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var form = await httpContext.Request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files["file"] ?? (form.Files.Count > 0 ? form.Files[0] : null);
+
+        if (file is null || file.Length == 0)
+        {
+            return Results.Json(
+                new { error = "invalid_request", field = "file" },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var idempotencyKey = httpContext.Request.Headers["Idempotency-Key"].ToString();
+
+        await using var content = file.OpenReadStream();
+
+        var result = await handler
+            .HandleAsync(
+                new CreateBatchCommand(
+                    tenantId,
+                    userId.Value,
+                    file.FileName,
+                    content,
+                    string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            CreateBatchOutcome.Accepted => Results.Json(
+                new StandaloneBatchCreateResponse(result.BatchId!.Value, result.Status!, result.Total),
+                statusCode: StatusCodes.Status202Accepted),
+
+            // CF-16 — replay: el lote que ya existia, sin crear nada nuevo.
+            CreateBatchOutcome.AlreadyExists => Results.Ok(
+                new StandaloneBatchCreateResponse(result.BatchId!.Value, result.Status!, result.Total)),
+
+            // 422 con el codigo del rechazo. El archivo NO llego a storage.
+            CreateBatchOutcome.Rejected => Results.Json(
+                new { error = result.ErrorCode, field = "file" },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+
+            _ => Results.Json(
+                new { error = result.ErrorCode ?? "invalid_request", field = "file" },
+                statusCode: StatusCodes.Status400BadRequest),
+        };
+    }
 
     internal static async Task<IResult> ListDocumentosAsync(
         HttpContext httpContext,

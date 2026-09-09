@@ -65,6 +65,26 @@ public sealed class StandaloneDocument
     public int DownloadCount { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    /// <summary>
+    /// Lote XLSX de origen (Feature #12201, I3). <c>null</c> en una generación individual. El CHECK
+    /// <c>ck_standalone_documents_batch_row</c> exige que viaje junto con <see cref="RowNumber"/>:
+    /// una fila de lote sin número no es rastreable hasta el archivo, y un número sin lote no
+    /// significa nada.
+    /// <para>Ambas columnas son INMUTABLES desde el DDL 106 (capa 2 del trigger): no se pueden
+    /// asignar después de insertar la fila. Quien crea la fila decide si es de lote o no.</para>
+    /// </summary>
+    public Guid? BatchId { get; init; }
+
+    /// <summary>Número de fila en el XLSX, 1-based y sin contar el encabezado (CF-13).</summary>
+    public int? RowNumber { get; init; }
+
+    /// <summary>
+    /// Errores de la fila del XLSX (CF-13) como <c>[{ code, field, message }]</c>. Vacío
+    /// (<c>[]</c>) mientras no haya ninguno — la columna es <c>NOT NULL DEFAULT '[]'</c>.
+    /// <para>Nunca refleja el valor capturado que produjo el error.</para>
+    /// </summary>
+    public string ValidationErrors { get; init; } = "[]";
 }
 
 /// <summary>Binario ya persistido en storage: lo que cierra la fila en <c>generated</c>.</summary>

@@ -6624,6 +6624,124 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── Admin · Generación documental · Lotes XLSX (I3, HU #12210) ──
+  /api/v1/admin/generacion-documental/lotes/plantilla:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPlantillaLote
+      summary: Descarga la plantilla XLSX v1 de carga masiva (CF-11)
+      description: >
+        Devuelve el XLSX de la plantilla v1 con TODAS las columnas declaradas como texto. Que sean
+        texto no es cosmética: evita que Excel guarde una fecha como serial numérico, que el parser
+        RECHAZA en vez de convertir (una conversión a ciegas produce documentos con la fecha
+        equivocada). El encabezado de este archivo es exactamente el que exige POST /lotes: se
+        genera de la misma lista de columnas que valida la carga. Requiere el permiso
+        generacion-documental.read.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Plantilla v1 vacía, con la fila de encabezado.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/lotes:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalCrearLote
+      summary: Carga un XLSX de hasta 100 filas y encola el lote (CF-11/CF-12/CF-13/CF-16)
+      description: >
+        Recibe multipart/form-data con el campo file y responde 202 con el identificador del lote,
+        estado queued y el total de filas; el procesamiento ocurre en segundo plano. Cada fila se
+        genera con el handler de SU tipo (certificado_rues o transferencia_dominio_generada con su
+        escenario), de modo que un mismo lote admite tipos mezclados (CF-12). Una fila inválida NO
+        cancela el lote (CF-13): queda en error con validation_errors —código, campo y mensaje, y el
+        mensaje NUNCA refleja el valor capturado—, las demás se generan y el lote termina en
+        partial_failure. Un document_type desconocido es una fila en error, no un aborto. Una fila
+        que declare cualquiera de las once condiciones de traspaso especial de los arts. 5.3.2.3 a
+        5.3.2.13 queda en error con el código VB-07 y el artículo citado, y el resto del lote
+        continúa (CF-24 en lote). Rechazos del archivo COMPLETO, con 422 y sin persistir el archivo
+        en storage: too_many_rows con más de 100 filas de datos, template_invalid si el encabezado no
+        es exactamente el de la plantilla v1 e invalid_file si el contenido real no es un XLSX (el
+        MIME se verifica por contenido, no por extensión). La cabecera Idempotency-Key repetida
+        dentro del mismo tenant devuelve el lote existente sin crear lote, ni filas, ni archivo
+        fuente nuevo (CF-16). El seguimiento del avance y la descarga ZIP del lote NO están en esta
+        superficie. Requiere el permiso generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 120 }
+          description: Repetirla dentro del mismo tenant devuelve el lote existente (CF-16).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: XLSX conforme a la plantilla v1, máximo 100 filas de datos.
+      responses:
+        "202":
+          description: Lote encolado. El procesamiento es asíncrono.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentBatchCreated"
+        "200":
+          description: >
+            Replay de idempotencia: el lote que ya existía para esa clave y ese tenant. No se creó
+            nada nuevo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentBatchCreated"
+        "400":
+          description: Falta el archivo o la petición no es multipart.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Archivo rechazado entero (too_many_rows, template_invalid o invalid_file). El XLSX no se
+            persistió en storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Trámites · Documentos (adjuntos, checklist, consolidado) — HU #10520 (RNF01) ──
   /api/v1/tramites/instances/{id}/attachments:
     parameters:
@@ -8122,6 +8240,27 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
+    StandaloneDocumentBatchCreated:
+      type: object
+      description: >
+        Cabecera del lote recién encolado (o del existente, en un replay de idempotencia).
+        Deliberadamente SIN nombre de archivo ni ruta de storage: el XLSX fuente contiene los datos
+        completos de las partes y no se refleja en el contrato.
+      required: [batchId, status, total]
+      properties:
+        batchId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, processing, completed, partial_failure, failed]
+          description: >
+            Cuatro estados internos del lote. La interfaz colapsa queued y processing en
+            «En proceso» (CF-21); partial_failure es un resultado visible, no un fallo del lote.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Filas de datos del XLSX, sin contar el encabezado.
+
     StandaloneDocumentDownloadLink:
       type: object
       description: >

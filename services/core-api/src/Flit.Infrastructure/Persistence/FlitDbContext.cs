@@ -324,6 +324,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<Entities.Admin.StandaloneDocumentEntity> StandaloneDocuments =>
         Set<Entities.Admin.StandaloneDocumentEntity>();
 
+    // Cabecera de lote XLSX de generación documental (Feature #12201, I3). Sin tabla de items: una
+    // fila del XLSX es una fila de StandaloneDocuments vinculada por (batch_id, row_number).
+    public DbSet<Entities.Admin.StandaloneDocumentBatchEntity> StandaloneDocumentBatches =>
+        Set<Entities.Admin.StandaloneDocumentBatchEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

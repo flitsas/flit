@@ -35,6 +35,14 @@ public interface IStandaloneDocumentStorage
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Abre el binario para lectura. Devuelve <c>null</c> si el archivo ya no existe.
+    /// <para>Lo usa el worker de lotes (Feature #12201, I3) para RELEER el XLSX fuente: las filas
+    /// del archivo no se copian a ninguna columna —no hay dónde, y serían PII duplicada—, así que
+    /// la fuente de verdad de lo cargado es el propio archivo en storage.</para>
+    /// </summary>
+    Task<Stream?> OpenReadAsync(string storagePath, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Presigned GET de vida corta para el PDF ya generado (CF-19, ADR-0029). Devuelve <c>null</c>
     /// si el binario no existe o el backend de almacenamiento no soporta presigned view.
     /// <para>El caller NO puede loguear la URL devuelta.</para>

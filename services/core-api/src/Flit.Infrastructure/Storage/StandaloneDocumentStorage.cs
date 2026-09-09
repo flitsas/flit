@@ -43,6 +43,17 @@ internal sealed class StandaloneDocumentStorage : IStandaloneDocumentStorage
     }
 
     /// <summary>
+    /// Lectura del binario (worker de lotes: relee el XLSX fuente). Delega tal cual; devuelve
+    /// <c>null</c> si el objeto ya no está en el backend de almacenamiento.
+    /// </summary>
+    public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken cancellationToken = default)
+    {
+        return string.IsNullOrWhiteSpace(storagePath)
+            ? Task.FromResult<Stream?>(null)
+            : _storage.OpenReadAsync(storagePath, cancellationToken);
+    }
+
+    /// <summary>
     /// Presigned GET inline (TTL corto, ADR-0029). <b>No se loguea la URL</b> ni aquí ni en el
     /// handler: contiene la firma HMAC y equivale a una credencial de lectura del binario.
     /// </summary>

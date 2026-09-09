@@ -381,6 +381,13 @@ public static class DependencyInjection
         // lector del baúl de firmas (modo MANUSCRITA fijo, anexo §9.0).
         services.AddScoped<GenerateTransferenciaHandler>();
 
+        // HU #12210 (Feature #12201, I3) — carga masiva XLSX. El runner del lote se registra scoped
+        // porque arrastra repositorios y handlers scoped; el BackgroundService de Infrastructure
+        // abre un scope por ciclo y lo resuelve ahí. Los puertos del parser y de la plantilla se
+        // registran en Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<GeneracionDocumental.Batches.CreateBatchHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.StandaloneDocumentBatchRunner>();
+
         return services;
     }
 }

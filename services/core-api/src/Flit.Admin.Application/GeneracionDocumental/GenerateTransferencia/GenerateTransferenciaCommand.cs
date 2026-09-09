@@ -28,7 +28,9 @@ public sealed record GenerateTransferenciaCommand(
     TransferEncumbranceInput? Gravamen = null,
     RegimenDeclarationInput? RegimenAplicable = null,
     TransferLeasingInput? Leasing = null,
-    string? IdempotencyKey = null)
+    string? IdempotencyKey = null,
+    Guid? BatchId = null,
+    int? RowNumber = null)
 {
     /// <summary>Escenario efectivo cuando hay exactamente uno; <c>null</c> si hay cero o varios.</summary>
     public string? SingleScenario =>

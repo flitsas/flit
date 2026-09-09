@@ -58,6 +58,14 @@ internal sealed class StandaloneDocumentEntityConfiguration
         builder.Property(x => x.DownloadedAt).HasColumnName("downloaded_at");
         builder.Property(x => x.DownloadCount).HasColumnName("download_count").IsRequired();
 
+        // DDL 106 (I3) — vínculo con el lote. batch_id + row_number viajan juntos (CHECK
+        // ck_standalone_documents_batch_row) y son inmutables una vez insertada la fila.
+        builder.Property(x => x.BatchId).HasColumnName("batch_id");
+        builder.Property(x => x.RowNumber).HasColumnName("row_number");
+        builder.Property(x => x.ValidationErrors)
+            .HasColumnName("validation_errors").HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb").IsRequired();
+
         builder.Property(x => x.RowVersion).HasColumnName("row_version").IsRequired();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.CreatedBy).HasColumnName("created_by");
@@ -70,5 +78,7 @@ internal sealed class StandaloneDocumentEntityConfiguration
             .HasDatabaseName("ix_standalone_documents_tenant_created");
         builder.HasIndex(x => new { x.TenantId, x.CreatedByUserId })
             .HasDatabaseName("ix_standalone_documents_tenant_user");
+        builder.HasIndex(x => new { x.BatchId, x.Status })
+            .HasDatabaseName("ix_standalone_documents_batch_status");
     }
 }
