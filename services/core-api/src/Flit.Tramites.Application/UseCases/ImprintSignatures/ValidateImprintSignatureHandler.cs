@@ -2,6 +2,7 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.ImprintSignatures;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ImprintSignatures;
 
@@ -107,8 +108,14 @@ public sealed class ValidateImprintSignatureHandler
         };
     }
 
+    /// <summary>
+    /// Placa canónica del trámite para la bitácora; <c>"-"</c> cuando el trámite no tiene placa
+    /// (la columna es obligatoria y un guion se lee mejor que una cadena vacía en el histórico).
+    /// La normalización en sí vive en <see cref="PlacaNormalizer"/> — misma regla que usan el
+    /// repositorio de improntas y el historial por placa.
+    /// </summary>
     private static string NormalizePlacaSnapshot(string? plate) =>
-        string.IsNullOrWhiteSpace(plate) ? "-" : plate.Trim().ToUpperInvariant();
+        PlacaNormalizer.NormalizeOrNull(plate) ?? "-";
 
     /// <summary>Quita espacios y saltos (el PDF suele partir la Base64 en varias líneas).</summary>
     internal static string NormalizeSignature(string? raw)

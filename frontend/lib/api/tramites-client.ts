@@ -498,6 +498,36 @@ async function searchInstances(
   return { items, total: res?.total ?? items.length };
 }
 
+/**
+ * HU #12194 — historial operativo de una placa.
+ *
+ * <p>Endpoint propio y no `listInstances({ placa })` porque el alcance NO es el mismo: el historial
+ * lo resuelve el servidor por rol (SuperAdmin ve la placa en todas las compañías; el resto solo en
+ * la suya) y fija el orden cronológico descendente. El cliente no manda `sortBy` ni tenant: si los
+ * mandara, estaría reproduciendo una decisión que ya es del servidor y podría divergir de ella.</p>
+ *
+ * <p>Una placa sin trámites responde `200` con lista vacía, nunca `404`: el vacío es un resultado,
+ * no un error, y quien llama debe pintarlo como estado vacío.</p>
+ */
+async function listPlateHistory(params: {
+  placa: string;
+  skip?: number;
+  take?: number;
+}): Promise<{ items: InstanceSummary[]; total: number }> {
+  const qs = new URLSearchParams();
+  // La normalización canónica la hace el servidor (Trim + upper); aquí solo se evita mandar
+  // espacios de sobra que ensucian la URL.
+  qs.set('placa', params.placa.trim());
+  if (params.skip !== undefined) qs.set('skip', String(params.skip));
+  if (params.take !== undefined) qs.set('take', String(params.take));
+
+  const res = await request<InstancesResponse>(
+    `/api/v1/tramites/instances/plate-history?${qs.toString()}`,
+  );
+  const items = normalizeInstances(res?.items);
+  return { items, total: res?.total ?? items.length };
+}
+
 async function listInstancesPage(
   params: ListInstancesParams,
 ): Promise<{ items: InstanceSummary[]; total: number }> {
@@ -591,6 +621,15 @@ export const tramitesClient = {
    * respaldo es el tamaño de la página, que al menos nunca promete filas que no existen.</p>
    */
   listInstancesPage: (params: ListInstancesParams = {}) => listInstancesPage(params),
+
+  /**
+   * HU #12194 — historial de trámites de una placa, paginado y con el `total` del universo.
+   *
+   * <p>El alcance por compañía y el orden (createdAt desc) los decide el servidor según el rol de
+   * quien consulta; por eso la firma solo admite placa y paginación.</p>
+   */
+  listPlateHistory: (params: { placa: string; skip?: number; take?: number }) =>
+    listPlateHistory(params),
 
   /**
    * HU #12106 — el listado por POST, que es el ÚNICO camino que admite condiciones.
@@ -2155,7 +2194,145 @@ export const tramitesClient = {
       `/api/v1/tramites/instances/${instanceId}/cancelar-subsanacion`,
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
+
+  // ── Admin · Trámites · Gestión avanzada (Feature #12155, HU #12163) ──────────────────
+  // Los 6 endpoints administrativos de HU #12158-#12162, todos gateados por permiso en el
+  // BACKEND (SuperAdmin bypassa). El frontend no repite esa validación aquí: solo condiciona la
+  // VISIBILIDAD del ítem de menú con el claim `permissions` del JWT (ver
+  // lib/tramites/admin-tramite-permissions.ts + hooks/usePermissions) — si una llamada se cuela sin
+  // el slug, el backend sigue respondiendo 403.
+
+  /** HU #12158 — descarta el consolidado vigente (aunque lo haya cargado un admin) y lo regenera. */
+  adminLimpiarConsolidado: (instanceId: string, tenantId?: string) =>
+    request<ProcedureAttachment>(
+      `/api/v1/admin/tramites/${instanceId}/consolidado/limpiar`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  /**
+   * HU #12158 — registra un PDF externo como el consolidado del trámite (Source="user"). Multipart
+   * (campo `file`): NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
+   * `analyzeDocument`/`analyzeBatch` de este archivo.
+   */
+  adminCargarConsolidado: async (
+    instanceId: string,
+    file: File,
+    tenantId?: string,
+  ): Promise<ProcedureAttachment> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(
+      apiUrl(`/api/v1/admin/tramites/${instanceId}/consolidado/cargar`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as ProcedureAttachment;
+  },
+
+  /** HU #12159 — cambia `status` sin restricciones de flujo (rechaza 422 si origen/destino es 'aprobado'). */
+  adminCambiarEstado: (
+    instanceId: string,
+    toStatus: string,
+    reason: string | null,
+    tenantId?: string,
+  ) =>
+    request<AdminCambiarEstadoResult>(
+      `/api/v1/admin/tramites/${instanceId}/estado`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ toStatus, reason }),
+      },
+    ),
+
+  /** HU #12160 — anula el trámite desde cualquier estado (rechaza 422 si es 'aprobado' o 'revocado'). */
+  adminAnular: (instanceId: string, reason: string | null, tenantId?: string) =>
+    request<AdminAnularResult>(
+      `/api/v1/admin/tramites/${instanceId}/anular`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ reason }),
+      },
+    ),
+
+  /** HU #12161 — reenvía la validación de identidad (biométrica) fuera del gate del wizard. */
+  adminReenviarValidacionIdentidad: (
+    instanceId: string,
+    validationId: string,
+    email: string | null,
+    tenantId?: string,
+  ) =>
+    request<AdminReenviarValidacionResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/${validationId}/reenviar`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ email }),
+      },
+    ),
+
+  /** HU #12162 — reasigna `AssignedToUserId` a otro gestor DISPONIBLE del mismo tenant. */
+  adminReasignarGestor: (instanceId: string, newAssignedToUserId: string, tenantId?: string) =>
+    request<AdminReasignarGestorResult>(
+      `/api/v1/admin/tramites/${instanceId}/reasignar-gestor`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ newAssignedToUserId }),
+      },
+    ),
+
+  /** HU #12162 (AC-selector) — gestores DISPONIBLES del tenant para el selector de reasignación. */
+  adminListGestoresDisponibles: (tenantId?: string) =>
+    request<GestorOption[]>(
+      '/api/v1/admin/tramites/gestores-disponibles',
+      { headers: tenantHeader(tenantId) },
+    ),
 };
+
+/** HU #12159 — resultado del cambio de estado administrativo (espejo de `AdminCambiarEstadoResult`). */
+export interface AdminCambiarEstadoResult {
+  id: string;
+  previousStatus: string;
+  newStatus: string;
+  changedAt: string;
+}
+
+/** HU #12160 — resultado de la anulación administrativa (mismo shape que el cambio de estado). */
+export interface AdminAnularResult {
+  id: string;
+  previousStatus: string;
+  newStatus: string;
+  changedAt: string;
+}
+
+/** HU #12161 — resultado del reenvío administrativo de validación de identidad. */
+export interface AdminReenviarValidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string;
+  emailActualizado: boolean;
+  /** `true` = 202 Accepted (falla transitoria del proveedor; el worker reintenta). */
+  queued: boolean;
+}
+
+/** HU #12162 — resultado de la reasignación administrativa de gestor. */
+export interface AdminReasignarGestorResult {
+  id: string;
+  previousAssignedToUserId: string | null;
+  newAssignedToUserId: string;
+  changedAt: string;
+}
+
+/** HU #12162 (AC-selector) — candidato del selector de reasignación (espejo de `GestorOption`). */
+export interface GestorOption {
+  id: string;
+  displayName: string;
+  email: string;
+}
 
 /** N 03 — copy UX por código de error del endpoint de transición (title del ProblemDetails). */
 const TRANSITION_ERROR_COPY: Record<string, string> = {

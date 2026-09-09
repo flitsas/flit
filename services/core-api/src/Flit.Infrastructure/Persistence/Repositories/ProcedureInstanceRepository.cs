@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
@@ -279,6 +280,32 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ThenByDescending(x => x.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlySet<Guid>> ListInstanceIdsConPrendaVigenteAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct)
+    {
+        if (instanceIds.Count == 0)
+            return new HashSet<Guid>();
+
+        var distinct = instanceIds.Distinct().ToList();
+
+        // El WHERE es el mismo de CompanyQueryRepository (consulta de la empresa): solo la decisión
+        // VIGENTE cuenta —las filas están versionadas— y `omitir`/`sin_prenda` no son tener prenda.
+        // No lleva filtro por tenant: los ids salen de un listado que YA está acotado al tenant del
+        // caller, así que volver a filtrar aquí no añade aislamiento y sí ocultaría un error de
+        // llamada en vez de dejarlo salir.
+        var ids = await db.ProcedureInstancePrendas
+            .AsNoTracking()
+            .Where(p => distinct.Contains(p.ProcedureInstanceId)
+                && p.Estado == PrendaEstado.Vigente
+                && p.Decision != PrendaDecision.SinPrenda
+                && p.Decision != PrendaDecision.Omitir)
+            .Select(p => p.ProcedureInstanceId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return ids.ToHashSet();
     }
 
     public async Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
@@ -1568,7 +1595,85 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             })
             .ToListAsync(ct);
 
-        return (items, total);
+        // HU #12184 — la compañía de quien movió cada estado, en DOS consultas para toda la página
+        // (no una por fila). Va después de materializar y no dentro de la proyección: resolver el
+        // tenant efectivo exige un fallback (`home_tenant_id` y, si falta, la asignación de rol más
+        // antigua) que anidado en el SELECT dependería de cómo cada provider traduzca el `??`.
+        var companias = await ResolveCompaniasDeUsuariosAsync(
+            items.Where(i => i.ChangedByUserId is not null).Select(i => i.ChangedByUserId!.Value).ToList(), ct);
+
+        var conCompania = items
+            .Select(i => i.ChangedByUserId is { } uid && companias.TryGetValue(uid, out var compania)
+                ? i with { ChangedByCompania = compania }
+                : i)
+            .ToList();
+
+        return (conCompania, total);
+    }
+
+    /// <summary>
+    /// HU #12184 — razón social de la compañía de cada usuario indicado.
+    ///
+    /// <para>El tenant EFECTIVO de un usuario es su <c>HomeTenantId</c> y, si falta, el de su
+    /// asignación de rol activa más antigua: mismo criterio que <c>UserRoleAssignmentRepository</c>
+    /// y que el emisor del JWT. Mirar solo <c>home_tenant_id</c> dejaría sin compañía a usuarios
+    /// legítimos que no lo tienen.</para>
+    ///
+    /// <para>Los usuarios sin compañía resoluble se omiten del mapa; el historial los muestra sin
+    /// ella en vez de inventarle una.</para>
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, string>> ResolveCompaniasDeUsuariosAsync(
+        List<Guid> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = userIds.Distinct().ToList();
+
+        var homes = await db.Users.AsNoTracking()
+            .Where(u => distinct.Contains(u.Id))
+            .Select(u => new { u.Id, u.HomeTenantId })
+            .ToListAsync(ct);
+
+        var sinHome = homes.Where(h => h.HomeTenantId is null).Select(h => h.Id).ToList();
+
+        var asignaciones = sinHome.Count == 0
+            ? []
+            : await db.UserRoleAssignments.AsNoTracking()
+                .Where(a => sinHome.Contains(a.UserId) && a.DeletedAt == null)
+                .OrderBy(a => a.AssignedAt)
+                .Select(a => new { a.UserId, a.TenantId })
+                .ToListAsync(ct);
+
+        var tenantPorUsuario = new Dictionary<Guid, Guid>();
+        foreach (var home in homes)
+        {
+            if (home.HomeTenantId is { } tid)
+                tenantPorUsuario[home.Id] = tid;
+        }
+
+        foreach (var asignacion in asignaciones)
+            tenantPorUsuario.TryAdd(asignacion.UserId, asignacion.TenantId);
+
+        if (tenantPorUsuario.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var tenantIds = tenantPorUsuario.Values.Distinct().ToList();
+        var razones = await db.Tenants.AsNoTracking()
+            .Where(t => tenantIds.Contains(t.Id))
+            .Select(t => new { t.Id, t.LegalName })
+            .ToListAsync(ct);
+
+        var razonPorTenant = razones.ToDictionary(r => r.Id, r => r.LegalName);
+
+        var resultado = new Dictionary<Guid, string>();
+        foreach (var (userId, tenantId) in tenantPorUsuario)
+        {
+            if (razonPorTenant.TryGetValue(tenantId, out var razon) && !string.IsNullOrWhiteSpace(razon))
+                resultado[userId] = razon;
+        }
+
+        return resultado;
     }
 
     public async Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(
@@ -1811,6 +1916,58 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 .ToList());
     }
 
+    // HU #12162 — reasignación de gestor. Ambos métodos consultan directamente `identity.users` /
+    // `security.user_role_assignments` / `security.user_temp_suspensions` con el MISMO criterio que
+    // `Flit.Modules.Security.Domain.UserRoles.IUserRoleAssignmentRepository.UserBelongsToTenantAsync`
+    // (pertenencia) y que la bandera de suspensión de `GET /api/v1/security/users` (disponibilidad):
+    // se ejecuta la misma consulta desde este repositorio, en vez de añadir una referencia de proyecto
+    // Tramites.Application → Modules.Security.Domain solo para esto (este repositorio YA hace lecturas
+    // ad hoc de identity.users — ver GetUserDisplayNamesAsync/UserExistsAsync/GetUserDisplayNameAsync).
+    public async Task<GestorCandidate?> FindGestorCandidateAsync(
+        Guid userId, Guid tenantId, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.Id, u.DisplayName, u.Status, u.DeletedAt, u.HomeTenantId })
+            .FirstOrDefaultAsync(ct);
+
+        if (user is null)
+            return null;
+
+        var belongsToTenant = user.DeletedAt is null
+            && (user.HomeTenantId == tenantId
+                || await db.UserRoleAssignments.AsNoTracking().AnyAsync(
+                    a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null, ct));
+
+        var isActive = user.DeletedAt is null
+            && string.Equals(user.Status, "active", StringComparison.OrdinalIgnoreCase);
+
+        var isSuspended = await db.UserTempSuspensions.AsNoTracking().AnyAsync(
+            s => s.UserId == userId && s.TenantId == tenantId && s.DeletedAt == null
+                && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now), ct);
+
+        return new GestorCandidate(user.Id, user.DisplayName, belongsToTenant, isActive, isSuspended);
+    }
+
+    public async Task<IReadOnlyList<GestorOption>> ListAvailableGestoresAsync(
+        Guid tenantId, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var rows = await db.Users.AsNoTracking()
+            .Where(u => u.DeletedAt == null
+                && u.Status == "active"
+                && (u.HomeTenantId == tenantId
+                    || db.UserRoleAssignments.Any(
+                        a => a.UserId == u.Id && a.TenantId == tenantId && a.DeletedAt == null))
+                && !db.UserTempSuspensions.Any(
+                    s => s.UserId == u.Id && s.TenantId == tenantId && s.DeletedAt == null
+                        && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)))
+            .OrderBy(u => u.DisplayName)
+            .Select(u => new { u.Id, u.DisplayName, u.Email })
+            .ToListAsync(ct);
+
+        return rows.Select(r => new GestorOption(r.Id, r.DisplayName, r.Email)).ToList();
+    }
+
     /// <summary>Clave del `field_value` con el nombre del organismo de tránsito elegido — la misma que
     /// proyecta <c>ListProcedureInstancesQuery</c> en <c>OrganismoTransito</c>.</summary>
     private const string TransitOfficeNameFieldKey = "transit_office_name";
@@ -1900,6 +2057,39 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 fv.FieldKey == TransitOfficeNameFieldKey
                 && fv.ValueText != null
                 && fv.ValueText.ToLower().Contains(ot)));
+        }
+
+        if (filter.Prioritario is { } prioritario)
+            query = query.Where(x => x.Prioritario == prioritario);
+
+        if (!string.IsNullOrWhiteSpace(filter.Busqueda))
+        {
+            // HU #12187 — el mismo alcance que tenía la búsqueda cuando se resolvía en el navegador,
+            // más el documento de las partes: radicado, placa, VIN, nombre y documento de comprador y
+            // vendedor, organismo de tránsito y razón social de la compañía.
+            //
+            // El RADICADO casa exacto y no por subcadena: es un consecutivo numérico corto desde el
+            // Feature #12150, así que buscar «1» por subcadena traería el 1, el 10, el 11 y el 100.
+            //
+            // Nombre y organismo van en minúsculas y placa/VIN en mayúsculas porque así se comparan
+            // ya en el resto de este método; el criterio no cambia por venir de la barra de búsqueda.
+            var termino = filter.Busqueda.Trim();
+            var enMinusculas = termino.ToLowerInvariant();
+            var enMayusculas = termino.ToUpperInvariant();
+
+            query = query.Where(x =>
+                x.ReferenceNumber == termino
+                || (x.Plate != null && x.Plate.ToUpper().Contains(enMayusculas))
+                || (x.Vin != null && x.Vin.ToUpper().Contains(enMayusculas))
+                || (x.CompradorNombre != null && x.CompradorNombre.ToLower().Contains(enMinusculas))
+                || (x.VendedorNombre != null && x.VendedorNombre.ToLower().Contains(enMinusculas))
+                || x.Actors.Any(a => a.DocumentNumber != null
+                    && a.DocumentNumber.ToLower().Contains(enMinusculas))
+                || x.FieldValues.Any(fv => fv.FieldKey == TransitOfficeNameFieldKey
+                    && fv.ValueText != null
+                    && fv.ValueText.ToLower().Contains(enMinusculas))
+                || db.Tenants.Any(t => t.Id == x.TenantId
+                    && t.LegalName.ToLower().Contains(enMinusculas)));
         }
 
         if (filter.Condiciones is { Count: > 0 } condiciones)
@@ -2097,6 +2287,16 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 verdadero: q => q.Where(x => x.SubsanacionActiva),
                 falso: q => q.Where(x => !x.SubsanacionActiva)),
 
+            // Las dos marcas del listado (HU #12199). No son columna: cada una es la disyunción de
+            // sus DOS disparadores, así que el «No» se construye negando la misma expresión y no con
+            // una condición propia — dos expresiones separadas se irían apartando.
+            TramitesQueryFieldCatalog.Prenda => ApplyBooleano(query, op, valores,
+                verdadero: q => q.Where(TienePrendaExpr),
+                falso: q => q.Where(Negar(TienePrendaExpr))),
+            TramitesQueryFieldCatalog.Transformacion => ApplyBooleano(query, op, valores,
+                verdadero: q => q.Where(TieneTransformacionExpr),
+                falso: q => q.Where(Negar(TieneTransformacionExpr))),
+
             // El metodo de pago vive en la fila comercial, que es opcional: un tramite sin datos
             // comerciales no tiene metodo, y por eso "no es ninguno" tiene que dejarlo pasar.
             TramitesQueryFieldCatalog.MetodoPago => op switch
@@ -2117,6 +2317,64 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             _ => query,
         };
     }
+
+    /// <summary>
+    /// Códigos y valores de las dos marcas, ya normalizados como los guarda la base, para no
+    /// recalcularlos en cada consulta. Salen del DOMINIO —<see cref="ProcedureTypeLayers"/> y
+    /// <see cref="TramiteMarcas"/>—, que es lo que impide que el <c>WHERE</c> y el ícono del listado
+    /// se separen: si mañana entra un tipo o una forma afirmativa nueva, entra en los dos a la vez.
+    /// </summary>
+    private static readonly string[] CodigosPrendaBase =
+        [.. ProcedureTypeLayers.CodigosPrendaBase.Select(c => c.ToUpperInvariant())];
+
+    private static readonly string[] CodigosTransformacion =
+        [.. ProcedureTypeLayers.CodigosTransformacion.Select(c => c.ToUpperInvariant())];
+
+    private static readonly string[] ClavesTransformacion =
+        [.. TramiteMarcas.ClavesTransformacion];
+
+    private static readonly string[] ValoresAfirmativos =
+        [.. TramiteMarcas.ValoresAfirmativos];
+
+    /// <summary>
+    /// «Tiene prenda», en SQL. Réplica de <see cref="TramiteMarcas.TienePrenda"/>: la decisión
+    /// VIGENTE que no sea <c>omitir</c> ni <c>sin_prenda</c> —mismo <c>WHERE</c> que
+    /// <see cref="ListInstanceIdsConPrendaVigenteAsync"/>— <b>o</b> que el trámite SEA de prenda,
+    /// que lo es desde que se abre, antes de que nadie capture la decisión.
+    /// </summary>
+    /// <remarks>
+    /// No es <c>static</c> porque la decisión de prenda no cuelga de la instancia como navegación:
+    /// vive en su propia tabla y hay que ir a ella por subconsulta correlacionada, igual que hace el
+    /// filtro «Gestor» contra <c>identity.users</c>.
+    /// </remarks>
+    private Expression<Func<ProcedureInstance, bool>> TienePrendaExpr =>
+        x => (x.ProcedureType != null && CodigosPrendaBase.Contains(x.ProcedureType.Code.ToUpper()))
+            || db.ProcedureInstancePrendas.Any(p => p.ProcedureInstanceId == x.Id
+                && p.Estado == PrendaEstado.Vigente
+                && p.Decision != PrendaDecision.SinPrenda
+                && p.Decision != PrendaDecision.Omitir);
+
+    /// <summary>
+    /// «Tiene transformación», en SQL. Réplica de <see cref="TramiteMarcas.TieneTransformacion"/>:
+    /// el tipo ES la transformación <b>o</b> el formulario declara alguna de las cuatro claves con
+    /// un valor afirmativo. El <c>Trim</c>/<c>ToLower</c> no es adorno: por los migrados de V1
+    /// circulan <c>1</c> y <c>si</c> además de <c>true</c>, y con espacios alrededor.
+    /// </summary>
+    private static readonly Expression<Func<ProcedureInstance, bool>> TieneTransformacionExpr =
+        x => (x.ProcedureType != null && CodigosTransformacion.Contains(x.ProcedureType.Code.ToUpper()))
+            || x.FieldValues.Any(fv => ClavesTransformacion.Contains(fv.FieldKey)
+                && fv.ValueText != null
+                && ValoresAfirmativos.Contains(fv.ValueText.Trim().ToLower()));
+
+    /// <summary>
+    /// El «No» de una marca es exactamente la negación de su «Sí», no una condición aparte: así el
+    /// AC5 —los dos conjuntos son complementarios y ninguno pierde filas— se cumple por
+    /// construcción y no por haber escrito dos veces la misma regla al derecho y al revés.
+    /// </summary>
+    private static Expression<Func<ProcedureInstance, bool>> Negar(
+        Expression<Func<ProcedureInstance, bool>> expr) =>
+        Expression.Lambda<Func<ProcedureInstance, bool>>(
+            Expression.Not(expr.Body), expr.Parameters);
 
     /// <summary>
     /// Un booleano de la gramática: los valores llegan como "TRUE"/"FALSE" ya normalizados. Con las

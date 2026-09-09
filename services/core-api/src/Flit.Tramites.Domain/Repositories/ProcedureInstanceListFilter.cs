@@ -88,6 +88,34 @@ public sealed record ProcedureInstanceListFilter
     /// </summary>
     public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
 
+    /// <summary>
+    /// HU #12187 — búsqueda de texto libre del listado, transversal a varios campos.
+    ///
+    /// <para><b>Por qué es un filtro del servidor y no del cliente.</b> Este cruce se hacía en el
+    /// navegador sobre las filas ya traídas, y el listado trae como mucho una página: buscar un
+    /// trámite que existe pero quedó fuera respondía «sin resultados». No es una limitación que el
+    /// gestor pueda ver —la pantalla no dice sobre cuántas filas buscó—, así que la respuesta era
+    /// sencillamente falsa. Y los contadores de estado, que SÍ salen del servidor, seguían
+    /// reportando el universo entero: la pantalla se contradecía sola.</para>
+    ///
+    /// <para><b>El radicado casa EXACTO; el resto, por subcadena.</b> Desde el Feature #12150 el
+    /// radicado es un consecutivo numérico corto, así que por subcadena buscar <c>1</c> traería el
+    /// 1, el 10, el 11 y el 100 — todo el listado con la apariencia de un resultado. Exacto es
+    /// además lo que quiere quien teclea un radicado: ese trámite, no los que lo contienen.</para>
+    /// </summary>
+    public string? Busqueda { get; init; }
+
+    /// <summary>
+    /// HU #12187 — solo los trámites marcados como prioritarios (<c>true</c>), o sin filtrar
+    /// (<c>null</c>).
+    ///
+    /// <para>Sube al servidor por la misma razón que la búsqueda, y con una urgencia mayor: en
+    /// cuanto el listado pagine de verdad (HU #12188), un filtro aplicado en el cliente dejaría de
+    /// mirar la ventana de 200 para mirar solo las diez filas de la página a la vista. Habría
+    /// empeorado en vez de quedarse igual.</para>
+    /// </summary>
+    public bool? Prioritario { get; init; }
+
     /// <summary><c>true</c> si algún criterio está activo (evita armar WHERE de más en el caso común sin filtros).</summary>
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(Vin) || !string.IsNullOrWhiteSpace(Placa)
@@ -97,5 +125,6 @@ public sealed record ProcedureInstanceListFilter
         || UpdatedFrom is not null || UpdatedTo is not null
         || Estados is { Count: > 0 } || !string.IsNullOrWhiteSpace(Modalidad)
         || !string.IsNullOrWhiteSpace(OrganismoTransito) || !string.IsNullOrWhiteSpace(TipoCodigo)
+        || !string.IsNullOrWhiteSpace(Busqueda) || Prioritario is not null
         || Condiciones is { Count: > 0 };
 }

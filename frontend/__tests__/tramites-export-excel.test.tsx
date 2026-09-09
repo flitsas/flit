@@ -63,6 +63,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { TramitesTable } from '@/components/operacion/TramitesTable';
+// HU #12163 — el menú de acciones avanzadas del admin usa `useToast`: la tabla necesita
+// `<ToastProvider>` en el árbol, igual que en producción.
+import { ToastProvider } from '@/components/admin/Toast';
 
 function makeInstance(i: number, extra: Partial<InstanceSummary> = {}): InstanceSummary {
   const num = String(i).padStart(4, '0');
@@ -150,6 +153,10 @@ describe('HU #12104 — AC3: las celdas compuestas se despliegan en columnas', (
       'estado',
       'paso',
       'pasoNombre',
+      // HU #12183 — el .xlsx no puede llevar el ícono, así que las marcas salen en texto. Sin esta
+      // columna el dato desaparecería justo en el archivo, que es donde nadie puede contrastarlo
+      // con la pantalla.
+      'marcas',
       'secretaria',
     ]);
     expect(new Set(ids).size).toBe(ids.length);
@@ -240,7 +247,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
       Promise.resolve({ items: universo.slice(skip, skip + take), total: universo.length }),
     );
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('TR-0001');
 
     await userEvent.click(screen.getByTestId('tramites-export-xlsx'));
@@ -256,21 +263,37 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
     expect(screen.getByTestId('tramites-export-aviso')).toHaveTextContent('Se exportaron 450 trámites');
   });
 
-  it('AC1: la búsqueda libre, que solo vive en cliente, también acota el archivo', async () => {
+  it('AC1: la búsqueda acota el archivo, y ahora la resuelve el SERVIDOR', async () => {
+    // Antes de la HU #12188 la búsqueda vivía en el cliente y la exportación tenía que reaplicarla
+    // página a página; si se le olvidaba, el Excel traía filas que la pantalla estaba escondiendo.
+    // Ahora viaja en la consulta: el archivo sale acotado porque el servidor ya devuelve lo acotado,
+    // y no queda nada que reaplicar (ni que se pueda olvidar).
     const universo = [
       makeInstance(1, { placa: 'ABC123' }),
       makeInstance(2, { placa: 'XYZ999' }),
       makeInstance(3, { placa: 'ABC777' }),
     ];
     mocks.listInstances.mockResolvedValue(universo);
-    mocks.searchInstances.mockImplementation(({ skip = 0, take = 200 }) =>
-      Promise.resolve({ items: universo.slice(skip, skip + take), total: universo.length }),
-    );
+    mocks.searchInstances.mockImplementation(({ busqueda, skip = 0, take = 200 }) => {
+      const texto = busqueda?.trim().toLowerCase();
+      const filtrado = texto
+        ? universo.filter((i) => i.placa?.toLowerCase().includes(texto))
+        : universo;
+      return Promise.resolve({
+        items: filtrado.slice(skip, skip + take),
+        total: filtrado.length,
+      });
+    });
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('TR-0001');
 
     await userEvent.type(screen.getByPlaceholderText(/buscar/i), 'ABC');
+    await waitFor(() =>
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ busqueda: 'ABC' }),
+      ),
+    );
     await userEvent.click(screen.getByTestId('tramites-export-xlsx'));
 
     await waitFor(() => expect(mocks.download).toHaveBeenCalledTimes(1));
@@ -288,7 +311,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
       Promise.resolve({ items: universo.slice(skip, skip + take), total: universo.length }),
     );
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('TR-0001');
 
     await userEvent.click(screen.getByTestId('tramites-export-xlsx'));
@@ -312,7 +335,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
     mocks.listInstances.mockResolvedValue([]);
     mocks.searchInstances.mockResolvedValue({ items: [], total: 0 });
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await userEvent.click(await screen.findByTestId('tramites-export-xlsx'));
 
     await waitFor(() =>
@@ -330,7 +353,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
       .mockResolvedValueOnce({ items: universo.slice(0, 200), total: 300 })
       .mockRejectedValueOnce(new Error('502 Bad Gateway'));
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('TR-0001');
 
     await userEvent.click(screen.getByTestId('tramites-export-xlsx'));

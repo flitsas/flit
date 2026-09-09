@@ -103,11 +103,28 @@ public sealed class GenerarConsolidadoHandler(
     /// Feature #11066 — cuando es <c>true</c>, invalida el consolidado vigente y lo regenera desde cero
     /// (FUR en cascada, adjuntos, fusión), en lugar de servir el PDF cacheado.
     /// </param>
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        Guid? userId,
+        bool force,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, userId, force, bypassSourceUserProtection: false, ct);
+
+    /// <param name="bypassSourceUserProtection">
+    /// HU #12158 (AC1/AC2) — por defecto (<c>false</c>), un consolidado vigente cargado a mano por el
+    /// admin (<c>Source="user"</c>) NO se descarta aunque <paramref name="force"/> sea <c>true</c>: eso
+    /// cubre toda regeneración AUTOMÁTICA del sistema y también el botón "regenerar" del gestor
+    /// (<c>ConsolidadoEndpoints</c>), que llegan aquí con este flag en su default. Solo la acción
+    /// explícita "Limpiar consolidado" del admin (<c>LimpiarConsolidadoHandler</c>) lo pone en
+    /// <c>true</c> para forzar SIEMPRE la regeneración, sin importar el <c>Source</c> del vigente.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         Guid? userId,
         bool force,
+        bool bypassSourceUserProtection,
         CancellationToken ct = default)
     {
         // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
@@ -142,6 +159,22 @@ public sealed class GenerarConsolidadoHandler(
         // Feature #11066 — `force=true` invalida y salta el atajo de caché para reconstruir desde cero.
         var consolidadoVigente = instance.Attachments
             .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+
+        // HU #12158 (AC2) — un consolidado cargado a mano por el admin (Source="user") prevalece sobre
+        // cualquier regeneración AUTOMÁTICA, incluida la que dispara `force=true` desde el botón
+        // "regenerar" del gestor: sin este corte, el bloque de invalidación de abajo lo descartaría
+        // igual que a uno del sistema. Va ANTES de leer `force` a propósito: ninguna combinación de
+        // `force`/caché puede rodear esta protección salvo `bypassSourceUserProtection` (AC1, la
+        // acción explícita "Limpiar consolidado" del admin).
+        if (!bypassSourceUserProtection
+            && consolidadoVigente is not null
+            && string.Equals(consolidadoVigente.Source, "user", StringComparison.OrdinalIgnoreCase))
+        {
+            var protegidoDto = new ConsolidadoDocumentDto(
+                consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
+            return (new GenerarConsolidadoResult(protegidoDto, Regenerado: false), null);
+        }
+
         if (force && (instance.ConsolidadoWizardVigente || consolidadoVigente is not null))
         {
             instance.InvalidarConsolidados();

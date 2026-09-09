@@ -103,9 +103,11 @@ public static class DevelopmentAuthSeeder
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedIctLogsPermissionsAsync(db, cancellationToken);
         await SeedIctPiiRevealPermissionAsync(db, cancellationToken);
+        await SeedHistorialPlacaPermissionsAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedGeneracionDocumentalPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
+        await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -1338,6 +1340,93 @@ public static class DevelopmentAuthSeeder
     }
 
     /// <summary>
+    /// Historial operativo por placa (Feature #12189, HU #12191) — módulo <c>historial-placa</c> +
+    /// permiso <c>historial-placa.read</c> que protege <c>GET /api/v1/tramites/instances/plate-history</c>.
+    /// Mismo patrón e idempotencia que <see cref="SeedIctLogsPermissionsAsync"/>: crea módulo y permiso
+    /// si faltan y concede el permiso sin duplicar si ya estaba concedido.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// El módulo se protege por PERMISO y no por nombre de rol. Los roles son DATOS gobernados por el
+    /// CRUD de SuperAdmin (<c>POST /api/v1/superadmin/roles</c>, <c>PUT /roles/{id}/permissions</c>), no
+    /// código: cada ambiente puede tener un catálogo distinto. Los nombres del borrador del PO
+    /// —Documentador, OperarioFull, Validador, Gestor— no existen como <c>role code</c> en ninguna parte
+    /// del código, así que cablearlos habría dejado el módulo abierto a roles inexistentes y cerrado a
+    /// los reales. Con un slug propio basta que SuperAdmin lo asigne al rol que exista en cada ambiente.
+    /// </para>
+    /// <para>
+    /// Se concede a <c>SuperAdmin</c>, <c>AdminCompany</c> y <c>Radicador</c> (decisión D4 del PO): los tres
+    /// sí existen en el código. SuperAdmin además bypassa por rol, pero el grant explícito hace que el
+    /// permiso aparezca marcado en la pantalla RBAC. Sin este seed la acción no figura en el catálogo y
+    /// ningún usuario no-superadmin podría recibirla por el flujo RBAC estándar.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedHistorialPlacaPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "historial-placa" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "historial-placa",
+                Name = "Historial por placa",
+                SortOrder = 11,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "historial-placa.read", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "historial-placa.read",
+                Name = "Ver historial por placa",
+                HttpMethod = "GET",
+                RoutePattern = "/api/v1/tramites/instances/plate-history",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. Se excluyen los roles
+        // borrados lógicamente — conceder permisos a un rol eliminado no sirve a nadie.
+        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador"];
+        var roles = await db.Roles
+            .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var role in roles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
     /// Administración de clientes ICT (Feature #10888, ronda 2) — módulo <c>ict-clients</c> + permiso
     /// <c>ict.clients.manage</c> que protege el CRUD de <c>ict.integration_clients</c>
     /// (<c>/api/v1/ict/clients</c>, submódulo "Clientes ICT" dentro de Usuarios y Roles). Mismo patrón e
@@ -1572,6 +1661,111 @@ public static class DevelopmentAuthSeeder
                     });
                 }
             }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Feature #12155 (HU #12157) — módulo <c>admin-tramites-avanzado</c> + 6 permisos granulares
+    /// para las acciones de gestión avanzada del administrador sobre trámites en el Dashboard:
+    /// cambiar estado, anular, limpiar/cargar consolidado, reenviar validación de identidad y
+    /// reasignar gestor. Mismo patrón e idempotencia que
+    /// <see cref="SeedDetailedReportPermissionsAsync"/>: crea módulo y permisos si faltan.
+    ///
+    /// Catálogo cerrado por defecto (AC3 — slugs independientes entre sí): solo se concede a
+    /// SuperAdmin (que además bypassa por rol en runtime), igual que
+    /// <see cref="SeedIctPiiRevealPermissionAsync"/>. Ningún rol de empresa recibe estos permisos
+    /// por seed; asignarlos a un rol concreto es una decisión explícita de quien administra RBAC,
+    /// que es justamente el propósito de que cada acción tenga su propio slug.
+    ///
+    /// Esta HU no implementa los endpoints de negocio (los protegen las HUs dependientes
+    /// #12158-#12162 con <c>.RequirePermission(...)</c>); el <c>RoutePattern</c> queda como
+    /// referencia del endpoint planeado para el catálogo RBAC.
+    /// </summary>
+    private static async Task SeedAdminTramiteAdvancedPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "admin-tramites-avanzado" && m.DeletedAt == null, ct);
+
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "admin-tramites-avanzado",
+                Name = "Gestión avanzada de trámites (Admin)",
+                SortOrder = 11,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var slugs = new (string Slug, string Name, string RoutePattern, string Method)[]
+        {
+            ("AdminTramiteCambiarEstado",       "Cambiar estado de un trámite",              "/api/v1/admin/tramites/{id}/estado",                 "PUT"),
+            ("AdminTramiteAnular",              "Anular un trámite",                         "/api/v1/admin/tramites/{id}/anular",                 "POST"),
+            ("AdminTramiteLimpiarConsolidado",  "Limpiar el consolidado de un trámite",      "/api/v1/admin/tramites/{id}/consolidado/limpiar",    "POST"),
+            ("AdminTramiteCargarConsolidado",   "Cargar el consolidado de un trámite",       "/api/v1/admin/tramites/{id}/consolidado/cargar",     "POST"),
+            ("AdminTramiteReenviarValidacion",  "Reenviar validación de identidad",          "/api/v1/admin/tramites/{id}/reenviar-validacion",    "POST"),
+            ("AdminTramiteReasignarGestor",     "Reasignar gestor de un trámite",            "/api/v1/admin/tramites/{id}/gestor",                 "PUT"),
+        };
+
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .Select(a => a.Slug)
+            .ToListAsync(ct);
+
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Method,
+                RoutePattern = s.RoutePattern,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length > 0)
+        {
+            db.RbacActions.AddRange(newActions);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var allActions = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .ToListAsync(ct);
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene. Sin grant a AdminCompany u
+        // otros roles de empresa — abrir cada permiso a un rol concreto es un acto explícito de
+        // RBAC posterior a este seed (AC3).
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var existingGrants = await db.RoleGrants
+                .Where(g => g.RoleId == role.Id)
+                .Select(g => g.PermissionId)
+                .ToListAsync(ct);
+
+            db.RoleGrants.AddRange(allActions
+                .Where(a => !existingGrants.Contains(a.Id))
+                .Select(a => new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = a.Id,
+                    CreatedAt = now,
+                }));
         }
 
         await db.SaveChangesAsync(ct);

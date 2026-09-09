@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type {
@@ -50,6 +50,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { OperacionView } from '@/components/operacion/OperacionView';
+// HU #12163 — el menú de acciones avanzadas del admin usa `useToast`: la tabla necesita
+// `<ToastProvider>` en el árbol, igual que en producción (`app/tramites/layout.tsx`).
+import { ToastProvider } from '@/components/admin/Toast';
 
 /**
  * Filas de datos de "Trámites en curso": la tabla ahora es un `<table>` semántico, así que
@@ -90,9 +93,44 @@ beforeEach(() => {
   // HU #12107 — la tabla pasó al camino POST (`searchInstances`), que es el único que lleva
   // condiciones. Se cablea sobre `listInstances` para que los casos que ya sembraban filas por ahí
   // sigan valiendo sin tocarlos: lo que cambió es el transporte, no lo que devuelve el servidor.
+  //
+  // HU #12188 — y desde que la tabla pagina contra el servidor, el doble tiene que resolver también
+  // la BÚSQUEDA y el marcado prioritario: si devolviera siempre todo, los casos de búsqueda
+  // pasarían en verde sobre un filtrado en cliente que ya no existe.
   mocks.searchInstances.mockImplementation(async (params?: unknown) => {
-    const items = (await mocks.listInstances(params)) ?? [];
-    return { items, total: items.length };
+    const todos: InstanceSummary[] = (await mocks.listInstances(params)) ?? [];
+    const p = (params ?? {}) as {
+      busqueda?: string;
+      prioritario?: boolean;
+      skip?: number;
+      take?: number;
+    };
+
+    let universo = todos;
+    const texto = p.busqueda?.trim().toLowerCase();
+    if (texto) {
+      universo = universo.filter((i) => {
+        // Radicado EXACTO, como el servidor: es un consecutivo numérico corto.
+        if (i.referenceNumber?.toLowerCase() === texto) return true;
+        return [
+          i.placa,
+          i.vin,
+          i.compradorNombre,
+          i.vendedorNombre,
+          i.organismoTransito,
+          i.companiaNombre,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(texto);
+      });
+    }
+    if (p.prioritario) universo = universo.filter((i) => i.prioritario);
+
+    const skip = p.skip ?? 0;
+    const take = p.take ?? universo.length;
+    return { items: universo.slice(skip, skip + take), total: universo.length };
   });
   mocks.searchEstadoCounts.mockImplementation((params?: unknown) =>
     mocks.listInstanceEstadoCounts(params),
@@ -185,14 +223,14 @@ const INSTANCE_SUBMITTED: InstanceSummary = {
 
 describe('M6 — tabla de trámites en curso', () => {
   it('muestra el estado vacío cuando no hay instancias', async () => {
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
     expect(await screen.findByText('Aún no hay trámites')).toBeInTheDocument();
     expect(mocks.listInstances).toHaveBeenCalledTimes(1);
   });
 
   it('renderiza una fila por instancia con placa, comprador, VIN, paso y chip de estado', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     const rows = await findTramitesBodyRows();
     expect(rows).toHaveLength(2);
@@ -216,7 +254,7 @@ describe('M6 — tabla de trámites en curso', () => {
   it('al hacer clic en una fila navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     const row = await screen.findByRole('button', { name: /Abrir trámite TR-001/ });
     await user.click(row);
@@ -230,7 +268,7 @@ describe('M0 — entrada al asistente (flujo del diseño)', () => {
   it('el botón general entra al asistente sin decidir la modalidad', async () => {
     const onNew = vi.fn();
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={onNew} />);
+    render(<ToastProvider><OperacionView onNewTramite={onNew} /></ToastProvider>);
 
     await user.click(await screen.findByRole('button', { name: /Nuevos*trámite/ }));
 
@@ -242,7 +280,7 @@ describe('M0 — entrada al asistente (flujo del diseño)', () => {
   });
 
   it('ya no ofrece un selector de modalidad en el listado', async () => {
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
     await screen.findByRole('button', { name: /Nuevos*trámite/ });
 
     expect(screen.queryByRole('radio', { name: /Matrícula inicial/ })).toBeNull();
@@ -253,7 +291,7 @@ describe('M0 — entrada al asistente (flujo del diseño)', () => {
 describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('renderiza los chips de filtro de modalidad y estado', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     // Espera a que cargue el listado (sale del estado "Cargando…").
     await screen.findByRole('table', { name: /Trámites en curso/ });
@@ -275,30 +313,29 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la búsqueda por placa reduce las filas visibles', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     const initialRows = await findTramitesBodyRows();
     expect(initialRows).toHaveLength(2);
 
-    // La búsqueda vive en la tarjeta de filtros, siempre visible.
+    // La búsqueda vive en la tarjeta de filtros, siempre visible. Desde la HU #12188 la resuelve el
+    // servidor tras un respiro, así que la tabla se actualiza cuando llega la respuesta.
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ABC123');
 
-    const rows = tramitesBodyRows();
-    expect(rows).toHaveLength(1);
-    expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
+    await waitFor(() => expect(tramitesBodyRows()).toHaveLength(1));
+    expect(within(tramitesBodyRows()[0]).getByText('ABC123')).toBeInTheDocument();
   });
 
   it('la búsqueda por VIN reduce las filas visibles', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     await findTramitesBodyRows();
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'VIN-NEW-002');
 
-    const rows = tramitesBodyRows();
-    expect(rows).toHaveLength(1);
-    expect(within(rows[0]).getByText('Entregado')).toBeInTheDocument();
+    await waitFor(() => expect(tramitesBodyRows()).toHaveLength(1));
+    expect(within(tramitesBodyRows()[0]).getByText('Entregado')).toBeInTheDocument();
   });
 
   // Desde HU #11037 las acciones de la fila viven dentro de un `ActionsMenu` (dropdown): hay que
@@ -306,7 +343,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la acción Continuar de una fila borrador navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     await user.click(
       await screen.findByRole('button', { name: /Acciones del trámite TR-001/ }),
@@ -322,7 +359,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('la acción Ver de una fila submitted abre el modal de detalle sin navegar', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     await user.click(
       await screen.findByRole('button', { name: /Acciones del trámite MA-002/ }),
@@ -339,14 +376,15 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
   it('el estado vacío con filtros activos muestra "Limpiar filtros" y al limpiar reaparecen las filas', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
-    render(<OperacionView onNewTramite={vi.fn()} />);
+    render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
 
     await findTramitesBodyRows();
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ZZZ-SIN-MATCH');
 
-    // Ya no hay tabla de resultados; aparece el vacío "Sin resultados".
+    // Ya no hay tabla de resultados; aparece el vacío "Sin resultados" (que el servidor confirma
+    // con `total: 0`, no un array recortado en memoria).
+    await waitFor(() => expect(screen.getAllByText('Sin resultados').length).toBeGreaterThan(0));
     expect(screen.queryByRole('table', { name: /Trámites en curso/ })).not.toBeInTheDocument();
-    expect(screen.getAllByText('Sin resultados').length).toBeGreaterThan(0);
 
     const clearButtons = screen.getAllByRole('button', { name: 'Limpiar filtros' });
     expect(clearButtons.length).toBeGreaterThan(0);

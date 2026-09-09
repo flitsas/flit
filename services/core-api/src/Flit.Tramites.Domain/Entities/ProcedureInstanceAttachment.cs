@@ -43,5 +43,13 @@ public sealed class ProcedureInstanceAttachment
     /// </summary>
     public Guid? SourcePersonalizedDocumentId { get; set; }
 
+    /// <summary>
+    /// HU #12166 (Feature #12156) — al revocar un trámite Aprobado, el FUR/certificados vigentes
+    /// quedan marcados como históricos (visibles, no borrados): documentan lo que el OT tuvo a la
+    /// vista al aprobar, pero ya no representan el estado vigente del vehículo tras la revocación.
+    /// Default false. Ningún otro flujo lo pone en true hoy.
+    /// </summary>
+    public bool IsHistorico { get; set; }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 }

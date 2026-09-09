@@ -24,6 +24,12 @@ public sealed class OtClientProcedureResponse
     /// <summary>Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado).</summary>
     public string? PlateFlowStatus { get; init; }
 
+    /// <summary>HU #12165/#12167 (Feature #12156) — base de la ventana de 1 hora para corregir la placa.</summary>
+    public DateTimeOffset? PlateAssignedAt { get; init; }
+
+    /// <summary>HU #12167 — no nulo si ya se usó la única corrección permitida dentro de la ventana.</summary>
+    public DateTimeOffset? PlateUpdatedAt { get; init; }
+
     /// <summary>HU #10804 (Feature #10587) — estado del SOAT (soat_estado): null | unknown | vencido | vigente.
     /// El frontend oculta Aprobar/Rechazar salvo ruta estándar o placa asignada con SOAT vigente.</summary>
     public string? SoatEstado { get; init; }
@@ -170,6 +176,12 @@ public sealed class ApproveOtClientProcedureRequest
     public Guid? MandateSignerId { get; init; }
 }
 
+/// <summary>HU #12166 (Feature #12156) — motivo opcional de la revocación (auditoría, no exigido por AC).</summary>
+public sealed class RevokeOtClientProcedureRequest
+{
+    public string? Reason { get; init; }
+}
+
 internal static class OtClientProcedureMapper
 {
     public static OtClientProcedureResponse ToResponse(Domain.OtClientProcedures.OtClientProcedure procedure) =>
@@ -184,6 +196,8 @@ internal static class OtClientProcedureMapper
             Status = procedure.Status,
             Familia = procedure.Familia,
             PlateFlowStatus = procedure.PlateFlowStatus,
+            PlateAssignedAt = procedure.PlateAssignedAt,
+            PlateUpdatedAt = procedure.PlateUpdatedAt,
             SoatEstado = procedure.SoatEstado,
             PlatePreferredLastDigit = procedure.PlatePreferredLastDigit,
             SoatPagado = procedure.SoatPagado,

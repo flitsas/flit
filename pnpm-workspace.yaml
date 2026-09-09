@@ -10,13 +10,12 @@ allowBuilds:
 # ESTE es el sitio de los overrides. pnpm 11 ya NO lee el campo `pnpm` de package.json, así que
 # escribirlos allí no hace nada y solo avisa por consola. Si un override no surte efecto, mirar aquí.
 #
-# sharp: next@16.3.4 ya pide ^0.35.4, pero el pin explícito se mantiene porque `node-linker=hoisted`
-#   deja una sola copia de sharp para todo el workspace. 0.35.4 es la versión parcheada de
-#   GHSA-rgj7-g3m4-5g8c (libheif: GHSA-g89c-p67h-r497 y GHSA-2jg2-4ch7-h545); 0.35.3 se reportaba con
-#   severidad alta y era una de las tres que rompían `dependency-audit` el 2026-09-09.
-# postcss: next@16.3.4 ya pinnea 8.5.23, así que este override quedó redundante y se conserva solo como
-#   piso explícito. Histórico: next@16.2.x pinneaba 8.4.31 (GHSA-6g55-p6wh-862q) y la corrección de la
-#   serie 8.5.x era incompleta —exige >=8.5.23—, así que 8.5.22 seguía reportando el aviso moderado.
+# next@16.3.4 ya pide sharp ^0.35.4 (GHSA-rgj7-g3m4-5g8c, vulnerabilidades de libheif en <0.35.4),
+#   pero el override de abajo venía fijado en 0.35.3 desde el parche anterior (next@16.2.x pedía
+#   sharp ^0.34.5, CVE de libvips) y seguía ganándole a la resolución normal. Se sube a 0.35.4.
+# next@16.2.x pinnea postcss 8.4.31 (GHSA-6g55-p6wh-862q). El aviso se amplió después: la corrección
+#   de la serie 8.5.x era incompleta y exige >=8.5.23, así que 8.5.22 sigue reportando el aviso
+#   moderado. Se sube a 8.5.23, verificado con build de producción del frontend en verde.
 # postcss pide nanoid ^3.3.16 y resuelve a 3.3.16 (GHSA-2v37-7h3g-55p8, severidad alta). El aviso se
 #   actualizó: la versión PARCHEADA es >=3.3.18 (3.3.17 SIGUE reportándose como vulnerable con el umbral
 #   `high` del workflow, que era lo que rompía `dependency-audit`). Se sube a 3.3.18. postcss pide

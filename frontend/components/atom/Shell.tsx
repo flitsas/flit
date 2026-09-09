@@ -56,6 +56,7 @@ import {
   ListChecks,
   Monitor,
   FileSignature,
+  History,
 } from "lucide-react";
 
 export type ModuleId =
@@ -64,6 +65,7 @@ export type ModuleId =
   | "reportes"
   | "reportes-detallados"
   | "validaciones"
+  | "historial-placa"
   | "usuarios"
   | "ayuda"
   | "rbac"
@@ -79,6 +81,10 @@ const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "reportes", label: "Reportes", icon: BarChart3 },
   { id: "reportes-detallados", label: "Reportes Detallados", icon: FileSpreadsheet },
   { id: "validaciones", label: "Identidad", icon: ShieldCheck },
+  // HU #12194 — historial operativo por placa. El id coincide con el `Code` del módulo RBAC
+  // (`historial-placa`): el dock lo filtra con `visibleModuleCodes.includes(it.id)`, así que un
+  // id distinto del slug del permiso dejaría la entrada invisible para todos.
+  { id: "historial-placa", label: "Historial por placa", icon: History },
   { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "ayuda", label: "Ayuda", icon: HelpCircle },
 ];
