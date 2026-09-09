@@ -105,7 +105,7 @@ export function IdentidadParteTrackingModal({
       {!loading && !error && conBitacora.length > 0 ? (
         <div className="space-y-3">
           {conBitacora.map((v) => (
-            <IdentidadLecturaHumana key={v.id} validation={v} rolLabel={rotulo} />
+            <IdentidadLecturaHumana key={v.id} validation={v} rolLabel={rotulo} tenantId={tenantId} />
           ))}
         </div>
       ) : null}

@@ -128,12 +128,20 @@ function auditDetailText(e: IdentityAuditEvent): string {
  */
 export function IdentityValidationTrackingPanel({
   validationId,
+  tenantId,
   refreshKey = 0,
   defaultOpen = false,
   embebido = false,
   detailLayout = false,
 }: {
   validationId: string;
+  /**
+   * Compañía DUEÑA de la validación. El endpoint compara el tenant de la validación con el header
+   * `X-Tenant-Id` y responde 404 si no coinciden, así que sin esto la bitácora sale vacía cada vez
+   * que quien mira no pertenece a la compañía del trámite —el caso del SuperAdmin—. Opcional: quien
+   * consulta dentro de su propia compañía no necesita pasarlo.
+   */
+  tenantId?: string | null;
   /** Cuando cambia (p. ej. cada poll del detalle), recarga la bitácora si el panel está abierto. */
   refreshKey?: number;
   /** Abrir el disclosure al montar (detalle en vivo de prevalidación). */
@@ -158,7 +166,7 @@ export function IdentityValidationTrackingPanel({
     setLoading(true);
     setError(null);
     try {
-      const res = await tramitesClient.getBiometricAuditByValidation(validationId);
+      const res = await tramitesClient.getBiometricAuditByValidation(validationId, tenantId ?? undefined);
       setEvents(res.events);
       setReferenced(res.referencedFromOtherProcedure ?? false);
     } catch (err) {
@@ -166,7 +174,7 @@ export function IdentityValidationTrackingPanel({
     } finally {
       setLoading(false);
     }
-  }, [validationId]);
+  }, [validationId, tenantId]);
 
   // Carga inicial si defaultOpen; re-sync cuando el padre hace poll (refreshKey).
   useEffect(() => {

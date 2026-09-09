@@ -13,13 +13,14 @@ vi.mock('@/lib/api/tramites-client', () => ({
   },
 }));
 
-function abrir() {
+function abrir(tenantId?: string) {
   return render(
     <IdentidadParteTrackingModal
       open
       instanceId="inst-1"
       parte="comprador"
       rotulo="Comprador"
+      tenantId={tenantId}
       onClose={() => undefined}
     />,
   );
@@ -206,5 +207,60 @@ describe('IdentidadParteTrackingModal', () => {
 
     expect(await screen.findByText('Identidad rechazada')).toBeInTheDocument();
     expect(screen.getByText('Documento ilegible')).toBeInTheDocument();
+  });
+
+  // ── La compañía del trámite viaja hasta la bitácora ──────────────────────────────────────
+  //
+  // El endpoint compara el tenant de la validación con el header y responde 404 si no coinciden.
+  // Cuando esto faltaba, quien miraba un trámite de OTRA compañía —el SuperAdmin— veía las
+  // tarjetas (el expediente sí mandaba el tenant) pero la línea de tiempo salía vacía.
+
+  it('pide la bitácora con la compañía del trámite, no con la de la sesión', async () => {
+    listBiometricExpediente.mockResolvedValue({
+      validations: [VALIDACION_APROBADA],
+      firmaBaulPartes: [],
+      provider: 'kyverum',
+    });
+    abrir('tenant-de-la-fila');
+
+    await waitFor(() =>
+      expect(getBiometricAuditByValidation).toHaveBeenCalledWith('val-1', 'tenant-de-la-fila'),
+    );
+    // Y el expediente pide con el MISMO tenant: las dos llamadas del modal hablan de la misma
+    // compañía, que es justo lo que no pasaba.
+    expect(listBiometricExpediente).toHaveBeenCalledWith('inst-1', 'tenant-de-la-fila');
+  });
+
+  it('si la bitácora falla lo dice, en vez de fingir que no hay movimientos', async () => {
+    // Un 404 devolviendo lista vacía se leía como «esta persona no tiene historial», que es una
+    // afirmación falsa: fue lo que escondió el fallo de tenant.
+    listBiometricExpediente.mockResolvedValue({
+      validations: [VALIDACION_APROBADA],
+      firmaBaulPartes: [],
+      provider: 'kyverum',
+    });
+    getBiometricAuditByValidation.mockRejectedValue(new Error('404'));
+    abrir('tenant-de-la-fila');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /No se pudo cargar el historial/i,
+    );
+    expect(screen.queryByText(/Todavía no hay movimientos/i)).toBeNull();
+    // El estado de la persona SÍ se sigue leyendo: sale de la validación, no de la bitácora.
+    expect(screen.getByText('Identidad aprobada')).toBeInTheDocument();
+  });
+
+  it('el reintento vuelve a pedir la bitácora y la pinta', async () => {
+    listBiometricExpediente.mockResolvedValue({
+      validations: [VALIDACION_APROBADA],
+      firmaBaulPartes: [],
+      provider: 'kyverum',
+    });
+    getBiometricAuditByValidation.mockRejectedValueOnce(new Error('404'));
+    abrir('tenant-de-la-fila');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Reintentar' }));
+
+    expect(await screen.findByRole('list', { name: 'Historial de la validación' })).toBeInTheDocument();
   });
 });

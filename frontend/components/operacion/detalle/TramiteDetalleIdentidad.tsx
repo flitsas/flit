@@ -133,10 +133,13 @@ function construirFilas(
 
 function FilaValidacion({
   fila,
+  tenantId,
   descargando,
   onDescargar,
 }: {
   fila: FilaIdentidad;
+  /** Compañía dueña del trámite: sin ella la bitácora responde 404 para quien mira desde fuera. */
+  tenantId?: string | null;
   descargando: boolean;
   onDescargar: (validationId: string, nombre: string) => void;
 }) {
@@ -171,7 +174,7 @@ function FilaValidacion({
         </span>
       </div>
       {fila.validationId ? (
-        <IdentityValidationTrackingPanel validationId={fila.validationId} />
+        <IdentityValidationTrackingPanel validationId={fila.validationId} tenantId={tenantId} />
       ) : null}
     </li>
   );
@@ -280,6 +283,7 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
           <FilaValidacion
             key={fila.key}
             fila={fila}
+            tenantId={tenantId}
             descargando={descargandoId === fila.validationId}
             onDescargar={(validationId, nombre) => void descargar(validationId, nombre)}
           />

@@ -50,7 +50,10 @@ describe('IdentityValidationTrackingPanel (HU #11007)', () => {
 
     await user.click(screen.getByRole('button', { name: /ver tracking/i }));
 
-    expect(mocks.getBiometricAuditByValidation).toHaveBeenCalledWith('val-1');
+    // Sin `tenantId` la llamada va con `undefined`: el cliente omite el header y el backend
+    // resuelve con el tenant de la sesión, que es el comportamiento correcto para quien consulta
+    // dentro de su propia compañía. El tenant explícito solo hace falta al mirar desde fuera.
+    expect(mocks.getBiometricAuditByValidation).toHaveBeenCalledWith('val-1', undefined);
     expect(await screen.findByText('Envío al proveedor')).toBeInTheDocument();
     expect(screen.getByText('OK (HTTP 200)')).toBeInTheDocument();
   });
