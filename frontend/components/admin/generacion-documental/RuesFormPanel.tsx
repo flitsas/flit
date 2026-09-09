@@ -5,9 +5,9 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 
 export interface RuesFormPanelProps {
   /**
-   * Estado de la vista (CF-22). El shell de HU-01 nace en «vacío»: no hay consulta en
-   * curso. HU-02 conecta `previewRuesCompany` / `generateRuesDocument` y hace girar los
-   * otros tres estados con datos reales; el contrato de estados ya queda cableado aquí.
+   * Estado de la vista (CF-22). El panel nace en «vacío»: sin hijos no hay nada que emitir.
+   * La página de la pestaña lo monta en «lleno» con `RuesGeneracionForm` dentro, que es quien
+   * consulta `previewRuesCompany` / `generateRuesDocument` y gobierna sus propios errores.
    */
   status?: UiStatus;
   onRetry?: () => void;
@@ -17,10 +17,11 @@ export interface RuesFormPanelProps {
 /**
  * Panel de la pestaña "Certificado RUES" (HU-01, CF-01/CF-22).
  *
- * Cascarón del formulario: la captura del NIT, la revisión previa y la generación son
- * alcance de HU-02/HU-05. Lo que sí es de esta HU y queda resuelto: los cuatro estados de
- * UI (vacío, cargando, error, lleno), el encabezado accesible del panel y la advertencia
- * de que la generación no devuelve el PDF en línea (se descarga desde el historial).
+ * Contenedor de la pestaña: decide cómo se ve vacía, cargando o en error, no qué campos
+ * existen. La captura del NIT, la revisión previa y la generación las aporta
+ * `RuesGeneracionForm` como hijo, igual que `TransferenciaFormPanel` dentro de
+ * `TransferenciaPanel`. De esta HU son los cuatro estados de UI, el encabezado accesible y la
+ * advertencia de que la generación no devuelve el PDF en línea (se descarga desde el historial).
  */
 export function RuesFormPanel({ status = "empty", onRetry, children }: RuesFormPanelProps) {
   return (

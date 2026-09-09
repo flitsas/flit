@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { GeneracionDocumentalTabs } from "@/components/admin/generacion-documental/GeneracionDocumentalTabs";
 import { RuesFormPanel } from "@/components/admin/generacion-documental/RuesFormPanel";
+import { RuesGeneracionForm } from "@/components/admin/generacion-documental/RuesGeneracionForm";
 
 // Landing del módulo "Generación documental" (HU-01, CF-01): pestaña Certificado RUES.
-// El formulario y la generación real son HU-02/HU-05; aquí queda el shell con los cuatro
-// estados de UI y la navegación entre pestañas sin recarga de página.
+// El shell con los cuatro estados de UI y la navegación entre pestañas es de HU-01; la captura
+// del NIT, la revisión previa y la generación las aporta `RuesGeneracionForm`, igual que
+// `TransferenciaFormPanel` se monta dentro de `TransferenciaPanel` en la otra pestaña.
 export default function AdminGeneracionDocumentalPage() {
   const router = useRouter();
 
@@ -32,7 +34,9 @@ export default function AdminGeneracionDocumentalPage() {
       <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
         <GeneracionDocumentalTabs activeId="rues" />
         <div className="mt-4">
-          <RuesFormPanel />
+          <RuesFormPanel status="ready">
+            <RuesGeneracionForm />
+          </RuesFormPanel>
         </div>
       </div>
     </div>
