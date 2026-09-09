@@ -3,6 +3,7 @@ using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.RevokeOtClientProcedure;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Infrastructure.Persistence;
@@ -177,6 +178,197 @@ public sealed class OtClientProcedureHandlerTests
         var history = await verify.ProcedureInstanceStatusHistories
             .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
         history.Reason.Should().Be(reason);
+    }
+
+    // ---------- HU #12166 (Feature #12156): revocar un trámite Aprobado ----------
+
+    [Fact]
+    public async Task AC1_Revoke_TransicionaARevocado_LiberaPlacaYMarcaAdjuntosHistoricos()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Aprobado,
+                plate: "ABC123");
+            seed.ProcedureInstanceAttachments.Add(new ProcedureInstanceAttachment
+            {
+                Id = attachmentId,
+                TenantId = ClientTenant,
+                ProcedureInstanceId = procedureId,
+                Tipo = "fur",
+                Filename = "fur.pdf",
+                Mimetype = "application/pdf",
+                SizeBytes = 1,
+                Sha256 = "x",
+                StoragePath = "/x",
+                UploadedAt = DateTimeOffset.UtcNow,
+            });
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewRevokeHandler(ctx);
+        var result = await handler.HandleAsync(new RevokeOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RevokedBy = Approver,
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RevokeOtClientProcedureStatus.Revoked);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Revocado);
+
+        await using var verify = NewContext(db);
+        var history = await verify.ProcedureInstanceStatusHistories
+            .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        history.FromStatus.Should().Be(TramiteEstado.Aprobado);
+        history.ToStatus.Should().Be(TramiteEstado.Revocado);
+        history.ChangedBy.Should().Be(Approver);
+
+        var attachment = await verify.ProcedureInstanceAttachments
+            .SingleAsync(a => a.Id == attachmentId, cancellationToken: TestContext.Current.CancellationToken);
+        attachment.IsHistorico.Should().BeTrue();
+
+        // AC1 + memoria de decisión — 'revocado' libera la placa: el mismo chequeo que usa
+        // AssignPlateAsync (EstadosQueLiberanPlaca) ya no la cuenta como ocupada.
+        TramiteEstado.OcupaPlaca(TramiteEstado.Revocado).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(TramiteEstado.Entregado)]
+    [InlineData(TramiteEstado.Rechazado)]
+    // 'anulado' NO entra aquí: queda fuera de TramiteEstado.RecibidosPorOrganismo (decisión de producto
+    // ya existente, ajena a esta HU) y por eso el OT ni siquiera lo encuentra (NotFound, no InvalidState).
+    public async Task AC2_Revoke_FueraDeAprobado_InvalidState(string estadoActual)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, estadoActual);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewRevokeHandler(ctx);
+        var result = await handler.HandleAsync(new RevokeOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RevokedBy = Approver,
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RevokeOtClientProcedureStatus.InvalidState);
+    }
+
+    // ---------- HU #12167 (Feature #12156): corregir placa dentro de la ventana de 1 hora ----------
+
+    [Fact]
+    public async Task AC1_UpdatePlate_DentroDeLaVentana_ActualizaYRegistraEvento()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado,
+                plate: "ABC123");
+            var proc = seed.ProcedureInstances.Single(p => p.Id == procedureId);
+            proc.PlateAssignedAt = DateTimeOffset.UtcNow.AddMinutes(-30);
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+        var outcome = await repo.UpdatePlateAsync(
+            OtTenant, procedureId, "XYZ987", Approver, "ot_console", TestContext.Current.CancellationToken);
+
+        outcome.Succeeded.Should().BeTrue();
+        outcome.Procedure!.Status.Should().Be(TramiteEstado.Entregado);
+
+        await using var verify = NewContext(db);
+        // El denormalizado `Plate` lo escribe un trigger de Postgres (no simulado por el proveedor
+        // InMemory); la fuente de verdad que sí escribe este método es field_values, igual que
+        // AssignPlateAsync (ver AssignPlate_Preasignado_ReservaPlacaYAvanzaSubEstado).
+        (await verify.ProcedureInstanceFieldValues.AnyAsync(
+            f => f.ProcedureInstanceId == procedureId && f.FieldKey == "plate" && f.ValueText == "XYZ987",
+            TestContext.Current.CancellationToken)).Should().BeTrue();
+        var updated = await verify.ProcedureInstances
+            .SingleAsync(p => p.Id == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        updated.PlateUpdatedAt.Should().NotBeNull();
+
+        var evt = await verify.ProcedureInstanceEvents
+            .SingleAsync(e => e.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        evt.Tipo.Should().Be("placa_corregida_ot");
+        evt.Payload.Should().Contain("ABC123").And.Contain("XYZ987");
+    }
+
+    [Fact]
+    public async Task AC2_UpdatePlate_PasadaLaHora_RechazaConWindowExpired()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado,
+                plate: "ABC123");
+            var proc = seed.ProcedureInstances.Single(p => p.Id == procedureId);
+            proc.PlateAssignedAt = DateTimeOffset.UtcNow.AddHours(-2);
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+        var outcome = await repo.UpdatePlateAsync(
+            OtTenant, procedureId, "XYZ987", Approver, "ot_console", TestContext.Current.CancellationToken);
+
+        outcome.Succeeded.Should().BeFalse();
+        outcome.Failure.Should().Be(PlateAssignmentFailure.PlateUpdateWindowExpired);
+    }
+
+    [Fact]
+    public async Task AC3_UpdatePlate_SegundoIntentoDentroDeLaHora_RechazaConAlreadyUsed()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado,
+                plate: "ABC123");
+            var proc = seed.ProcedureInstances.Single(p => p.Id == procedureId);
+            proc.PlateAssignedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+            // Ya usó su única oportunidad, aunque siga dentro de la hora.
+            proc.PlateUpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+        var outcome = await repo.UpdatePlateAsync(
+            OtTenant, procedureId, "XYZ987", Approver, "ot_console", TestContext.Current.CancellationToken);
+
+        outcome.Succeeded.Should().BeFalse();
+        outcome.Failure.Should().Be(PlateAssignmentFailure.PlateUpdateAlreadyUsed);
     }
 
     // ---------- HU #10871 (AC1): observación subsanable del OT (entregado→subsanacion) ----------
@@ -1407,6 +1599,9 @@ public sealed class OtClientProcedureHandlerTests
             new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()),
             new AllowAllQuipuxGuard(),
             new RejectionReasonRepository(ctx));
+
+    private static RevokeOtClientProcedureHandler NewRevokeHandler(FlitDbContext ctx) =>
+        new(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()), new AllowAllQuipuxGuard());
 
     private sealed class AllowAllQuipuxGuard : IQuipuxReadOnlyGuard
     {
