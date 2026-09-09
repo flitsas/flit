@@ -63,6 +63,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { TramitesTable } from '@/components/operacion/TramitesTable';
+// HU #12163 — el menú de acciones avanzadas del admin usa `useToast`: la tabla necesita
+// `<ToastProvider>` en el árbol, igual que en producción.
+import { ToastProvider } from '@/components/admin/Toast';
 
 function makeInstance(i: number, extra: Partial<InstanceSummary> = {}): InstanceSummary {
   const num = String(i).padStart(4, '0');
@@ -244,7 +247,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
       Promise.resolve({ items: universo.slice(skip, skip + take), total: universo.length }),
     );
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('TR-0001');
 
     await userEvent.click(screen.getByTestId('tramites-export-xlsx'));
@@ -282,7 +285,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
       });
     });
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('TR-0001');
 
     await userEvent.type(screen.getByPlaceholderText(/buscar/i), 'ABC');
@@ -308,7 +311,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
       Promise.resolve({ items: universo.slice(skip, skip + take), total: universo.length }),
     );
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('TR-0001');
 
     await userEvent.click(screen.getByTestId('tramites-export-xlsx'));
@@ -332,7 +335,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
     mocks.listInstances.mockResolvedValue([]);
     mocks.searchInstances.mockResolvedValue({ items: [], total: 0 });
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await userEvent.click(await screen.findByTestId('tramites-export-xlsx'));
 
     await waitFor(() =>
@@ -350,7 +353,7 @@ describe('HU #12104 — el archivo sale del universo, no de la página', () => {
       .mockResolvedValueOnce({ items: universo.slice(0, 200), total: 300 })
       .mockRejectedValueOnce(new Error('502 Bad Gateway'));
 
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('TR-0001');
 
     await userEvent.click(screen.getByTestId('tramites-export-xlsx'));

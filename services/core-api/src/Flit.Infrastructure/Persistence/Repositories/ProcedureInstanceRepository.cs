@@ -1916,6 +1916,58 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 .ToList());
     }
 
+    // HU #12162 — reasignación de gestor. Ambos métodos consultan directamente `identity.users` /
+    // `security.user_role_assignments` / `security.user_temp_suspensions` con el MISMO criterio que
+    // `Flit.Modules.Security.Domain.UserRoles.IUserRoleAssignmentRepository.UserBelongsToTenantAsync`
+    // (pertenencia) y que la bandera de suspensión de `GET /api/v1/security/users` (disponibilidad):
+    // se ejecuta la misma consulta desde este repositorio, en vez de añadir una referencia de proyecto
+    // Tramites.Application → Modules.Security.Domain solo para esto (este repositorio YA hace lecturas
+    // ad hoc de identity.users — ver GetUserDisplayNamesAsync/UserExistsAsync/GetUserDisplayNameAsync).
+    public async Task<GestorCandidate?> FindGestorCandidateAsync(
+        Guid userId, Guid tenantId, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.Id, u.DisplayName, u.Status, u.DeletedAt, u.HomeTenantId })
+            .FirstOrDefaultAsync(ct);
+
+        if (user is null)
+            return null;
+
+        var belongsToTenant = user.DeletedAt is null
+            && (user.HomeTenantId == tenantId
+                || await db.UserRoleAssignments.AsNoTracking().AnyAsync(
+                    a => a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null, ct));
+
+        var isActive = user.DeletedAt is null
+            && string.Equals(user.Status, "active", StringComparison.OrdinalIgnoreCase);
+
+        var isSuspended = await db.UserTempSuspensions.AsNoTracking().AnyAsync(
+            s => s.UserId == userId && s.TenantId == tenantId && s.DeletedAt == null
+                && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now), ct);
+
+        return new GestorCandidate(user.Id, user.DisplayName, belongsToTenant, isActive, isSuspended);
+    }
+
+    public async Task<IReadOnlyList<GestorOption>> ListAvailableGestoresAsync(
+        Guid tenantId, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var rows = await db.Users.AsNoTracking()
+            .Where(u => u.DeletedAt == null
+                && u.Status == "active"
+                && (u.HomeTenantId == tenantId
+                    || db.UserRoleAssignments.Any(
+                        a => a.UserId == u.Id && a.TenantId == tenantId && a.DeletedAt == null))
+                && !db.UserTempSuspensions.Any(
+                    s => s.UserId == u.Id && s.TenantId == tenantId && s.DeletedAt == null
+                        && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)))
+            .OrderBy(u => u.DisplayName)
+            .Select(u => new { u.Id, u.DisplayName, u.Email })
+            .ToListAsync(ct);
+
+        return rows.Select(r => new GestorOption(r.Id, r.DisplayName, r.Email)).ToList();
+    }
+
     /// <summary>Clave del `field_value` con el nombre del organismo de tránsito elegido — la misma que
     /// proyecta <c>ListProcedureInstancesQuery</c> en <c>OrganismoTransito</c>.</summary>
     private const string TransitOfficeNameFieldKey = "transit_office_name";

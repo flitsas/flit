@@ -50,7 +50,10 @@ import {
 } from '@/lib/api/tramites-client';
 import { superadminClient, type CompanyItem } from '@/lib/api/superadmin-client';
 import { getToken } from '@/lib/api/client';
-import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { decodeJwtPayload, hasPermission, isSuperAdmin } from '@/lib/auth/jwt';
+import { useToast } from '@/components/admin/Toast';
+import { ADMIN_TRAMITE_PERMISSIONS } from '@/lib/tramites/admin-tramite-permissions';
+import { ReenviarValidacionIdentidadModal } from '@/components/operacion/ReenviarValidacionIdentidadModal';
 import type {
   BiometricEstado,
   BiometricParte,
@@ -261,6 +264,16 @@ export function Validaciones() {
   // TODA la pantalla — incluidos los drawers y formularios anidados, que así no necesitan recibirlo por
   // props. Para un usuario de compañía esto no cambia nada: el backend le impone su tenant desde el JWT.
   const [isFlitAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  // HU #12164 — mismo permiso `AdminTramiteReenviarValidacion` (catálogo HU #12157) que gatea la
+  // acción homónima del Dashboard de Trámites (`AdminTramiteAcciones.tsx`, HU #12163): AC1 exige que
+  // el módulo de Validaciones ofrezca EXACTAMENTE la misma acción, no una paralela sin permiso. Mismo
+  // idioma que `isFlitAdmin` de arriba (lee el JWT directo) en vez de `usePermissions()`, que trae
+  // roles/tenant que esta pantalla no necesita.
+  const [puedeReenviarValidacionAdmin] = useState(() => {
+    const payload = decodeJwtPayload(getToken());
+    return isSuperAdmin(payload) || hasPermission(payload, ADMIN_TRAMITE_PERMISSIONS.reenviarValidacion);
+  });
+  const { show: showToast } = useToast();
   const [companies, setCompanies] = useState<CompanyItem[] | null>(null);
   const [companyId, setCompanyId] = useState<string>('');
   const [showFiltros, setShowFiltros] = useState(false);
@@ -304,6 +317,12 @@ export function Validaciones() {
   const [resendResult, setResendResult] = useState<ResendResultState | null>(null);
   const [resendMeta, setResendMeta] = useState<Record<string, ResendMeta>>({});
   const [liveMessage, setLiveMessage] = useState('');
+
+  // HU #12164 (AC1) — fila de trámite cuyo reenvío administrativo (HU #12161, mismo mecanismo del
+  // Dashboard) está en curso. Distinto de `confirmAction`: ese es el reenvío/reintento STANDALONE
+  // de este módulo (D12); este abre el modal completo de `AdminTramiteAcciones` con selector de
+  // validación + correo, reutilizado tal cual.
+  const [adminReenviarRow, setAdminReenviarRow] = useState<TenantBiometricValidation | null>(null);
 
   // Tick ligero para refrescar la etiqueta "disponible en N min" sin depender de una acción del
   // usuario. No es una fuente de datos — solo fuerza el recálculo del cooldown en pantalla.
@@ -695,6 +714,17 @@ export function Validaciones() {
     }
   };
 
+  // HU #12164 (AC1) — reenvío administrativo de una validación de trámite, mismo endpoint/modal que
+  // el Dashboard (HU #12161/#12163): éxito recarga la grilla (el estado/reenvíos cambiaron) y avisa
+  // por toast, igual que `AdminTramiteAcciones`.
+  const handleAdminReenviarSuccess = (message: string) => {
+    showToast(message, 'success');
+    void load(appliedRef.current);
+  };
+  const handleAdminReenviarError = (message: string) => {
+    showToast(message, 'error');
+  };
+
   // AC8 — estados de UI. La carga inicial (skeleton) solo aplica antes de la primera respuesta.
   const initialLoading = !hasLoadedOnce && persons === null && error === null;
   const isEmpty = persons !== null && persons.length === 0;
@@ -877,6 +907,8 @@ export function Validaciones() {
             setConfirmAction({ row, mode: 'retry' });
           }}
           onNewFor={handleNewFor}
+          canAdminReenviar={puedeReenviarValidacionAdmin}
+          onAdminReenviarClick={setAdminReenviarRow}
         />
       )}
 
@@ -999,6 +1031,22 @@ export function Validaciones() {
           resendCount={resendResult.resendCount}
           notice={resendResult.notice}
           onClose={() => setResendResult(null)}
+        />
+      )}
+
+      {/* HU #12164 (AC1) — reenvío administrativo de una validación DE TRÁMITE: mismo modal y mismo
+          endpoint (HU #12161) que "Reenviar validación" del menú de Acciones del Dashboard de
+          Trámites. `instanceId` siempre existe aquí: solo se abre desde filas con trámite (ver
+          `ValidacionRow`). */}
+      {adminReenviarRow && adminReenviarRow.instanceId && (
+        <ReenviarValidacionIdentidadModal
+          open
+          onClose={() => setAdminReenviarRow(null)}
+          instanceId={adminReenviarRow.instanceId}
+          referenceNumber={adminReenviarRow.referenceNumber ?? ''}
+          initialValidationId={adminReenviarRow.id}
+          onSuccess={handleAdminReenviarSuccess}
+          onError={handleAdminReenviarError}
         />
       )}
     </div>
@@ -1546,6 +1594,8 @@ function PersonasTable({
   onResendClick,
   onRetryClick,
   onNewFor,
+  canAdminReenviar,
+  onAdminReenviarClick,
 }: {
   rows: TenantBiometricPerson[];
   now: number;
@@ -1555,6 +1605,9 @@ function PersonasTable({
   onResendClick: (row: TenantBiometricValidation) => void;
   onRetryClick: (row: TenantBiometricValidation) => void;
   onNewFor: (row: TenantBiometricValidation) => void;
+  /** HU #12164 (AC1) — permiso `AdminTramiteReenviarValidacion`: gatea "Reenviar" en filas de trámite. */
+  canAdminReenviar: boolean;
+  onAdminReenviarClick: (row: TenantBiometricValidation) => void;
 }) {
   const byLatestId = new Map(rows.map((r) => [r.latestValidationId, r]));
   const mapped: TenantBiometricValidation[] = rows.map((p) => ({
@@ -1599,6 +1652,8 @@ function PersonasTable({
       onResendClick={onResendClick}
       onRetryClick={onRetryClick}
       onNewFor={onNewFor}
+      canAdminReenviar={canAdminReenviar}
+      onAdminReenviarClick={onAdminReenviarClick}
     />
   );
 }
@@ -1614,6 +1669,8 @@ function ValidacionesTable({
   onResendClick,
   onRetryClick,
   onNewFor,
+  canAdminReenviar,
+  onAdminReenviarClick,
 }: {
   rows: TenantBiometricValidation[];
   now: number;
@@ -1624,6 +1681,8 @@ function ValidacionesTable({
   onResendClick: (row: TenantBiometricValidation) => void;
   onRetryClick: (row: TenantBiometricValidation) => void;
   onNewFor: (row: TenantBiometricValidation) => void;
+  canAdminReenviar: boolean;
+  onAdminReenviarClick: (row: TenantBiometricValidation) => void;
 }) {
   return (
     <div className="overflow-x-auto shrink-0">
@@ -1658,6 +1717,8 @@ function ValidacionesTable({
               onResendClick={onResendClick}
               onRetryClick={onRetryClick}
               onNewFor={onNewFor}
+              canAdminReenviar={canAdminReenviar}
+              onAdminReenviarClick={onAdminReenviarClick}
             />
           ))}
         </ul>
@@ -1676,6 +1737,8 @@ function ValidacionRow({
   onResendClick,
   onRetryClick,
   onNewFor,
+  canAdminReenviar,
+  onAdminReenviarClick,
 }: {
   row: TenantBiometricValidation;
   now: number;
@@ -1686,6 +1749,8 @@ function ValidacionRow({
   onResendClick: (row: TenantBiometricValidation) => void;
   onRetryClick: (row: TenantBiometricValidation) => void;
   onNewFor: (row: TenantBiometricValidation) => void;
+  canAdminReenviar: boolean;
+  onAdminReenviarClick: (row: TenantBiometricValidation) => void;
 }) {
   const [copied, setCopied] = useState(false);
   // Estado EFECTIVO: una validación no aprobada con el enlace vencido se lee "Expirado" aunque el
@@ -1837,6 +1902,23 @@ function ValidacionRow({
         disabledReason: sinParte
           ? 'La fila no identifica la parte del trámite: hazlo desde el trámite.'
           : undefined,
+      });
+    } else if (!isApproved && canAdminReenviar) {
+      // HU #12164 (AC1) — validación de trámite PENDIENTE (enviada, en proceso o pendiente de envío,
+      // sin llegar a un estado terminal): antes solo se podía reenviar desde el Dashboard de Trámites.
+      // Aquí abre EXACTAMENTE el mismo modal/endpoint administrativo (HU #12161), no el reintento por
+      // parte de arriba (D12 solo bloquea el mecanismo STANDALONE por id, no este endpoint admin
+      // dedicado). Corrección QA: la condición usaba `admiteReenvio` (= `estadoAdmiteReenvio`), que
+      // excluye deliberadamente 'en_proceso' para el mecanismo STANDALONE (reenviar invalidaría el
+      // enlace que la persona ya está usando) — pero ese criterio no aplica aquí: el propio backend
+      // (`AdminReenviarValidacionIdentidadHandler`) solo bloquea `validation.Status == Aprobado`, nada
+      // más, así que 'en_proceso' es precisamente el caso central de esta HU (correo equivocado en una
+      // validación que sigue en curso).
+      actionItems.push({
+        key: 'admin-reenviar',
+        label: 'Reenviar',
+        icon: Send,
+        onSelect: () => onAdminReenviarClick(r),
       });
     }
   } else if (admiteReenvio) {

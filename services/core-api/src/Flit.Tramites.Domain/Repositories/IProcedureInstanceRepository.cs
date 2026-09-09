@@ -523,6 +523,28 @@ public interface IProcedureInstanceRepository
     /// devolver cero — el mismo criterio que sigue el catálogo de Consultas.</para>
     /// </summary>
     Task<TramitesFilterOptions> GetFilterOptionsAsync(Guid? tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12162 (AC2) — evalúa al usuario destino de una reasignación de gestor: existencia,
+    /// pertenencia al tenant y disponibilidad (activo, sin suspensión vigente). <c>null</c> si el
+    /// usuario no existe en absoluto; con resultado no-null, el caller decide con
+    /// <see cref="ReadModels.GestorCandidate.IsAvailable"/>. Ver XML doc de
+    /// <see cref="ReadModels.GestorCandidate"/> para el porqué de reusar el mismo criterio de
+    /// pertenencia que el módulo Security en vez de una validación paralela.
+    /// </summary>
+    Task<ReadModels.GestorCandidate?> FindGestorCandidateAsync(
+        Guid userId, Guid tenantId, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12162 (AC-selector) — gestores DISPONIBLES (activos, no eliminados, sin suspensión vigente,
+    /// pertenecientes al tenant) para el selector de reasignación (HU #12163), ordenados por nombre
+    /// visible. Deliberadamente NO reutiliza <c>GET /api/v1/security/users</c>: ese endpoint mezcla
+    /// usuarios reales con invitaciones pendientes (ids que no son FK válidas de
+    /// <c>assigned_to_user_id</c>), no filtra por disponibilidad y está gateado por un permiso de
+    /// administración de usuarios distinto del de esta acción (<c>AdminTramiteReasignarGestor</c>).
+    /// </summary>
+    Task<IReadOnlyList<ReadModels.GestorOption>> ListAvailableGestoresAsync(
+        Guid tenantId, DateTimeOffset now, CancellationToken ct = default);
 }
 
 /// <summary>Opciones de filtro que salen de los datos del tenant, no de una lista fija.</summary>
