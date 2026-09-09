@@ -55,6 +55,16 @@ export interface OtClientProcedure {
    */
   plateFlowStatus?: string | null;
   /**
+   * HU #12165/#12167 (Feature #12156) — momento en que el OT asignó la placa. Base de la ventana
+   * de 1 hora para corregirla (`updateProcedurePlate`). `null` si nunca se asignó por este flujo.
+   */
+  plateAssignedAt?: string | null;
+  /**
+   * HU #12167 — no nulo si ya se usó la única corrección permitida dentro de la ventana (bloquea un
+   * segundo intento aunque siga dentro de la hora).
+   */
+  plateUpdatedAt?: string | null;
+  /**
    * Estado del SOAT (null | unknown | vencido | vigente). Informativo; la decisión OT
    * en ruta de placa requiere `terminado`.
    */

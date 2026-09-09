@@ -12,7 +12,7 @@ import {
 import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
-import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
+import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusTone } from "./ot-utils";
 import {
   esperandoProcesoDelGestor,
   plateFlowChipStyle,
@@ -45,6 +45,14 @@ export interface ClientProceduresTableProps {
   onAssignPlate?: (row: OtClientProcedure) => void;
   /** Feature #10587 — revocar la preasignación de un trámite. */
   onRevoke?: (row: OtClientProcedure) => void;
+  /**
+   * HU #12166 (Feature #12156) — el OT deshace su propia aprobación (aprobado→revocado). Distinto
+   * de `onRevoke` (revoca una PREASIGNACIÓN antes de aprobar, HU #10655): mismo rótulo "Revocar" en
+   * el menú porque nunca coinciden en la misma fila (aprobar limpia plateFlowStatus).
+   */
+  onRevokeAprobacion?: (row: OtClientProcedure) => void;
+  /** HU #12167 (Feature #12156) — corregir la placa dentro de la ventana de 1 hora (una única vez). */
+  onUpdatePlate?: (row: OtClientProcedure) => void;
   /** Id de la fila con accion de consolidado en curso (deshabilita sus botones). */
   consolidadoActingId?: string | null;
   /** Abre el panel de documentos del expediente para el trámite. */
@@ -124,6 +132,8 @@ export function ClientProceduresTable({
   onAdjuntarLt,
   onAssignPlate,
   onRevoke,
+  onRevokeAprobacion,
+  onUpdatePlate,
   consolidadoActingId = null,
   onVerDocumentos,
   onVerDetalle,
@@ -174,6 +184,27 @@ export function ClientProceduresTable({
       onRevoke
     ) {
       items.push({ key: "revocar", label: "Revocar", onSelect: () => onRevoke(row) });
+    }
+
+    // HU #12168 AC1 — "Revocar" (la aprobación) solo existe en Aprobado: es la única transición que
+    // la máquina de estados permite desde ahí (aprobado→revocado), y solo el OT puede dispararla.
+    if (row.status === "aprobado" && onRevokeAprobacion) {
+      items.push({ key: "revocar-aprobacion", label: "Revocar", onSelect: () => onRevokeAprobacion(row) });
+    }
+
+    // HU #12168 AC2/AC3 — "Actualizar placa" existe mientras haya una placa asignada por este flujo
+    // (plateAssignedAt), y se autodeshabilita con motivo cuando la ventana cerró o ya se usó la
+    // única corrección — igual que "Ver consolidado" arriba, nunca se OMITE la opción: verla
+    // deshabilitada con el motivo es lo que le dice al OT por qué ya no puede corregirla.
+    if (row.plateAssignedAt && onUpdatePlate) {
+      const ventana = plateUpdateWindow(row.plateAssignedAt, row.plateUpdatedAt);
+      items.push({
+        key: "actualizar-placa",
+        label: ventana.disabled ? "Actualizar placa" : `Actualizar placa (${ventana.minutosRestantes} min)`,
+        disabled: ventana.disabled,
+        disabledReason: ventana.disabledReason,
+        onSelect: () => onUpdatePlate(row),
+      });
     }
 
     if (row.status === "aprobado" && onAdjuntarLt) {

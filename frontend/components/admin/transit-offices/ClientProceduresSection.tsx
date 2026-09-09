@@ -17,6 +17,7 @@ import {
   fetchOtProfile,
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
+  revokeOtClientProcedure,
 } from "@/lib/api/admin-ot";
 import type {
   OtBandejaCounters,
@@ -42,9 +43,11 @@ import {
   assignPlateToProcedure,
   listPlateDetails,
   revokeProcedurePlate,
+  updateProcedurePlate,
   type PlateDetail,
 } from "@/lib/api/admin-plate-ranges";
 import { OT_FILTER_FORM_CLS, OT_FILTER_LABEL_CLS, OT_INPUT_CLS } from "./ot-form-styles";
+import { plateUpdateRemainingLabel } from "./ot-utils";
 import {
   OtBandejaCountersStrip,
   filtrosDeContador,
@@ -77,7 +80,10 @@ function esEstadoDeBandeja(valor: string): boolean {
 }
 
 /** Extrae el motivo de fallo al asignar placa (ProblemDetails.detail o fallback legible). */
-export function readAssignPlateError(err: unknown): string {
+export function readAssignPlateError(
+  err: unknown,
+  fallback = "No se pudo asignar la placa.",
+): string {
   if (err instanceof ApiError) {
     const body = err.body as { detail?: unknown; title?: unknown } | null | undefined;
     if (typeof body?.detail === "string" && body.detail.trim()) return body.detail.trim();
@@ -94,7 +100,7 @@ export function readAssignPlateError(err: unknown): string {
       return err.message;
     }
   }
-  return "No se pudo asignar la placa.";
+  return fallback;
 }
 
 /**
@@ -377,6 +383,25 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [assignMode, setAssignMode] = useState<"range" | "out">("range");
   const [revokeTarget, setRevokeTarget] = useState<OtClientProcedure | null>(null);
   const [revokePlateReason, setRevokePlateReason] = useState("");
+  // HU #12166 (Feature #12156) — revocar la APROBACIÓN (aprobado→revocado), distinto del revoke de
+  // preasignación de arriba.
+  const [revokeAprobacionTarget, setRevokeAprobacionTarget] = useState<OtClientProcedure | null>(null);
+  const [revokeAprobacionReason, setRevokeAprobacionReason] = useState("");
+  // HU #12167 — corregir la placa dentro de la ventana de 1 hora.
+  const [updatePlateTarget, setUpdatePlateTarget] = useState<OtClientProcedure | null>(null);
+  const [updatePlateInput, setUpdatePlateInput] = useState("");
+  // HU #12168 — contador EN VIVO del tiempo restante dentro del modal (a pedido explícito): un
+  // tick por segundo mientras el modal está abierto, nada más (no corre en segundo plano sin
+  // necesidad ni sigue vivo tras cerrar el modal).
+  const [, setPlateCountdownTick] = useState(0);
+  useEffect(() => {
+    if (!updatePlateTarget) return;
+    const id = setInterval(() => setPlateCountdownTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [updatePlateTarget]);
+  const plateWindowJustExpired =
+    !!updatePlateTarget?.plateAssignedAt &&
+    plateUpdateRemainingLabel(updatePlateTarget.plateAssignedAt) === "00:00";
   const [rejectReason, setRejectReason] = useState("");
   // Causales del catálogo para el modal de rechazo. Se cargan según la familia del trámite: las
   // causales no son intercambiables entre matrícula y traspaso.
@@ -793,6 +818,52 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       show("Preasignación revocada.", "success");
     } catch {
       show("No se pudo revocar la preasignación.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  // HU #12166 (Feature #12156) — revocar la aprobación: libera la placa (el trámite ya no cuenta
+  // como "en proceso" en el CF-01/CF-03 del backend) y marca el FUR/certificados como históricos.
+  // AC4: confirmación previa (el modal en sí) + registro de usuario/fecha/hora (lo hace el backend).
+  const confirmRevokeAprobacion = async () => {
+    if (!revokeAprobacionTarget) return;
+    setActing(true);
+    try {
+      const updated = await revokeOtClientProcedure(revokeAprobacionTarget.id, revokeAprobacionReason);
+      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setDetailProcedure((prev) => (prev && prev.id === updated.id ? updated : prev));
+      setRevokeAprobacionTarget(null);
+      setRevokeAprobacionReason("");
+      show("Trámite revocado.", "success");
+    } catch {
+      show("No se pudo revocar el trámite.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  // HU #12167 (Feature #12156) — corregir la placa dentro de la ventana de 1 hora (una única vez).
+  // El backend rechaza fuera de la ventana o si ya se usó la corrección; el modal solo evita el
+  // roundtrip cuando el ítem del menú ya llegó deshabilitado (ver plateUpdateWindow).
+  const confirmUpdatePlate = async () => {
+    if (!updatePlateTarget || !updatePlateInput.trim()) return;
+    setActing(true);
+    try {
+      await updateProcedurePlate(updatePlateTarget.id, updatePlateInput.trim());
+      const nuevaPlaca = updatePlateInput.trim().toUpperCase();
+      const corregido = (r: OtClientProcedure): OtClientProcedure => ({
+        ...r,
+        placa: nuevaPlaca,
+        plateUpdatedAt: new Date().toISOString(),
+      });
+      setRows((prev) => prev.map((r) => (r.id === updatePlateTarget.id ? corregido(r) : r)));
+      setDetailProcedure((prev) => (prev && prev.id === updatePlateTarget.id ? corregido(prev) : prev));
+      setUpdatePlateTarget(null);
+      setUpdatePlateInput("");
+      show("Placa corregida.", "success");
+    } catch (err) {
+      show(readAssignPlateError(err, "No se pudo corregir la placa."), "error");
     } finally {
       setActing(false);
     }
@@ -1230,6 +1301,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           onReject={(p) => void openReject(p)}
           onAssignPlate={!isReadOnly && !superAdmin ? openAssignPlate : undefined}
           onRevoke={!isReadOnly && !superAdmin ? (row) => { setRevokePlateReason(""); setRevokeTarget(row); } : undefined}
+          onRevokeAprobacion={
+            !isReadOnly && !superAdmin
+              ? (row) => { setRevokeAprobacionReason(""); setRevokeAprobacionTarget(row); }
+              : undefined
+          }
+          onUpdatePlate={
+            !isReadOnly && !superAdmin
+              ? (row) => { setUpdatePlateInput(""); setUpdatePlateTarget(row); }
+              : undefined
+          }
           showApprovalActions={!isReadOnly && !superAdmin}
           onConsolidado={handleConsolidado}
           onAdjuntarLt={
@@ -1489,6 +1570,86 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeTarget(null)} disabled={acting}>Cancelar</button>
               <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting || !revokePlateReason.trim()} onClick={() => void confirmRevokePlate()}>{acting ? "Procesando…" : "Revocar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HU #12166 (Feature #12156) AC4 — confirmación previa a revocar la APROBACIÓN. Distinto del
+          modal de arriba (que revoca una preasignación de placa antes de aprobar). */}
+      {revokeAprobacionTarget && (
+        <div
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Revocar trámite"
+        >
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>¿Revocar este trámite aprobado?</h2>
+            <p className="mt-2 text-sm opacity-80">{revokeAprobacionTarget.referenceNumber}</p>
+            <p className="mt-2 text-xs opacity-70">
+              Se libera la placa/VIN para una nueva radicación y el FUR/certificados vigentes quedan
+              marcados como históricos. Esta acción no se puede deshacer desde aquí.
+            </p>
+            <textarea
+              className={`mt-3 ${OT_INPUT_CLS}`}
+              rows={3}
+              value={revokeAprobacionReason}
+              onChange={(e) => setRevokeAprobacionReason(e.target.value)}
+              placeholder="Motivo de la revocación (opcional)…"
+              aria-label="Motivo de la revocación del trámite"
+            />
+            <div className="mt-5 flex gap-3">
+              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeAprobacionTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting} onClick={() => void confirmRevokeAprobacion()}>{acting ? "Procesando…" : "Revocar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HU #12167 (Feature #12156) — corregir la placa dentro de la ventana de 1 hora. El ítem del
+          menú ya llega deshabilitado con el motivo cuando no aplica (ver plateUpdateWindow); este
+          modal solo se abre cuando SÍ aplica. */}
+      {updatePlateTarget && (
+        <div
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Actualizar placa"
+        >
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Corregir placa</h2>
+            <p className="mt-2 text-sm opacity-80">
+              {updatePlateTarget.referenceNumber} · placa actual {updatePlateTarget.placa?.trim() || "—"}
+            </p>
+            <p className="mt-2 text-xs opacity-70">
+              Solo se puede usar una vez, dentro de la hora siguiente a la asignación original.
+            </p>
+            {/* HU #12168 — tiempo restante EN VIVO (tick de 1s mientras el modal está abierto). */}
+            {updatePlateTarget.plateAssignedAt && (
+              <p
+                className="mt-2 text-sm font-semibold"
+                style={{ color: plateWindowJustExpired ? "#dc2626" : "#557EFF" }}
+              >
+                {plateWindowJustExpired
+                  ? "La ventana de 1 hora venció mientras tenías este cuadro abierto."
+                  : `Tiempo restante: ${plateUpdateRemainingLabel(updatePlateTarget.plateAssignedAt)}`}
+              </p>
+            )}
+            <label className="mt-3 block text-xs font-semibold" style={{ color: "#162744" }}>
+              Placa correcta
+              <input
+                type="text"
+                value={updatePlateInput}
+                onChange={(e) => setUpdatePlateInput(e.target.value)}
+                placeholder="ABC123"
+                aria-label="Placa correcta"
+                className={`mt-1 uppercase ${OT_INPUT_CLS}`}
+              />
+            </label>
+            <div className="mt-5 flex gap-3">
+              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setUpdatePlateTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#557EFF" }} disabled={acting || !updatePlateInput.trim() || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
             </div>
           </div>
         </div>
