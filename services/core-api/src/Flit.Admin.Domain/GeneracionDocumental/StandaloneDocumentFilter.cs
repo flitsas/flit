@@ -3,10 +3,20 @@ namespace Flit.Admin.Domain.GeneracionDocumental;
 /// <summary>
 /// Filtros del historial de <c>admin.standalone_documents</c> (CF-17/CF-18, HU #12204).
 ///
-/// <para><see cref="TenantId"/> NO es opcional y no viaja como «filtro» del usuario: es el universo
-/// visible. Un SuperAdmin que quiera ver otra compañía envía su <c>tenantId</c> explícito y el
-/// endpoint lo resuelve a este campo; nunca existe una consulta sin tenant (§5.4 del diseño: el
-/// aislamiento real es este <c>WHERE</c>, no la política RLS).</para>
+/// <para><see cref="TenantId"/> es el universo visible, no un «filtro» del usuario. Tres caminos, y
+/// solo uno de ellos es global:</para>
+/// <list type="bullet">
+///   <item>Usuario normal: el tenant del JWT. Siempre. Un <c>tenantId</c> en la query se ignora.</item>
+///   <item>SuperAdmin con <c>tenantId</c> explícito: esa compañía (CF-20).</item>
+///   <item>SuperAdmin que pide <b>explícitamente</b> todas: <c>null</c>, y solo entonces.</item>
+/// </list>
+///
+/// <para><b>El tipo es anulable a propósito y sigue siendo <c>required</c>.</b> En este repo el
+/// aislamiento real entre compañías es este <c>WHERE tenant_id</c> y no la RLS —no hay
+/// <c>FORCE ROW LEVEL SECURITY</c> y la aplicación conecta como owner—, así que el listado global
+/// no puede alcanzarse por olvido: quien construya un filtro tiene que escribir <c>null</c> a
+/// conciencia. El único sitio que lo hace es <c>ListStandaloneDocumentsHandler</c>, y solo tras
+/// comprobar que quien pregunta es SuperAdmin y lo pidió.</para>
 ///
 /// <para><see cref="Statuses"/> recibe estados INTERNOS (los cuatro de
 /// <see cref="StandaloneDocumentStatus"/>). La interfaz ofrece tres opciones y expande «En proceso»
@@ -15,7 +25,8 @@ namespace Flit.Admin.Domain.GeneracionDocumental;
 /// </summary>
 public sealed record StandaloneDocumentFilter
 {
-    public required Guid TenantId { get; init; }
+    /// <summary><c>null</c> = todas las compañías. Ver la nota de la clase antes de usarlo.</summary>
+    public required Guid? TenantId { get; init; }
 
     /// <summary>Uno de <see cref="StandaloneDocumentType"/>. <c>null</c> = todos.</summary>
     public string? DocumentType { get; init; }

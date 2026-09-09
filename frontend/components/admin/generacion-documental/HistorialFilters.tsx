@@ -18,7 +18,21 @@ export interface HistorialFiltersValue {
    * tipo, fecha, usuario y estado, y todos se aplican a la vez.
    */
   batchId: string;
+  /**
+   * Universo de compañías, y por eso NO es un filtro más: los demás recortan lo que ya se puede
+   * ver, este decide qué se puede ver. Solo lo honra el backend para un SuperAdmin.
+   *
+   * Cadena vacía = mi compañía, `HISTORIAL_COMPANY_ALL` = todas, un uuid = esa compañía.
+   */
+  company: string;
 }
+
+/**
+ * Valor centinela de «todas las compañías». Es una cadena y no `null` para que el estado de los
+ * filtros siga siendo homogéneo (`""` = sin filtro) y `hasHistorialFilters` no necesite un caso
+ * aparte.
+ */
+export const HISTORIAL_COMPANY_ALL = "ALL";
 
 export const HISTORIAL_FILTERS_EMPTY: HistorialFiltersValue = {
   documentType: "",
@@ -27,6 +41,9 @@ export const HISTORIAL_FILTERS_EMPTY: HistorialFiltersValue = {
   dateTo: "",
   userId: "",
   batchId: "",
+  // Por defecto, la propia compañía. Ver documentos de otras es un acto deliberado, incluso para
+  // un SuperAdmin: el estado inicial de la pantalla nunca cruza datos entre compañías.
+  company: "",
 };
 
 export function hasHistorialFilters(value: HistorialFiltersValue): boolean {
@@ -38,9 +55,20 @@ export interface HistorialUserOption {
   name: string;
 }
 
+export interface HistorialCompanyOption {
+  id: string;
+  name: string;
+}
+
 export interface HistorialFiltersProps {
   value: HistorialFiltersValue;
   onChange: (value: HistorialFiltersValue) => void;
+  /**
+   * Compañías elegibles. Solo se pasan cuando quien mira es SuperAdmin: para cualquier otro
+   * usuario el control no existe —no está oculto ni deshabilitado— porque el backend ignoraría
+   * el parámetro de todas formas y un selector inerte prometería algo que no va a pasar.
+   */
+  companies?: HistorialCompanyOption[];
   /**
    * Autores que se pueden elegir. Se construyen con los usuarios ya vistos en el historial
    * de esta sesión: pedirlos a `/api/v1/security/users` exigiría un permiso de otro módulo
@@ -64,7 +92,13 @@ const FIELD_CLASS =
  * <p>Accesibilidad (CF-22): cada control tiene su `label` asociada por `htmlFor`, el foco es
  * visible y ningún filtro se comunica solo por color.</p>
  */
-export function HistorialFilters({ value, onChange, users, disabled = false }: HistorialFiltersProps) {
+export function HistorialFilters({
+  value,
+  onChange,
+  users,
+  companies,
+  disabled = false,
+}: HistorialFiltersProps) {
   const set = <K extends keyof HistorialFiltersValue>(key: K, v: HistorialFiltersValue[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -75,6 +109,35 @@ export function HistorialFilters({ value, onChange, users, disabled = false }: H
       </h2>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        {/*
+          Va PRIMERO y ocupa dos columnas a propósito: no recorta el listado como los demás, decide
+          de qué compañías es. Leerlo después del tipo de documento invitaría a interpretarlo como
+          un filtro más.
+        */}
+        {companies !== undefined && (
+          <div className="lg:col-span-2">
+            <label htmlFor="historial-filtro-compania" className="mb-1 block text-[11px] font-medium">
+              Compañía
+            </label>
+            <select
+              id="historial-filtro-compania"
+              data-testid="historial-filtro-compania"
+              className={FIELD_CLASS}
+              value={value.company}
+              disabled={disabled}
+              onChange={(e) => set("company", e.target.value)}
+            >
+              <option value="">Mi compañía</option>
+              <option value={HISTORIAL_COMPANY_ALL}>Todas las compañías</option>
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div>
           <label htmlFor="historial-filtro-tipo" className="mb-1 block text-[11px] font-medium">
             Tipo de documento

@@ -310,7 +310,13 @@ internal sealed class StandaloneDocumentRepository : IStandaloneDocumentReposito
             _ => filter.PageSize,
         };
 
-        var query = Scoped(filter.TenantId);
+        // El ÚNICO punto del repositorio que puede producir una consulta sin `WHERE tenant_id`, y
+        // solo cuando el filtro trae `null` a conciencia. `ListStandaloneDocumentsHandler` es quien
+        // lo decide, y únicamente tras comprobar que quien pregunta es SuperAdmin y lo pidió
+        // explícitamente. El borrado lógico se sigue respetando en ambos caminos.
+        var query = filter.TenantId is { } tenant
+            ? Scoped(tenant)
+            : _context.StandaloneDocuments.Where(x => x.DeletedAt == null);
 
         if (!string.IsNullOrWhiteSpace(filter.DocumentType))
         {

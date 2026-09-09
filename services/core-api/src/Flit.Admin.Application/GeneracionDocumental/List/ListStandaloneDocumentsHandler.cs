@@ -5,10 +5,16 @@ namespace Flit.Admin.Application.GeneracionDocumental.List;
 /// <summary>
 /// Consulta del historial de documentos standalone (CF-17/CF-18, HU #12204).
 ///
-/// <para><b>El tenant nunca es opcional.</b> El comando trae el tenant del JWT y, solo para un
-/// SuperAdmin, un <c>tenantId</c> explícito de otra compañía (CF-20). Un usuario normal que envíe
-/// ese parámetro no amplía nada: se ignora y se consulta su propio tenant. No existe camino que
-/// produzca una consulta sin <c>WHERE tenant_id</c> — el aislamiento es ese filtro, no la RLS.</para>
+/// <para><b>Aquí se decide el universo visible, y es el único sitio donde puede ser global.</b> El
+/// comando trae el tenant del JWT y, solo para un SuperAdmin, o bien un <c>tenantId</c> explícito de
+/// otra compañía (CF-20) o bien <c>AllTenants</c> para verlas todas. Un usuario normal que envíe
+/// cualquiera de los dos no amplía nada: se ignoran y se consulta su propio tenant.</para>
+///
+/// <para><b>Lo global exige las dos cosas a la vez</b> —ser SuperAdmin y haberlo pedido—, nunca se
+/// alcanza por omisión y no es el estado por defecto de la interfaz: cruzar datos entre compañías es
+/// siempre un acto deliberado. Importa porque en este repo el aislamiento real es este
+/// <c>WHERE tenant_id</c> y no la RLS (sin <c>FORCE ROW LEVEL SECURITY</c>, la app conecta como
+/// owner).</para>
 ///
 /// <para><b>Qué NO devuelve, en ningún caso y para ningún rol:</b> <c>document_snapshot</c>,
 /// <c>rues_snapshot</c>, la ruta de storage o cualquier URL firmada. La proyección
@@ -30,10 +36,24 @@ public sealed class ListStandaloneDocumentsHandler
         ArgumentNullException.ThrowIfNull(query);
 
         // CF-20: el filtro cross-tenant es privilegio de SuperAdmin y debe ser EXPLÍCITO. Para
-        // cualquier otro usuario el parámetro no existe: se cae al tenant del JWT.
-        var tenantId = query.IsSuperAdmin && query.RequestedTenantId is { } solicitado && solicitado != Guid.Empty
-            ? solicitado
-            : query.TenantId;
+        // cualquier otro usuario ninguno de los dos parámetros existe: se cae al tenant del JWT.
+        //
+        // El orden importa. `AllTenants` gana sobre `RequestedTenantId` porque «todas» es una
+        // petición más amplia y explícita; si llegaran los dos, quedarse con la compañía concreta
+        // devolvería MENOS de lo pedido sin decirlo, que es la clase de silencio que confunde.
+        Guid? tenantId;
+        if (query.IsSuperAdmin && query.AllTenants)
+        {
+            tenantId = null;
+        }
+        else if (query.IsSuperAdmin && query.RequestedTenantId is { } solicitado && solicitado != Guid.Empty)
+        {
+            tenantId = solicitado;
+        }
+        else
+        {
+            tenantId = query.TenantId;
+        }
 
         var statuses = query.Statuses?
             .Where(s => !string.IsNullOrWhiteSpace(s))
@@ -90,6 +110,13 @@ public sealed record ListStandaloneDocumentsQuery
     public bool IsSuperAdmin { get; init; }
 
     public Guid? RequestedTenantId { get; init; }
+
+    /// <summary>
+    /// Solo lo honra un SuperAdmin: consulta TODAS las compañías, sin <c>WHERE tenant_id</c>. Gana
+    /// sobre <see cref="RequestedTenantId"/> si llegan los dos. Para cualquier otro usuario se
+    /// ignora, igual que <see cref="RequestedTenantId"/>.
+    /// </summary>
+    public bool AllTenants { get; init; }
 
     public string? DocumentType { get; init; }
 

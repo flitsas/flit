@@ -6613,6 +6613,17 @@ paths:
             Solo lo honra un SuperAdmin (CF-20): devuelve METADATA global de esa compañía y jamás
             document_snapshot ni presigned URLs. Para cualquier otro usuario se ignora y se consulta
             su propio tenant.
+        - name: allTenants
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Solo lo honra un SuperAdmin: lista los documentos de TODAS las compañías, sin filtro de
+            tenant. Es el único camino del listado sin WHERE tenant_id, y exige las dos condiciones a
+            la vez —ser SuperAdmin y pedirlo— así que no se alcanza por omisión. Gana sobre tenantId
+            si llegan los dos. Para cualquier otro usuario se ignora, igual que tenantId. La
+            respuesta sigue sin document_snapshot, sin ruta de storage y sin presigned URLs: es
+            metadata, y la columna companyName permite distinguir de qué compañía es cada fila.
         - name: page
           in: query
           required: false

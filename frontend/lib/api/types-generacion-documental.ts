@@ -55,6 +55,12 @@ export interface StandaloneDocumentsListParams {
   /** Solo SuperAdmin: metadata global de otro tenant (CF-20). Nunca devuelve contenido. */
   tenantId?: string;
   /**
+   * Solo SuperAdmin: TODAS las compañías, sin filtro de tenant. Gana sobre `tenantId` si viajan
+   * los dos. Es el único camino del listado sin `WHERE tenant_id`, así que se envía únicamente
+   * cuando el usuario lo elige a propósito — nunca por defecto.
+   */
+  allTenants?: boolean;
+  /**
    * Lote XLSX del que provienen las filas (CF-18 en I3, HU #12211). Es un filtro MÁS: se aplica
    * con AND junto a los de tipo, estado, fechas y usuario, no los sustituye.
    */

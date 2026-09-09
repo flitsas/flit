@@ -10,10 +10,15 @@ import {
 import { ApiError } from "@/lib/api/types";
 import type { StandaloneDocumentListItem } from "@/lib/api/types-generacion-documental";
 import { HistorialTable } from "./HistorialTable";
+import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { getToken } from "@/lib/api/client";
 import {
+  HISTORIAL_COMPANY_ALL,
   HISTORIAL_FILTERS_EMPTY,
   HistorialFilters,
   hasHistorialFilters,
+  type HistorialCompanyOption,
   type HistorialFiltersValue,
   type HistorialUserOption,
 } from "./HistorialFilters";
@@ -52,6 +57,12 @@ export function HistorialSection() {
   const seenUsers = useRef(new Map<string, string>());
   const [userOptions, setUserOptions] = useState<HistorialUserOption[]>([]);
 
+  // El selector de compañía solo existe para un SuperAdmin. Para cualquier otro usuario no se
+  // pinta —ni oculto ni deshabilitado—: el backend ignoraría `tenantId`/`allTenants` de todas
+  // formas, y un control inerte prometería algo que no va a ocurrir.
+  const [superAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  const [companyOptions, setCompanyOptions] = useState<HistorialCompanyOption[]>([]);
+
   const filtered = hasHistorialFilters(filters);
 
   const load = useCallback(
@@ -72,6 +83,13 @@ export function HistorialSection() {
             userId: current.userId || undefined,
             // CF-18 en I3: el lote es un filtro mas, en AND con los cuatro anteriores.
             batchId: current.batchId || undefined,
+            // El universo de compañías, no un filtro: `""` es la propia (y no se envía nada),
+            // `ALL` pide todas y un uuid pide esa. El backend los ignora salvo para SuperAdmin.
+            tenantId:
+              current.company && current.company !== HISTORIAL_COMPANY_ALL
+                ? current.company
+                : undefined,
+            allTenants: current.company === HISTORIAL_COMPANY_ALL ? true : undefined,
           },
           signal,
         );
@@ -109,6 +127,36 @@ export function HistorialSection() {
     void load(page, filters, controller.signal);
     return () => controller.abort();
   }, [load, page, filters]);
+
+  // Compañías del selector. Solo para SuperAdmin, y de un vistazo: no se pagina porque el control
+  // es un `select`, no un buscador. Si la consulta falla el selector se queda con «Mi compañía» y
+  // «Todas» —que son las dos opciones que no dependen de este listado— en vez de romper la
+  // pantalla: el historial se puede usar igual.
+  useEffect(() => {
+    if (!superAdmin) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const result = await fetchCompaniesIndex(
+          { page: 1, pageSize: 200, excludeTransitOffices: false },
+          controller.signal,
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
+        setCompanyOptions(
+          (result.data ?? []).map((c) => ({ id: c.id, name: c.razonSocial })),
+        );
+      } catch {
+        // Silencio deliberado: ver la nota de arriba.
+      }
+    })();
+
+    return () => controller.abort();
+  }, [superAdmin]);
 
   const applyFilters = useCallback((value: HistorialFiltersValue) => {
     setDownloadError(null);
@@ -167,7 +215,12 @@ export function HistorialSection() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <HistorialFilters value={filters} onChange={applyFilters} users={userOptions} />
+      <HistorialFilters
+        value={filters}
+        onChange={applyFilters}
+        users={userOptions}
+        companies={superAdmin ? companyOptions : undefined}
+      />
 
       {/* Puente al seguimiento del lote (CF-14): la vista de avance es un detalle al que se
           llega desde aqui, no una cuarta pestana del modulo. */}

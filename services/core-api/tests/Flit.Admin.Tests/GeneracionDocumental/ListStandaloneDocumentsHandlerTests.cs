@@ -183,6 +183,95 @@ public sealed class ListStandaloneDocumentsHandlerTests
             .Should().NotContain("DocumentSnapshot");
     }
 
+    // ── Listado global de SuperAdmin ────────────────────────────────────────────────
+    //
+    // Es el UNICO camino del listado sin `WHERE tenant_id`, y en este repo ese WHERE es el
+    // aislamiento real entre companias (no hay FORCE ROW LEVEL SECURITY y la app conecta como
+    // owner). Por eso los casos de abajo comprueban las dos direcciones: que se abre cuando debe y
+    // que no se abre en ningun otro supuesto.
+
+    [Fact]
+    public async Task SuperAdmin_QuePideTodas_VeLasDeTodasLasCompanias()
+    {
+        Sembrar(1, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated);
+        Sembrar(2, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated, tenant: OtroTenant);
+
+        var page = await Listar.HandleAsync(
+            Query() with { IsSuperAdmin = true, AllTenants = true },
+            TestContext.Current.CancellationToken);
+
+        page.Total.Should().Be(2);
+        page.Items.Select(i => i.CompanyName).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task UsuarioNormal_QuePideTodas_SigueViendoSoloLaSuya()
+    {
+        Sembrar(1, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated);
+        Sembrar(2, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated, tenant: OtroTenant);
+
+        var page = await Listar.HandleAsync(
+            Query() with { IsSuperAdmin = false, AllTenants = true },
+            TestContext.Current.CancellationToken);
+
+        page.Total.Should().Be(1);
+        page.Items.Should().ContainSingle().Which.CompanyName.Should().Contain(Tenant.ToString()[..8]);
+    }
+
+    /// <summary>
+    /// Sin pedirlo no se abre: un SuperAdmin que no marca «todas» sigue viendo su propia compania.
+    /// Cruzar datos entre companias tiene que ser un acto deliberado, nunca el estado por defecto.
+    /// </summary>
+    [Fact]
+    public async Task SuperAdmin_QueNoPideTodas_NoObtieneElListadoGlobal()
+    {
+        Sembrar(1, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated);
+        Sembrar(2, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated, tenant: OtroTenant);
+
+        var page = await Listar.HandleAsync(
+            Query() with { IsSuperAdmin = true },
+            TestContext.Current.CancellationToken);
+
+        page.Total.Should().Be(1);
+        page.Items.Should().ContainSingle().Which.CompanyName.Should().Contain(Tenant.ToString()[..8]);
+    }
+
+    /// <summary>
+    /// Si llegan los dos, «todas» gana: quedarse con la compania concreta devolveria MENOS de lo
+    /// pedido sin decirlo.
+    /// </summary>
+    [Fact]
+    public async Task SuperAdmin_ConTodasYTenantIdALaVez_DevuelveTodas()
+    {
+        Sembrar(1, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated);
+        Sembrar(2, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated, tenant: OtroTenant);
+
+        var page = await Listar.HandleAsync(
+            Query() with { IsSuperAdmin = true, AllTenants = true, RequestedTenantId = OtroTenant },
+            TestContext.Current.CancellationToken);
+
+        page.Total.Should().Be(2);
+    }
+
+    /// <summary>
+    /// El listado global sigue siendo METADATA: la proyeccion no tiene snapshot que devolver, ni
+    /// siquiera cuando la fila es de otra compania.
+    /// </summary>
+    [Fact]
+    public async Task ListadoGlobal_NoExponeSnapshotDeNingunaCompania()
+    {
+        Sembrar(2, StandaloneDocumentType.CertificadoRues, StandaloneDocumentStatus.Generated,
+            tenant: OtroTenant, documentSnapshot: "{\"pii\":\"alta\"}");
+
+        var page = await Listar.HandleAsync(
+            Query() with { IsSuperAdmin = true, AllTenants = true },
+            TestContext.Current.CancellationToken);
+
+        page.Items.Should().NotBeEmpty();
+        typeof(StandaloneDocumentListItem).GetProperties().Select(p => p.Name)
+            .Should().NotContain(["DocumentSnapshot", "RuesSnapshot", "StoragePath", "StorageSha256"]);
+    }
+
     // ── Paginación ──────────────────────────────────────────────────────────────────
 
     [Fact]

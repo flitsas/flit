@@ -1077,6 +1077,10 @@ public static class AdminGeneracionDocumentalEndpoints
         }
 
         Guid? requestedTenantId = Guid.TryParse(q["tenantId"], out var otroTenant) ? otroTenant : null;
+        // Solo el literal "true" activa el listado global: cualquier otro valor —incluido el
+        // parametro presente pero vacio— se lee como false. Ver todas las companias no puede
+        // depender de que una cadena rara se interprete como afirmativa.
+        var allTenants = bool.TryParse(q["allTenants"], out var todas) && todas;
         Guid? userId = Guid.TryParse(q["userId"], out var autor) ? autor : null;
         // CF-18 en I3: filtro por lote. Convive con los de tipo, fecha, usuario y estado (AND).
         Guid? batchId = Guid.TryParse(q["batchId"], out var lote) ? lote : null;
@@ -1089,6 +1093,7 @@ public static class AdminGeneracionDocumentalEndpoints
                     TenantId = tenantId,
                     IsSuperAdmin = IsSuperAdmin(httpContext.User),
                     RequestedTenantId = requestedTenantId,
+                    AllTenants = allTenants,
                     DocumentType = string.IsNullOrWhiteSpace(documentType) ? null : documentType,
                     Statuses = [.. q["status"].Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!)],
                     DateFrom = dateFrom,

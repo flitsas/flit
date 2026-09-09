@@ -170,7 +170,12 @@ internal sealed class FakeStandaloneDocumentRepository : IStandaloneDocumentRepo
     public Task<StandaloneDocumentPage> ListAsync(
         StandaloneDocumentFilter filter, CancellationToken cancellationToken = default)
     {
-        var query = Rows.Where(r => r.TenantId == filter.TenantId);
+        // Espeja al repositorio real: `TenantId` nulo = todas las companias (listado global de
+        // SuperAdmin). Si este doble filtrara siempre por tenant, el caso global pasaria por
+        // vacio y el test no demostraria nada.
+        var query = filter.TenantId is { } tenant
+            ? Rows.Where(r => r.TenantId == tenant)
+            : Rows.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(filter.DocumentType))
         {
