@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/atom/Modal';
-import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
+import { IdentidadLecturaHumana } from '@/components/operacion/IdentidadLecturaHumana';
 import { SeccionCargando, SeccionError, SeccionVacia } from '@/components/operacion/detalle/primitivos';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { BiometricParte, BiometricValidation } from '@/lib/api/types/procedure-runtime';
@@ -11,7 +11,11 @@ const KYVERUM = 'kyverum';
 
 /**
  * Modal de tracking de identidad por UNA parte (click en línea de la columna Firmas).
- * FE-only: `listBiometricExpediente` + `IdentityValidationTrackingPanel`.
+ *
+ * <p>HU #12186 — pinta la LECTURA HUMANA (`IdentidadLecturaHumana`), no la bitácora cruda. La
+ * bitácora sigue estando, dentro de esa misma lectura y un clic más adentro, para soporte. El
+ * panel técnico a secas se conserva donde tiene sentido: dentro del asistente, delante del
+ * operador que está a mitad del flujo y sí quiere el diagnóstico.</p>
  */
 export function IdentidadParteTrackingModal({
   open,
@@ -73,12 +77,14 @@ export function IdentidadParteTrackingModal({
     };
   }, [open, instanceId, tenantId, parte, reloadKey]);
 
-  const kyverumIds = useMemo(
-    () => validations.filter((v) => v.provider === KYVERUM).map((v) => v.id),
+  // Solo las validaciones con bitácora. El filtro mira el proveedor, pero eso NO llega a pantalla:
+  // lo que se pinta es la lectura humana, que no lo nombra en ningún sitio.
+  const conBitacora = useMemo(
+    () => validations.filter((v) => v.provider === KYVERUM),
     [validations],
   );
 
-  const title = `Tracking de identidad · ${rotulo}`;
+  const title = `Validación de identidad · ${rotulo}`;
 
   return (
     <Modal open={open} onClose={onClose} title={title} size="lg">
@@ -90,16 +96,16 @@ export function IdentidadParteTrackingModal({
           onReintentar={() => setReloadKey((k) => k + 1)}
         />
       ) : null}
-      {!loading && !error && firmaBaul && kyverumIds.length === 0 ? (
-        <SeccionVacia mensaje="Esta parte está cubierta por firma electrónica (baúl). No hay bitácora de validación de identidad." />
+      {!loading && !error && firmaBaul && conBitacora.length === 0 ? (
+        <SeccionVacia mensaje="Esta parte quedó acreditada con su firma electrónica, así que no hizo falta validar su identidad." />
       ) : null}
-      {!loading && !error && !firmaBaul && kyverumIds.length === 0 ? (
-        <SeccionVacia mensaje="No hay validaciones de identidad con bitácora para esta parte." />
+      {!loading && !error && !firmaBaul && conBitacora.length === 0 ? (
+        <SeccionVacia mensaje="Todavía no se ha iniciado la validación de identidad de esta parte." />
       ) : null}
-      {!loading && !error && kyverumIds.length > 0 ? (
+      {!loading && !error && conBitacora.length > 0 ? (
         <div className="space-y-3">
-          {kyverumIds.map((id) => (
-            <IdentityValidationTrackingPanel key={id} validationId={id} defaultOpen />
+          {conBitacora.map((v) => (
+            <IdentidadLecturaHumana key={v.id} validation={v} rolLabel={rotulo} />
           ))}
         </div>
       ) : null}

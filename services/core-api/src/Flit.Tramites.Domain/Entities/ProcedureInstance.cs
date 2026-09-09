@@ -67,6 +67,25 @@ public sealed class ProcedureInstance
     public string? PlateFlowStatus { get; set; }
 
     /// <summary>
+    /// HU #12165 (Feature #12156) — momento exacto en que el OT asignó/actualizó por última vez la
+    /// placa (<see cref="Plate"/>) vía <c>AssignPlateAsync</c>/<c>UpdatePlateAsync</c>. Base confiable
+    /// para calcular la ventana de 1 hora de HU #12167: a diferencia de <see cref="UpdatedAt"/>, no lo
+    /// pisa ninguna otra escritura sobre la instancia. <c>null</c> si nunca se asignó placa por este
+    /// flujo. Columna agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí
+    /// solo se mapea al modelo EF.
+    /// </summary>
+    public DateTimeOffset? PlateAssignedAt { get; set; }
+
+    /// <summary>
+    /// HU #12165/#12167 — momento en que el OT usó su ÚNICA oportunidad de corregir la placa dentro de
+    /// la ventana de 1 hora. <c>null</c> = todavía no la ha usado (independientemente de si la ventana
+    /// ya cerró). Distinguir "no usada" de "ventana cerrada" es lo que permite el AC3 de HU #12167
+    /// ("una única oportunidad", rechaza un segundo intento aunque siga dentro de la hora). Columna
+    /// agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea.
+    /// </summary>
+    public DateTimeOffset? PlateUpdatedAt { get; set; }
+
+    /// <summary>
     /// Marca de "borrador finalizado" (HU #10349, fase 2). El gestor finaliza la captura de datos
     /// (actores, documentos, organismo) y el trámite queda en <c>draft</c> a la espera de la validación
     /// de identidad async del cliente. Cuando llega <c>IdentityValidationCompleted</c> (aprobado), el
@@ -217,6 +236,18 @@ public sealed class ProcedureInstance
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid CreatedByUserId { get; set; }
+
+    /// <summary>
+    /// HU #12162 (Feature #12155, Dashboard admin) — gestor actualmente responsable del trámite,
+    /// reasignable por un admin con el permiso <c>AdminTramiteReasignarGestor</c> (catálogo HU
+    /// #12157, ver <see cref="Flit.Api.Authorization.AdminTramiteAuthorization"/> en Flit.Api).
+    /// Distinto de <see cref="CreatedByUserId"/> (quién radicó el trámite, auditoría inmutable que
+    /// esta HU NO toca). <c>null</c> = sin gestor asignado; NO se copia automáticamente el creador
+    /// como default (decisión de la migración de esquema: fabricaría una reasignación que nunca
+    /// ocurrió). FK a <c>identity.users(id)</c> ON DELETE SET NULL. Columna agregada por migración
+    /// SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public Guid? AssignedToUserId { get; set; }
     public DateTimeOffset? RulesSnapshotAt { get; set; }
     public long RowVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

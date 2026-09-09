@@ -161,6 +161,23 @@ export function rejectOtClientProcedure(
   });
 }
 
+/**
+ * HU #12166 (Feature #12156) — el OT revoca su propia aprobación (aprobado→revocado): libera la
+ * placa y habilita re-radicar con el mismo VIN/placa. Distinto de `revokeProcedurePlate`
+ * (`admin-plate-ranges.ts`, HU #10655), que revoca una PREASIGNACIÓN antes de aprobar.
+ */
+export function revokeOtClientProcedure(
+  id: string,
+  reason?: string,
+  scope?: OtApiScope,
+): Promise<OtClientProcedure> {
+  return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}/revoke`, {
+    method: "POST",
+    body: reason?.trim() ? { reason: reason.trim() } : undefined,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
+}
+
 /** Adjunto devuelto por los endpoints de expediente OT (shape del AttachmentDto de trámites). */
 export interface OtProcedureAttachment {
   id: string;

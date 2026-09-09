@@ -6429,6 +6429,360 @@ paths:
         "404": { description: "Trámite no encontrado." }
         "409": { description: "Modalidad no soportada, FUR faltante, documentos incompletos o adjunto no disponible." }
 
+  # ── Admin · Trámites · Gestión avanzada del consolidado (Feature #12155, HU #12158) ──────────
+
+  /api/v1/admin/tramites/{id}/consolidado/limpiar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Limpiar (forzar la regeneración de) el consolidado de un trámite
+      operationId: adminTramiteLimpiarConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        Descarta el consolidado vigente y lo regenera desde cero, incluso si el vigente lo cargó el
+        admin a mano (Source="user"): es la ÚNICA acción que puede descartarlo. El nuevo consolidado
+        queda con Source="system". Requiere el permiso `AdminTramiteLimpiarConsolidado` (SuperAdmin
+        bypassa). La acción queda registrada en la bitácora del trámite con usuario, fecha y hora.
+      responses:
+        "200":
+          description: Consolidado regenerado (adjunto tipo "consolidado", Source="system").
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteLimpiarConsolidado." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Trámite migrado (solo lectura), FUR faltante, documentos incompletos o adjunto no disponible." }
+
+  /api/v1/admin/tramites/{id}/consolidado/cargar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Cargar un PDF externo como el consolidado de un trámite
+      operationId: adminTramiteCargarConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        Registra un PDF provisto por el admin (multipart/form-data, campo `file`) como el expediente
+        consolidado del trámite, con Source="user". Reemplaza CUALQUIER consolidado vigente sin
+        importar su Source actual, y a partir de ahí prevalece sobre cualquier regeneración
+        automática futura hasta que se reemplace con "Limpiar consolidado" u otra carga. Requiere el
+        permiso `AdminTramiteCargarConsolidado` (SuperAdmin bypassa). La acción queda registrada en
+        la bitácora del trámite con usuario, fecha y hora.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo PDF a registrar como consolidado.
+              required: [file]
+      responses:
+        "201":
+          description: Consolidado externo registrado (adjunto tipo "consolidado", Source="user").
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDto" }
+        "400": { description: "Falta el header X-Tenant-Id, falta el archivo, el mimetype no es PDF o excede el tamaño máximo." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteCargarConsolidado." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Trámite migrado (solo lectura)." }
+
+  # ── Admin · Trámites · Cambiar estado sin restricción de flujo (Feature #12155, HU #12159) ─────
+
+  /api/v1/admin/tramites/{id}/estado:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Cambia el estado de un trámite sin restricciones de flujo (excluye 'aprobado')
+      operationId: adminTramiteCambiarEstado
+      security:
+        - bearerAuth: []
+      description: >
+        Cambia `status` directamente a cualquier estado de negocio conocido (borrador, preparado,
+        entregado, rechazado o anulado) SIN pasar por las transiciones válidas de la máquina de
+        estados normal del gestor/OT ni por sus gates de negocio. Única regla dura: `aprobado` nunca
+        participa, ni como origen ni como destino (422) — la aprobación exige el flujo formal del
+        organismo de tránsito. No replica los efectos colaterales de una transición normal (no
+        libera/asigna placa, no regenera consolidados/FUR, no resuelve mandatario, no encola
+        notificaciones): es una corrección puntual del campo `status` para situaciones excepcionales.
+        Requiere el permiso `AdminTramiteCambiarEstado` (SuperAdmin bypassa). La acción queda
+        registrada en el historial de estados y en la bitácora del trámite con estado anterior, nuevo
+        estado, usuario, fecha y hora.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                toStatus:
+                  type: string
+                  description: Estado destino (borrador, preparado, entregado, rechazado o anulado).
+                reason:
+                  type: string
+                  nullable: true
+                  description: Motivo de la corrección administrativa (libre, no obligatorio).
+              required: [toStatus]
+      responses:
+        "200":
+          description: Estado cambiado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  previousStatus: { type: string }
+                  newStatus: { type: string }
+                  changedAt: { type: string, format: date-time }
+        "400": { description: "Falta el header X-Tenant-Id o el campo toStatus." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteCambiarEstado." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Conflicto de concurrencia (row_version): recargue e intente de nuevo." }
+        "422": { description: "Estado destino desconocido, o 'aprobado' como origen/destino (excluido por regla de negocio)." }
+
+  # ── Admin · Trámites · Anular desde cualquier estado (Feature #12155, HU #12160) ────────────────
+
+  /api/v1/admin/tramites/{id}/anular:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Anula un trámite desde cualquier estado (excluye 'aprobado' y 'revocado')
+      operationId: adminTramiteAnular
+      security:
+        - bearerAuth: []
+      description: >
+        Cambia `status` directamente a `anulado` desde CUALQUIER estado de origen, sin pasar por las
+        transiciones válidas de la máquina de estados normal del gestor/OT ni por sus gates de
+        negocio. Dos excepciones duras (422): `aprobado` (`CANNOT_ANNUL_APPROVED`) y `revocado`
+        (`CANNOT_ANNUL_REVOKED`, estado que introducirá la Feature #12156/HU #12165) no pueden
+        anularse — son autoridad exclusiva del organismo de tránsito. No replica los efectos
+        colaterales de una transición normal (no libera/asigna placa, no regenera consolidados/FUR, no
+        resuelve mandatario, no encola notificaciones): es una corrección puntual del campo `status`
+        para descartar radicaciones inválidas. Requiere el permiso `AdminTramiteAnular` (SuperAdmin
+        bypassa). La acción queda registrada en el historial de estados y en la bitácora del trámite
+        con estado anterior, usuario, fecha y hora.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  nullable: true
+                  description: Motivo de la anulación administrativa (libre, no obligatorio).
+      responses:
+        "200":
+          description: Trámite anulado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  previousStatus: { type: string }
+                  newStatus: { type: string }
+                  changedAt: { type: string, format: date-time }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteAnular." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Conflicto de concurrencia (row_version): recargue e intente de nuevo." }
+        "422": { description: "'aprobado' o 'revocado' como origen (excluidos por regla de negocio)." }
+
+  # ── Admin · Trámites · Reenviar validación de identidad (Feature #12155, HU #12161) ─────────────
+
+  /api/v1/admin/tramites/{id}/validaciones-identidad/{validationId}/reenviar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: validationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Reenvía la validación de identidad de un trámite, con correo opcional
+      operationId: adminTramiteReenviarValidacionIdentidad
+      security:
+        - bearerAuth: []
+      description: >
+        Reenvía la validación de identidad (biométrica) de una parte de un trámite fuera del gate
+        `not_draft` del wizard (`POST /instances/{id}/biometric`, solo borrador/subsanación) y sin
+        pasar por `POST /biometric-validations/{id}/resend` (exclusivo de la prevalidación standalone,
+        que rechaza validaciones ligadas a trámite). Pensado para trámites ya `entregado` con datos de
+        contacto incorrectos. Sin `email` en el body, reenvía al correo actual (mismo registro, token/
+        enlace nuevo, TTL 24h); con `email`, lo persiste y reenvía al nuevo destinatario. Rechaza (422)
+        si el trámite está en `aprobado`, `anulado` o `revocado` (estado que introducirá la Feature
+        #12156/HU #12165): en esos tres estados la identidad ya no es accionable. Aplica el mismo tope
+        de reenvíos y cooldown que la prevalidación standalone (429). Requiere el permiso
+        `AdminTramiteReenviarValidacion` (SuperAdmin bypassa). El reenvío queda registrado en el
+        historial del trámite y en la bitácora técnica de identidad (correo siempre enmascarado).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  nullable: true
+                  description: Nuevo correo destinatario (opcional). Omitido/vacío ⇒ reenvía al correo actual.
+      responses:
+        "200":
+          description: Reenvío completado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation: { $ref: "#/components/schemas/BiometricValidationDto" }
+                  captureUrl: { type: string }
+                  emailActualizado: { type: boolean }
+                  queued: { type: boolean }
+        "202":
+          description: Envío encolado (falla transitoria del proveedor); el worker reintenta.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation: { $ref: "#/components/schemas/BiometricValidationDto" }
+                  captureUrl: { type: string }
+                  emailActualizado: { type: boolean }
+                  queued: { type: boolean }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteReenviarValidacion." }
+        "404": { description: "Trámite o validación de identidad no encontrada." }
+        "409": { description: "La identidad ya está aprobada: revalidar exige una validación nueva." }
+        "422": { description: "El trámite está en 'aprobado', 'anulado' o 'revocado' (identidad no accionable)." }
+        "429": { description: "Tope de reenvíos agotado, o en cooldown entre reenvíos." }
+        "502": { description: "El proveedor de validación de identidad rechazó la solicitud." }
+        "503": { description: "El proveedor de validación de identidad no está disponible." }
+
+  # ── Admin · Trámites · Reasignar gestor (Feature #12155, HU #12162) ─────────────────────────────
+
+  /api/v1/admin/tramites/{id}/reasignar-gestor:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Reasigna el gestor responsable de un trámite a otro usuario disponible del tenant
+      operationId: adminTramiteReasignarGestor
+      security:
+        - bearerAuth: []
+      description: >
+        Cambia `AssignedToUserId` (gestor HOY responsable del trámite) a otro usuario DISPONIBLE del
+        mismo tenant, SIN tocar `CreatedByUserId` (quién radicó, auditoría inmutable). El destino debe
+        existir, pertenecer al tenant, estar activo y sin una suspensión temporal vigente; cualquier
+        otra combinación rechaza la operación (422, `gestor_no_disponible`) sin aplicar cambios.
+        Requiere el permiso `AdminTramiteReasignarGestor` (SuperAdmin bypassa). Queda registrado en la
+        bitácora del trámite (gestor anterior, gestor nuevo, usuario, fecha y hora); no toca
+        `CreatedByUserId` ni replica efectos colaterales de una transición normal (no libera/asigna
+        placa, no regenera consolidados/FUR).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                newAssignedToUserId:
+                  type: string
+                  format: uuid
+                  description: Id del usuario destino (debe estar en el listado de gestores disponibles).
+              required: [newAssignedToUserId]
+      responses:
+        "200":
+          description: Gestor reasignado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  previousAssignedToUserId: { type: string, format: uuid, nullable: true }
+                  newAssignedToUserId: { type: string, format: uuid }
+                  changedAt: { type: string, format: date-time }
+        "400": { description: "Falta el header X-Tenant-Id o el campo newAssignedToUserId." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteReasignarGestor." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Conflicto de concurrencia (row_version): recargue e intente de nuevo." }
+        "422": { description: "El usuario destino no existe, no pertenece al tenant, está inactivo o tiene una suspensión vigente (gestor_no_disponible)." }
+
+  /api/v1/admin/tramites/gestores-disponibles:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+    get:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Lista los gestores disponibles del tenant para el selector de reasignación
+      operationId: adminTramiteGestoresDisponibles
+      security:
+        - bearerAuth: []
+      description: >
+        Usuarios activos, no eliminados y sin suspensión vigente del tenant del header — alimenta el
+        selector de "Reasignar gestor" del dashboard admin (HU #12163). Mismo permiso que la acción de
+        reasignar: no reutiliza `GET /api/v1/security/users` (mezcla invitaciones pendientes, no filtra
+        por disponibilidad y está gateado por un permiso de administración de usuarios distinto).
+      responses:
+        "200":
+          description: Gestores disponibles del tenant.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    displayName: { type: string }
+                    email: { type: string, format: email }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteReasignarGestor." }
+
   # ── Admin · OT · Documentos del trámite de cliente (Feature #10701 / HU #10704 + HU #10706) ──
 
   /api/v1/admin/ot/client-procedures/{id}/documents:

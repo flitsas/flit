@@ -27,6 +27,9 @@ describe('buildTramitesGridLayout', () => {
       'propietario',
       'comprador',
       'tramite',
+      // HU #12183 — visible de salida: la prenda y la transformación no se ven en ninguna otra
+      // columna, y una marca que hay que activar a mano no informa a quien no sabe que existe.
+      'marcas',
       'secretaria',
     ]);
     // Fuera del default porque su dato viaja apilado dentro de `radicado` (fechas), `placa`
@@ -67,20 +70,21 @@ describe('buildTramitesGridLayout', () => {
 
   it('el orden del catálogo es el orden real de la tabla: primero el listado, luego los desgloses', () => {
     const keys = TRAMITES_COLUMNS.map((c) => c.key);
-    // Las 8 del listado van al frente, en el orden en que se leen de izquierda a derecha.
-    expect(keys.slice(0, 8)).toEqual([
+    // Las 9 del listado van al frente, en el orden en que se leen de izquierda a derecha.
+    expect(keys.slice(0, 9)).toEqual([
       'radicado',
       'placa',
       'propietario',
       'comprador',
       'tramite',
+      'marcas',
       'secretaria',
       'gestor',
       'fuente',
     ]);
     // Las visibles por defecto son un SUBCONJUNTO del grupo "Listado" —no todo el grupo— y se
     // leen en el mismo orden: es lo que garantiza que la cabecera no se reordene al ocultar una.
-    const listado = keys.slice(0, 8);
+    const listado = keys.slice(0, 9);
     expect(listado.filter((k) => DEFAULT_TRAMITES_VISIBLE_COLUMNS.includes(k))).toEqual([
       ...DEFAULT_TRAMITES_VISIBLE_COLUMNS,
     ]);
@@ -209,24 +213,29 @@ describe('buildTramitesColWidths', () => {
   });
 
   it('las columnas de dato atómico son de ancho FIJO: no crecen y el resto les cede su parte', () => {
-    // El default no trae ninguna fija, así que se mide sobre él MÁS `fuente` (etiqueta corta y
-    // conocida), que es de las que no ganan nada con más espacio.
+    // Se mide sobre el default MÁS `fuente` (etiqueta corta y conocida), que es de las que no ganan
+    // nada con más espacio. Desde la HU #12183 el default ya trae una fija —`marcas`, que son dos
+    // íconos de 20px—, así que el descuento esperado son las DOS más Acciones.
     const visibles = [...DEFAULT_TRAMITES_VISIBLE_COLUMNS, 'fuente'];
     const widths = buildTramitesColWidths(visibles);
     const orden = TRAMITES_COLUMNS.filter((c) => visibles.includes(c.key)).map((c) => c.key);
     const porClave = new Map(orden.map((key, index) => [key, widths[index]]));
     const defPorClave = new Map(TRAMITES_COLUMNS.map((c) => [c.key, c]));
 
-    // Fuente sale en px exactos (su `minPx`), sin porcentaje: no absorbe el sobrante.
-    expect(porClave.get('fuente')).toBe(`${defPorClave.get('fuente')!.minPx}px`);
-    expect(percentOf(porClave.get('fuente')!)).toBeNull();
+    // Fuente y marcas salen en px exactos (su `minPx`), sin porcentaje: no absorben el sobrante.
+    for (const fija of ['fuente', 'marcas']) {
+      expect(porClave.get(fija)).toBe(`${defPorClave.get(fija)!.minPx}px`);
+      expect(percentOf(porClave.get(fija)!)).toBeNull();
+    }
     // Acciones (estructural, no está en la preferencia) va última y también es fija.
     expect(widths[widths.length - 1]).toMatch(/^\d+px$/);
     // Las de texto sí reparten el 100% y descuentan, entre todas, exactamente lo que ocupa lo
     // fijo: la columna fija visible + Acciones.
     const flexibles = widths.filter((w) => percentOf(w) !== null);
     const fijoEsperado =
-      defPorClave.get('fuente')!.minPx + parseFloat(widths[widths.length - 1]);
+      defPorClave.get('fuente')!.minPx
+      + defPorClave.get('marcas')!.minPx
+      + parseFloat(widths[widths.length - 1]);
     expect(flexibles.reduce((sum, w) => sum + pxDiscountOf(w), 0)).toBeCloseTo(fijoEsperado, 0);
   });
 

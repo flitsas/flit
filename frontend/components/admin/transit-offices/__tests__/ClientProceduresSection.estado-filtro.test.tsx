@@ -140,12 +140,14 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
     expect(estado.getByRole("option", { name: "Pendiente OT" })).toBeInTheDocument();
     expect(estado.getByRole("option", { name: "Aprobado OT" })).toBeInTheDocument();
     expect(estado.getByRole("option", { name: "Rechazado OT" })).toBeInTheDocument();
+    // HU #12166 (Feature #12156) — Revocado se suma a los estados filtrables.
+    expect(estado.getByRole("option", { name: "Revocado OT" })).toBeInTheDocument();
 
     // Lista cerrada: cualquier estado nuevo tiene que añadirse aquí a conciencia.
     const valores = estado
       .getAllByRole("option")
       .map((o) => (o as HTMLOptionElement).value);
-    expect(valores).toEqual(["entregado", "aprobado", "rechazado", ""]);
+    expect(valores).toEqual(["entregado", "aprobado", "rechazado", "revocado", ""]);
   });
 
   // AC2 — la bandeja sigue abriendo por la cola de decisión: es el trabajo pendiente del organismo.

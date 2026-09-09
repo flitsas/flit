@@ -36,6 +36,12 @@ public sealed record ProcedureInstanceListRequest
     /// <summary>Código del tipo concreto de trámite, no la familia.</summary>
     public string? TipoCodigo { get; init; }
 
+    /// <summary>HU #12187 — texto libre transversal (radicado exacto; el resto por subcadena).</summary>
+    public string? Busqueda { get; init; }
+
+    /// <summary>HU #12187 — <c>true</c> = solo los marcados como prioritarios.</summary>
+    public bool? Prioritario { get; init; }
+
     /// <summary>
     /// Condiciones armadas con la gramática de Consultas (HU #12106). Llegan validadas contra
     /// <see cref="TramitesQueryFieldCatalog"/>; ver <see cref="TramitesQueryConditions"/>.
@@ -194,6 +200,8 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
             Modalidad = request.Modalidad,
             OrganismoTransito = request.OrganismoTransito,
             TipoCodigo = request.TipoCodigo,
+            Busqueda = request.Busqueda,
+            Prioritario = request.Prioritario,
             Condiciones = request.Condiciones,
         };
 
@@ -220,13 +228,21 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
 
+        // HU #12182 — misma marca de prenda que el listado sin filtros, y por el mismo camino: una
+        // consulta en lote. Las dos rutas comparten `ToSummary`, así que también tienen que
+        // compartir lo que le pasan; si esta se quedara sin la marca, el listado la perdería en
+        // cuanto el gestor aplicara cualquier filtro.
+        IReadOnlySet<Guid> conPrenda = await repo.ListInstanceIdsConPrendaVigenteAsync(
+            instances.Select(i => i.Id).ToList(), ct) ?? new HashSet<Guid>();
+
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
                 IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.CreatedByUserId),
-                firmaBaul))
+                firmaBaul,
+                conPrenda.Contains(e.Id)))
             .ToList();
 
         return (items, total);
@@ -261,6 +277,11 @@ public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRep
             Modalidad = request.Modalidad,
             OrganismoTransito = request.OrganismoTransito,
             TipoCodigo = request.TipoCodigo,
+            // La búsqueda y el marcado prioritario SÍ acotan las tarjetas: si la tabla dice «3
+            // resultados» para un texto y la tarjeta de borradores dice 40, la pantalla se
+            // contradice — que es justo el defecto que esta HU corrige.
+            Busqueda = request.Busqueda,
+            Prioritario = request.Prioritario,
             // Las condiciones SÍ viajan a los conteos: la tira de KPIs habla del universo que cumple
             // los filtros. Lo único que se descarta es el estado, arriba.
             Condiciones = request.Condiciones,

@@ -77,6 +77,23 @@ public interface IProcedureInstanceRepository
     Task<IReadOnlyList<ProcedureInstance>> ListWithSummaryGraphAsync(Guid? tenantId, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12182 — instancias, de entre las indicadas, con una decisión de prenda VIGENTE que sea un
+    /// hecho de gravamen. Alimenta la marca de prenda del listado.
+    ///
+    /// <para>Va en una consulta aparte y no como <c>Include</c> del grafo porque la decisión vive en
+    /// su propia tabla (<c>procedure_instance_prendas</c>) y la instancia no la navega. Una consulta
+    /// por listado, nunca por fila.</para>
+    ///
+    /// <para><b>Solo la VIGENTE, y solo si es un hecho.</b> Las filas están versionadas: mirarlas
+    /// todas diría «tiene prenda» de un trámite al que se le quitó. Y <c>omitir</c>/<c>sin_prenda</c>
+    /// son exactamente lo contrario a tenerla. Es el mismo predicado que usa la consulta de la
+    /// empresa (<c>CompanyQueryRepository</c>), a propósito: dos superficies que responden lo mismo
+    /// sobre el mismo trámite no pueden discrepar.</para>
+    /// </summary>
+    Task<IReadOnlySet<Guid>> ListInstanceIdsConPrendaVigenteAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el nombre (razón social) de cada tenant indicado, para la columna "Compañía" del
     /// listado multi-tenant del SuperAdmin (#1). Devuelve un mapa id→nombre; ids sin tenant se omiten.
     /// </summary>
@@ -506,6 +523,28 @@ public interface IProcedureInstanceRepository
     /// devolver cero — el mismo criterio que sigue el catálogo de Consultas.</para>
     /// </summary>
     Task<TramitesFilterOptions> GetFilterOptionsAsync(Guid? tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12162 (AC2) — evalúa al usuario destino de una reasignación de gestor: existencia,
+    /// pertenencia al tenant y disponibilidad (activo, sin suspensión vigente). <c>null</c> si el
+    /// usuario no existe en absoluto; con resultado no-null, el caller decide con
+    /// <see cref="ReadModels.GestorCandidate.IsAvailable"/>. Ver XML doc de
+    /// <see cref="ReadModels.GestorCandidate"/> para el porqué de reusar el mismo criterio de
+    /// pertenencia que el módulo Security en vez de una validación paralela.
+    /// </summary>
+    Task<ReadModels.GestorCandidate?> FindGestorCandidateAsync(
+        Guid userId, Guid tenantId, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12162 (AC-selector) — gestores DISPONIBLES (activos, no eliminados, sin suspensión vigente,
+    /// pertenecientes al tenant) para el selector de reasignación (HU #12163), ordenados por nombre
+    /// visible. Deliberadamente NO reutiliza <c>GET /api/v1/security/users</c>: ese endpoint mezcla
+    /// usuarios reales con invitaciones pendientes (ids que no son FK válidas de
+    /// <c>assigned_to_user_id</c>), no filtra por disponibilidad y está gateado por un permiso de
+    /// administración de usuarios distinto del de esta acción (<c>AdminTramiteReasignarGestor</c>).
+    /// </summary>
+    Task<IReadOnlyList<ReadModels.GestorOption>> ListAvailableGestoresAsync(
+        Guid tenantId, DateTimeOffset now, CancellationToken ct = default);
 }
 
 /// <summary>Opciones de filtro que salen de los datos del tenant, no de una lista fija.</summary>
@@ -539,6 +578,20 @@ public sealed record ProcedureInstanceStatusHistoryEntry(
     string? ChangedByName,
     string? Reason)
 {
+    /// <summary>
+    /// HU #12184 — razón social de la compañía a la que pertenecía quien ejecutó el movimiento.
+    ///
+    /// <para>No es el tenant del trámite, que ya se conoce y es el mismo en todas las filas: es
+    /// <b>quién hizo cada paso</b>. Un trámite lo abre una compañía y lo mueve, después, quien lo
+    /// revisa. Sin este dato el historial dice «Preparado · Laura Restrepo» y no distingue si Laura
+    /// es de la empresa dueña o del organismo.</para>
+    ///
+    /// <para><c>null</c> si el movimiento lo hizo un proceso automático, si el usuario ya no existe
+    /// o si no se le puede resolver compañía. Es opcional a propósito: los movimientos anteriores a
+    /// esta HU no la traen y el historial tiene que seguir leyéndose igual.</para>
+    /// </summary>
+    public string? ChangedByCompania { get; init; }
+
     /// <summary>
     /// Metadata jsonb crudo del evento. En eventos de migración V1→V2 conserva el actor REAL de V1
     /// (<c>usuario</c>/<c>usuario_rol</c>/<c>usuario_email</c>) y el marcador <c>origen=migration_v1</c>,

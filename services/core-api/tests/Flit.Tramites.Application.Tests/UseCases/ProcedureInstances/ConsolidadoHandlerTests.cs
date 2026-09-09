@@ -152,7 +152,12 @@ public sealed class ConsolidadoHandlerTests
             SizeBytes = 10,
             Sha256 = $"sha-{tipo}",
             StoragePath = path,
-            Source = tipo is "fur" or "certificado_identidad" or "certificado_identidad_vendedor" ? "system" : "user",
+            // HU #12158 (AC2) — "consolidado"/"consolidado_maestro" también son SISTEMA por defecto en
+            // este fixture genérico: la producción SIEMPRE los crea con Source="system" (ver
+            // GenerarConsolidadoHandler/GenerarConsolidadoMaestroHandler). Los tests que necesitan un
+            // consolidado Source="user" (protección AC2) usan AddAttachmentWithSource explícitamente.
+            Source = tipo is "fur" or "certificado_identidad" or "certificado_identidad_vendedor"
+                or "consolidado" or "consolidado_maestro" ? "system" : "user",
             UploadedAt = DateTimeOffset.UtcNow,
         });
     }
@@ -612,6 +617,72 @@ public sealed class ConsolidadoHandlerTests
         instance.ConsolidadoWizardVigente.Should().BeTrue();
         _storage.Saved.Should().NotBeEmpty();
         await _repo.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    // ── HU #12158 (AC2) — un consolidado Source="user" no se sobrescribe con la regeneración
+    // automática/del gestor, ni siquiera con force=true. Solo bypassSourceUserProtection=true (la
+    // acción explícita "Limpiar consolidado" del admin, HU #12158 AC1) puede descartarlo. ──────────
+
+    [Fact]
+    public async Task HU12158_AC2_ConsolidadoSourceUser_ForceTrue_NoLoSobrescribe()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        AddAttachmentWithSource(instance, "consolidado", "consolidado_user.pdf", "%PDF-cons-user", "user", DateTimeOffset.UtcNow);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, userId: null, force: true, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeFalse("el consolidado Source=\"user\" está protegido de la regeneración automática");
+        result.Document.Filename.Should().Be("consolidado_user.pdf");
+        _storage.Saved.Should().BeEmpty("no se debe tocar el almacenamiento cuando la protección aplica");
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU12158_AC2_ConsolidadoSourceUser_SinForce_TampocoLoSobrescribe()
+    {
+        // Regeneración "normal" (sin force, ConsolidadoWizardVigente=false): el consolidado del
+        // gestor/sistema por defecto habría refundido el expediente; con Source="user" no debe hacerlo.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        AddAttachmentWithSource(instance, "consolidado", "consolidado_user.pdf", "%PDF-cons-user", "user", DateTimeOffset.UtcNow);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeFalse();
+        _storage.Saved.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HU12158_AC1_BypassSourceUserProtection_ForceTrue_SiLoSobrescribe()
+    {
+        // La acción explícita "Limpiar consolidado" (LimpiarConsolidadoHandler) llama con
+        // bypassSourceUserProtection=true: DEBE poder descartar un consolidado Source="user".
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        AddAttachmentWithSource(instance, "consolidado", "consolidado_user.pdf", "%PDF-cons-user", "user", DateTimeOffset.UtcNow);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(
+            id, tenantId, userId: null, force: true, bypassSourceUserProtection: true, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
+        instance.Attachments.Should().ContainSingle(a => a.Tipo == "consolidado" && a.Source == "system");
+        instance.Attachments.Should().NotContain(a => a.Filename == "consolidado_user.pdf");
     }
 
     [Fact]

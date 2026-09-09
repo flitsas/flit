@@ -27,19 +27,62 @@ const MODALIDAD_SHORT: Record<ProcedureFamily, string> = {
 };
 
 /**
- * Qué rotula la fila del listado.
+ * Qué rotula la fila del listado: el nombre del TIPO, no el de su familia.
  *
- * En MATRICULAS y TRASPASO la familia identifica bien el trámite. En OTROS no: agrupa quince tipos
- * —blindaje, cambio de color, levantamiento de prenda, duplicado de tarjeta…— que se veían los tres
- * igual, «Otros», sin forma de distinguirlos sin abrirlos. Ahí manda el nombre del tipo.
+ * <p>HU #12181 — antes el tipo solo mandaba en OTROS, y en las otras dos familias se rotulaba
+ * «Matrícula» o «Traspaso». Pero la familia tampoco identifica ahí: `TRASPASO_STANDARD` y
+ * `TRASPASO_UNILATERAL` son trámites distintos —en el unilateral el comprador ni siquiera
+ * comparece— y los dos se leían «Traspaso». El nombre del tipo es lo que el gestor reconoce, en
+ * las tres familias.</p>
  *
- * Respaldo a la familia si el expediente viene de un backend anterior al campo, para que la celda
- * nunca quede vacía.
+ * <p>Respaldo a la familia si el tipo no está parametrizado o el expediente viene de un backend
+ * anterior al campo: la celda nunca queda vacía, y una fila sin tipo se sigue pintando.</p>
  */
 export function tramiteLabel(item: InstanceSummary): string {
-  const familia = MODALIDAD_SHORT[item.modalidad];
-  if (item.modalidad !== 'OTROS') return familia;
-  return item.tipoNombre?.trim() || familia;
+  return item.tipoNombre?.trim() || MODALIDAD_SHORT[item.modalidad] || '—';
+}
+
+/**
+ * HU #12183 — las dos marcas informativas de la fila, en el orden en que se pintan.
+ *
+ * <p>Son <b>dos</b> y solo dos: prenda y transformación. El borrador del requerimiento pedía «un
+ * ícono por tipo de trámite», que serían quince y ninguno diría nada que la columna «Trámite» no
+ * diga ya con palabras. Estas dos marcan lo que NO se ve en ninguna otra columna.</p>
+ *
+ * <p>El rótulo no es decorativo: los dos íconos son círculos de color —verde y azul— y el color no
+ * puede ser el único portador del significado. Va como `alt` de la imagen, así que un lector de
+ * pantalla lee «Con prenda» y quien pasa el ratón ve el mismo texto.</p>
+ *
+ * <p>Los SVG traen su propio círculo de color: se pintan enteros, sin pastilla ni recoloreado por
+ * CSS, igual que los íconos de estado.</p>
+ */
+export const MARCAS_TRAMITE = [
+  {
+    id: 'prenda',
+    label: 'Con prenda',
+    src: '/assets/marcas/prenda.svg',
+    lee: (item: InstanceSummary) => item.tienePrenda === true,
+  },
+  {
+    id: 'transformacion',
+    label: 'Con transformación',
+    src: '/assets/marcas/transformacion.svg',
+    lee: (item: InstanceSummary) => item.tieneTransformacion === true,
+  },
+] as const;
+
+/** Marcas activas de una fila, en orden. Vacío si no tiene ninguna. */
+export function marcasDe(item: InstanceSummary): readonly (typeof MARCAS_TRAMITE)[number][] {
+  return MARCAS_TRAMITE.filter((marca) => marca.lee(item));
+}
+
+/**
+ * Las marcas en TEXTO, para el Excel. Un archivo no puede llevar el ícono, y sin esta columna el
+ * dato desaparecería justo en el sitio donde nadie puede contrastarlo con la pantalla.
+ */
+export function marcasLabel(item: InstanceSummary): string {
+  const activas = marcasDe(item);
+  return activas.length > 0 ? activas.map((m) => m.label.replace('Con ', '')).join(', ') : '';
 }
 
 /**

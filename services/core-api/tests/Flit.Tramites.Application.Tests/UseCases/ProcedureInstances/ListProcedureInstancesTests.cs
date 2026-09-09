@@ -491,6 +491,56 @@ public sealed class ListProcedureInstancesTests
         result[0].GestorNombre.Should().BeNull();
     }
 
+    // ── HU #12162 — colisión terminológica de "gestor": AssignedToUserId manda sobre CreatedByUserId ──
+
+    [Fact]
+    public async Task HandleAsync_TramiteReasignado_GestorNombreEsElAsignadoNoElCreador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var creador = Guid.NewGuid();
+        var asignado = Guid.NewGuid();
+        var instance = Traspaso(tenantId);
+        instance.CreatedByUserId = creador;
+        instance.AssignedToUserId = asignado;
+
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string>
+            {
+                [creador] = "Quien Radicó",
+                [asignado] = "Gestor Reasignado",
+            });
+
+        var result = await _sut.HandleAsync(tenantId, ct);
+
+        result[0].GestorNombre.Should().Be("Gestor Reasignado");
+        // El lote de nombres se resuelve por el id EFECTIVO (AssignedToUserId), no por CreatedByUserId:
+        // no hace falta pedir el nombre del creador para esta fila.
+        await _repo.Received(1).GetUserDisplayNamesAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Contains(asignado)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_TramiteNuncaReasignado_GestorNombreCaeAlCreador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var creador = Guid.NewGuid();
+        var instance = Traspaso(tenantId);
+        instance.CreatedByUserId = creador;
+        instance.AssignedToUserId = null;
+
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [creador] = "Quien Radicó" });
+
+        var result = await _sut.HandleAsync(tenantId, ct);
+
+        result[0].GestorNombre.Should().Be("Quien Radicó");
+    }
+
     [Theory]
     [InlineData(null, false, TramiteFuente.Dashboard)]
     [InlineData("ict", false, TramiteFuente.Integracion)]

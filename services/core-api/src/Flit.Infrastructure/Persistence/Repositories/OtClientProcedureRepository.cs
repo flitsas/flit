@@ -79,6 +79,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 Status = p.Status,
                                 Familia = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                                 PlateFlowStatus = p.PlateFlowStatus,
+                                PlateAssignedAt = p.PlateAssignedAt,
+                                PlateUpdatedAt = p.PlateUpdatedAt,
                                 // HU #10804 — soat_estado por fila (para ocultar Aprobar/Rechazar en el frontend
                                 // hasta que la placa esté 'asignado' con SOAT 'vigente'). Lectura cross-tenant
                                 // permitida bajo el 'SET LOCAL row_security = off' de ExecuteCrossTenantReadAsync.
@@ -210,7 +212,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 // Sin grants no hay bandeja que contar: todo cero, y sin pegarle a la base.
                 if (grantedClientTenantIds.Count == 0)
                 {
-                    return (OtBandejaCounters?)new OtBandejaCounters(0, 0, 0, 0, 0);
+                    return (OtBandejaCounters?)new OtBandejaCounters(0, 0, 0, 0, 0, 0);
                 }
 
                 return await ExecuteCrossTenantReadAsync(
@@ -243,6 +245,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         var aprobados = 0;
                         var rechazados = 0;
                         var sinGestion = 0;
+                        var revocados = 0;
 
                         foreach (var fila in porClase)
                         {
@@ -279,6 +282,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             {
                                 rechazados += fila.Total;
                             }
+
+                            // HU #12166/#12168 (Feature #12156) — Aprobados que el OT revocó.
+                            if (string.Equals(fila.Status, TramiteEstado.Revocado, StringComparison.Ordinal))
+                            {
+                                revocados += fila.Total;
+                            }
                         }
 
                         return (OtBandejaCounters?)new OtBandejaCounters(
@@ -286,7 +295,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             conPlacaAsignada,
                             aprobados,
                             rechazados,
-                            sinGestion);
+                            sinGestion,
+                            revocados);
                     },
                     cancellationToken).ConfigureAwait(false);
             },
@@ -720,8 +730,144 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 // (evita registrar aristas que la máquina no contempla). La trazabilidad de la placa queda
                 // en plate_range_details (reserva) y en el field_value 'plate'.
                 entity.PlateFlowStatus = PlateFlowStatus.Asignado;
+                // HU #12165/#12167 (Feature #12156) — momento de la asignación ORIGINAL: base de la
+                // ventana de 1 hora de UpdatePlateAsync. UpdatedAt no sirve (lo pisa cualquier otra
+                // escritura); esta columna solo la toca este método.
+                entity.PlateAssignedAt = now;
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                var mapped = Map(entity);
+                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
+                return PlateAssignmentOutcome.Ok(enriched[0]);
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    // HU #12167 (Feature #12156) — el OT corrige la placa dentro de la ventana de 1 hora desde
+    // plate_assigned_at, una única vez (plate_updated_at nulo). NO reutiliza AssignPlateAsync: ese
+    // método exige PlateFlowStatus.Preasignado (la placa aún no existe); aquí la placa YA está asignada
+    // (Asignado o incluso ya entregado/aprobado — la HU no acota el sub-estado, solo la ventana de
+    // tiempo) y solo se corrige el valor.
+    public async Task<PlateAssignmentOutcome> UpdatePlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string plate,
+        Guid? changedBy,
+        string source,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(plate))
+        {
+            return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.MissingPlate);
+        }
+
+        var accessible = await ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeId => FindAccessibleProcedureAsync(transitOfficeId, procedureInstanceId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        if (accessible is null)
+        {
+            return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.ProcedureNotAccessible);
+        }
+
+        // Misma regla global de AssignPlateAsync: una placa no puede estar viva en dos trámites a la vez.
+        var enUso = await FindProcedureHoldingPlateAsync(plate, procedureInstanceId, cancellationToken)
+            .ConfigureAwait(false);
+        if (enUso is not null)
+        {
+            return PlateAssignmentOutcome.Fail(
+                PlateAssignmentFailure.PlateInUseByAnotherProcedure,
+                $"La placa {plate.Trim().ToUpperInvariant()} ya está registrada en el trámite {enUso.ReferenceNumber} ({enUso.Status}). No se puede asignar a otro trámite mientras ese siga abierto.");
+        }
+
+        return await ExecuteInClientTenantScopeAsync(
+            accessible.ClientTenantId,
+            async () =>
+            {
+                var entity = await _context.ProcedureInstances
+                    .FirstOrDefaultAsync(
+                        p => p.Id == procedureInstanceId
+                            && p.TenantId == accessible.ClientTenantId
+                            && p.DeletedAt == null,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (entity is null)
+                {
+                    return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.ProcedureNotAccessible);
+                }
+
+                var now = DateTimeOffset.UtcNow;
+
+                // AC2 — sin asignación previa registrada, o pasada la hora: rechaza.
+                if (entity.PlateAssignedAt is not { } assignedAt || now - assignedAt > TimeSpan.FromHours(1))
+                {
+                    return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.PlateUpdateWindowExpired);
+                }
+
+                // AC3 — una única oportunidad, aunque siga dentro de la hora.
+                if (entity.PlateUpdatedAt is not null)
+                {
+                    return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.PlateUpdateAlreadyUsed);
+                }
+
+                var previousPlate = entity.Plate;
+                var normalizedPlate = plate.Trim().ToUpperInvariant();
+
+                // Mismo orden que AssignPlateAsync: escribe field_values y persiste ANTES de tocar la
+                // instancia (el trigger de denormalización dispara tr_procedure_instances_row_version;
+                // recargar después evita el DbUpdateConcurrencyException del token ya obsoleto).
+                var fv = await _context.ProcedureInstanceFieldValues
+                    .FirstOrDefaultAsync(
+                        f => f.ProcedureInstanceId == procedureInstanceId && f.FieldKey == "plate",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (fv is null)
+                {
+                    _context.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+                    {
+                        Id = Guid.NewGuid(),
+                        ProcedureInstanceId = procedureInstanceId,
+                        TenantId = accessible.ClientTenantId,
+                        FieldKey = "plate",
+                        ValueText = normalizedPlate,
+                    });
+                }
+                else
+                {
+                    fv.ValueText = normalizedPlate;
+                }
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await _context.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
+
+                var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken).ConfigureAwait(false);
+                entity.PlateUpdatedAt = now;
+                entity.UpdatedAt = now;
+                entity.UpdatedBy = resolvedChangedBy;
+
+                // AC1 — historial de la corrección (placa anterior, nueva, usuario, fecha, hora). No hay
+                // transición de status: se registra como evento de bitácora (mismo mecanismo del resto
+                // del feature), no como fila de procedure_instance_status_history.
+                _context.ProcedureInstanceEvents.Add(new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = accessible.ClientTenantId,
+                    ProcedureInstanceId = procedureInstanceId,
+                    Tipo = "placa_corregida_ot",
+                    CreatedAt = now,
+                    CreatedBy = resolvedChangedBy,
+                    Payload = JsonSerializer.Serialize(new
+                    {
+                        placa_anterior = previousPlate,
+                        placa_nueva = normalizedPlate,
+                        ot_tenant_id = otTenantId,
+                        source,
+                    }),
+                });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 var mapped = Map(entity);
@@ -805,6 +951,99 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             cancellationToken).ConfigureAwait(false);
     }
 
+    // HU #12166 (Feature #12156) — el OT deshace su propia aprobación. NO reutiliza TransitionAsync:
+    // ese método asume la decisión 'entregado→aprobado|rechazado' (mira PlateRangeDetails en estado
+    // Preasignada, que ya no existe para un trámite Aprobado — la placa quedó Utilizada al aprobar) y
+    // exige PlateFlowStatus.PermiteDecisionOt, que no aplica aquí. 'aprobado→revocado' es una
+    // transición propia con su propio esqueleto, espejo estructural de TransitionAsync/RevokePlateAsync.
+    public async Task<OtClientProcedure?> RevokeAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string? reason,
+        Guid? changedBy,
+        string source,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default)
+    {
+        var accessible = await ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            transitOfficeId => FindAccessibleProcedureAsync(transitOfficeId, procedureInstanceId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        if (accessible is null)
+        {
+            return null;
+        }
+
+        return await ExecuteInClientTenantScopeAsync(
+            accessible.ClientTenantId,
+            async () =>
+            {
+                var entity = await _context.ProcedureInstances
+                    .FirstOrDefaultAsync(
+                        p => p.Id == procedureInstanceId
+                            && p.TenantId == accessible.ClientTenantId
+                            && p.DeletedAt == null,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (entity is null)
+                {
+                    return null;
+                }
+
+                var fromStatus = entity.Status;
+
+                // AC2 (HU #12166) — única transición de la máquina desde 'aprobado' es a 'revocado'; si
+                // el trámite ya no está en 'aprobado' (o cualquier otro estado), IsValidTransition
+                // rechaza sin necesidad de comparar contra la constante directamente.
+                if (!TramiteStateMachine.IsValidTransition(fromStatus, TramiteEstado.Revocado))
+                {
+                    return null;
+                }
+
+                var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken)
+                    .ConfigureAwait(false);
+                var now = DateTimeOffset.UtcNow;
+                entity.Status = TramiteEstado.Revocado;
+                entity.UpdatedAt = now;
+                entity.UpdatedBy = resolvedChangedBy;
+
+                // AC1 — el FUR/certificados vigentes quedan como históricos: visibles, no borrados. La
+                // placa se libera SIN tocar plate_range_details: 'revocado' ya está en
+                // EstadosQueLiberanPlaca, y FindProcedureHoldingPlateAsync (el chequeo real de "una
+                // placa no puede estar viva en dos trámites") filtra por ese conjunto.
+                var attachments = await _context.ProcedureInstanceAttachments
+                    .Where(a => a.ProcedureInstanceId == procedureInstanceId && !a.IsHistorico)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                foreach (var attachment in attachments)
+                {
+                    attachment.IsHistorico = true;
+                }
+
+                _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = accessible.ClientTenantId,
+                    ProcedureInstanceId = entity.Id,
+                    FromStatus = fromStatus,
+                    ToStatus = TramiteEstado.Revocado,
+                    ChangedAt = now,
+                    ChangedBy = resolvedChangedBy,
+                    Reason = reason,
+                    Metadata = BuildStatusHistoryMetadata(otTenantId, source, reason, items: null),
+                });
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                var mapped = Map(entity);
+                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
+                return enriched[0];
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<OtClientProcedure?> FindAccessibleProcedureAsync(
         Guid transitOfficeId,
         Guid procedureInstanceId,
@@ -837,6 +1076,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         // del rechazo descartaría causales válidas por creerlas de otro proceso.
                         p.ProcedureType != null ? p.ProcedureType.Family : "",
                         p.PlateFlowStatus,
+                        p.PlateAssignedAt,
+                        p.PlateUpdatedAt,
                         p.TransitOfficeId,
                         p.CreatedAt,
                         p.SubmittedAt,
@@ -915,6 +1156,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     Status = mapped.Status,
                     Familia = mapped.Familia,
                     PlateFlowStatus = mapped.PlateFlowStatus,
+                    PlateAssignedAt = mapped.PlateAssignedAt,
+                    PlateUpdatedAt = mapped.PlateUpdatedAt,
                     // HU #10804 — soat_estado también en el detalle (mismo criterio de visibilidad).
                     SoatEstado = Field(fields, Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey),
                     // HU #10805 — dígito de preferencia también en el detalle.
@@ -977,6 +1220,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string Status,
         string Familia,
         string? PlateFlowStatus,
+        DateTimeOffset? PlateAssignedAt,
+        DateTimeOffset? PlateUpdatedAt,
         Guid? TransitOfficeId,
         DateTimeOffset CreatedAt,
         DateTimeOffset? SubmittedAt,
@@ -1387,6 +1632,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Status = entity.Status,
         Familia = entity.ProcedureType != null ? entity.ProcedureType.Family : "",
         PlateFlowStatus = entity.PlateFlowStatus,
+        PlateAssignedAt = entity.PlateAssignedAt,
+        PlateUpdatedAt = entity.PlateUpdatedAt,
         TransitOfficeId = entity.TransitOfficeId,
         CreatedAt = entity.CreatedAt,
         SubmittedAt = entity.SubmittedAt,

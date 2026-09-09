@@ -2194,7 +2194,145 @@ export const tramitesClient = {
       `/api/v1/tramites/instances/${instanceId}/cancelar-subsanacion`,
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
+
+  // ── Admin · Trámites · Gestión avanzada (Feature #12155, HU #12163) ──────────────────
+  // Los 6 endpoints administrativos de HU #12158-#12162, todos gateados por permiso en el
+  // BACKEND (SuperAdmin bypassa). El frontend no repite esa validación aquí: solo condiciona la
+  // VISIBILIDAD del ítem de menú con el claim `permissions` del JWT (ver
+  // lib/tramites/admin-tramite-permissions.ts + hooks/usePermissions) — si una llamada se cuela sin
+  // el slug, el backend sigue respondiendo 403.
+
+  /** HU #12158 — descarta el consolidado vigente (aunque lo haya cargado un admin) y lo regenera. */
+  adminLimpiarConsolidado: (instanceId: string, tenantId?: string) =>
+    request<ProcedureAttachment>(
+      `/api/v1/admin/tramites/${instanceId}/consolidado/limpiar`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  /**
+   * HU #12158 — registra un PDF externo como el consolidado del trámite (Source="user"). Multipart
+   * (campo `file`): NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
+   * `analyzeDocument`/`analyzeBatch` de este archivo.
+   */
+  adminCargarConsolidado: async (
+    instanceId: string,
+    file: File,
+    tenantId?: string,
+  ): Promise<ProcedureAttachment> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(
+      apiUrl(`/api/v1/admin/tramites/${instanceId}/consolidado/cargar`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as ProcedureAttachment;
+  },
+
+  /** HU #12159 — cambia `status` sin restricciones de flujo (rechaza 422 si origen/destino es 'aprobado'). */
+  adminCambiarEstado: (
+    instanceId: string,
+    toStatus: string,
+    reason: string | null,
+    tenantId?: string,
+  ) =>
+    request<AdminCambiarEstadoResult>(
+      `/api/v1/admin/tramites/${instanceId}/estado`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ toStatus, reason }),
+      },
+    ),
+
+  /** HU #12160 — anula el trámite desde cualquier estado (rechaza 422 si es 'aprobado' o 'revocado'). */
+  adminAnular: (instanceId: string, reason: string | null, tenantId?: string) =>
+    request<AdminAnularResult>(
+      `/api/v1/admin/tramites/${instanceId}/anular`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ reason }),
+      },
+    ),
+
+  /** HU #12161 — reenvía la validación de identidad (biométrica) fuera del gate del wizard. */
+  adminReenviarValidacionIdentidad: (
+    instanceId: string,
+    validationId: string,
+    email: string | null,
+    tenantId?: string,
+  ) =>
+    request<AdminReenviarValidacionResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/${validationId}/reenviar`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ email }),
+      },
+    ),
+
+  /** HU #12162 — reasigna `AssignedToUserId` a otro gestor DISPONIBLE del mismo tenant. */
+  adminReasignarGestor: (instanceId: string, newAssignedToUserId: string, tenantId?: string) =>
+    request<AdminReasignarGestorResult>(
+      `/api/v1/admin/tramites/${instanceId}/reasignar-gestor`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ newAssignedToUserId }),
+      },
+    ),
+
+  /** HU #12162 (AC-selector) — gestores DISPONIBLES del tenant para el selector de reasignación. */
+  adminListGestoresDisponibles: (tenantId?: string) =>
+    request<GestorOption[]>(
+      '/api/v1/admin/tramites/gestores-disponibles',
+      { headers: tenantHeader(tenantId) },
+    ),
 };
+
+/** HU #12159 — resultado del cambio de estado administrativo (espejo de `AdminCambiarEstadoResult`). */
+export interface AdminCambiarEstadoResult {
+  id: string;
+  previousStatus: string;
+  newStatus: string;
+  changedAt: string;
+}
+
+/** HU #12160 — resultado de la anulación administrativa (mismo shape que el cambio de estado). */
+export interface AdminAnularResult {
+  id: string;
+  previousStatus: string;
+  newStatus: string;
+  changedAt: string;
+}
+
+/** HU #12161 — resultado del reenvío administrativo de validación de identidad. */
+export interface AdminReenviarValidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string;
+  emailActualizado: boolean;
+  /** `true` = 202 Accepted (falla transitoria del proveedor; el worker reintenta). */
+  queued: boolean;
+}
+
+/** HU #12162 — resultado de la reasignación administrativa de gestor. */
+export interface AdminReasignarGestorResult {
+  id: string;
+  previousAssignedToUserId: string | null;
+  newAssignedToUserId: string;
+  changedAt: string;
+}
+
+/** HU #12162 (AC-selector) — candidato del selector de reasignación (espejo de `GestorOption`). */
+export interface GestorOption {
+  id: string;
+  displayName: string;
+  email: string;
+}
 
 /** N 03 — copy UX por código de error del endpoint de transición (title del ProblemDetails). */
 const TRANSITION_ERROR_COPY: Record<string, string> = {

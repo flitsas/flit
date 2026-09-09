@@ -10,9 +10,9 @@ allowBuilds:
 # ESTE es el sitio de los overrides. pnpm 11 ya NO lee el campo `pnpm` de package.json, así que
 # escribirlos allí no hace nada y solo avisa por consola. Si un override no surte efecto, mirar aquí.
 #
-# next pinnea sharp por debajo del parche (CVE libvips). Forzar parche hasta que Next actualice.
-#   Ampliado 2026-09-08: GHSA-rgj7-g3m4-5g8c (vulnerabilidades de libheif) exige >=0.35.4, asi que
-#   0.35.3 pasó a reportarse con severidad alta y rompia `dependency-audit`. Se sube a 0.35.4.
+# next@16.3.4 ya pide sharp ^0.35.4 (GHSA-rgj7-g3m4-5g8c, vulnerabilidades de libheif en <0.35.4),
+#   pero el override de abajo venía fijado en 0.35.3 desde el parche anterior (next@16.2.x pedía
+#   sharp ^0.34.5, CVE de libvips) y seguía ganándole a la resolución normal. Se sube a 0.35.4.
 # next@16.2.x pinnea postcss 8.4.31 (GHSA-6g55-p6wh-862q). El aviso se amplió después: la corrección
 #   de la serie 8.5.x era incompleta y exige >=8.5.23, así que 8.5.22 sigue reportando el aviso
 #   moderado. Se sube a 8.5.23, verificado con build de producción del frontend en verde.

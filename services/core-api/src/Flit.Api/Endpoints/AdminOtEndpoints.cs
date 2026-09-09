@@ -7,6 +7,7 @@ using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.RevokeOtClientProcedure;
 using Flit.Admin.Application.OtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
@@ -197,6 +198,15 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapPost("/client-procedures/{id:guid}/revoke", RevokeClientProcedureAsync)
+            .WithName("AdminOtRevokeClientProcedure")
+            .WithSummary("Revoca un trámite Aprobado de un cliente OT (HU #12166): libera la placa y habilita re-radicar")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         group.MapPost("/client-procedures/{id:guid}/consolidado", GenerateClientProcedureConsolidadoAsync)
             .WithName("AdminOtGenerateClientProcedureConsolidado")
@@ -1408,6 +1418,52 @@ public static class AdminOtEndpoints
             RejectOtClientProcedureStatus.ValidationFailed => Results.Json(
                 new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
                 statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Ok(result.Procedure),
+        };
+    }
+
+    private static async Task<IResult> RevokeClientProcedureAsync(
+        Guid id,
+        HttpContext httpContext,
+        RevokeOtClientProcedureRequest? request,
+        RevokeOtClientProcedureHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new RevokeOtClientProcedureCommand
+        {
+            OtTenantId = tenantId,
+            ProcedureInstanceId = id,
+            RevokedBy = ResolveUserId(httpContext.User),
+            Reason = request?.Reason,
+            TransitOfficeId = scopedOfficeId,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            RevokeOtClientProcedureStatus.NotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            RevokeOtClientProcedureStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
+            RevokeOtClientProcedureStatus.QuipuxReadOnly => Results.Json(
+                new { error = "QUIPUX_READONLY" },
+                statusCode: StatusCodes.Status403Forbidden),
             _ => Results.Ok(result.Procedure),
         };
     }
