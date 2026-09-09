@@ -147,18 +147,16 @@ describe("Bandeja OT — la barra de filtros del listado de trámites (HU #12218
     expect(screen.queryByLabelText(/Filtrar por VIN/)).not.toBeInTheDocument();
   });
 
-  it("AC4 — el borrador no mueve la bandeja hasta pulsar Aplicar", async () => {
+  it("la búsqueda se aplica sola tras la pausa, sin pasar por Aplicar", async () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByText("RAD-0001");
-    const llamadasAntes = vi.mocked(searchOtClientProcedures).mock.calls.length;
 
     await user.type(screen.getByLabelText("Buscar en la bandeja de trámites"), "ABC");
-    expect(vi.mocked(searchOtClientProcedures).mock.calls.length).toBe(llamadasAntes);
 
-    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
-    await user.click(screen.getByRole("button", { name: /^Aplicar$/ }));
-
+    // Igual que la caja del listado del gestor: la misma caja en las dos pantallas tiene que
+    // responder igual. Obligar aquí a abrir «Filtros» y pulsar «Aplicar» era una diferencia que
+    // solo se descubría usándola.
     await waitFor(() =>
       expect(searchOtClientProcedures).toHaveBeenCalledWith(
         expect.objectContaining({ busqueda: "ABC" }),
@@ -166,6 +164,46 @@ describe("Bandeja OT — la barra de filtros del listado de trámites (HU #12218
         { transitOfficeId: OT_ID },
       ),
     );
+  });
+
+  it("AC4 — una condición en borrador no mueve la bandeja hasta pulsar Aplicar", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([
+      {
+        id: "placa",
+        label: "Placa",
+        kind: "texto",
+        group: "Vehículo",
+        operators: ["es_alguno", "contiene"],
+        options: [],
+        hint: null,
+        admiteLista: true,
+      },
+    ]);
+    renderSection();
+    await screen.findByText("RAD-0001");
+
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+    await user.click(
+      within(screen.getByTestId("ot-bandeja-filtros-campos")).getByRole("button", { name: "Placa" }),
+    );
+    await user.type(screen.getByRole("textbox"), "ABC123");
+    await user.click(screen.getByTestId("ot-bandeja-filtros-aplicar-placa"));
+
+    // La condición ya está en el panel, pero la bandeja NO se ha recargado con ella.
+    const llamadasAntes = vi.mocked(searchOtClientProcedures).mock.calls.length;
+    expect(
+      vi.mocked(searchOtClientProcedures).mock.calls.every((c) => c[0]?.condiciones === undefined),
+    ).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /^Aplicar$/ }));
+
+    await waitFor(() => {
+      expect(vi.mocked(searchOtClientProcedures).mock.calls.length).toBeGreaterThan(llamadasAntes);
+      expect(vi.mocked(searchOtClientProcedures).mock.calls.at(-1)?.[0]?.condiciones).toEqual([
+        expect.objectContaining({ fieldId: "placa", values: ["ABC123"] }),
+      ]);
+    });
   });
 
   it("AC3 — un chip dice qué está filtrando y quitarlo recarga sin ese filtro", async () => {
@@ -338,8 +376,6 @@ describe("Bandeja OT — descarga a Excel (HU #12220)", () => {
     await screen.findByText("RAD-0001");
 
     await user.type(screen.getByLabelText("Buscar en la bandeja de trámites"), "ABC");
-    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
-    await user.click(screen.getByRole("button", { name: /^Aplicar$/ }));
     await waitFor(() =>
       expect(searchOtClientProcedures).toHaveBeenCalledWith(
         expect.objectContaining({ busqueda: "ABC" }),

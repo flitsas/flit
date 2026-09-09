@@ -551,6 +551,20 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     return () => controller.abort();
   }, [transitOfficeId]);
 
+  // El respiro tras la última tecla. La búsqueda se aplica SOLA, igual que en el listado del
+  // gestor: la caja se ve idéntica en las dos pantallas y tiene que responder igual — obligar aquí
+  // a abrir «Filtros» y pulsar «Aplicar» para que surtiera efecto era la clase de diferencia que
+  // solo se descubre probando. 350 ms es el rango en que una pausa se lee como «terminé de
+  // escribir» sin que la tabla se sienta perezosa.
+  useEffect(() => {
+    // El setState va dentro del temporizador, no en el cuerpo del efecto: es diferido.
+    const id = setTimeout(() => {
+      setBusquedaAplicada(search);
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(id);
+  }, [search]);
+
   // HU #12218 — catálogo de campos filtrables. Degrada con elegancia (AC8): si no carga, la
   // bandeja se pinta igual con su listado y el panel ofrece reintentar. Nunca bloquea el render.
   useEffect(() => {
@@ -1299,41 +1313,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         </div>
       )}
       {/*
-        Cabecera de trabajo (HU #12218): la tira de contadores ocupa el ancho y debajo va la MISMA
-        fila de controles que el listado del gestor —búsqueda, Periodo, Filtros, Columnas y
-        Exportar—. Antes había aquí un botón «Búsqueda avanzada» que desplegaba una tarjeta con
-        ocho campos sueltos: ocupaba media pantalla en reposo y no se parecía en nada a la barra
-        que el mismo producto ya usa al otro lado del trámite.
-      */}
-      <div className="flex items-stretch gap-3">
-        <div className="min-w-0 flex-1">
-          <OtBandejaCountersStrip
-            counters={counters}
-            selected={contadorActivo}
-            onSelect={handleContadorSelect}
-            loading={status === "loading"}
-          />
-        </div>
-        {/* Actualizar, el mismo gesto que el listado del gestor: la bandeja cambia por lo que
-            hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
-            perder los filtros puestos. */}
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={status === "loading"}
-          aria-label="Actualizar la bandeja de trámites"
-          title="Actualizar"
-          className="flex w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl border text-sm font-semibold leading-tight transition hover:bg-[#557EFF]/10 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-          style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${status === "loading" ? "animate-spin" : ""}`}
-            aria-hidden="true"
-          />
-          <span aria-hidden="true">Actualizar</span>
-        </button>
-      </div>
+        Cabecera de trabajo (HU #12218): PRIMERO la fila de controles y después la tira de
+        contadores, el mismo orden que el listado del gestor («tabs + filtros ANTES de KPIs», la
+        convención de flit-tramites-chrome). Los controles son con lo que se empieza a trabajar; los
+        contadores describen lo que hay. Con la fila debajo, buscar quedaba escondido tras un bloque
+        de seis tarjetas.
 
+        Antes había aquí un botón «Búsqueda avanzada» que desplegaba una tarjeta con ocho campos
+        sueltos: ocupaba media pantalla en reposo y no se parecía en nada a la barra que el mismo
+        producto ya usa al otro lado del trámite.
+      */}
       <div className="flex min-w-0 flex-col">
         <div className="flex flex-wrap items-center justify-end gap-2">
           <TramitesFiltrosBar
@@ -1401,6 +1390,23 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               </button>
             }
           />
+          {/* Actualizar cierra la fila, como en el listado del gestor: la bandeja cambia por lo que
+              hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
+              perder los filtros puestos. */}
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={status === "loading"}
+            aria-label="Actualizar la bandeja de trámites"
+            title="Actualizar"
+            className={controlCls(false)}
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
+            Actualizar
+          </button>
         </div>
 
         <TramitesFiltrosChips
@@ -1429,6 +1435,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           {exportNotice}
         </p>
       ) : null}
+
+      {/* La tira de contadores ocupa ya todo el ancho: su acompañante de la derecha era el botón
+          Actualizar, que se mudó a la fila de controles. */}
+      <OtBandejaCountersStrip
+        counters={counters}
+        selected={contadorActivo}
+        onSelect={handleContadorSelect}
+        loading={status === "loading"}
+      />
 
       <UiStateBoundary
         status={status}
