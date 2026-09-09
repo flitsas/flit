@@ -46,16 +46,10 @@ public sealed record AdminAnularResult(
 /// </para>
 ///
 /// <para>
-/// AC3 — "revocado" como ORIGEN: rechazado siempre (422,
-/// <see cref="TramiteEstadoErrores.CannotAnnulRevoked"/>). <b>OJO:</b> el estado <c>Revocado</c>
-/// TODAVÍA NO EXISTE en <see cref="TramiteEstado"/> ni en <see cref="TramiteStateMachine"/> — lo
-/// introducirá la Feature hermana #12156 (HU #12165). Por eso esta comparación se hace contra el
-/// literal <see cref="RevocadoPendienteHu12165"/> (string), NO contra un miembro de enum: comparar
-/// contra un enum que no existe no compila, y bloquear la implementación de esta HU hasta que exista
-/// el enum real invertiría el orden en que dos features hermanas e independientes deben poder avanzar.
-/// Cuando la HU #12165 agregue <c>TramiteEstado.Revocado</c> (o el value object que corresponda), quien
-/// la implemente DEBE volver aquí, reemplazar esta comparación por string por la constante/enum real, y
-/// borrar este comentario.
+/// AC3 — <see cref="TramiteEstado.Revocado"/> como ORIGEN: rechazado siempre (422,
+/// <see cref="TramiteEstadoErrores.CannotAnnulRevoked"/>). La revocación es una decisión del
+/// organismo de tránsito (deshace su propia aprobación, HU #12166); la anulación administrativa no
+/// puede invadirla, igual que con <see cref="TramiteEstado.Aprobado"/> en AC2.
 /// </para>
 ///
 /// <para>
@@ -79,13 +73,6 @@ public sealed class AdminAnularHandler(
     /// <summary>Tipo del evento PROPIO de bitácora (distinto del genérico <c>cambio_estado</c> del recorder).</summary>
     public const string EventoTipo = "anular_admin";
 
-    /// <summary>
-    /// HU #12165 (Feature #12156) TODAVÍA no agrega <c>Revocado</c> a <see cref="TramiteEstado"/>: se
-    /// compara contra este literal mientras tanto. Ver XML doc de la clase para el porqué. BORRAR y
-    /// reemplazar por el estado real cuando esa HU lo introduzca.
-    /// </summary>
-    private const string RevocadoPendienteHu12165 = "revocado";
-
     public async Task<(AdminAnularResult? Result, string? Error, string? ErrorDetail)> HandleAsync(
         AdminAnularCommand command,
         CancellationToken ct = default)
@@ -104,9 +91,8 @@ public sealed class AdminAnularHandler(
                 "El trámite está en estado 'aprobado': la anulación administrativa no puede invadir " +
                 "una decisión del organismo de tránsito.");
 
-        // AC3 — Revocado como ORIGEN: rechazado siempre. Comparación por STRING, ver XML doc de la clase
-        // (RevocadoPendienteHu12165 / HU #12165).
-        if (string.Equals(from, RevocadoPendienteHu12165, StringComparison.OrdinalIgnoreCase))
+        // AC3 — Revocado como ORIGEN: rechazado siempre, sin importar que el destino sea fijo (anulado).
+        if (string.Equals(from, TramiteEstado.Revocado, StringComparison.Ordinal))
             return (null, TramiteEstadoErrores.CannotAnnulRevoked,
                 "El trámite está en estado 'revocado': la anulación administrativa no puede invadir " +
                 "una decisión del organismo de tránsito.");
