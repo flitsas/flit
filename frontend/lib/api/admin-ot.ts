@@ -2,6 +2,7 @@
 import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
 import { downloadFile } from "./download";
 import { ApiError } from "./types";
+import type { QueryField } from "./queries";
 import type {
   CreateOtWebhookRequest,
   CreateOtDocumentTagRequest,
@@ -85,11 +86,51 @@ export function fetchOtClientProcedures(
   signal?: AbortSignal,
   scope?: OtApiScope,
 ): Promise<OtClientProcedurePagedResult> {
+  // Las condiciones NO caben en una query string y este endpoint no las acepta: van por
+  // `searchOtClientProcedures`. Se descartan aquí explícitamente para que llamar al GET con ellas
+  // sea un filtro que no se aplica y no un 400 raro a mitad de pantalla.
+  const { condiciones, ...enQueryString } = params;
+  void condiciones;
+
   return apiFetch<OtClientProcedurePagedResult>(`${base}/client-procedures`, {
     query: {
-      ...params,
+      ...enQueryString,
       ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
     },
+    signal,
+  });
+}
+
+/**
+ * HU #12217 — por qué puede filtrar el organismo su bandeja. El panel de filtros se pinta a partir
+ * de esta respuesta, así que un campo nuevo aparece en pantalla sin desplegar frontend.
+ */
+export function fetchOtBandejaFilterFields(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<QueryField[]> {
+  return apiFetch<QueryField[]>(`${base}/client-procedures/fields`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
+/**
+ * HU #12217 — la MISMA bandeja que `fetchOtClientProcedures`, por POST y aceptando condiciones.
+ *
+ * <p>Es POST y no más parámetros del GET porque placa, VIN y radicado admiten pegar una lista
+ * completa desde Excel, y unos cientos de valores no caben en una query string. Lo usan la tabla y
+ * el recorrido del export, así que un filtro nuevo llega a los dos a la vez.</p>
+ */
+export function searchOtClientProcedures(
+  params: OtClientProceduresParams = {},
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtClientProcedurePagedResult> {
+  return apiFetch<OtClientProcedurePagedResult>(`${base}/client-procedures/search`, {
+    method: "POST",
+    body: params,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
 }
