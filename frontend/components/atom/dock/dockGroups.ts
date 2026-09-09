@@ -85,6 +85,8 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "mi-empresa": "administradores",
   "admin-documents": "administradores",
   "admin-improntas": "administradores",
+  // Generación documental (Feature #12201): visible por módulo accesible, no por rol.
+  "admin-generacion-documental": "administradores",
   "admin-quipux": "administradores",
   // Tránsito anida Organismos y Causales de rechazo; solo el padre necesita grupo.
   "admin-transit": "administradores",

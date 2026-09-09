@@ -12,6 +12,10 @@ import {
   type OtHubTabId,
 } from "@/components/admin/transit-offices/ot-nav";
 import { OT_ADMIN_SPA_OMIT } from "@/lib/nav/modules";
+import {
+  canSeeGeneracionDocumental,
+  GENERACION_DOCUMENTAL_BASE_PATH,
+} from "@/components/admin/generacion-documental/generacion-documental-nav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
 import { buildDockGroups, flattenDockEntries } from "./dock/dockGroups";
 import { DockDesktop } from "./dock/DockDesktop";
@@ -337,6 +341,22 @@ export function Shell({
         ],
       },
     );
+  }
+
+  // Generación documental (HU-01, Feature #12201) — R12: esta entrada NO cuelga de
+  // `currentUser?.isSuperAdmin` como el resto de accesos admin de arriba, sino de los
+  // MÓDULOS ACCESIBLES del usuario (`visibleModuleCodes`, que viene de
+  // `useAccessibleModules` → /api/v1/security/modules). Colgarla del rol dejaría a un
+  // AdminCompany con el permiso `generacion-documental.read` sin ver jamás el módulo, que
+  // es justo el criterio de aceptación principal de la HU.
+  if (canSeeGeneracionDocumental(visibleModuleCodes)) {
+    entries.push({
+      key: "admin-generacion-documental",
+      label: "Generación documental",
+      icon: FileText,
+      active: pathname.startsWith(GENERACION_DOCUMENTAL_BASE_PATH),
+      onClick: () => window.location.assign(GENERACION_DOCUMENTAL_BASE_PATH),
+    });
   }
 
   // Admin OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
