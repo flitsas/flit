@@ -2117,31 +2117,6 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     // ── Condiciones de la gramática de Consultas (HU #12106) ──────────────────────────────────
 
     /// <summary>
-    /// Normaliza un valor de IDENTIFICADOR igual que <c>QueryEngine.SinSeparadores</c>: mayúsculas y
-    /// sin guiones, puntos ni espacios.
-    ///
-    /// <para><b>Esta regla está escrita DOS veces</b> —aquí y en el motor de Consultas— y las dos
-    /// tienen que decir lo mismo. Si se cambia una hay que cambiar la otra: una placa que casa en
-    /// Consultas y no en el listado no falla con un error, hace que dos pantallas del mismo producto
-    /// se contradigan sobre el mismo trámite. La forma de la expresión SQL de abajo
-    /// (<c>ToUpper().Replace(...)</c>) replica exactamente estos tres reemplazos.</para>
-    /// </summary>
-    private static string NormalizarIdentificador(string valor) => valor
-        .ToUpperInvariant()
-        .Replace("-", string.Empty, StringComparison.Ordinal)
-        .Replace(" ", string.Empty, StringComparison.Ordinal)
-        .Replace(".", string.Empty, StringComparison.Ordinal);
-
-    private static List<string> Normalizar(QueryCondition condicion, bool identificador)
-    {
-        return condicion.Values
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => identificador ? NormalizarIdentificador(v) : v.Trim().ToUpperInvariant())
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-    }
-
-    /// <summary>
     /// Traduce UNA condición del catálogo a <c>WHERE</c>.
     ///
     /// <para>Cada campo se escribe entero —sus cinco operadores— en vez de componer expresiones
@@ -2160,65 +2135,30 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     {
         var op = condicion.Operator;
         var esIdentificador = TramitesQueryFieldCatalog.IsIdentifier(condicion.FieldId);
-        var valores = Normalizar(condicion, esIdentificador);
+        var valores = ProcedureInstanceFiltroSql.Normalizar(condicion, esIdentificador);
 
-        // Un operador con valores que se quedan todos vacíos no es un filtro: filtrar por "nada" no
-        // debe vaciar el listado.
-        if (!QueryOperator.IsUnary(op) && valores.Count == 0)
+        if (ProcedureInstanceFiltroSql.EsInerte(op, valores))
             return query;
 
         return condicion.FieldId switch
         {
-            TramitesQueryFieldCatalog.Radicado => op switch
-            {
-                QueryOperator.EsAlguno => query.Where(x => valores.Contains(
-                    x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-                QueryOperator.NoEsNinguno => query.Where(x => !valores.Contains(
-                    x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-                QueryOperator.Contiene => query.Where(x => x.ReferenceNumber
-                    .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                    .Contains(valores[0])),
-                QueryOperator.EstaVacio => query.Where(x => x.ReferenceNumber == ""),
-                QueryOperator.NoEstaVacio => query.Where(x => x.ReferenceNumber != ""),
-                _ => query,
-            },
+            TramitesQueryFieldCatalog.Radicado =>
+                ProcedureInstanceFiltroSql.PorRadicado(query, op, valores),
 
-            TramitesQueryFieldCatalog.Placa => op switch
-            {
-                QueryOperator.EsAlguno => query.Where(x => x.Plate != null && valores.Contains(
-                    x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-                QueryOperator.NoEsNinguno => query.Where(x => x.Plate == null || !valores.Contains(
-                    x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-                QueryOperator.Contiene => query.Where(x => x.Plate != null && x.Plate
-                    .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                    .Contains(valores[0])),
-                QueryOperator.EstaVacio => query.Where(x => x.Plate == null || x.Plate == ""),
-                QueryOperator.NoEstaVacio => query.Where(x => x.Plate != null && x.Plate != ""),
-                _ => query,
-            },
+            TramitesQueryFieldCatalog.Placa =>
+                ProcedureInstanceFiltroSql.PorPlaca(query, op, valores),
 
-            TramitesQueryFieldCatalog.Vin => op switch
-            {
-                QueryOperator.EsAlguno => query.Where(x => x.Vin != null && valores.Contains(
-                    x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-                QueryOperator.NoEsNinguno => query.Where(x => x.Vin == null || !valores.Contains(
-                    x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-                QueryOperator.Contiene => query.Where(x => x.Vin != null && x.Vin
-                    .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                    .Contains(valores[0])),
-                QueryOperator.EstaVacio => query.Where(x => x.Vin == null || x.Vin == ""),
-                QueryOperator.NoEstaVacio => query.Where(x => x.Vin != null && x.Vin != ""),
-                _ => query,
-            },
+            TramitesQueryFieldCatalog.Vin =>
+                ProcedureInstanceFiltroSql.PorVin(query, op, valores),
 
             // Comprador y vendedor buscan por NOMBRE y por DOCUMENTO, como anuncia el catálogo. El
             // nombre está denormalizado en la instancia (lo mantiene un trigger) pero el documento no:
             // vive en los actores, así que esa mitad va por EXISTS sobre `Actors`.
-            TramitesQueryFieldCatalog.Comprador =>
-                ApplyActor(query, op, valores, ActorTipoComprador, x => x.CompradorNombre),
+            TramitesQueryFieldCatalog.Comprador => ProcedureInstanceFiltroSql.PorActor(
+                query, op, valores, ProcedureInstanceFiltroSql.ActorTipoComprador),
 
-            TramitesQueryFieldCatalog.Vendedor =>
-                ApplyActor(query, op, valores, ActorTipoVendedor, x => x.VendedorNombre),
+            TramitesQueryFieldCatalog.Vendedor => ProcedureInstanceFiltroSql.PorActor(
+                query, op, valores, ProcedureInstanceFiltroSql.ActorTipoVendedor),
 
             // El nombre del organismo no es columna de la instancia: es el `field_value` que proyecta
             // el listado. Mismo EXISTS que ya usa el filtro suelto de organismo.
@@ -2240,14 +2180,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 _ => query,
             },
 
-            TramitesQueryFieldCatalog.TipoTramite => op switch
-            {
-                QueryOperator.EsAlguno => query.Where(x =>
-                    x.ProcedureType != null && valores.Contains(x.ProcedureType.Code.ToUpper())),
-                QueryOperator.NoEsNinguno => query.Where(x =>
-                    x.ProcedureType == null || !valores.Contains(x.ProcedureType.Code.ToUpper())),
-                _ => query,
-            },
+            TramitesQueryFieldCatalog.TipoTramite =>
+                ProcedureInstanceFiltroSql.PorTipoTramite(query, op, valores),
 
             TramitesQueryFieldCatalog.Estado => op switch
             {
@@ -2295,22 +2229,28 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
             // Booleanos de columna: el catalogo solo les da `es alguno`, y con las dos opciones
             // marcadas la condicion no acota nada (es la lista entera), asi que se deja pasar.
-            TramitesQueryFieldCatalog.Prioritario => ApplyBooleano(query, op, valores,
+            TramitesQueryFieldCatalog.Prioritario => ProcedureInstanceFiltroSql.Booleano(
+                query, op, valores,
                 verdadero: q => q.Where(x => x.Prioritario),
                 falso: q => q.Where(x => !x.Prioritario)),
-            TramitesQueryFieldCatalog.EnSubsanacion => ApplyBooleano(query, op, valores,
+            TramitesQueryFieldCatalog.EnSubsanacion => ProcedureInstanceFiltroSql.Booleano(
+                query, op, valores,
                 verdadero: q => q.Where(x => x.SubsanacionActiva),
                 falso: q => q.Where(x => !x.SubsanacionActiva)),
 
             // Las dos marcas del listado (HU #12199). No son columna: cada una es la disyunción de
             // sus DOS disparadores, así que el «No» se construye negando la misma expresión y no con
             // una condición propia — dos expresiones separadas se irían apartando.
-            TramitesQueryFieldCatalog.Prenda => ApplyBooleano(query, op, valores,
-                verdadero: q => q.Where(TienePrendaExpr),
-                falso: q => q.Where(Negar(TienePrendaExpr))),
-            TramitesQueryFieldCatalog.Transformacion => ApplyBooleano(query, op, valores,
-                verdadero: q => q.Where(TieneTransformacionExpr),
-                falso: q => q.Where(Negar(TieneTransformacionExpr))),
+            TramitesQueryFieldCatalog.Prenda => ProcedureInstanceFiltroSql.Booleano(
+                query, op, valores,
+                verdadero: q => q.Where(ProcedureInstanceFiltroSql.TienePrenda(db)),
+                falso: q => q.Where(ProcedureInstanceFiltroSql.Negar(
+                    ProcedureInstanceFiltroSql.TienePrenda(db)))),
+            TramitesQueryFieldCatalog.Transformacion => ProcedureInstanceFiltroSql.Booleano(
+                query, op, valores,
+                verdadero: q => q.Where(ProcedureInstanceFiltroSql.TieneTransformacion),
+                falso: q => q.Where(ProcedureInstanceFiltroSql.Negar(
+                    ProcedureInstanceFiltroSql.TieneTransformacion))),
 
             // El metodo de pago vive en la fila comercial, que es opcional: un tramite sin datos
             // comerciales no tiene metodo, y por eso "no es ninguno" tiene que dejarlo pasar.
@@ -2327,159 +2267,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
             // La compañía se compara por identificador, no por razón social: dos empresas pueden
             // renombrarse y el nombre no es clave de nada.
-            TramitesQueryFieldCatalog.Compania => ApplyCompania(query, op, valores),
-
-            _ => query,
-        };
-    }
-
-    /// <summary>
-    /// Códigos y valores de las dos marcas, ya normalizados como los guarda la base, para no
-    /// recalcularlos en cada consulta. Salen del DOMINIO —<see cref="ProcedureTypeLayers"/> y
-    /// <see cref="TramiteMarcas"/>—, que es lo que impide que el <c>WHERE</c> y el ícono del listado
-    /// se separen: si mañana entra un tipo o una forma afirmativa nueva, entra en los dos a la vez.
-    /// </summary>
-    private static readonly string[] CodigosPrendaBase =
-        [.. ProcedureTypeLayers.CodigosPrendaBase.Select(c => c.ToUpperInvariant())];
-
-    private static readonly string[] CodigosTransformacion =
-        [.. ProcedureTypeLayers.CodigosTransformacion.Select(c => c.ToUpperInvariant())];
-
-    private static readonly string[] ClavesTransformacion =
-        [.. TramiteMarcas.ClavesTransformacion];
-
-    private static readonly string[] ValoresAfirmativos =
-        [.. TramiteMarcas.ValoresAfirmativos];
-
-    /// <summary>
-    /// «Tiene prenda», en SQL. Réplica de <see cref="TramiteMarcas.TienePrenda"/>: la decisión
-    /// VIGENTE que no sea <c>omitir</c> ni <c>sin_prenda</c> —mismo <c>WHERE</c> que
-    /// <see cref="ListInstanceIdsConPrendaVigenteAsync"/>— <b>o</b> que el trámite SEA de prenda,
-    /// que lo es desde que se abre, antes de que nadie capture la decisión.
-    /// </summary>
-    /// <remarks>
-    /// No es <c>static</c> porque la decisión de prenda no cuelga de la instancia como navegación:
-    /// vive en su propia tabla y hay que ir a ella por subconsulta correlacionada, igual que hace el
-    /// filtro «Gestor» contra <c>identity.users</c>.
-    /// </remarks>
-    private Expression<Func<ProcedureInstance, bool>> TienePrendaExpr =>
-        x => (x.ProcedureType != null && CodigosPrendaBase.Contains(x.ProcedureType.Code.ToUpper()))
-            || db.ProcedureInstancePrendas.Any(p => p.ProcedureInstanceId == x.Id
-                && p.Estado == PrendaEstado.Vigente
-                && p.Decision != PrendaDecision.SinPrenda
-                && p.Decision != PrendaDecision.Omitir);
-
-    /// <summary>
-    /// «Tiene transformación», en SQL. Réplica de <see cref="TramiteMarcas.TieneTransformacion"/>:
-    /// el tipo ES la transformación <b>o</b> el formulario declara alguna de las cuatro claves con
-    /// un valor afirmativo. El <c>Trim</c>/<c>ToLower</c> no es adorno: por los migrados de V1
-    /// circulan <c>1</c> y <c>si</c> además de <c>true</c>, y con espacios alrededor.
-    /// </summary>
-    private static readonly Expression<Func<ProcedureInstance, bool>> TieneTransformacionExpr =
-        x => (x.ProcedureType != null && CodigosTransformacion.Contains(x.ProcedureType.Code.ToUpper()))
-            || x.FieldValues.Any(fv => ClavesTransformacion.Contains(fv.FieldKey)
-                && fv.ValueText != null
-                && ValoresAfirmativos.Contains(fv.ValueText.Trim().ToLower()));
-
-    /// <summary>
-    /// El «No» de una marca es exactamente la negación de su «Sí», no una condición aparte: así el
-    /// AC5 —los dos conjuntos son complementarios y ninguno pierde filas— se cumple por
-    /// construcción y no por haber escrito dos veces la misma regla al derecho y al revés.
-    /// </summary>
-    private static Expression<Func<ProcedureInstance, bool>> Negar(
-        Expression<Func<ProcedureInstance, bool>> expr) =>
-        Expression.Lambda<Func<ProcedureInstance, bool>>(
-            Expression.Not(expr.Body), expr.Parameters);
-
-    /// <summary>
-    /// Un booleano de la gramática: los valores llegan como "TRUE"/"FALSE" ya normalizados. Con las
-    /// dos opciones marcadas no se filtra, porque «sí o no» es el universo entero.
-    /// </summary>
-    private static IQueryable<ProcedureInstance> ApplyBooleano(
-        IQueryable<ProcedureInstance> query, string op, List<string> valores,
-        Func<IQueryable<ProcedureInstance>, IQueryable<ProcedureInstance>> verdadero,
-        Func<IQueryable<ProcedureInstance>, IQueryable<ProcedureInstance>> falso)
-    {
-        if (op != QueryOperator.EsAlguno || valores.Count != 1) return query;
-        return valores[0] == "TRUE" ? verdadero(query) : falso(query);
-    }
-
-    /// <summary>
-    /// Acota a una o varias compañías. Solo tiene efecto para quien consulta sin tenant fijado (el
-    /// SuperAdmin); a los demás el `tenantId` del token ya les acotó la consulta antes de llegar aquí.
-    /// </summary>
-    private static IQueryable<ProcedureInstance> ApplyCompania(
-        IQueryable<ProcedureInstance> query, string op, List<string> valores)
-    {
-        var ids = new List<Guid>();
-        foreach (var valor in valores)
-            if (Guid.TryParse(valor, out var id)) ids.Add(id);
-        if (ids.Count == 0) return query;
-
-        return op switch
-        {
-            QueryOperator.EsAlguno => query.Where(x => ids.Contains(x.TenantId)),
-            QueryOperator.NoEsNinguno => query.Where(x => !ids.Contains(x.TenantId)),
-            _ => query,
-        };
-    }
-
-    private const string ActorTipoComprador = "comprador";
-    private const string ActorTipoVendedor = "vendedor";
-
-    /// <summary>
-    /// Comprador/vendedor: coincide por el nombre denormalizado O por el documento del actor.
-    /// «Está vacío» mira solo el nombre — es lo que la columna del listado muestra, y un trámite con
-    /// documento pero sin nombre no existe (los captura el mismo formulario).
-    /// </summary>
-    private static IQueryable<ProcedureInstance> ApplyActor(
-        IQueryable<ProcedureInstance> query,
-        string op,
-        List<string> valores,
-        string actorType,
-        Func<ProcedureInstance, string?> _)
-    {
-        var esComprador = actorType == ActorTipoComprador;
-
-        return op switch
-        {
-            QueryOperator.EsAlguno => esComprador
-                ? query.Where(x =>
-                    (x.CompradorNombre != null && valores.Contains(x.CompradorNombre.ToUpper()))
-                    || x.Actors.Any(a => a.ActorType == ActorTipoComprador
-                        && valores.Contains(a.DocumentNumber.ToUpper())))
-                : query.Where(x =>
-                    (x.VendedorNombre != null && valores.Contains(x.VendedorNombre.ToUpper()))
-                    || x.Actors.Any(a => a.ActorType == ActorTipoVendedor
-                        && valores.Contains(a.DocumentNumber.ToUpper()))),
-
-            QueryOperator.NoEsNinguno => esComprador
-                ? query.Where(x =>
-                    (x.CompradorNombre == null || !valores.Contains(x.CompradorNombre.ToUpper()))
-                    && !x.Actors.Any(a => a.ActorType == ActorTipoComprador
-                        && valores.Contains(a.DocumentNumber.ToUpper())))
-                : query.Where(x =>
-                    (x.VendedorNombre == null || !valores.Contains(x.VendedorNombre.ToUpper()))
-                    && !x.Actors.Any(a => a.ActorType == ActorTipoVendedor
-                        && valores.Contains(a.DocumentNumber.ToUpper()))),
-
-            QueryOperator.Contiene => esComprador
-                ? query.Where(x =>
-                    (x.CompradorNombre != null && x.CompradorNombre.ToUpper().Contains(valores[0]))
-                    || x.Actors.Any(a => a.ActorType == ActorTipoComprador
-                        && a.DocumentNumber.ToUpper().Contains(valores[0])))
-                : query.Where(x =>
-                    (x.VendedorNombre != null && x.VendedorNombre.ToUpper().Contains(valores[0]))
-                    || x.Actors.Any(a => a.ActorType == ActorTipoVendedor
-                        && a.DocumentNumber.ToUpper().Contains(valores[0]))),
-
-            QueryOperator.EstaVacio => esComprador
-                ? query.Where(x => x.CompradorNombre == null || x.CompradorNombre == "")
-                : query.Where(x => x.VendedorNombre == null || x.VendedorNombre == ""),
-
-            QueryOperator.NoEstaVacio => esComprador
-                ? query.Where(x => x.CompradorNombre != null && x.CompradorNombre != "")
-                : query.Where(x => x.VendedorNombre != null && x.VendedorNombre != ""),
+            TramitesQueryFieldCatalog.Compania =>
+                ProcedureInstanceFiltroSql.PorTenant(query, op, valores),
 
             _ => query,
         };
