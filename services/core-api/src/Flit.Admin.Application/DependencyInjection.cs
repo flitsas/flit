@@ -326,6 +326,7 @@ public static class DependencyInjection
 
         // HU #10217 — trámites de clientes OT (tenant admin).
         services.AddScoped<ListOtClientProceduresHandler>();
+        services.AddScoped<GetOtBandejaFilterFieldsHandler>();
         services.AddScoped<GetOtClientProcedureHandler>();
         services.AddScoped<ApproveOtClientProcedureHandler>();
         services.AddScoped<RejectOtClientProcedureHandler>();

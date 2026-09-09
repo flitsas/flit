@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -35,6 +36,8 @@ import {
 } from "@/lib/tramites/estados";
 import {
   OT_PROCEDURES_COLUMNS,
+  otProceduresSortOptions,
+  type OtProceduresSortOption,
   otColumnToSortBy,
 } from "@/lib/admin/ot-procedures-columns";
 
@@ -77,10 +80,139 @@ export interface ClientProceduresTableProps {
    * opciones para llegar a él era peaje puro (prototipo del Feature #12059).
    */
   onVerDetalle?: (row: OtClientProcedure) => void;
+  /**
+   * Columnas que el usuario tiene encendidas (HU #12218 AC7). Sin la prop se pintan todas: la
+   * tabla nunca se queda sin columnas porque una preferencia no cargara.
+   */
+  visibleColumns?: readonly string[];
   /** sortBy actual del API (vin, placa, vendedor, …). */
   sortBy?: string;
   sortDir?: "asc" | "desc";
   onSortChange?: (sortBy: string, sortDir: "asc" | "desc") => void;
+}
+
+/**
+ * Desplegable de orden para una columna que muestra varios datos (HU #12219).
+ *
+ * <p>Cierra al pulsar fuera y con Escape, devolviendo el foco al disparador: sin eso, quien navega
+ * con teclado se queda dentro de un menú que ya no está.</p>
+ */
+function SortMenu({
+  label,
+  opciones,
+  sortBy,
+  sortDir,
+  onSortChange,
+}: {
+  label: string;
+  opciones: OtProceduresSortOption[];
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+  onSortChange: (sortBy: string, sortDir: "asc" | "desc") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!panelRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", onDocDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const activa = opciones.find((o) => o.sort === sortBy);
+  const Icon = !activa ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        // El nombre accesible dice por qué está ordenando AHORA, no solo que se puede ordenar: es
+        // la única forma de saberlo sin ver el icono.
+        aria-label={
+          activa
+            ? `Ordenar ${label}. Ahora: ${activa.label} ${sortDir === "asc" ? "ascendente" : "descendente"}`
+            : `Ordenar ${label}`
+        }
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:opacity-80 ${
+          activa ? "underline underline-offset-4" : ""
+        }`}
+      >
+        {label}
+        <Icon className={`h-3 w-3 ${activa ? "opacity-100" : "opacity-45"}`} aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <div
+          ref={panelRef}
+          role="menu"
+          aria-label={`Ordenar por, en ${label}`}
+          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case text-[#162744] shadow-xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+        >
+          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
+            Ordenar por
+          </p>
+          <div className="p-1.5">
+            {opciones.map((opcion) => (
+              <div
+                key={opcion.id}
+                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
+              >
+                <p className="mb-1.5 text-xs font-medium">{opcion.label}</p>
+                <span className="flex items-center gap-1.5">
+                  {(["asc", "desc"] as const).map((dir) => {
+                    const seleccionada = sortBy === opcion.sort && sortDir === dir;
+                    const Flecha = dir === "asc" ? ArrowUp : ArrowDown;
+                    return (
+                      <button
+                        key={dir}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={seleccionada}
+                        aria-label={`${opcion.label}: ${dir === "asc" ? "A-Z" : "Z-A"}`}
+                        onClick={() => {
+                          onSortChange(opcion.sort, dir);
+                          setOpen(false);
+                        }}
+                        className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                          seleccionada
+                            ? "border-[#2C6BED] bg-[#2C6BED] text-white"
+                            : "border-[#DFE5ED] text-[#5A6B7F] hover:bg-[#EEF5FF] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        <Flecha className="h-3 w-3" aria-hidden="true" />
+                        {dir === "asc" ? "A-Z" : "Z-A"}
+                      </button>
+                    );
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function SortableTh({
@@ -117,6 +249,23 @@ function SortableTh({
     );
   }
 
+  // HU #12219 — una columna que apila varios datos no puede ordenarse con un clic: no habría forma
+  // de decir por cuál. Con más de una opción, la cabecera abre un desplegable.
+  const opciones = otProceduresSortOptions(columnKey);
+  if (opciones.length > 1) {
+    return (
+      <th className={cls} style={style}>
+        <SortMenu
+          label={label}
+          opciones={opciones}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSortChange={onSortChange}
+        />
+      </th>
+    );
+  }
+
   return (
     <th className={cls} style={style}>
       <button
@@ -130,6 +279,85 @@ function SortableTh({
       </button>
     </th>
   );
+}
+
+/**
+ * Clases propias de cada celda, más allá de las comunes. Viven aquí y no dentro del render para que
+ * añadir una columna sea una entrada en dos mapas y no un `if` en medio del JSX.
+ */
+const CELDA_CLS: Record<string, string> = {
+  radicado: "font-semibold",
+  vin: "font-mono text-[11px]",
+  placa: "font-semibold",
+  fechaRadicacion: "opacity-70",
+};
+
+/** Qué pinta cada columna. Un solo sitio donde mirar cuando una celda muestra lo que no debe. */
+function renderCelda(columnKey: string, row: OtClientProcedure) {
+  switch (columnKey) {
+    case "radicado":
+      return (
+        <span className="flex items-center gap-1.5">
+          {row.prioritario && (
+            <Star
+              className="h-3.5 w-3.5 shrink-0"
+              style={{ color: "#F59E0B", fill: "#F59E0B" }}
+              aria-label="Trámite prioritario"
+            />
+          )}
+          {row.referenceNumber}
+        </span>
+      );
+    case "vin":
+      return row.vin?.trim() || "—";
+    case "placa":
+      return row.placa?.trim() || "—";
+    case "vendedor":
+      return row.vendedorNombre?.trim() || "—";
+    case "comprador":
+      return row.compradorNombre?.trim() || "—";
+    case "tipoTramite":
+      return row.procedureTypeName ?? row.procedureTypeId;
+    // Empresa arriba, gestor debajo y atenuado: la empresa es la responsable del trámite; el
+    // gestor, la persona concreta con la que hablar.
+    case "empresaGestor":
+      return (
+        <span className="block min-w-0">
+          <span className="block truncate font-semibold">
+            {row.clientTenantName ?? row.clientTenantId}
+          </span>
+          <span className={`block truncate ${TABLA_CELDA_SECUNDARIA_CLS}`}>
+            {row.gestorNombre?.trim() || "—"}
+          </span>
+        </span>
+      );
+    case "estado":
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <StatusBadge
+            label={formatOtProcedureStatus(row.status)}
+            tone={procedureStatusTone(row.status)}
+          />
+          {plateFlowChipStyle(row.plateFlowStatus) && (
+            <span
+              title="Progreso de la placa (sub-estado interno; el trámite sigue en Entregado)"
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={{
+                background: plateFlowChipStyle(row.plateFlowStatus)!.bg,
+                color: plateFlowChipStyle(row.plateFlowStatus)!.color,
+                border: `1px solid ${plateFlowChipStyle(row.plateFlowStatus)!.border}`,
+              }}
+            >
+              {plateFlowLabel(row.plateFlowStatus)}
+            </span>
+          )}
+        </div>
+      );
+    case "fechaRadicacion":
+      return formatOtDate(row.createdAt);
+    default:
+      return null;
+  }
 }
 
 /** Tabla paginada tramites clientes OT — patron CompanyListTable (HU #10220). */
@@ -151,11 +379,17 @@ export function ClientProceduresTable({
   consolidadoActingId = null,
   onVerDocumentos,
   onVerDetalle,
+  visibleColumns,
   sortBy,
   sortDir,
   onSortChange,
 }: ClientProceduresTableProps) {
-  const col = (key: string) => OT_PROCEDURES_COLUMNS.find((c) => c.key === key)!;
+  // Sin preferencia (o con una que dejara la tabla vacía) se pintan todas: una tabla sin columnas
+  // no es una tabla, y eso NO puede depender de que una llamada de preferencias haya respondido.
+  const columnasVisibles =
+    visibleColumns && visibleColumns.length > 0
+      ? OT_PROCEDURES_COLUMNS.filter((c) => visibleColumns.includes(c.key))
+      : OT_PROCEDURES_COLUMNS;
 
   /**
    * Acciones disponibles para una fila, en el orden en que el operador las necesita: primero
@@ -267,70 +501,18 @@ export function ClientProceduresTable({
       <table className="w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr>
-            <SortableTh
-              label={col("radicado").label}
-              columnKey="radicado"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={col("radicado").sortable ? onSortChange : undefined}
-              className="rounded-l-xl"
-            />
-            <SortableTh
-              label={col("vin").label}
-              columnKey="vin"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={onSortChange}
-            />
-            <SortableTh
-              label={col("placa").label}
-              columnKey="placa"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={onSortChange}
-            />
-            <SortableTh
-              label={col("vendedor").label}
-              columnKey="vendedor"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={onSortChange}
-            />
-            <SortableTh
-              label={col("comprador").label}
-              columnKey="comprador"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={onSortChange}
-            />
-            <th
-              className={TABLA_HEADER_CELL_CLS}
-              style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-            >
-              {col("tipoTramite").label}
-            </th>
-            <SortableTh
-              label={col("empresaGestor").label}
-              sortLabel={col("empresaGestor").sortLabel}
-              columnKey="empresaGestor"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={onSortChange}
-            />
-            <SortableTh
-              label={col("estado").label}
-              columnKey="estado"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={onSortChange}
-            />
-            <SortableTh
-              label={col("fechaRadicacion").label}
-              columnKey="fechaRadicacion"
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={onSortChange}
-            />
+            {columnasVisibles.map((columna, indice) => (
+              <SortableTh
+                key={columna.key}
+                label={columna.label}
+                sortLabel={columna.sortLabel}
+                columnKey={columna.key}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSortChange={columna.sortable ? onSortChange : undefined}
+                className={indice === 0 ? "rounded-l-xl" : ""}
+              />
+            ))}
             <th
               className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
               style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
@@ -362,69 +544,14 @@ export function ClientProceduresTable({
                   : undefined
               }
             >
-              <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
-                <span className="flex items-center gap-1.5">
-                  {row.prioritario && (
-                    <Star
-                      className="h-3.5 w-3.5 shrink-0"
-                      style={{ color: "#F59E0B", fill: "#F59E0B" }}
-                      aria-label="Trámite prioritario"
-                    />
-                  )}
-                  {row.referenceNumber}
-                </span>
-              </td>
-              <td className="border-y px-4 py-3 font-mono text-[11px]">
-                {row.vin?.trim() || "—"}
-              </td>
-              <td className="border-y px-4 py-3 font-semibold">
-                {row.placa?.trim() || "—"}
-              </td>
-              <td className="border-y px-4 py-3">
-                {row.vendedorNombre?.trim() || "—"}
-              </td>
-              <td className="border-y px-4 py-3">
-                {row.compradorNombre?.trim() || "—"}
-              </td>
-              <td className="border-y px-4 py-3">
-                {row.procedureTypeName ?? row.procedureTypeId}
-              </td>
-              {/* Empresa arriba, gestor debajo y atenuado: la empresa es la responsable del
-                  trámite; el gestor, la persona concreta con la que hablar. */}
-              <td className="border-y px-4 py-3">
-                <span className="block min-w-0">
-                  <span className="block truncate font-semibold">
-                    {row.clientTenantName ?? row.clientTenantId}
-                  </span>
-                  <span className={`block truncate ${TABLA_CELDA_SECUNDARIA_CLS}`}>
-                    {row.gestorNombre?.trim() || "—"}
-                  </span>
-                </span>
-              </td>
-              <td className="border-y px-4 py-3">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <StatusBadge
-                    label={formatOtProcedureStatus(row.status)}
-                    tone={procedureStatusTone(row.status)}
-                  />
-                  {plateFlowChipStyle(row.plateFlowStatus) && (
-                    <span
-                      title="Progreso de la placa (sub-estado interno; el trámite sigue en Entregado)"
-                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                      style={{
-                        background: plateFlowChipStyle(row.plateFlowStatus)!.bg,
-                        color: plateFlowChipStyle(row.plateFlowStatus)!.color,
-                        border: `1px solid ${plateFlowChipStyle(row.plateFlowStatus)!.border}`,
-                      }}
-                    >
-                      {plateFlowLabel(row.plateFlowStatus)}
-                    </span>
-                  )}
-                </div>
-              </td>
-              <td className="border-y px-4 py-3 opacity-70">
-                {formatOtDate(row.createdAt)}
-              </td>
+              {columnasVisibles.map((columna, indice) => (
+                <td
+                  key={columna.key}
+                  className={`${indice === 0 ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
+                >
+                  {renderCelda(columna.key, row)}
+                </td>
+              ))}
               {/*
                 Las ACCIONES van en un menú (`ActionsMenu`, el mismo del listado del gestor). Sueltas
                 eran hasta ocho botones condicionales en una celda: la columna crecía o encogía según

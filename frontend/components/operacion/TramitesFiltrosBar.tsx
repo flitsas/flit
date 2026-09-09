@@ -494,6 +494,13 @@ export interface TramitesFiltrosBarProps {
 
   search: string;
   onSearchChange: (v: string) => void;
+  /**
+   * Qué se puede escribir en la caja de búsqueda. Por defecto, lo del listado del gestor. La
+   * bandeja del organismo busca sobre otro conjunto —no tiene «organismo», y sí empresa cliente—
+   * y prometer lo que no busca haría que el usuario diera por hecho que un término no existe.
+   */
+  searchPlaceholder?: string;
+  searchAriaLabel?: string;
 
   onAplicar: () => void;
   onEmpezarDeCero: () => void;
@@ -530,6 +537,8 @@ export function TramitesFiltrosBar({
   fieldsError,
   search,
   onSearchChange,
+  searchPlaceholder = 'Buscar radicado, placa, VIN...',
+  searchAriaLabel = 'Buscar trámites',
   onAplicar,
   onEmpezarDeCero,
   empezarDeCeroDisabled = false,
@@ -546,10 +555,10 @@ export function TramitesFiltrosBar({
         />
         <input
           type="search"
-          aria-label="Buscar trámites"
+          aria-label={searchAriaLabel}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar radicado, placa, VIN..."
+          placeholder={searchPlaceholder}
           className={`${INPUT_CLS} w-full pl-9`}
         />
       </div>

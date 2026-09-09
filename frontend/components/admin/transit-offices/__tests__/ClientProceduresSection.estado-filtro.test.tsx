@@ -4,13 +4,14 @@
 // pidan. Lo que se prueba aquí es que la pantalla no le mienta al usuario sobre lo que muestra ni
 // se quede en un estado que su propio desplegable no puede representar.
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, waitFor } from "@testing-library/react";
 import { ToastProvider } from "@/components/admin/Toast";
 import { ClientProceduresSection } from "../ClientProceduresSection";
 
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtClientProcedures: vi.fn(),
+  searchOtClientProcedures: vi.fn(),
+  fetchOtBandejaFilterFields: vi.fn(),
   fetchOtBandejaHealth: vi.fn(),
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
@@ -33,7 +34,8 @@ vi.mock("@/lib/api/tramites-client", () => ({
 
 import {
   fetchOtBandejaHealth,
-  fetchOtClientProcedures,
+  searchOtClientProcedures,
+  fetchOtBandejaFilterFields,
   fetchOtProfile,
 } from "@/lib/api/admin-ot";
 
@@ -63,20 +65,6 @@ function conQueryString(query: string) {
     });
 }
 
-/**
- * Devuelve el desplegable de Estado, abriendo el panel solo si hace falta: un deep-link con
- * filtros lo abre por su cuenta, y en ese caso pulsar el botón lo cerraría.
- */
-async function abrirFiltros() {
-  const yaAbierto = screen.queryByRole("combobox", { name: "Filtrar por estado" });
-  if (yaAbierto) return yaAbierto;
-
-  // El panel lo abre "Búsqueda avanzada"; el aviso de filtros aplicados es ahora una etiqueta
-  // aparte, no parte del nombre del botón.
-  await userEvent.click(await screen.findByRole("button", { name: /Búsqueda avanzada/ }));
-  return screen.getByRole("combobox", { name: "Filtrar por estado" });
-}
-
 describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
   let restaurarLocation: (() => void) | null = null;
 
@@ -88,7 +76,8 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
       transitOfficeId: OT_ID,
       featureFlags: [],
     });
-    vi.mocked(fetchOtClientProcedures).mockResolvedValue({
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
+    vi.mocked(searchOtClientProcedures).mockResolvedValue({
       data: [],
       totalCount: 0,
       page: 1,
@@ -109,46 +98,20 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
     restaurarLocation = null;
   });
 
-  // AC1 — «Todos» dejó de ser cierto: el organismo nunca ve el universo completo de sus empresas.
-  it("AC1 — la opción abierta se rotula «Todos los recibidos» y sigue sin aplicar filtro", async () => {
-    renderSection();
-    const select = await abrirFiltros();
-
-    // Acotado al select de Estado: el de «Tipo de trámite» tiene su propia opción «Todos».
-    const estado = within(select);
-    const abierta = estado.getByRole("option", { name: "Todos los recibidos" });
-    expect((abierta as HTMLOptionElement).value).toBe("");
-    expect(estado.queryByRole("option", { name: "Todos" })).not.toBeInTheDocument();
-
-    await userEvent.selectOptions(select, "");
-
-    await waitFor(() => {
-      const ultima = vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0];
-      // Sin este `toBeDefined`, un array de llamadas vacío daría `undefined` igual y la
-      // aserción pasaría sin haber comprobado nada.
-      expect(ultima).toBeDefined();
-      expect(ultima?.status).toBeUndefined();
-    });
-  });
-
-  // AC1 (contrato) — el desplegable ofrece exactamente los tres estados recibidos, y ninguno de
-  // los que el backend ya no sirve.
-  it("AC1 — el desplegable no ofrece borrador, preparado ni anulado", async () => {
-    renderSection();
-    const estado = within(await abrirFiltros());
-
-    expect(estado.getByRole("option", { name: "Pendiente OT" })).toBeInTheDocument();
-    expect(estado.getByRole("option", { name: "Aprobado OT" })).toBeInTheDocument();
-    expect(estado.getByRole("option", { name: "Rechazado OT" })).toBeInTheDocument();
-    // HU #12166 (Feature #12156) — Revocado se suma a los estados filtrables.
-    expect(estado.getByRole("option", { name: "Revocado OT" })).toBeInTheDocument();
-
-    // Lista cerrada: cualquier estado nuevo tiene que añadirse aquí a conciencia.
-    const valores = estado
-      .getAllByRole("option")
-      .map((o) => (o as HTMLOptionElement).value);
-    expect(valores).toEqual(["entregado", "aprobado", "rechazado", "revocado", ""]);
-  });
+  /*
+   * Las dos pruebas de AC1 que había aquí afirmaban sobre el <select> de Estado del formulario
+   * «Búsqueda avanzada»: que la opción abierta se rotulaba «Todos los recibidos» y que la lista
+   * era exactamente entregado/aprobado/rechazado/revocado.
+   *
+   * Ese control desapareció con la HU #12218: el estado se filtra desde el panel «Filtros», y su
+   * vocabulario ya NO lo escribe el frontend — lo sirve el catálogo del backend. Afirmarlo aquí
+   * sería afirmar sobre el mock del catálogo, es decir, sobre nada. La regla vive ahora donde se
+   * decide, con una prueba que la ata a `TramiteEstado.RecibidosPorOrganismo`:
+   * `OtBandejaFiltrosTests.AC2_LosEstadosDelCatalogo_SonLosQueLaBandejaRecibe`.
+   *
+   * Lo que sí sigue siendo del frontend —y sigue probado abajo— es cuál es el estado con el que la
+   * bandeja abre y qué hace con el de un enlace profundo.
+   */
 
   // AC2 — la bandeja sigue abriendo por la cola de decisión: es el trabajo pendiente del organismo.
   it("AC2 — sin parámetros en la URL, el filtro arranca en «Pendiente OT»", async () => {
@@ -156,29 +119,23 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
     renderSection();
 
     await waitFor(() => {
-      expect(vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0]?.status).toBe("entregado");
+      expect(vi.mocked(searchOtClientProcedures).mock.calls.at(-1)?.[0]?.status).toBe("entregado");
     });
-
-    const select = await abrirFiltros();
-    expect((select as HTMLSelectElement).value).toBe("entregado");
   });
 
-  // AC3 — el caso que motiva la HU: sin este descarte el <select> se queda en "borrador", un valor
-  // que ninguna <option> tiene. El desplegable se ve en blanco junto a una lista vacía y parece un
-  // fallo de carga, no un filtro imposible.
+  // AC3 — el caso que motiva la HU: un estado que la bandeja nunca recibe se descarta en vez de
+  // sembrarse. Sembrarlo dejaría la bandeja vacía sin nada que explicara por qué, que se lee como
+  // un fallo de carga y no como un filtro imposible.
   it("AC3 — un deep-link con estado no permitido cae al valor por defecto", async () => {
     restaurarLocation = conQueryString("?status=borrador");
     renderSection();
 
     await waitFor(() => {
-      expect(vi.mocked(fetchOtClientProcedures)).toHaveBeenCalled();
+      expect(vi.mocked(searchOtClientProcedures)).toHaveBeenCalled();
     });
     expect(
-      vi.mocked(fetchOtClientProcedures).mock.calls.every((c) => c[0]?.status !== "borrador"),
+      vi.mocked(searchOtClientProcedures).mock.calls.every((c) => c[0]?.status !== "borrador"),
     ).toBe(true);
-
-    const select = await abrirFiltros();
-    expect((select as HTMLSelectElement).value).toBe("entregado");
   });
 
   // AC4 — el drill-down de reportes sigue aterrizando filtrado: descartar de más costaría esa ruta.
@@ -187,10 +144,7 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
     renderSection();
 
     await waitFor(() => {
-      expect(vi.mocked(fetchOtClientProcedures).mock.calls.at(-1)?.[0]?.status).toBe("aprobado");
+      expect(vi.mocked(searchOtClientProcedures).mock.calls.at(-1)?.[0]?.status).toBe("aprobado");
     });
-
-    const select = await abrirFiltros();
-    expect((select as HTMLSelectElement).value).toBe("aprobado");
   });
 });

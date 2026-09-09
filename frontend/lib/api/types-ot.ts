@@ -1,3 +1,5 @@
+import type { QueryCondition } from '@/lib/api/queries';
+
 /** Tipos del módulo Administración OT (HU #10215 / #10217 / #10218). */
 
 export type OtOperationMode = "dashboard" | "quipux";
@@ -183,7 +185,20 @@ export interface OtClientProceduresParams {
   vendedor?: string;
   comprador?: string;
   gestor?: string;
-  /** vin | placa | vendedor | comprador | gestor | createdAt | radicado | estado */
+  /**
+   * HU #12218 — texto libre transversal: radicado (exacto), placa, VIN, nombre y documento de las
+   * partes, y razón social de la empresa cliente.
+   */
+  busqueda?: string;
+  /** HU #12217 — condiciones de la gramática de Consultas. Solo viajan por el POST de búsqueda. */
+  condiciones?: QueryCondition[];
+  /** Rango sobre la fecha de radicación (`yyyy-mm-dd` o ISO). */
+  createdFrom?: string;
+  createdTo?: string;
+  /** Rango sobre la fecha de última actualización. */
+  updatedFrom?: string;
+  updatedTo?: string;
+  /** vin | placa | vendedor | comprador | gestor | empresa | tipo_tramite | createdAt | radicado | estado */
   sortBy?: string;
   /** asc | desc */
   sortDir?: "asc" | "desc";
