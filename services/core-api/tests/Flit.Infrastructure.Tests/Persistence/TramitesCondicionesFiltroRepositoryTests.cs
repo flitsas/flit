@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Queries.Domain;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -669,5 +670,59 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
         transfSegunSql.Should().Equal(segunElDominio(i => TramiteMarcas.TieneTransformacion(
             i.FieldValues.ToDictionary(fv => fv.FieldKey, fv => fv.ValueText),
             i.ProcedureType?.Code)));
+    }
+
+    // ── HU #12162 — «Gestor» en la gramática apunta al responsable de HOY ────────────────────
+
+    [Fact]
+    public async Task Gestor_FiltraPorElReasignadoYNoPorElCreador()
+    {
+        // La columna del listado muestra al reasignado desde la HU #12162. Si el filtro siguiera
+        // casando contra quien radicó, buscar al responsable actual no encontraría nada y buscar al
+        // anterior devolvería una fila que en pantalla lleva otro nombre.
+        await using var db = NewContext(nameof(Gestor_FiltraPorElReasignadoYNoPorElCreador));
+        var (creador, asignado) = (Guid.NewGuid(), Guid.NewGuid());
+        db.Users.AddRange(
+            new User { Id = creador, Email = "ana@flit.io", DisplayName = "Ana Gestora" },
+            new User { Id = asignado, Email = "beto@flit.io", DisplayName = "Beto Gestor" });
+        var reasignado = Instancia("R1");
+        reasignado.CreatedByUserId = creador;
+        reasignado.AssignedToUserId = asignado;
+        var normal = Instancia("R2");
+        normal.CreatedByUserId = creador;
+        db.ProcedureInstances.AddRange(reasignado, normal);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (porElNuevo, totalNuevo) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Gestor, QueryOperator.Contiene, "Beto"));
+        porElNuevo.Should().Equal("R1");
+        totalNuevo.Should().Be(1);
+
+        var (porElCreador, totalCreador) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Gestor, QueryOperator.Contiene, "Ana"));
+        porElCreador.Should().Equal("R2");
+        totalCreador.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Gestor_SinReasignar_SigueCayendoAQuienRadico()
+    {
+        // El fallback de la HU #12162: un trámite que nunca se reasignó se sigue encontrando por
+        // quien lo radicó. Es lo que evita que este arreglo se lleve por delante el comportamiento
+        // de siempre para la inmensa mayoría de los trámites.
+        await using var db = NewContext(nameof(Gestor_SinReasignar_SigueCayendoAQuienRadico));
+        var creador = Guid.NewGuid();
+        db.Users.Add(new User { Id = creador, Email = "ana@flit.io", DisplayName = "Ana Gestora" });
+        var instancia = Instancia("R1");
+        instancia.CreatedByUserId = creador;
+        instancia.AssignedToUserId = null;
+        db.ProcedureInstances.Add(instancia);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Gestor, QueryOperator.EsAlguno, "Ana Gestora"));
+
+        refs.Should().Equal("R1");
+        total.Should().Be(1);
     }
 }
