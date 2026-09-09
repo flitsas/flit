@@ -4,6 +4,13 @@ namespace Flit.Admin.Application.GeneracionDocumental.Ports;
 public sealed record StoredStandaloneDocument(string StoragePath, string Sha256, long SizeBytes);
 
 /// <summary>
+/// Enlace de descarga de vida corta (presigned GET, ADR-0029). <b>La URL lleva firma HMAC: no se
+/// escribe en ningún log, traza de error ni comentario de auditoría</b>; solo viaja en el cuerpo de
+/// la respuesta al usuario que ya demostró permiso y pertenencia al tenant.
+/// </summary>
+public sealed record StandaloneDocumentDownloadLink(string Url, DateTimeOffset ExpiresAt);
+
+/// <summary>
 /// Puerto ACOTADO de almacenamiento del módulo de generación documental (Feature #12201,
 /// ADR-0056-generacion-documental-standalone). El adaptador de Infrastructure delega en
 /// <c>IAttachmentStorage</c> pasando el <b>tenantId</b> como clave de agrupación — que es lo que ese
@@ -25,5 +32,14 @@ public interface IStandaloneDocumentStorage
         string tipo,
         string filename,
         Stream content,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Presigned GET de vida corta para el PDF ya generado (CF-19, ADR-0029). Devuelve <c>null</c>
+    /// si el binario no existe o el backend de almacenamiento no soporta presigned view.
+    /// <para>El caller NO puede loguear la URL devuelta.</para>
+    /// </summary>
+    Task<StandaloneDocumentDownloadLink?> GetPresignedViewUrlAsync(
+        string storagePath,
         CancellationToken cancellationToken = default);
 }

@@ -13,8 +13,10 @@ export interface HistorialTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
-  /** Redescarga del PDF ya generado (HU-03). Sin handler, la acción no se ofrece. */
+  /** Redescarga del PDF ya generado (CF-19). Sin handler, la acción no se ofrece. */
   onDownload?: (row: StandaloneDocumentListItem) => void;
+  /** Id de la fila cuya presigned URL se está pidiendo, para bloquear el doble clic. */
+  downloadingId?: string | null;
 }
 
 /**
@@ -23,7 +25,10 @@ export interface HistorialTableProps {
  * Presentacional pura: tipo, escenario, empresa, usuario, fecha y resultado. Nunca
  * renderiza `document_snapshot` (PII alta) — el contrato del listado ni siquiera lo trae.
  * El estado se pinta con `StatusBadge` a partir de `status-labels.ts`: texto visible
- * siempre, el color solo acompaña (CF-22). Los filtros y la descarga real son HU-03.
+ * siempre, el color solo acompaña (CF-22).
+ *
+ * La acción de descarga solo se ofrece en las filas `generated`: pedir la presigned URL de
+ * un documento en error devolvería 409 y sería una acción que promete lo que no puede dar.
  */
 export function HistorialTable({
   rows,
@@ -32,6 +37,7 @@ export function HistorialTable({
   pageSize,
   onPageChange,
   onDownload,
+  downloadingId = null,
 }: HistorialTableProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -85,12 +91,14 @@ export function HistorialTable({
                       <button
                         type="button"
                         onClick={() => onDownload(row)}
+                        disabled={downloadingId === row.id}
+                        aria-busy={downloadingId === row.id}
                         aria-label={`Descargar ${generacionDocumentalTypeLabel(row.documentType)} del ${formatGeneracionDocumentalDate(row.createdAt)}`}
-                        className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                        className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
                         style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
                       >
                         <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                        Descargar
+                        {downloadingId === row.id ? "Preparando…" : "Descargar"}
                       </button>
                     ) : (
                       <span className="opacity-60">—</span>

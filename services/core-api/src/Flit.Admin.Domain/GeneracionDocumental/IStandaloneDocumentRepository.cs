@@ -20,6 +20,31 @@ public interface IStandaloneDocumentRepository
         string idempotencyKey,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Historial paginado del tenant del filtro (CF-17/CF-18). Devuelve una PROYECCIÓN pobre en
+    /// PII: sin <c>document_snapshot</c>, sin <c>rues_snapshot</c> y sin <c>storage_path</c>.
+    /// </summary>
+    Task<StandaloneDocumentPage> ListAsync(
+        StandaloneDocumentFilter filter,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Audita una descarga (CF-19) en un ÚNICO UPDATE atómico: <c>download_count</c> se incrementa
+    /// con una expresión SQL sobre la propia columna y <c>downloaded_at</c> se fija en el mismo
+    /// enunciado. Nunca se lee-y-escribe desde el handler: dos descargas concurrentes dejarían el
+    /// contador en 1.
+    /// <para>Solo afecta filas del tenant en estado <c>generated</c>. Devuelve el número de filas
+    /// actualizadas (0 = no existe, es de otro tenant o no está generada).</para>
+    /// <para>Las cinco columnas que toca este UPDATE están EXENTAS del trigger
+    /// <c>tr_standalone_documents_immutable</c>; tocar cualquier otra aquí haría fallar la descarga
+    /// con <c>check_violation</c>.</para>
+    /// </summary>
+    Task<int> RegisterDownloadAsync(
+        Guid tenantId,
+        Guid id,
+        DateTimeOffset downloadedAt,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Una fila del tenant por id. <c>null</c> si no existe o es de otro tenant.</summary>
     Task<StandaloneDocument?> GetByIdAsync(
         Guid tenantId,

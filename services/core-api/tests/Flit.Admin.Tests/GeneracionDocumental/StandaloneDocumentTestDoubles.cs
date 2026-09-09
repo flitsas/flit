@@ -19,6 +19,9 @@ internal sealed class FakeStandaloneDocumentRepository : IStandaloneDocumentRepo
 
     public List<(Guid Id, string ErrorCode, string? ErrorField)> Errors { get; } = [];
 
+    /// <summary>Auditorías de descarga registradas (CF-19), en orden.</summary>
+    public List<(Guid Id, DateTimeOffset At)> Downloads { get; } = [];
+
     public Task<StandaloneDocument?> FindByIdempotencyKeyAsync(
         Guid tenantId, string idempotencyKey, CancellationToken cancellationToken = default)
         => Task.FromResult(Rows.FirstOrDefault(
@@ -72,6 +75,85 @@ internal sealed class FakeStandaloneDocumentRepository : IStandaloneDocumentRepo
     }
 
     /// <summary>
+    /// Historial en memoria con los mismos filtros que el SQL del repositorio real. Devuelve la
+    /// PROYECCIÓN pobre en PII: aunque la fila guardada tenga <c>document_snapshot</c>, el listado
+    /// no tiene dónde ponerlo.
+    /// </summary>
+    public Task<StandaloneDocumentPage> ListAsync(
+        StandaloneDocumentFilter filter, CancellationToken cancellationToken = default)
+    {
+        var query = Rows.Where(r => r.TenantId == filter.TenantId);
+
+        if (!string.IsNullOrWhiteSpace(filter.DocumentType))
+        {
+            query = query.Where(r => r.DocumentType == filter.DocumentType);
+        }
+
+        if (filter.Statuses is { Count: > 0 })
+        {
+            query = query.Where(r => filter.Statuses.Contains(r.Status));
+        }
+
+        if (filter.DateFrom is { } desde)
+        {
+            query = query.Where(r => r.CreatedAt >= desde);
+        }
+
+        if (filter.DateTo is { } hasta)
+        {
+            query = query.Where(r => r.CreatedAt < hasta);
+        }
+
+        if (filter.CreatedByUserId is { } autor)
+        {
+            query = query.Where(r => r.CreatedByUserId == autor);
+        }
+
+        var ordered = query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).ToList();
+
+        var items = ordered
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .Select(r => new StandaloneDocumentListItem
+            {
+                Id = r.Id,
+                DocumentType = r.DocumentType,
+                Scenario = r.Scenario,
+                Status = r.Status,
+                ErrorCode = r.ErrorCode,
+                Filename = r.Filename,
+                CompanyName = $"COMPANIA {r.TenantId.ToString()[..8]}",
+                CreatedByUserId = r.CreatedByUserId,
+                CreatedByUserName = "Usuario de prueba",
+                CreatedAt = r.CreatedAt,
+            })
+            .ToList();
+
+        return Task.FromResult(new StandaloneDocumentPage(items, filter.Page, filter.PageSize, ordered.Count));
+    }
+
+    /// <summary>
+    /// Imita el UPDATE atómico: incrementa sobre el valor de la propia fila y fija la fecha en el
+    /// mismo paso. Devuelve las filas afectadas (0 si no es del tenant o no está generada), que es
+    /// lo que devuelve <c>ExecuteUpdateAsync</c>.
+    /// </summary>
+    public Task<int> RegisterDownloadAsync(
+        Guid tenantId, Guid id, DateTimeOffset downloadedAt, CancellationToken cancellationToken = default)
+    {
+        var index = Rows.FindIndex(
+            r => r.TenantId == tenantId && r.Id == id && r.Status == StandaloneDocumentStatus.Generated);
+
+        if (index < 0)
+        {
+            return Task.FromResult(0);
+        }
+
+        Downloads.Add((id, downloadedAt));
+        Replace(id, r => r with { DownloadCount = r.DownloadCount + 1, DownloadedAt = downloadedAt });
+        return Task.FromResult(1);
+    }
+
+    /// <summary>
     /// <see cref="StandaloneDocument"/> es una clase con <c>init</c>: se sustituye la fila entera
     /// para imitar el UPDATE, sin mutar propiedades de solo inicialización.
     /// </summary>
@@ -105,12 +187,15 @@ internal sealed record StandaloneDocumentSnapshot(
     string? IdempotencyKey,
     string InputSummary,
     string? RuesSnapshot,
+    string? DocumentSnapshot,
+    DateTimeOffset? DownloadedAt,
+    int DownloadCount,
     DateTimeOffset CreatedAt)
 {
     public static StandaloneDocumentSnapshot From(StandaloneDocument d) => new(
         d.Id, d.TenantId, d.CreatedByUserId, d.DocumentType, d.Scenario, d.Status, d.ErrorCode,
         d.ErrorField, d.StoragePath, d.StorageSha256, d.SizeBytes, d.Filename, d.IdempotencyKey,
-        d.InputSummary, d.RuesSnapshot, d.CreatedAt);
+        d.InputSummary, d.RuesSnapshot, d.DocumentSnapshot, d.DownloadedAt, d.DownloadCount, d.CreatedAt);
 
     public StandaloneDocument ToDocument() => new()
     {
@@ -129,6 +214,9 @@ internal sealed record StandaloneDocumentSnapshot(
         IdempotencyKey = IdempotencyKey,
         InputSummary = InputSummary,
         RuesSnapshot = RuesSnapshot,
+        DocumentSnapshot = DocumentSnapshot,
+        DownloadedAt = DownloadedAt,
+        DownloadCount = DownloadCount,
         CreatedAt = CreatedAt,
     };
 }
@@ -176,6 +264,12 @@ internal sealed class FakeStandaloneDocumentStorage : IStandaloneDocumentStorage
 {
     public List<(Guid TenantId, string Tipo, string Filename, long Length)> Saved { get; } = [];
 
+    /// <summary>Presigned URLs entregadas, para contar cuántas veces se firmó de verdad.</summary>
+    public List<string> Presigned { get; } = [];
+
+    /// <summary>Simula un binario ausente en storage: el puerto devuelve null.</summary>
+    public bool BinarioDisponible { get; set; } = true;
+
     public Task<StoredStandaloneDocument> SaveAsync(
         Guid tenantId, string tipo, string filename, Stream content,
         CancellationToken cancellationToken = default)
@@ -185,5 +279,19 @@ internal sealed class FakeStandaloneDocumentStorage : IStandaloneDocumentStorage
             $"fm://{tenantId}/{filename}",
             "9f2b1c0a5d4e6f7a8b9c0d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c",
             content.Length));
+    }
+
+    public Task<StandaloneDocumentDownloadLink?> GetPresignedViewUrlAsync(
+        string storagePath, CancellationToken cancellationToken = default)
+    {
+        if (!BinarioDisponible)
+        {
+            return Task.FromResult<StandaloneDocumentDownloadLink?>(null);
+        }
+
+        Presigned.Add(storagePath);
+        return Task.FromResult<StandaloneDocumentDownloadLink?>(new StandaloneDocumentDownloadLink(
+            $"https://storage.example/{storagePath}?X-Amz-Signature=firma-{Presigned.Count}",
+            DateTimeOffset.UtcNow.AddMinutes(10)));
     }
 }

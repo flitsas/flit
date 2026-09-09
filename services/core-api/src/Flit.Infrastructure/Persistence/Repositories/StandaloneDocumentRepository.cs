@@ -154,6 +154,110 @@ internal sealed class StandaloneDocumentRepository : IStandaloneDocumentReposito
                 cancellationToken);
     }
 
+    /// <summary>
+    /// Historial paginado (CF-17/CF-18). La proyección se arma en SQL y <b>no selecciona
+    /// <c>document_snapshot</c>, <c>rues_snapshot</c> ni <c>storage_path</c></b>: el snapshot es PII
+    /// alta y no puede salir en un listado, ni siquiera «por si acaso» dentro de la entidad.
+    /// </summary>
+    public async Task<StandaloneDocumentPage> ListAsync(
+        StandaloneDocumentFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var page = filter.Page < 1 ? 1 : filter.Page;
+        var pageSize = filter.PageSize switch
+        {
+            < 1 => 20,
+            > 100 => 100,
+            _ => filter.PageSize,
+        };
+
+        var query = Scoped(filter.TenantId);
+
+        if (!string.IsNullOrWhiteSpace(filter.DocumentType))
+        {
+            var documentType = filter.DocumentType;
+            query = query.Where(x => x.DocumentType == documentType);
+        }
+
+        if (filter.Statuses is { Count: > 0 })
+        {
+            // Estados INTERNOS: «En proceso» llega ya expandido a pending + processing (CF-21).
+            var statuses = filter.Statuses.ToArray();
+            query = query.Where(x => statuses.Contains(x.Status));
+        }
+
+        if (filter.DateFrom is { } desde)
+        {
+            query = query.Where(x => x.CreatedAt >= desde);
+        }
+
+        if (filter.DateTo is { } hasta)
+        {
+            query = query.Where(x => x.CreatedAt < hasta);
+        }
+
+        if (filter.CreatedByUserId is { } autor)
+        {
+            query = query.Where(x => x.CreatedByUserId == autor);
+        }
+
+        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+
+        var items = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => new StandaloneDocumentListItem
+            {
+                Id = x.Id,
+                DocumentType = x.DocumentType,
+                Scenario = x.Scenario,
+                Status = x.Status,
+                ErrorCode = x.ErrorCode,
+                Filename = x.Filename,
+                CompanyName = _context.Tenants
+                    .Where(t => t.Id == x.TenantId)
+                    .Select(t => t.LegalName)
+                    .FirstOrDefault(),
+                CreatedByUserId = x.CreatedByUserId,
+                CreatedByUserName = _context.Users
+                    .Where(u => u.Id == x.CreatedByUserId)
+                    .Select(u => u.DisplayName)
+                    .FirstOrDefault(),
+                CreatedAt = x.CreatedAt,
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new StandaloneDocumentPage(items, page, pageSize, total);
+    }
+
+    /// <summary>
+    /// Auditoría de descarga (CF-19) en un ÚNICO UPDATE atómico. El contador se incrementa con una
+    /// expresión sobre la propia columna —<c>download_count = download_count + 1</c> en SQL—, de
+    /// modo que dos descargas dejan 2 aunque ocurran a la vez: leer en el handler y escribir después
+    /// perdería una.
+    /// <para>Las tres columnas escritas están exentas del trigger de inmutabilidad. Añadir aquí
+    /// cualquier columna congelada (snapshot, storage_path, status…) haría fallar toda descarga de
+    /// un documento ya generado con <c>check_violation</c>.</para>
+    /// </summary>
+    public Task<int> RegisterDownloadAsync(
+        Guid tenantId,
+        Guid id,
+        DateTimeOffset downloadedAt,
+        CancellationToken cancellationToken = default)
+        => Scoped(tenantId)
+            .Where(x => x.Id == id && x.Status == StandaloneDocumentStatus.Generated)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(x => x.DownloadCount, x => x.DownloadCount + 1)
+                    .SetProperty(x => x.DownloadedAt, downloadedAt)
+                    .SetProperty(x => x.UpdatedAt, downloadedAt),
+                cancellationToken);
+
     /// <summary>Universo visible: SIEMPRE el tenant indicado y solo filas no borradas lógicamente.</summary>
     private IQueryable<StandaloneDocumentEntity> Scoped(Guid tenantId) =>
         _context.StandaloneDocuments.Where(x => x.TenantId == tenantId && x.DeletedAt == null);

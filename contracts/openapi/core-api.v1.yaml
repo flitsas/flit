@@ -6233,6 +6233,153 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/generacion-documental:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalList
+      summary: Historial paginado de documentos generados por la compañía
+      description: >
+        Historial tenant-scoped (CF-17/CF-18) con la metadata mínima de cada documento: tipo,
+        escenario cuando aplica, empresa, usuario, fecha y resultado. NUNCA expone
+        document_snapshot ni rues_snapshot (PII alta, CF-26), ni la ruta de storage, ni ninguna URL
+        firmada. El aislamiento entre compañías es el filtro WHERE tenant_id del repositorio más la
+        autorización del endpoint: la política RLS de la tabla no aísla nada (§5.4 del diseño).
+        Requiere el permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [certificado_rues, transferencia_dominio_generada]
+        - name: status
+          in: query
+          required: false
+          description: >
+            Estado INTERNO. Se repite una vez por estado: la opción de usuario «En proceso» viaja
+            como status=pending&status=processing (CF-21, tres opciones para cuatro estados).
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [pending, processing, generated, error]
+          style: form
+          explode: true
+        - name: dateFrom
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Límite inferior inclusivo sobre la fecha de generación.
+        - name: dateTo
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: >
+            Límite superior. Una fecha sin hora incluye el día completo (el backend la convierte en
+            el límite exclusivo del día siguiente).
+        - name: userId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Autor de la generación (created_by_user_id).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Solo lo honra un SuperAdmin (CF-20): devuelve METADATA global de esa compañía y jamás
+            document_snapshot ni presigned URLs. Para cualquier otro usuario se ignora y se consulta
+            su propio tenant.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página del historial.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentsPagedResult"
+        "400":
+          description: Parámetro de fecha con formato inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/{id}/download:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalDownload
+      summary: Presigned URL de descarga del PDF ya generado y auditoría (CF-19)
+      description: >
+        Devuelve una presigned URL de vida corta (ADR-0029) para el PDF ya generado y, en la misma
+        operación, incrementa download_count y actualiza downloaded_at con un ÚNICO UPDATE atómico
+        en SQL — dos descargas dejan el contador en 2. Aplica en CADA descarga, no solo la primera;
+        el contador es de auditoría y no limita descargas. No regenera nada: no se invoca ningún
+        generador ni proveedor externo y storage_sha256 no cambia (CF-03). La URL firmada no se
+        escribe en ningún log ni traza de error. Un id de otra compañía responde 404 sin revelar su
+        existencia, también para SuperAdmin (CF-20). Requiere el permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Enlace de descarga vigente. La descarga queda auditada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentDownloadLink"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            No existe, pertenece a otro tenant o perdió su binario. Misma respuesta escueta en los
+            tres casos: no revela existencia, presigned URL, snapshot ni PII.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El documento existe en el tenant pero no está en estado generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Trámites · Documentos (adjuntos, checklist, consolidado) — HU #10520 (RNF01) ──
   /api/v1/tramites/instances/{id}/attachments:
     parameters:
@@ -7353,6 +7500,62 @@ components:
           type: string
           nullable: true
           enum: [invalid_request, provider_unavailable, provider_not_found]
+    StandaloneDocumentListItem:
+      type: object
+      description: >
+        Fila del historial (CF-17). Pobre en PII a propósito: no declara document_snapshot,
+        rues_snapshot, storage_path ni storage_sha256, así que el listado no puede filtrarlos por
+        descuido.
+      required: [id, documentType, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        documentType:
+          type: string
+          enum: [certificado_rues, transferencia_dominio_generada]
+        scenario:
+          type: string
+          nullable: true
+          enum: [A, B, C]
+          description: Escenario normativo de la transferencia; null en el Certificado RUES.
+        status:
+          type: string
+          enum: [pending, processing, generated, error]
+          description: Estado INTERNO. La interfaz colapsa pending y processing en «En proceso» (CF-21).
+        errorCode:
+          type: string
+          nullable: true
+        filename:
+          type: string
+          nullable: true
+        companyName:
+          type: string
+          nullable: true
+          description: Razón social de la compañía dueña del documento.
+        createdByUserId: { type: string, format: uuid }
+        createdByUserName:
+          type: string
+          nullable: true
+        createdAt: { type: string, format: date-time }
+    StandaloneDocumentsPagedResult:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandaloneDocumentListItem"
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    StandaloneDocumentDownloadLink:
+      type: object
+      description: >
+        Enlace presignado de vida corta. Contiene una firma HMAC: no se loguea, no se persiste y no
+        se reenvía a terceros.
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
     # ── Trámites · Firma a posteriori (HU #11196 / #11197) ─────────────────────
     DeferredSignatureStateResponse:
       type: object

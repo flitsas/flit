@@ -2,13 +2,18 @@
 // vacío ofreciendo la acción de generar el primer documento.
 // Uso de ejemplo: render(<HistorialSection />) con `fetchStandaloneDocuments` mockeado.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const mocks = vi.hoisted(() => ({ fetchStandaloneDocuments: vi.fn(), push: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  fetchStandaloneDocuments: vi.fn(),
+  requestStandaloneDocumentDownload: vi.fn(),
+  push: vi.fn(),
+}));
 
 vi.mock("@/lib/api/admin-generacion-documental", () => ({
   fetchStandaloneDocuments: mocks.fetchStandaloneDocuments,
+  requestStandaloneDocumentDownload: mocks.requestStandaloneDocumentDownload,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 
@@ -65,7 +70,8 @@ describe("HistorialSection — cuatro estados de UI (CF-22)", () => {
     render(<HistorialSection />);
 
     await waitFor(() => expect(screen.getByRole("table")).toBeInTheDocument());
-    expect(screen.getByText("Generado")).toBeInTheDocument();
+    // HU-03 añadió el selector de estado, que también dice «Generado»: se acota a la tabla.
+    expect(within(screen.getByRole("table")).getByText("Generado")).toBeInTheDocument();
   });
 
   it("contrato: pide la primera página con el tamaño de página del módulo", async () => {
@@ -73,8 +79,9 @@ describe("HistorialSection — cuatro estados de UI (CF-22)", () => {
     render(<HistorialSection />);
 
     await waitFor(() => expect(mocks.fetchStandaloneDocuments).toHaveBeenCalled());
+    // HU-03 añadió los filtros: la primera carga los manda sin valor, no los omite del objeto.
     expect(mocks.fetchStandaloneDocuments).toHaveBeenCalledWith(
-      { page: 1, pageSize: 20 },
+      expect.objectContaining({ page: 1, pageSize: 20 }),
       expect.any(AbortSignal),
     );
   });

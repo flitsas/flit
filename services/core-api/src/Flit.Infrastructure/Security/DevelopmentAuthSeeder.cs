@@ -1468,7 +1468,7 @@ public static class DevelopmentAuthSeeder
             (Slug: "generacion-documental.read",
              Name: "Ver generación documental",
              HttpMethod: "GET",
-             RoutePattern: "/api/v1/admin/generacion-documental/documentos"),
+             RoutePattern: "/api/v1/admin/generacion-documental"),
             (Slug: "generacion-documental.generate",
              Name: "Generar documentos sin trámite",
              HttpMethod: "POST",

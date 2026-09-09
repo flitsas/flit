@@ -41,4 +41,26 @@ internal sealed class StandaloneDocumentStorage : IStandaloneDocumentStorage
 
         return new StoredStandaloneDocument(stored.StoragePath, stored.Sha256, stored.SizeBytes);
     }
+
+    /// <summary>
+    /// Presigned GET inline (TTL corto, ADR-0029). <b>No se loguea la URL</b> ni aquí ni en el
+    /// handler: contiene la firma HMAC y equivale a una credencial de lectura del binario.
+    /// </summary>
+    public async Task<StandaloneDocumentDownloadLink?> GetPresignedViewUrlAsync(
+        string storagePath,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(storagePath))
+        {
+            return null;
+        }
+
+        var presigned = await _storage
+            .GetPresignedViewUrlAsync(storagePath, cancellationToken)
+            .ConfigureAwait(false);
+
+        return presigned is null
+            ? null
+            : new StandaloneDocumentDownloadLink(presigned.Value.Url, presigned.Value.ExpiresAt);
+    }
 }

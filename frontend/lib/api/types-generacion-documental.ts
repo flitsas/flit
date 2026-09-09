@@ -25,6 +25,8 @@ export interface StandaloneDocumentListItem {
   errorCode?: string | null;
   filename?: string | null;
   companyName?: string | null;
+  /** Autor de la generación. Alimenta el filtro por usuario del historial (CF-18). */
+  createdByUserId: string;
   createdByUserName?: string | null;
   createdAt: string;
 }

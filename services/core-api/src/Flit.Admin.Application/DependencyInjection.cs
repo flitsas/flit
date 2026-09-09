@@ -51,7 +51,9 @@ using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
 using Flit.Admin.Application.DocumentTypes.PurgeDocumentType;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
+using Flit.Admin.Application.GeneracionDocumental.Download;
 using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
+using Flit.Admin.Application.GeneracionDocumental.List;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
 using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
@@ -356,6 +358,10 @@ public static class DependencyInjection
         // Flit.Infrastructure.AddAdminInfrastructure.
         services.AddScoped<GenerateRuesDocumentHandler>();
         services.AddScoped<PreviewRuesCompanyHandler>();
+
+        // HU #12204 (Feature #12201) — historial tenant-scoped y redescarga presignada auditada.
+        services.AddScoped<ListStandaloneDocumentsHandler>();
+        services.AddScoped<GetStandaloneDocumentDownloadHandler>();
 
         return services;
     }
