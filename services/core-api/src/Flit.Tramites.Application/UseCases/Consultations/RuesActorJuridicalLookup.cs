@@ -9,10 +9,10 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// habrían podido divergir con el tiempo (p. ej. si alguien cambiaba la clave del provider en un
 /// handler y olvidaba el otro).
 /// </summary>
-internal static class RuesActorJuridicalLookup
+public static class RuesActorJuridicalLookup
 {
-    internal const string ProviderKey = "verifik_rues";
-    internal const string TemplateCode = "RUES_ACTOR_JURIDICAL";
+    public const string ProviderKey = "verifik_rues";
+    public const string TemplateCode = "RUES_ACTOR_JURIDICAL";
 
     /// <summary>
     /// Resuelve el proveedor RUES y consulta el NIT. <paramref name="instanceId"/> es
@@ -20,7 +20,7 @@ internal static class RuesActorJuridicalLookup
     /// <c>RunPreflightPreviewHandler.RunVehiculoAsync</c> para "sin instancia". Devuelve
     /// <c>Error = "provider_not_found"</c> si el proveedor no está registrado; nunca lanza.
     /// </summary>
-    internal static async Task<(ConsultationResult? Result, string? Error)> ConsultAsync(
+    public static async Task<(ConsultationResult? Result, string? Error)> ConsultAsync(
         IConsultationProviderRegistry registry,
         Guid instanceId,
         Guid tenantId,
@@ -49,7 +49,7 @@ internal static class RuesActorJuridicalLookup
     /// Distingue "el proveedor no respondió" (check error) de "el NIT no existe" (check unknown).
     /// Ambos llegan con cero campos hidratados; sin este filtro el operador ve "empresa no encontrada".
     /// </summary>
-    internal static bool IsProviderFailure(ConsultationResult result)
+    public static bool IsProviderFailure(ConsultationResult result)
     {
         foreach (var check in result.Checks)
         {
@@ -61,7 +61,7 @@ internal static class RuesActorJuridicalLookup
     }
 
     /// <summary>Busca <paramref name="fieldKey"/> en los campos hidratados por la consulta.</summary>
-    internal static string? GetHydrated(IReadOnlyList<HydratedField> fields, string fieldKey)
+    public static string? GetHydrated(IReadOnlyList<HydratedField> fields, string fieldKey)
     {
         foreach (var f in fields)
         {

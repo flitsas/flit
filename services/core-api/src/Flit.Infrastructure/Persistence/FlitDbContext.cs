@@ -318,6 +318,17 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     internal DbSet<Entities.Admin.NotificationDeliveryLogEntity> NotificationDeliveryLogs =>
         Set<Entities.Admin.NotificationDeliveryLogEntity>();
 
+    // Generación documental autónoma (Feature #12201, ADR-0056-generacion-documental-standalone):
+    // documentos emitidos SIN trámite. Ninguna FK hacia tramites.*; el PDF vive en storage y aquí
+    // solo hay metadata, hash, snapshot inmutable y auditoría de descarga.
+    public DbSet<Entities.Admin.StandaloneDocumentEntity> StandaloneDocuments =>
+        Set<Entities.Admin.StandaloneDocumentEntity>();
+
+    // Cabecera de lote XLSX de generación documental (Feature #12201, I3). Sin tabla de items: una
+    // fila del XLSX es una fila de StandaloneDocuments vinculada por (batch_id, row_number).
+    public DbSet<Entities.Admin.StandaloneDocumentBatchEntity> StandaloneDocumentBatches =>
+        Set<Entities.Admin.StandaloneDocumentBatchEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

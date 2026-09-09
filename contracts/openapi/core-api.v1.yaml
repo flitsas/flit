@@ -44,6 +44,11 @@ tags:
       Historial del Certificado de Improntas Digitales vehicular (Res. 17145/2023
       Mintransporte, integración Kyverum RUNT — ADR-0022). Vista global cross-tenant
       sin RLS, rol SuperAdmin.
+  - name: Admin · Generación documental
+    description: >
+      Emisión de documentos SIN abrir un trámite (Feature #12201,
+      ADR-0056-generacion-documental-standalone). Autorización POR PERMISO
+      (generacion-documental.read / generacion-documental.generate), nunca por policy de grupo.
   - name: Trámites · Documentos
     description: >
       Alta de trámite con snapshot documental inmutable y lectura de los documentos
@@ -6165,6 +6170,830 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── Admin · Generación documental (Feature #12201, ADR-0056) ──
+  # Emisión SIN trámite: ninguna ruta crea ni referencia una procedure_instance.
+  /api/v1/admin/generacion-documental/rues/preview:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPreviewRues
+      summary: Consulta el RUES por NIT para revisión previa (no persiste)
+      description: >
+        Consulta EN VIVO el RUES por NIT y devuelve los campos mercantiles para que el usuario los
+        revise antes de emitir el certificado (CF-04). NO crea ninguna fila en
+        admin.standalone_documents ni escribe archivo alguno: es una consulta efímera. Requiere el
+        permiso generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandaloneRuesRequest"
+      responses:
+        "200":
+          description: Resultado de la consulta (found=false si el NIT no tiene coincidencia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneRuesPreviewResult"
+        "400":
+          description: NIT ausente o vacío.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor RUES no respondió.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor RUES no está registrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/rues/generate:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalGenerateRues
+      summary: Genera el Certificado RUES standalone (sin trámite)
+      description: >
+        Consulta el RUES EN VIVO por NIT, congela el snapshot inmutable, renderiza el PDF con la
+        plantilla QuestPDF local (el mismo generador del expediente) y lo persiste en storage. NO
+        devuelve el PDF: responde { id, status } en application/json con cualquier Accept, y la
+        descarga va siempre por GET /{id}/download. El campo status solo puede valer generated o
+        error (CF-21). Requiere el permiso generacion-documental.generate. El documento queda en el
+        tenant del JWT, también para SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 120 }
+          description: >
+            Repetir la misma clave dentro del tenant devuelve el documento existente sin consultar
+            al proveedor RUES y sin escribir un archivo nuevo (CF-16).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandaloneRuesRequest"
+      responses:
+        "200":
+          description: Documento generado (o recuperado por idempotencia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentGenerateResult"
+        "400":
+          description: NIT ausente o con formato inválido. No se crea fila ni se consulta nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin los claims tenant_id / sub.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            El NIT no tiene coincidencia en RUES. La fila queda en estado error con error_code
+            identificable y NO se produce ningún archivo en storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor RUES no respondió.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor RUES no está registrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/transferencia/generate:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalGenerateTransferencia
+      summary: Genera el Documento de Transferencia de Dominio (escenarios A, B y C)
+      description: >
+        Emite el instrumento privado de transferencia de dominio SIN abrir un trámite, conforme al
+        anexo normativo docs/plantilla-transferencia-dominio.md (Resolución 20233040017145 de 2023).
+        Los tres escenarios están disponibles: A traspaso ordinario (art. 5.3.2.1), B transferencia
+        unilateral de leasing al locatario (art. 5.3.2.2) y C entidad financiera a un tercero
+        (art. 5.3.2.1 SIN las exenciones del 5.3.2.2). El escenario es obligatorio y ÚNICO: cero o
+        más de uno responde 422 con el código VB-05.
+        VB-07 es un GATE PREVIO a la selección de escenario: mientras no se declare que ninguna de
+        las once condiciones especiales de traspaso de los arts. 5.3.2.3 a 5.3.2.13 aplica, la
+        generación se rechaza con 422 y el código VB-07; declarar cualquiera de las once también
+        rechaza, con el artículo citado en el mensaje. El art. 5.3.2.14 (expedición de la nueva
+        licencia de tránsito) NO es una condición especial y no bloquea.
+        En el ESCENARIO B el locatario no es una parte del documento: no se envía adquirente, no hay
+        campo de precio (si el cuerpo trae precio o contraprestación, 422 con VB-B-05) y el PDF se
+        emite con UN solo bloque de firma, el de la entidad financiera.
+        Validaciones bloqueantes: VB-02 placa, VB-06 partes distintas, VB-07 régimen aplicable,
+        VB-A-04 gravamen, VB-A-06 precio de la compraventa, VB-A-07 título jurídico, VB-B-01 a
+        VB-B-05 del escenario B y VB-C-01 del escenario C. Todas responden 422 con código, campo y
+        mensaje, y NUNCA reflejan el valor capturado.
+        Prevalidaciones advisory (VB-01, VB-03, VB-04, VB-A-01 a VB-A-03, VB-A-05, VB-A-08 a
+        VB-A-10, VB-B-06 y VB-C-02 a VB-C-10): viajan en la respuesta 200 como aviso y no bloquean
+        nunca; las verifica el Organismo de Tránsito. El modo de firma es MANUSCRITA fijo: el PDF
+        lleva líneas de firma con nombre y documento y no contiene leyenda de firma electrónica ni
+        sello alguno. NO devuelve el PDF: responde { id, status, advisories } en application/json
+        con cualquier Accept, y la descarga va por GET /{id}/download. Requiere el permiso
+        generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 120 }
+          description: >
+            Repetir la misma clave dentro del tenant devuelve el documento existente sin renderizar
+            de nuevo ni escribir otro archivo (CF-16).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandaloneTransferenciaRequest"
+      responses:
+        "200":
+          description: Documento generado (o recuperado por idempotencia), con las advisory.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneTransferGenerateResult"
+        "400":
+          description: >
+            Cuerpo incompleto o fuera de catálogo (nombres, documentos, ciudad de firma o las
+            variables fiscales de la cláusula sexta). No es una validación normativa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin los claims tenant_id / sub.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Al menos una validación bloqueante del anexo falló —incluido el gate VB-07 de régimen
+            aplicable—. No se persiste ninguna fila ni se escribe archivo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneTransferValidationError"
+
+  /api/v1/admin/generacion-documental/prefill/vehiculo:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPrefillVehiculo
+      summary: Prellena el bloque de vehículo a partir de la placa (RUNT)
+      description: >
+        Consulta la placa en la cadena de proveedores RUNT existente (el mismo
+        IConsultationProviderChainResolver del expediente, con KyverumRuntVehicleResultMapper) y
+        devuelve 12 de las 13 variables de vehículo del anexo normativo, cada una con su fuente. La
+        restante, no_licencia_transito, no la entrega ninguna consulta y se captura a mano.
+        Un trámite ACTIVO sobre la placa NO bloquea el prellenado: no se evalúa duplicidad de
+        trámite ni el gate de organismo, y no se reutiliza el preflight del wizard (CF-25). Una
+        placa sin antecedente responde 200 con found=false, nunca 404. NO persiste nada: no crea
+        fila en admin.standalone_documents ni escribe archivo. Requiere el permiso
+        generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandalonePrefillVehiculoRequest"
+      responses:
+        "200":
+          description: Campos hidratados con su fuente (found=false si la placa no tiene antecedente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandalonePrefillResult"
+        "400":
+          description: Placa ausente o vacía. No se gasta consulta al proveedor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Ninguna fuente respondió. Sin coincidencia no hay 502; eso es 200 con found=false.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/prefill/persona-juridica:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPrefillPersonaJuridica
+      summary: Prellena una parte jurídica por NIT (directorio primero, RUES de respaldo)
+      description: >
+        Precedencia explícita (CF-25): el directorio de representantes legales del tenant
+        (admin.company_legal_representatives) PRIMERO, y el RUES SOLO si el directorio no responde
+        —sea porque el NIT no está o porque la lectura falló—. La respuesta declara la fuente
+        efectiva por campo. El dígito de verificación se CALCULA (módulo 11 DIAN) y viaja con fuente
+        CALCULADO: no se consulta a ningún proveedor y no lo captura el usuario. Sin coincidencia en
+        ninguna fuente: 200 con found=false, nunca 404. NO persiste nada. Requiere el permiso
+        generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandaloneRuesRequest"
+      responses:
+        "200":
+          description: Campos hidratados con su fuente (DIRECTORIO o RUES; el DV, CALCULADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandalonePrefillResult"
+        "400":
+          description: NIT ausente o sin dígitos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Ninguna de las dos fuentes respondió.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/prefill/persona-natural:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPrefillPersonaNatural
+      summary: Prellena una parte natural por documento (RUNT primero, contacto de respaldo)
+      description: >
+        Precedencia explícita (CF-25): la cadena RUNT persona PRIMERO —sin instancia de trámite, con
+        el guardado de caché de consultas externas usando instancia nula— y contact-lookup
+        (histórico de actores del tenant) como respaldo. El domicilio SIEMPRE declara CONTACT_LOOKUP:
+        el RUNT no lo entrega. El respaldo nunca inventa el nombre, porque contact-lookup no
+        devuelve nombre ni documento por contrato. Sin coincidencia en ninguna fuente: 200 con
+        found=false, nunca 404. NO persiste nada. Requiere el permiso
+        generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandalonePrefillPersonaNaturalRequest"
+      responses:
+        "200":
+          description: Campos hidratados con su fuente (RUNT o CONTACT_LOOKUP).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandalonePrefillResult"
+        "400":
+          description: Tipo o número de documento ausente, o tipo no admitido (NIT va por persona-juridica).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Ninguna de las dos fuentes respondió.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalList
+      summary: Historial paginado de documentos generados por la compañía
+      description: >
+        Historial tenant-scoped (CF-17/CF-18) con la metadata mínima de cada documento: tipo,
+        escenario cuando aplica, empresa, usuario, fecha y resultado. NUNCA expone
+        document_snapshot ni rues_snapshot (PII alta, CF-26), ni la ruta de storage, ni ninguna URL
+        firmada. El aislamiento entre compañías es el filtro WHERE tenant_id del repositorio más la
+        autorización del endpoint: la política RLS de la tabla no aísla nada (§5.4 del diseño).
+        Requiere el permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [certificado_rues, transferencia_dominio_generada]
+        - name: status
+          in: query
+          required: false
+          description: >
+            Estado INTERNO. Se repite una vez por estado: la opción de usuario «En proceso» viaja
+            como status=pending&status=processing (CF-21, tres opciones para cuatro estados).
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [pending, processing, generated, error]
+          style: form
+          explode: true
+        - name: dateFrom
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Límite inferior inclusivo sobre la fecha de generación.
+        - name: dateTo
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: >
+            Límite superior. Una fecha sin hora incluye el día completo (el backend la convierte en
+            el límite exclusivo del día siguiente).
+        - name: userId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Autor de la generación (created_by_user_id).
+        - name: batchId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Lote XLSX del que provienen las filas (CF-18 en I3). Convive con los filtros de tipo,
+            fecha, usuario y estado: todos se aplican a la vez con AND. Un batchId de otra compañía
+            devuelve cero resultados, porque el filtro por tenant se aplica igual.
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Solo lo honra un SuperAdmin (CF-20): devuelve METADATA global de esa compañía y jamás
+            document_snapshot ni presigned URLs. Para cualquier otro usuario se ignora y se consulta
+            su propio tenant.
+        - name: allTenants
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Solo lo honra un SuperAdmin: lista los documentos de TODAS las compañías, sin filtro de
+            tenant. Es el único camino del listado sin WHERE tenant_id, y exige las dos condiciones a
+            la vez —ser SuperAdmin y pedirlo— así que no se alcanza por omisión. Gana sobre tenantId
+            si llegan los dos. Para cualquier otro usuario se ignora, igual que tenantId. La
+            respuesta sigue sin document_snapshot, sin ruta de storage y sin presigned URLs: es
+            metadata, y la columna companyName permite distinguir de qué compañía es cada fila.
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página del historial.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentsPagedResult"
+        "400":
+          description: Parámetro de fecha con formato inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/{id}/download:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalDownload
+      summary: Presigned URL de descarga del PDF ya generado y auditoría (CF-19)
+      description: >
+        Devuelve una presigned URL de vida corta (ADR-0029) para el PDF ya generado y, en la misma
+        operación, incrementa download_count y actualiza downloaded_at con un ÚNICO UPDATE atómico
+        en SQL — dos descargas dejan el contador en 2. Aplica en CADA descarga, no solo la primera;
+        el contador es de auditoría y no limita descargas. No regenera nada: no se invoca ningún
+        generador ni proveedor externo y storage_sha256 no cambia (CF-03). La URL firmada no se
+        escribe en ningún log ni traza de error. Un id de otra compañía responde 404 sin revelar su
+        existencia, también para SuperAdmin (CF-20). Requiere el permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Enlace de descarga vigente. La descarga queda auditada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentDownloadLink"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            No existe, pertenece a otro tenant o perdió su binario. Misma respuesta escueta en los
+            tres casos: no revela existencia, presigned URL, snapshot ni PII.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El documento existe en el tenant pero no está en estado generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Admin · Generación documental · Lotes XLSX (I3, HU #12210) ──
+  /api/v1/admin/generacion-documental/lotes/plantilla:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPlantillaLote
+      summary: Descarga la plantilla XLSX v1 de carga masiva (CF-11)
+      description: >
+        Devuelve el XLSX de la plantilla v1 con TODAS las columnas declaradas como texto. Que sean
+        texto no es cosmética: evita que Excel guarde una fecha como serial numérico, que el parser
+        RECHAZA en vez de convertir (una conversión a ciegas produce documentos con la fecha
+        equivocada). El encabezado de este archivo es exactamente el que exige POST /lotes: se
+        genera de la misma lista de columnas que valida la carga. Requiere el permiso
+        generacion-documental.read.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Plantilla v1 vacía, con la fila de encabezado.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/lotes:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalCrearLote
+      summary: Carga un XLSX de hasta 100 filas y encola el lote (CF-11/CF-12/CF-13/CF-16)
+      description: >
+        Recibe multipart/form-data con el campo file y responde 202 con el identificador del lote,
+        estado queued y el total de filas; el procesamiento ocurre en segundo plano. Cada fila se
+        genera con el handler de SU tipo (certificado_rues o transferencia_dominio_generada con su
+        escenario), de modo que un mismo lote admite tipos mezclados (CF-12). Una fila inválida NO
+        cancela el lote (CF-13): queda en error con validation_errors —código, campo y mensaje, y el
+        mensaje NUNCA refleja el valor capturado—, las demás se generan y el lote termina en
+        partial_failure. Un document_type desconocido es una fila en error, no un aborto. Una fila
+        que declare cualquiera de las once condiciones de traspaso especial de los arts. 5.3.2.3 a
+        5.3.2.13 queda en error con el código VB-07 y el artículo citado, y el resto del lote
+        continúa (CF-24 en lote). Rechazos del archivo COMPLETO, con 422 y sin persistir el archivo
+        en storage: too_many_rows con más de 100 filas de datos, template_invalid si el encabezado no
+        es exactamente el de la plantilla v1 e invalid_file si el contenido real no es un XLSX (el
+        MIME se verifica por contenido, no por extensión). La cabecera Idempotency-Key repetida
+        dentro del mismo tenant devuelve el lote existente sin crear lote, ni filas, ni archivo
+        fuente nuevo (CF-16). El seguimiento del avance y la descarga ZIP del lote NO están en esta
+        superficie. Requiere el permiso generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 120 }
+          description: Repetirla dentro del mismo tenant devuelve el lote existente (CF-16).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: XLSX conforme a la plantilla v1, máximo 100 filas de datos.
+      responses:
+        "202":
+          description: Lote encolado. El procesamiento es asíncrono.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentBatchCreated"
+        "200":
+          description: >
+            Replay de idempotencia: el lote que ya existía para esa clave y ese tenant. No se creó
+            nada nuevo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentBatchCreated"
+        "400":
+          description: Falta el archivo o la petición no es multipart.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Archivo rechazado entero (too_many_rows, template_invalid o invalid_file). El XLSX no se
+            persistió en storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/lotes/{batchId}:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalEstadoLote
+      summary: Avance de un lote para el seguimiento in-app (CF-14)
+      description: >
+        Devuelve el estado del lote, el total de filas y cuántas van generadas y en error. Es la
+        ruta que la interfaz sondea cada 4 segundos: no consulta storage, no firma ninguna URL y no
+        toca proveedores externos. Los contadores se cuentan sobre las filas ya materializadas y no
+        se leen de la cabecera del lote, que solo los escribe al cerrar: leerlos ahí dejaría el
+        progreso clavado en cero durante todo el procesamiento. isTerminal viaja EXPLÍCITO porque es
+        la señal con la que el cliente detiene el polling; si el contrato gana un estado terminal
+        nuevo, el cliente deja de sondear sin cambiar de versión. No se envía correo ni notificación
+        push: el avance se consulta, no se empuja. Un lote de otra compañía responde 404 sin revelar
+        su existencia. Requiere el permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Avance del lote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentBatchStatus"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o no pertenece a la compañía del JWT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/lotes/{batchId}/items:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalItemsLote
+      summary: Filas de un lote con el detalle de sus errores (CF-13)
+      description: >
+        Listado paginado de las filas del lote, ordenado por número de fila ascendente —que es como
+        el usuario mira su XLSX—. Cada fila trae número, tipo, escenario, estado y validationErrors
+        con código, campo y mensaje. El mensaje NUNCA refleja el valor capturado que produjo el
+        error: la fila puede traer un documento de identidad o una dirección, y el listado los
+        enseñaría a cualquiera con permiso de lectura. OJO con documentType, que en algunas filas
+        MIENTE por una limitación del esquema: los CHECK de admin.standalone_documents solo admiten
+        dos literales, así que una fila con un tipo desconocido —o una transferencia sin escenario
+        válido— se persiste como certificado_rues con escenario nulo y el error verdadero vive en
+        validationErrors, que es lo que la interfaz debe mostrar. No expone document_snapshot,
+        rues_snapshot ni rutas de storage. Un lote de otra compañía responde 404. Requiere el
+        permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página de filas del lote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentBatchItemsPage"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o no pertenece a la compañía del JWT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/lotes/{batchId}/zip:
+    get:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalZipLote
+      summary: Descarga por streaming los documentos generados del lote (CF-15)
+      description: >
+        Devuelve application/zip armado AL VUELO sobre el cuerpo de la respuesta, con una entrada
+        por cada fila en estado generated: un lote de nueve generadas y una en error produce un ZIP
+        de nueve entradas, y la fila fallida no aparece. El filtro por estado va en SQL, no en el
+        streamer, para que «solo los generados» sea una propiedad de la consulta y no un if que
+        alguien pueda olvidar. El ZIP NO se persiste en storage ni en base de datos, y la memoria del
+        proceso sostiene un PDF a la vez: cada binario se abre, se copia por bloques y se cierra
+        antes de abrir el siguiente. Las entradas van prefijadas con el número de fila del XLSX
+        porque dos filas pueden producir el mismo nombre de archivo y un ZIP con nombres repetidos
+        pierde entradas al descomprimirse. Un lote cuyas filas quedaron TODAS en error responde 409
+        con una explicación explícita, nunca un ZIP vacío que parecería una descarga corrupta. Un
+        lote de otra compañía responde 404 sin revelar su existencia ni entregar presigned URLs.
+        Requiere el permiso generacion-documental.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: ZIP por streaming con los documentos generados del lote.
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o no pertenece a la compañía del JWT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            El lote existe pero ninguna fila llegó a generated: no hay nada que descargar
+            (code no_documents). No se entrega un ZIP vacío.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Trámites · Documentos (adjuntos, checklist, consolidado) — HU #10520 (RNF01) ──
   /api/v1/tramites/instances/{id}/attachments:
     parameters:
@@ -7588,6 +8417,560 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Admin · Generación documental (Feature #12201, ADR-0056) ───────────────
+    StandaloneRuesRequest:
+      type: object
+      required: [nit]
+      properties:
+        nit:
+          type: string
+          minLength: 5
+          maxLength: 20
+          description: NIT de la persona jurídica, con o sin separadores.
+    StandaloneDocumentGenerateResult:
+      type: object
+      description: >
+        Contrato de respuesta de la generación individual. NUNCA transporta el PDF (decisión del
+        PO): el binario se descarga después por GET /{id}/download.
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [generated, error]
+          description: >
+            Solo generated o error (CF-21). Los estados pending y processing son de tránsito de la
+            fila y no se responden en la generación individual.
+    StandaloneRuesPreviewField:
+      type: object
+      required: [key]
+      properties:
+        key:
+          type: string
+          description: Clave del campo mercantil (por ejemplo rues_razon_social).
+        value:
+          type: string
+          nullable: true
+    StandaloneRuesPreviewResult:
+      type: object
+      description: Campos mercantiles para revisión previa. No se persiste nada.
+      required: [found, nit, campos]
+      properties:
+        found:
+          type: boolean
+          description: false cuando el NIT no tiene coincidencia en RUES.
+        nit: { type: string }
+        campos:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandaloneRuesPreviewField"
+        error:
+          type: string
+          nullable: true
+          enum: [invalid_request, provider_unavailable, provider_not_found]
+    StandaloneTransferParte:
+      type: object
+      description: >
+        Una parte compareciente (anexo §5.2 y §5.3). El dígito de verificación se admite pero el
+        servidor lo RECALCULA cuando el documento es un NIT: un NIT y su DV no pueden discrepar
+        dentro del mismo PDF.
+      required: [nombreRazonSocial, tipoDoc, numeroDoc]
+      properties:
+        tipoPersona:
+          type: string
+          nullable: true
+          enum: [PN, PJ]
+        nombreRazonSocial: { type: string }
+        tipoDoc:
+          type: string
+          description: CC / CE / NIT / Pasaporte, según el catálogo RUNT.
+        numeroDoc: { type: string }
+        digitoVerificacion:
+          type: string
+          nullable: true
+          description: Se ignora y se recalcula cuando tipoDoc es NIT.
+        domicilio: { type: string, nullable: true }
+        representanteLegal: { type: string, nullable: true }
+        ccRepresentanteLegal: { type: string, nullable: true }
+    StandaloneTransferVehiculo:
+      type: object
+      description: Las 13 variables de vehículo del anexo §5.1.
+      required: [placa]
+      properties:
+        placa:
+          type: string
+          description: 5 a 7 caracteres alfanuméricos tras quitar guiones y espacios (VB-02).
+        marca: { type: string, nullable: true }
+        linea: { type: string, nullable: true }
+        modeloAnio: { type: string, nullable: true }
+        claseVehiculo:
+          type: string
+          nullable: true
+          description: >
+            Si contiene REMOLQUE (o SEMIRREMOLQUE) no se pide quién asume el impuesto sobre
+            vehículos: están exentos (Ley 488/1998, art. 5.3.2.1 num. 5.º inciso final).
+        tipoCarroceria: { type: string, nullable: true }
+        color: { type: string, nullable: true }
+        noMotor: { type: string, nullable: true }
+        noChasis: { type: string, nullable: true }
+        noSerie: { type: string, nullable: true }
+        servicio: { type: string, nullable: true }
+        noLicenciaTransito: { type: string, nullable: true }
+        organismoTransito: { type: string, nullable: true }
+    StandaloneTransferNegocio:
+      type: object
+      description: >
+        Variables del negocio (anexo §5.4), incluidas las tres fiscales que imprime la cláusula
+        SEXTA. El modo de firma no se captura: es MANUSCRITA fijo (§9.0).
+      required: [tituloJuridico, asumeRetencionFuente, asumeDerechosTramite, ciudadFirma]
+      properties:
+        tituloJuridico:
+          type: string
+          enum: [COMPRAVENTA, DACION_EN_PAGO, PERMUTA, DONACION, OTRO]
+          description: >
+            VB-A-07. El precio NO es requisito universal: lo exige la compraventa (VB-A-06), no
+            todos los títulos traslaticios del art. 5.3.2.1 num. 1.º.
+        descripcionTitulo:
+          type: string
+          nullable: true
+          description: Obligatorio cuando tituloJuridico es OTRO; si falta, 422 con VB-A-07.
+        precioLetras: { type: string, nullable: true }
+        precioNumeros: { type: string, nullable: true }
+        contraprestacionDescripcion: { type: string, nullable: true }
+        formaPago: { type: string, nullable: true }
+        asumeRetencionFuente:
+          type: string
+          enum: [TRANSFERENTE, ADQUIRENTE, SEGUN_LEY]
+        asumeDerechosTramite:
+          type: string
+          enum: [TRANSFERENTE, ADQUIRENTE, COMPARTIDOS]
+        asumeImpuestoVehiculo:
+          type: string
+          nullable: true
+          enum: [TRANSFERENTE, ADQUIRENTE, SEGUN_LEY]
+          description: No aplica a remolques ni semirremolques (exentos).
+        ciudadFirma: { type: string }
+        fechaFirma:
+          type: string
+          format: date
+          nullable: true
+          description: Sin valor, el día de hoy en Colombia (UTC-05:00).
+    StandaloneTransferGravamen:
+      type: object
+      description: >
+        Declaración del usuario sobre el gravamen (VB-A-04). FLIT no consulta el Registro de
+        Garantías Mobiliarias; el OT verifica.
+      properties:
+        gravamenActivo: { type: boolean, default: false }
+        tieneLevantamientoOAutorizacion: { type: boolean, default: false }
+    StandaloneTransferRegimen:
+      type: object
+      description: >
+        Declaración de régimen aplicable (anexo §4.0, CF-24). Es el GATE previo a elegir escenario y
+        lo evalúa VB-07: se rechaza tanto declarar una de las once condiciones de los
+        arts. 5.3.2.3 a 5.3.2.13 como NO responder —el silencio no es un «ninguna aplica»—. La
+        declaración y su fecha se conservan en input_summary, sin PII.
+      properties:
+        ningunaAplica:
+          type: boolean
+          nullable: true
+          description: >
+            true = ninguna de las once condiciones aplica y puede generarse. null = sin responder,
+            que bloquea con VB-07.
+        condicionesDeclaradas:
+          type: array
+          description: >
+            Códigos de las once condiciones especiales. Declarar al menos una bloquea con VB-07 y el
+            mensaje cita su artículo. El art. 5.3.2.14 no pertenece a esta lista.
+          items:
+            type: string
+            enum:
+              - SERVICIO_PUBLICO_PASAJEROS_O_MIXTO
+              - ASEGURADORA_POR_HURTO
+              - ASEGURADORA_POR_PERDIDA_PARCIAL
+              - VEHICULO_BLINDADO
+              - DECISION_JUDICIAL_O_ADMINISTRATIVA
+              - SUCESION
+              - IMPORTACION_TEMPORAL_SUSTITUCION_IMPORTADOR
+              - DECOMISO_DIAN_O_ADJUDICACION_NACION
+              - COMISO_FISCALIA
+              - DECLARATORIA_DE_ABANDONO
+              - CARGA_PBV_SUPERIOR_10500_KG
+        declaredAt: { type: string, format: date-time, nullable: true }
+    StandaloneTransferLeasing:
+      type: object
+      description: >
+        Antecedente de leasing (anexo §5.5). OBLIGATORIO en el escenario B; en el C es opcional y
+        solo alimenta VB-C-01 —comparar al adquirente con el locatario histórico—. No tiene campo
+        de precio: el acto del art. 5.3.2.2 es unilateral y no declara precio entre las partes del
+        instrumento (VB-B-05). Los datos del locatario alimentan las cláusulas declarativas del PDF
+        y NUNCA su bloque de firmas (§9.2).
+      properties:
+        transferenteEsEntidadFinanciera:
+          type: boolean
+          description: >
+            Declaración de que el transferente es establecimiento bancario, compañía de
+            financiamiento o de leasing. false bloquea con VB-B-01.
+        noContratoLeasing: { type: string, nullable: true }
+        tipoOpcionCompra:
+          type: string
+          nullable: true
+          enum: [EJERCIDA, AUTOMATICA, TERMINACION_CONTRATO]
+          description: >
+            Causal de la transferencia. Con AUTOMATICA basta la copia del contrato (art. 5.3.2.2,
+            Parágrafo 1.º); con las otras dos se aporta además la declaración. Fuera del catálogo,
+            422 con VB-B-03.
+        fechaTerminacion: { type: string, format: date, nullable: true }
+        locatarioNombre: { type: string, nullable: true }
+        locatarioTipoDoc: { type: string, nullable: true }
+        locatarioNoDoc: { type: string, nullable: true }
+    StandaloneTransferenciaRequest:
+      type: object
+      description: >
+        Cuerpo de la generación de transferencia. escenarios es una LISTA para que VB-05 sea
+        comprobable: con un escalar, «más de un escenario» sería irrepresentable. escenario se
+        admite como atajo de un solo valor; si llegan los dos, se suman.
+        En el ESCENARIO A y en el C viajan adquirente y negocio completo. En el ESCENARIO B viaja
+        leasing, NO viaja adquirente —el locatario no es parte del instrumento— y negocio solo
+        aporta ciudad y fecha de firma: cualquier campo de precio o contraprestación responde 422
+        con VB-B-05.
+        regimenAplicable debe venir respondido en los tres escenarios (VB-07).
+      required: [vehiculo, transferente, negocio]
+      properties:
+        escenarios:
+          type: array
+          items:
+            type: string
+            enum: [A, B, C]
+        escenario:
+          type: string
+          nullable: true
+          enum: [A, B, C]
+        vehiculo:
+          $ref: "#/components/schemas/StandaloneTransferVehiculo"
+        transferente:
+          $ref: "#/components/schemas/StandaloneTransferParte"
+        adquirente:
+          $ref: "#/components/schemas/StandaloneTransferParte"
+        negocio:
+          $ref: "#/components/schemas/StandaloneTransferNegocio"
+        gravamen:
+          $ref: "#/components/schemas/StandaloneTransferGravamen"
+        regimenAplicable:
+          $ref: "#/components/schemas/StandaloneTransferRegimen"
+        leasing:
+          $ref: "#/components/schemas/StandaloneTransferLeasing"
+    StandaloneTransferIssue:
+      type: object
+      description: >
+        Código del anexo §6, campo del formulario y mensaje. El mensaje NUNCA repite el valor
+        capturado: un 422 termina en logs de acceso y capturas de pantalla de soporte.
+      required: [code, field, message]
+      properties:
+        code:
+          type: string
+          description: >
+            VB-01 a VB-07, VB-A-01 a VB-A-10, VB-B-01 a VB-B-06 y VB-C-01 a VB-C-10 del anexo
+            normativo. VB-C-07 se verifica sobre la plantilla del escenario C, no sobre el
+            formulario, y por eso no viaja en esta lista.
+        field: { type: string }
+        message: { type: string }
+    StandaloneTransferGenerateResult:
+      type: object
+      description: >
+        Respuesta de la generación. NUNCA transporta el PDF: el binario se descarga después por
+        GET /{id}/download.
+      required: [id, status, advisories]
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [generated, error]
+        advisories:
+          type: array
+          description: >
+            Prevalidaciones VA que la interfaz muestra como AVISO, nunca como error bloqueante.
+          items:
+            $ref: "#/components/schemas/StandaloneTransferIssue"
+    StandaloneTransferValidationError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [validation_failed, scenario_not_implemented]
+        field:
+          type: string
+          nullable: true
+        errors:
+          type: array
+          description: Todas las VB bloqueantes que fallaron, no solo la primera.
+          items:
+            $ref: "#/components/schemas/StandaloneTransferIssue"
+    StandalonePrefillVehiculoRequest:
+      type: object
+      required: [placa]
+      properties:
+        placa:
+          type: string
+          minLength: 5
+          maxLength: 10
+          description: Placa del vehículo. Se normaliza a mayúsculas antes de consultar.
+        ownerDocumentType:
+          type: string
+          nullable: true
+          description: >
+            Documento del propietario inscrito. OPCIONAL aquí, a diferencia del wizard: para
+            prellenar un documento el usuario puede tener solo la placa.
+        ownerDocumentNumber:
+          type: string
+          nullable: true
+    StandalonePrefillPersonaNaturalRequest:
+      type: object
+      required: [documentType, documentNumber]
+      properties:
+        documentType:
+          type: string
+          enum: [CC, CE, PAS, TI]
+          description: NIT no se admite aquí; una persona jurídica va por /prefill/persona-juridica.
+        documentNumber:
+          type: string
+          minLength: 3
+          maxLength: 20
+    StandalonePrefillField:
+      type: object
+      description: >
+        Un campo prellenado con su FUENTE EFECTIVA. La fuente es por campo y no por respuesta: una
+        misma parte puede hidratarse de dos sitios a la vez (el nombre del RUNT y el domicilio del
+        histórico de actores).
+      required: [key, source]
+      properties:
+        key:
+          type: string
+          description: >
+            Variable del anexo normativo (docs/plantilla-transferencia-dominio.md secciones 5.1 a
+            5.3): placa, marca, linea, modelo_anio, clase_vehiculo, tipo_carroceria, color,
+            no_motor, no_chasis, no_serie, servicio, organismo_transito; razon_social, tipo_doc,
+            no_doc, digito_verificacion, domicilio, representante_legal, cc_rl;
+            nombre_razon_social.
+        value:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [RUNT, DIRECTORIO, RUES, CONTACT_LOOKUP, CALCULADO]
+    StandalonePrefillAttempt:
+      type: object
+      description: >
+        Intento contra una fuente, en orden de precedencia. Permite ver que una fuente se cayó sin
+        que eso invalide el resto de la respuesta.
+      required: [source, outcome]
+      properties:
+        source:
+          type: string
+          enum: [RUNT, DIRECTORIO, RUES, CONTACT_LOOKUP, CALCULADO]
+        outcome:
+          type: string
+          enum: [found, not_found, error]
+        errorCode:
+          type: string
+          nullable: true
+    StandalonePrefillResult:
+      type: object
+      description: >
+        Respuesta común de los tres prellenados. NUNCA trae id de documento porque no se crea
+        ninguno: el prellenado no persiste (cero filas en admin.standalone_documents) y los valores
+        viajan solo hacia el formulario.
+      required: [found, fields, attempts]
+      properties:
+        found:
+          type: boolean
+          description: false cuando ninguna fuente tuvo coincidencia. Sigue siendo 200.
+        source:
+          type: string
+          nullable: true
+          enum: [RUNT, DIRECTORIO, RUES, CONTACT_LOOKUP]
+          description: Fuente que resolvió la identidad. null cuando no hubo coincidencia.
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandalonePrefillField"
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandalonePrefillAttempt"
+    StandaloneDocumentListItem:
+      type: object
+      description: >
+        Fila del historial (CF-17). Pobre en PII a propósito: no declara document_snapshot,
+        rues_snapshot, storage_path ni storage_sha256, así que el listado no puede filtrarlos por
+        descuido.
+      required: [id, documentType, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        documentType:
+          type: string
+          enum: [certificado_rues, transferencia_dominio_generada]
+        scenario:
+          type: string
+          nullable: true
+          enum: [A, B, C]
+          description: Escenario normativo de la transferencia; null en el Certificado RUES.
+        status:
+          type: string
+          enum: [pending, processing, generated, error]
+          description: Estado INTERNO. La interfaz colapsa pending y processing en «En proceso» (CF-21).
+        errorCode:
+          type: string
+          nullable: true
+        filename:
+          type: string
+          nullable: true
+        companyName:
+          type: string
+          nullable: true
+          description: Razón social de la compañía dueña del documento.
+        createdByUserId: { type: string, format: uuid }
+        createdByUserName:
+          type: string
+          nullable: true
+        createdAt: { type: string, format: date-time }
+    StandaloneDocumentsPagedResult:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandaloneDocumentListItem"
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    StandaloneDocumentBatchStatus:
+      type: object
+      description: >
+        Avance de un lote para el seguimiento in-app (CF-14). Sin nombre de archivo fuente, sin ruta
+        de storage y sin nada del contenido del XLSX.
+      required: [batchId, status, total, generated, errors, processed, isTerminal, createdAt]
+      properties:
+        batchId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, processing, completed, partial_failure, failed]
+          description: >
+            La interfaz colapsa queued y processing en «En proceso» (CF-21); partial_failure es un
+            RESULTADO visible del lote —con su conteo de generados y de errores—, no un fallo.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Filas de datos declaradas por el XLSX, sin contar el encabezado.
+        generated:
+          type: integer
+          minimum: 0
+          description: Filas que llegaron a generated. Se cuentan, no se leen de la cabecera.
+        errors:
+          type: integer
+          minimum: 0
+          description: Filas que quedaron en error.
+        processed:
+          type: integer
+          minimum: 0
+          description: Filas ya materializadas (generadas + en error + en curso).
+        isTerminal:
+          type: boolean
+          description: >
+            true en completed, partial_failure y failed. Es la señal con la que el cliente DETIENE
+            el polling; viaja explícita para que un estado terminal nuevo no exija una versión nueva
+            del frontend.
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+    StandaloneDocumentBatchItemError:
+      type: object
+      description: >
+        Error de una fila del XLSX (CF-13): código, campo y mensaje. El mensaje NUNCA refleja el
+        valor capturado que produjo el error — se nombra el campo, no su contenido.
+      properties:
+        code: { type: string, nullable: true }
+        field: { type: string, nullable: true }
+        message: { type: string, nullable: true }
+    StandaloneDocumentBatchItem:
+      type: object
+      description: >
+        Una fila del lote en el seguimiento. Proyección pobre en PII: sin snapshots y sin ruta de
+        storage.
+      required: [id, documentType, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        rowNumber:
+          type: integer
+          nullable: true
+          description: Número de la fila en el XLSX (1 = primera fila de datos).
+        documentType:
+          type: string
+          enum: [certificado_rues, transferencia_dominio_generada]
+          description: >
+            ATENCIÓN: en una fila cuyo tipo el usuario tecleó mal, este valor dice certificado_rues
+            aunque no lo sea — los CHECK de la tabla solo admiten dos literales y no hay dónde
+            guardar el tipo real. En esas filas el error verdadero está en validationErrors, y es
+            eso lo que la interfaz debe mostrar.
+        scenario:
+          type: string
+          nullable: true
+          enum: [A, B, C]
+        status:
+          type: string
+          enum: [pending, processing, generated, error]
+          description: Estado INTERNO. La interfaz colapsa pending y processing en «En proceso» (CF-21).
+        errorCode: { type: string, nullable: true }
+        errorField: { type: string, nullable: true }
+        validationErrors:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandaloneDocumentBatchItemError"
+        filename: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    StandaloneDocumentBatchItemsPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandaloneDocumentBatchItem"
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    StandaloneDocumentBatchCreated:
+      type: object
+      description: >
+        Cabecera del lote recién encolado (o del existente, en un replay de idempotencia).
+        Deliberadamente SIN nombre de archivo ni ruta de storage: el XLSX fuente contiene los datos
+        completos de las partes y no se refleja en el contrato.
+      required: [batchId, status, total]
+      properties:
+        batchId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, processing, completed, partial_failure, failed]
+          description: >
+            Cuatro estados internos del lote. La interfaz colapsa queued y processing en
+            «En proceso» (CF-21); partial_failure es un resultado visible, no un fallo del lote.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Filas de datos del XLSX, sin contar el encabezado.
+
+    StandaloneDocumentDownloadLink:
+      type: object
+      description: >
+        Enlace presignado de vida corta. Contiene una firma HMAC: no se loguea, no se persiste y no
+        se reenvía a terceros.
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
     # ── Trámites · Firma a posteriori (HU #11196 / #11197) ─────────────────────
     DeferredSignatureStateResponse:
       type: object
