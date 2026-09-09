@@ -1650,6 +1650,24 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     && u.DisplayName.ToLower().Contains(gestor)));
         }
 
+        if (!string.IsNullOrWhiteSpace(filter.Busqueda))
+        {
+            var termino = filter.Busqueda.Trim();
+            var enMinusculas = termino.ToLowerInvariant();
+            var enMayusculas = termino.ToUpperInvariant();
+
+            query = query.Where(p =>
+                p.ReferenceNumber == termino
+                || (p.Plate != null && p.Plate.ToUpper().Contains(enMayusculas))
+                || (p.Vin != null && p.Vin.ToUpper().Contains(enMayusculas))
+                || (p.CompradorNombre != null && p.CompradorNombre.ToLower().Contains(enMinusculas))
+                || (p.VendedorNombre != null && p.VendedorNombre.ToLower().Contains(enMinusculas))
+                || p.Actors.Any(a => a.DocumentNumber != null
+                    && a.DocumentNumber.ToLower().Contains(enMinusculas))
+                || _context.Tenants.Any(t => t.Id == p.TenantId
+                    && t.LegalName.ToLower().Contains(enMinusculas)));
+        }
+
         // Rango de fechas (HU #12217). Va en SQL, no sobre la página: el total de la cabecera y el
         // recorrido del export tienen que ver el mismo universo que la tabla.
         if (filter.CreatedFrom is { } creadoDesde)

@@ -25,6 +25,9 @@ public sealed class ListOtClientProceduresQuery
 
     public string? Gestor { get; init; }
 
+    /// <summary>Texto libre transversal de la barra de búsqueda (HU #12218).</summary>
+    public string? Busqueda { get; init; }
+
     /// <summary>
     /// Condiciones de la gramática de Consultas (HU #12217). Llegan solo por el endpoint POST: placa,
     /// VIN y radicado admiten pegar una lista completa desde Excel, y unos cientos de valores no

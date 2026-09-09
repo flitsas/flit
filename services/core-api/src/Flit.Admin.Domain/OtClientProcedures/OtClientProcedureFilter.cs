@@ -39,6 +39,18 @@ public sealed class OtClientProcedureFilter
     public string? Gestor { get; init; }
 
     /// <summary>
+    /// Texto libre transversal de la barra de búsqueda (HU #12218): radicado, placa, VIN, nombre y
+    /// documento de las partes, y razón social de la empresa cliente.
+    ///
+    /// <para>El radicado casa EXACTO y no por subcadena: es un consecutivo numérico corto desde el
+    /// Feature #12150, así que buscar «1» por subcadena traería el 1, el 10, el 11 y el 100. Mismo
+    /// criterio que la búsqueda del listado del gestor.</para>
+    ///
+    /// <para>No busca por organismo, a diferencia de la del gestor: aquí siempre es el suyo.</para>
+    /// </summary>
+    public string? Busqueda { get; init; }
+
+    /// <summary>
     /// Condiciones armadas con la gramática de Consultas (HU #12217): campo del catálogo, operador
     /// y valores. Se resuelven en <c>WHERE</c> sobre el universo de trámites con grant vigente, no
     /// sobre la página ya cargada.

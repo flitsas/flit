@@ -2912,6 +2912,9 @@ internal sealed record OtBandejaSearchRequest
 {
     public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
 
+    /// <summary>Texto libre de la barra de búsqueda (HU #12218).</summary>
+    public string? Busqueda { get; init; }
+
     public string? Status { get; init; }
     public string? PlateFlowStatus { get; init; }
     public Guid? ProcedureTypeId { get; init; }
@@ -2936,6 +2939,7 @@ internal sealed record OtBandejaSearchRequest
         OtTenantId = otTenantId,
         TransitOfficeId = transitOfficeId,
         Condiciones = Condiciones,
+        Busqueda = Busqueda,
         Status = Status,
         PlateFlowStatus = PlateFlowStatus,
         ProcedureTypeId = ProcedureTypeId,

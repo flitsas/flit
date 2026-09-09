@@ -37,6 +37,7 @@ public sealed class ListOtClientProceduresHandler
                 Vendedor = query.Vendedor,
                 Comprador = query.Comprador,
                 Gestor = query.Gestor,
+                Busqueda = query.Busqueda,
                 Condiciones = query.Condiciones,
                 CreatedFrom = query.CreatedFrom,
                 CreatedTo = query.CreatedTo,

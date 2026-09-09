@@ -321,6 +321,48 @@ public sealed class OtBandejaFiltrosTests
         bandeja.TotalCount.Should().Be(3);
     }
 
+    // ── La búsqueda libre (HU #12218 AC1) ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// El radicado casa EXACTO y el resto por subcadena. Es la diferencia que importa: desde el
+    /// Feature #12150 el radicado es un consecutivo numérico corto, y por subcadena «1» traería
+    /// también el 10, el 11 y el 100.
+    /// </summary>
+    [Fact]
+    public async Task LaBusquedaLibre_CasaElRadicadoExactoYElRestoPorSubcadena()
+    {
+        var db = await SembrarEscenarioAsync();
+
+        var porRadicado = await ListarAsync(db, new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Busqueda = "REF-1",
+        });
+        porRadicado.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-1"]);
+
+        var porPlacaParcial = await ListarAsync(db, new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Busqueda = "abc",
+        });
+        porPlacaParcial.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-1"]);
+    }
+
+    /// <summary>Busca también por la empresa cliente: es la columna que la bandeja muestra.</summary>
+    [Fact]
+    public async Task LaBusquedaLibre_TambienMiraLaEmpresaCliente()
+    {
+        var db = await SembrarEscenarioAsync();
+
+        var bandeja = await ListarAsync(db, new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Busqueda = "Zulia",
+        });
+
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-3"]);
+    }
+
     // ── El rango de fechas (AC6) ──────────────────────────────────────────────────────────────
 
     [Fact]
