@@ -313,6 +313,22 @@ public static class AdminInfrastructureExtensions
         // HU #10650 (Feature #10587) — inventario de rangos de placas de preasignación.
         services.AddScoped<IPlateRangeRepository, PlateRangeRepository>();
 
+        // HU #12203 (Feature #12201, ADR-0056-generacion-documental-standalone) — generación
+        // documental SIN trámite. Repositorio tenant-scoped (WHERE tenant_id explícito; la RLS de
+        // la tabla es decorativa) y los tres puertos acotados del módulo, implementados aquí para
+        // que Flit.Admin.Application no tenga que nombrar ningún tipo de Flit.Tramites.* (C6):
+        //   · storage    -> delega en IAttachmentStorage pasando el tenantId como agrupación
+        //   · renderer   -> delega en IRuesCertificateGenerator, que NO se modifica
+        //   · lookup     -> reusa RuesActorJuridicalLookup con Guid.Empty (sin instancia)
+        services.AddScoped<Flit.Admin.Domain.GeneracionDocumental.IStandaloneDocumentRepository,
+            Flit.Infrastructure.Persistence.Repositories.StandaloneDocumentRepository>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneDocumentStorage,
+            Flit.Infrastructure.Storage.StandaloneDocumentStorage>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneRuesCertificateRenderer,
+            Flit.Infrastructure.Documents.Standalone.StandaloneRuesCertificateRenderer>();
+        services.AddScoped<Flit.Admin.Application.GeneracionDocumental.Ports.IStandaloneRuesCompanyLookup,
+            Flit.Infrastructure.Consultations.StandaloneRuesCompanyLookup>();
+
         return services;
     }
 }

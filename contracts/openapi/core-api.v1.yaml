@@ -44,6 +44,11 @@ tags:
       Historial del Certificado de Improntas Digitales vehicular (Res. 17145/2023
       Mintransporte, integración Kyverum RUNT — ADR-0022). Vista global cross-tenant
       sin RLS, rol SuperAdmin.
+  - name: Admin · Generación documental
+    description: >
+      Emisión de documentos SIN abrir un trámite (Feature #12201,
+      ADR-0056-generacion-documental-standalone). Autorización POR PERMISO
+      (generacion-documental.read / generacion-documental.generate), nunca por policy de grupo.
   - name: Trámites · Documentos
     description: >
       Alta de trámite con snapshot documental inmutable y lectura de los documentos
@@ -6096,6 +6101,138 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── Admin · Generación documental (Feature #12201, ADR-0056) ──
+  # Emisión SIN trámite: ninguna ruta crea ni referencia una procedure_instance.
+  /api/v1/admin/generacion-documental/rues/preview:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalPreviewRues
+      summary: Consulta el RUES por NIT para revisión previa (no persiste)
+      description: >
+        Consulta EN VIVO el RUES por NIT y devuelve los campos mercantiles para que el usuario los
+        revise antes de emitir el certificado (CF-04). NO crea ninguna fila en
+        admin.standalone_documents ni escribe archivo alguno: es una consulta efímera. Requiere el
+        permiso generacion-documental.generate.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandaloneRuesRequest"
+      responses:
+        "200":
+          description: Resultado de la consulta (found=false si el NIT no tiene coincidencia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneRuesPreviewResult"
+        "400":
+          description: NIT ausente o vacío.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin claim tenant_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor RUES no respondió.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor RUES no está registrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/generacion-documental/rues/generate:
+    post:
+      tags: [Admin · Generación documental]
+      operationId: adminGeneracionDocumentalGenerateRues
+      summary: Genera el Certificado RUES standalone (sin trámite)
+      description: >
+        Consulta el RUES EN VIVO por NIT, congela el snapshot inmutable, renderiza el PDF con la
+        plantilla QuestPDF local (el mismo generador del expediente) y lo persiste en storage. NO
+        devuelve el PDF: responde { id, status } en application/json con cualquier Accept, y la
+        descarga va siempre por GET /{id}/download. El campo status solo puede valer generated o
+        error (CF-21). Requiere el permiso generacion-documental.generate. El documento queda en el
+        tenant del JWT, también para SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 120 }
+          description: >
+            Repetir la misma clave dentro del tenant devuelve el documento existente sin consultar
+            al proveedor RUES y sin escribir un archivo nuevo (CF-16).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StandaloneRuesRequest"
+      responses:
+        "200":
+          description: Documento generado (o recuperado por idempotencia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandaloneDocumentGenerateResult"
+        "400":
+          description: NIT ausente o con formato inválido. No se crea fila ni se consulta nada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token o token sin los claims tenant_id / sub.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin el permiso generacion-documental.generate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            El NIT no tiene coincidencia en RUES. La fila queda en estado error con error_code
+            identificable y NO se produce ningún archivo en storage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor RUES no respondió.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor RUES no está registrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Trámites · Documentos (adjuntos, checklist, consolidado) — HU #10520 (RNF01) ──
   /api/v1/tramites/instances/{id}/attachments:
     parameters:
@@ -7165,6 +7302,57 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Admin · Generación documental (Feature #12201, ADR-0056) ───────────────
+    StandaloneRuesRequest:
+      type: object
+      required: [nit]
+      properties:
+        nit:
+          type: string
+          minLength: 5
+          maxLength: 20
+          description: NIT de la persona jurídica, con o sin separadores.
+    StandaloneDocumentGenerateResult:
+      type: object
+      description: >
+        Contrato de respuesta de la generación individual. NUNCA transporta el PDF (decisión del
+        PO): el binario se descarga después por GET /{id}/download.
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [generated, error]
+          description: >
+            Solo generated o error (CF-21). Los estados pending y processing son de tránsito de la
+            fila y no se responden en la generación individual.
+    StandaloneRuesPreviewField:
+      type: object
+      required: [key]
+      properties:
+        key:
+          type: string
+          description: Clave del campo mercantil (por ejemplo rues_razon_social).
+        value:
+          type: string
+          nullable: true
+    StandaloneRuesPreviewResult:
+      type: object
+      description: Campos mercantiles para revisión previa. No se persiste nada.
+      required: [found, nit, campos]
+      properties:
+        found:
+          type: boolean
+          description: false cuando el NIT no tiene coincidencia en RUES.
+        nit: { type: string }
+        campos:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandaloneRuesPreviewField"
+        error:
+          type: string
+          nullable: true
+          enum: [invalid_request, provider_unavailable, provider_not_found]
     # ── Trámites · Firma a posteriori (HU #11196 / #11197) ─────────────────────
     DeferredSignatureStateResponse:
       type: object

@@ -253,6 +253,9 @@ app.MapAdminOtPrendaDocumentPolicyEndpoints();
 app.MapAdminResolvedDocumentMatrixEndpoints();
 app.MapAdminCompanyDocumentParamsEndpoints();
 app.MapAdminImprontasEndpoints();
+// Feature #12201 (ADR-0056-generacion-documental-standalone) — generación documental SIN trámite.
+// Autorización por permiso (generacion-documental.*), no por policy de grupo.
+app.MapAdminGeneracionDocumentalEndpoints();
 app.MapTramitesEndpoints();
 app.MapTransfersEndpoints();
 

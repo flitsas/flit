@@ -51,6 +51,7 @@ using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
 using Flit.Admin.Application.DocumentTypes.PurgeDocumentType;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
+using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
 using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
@@ -348,6 +349,13 @@ public static class DependencyInjection
         // IImprontaExternalClient (HU #10465) e IImprontaRepository (HU #10466) se registran en
         // Flit.Infrastructure (InfrastructureExtensions/AddAdminInfrastructure).
         services.AddScoped<GenerarImprontaHandler>();
+
+        // HU #12203 (Feature #12201) — generación documental SIN trámite. Los puertos
+        // (IStandaloneDocumentStorage / IStandaloneRuesCertificateRenderer /
+        // IStandaloneRuesCompanyLookup) y el repositorio se registran en
+        // Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<GenerateRuesDocumentHandler>();
+        services.AddScoped<PreviewRuesCompanyHandler>();
 
         return services;
     }
