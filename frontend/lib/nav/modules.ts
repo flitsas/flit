@@ -8,6 +8,7 @@ export const ALL_MODULE_IDS: ModuleId[] = [
   "reportes",
   "reportes-detallados",
   "validaciones",
+  "historial-placa",
   "usuarios",
   "ayuda",
   "rbac",
@@ -27,6 +28,8 @@ export const SPA_DOCK_MODULE_IDS: readonly ModuleId[] = [
   "reportes",
   "reportes-detallados",
   "validaciones",
+  // HU #12194 — gate RBAC puro: solo aparece si `historial-placa` viene en accessibleCodes.
+  "historial-placa",
   "usuarios",
   "ayuda",
 ] as const;

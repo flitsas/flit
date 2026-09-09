@@ -103,6 +103,7 @@ public static class DevelopmentAuthSeeder
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedIctLogsPermissionsAsync(db, cancellationToken);
         await SeedIctPiiRevealPermissionAsync(db, cancellationToken);
+        await SeedHistorialPlacaPermissionsAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
@@ -1319,6 +1320,93 @@ public static class DevelopmentAuthSeeder
             .Where(r => r.Code == "SuperAdmin")
             .ToListAsync(ct);
         foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Historial operativo por placa (Feature #12189, HU #12191) — módulo <c>historial-placa</c> +
+    /// permiso <c>historial-placa.read</c> que protege <c>GET /api/v1/tramites/instances/plate-history</c>.
+    /// Mismo patrón e idempotencia que <see cref="SeedIctLogsPermissionsAsync"/>: crea módulo y permiso
+    /// si faltan y concede el permiso sin duplicar si ya estaba concedido.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// El módulo se protege por PERMISO y no por nombre de rol. Los roles son DATOS gobernados por el
+    /// CRUD de SuperAdmin (<c>POST /api/v1/superadmin/roles</c>, <c>PUT /roles/{id}/permissions</c>), no
+    /// código: cada ambiente puede tener un catálogo distinto. Los nombres del borrador del PO
+    /// —Documentador, OperarioFull, Validador, Gestor— no existen como <c>role code</c> en ninguna parte
+    /// del código, así que cablearlos habría dejado el módulo abierto a roles inexistentes y cerrado a
+    /// los reales. Con un slug propio basta que SuperAdmin lo asigne al rol que exista en cada ambiente.
+    /// </para>
+    /// <para>
+    /// Se concede a <c>SuperAdmin</c>, <c>AdminCompany</c> y <c>Radicador</c> (decisión D4 del PO): los tres
+    /// sí existen en el código. SuperAdmin además bypassa por rol, pero el grant explícito hace que el
+    /// permiso aparezca marcado en la pantalla RBAC. Sin este seed la acción no figura en el catálogo y
+    /// ningún usuario no-superadmin podría recibirla por el flujo RBAC estándar.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedHistorialPlacaPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "historial-placa" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "historial-placa",
+                Name = "Historial por placa",
+                SortOrder = 11,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "historial-placa.read", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "historial-placa.read",
+                Name = "Ver historial por placa",
+                HttpMethod = "GET",
+                RoutePattern = "/api/v1/tramites/instances/plate-history",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. Se excluyen los roles
+        // borrados lógicamente — conceder permisos a un rol eliminado no sirve a nadie.
+        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador"];
+        var roles = await db.Roles
+            .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var role in roles)
         {
             var alreadyGranted = await db.RoleGrants
                 .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
