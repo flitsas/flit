@@ -70,6 +70,10 @@ const FILTROS_ESTADO_OT = [
   { value: "entregado", label: "Pendiente OT" },
   { value: "aprobado", label: "Aprobado OT" },
   { value: "rechazado", label: "Rechazado OT" },
+  // HU #12166/#12168 (Feature #12156) — a diferencia de Anulado, Revocado SÍ entra en
+  // TramiteEstado.RecibidosPorOrganismo (el OT revocó su propia aprobación; ver el comentario en
+  // esa constante en el backend), así que también puede filtrarse aquí.
+  { value: "revocado", label: "Revocado OT" },
 ] as const;
 
 /** La bandeja abre por la cola de decisión: es el trabajo que el organismo tiene pendiente. */

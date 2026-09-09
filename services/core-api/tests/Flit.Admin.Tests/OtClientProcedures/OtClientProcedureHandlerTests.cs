@@ -240,6 +240,56 @@ public sealed class OtClientProcedureHandlerTests
         TramiteEstado.OcupaPlaca(TramiteEstado.Revocado).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Revocado_SigueVisibleParaElOt_ParaFiltrarloEnLaBandeja()
+    {
+        // A pedido del usuario (filtro "Revocados" en la bandeja, HU #12168): a diferencia de
+        // Anulado, un trámite Revocado NO desaparece de lo que el OT puede ver/listar — es una
+        // decisión que el propio organismo tomó, y su única transición posible (aprobado→revocado)
+        // garantiza que siempre pasó por 'entregado' (TramiteEstado.RecibidosPorOrganismo).
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Aprobado);
+        }
+
+        await using (var ctx = NewContext(db))
+        {
+            var revokeHandler = NewRevokeHandler(ctx);
+            var revokeResult = await revokeHandler.HandleAsync(new RevokeOtClientProcedureCommand
+            {
+                OtTenantId = OtTenant,
+                ProcedureInstanceId = procedureId,
+                RevokedBy = Approver,
+            }, TestContext.Current.CancellationToken);
+            revokeResult.Status.Should().Be(RevokeOtClientProcedureStatus.Revoked);
+        }
+
+        await using var ctx2 = NewContext(db);
+        var getHandler = new GetOtClientProcedureHandler(new OtClientProcedureRepository(ctx2, new NullTramiteTransitionPublisher()));
+        var getResult = await getHandler.HandleAsync(new GetOtClientProcedureQuery
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+        }, TestContext.Current.CancellationToken);
+
+        getResult.Status.Should().Be(GetOtClientProcedureStatus.Found);
+        getResult.Procedure!.Status.Should().Be(TramiteEstado.Revocado);
+
+        var listHandler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx2, new NullTramiteTransitionPublisher()));
+        var listResult = await listHandler.HandleAsync(new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Status = TramiteEstado.Revocado,
+        }, TestContext.Current.CancellationToken);
+        listResult.Data.Should().ContainSingle(p => p.Id == procedureId);
+    }
+
     [Theory]
     [InlineData(TramiteEstado.Entregado)]
     [InlineData(TramiteEstado.Rechazado)]

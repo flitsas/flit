@@ -212,7 +212,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 // Sin grants no hay bandeja que contar: todo cero, y sin pegarle a la base.
                 if (grantedClientTenantIds.Count == 0)
                 {
-                    return (OtBandejaCounters?)new OtBandejaCounters(0, 0, 0, 0, 0);
+                    return (OtBandejaCounters?)new OtBandejaCounters(0, 0, 0, 0, 0, 0);
                 }
 
                 return await ExecuteCrossTenantReadAsync(
@@ -245,6 +245,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         var aprobados = 0;
                         var rechazados = 0;
                         var sinGestion = 0;
+                        var revocados = 0;
 
                         foreach (var fila in porClase)
                         {
@@ -281,6 +282,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             {
                                 rechazados += fila.Total;
                             }
+
+                            // HU #12166/#12168 (Feature #12156) — Aprobados que el OT revocó.
+                            if (string.Equals(fila.Status, TramiteEstado.Revocado, StringComparison.Ordinal))
+                            {
+                                revocados += fila.Total;
+                            }
                         }
 
                         return (OtBandejaCounters?)new OtBandejaCounters(
@@ -288,7 +295,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             conPlacaAsignada,
                             aprobados,
                             rechazados,
-                            sinGestion);
+                            sinGestion,
+                            revocados);
                     },
                     cancellationToken).ConfigureAwait(false);
             },

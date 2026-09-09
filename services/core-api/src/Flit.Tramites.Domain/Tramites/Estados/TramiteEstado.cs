@@ -61,11 +61,20 @@ public static class TramiteEstado
     /// solo lo llevan filas migradas que provienen de un rechazo, así que esos trámites estuvieron
     /// entregados. Dejarlo fuera escondería datos históricos que el organismo sí trabajó.</para>
     ///
+    /// <para><see cref="Revocado"/> (HU #12166, Feature #12156) SÍ entra, a diferencia de
+    /// <see cref="Anulado"/>: no tiene el mismo problema de origen, porque su ÚNICA transición
+    /// posible es <see cref="Aprobado"/> → <see cref="Revocado"/> (ver
+    /// <c>TramiteStateMachine.Transitions</c>), y a <see cref="Aprobado"/> solo se llega habiendo
+    /// pasado por <see cref="Entregado"/>. No hace falta el resguardo adicional que sí necesitaría
+    /// <see cref="Anulado"/> (evento <see cref="Entregado"/> en el historial): aquí es imposible que
+    /// no lo haya. Además la revocación es una decisión que el propio organismo tomó (deshace su
+    /// aprobación), así que ocultársela sería peor que el "precio" que sí se acepta para Anulado.</para>
+    ///
     /// <para>Ojo al ampliar <see cref="Todos"/>: un estado nuevo NO es visible para el organismo hasta
     /// que se añada aquí explícitamente. Es el lado seguro por defecto.</para>
     /// </summary>
     public static readonly IReadOnlyList<string> RecibidosPorOrganismo =
-        [Entregado, Aprobado, Rechazado, Subsanacion];
+        [Entregado, Aprobado, Rechazado, Subsanacion, Revocado];
 
     /// <summary>
     /// ¿El trámite ya está en manos del organismo de tránsito? Ver

@@ -8,7 +8,8 @@ export type OtCounterKey =
   | "conPlacaAsignada"
   | "aprobados"
   | "rechazados"
-  | "sinGestion";
+  | "sinGestion"
+  | "revocados";
 
 interface TarjetaDef {
   key: OtCounterKey;
@@ -54,6 +55,12 @@ const TARJETAS: TarjetaDef[] = [
     icon: "/assets/ot-estados/sin-gestion.svg",
     hint: "Entregados que nadie ha empezado a trabajar",
   },
+  {
+    key: "revocados",
+    label: "Revocados",
+    icon: "/assets/ot-estados/revocados.svg",
+    hint: "Trámites Aprobados que el organismo revocó (HU #12166)",
+  },
 ];
 
 export interface OtBandejaCountersStripProps {
@@ -82,7 +89,7 @@ export function OtBandejaCountersStrip({
     <div
       role="group"
       aria-label="Carga de trabajo del organismo"
-      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-3 sm:divide-x lg:grid-cols-5 dark:divide-white/5 dark:border-white/10 dark:bg-[#0B0F14]"
+      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-3 sm:divide-x lg:grid-cols-6 dark:divide-white/5 dark:border-white/10 dark:bg-[#0B0F14]"
     >
       {TARJETAS.map((t) => {
         const valor = counters ? counters[t.key] : null;
@@ -144,6 +151,8 @@ export function filtrosDeContador(key: OtCounterKey | ""): {
       return { status: "rechazado", plateFlowStatus: "" };
     case "sinGestion":
       return { status: "entregado", plateFlowStatus: "sin_ruta" };
+    case "revocados":
+      return { status: "revocado", plateFlowStatus: "" };
     default:
       return { status: "", plateFlowStatus: "" };
   }

@@ -206,6 +206,8 @@ export interface OtBandejaCounters {
   aprobados: number;
   rechazados: number;
   sinGestion: number;
+  /** HU #12166/#12168 (Feature #12156) — trámites Aprobados que el OT revocó. */
+  revocados: number;
 }
 
 export interface OtBandejaHealth {

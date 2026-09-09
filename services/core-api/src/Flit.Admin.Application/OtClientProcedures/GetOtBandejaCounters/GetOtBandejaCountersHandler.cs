@@ -23,6 +23,8 @@ public sealed class GetOtBandejaCountersResult
     public int Aprobados { get; init; }
     public int Rechazados { get; init; }
     public int SinGestion { get; init; }
+    /// <summary>HU #12166/#12168 (Feature #12156) — Aprobados que el organismo revocó.</summary>
+    public int Revocados { get; init; }
 }
 
 /// <summary>
@@ -63,6 +65,7 @@ public sealed class GetOtBandejaCountersHandler
             Aprobados = counters.Aprobados,
             Rechazados = counters.Rechazados,
             SinGestion = counters.SinGestion,
+            Revocados = counters.Revocados,
         };
     }
 }
