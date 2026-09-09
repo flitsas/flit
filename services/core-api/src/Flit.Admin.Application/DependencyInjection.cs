@@ -91,6 +91,8 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
+using Flit.Admin.Application.Banners.GetBannerImage;
+using Flit.Admin.Application.Banners.ListActiveBanners;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -398,6 +400,11 @@ public static class DependencyInjection
         services.AddScoped<GeneracionDocumental.Batches.GetBatchStatusHandler>();
         services.AddScoped<GeneracionDocumental.Batches.ListBatchItemsHandler>();
         services.AddScoped<GeneracionDocumental.Batches.DownloadBatchZipHandler>();
+
+        // HU #12240 (Feature #12236, Feature #12231) — banners: endpoint publico de banners
+        // activos + imagen por streaming con ETag. Sin filtro de tenant (ADR-0058).
+        services.AddScoped<ListActiveBannersHandler>();
+        services.AddScoped<GetBannerImageHandler>();
 
         return services;
     }

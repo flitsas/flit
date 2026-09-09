@@ -354,6 +354,15 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Domain.GeneracionDocumental.IStandaloneDocumentBatchRepository,
             Flit.Infrastructure.Persistence.Repositories.StandaloneDocumentBatchRepository>();
 
+        // HU #12240 (Feature #12236, Feature #12231) — lectura de banners activos + imagen
+        // publica. IBannerRepository (ADR-0058, tabla global sin tenant_id) e
+        // IBannerImageStorage (ADR-0057, delega en IAttachmentStorage). HU #12239 (CRUD, en
+        // paralelo) reusa/amplia estos mismos registros.
+        services.AddScoped<Flit.Admin.Domain.Banners.IBannerRepository,
+            Flit.Infrastructure.Persistence.Repositories.BannerRepository>();
+        services.AddScoped<Flit.Admin.Application.Banners.Ports.IBannerImageStorage,
+            Flit.Infrastructure.Storage.BannerImageStorage>();
+
         return services;
     }
 }

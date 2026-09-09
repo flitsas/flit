@@ -329,6 +329,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<Entities.Admin.StandaloneDocumentBatchEntity> StandaloneDocumentBatches =>
         Set<Entities.Admin.StandaloneDocumentBatchEntity>();
 
+    // Banners promocionales globales (Feature #12236, HU #12240): lectura para el endpoint
+    // publico de consumo. ADR-0058 (tabla global sin tenant_id) + ADR-0057 (imagen por
+    // streaming propio).
+    public DbSet<Entities.Admin.BannerEntity> Banners => Set<Entities.Admin.BannerEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

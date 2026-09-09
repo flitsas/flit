@@ -266,6 +266,8 @@ app.MapPublicProcedureTypeEndpoints();
 app.MapPublicBiometricaEndpoints();
 app.MapPublicKyverumWebhookEndpoints();
 app.MapPublicPortalEndpoints();
+// HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
+app.MapPublicBannersEndpoints();
 app.MapTramitesInstanceEndpoints();
 app.MapTramitesActorEndpoints();
 // HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
