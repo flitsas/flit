@@ -21,7 +21,7 @@ import type {
 } from "@/lib/api/types-generacion-documental";
 import { RegimenAplicableControl } from "./RegimenAplicableControl";
 import { ParteFields, type ParteId } from "./ParteFields";
-import { VehiculoPrefillFields } from "./VehiculoPrefillFields";
+import { VehiculoPrefillFields, type PropietarioConsultaInput } from "./VehiculoPrefillFields";
 import {
   CAMPOS_VEHICULO_SIEMPRE_EDITABLES,
   CAMPOS_VEHICULO_SIEMPRE_MANUALES,
@@ -222,6 +222,16 @@ function CampoBase({
  */
 export function TransferenciaFormPanel() {
   const [form, setForm] = useState<TransferenciaFormState>(ESTADO_INICIAL);
+  /**
+   * Documento del propietario inscrito. Vive FUERA de `form` a propósito: es insumo de la consulta
+   * al RUNT, no una variable del anexo, y no debe viajar en el cuerpo de la generación ni acabar
+   * transcrito en el documento. El tipo por defecto es `CC`, igual que el paso «consulta» del
+   * wizard.
+   */
+  const [propietario, setPropietario] = useState<PropietarioConsultaInput>({
+    tipoDoc: "CC",
+    numeroDoc: "",
+  });
   const [enviando, setEnviando] = useState(false);
   const [errores, setErrores] = useState<TransferValidationIssue[]>([]);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
@@ -237,6 +247,9 @@ export function TransferenciaFormPanel() {
 
   const setVehiculo = (key: keyof TransferVehiculoInput, value: string) =>
     setForm((prev) => ({ ...prev, vehiculo: { ...prev.vehiculo, [key]: value } }));
+
+  const setPropietarioCampo = (campo: keyof PropietarioConsultaInput, valor: string) =>
+    setPropietario((prev) => ({ ...prev, [campo]: valor }));
 
   const setParte = (parte: "transferente" | "adquirente", key: keyof TransferParteInput, value: string) =>
     setForm((prev) => ({ ...prev, [parte]: { ...prev[parte], [key]: value } }));
@@ -265,7 +278,16 @@ export function TransferenciaFormPanel() {
   );
 
   const prefillVehiculoBloque = usePrefillBloque({
-    consultar: () => prefillVehiculo({ placa: form.vehiculo.placa.trim().toUpperCase() }),
+    // El documento del propietario NO es opcional en la práctica: el proveedor RUNT devuelve
+    // «Se requiere documento del propietario para consulta por placa» y cero campos si falta, y el
+    // prellenado no puede distinguir eso de «esta placa no tiene antecedente». El wizard lo impone
+    // en su paso «consulta»; aquí se impone igual.
+    consultar: () =>
+      prefillVehiculo({
+        placa: form.vehiculo.placa.trim().toUpperCase(),
+        ownerDocumentType: propietario.tipoDoc,
+        ownerDocumentNumber: propietario.numeroDoc.trim(),
+      }),
     valores: form.vehiculo,
     onAplicar: aplicarVehiculo,
     siempreEditables: CAMPOS_VEHICULO_SIEMPRE_EDITABLES,
@@ -498,6 +520,8 @@ export function TransferenciaFormPanel() {
         onChange={setVehiculo}
         errorDe={errorDe}
         prefill={prefillVehiculoBloque}
+        propietario={propietario}
+        onPropietarioChange={setPropietarioCampo}
       />
 
       {/*

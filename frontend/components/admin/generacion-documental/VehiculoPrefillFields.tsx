@@ -16,6 +16,7 @@
  * campos siguen editables</b>: la generación del documento no depende de que el RUNT responda.</p>
  */
 import { RefreshCw, Search } from "lucide-react";
+import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
 import type {
   TransferValidationIssue,
   TransferVehiculoInput,
@@ -41,11 +42,26 @@ export const CAMPOS_VEHICULO: { key: keyof TransferVehiculoInput; id: string; la
   { key: "organismoTransito", id: "tf-organismo", label: "Organismo de tránsito" },
 ];
 
+/**
+ * Documento del propietario inscrito. **No es una variable del anexo**: es entrada de la consulta
+ * al RUNT y no viaja al documento generado, por eso vive aparte de `TransferVehiculoInput`.
+ */
+export interface PropietarioConsultaInput {
+  tipoDoc: string;
+  numeroDoc: string;
+}
+
+/** Los mismos que ofrece el paso «consulta» del wizard de tramites. */
+export const DOC_TYPES_PROPIETARIO = ["CC", "CE", "NIT", "PAS"] as const;
+
 export interface VehiculoPrefillFieldsProps {
   valores: TransferVehiculoInput;
   onChange: (key: keyof TransferVehiculoInput, valor: string) => void;
   errorDe: (field: string) => TransferValidationIssue[];
   prefill: PrefillBloque;
+  /** Documento del propietario inscrito, exigido por el RUNT para consultar por placa. */
+  propietario: PropietarioConsultaInput;
+  onPropietarioChange: (campo: keyof PropietarioConsultaInput, valor: string) => void;
 }
 
 export function VehiculoPrefillFields({
@@ -53,26 +69,86 @@ export function VehiculoPrefillFields({
   onChange,
   errorDe,
   prefill,
+  propietario,
+  onPropietarioChange,
 }: VehiculoPrefillFieldsProps) {
   const placaVacia = !(valores.placa ?? "").trim();
+  const documentoVacio = !propietario.numeroDoc.trim();
   const consultando = prefill.estado === "consultando";
+  // El RUNT NO consulta por placa sola: `KyverumRuntVehicleConsultationProvider` devuelve
+  // «Se requiere documento del propietario para consulta por placa» y cero campos, que el
+  // prellenado no puede distinguir de «esta placa no tiene antecedente». Mismo requisito que
+  // impone el paso «consulta» del wizard.
+  const faltaInsumo = placaVacia || documentoVacio;
 
   return (
     <fieldset className="rounded-2xl border p-4" data-testid="transferencia-vehiculo">
       <legend className="px-1 text-[11px] font-semibold uppercase opacity-70">Vehículo</legend>
 
       <p className="mb-3 text-[11px] opacity-80">
-        Escribe la placa y consulta el RUNT: el bloque se diligencia solo y los datos consultados
-        quedan bloqueados para que no se pisen por error. El número de licencia de tránsito no lo
-        devuelve ninguna consulta —está en la licencia física— y siempre se captura a mano.
+        Escribe la placa y el documento del propietario inscrito, y consulta el RUNT: el bloque se
+        diligencia solo y los datos consultados quedan bloqueados para que no se pisen por error. El
+        número de licencia de tránsito no lo devuelve ninguna consulta —está en la licencia física— y
+        siempre se captura a mano.
       </p>
+
+      {/*
+        El documento del propietario NO es una variable del anexo y no viaja al documento generado:
+        es lo que el RUNT exige para poder consultar por placa. Mismos rótulos y mismos tipos que el
+        paso «consulta» del wizard, para que quien conoce uno reconozca el otro.
+      */}
+      <div className="mb-3 grid gap-3 sm:grid-cols-[8rem_1fr]">
+        <div className="min-w-0">
+          <label htmlFor="tf-propietario-tipo-doc" className="text-[11px] font-semibold opacity-80">
+            Tipo documento propietario
+          </label>
+          <select
+            id="tf-propietario-tipo-doc"
+            data-testid="tf-propietario-tipo-doc"
+            value={propietario.tipoDoc}
+            onChange={(event) => {
+              const siguiente = event.target.value;
+              onPropietarioChange("tipoDoc", siguiente);
+              // El saneado depende del tipo: el pasaporte admite letras. Al cambiar de tipo se
+              // vuelve a sanear lo ya escrito en vez de dejar un valor imposible para el nuevo.
+              onPropietarioChange("numeroDoc", sanitizeDocNumber(propietario.numeroDoc, siguiente));
+            }}
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-xs"
+          >
+            {DOC_TYPES_PROPIETARIO.map((tipo) => (
+              <option key={tipo} value={tipo}>
+                {tipo}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="min-w-0">
+          <label htmlFor="tf-propietario-doc" className="text-[11px] font-semibold opacity-80">
+            Número documento del propietario
+          </label>
+          <input
+            id="tf-propietario-doc"
+            data-testid="tf-propietario-doc"
+            type="text"
+            inputMode={propietario.tipoDoc === "PAS" ? "text" : "numeric"}
+            autoComplete="off"
+            value={propietario.numeroDoc}
+            onChange={(event) =>
+              onPropietarioChange("numeroDoc", sanitizeDocNumber(event.target.value, propietario.tipoDoc))
+            }
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-xs"
+            placeholder="Documento de quien figura como propietario en el RUNT"
+          />
+        </div>
+      </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           data-testid="tf-consultar-placa"
           onClick={() => void prefill.ejecutar()}
-          disabled={placaVacia || consultando}
+          disabled={faltaInsumo || consultando}
           aria-describedby="tf-prefill-vehiculo-estado"
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
           style={{ backgroundColor: "#557EFF" }}
@@ -92,7 +168,10 @@ export function VehiculoPrefillFields({
           aria-live="polite"
           className="text-[11px] opacity-80"
         >
-          {prefill.estado === "idle"
+          {prefill.estado === "idle" && faltaInsumo
+            ? "El RUNT no consulta por placa sola: escribe también el documento del propietario inscrito para habilitar la consulta."
+            : null}
+          {prefill.estado === "idle" && !faltaInsumo
             ? "Sin consultar: todos los campos son de captura manual."
             : null}
           {consultando ? "Consultando el RUNT por placa…" : null}

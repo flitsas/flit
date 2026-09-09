@@ -53,8 +53,13 @@ const ETIQUETAS_VEHICULO: Record<string, string> = {
   organismoTransito: "Organismo de tránsito",
 };
 
-async function consultarPlaca(placa = "ABC123") {
+/**
+ * El RUNT no consulta por placa sola: exige el documento del propietario inscrito, igual que el
+ * paso «consulta» del wizard. Por eso el helper llena los dos insumos.
+ */
+async function consultarPlaca(placa = "ABC123", documentoPropietario = "79123456") {
   await userEvent.type(screen.getByLabelText("Placa"), placa);
+  await userEvent.type(screen.getByTestId("tf-propietario-doc"), documentoPropietario);
   await userEvent.click(screen.getByTestId("tf-consultar-placa"));
   await waitFor(() => expect(prefillVehiculo).toHaveBeenCalled());
 }
@@ -81,7 +86,11 @@ describe("TransferenciaFormPanel — prellenado del vehículo por placa (CF-25)"
       expect(screen.getByTestId(`${input.id}-hidratacion`)).toHaveTextContent(/Dato de RUNT/);
     }
 
-    expect(prefillVehiculo).toHaveBeenCalledWith({ placa: "ABC123" });
+    expect(prefillVehiculo).toHaveBeenCalledWith({
+      placa: "ABC123",
+      ownerDocumentType: "CC",
+      ownerDocumentNumber: "79123456",
+    });
 
     // El 13.º campo: ni bloqueado, ni marcado como hidratado, ni diligenciado.
     const licencia = screen.getByLabelText("Licencia de tránsito No.") as HTMLInputElement;
@@ -381,5 +390,87 @@ describe("TransferenciaFormPanel — campos siempre manuales y accesibilidad", (
     for (const boton of screen.getAllByRole("button")) {
       expect(boton.getAttribute("aria-label") || boton.textContent?.trim()).toBeTruthy();
     }
+  });
+});
+
+// El defecto que motivó estos casos: el módulo consultaba con la placa sola. El proveedor RUNT
+// (`KyverumRuntVehicleConsultationProvider`) devuelve entonces «Se requiere documento del
+// propietario para consulta por placa» y CERO campos hidratados — que el prellenado no puede
+// distinguir de «esta placa no tiene antecedente». Resultado: la consulta parecía funcionar y
+// siempre decía «sin antecedente», mientras el wizard, que sí impone el documento, funcionaba.
+describe("TransferenciaFormPanel — el RUNT exige el documento del propietario (como el wizard)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    generateTransferenciaDocument.mockResolvedValue({ id: "id-1", status: "generated", advisories: [] });
+    prefillVehiculo.mockResolvedValue({ found: true, source: "RUNT", fields: CAMPOS_RUNT });
+    prefillPersonaJuridica.mockResolvedValue({ found: false });
+    prefillPersonaNatural.mockResolvedValue({ found: false });
+  });
+
+  it("con la placa sola no deja consultar, y dice por qué en vez de quedarse mudo", async () => {
+    render(<TransferenciaFormPanel />);
+    await userEvent.type(screen.getByLabelText("Placa"), "ABC123");
+
+    expect(screen.getByTestId("tf-consultar-placa")).toBeDisabled();
+    expect(screen.getByTestId("tf-prefill-vehiculo-estado")).toHaveTextContent(
+      /no consulta por placa sola/i,
+    );
+    expect(prefillVehiculo).not.toHaveBeenCalled();
+  });
+
+  it("con placa y documento habilita la consulta y deja de avisar", async () => {
+    render(<TransferenciaFormPanel />);
+    await userEvent.type(screen.getByLabelText("Placa"), "ABC123");
+    await userEvent.type(screen.getByTestId("tf-propietario-doc"), "79123456");
+
+    expect(screen.getByTestId("tf-consultar-placa")).toBeEnabled();
+    expect(screen.getByTestId("tf-prefill-vehiculo-estado")).not.toHaveTextContent(
+      /no consulta por placa sola/i,
+    );
+  });
+
+  it("el tipo de documento elegido viaja en la consulta", async () => {
+    render(<TransferenciaFormPanel />);
+    await userEvent.type(screen.getByLabelText("Placa"), "ABC123");
+    await userEvent.selectOptions(screen.getByTestId("tf-propietario-tipo-doc"), "NIT");
+    await userEvent.type(screen.getByTestId("tf-propietario-doc"), "900123456");
+    await userEvent.click(screen.getByTestId("tf-consultar-placa"));
+
+    await waitFor(() =>
+      expect(prefillVehiculo).toHaveBeenCalledWith({
+        placa: "ABC123",
+        ownerDocumentType: "NIT",
+        ownerDocumentNumber: "900123456",
+      }),
+    );
+  });
+
+  it("sanea el número según el tipo: CC no admite letras, pasaporte sí", async () => {
+    render(<TransferenciaFormPanel />);
+    const documento = screen.getByTestId("tf-propietario-doc") as HTMLInputElement;
+
+    await userEvent.type(documento, "79A123B456");
+    expect(documento.value).toBe("79123456");
+
+    await userEvent.selectOptions(screen.getByTestId("tf-propietario-tipo-doc"), "PAS");
+    await userEvent.clear(documento);
+    await userEvent.type(documento, "AV123456");
+    expect(documento.value).toBe("AV123456");
+  });
+
+  it("el documento del propietario es insumo de consulta, no una variable del anexo", async () => {
+    render(<TransferenciaFormPanel />);
+    await consultarPlaca();
+
+    // Control positivo: la consulta SÍ hidrató el bloque, así que lo que se afirma abajo no lo
+    // «demuestra» un formulario que no se llenó.
+    expect((screen.getByLabelText("Marca") as HTMLInputElement).value).toBe("MAZDA");
+
+    // El documento del propietario no es ninguna de las 13 variables de §5.1: la hidratación no lo
+    // toca, no lo bloquea y no lo marca como traído de una fuente. Conserva lo que tecleó el usuario.
+    const documento = screen.getByTestId("tf-propietario-doc") as HTMLInputElement;
+    expect(documento.value).toBe("79123456");
+    expect(documento).not.toHaveAttribute("data-hidratado");
+    expect(documento).not.toHaveAttribute("readonly");
   });
 });
