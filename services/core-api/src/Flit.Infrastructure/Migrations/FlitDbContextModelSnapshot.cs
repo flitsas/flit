@@ -7229,6 +7229,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("filename");
 
+                    b.Property<bool>("IsHistorico")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_historico");
+
                     b.Property<string>("Mimetype")
                         .IsRequired()
                         .HasMaxLength(150)

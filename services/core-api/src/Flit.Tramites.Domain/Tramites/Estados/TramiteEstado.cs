@@ -15,6 +15,16 @@ public static class TramiteEstado
     public const string Rechazado = "rechazado";
 
     /// <summary>
+    /// HU #12165/#12166 (Feature #12156) — el Organismo de Tránsito deshace una aprobación propia.
+    /// Alcanzable SOLO desde <see cref="Aprobado"/>, y SOLO por el flujo OT (el admin de FLIT no tiene
+    /// autoridad para revertir una decisión del organismo; ver "Cambiar estado"/"Anular" del admin,
+    /// que excluyen <see cref="Aprobado"/> explícitamente). Final: libera la placa (
+    /// <see cref="EstadosQueLiberanPlaca"/>) y habilita re-radicar con el mismo VIN/placa (excluido de
+    /// los gates de duplicidad CF-01 y de estado registral CF-03).
+    /// </summary>
+    public const string Revocado = "revocado";
+
+    /// <summary>
     /// LEGACY — ya no es un estado de negocio activo. La subsanación vive como flag
     /// <c>subsanacion_activa</c> sobre <see cref="Rechazado"/>. Se conserva la constante para
     /// leer historial / filas migradas pendientes. No forma parte de <see cref="Todos"/>.
@@ -27,10 +37,10 @@ public static class TramiteEstado
 
     /// <summary>Todos los estados válidos (para validación de entrada y checks DDL).</summary>
     public static readonly IReadOnlyList<string> Todos =
-        [Borrador, Anulado, Preparado, Entregado, Aprobado, Rechazado];
+        [Borrador, Anulado, Preparado, Entregado, Aprobado, Rechazado, Revocado];
 
     /// <summary>Estados FINALES (RF04): sin transiciones posteriores ni edición de datos.</summary>
-    public static readonly IReadOnlyList<string> Finales = [Aprobado, Anulado];
+    public static readonly IReadOnlyList<string> Finales = [Aprobado, Anulado, Revocado];
 
     /// <summary>
     /// Estados en los que el trámite YA ESTÁ EN MANOS DEL ORGANISMO DE TRÁNSITO (HU #11945).
@@ -77,7 +87,7 @@ public static class TramiteEstado
     /// asignarse a otro trámite. Cualquier otro estado (borrador, preparado, entregado, aprobado) la
     /// mantiene ocupada — una placa no puede estar viva en dos trámites a la vez.
     /// </summary>
-    public static readonly IReadOnlyList<string> EstadosQueLiberanPlaca = [Rechazado, Anulado];
+    public static readonly IReadOnlyList<string> EstadosQueLiberanPlaca = [Rechazado, Anulado, Revocado];
 
     /// <summary>¿Un trámite en <paramref name="estado"/> retiene la placa e impide reasignarla?</summary>
     public static bool OcupaPlaca(string? estado) =>
@@ -88,9 +98,9 @@ public static class TramiteEstado
     public static bool EsValido(string? estado) =>
         estado is not null && Todos.Contains(estado, StringComparer.Ordinal);
 
-    /// <summary>¿<paramref name="estado"/> es final (RF04)? Aprobado y Anulado son inmutables.</summary>
+    /// <summary>¿<paramref name="estado"/> es final (RF04)? Aprobado, Anulado y Revocado son inmutables.</summary>
     public static bool EsFinal(string? estado) =>
-        estado is Aprobado or Anulado;
+        estado is Aprobado or Anulado or Revocado;
 
     /// <summary>
     /// ¿El trámite está "en proceso" para duplicidad (CF-01)? Incluye el legado

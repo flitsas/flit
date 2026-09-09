@@ -82,6 +82,18 @@ public sealed class VinPolicyEvaluatorTests
     }
 
     [Fact]
+    public void EvaluarConflicto_SoloRevocados_Null_PermiteReRadicar()
+    {
+        // AC2/AC3 (HU #12165/#12166, Feature #12156): un Aprobado revocado por el OT libera el VIN
+        // igual que rechazado/anulado — el cliente puede re-radicar el mismo VIN sin bloqueo.
+        var existentes = new List<VinTramiteExistente>
+        {
+            new(Guid.NewGuid(), TramiteEstado.Revocado, Paso: 6, Placa: "X", Vin: "ABC123"),
+        };
+        VinPolicyEvaluator.EvaluarConflicto(existentes).Should().BeNull();
+    }
+
+    [Fact]
     public void EvaluarConflicto_IgnoraRechazadoYPrioriza1erBloqueante()
     {
         // Ordenado por recencia desc: el rechazado se ignora, el borrador (1er bloqueante) define.
