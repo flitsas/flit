@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Admin.Domain.OtQueries;
 using Flit.Admin.Domain.PlatePreassign;
+using Flit.Queries.Domain;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -195,6 +197,84 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
     /// <summary>Valor público para pedir los trámites que NO están en ruta de placa.</summary>
     public const string PlateFlowSinRuta = "sin_ruta";
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<QueryFieldDto>?> GetBandejaFilterFieldsAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            async transitOfficeId =>
+            {
+                var clientTenantIds = await ListGrantedClientTenantIdsAsync(
+                    transitOfficeId,
+                    cancellationToken).ConfigureAwait(false);
+
+                return await ExecuteCrossTenantReadAsync(
+                    async () =>
+                    {
+                        // Las empresas con grant vigente, TODAS y no solo las que tienen trámites
+                        // ahora mismo: el contenido del filtro no debe cambiar según lo que haya en
+                        // la bandeja hoy, o el mismo desplegable ofrecería cosas distintas cada día.
+                        var empresas = await _context.Tenants
+                            .AsNoTracking()
+                            .Where(t => clientTenantIds.Contains(t.Id))
+                            .Select(t => new { t.Id, t.LegalName })
+                            .ToListAsync(cancellationToken)
+                            .ConfigureAwait(false);
+
+                        var empresaOptions = empresas
+                            .OrderBy(t => t.LegalName, StringComparer.OrdinalIgnoreCase)
+                            .Select(t => new QueryFieldOptionDto(t.Id.ToString(), t.LegalName))
+                            .ToList();
+
+                        // Los tipos que este organismo ha recibido de verdad. Aquí sí se mira lo
+                        // recibido y no el catálogo entero: los 21 tipos de ADR-0050 en una lista
+                        // plana obligarían a buscar entre tipos que este organismo nunca tramita.
+                        var tipoIds = clientTenantIds.Count == 0
+                            ? []
+                            : await _context.ProcedureInstances
+                                .AsNoTracking()
+                                .Where(p => p.DeletedAt == null
+                                    && p.TransitOfficeId == transitOfficeId
+                                    && clientTenantIds.Contains(p.TenantId))
+                                .Select(p => p.ProcedureTypeId)
+                                .Distinct()
+                                .ToListAsync(cancellationToken)
+                                .ConfigureAwait(false);
+
+                        var tipos = await _context.ProcedureTypes
+                            .AsNoTracking()
+                            .Where(t => tipoIds.Contains(t.Id))
+                            .Select(t => new { t.Id, t.Name, t.Family })
+                            .ToListAsync(cancellationToken)
+                            .ConfigureAwait(false);
+
+                        // Por Id y no por código, igual que el catálogo de Consultas del organismo:
+                        // dentro de la superficie OT un tipo de trámite se nombra siempre por su Id.
+                        var tipoOptions = TipoTramiteOptionCatalog.Build(
+                            tipos.Select(t => (t.Id.ToString(), t.Name, (string?)t.Family)));
+
+                        return (IReadOnlyList<QueryFieldDto>?)OtBandejaQueryFieldCatalog.Fields
+                            // Un campo de opciones cuyo catálogo salió vacío NO se ofrece: un filtro
+                            // que solo puede devolver cero se lee como que el dato no existe.
+                            .Where(f => f.Id != OtBandejaQueryFieldCatalog.Empresa
+                                    || empresaOptions.Count > 0)
+                            .Where(f => f.Id != OtBandejaQueryFieldCatalog.TipoTramite
+                                    || tipoOptions.Count > 0)
+                            .Select(f => f.Id switch
+                            {
+                                OtBandejaQueryFieldCatalog.Empresa => f with { Options = empresaOptions },
+                                OtBandejaQueryFieldCatalog.TipoTramite => f with { Options = tipoOptions },
+                                _ => f,
+                            })
+                            .ToList();
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            },
+            cancellationToken);
 
     public Task<OtBandejaCounters?> GetBandejaCountersAsync(
         Guid otTenantId,
@@ -1570,7 +1650,177 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     && u.DisplayName.ToLower().Contains(gestor)));
         }
 
+        // Rango de fechas (HU #12217). Va en SQL, no sobre la página: el total de la cabecera y el
+        // recorrido del export tienen que ver el mismo universo que la tabla.
+        if (filter.CreatedFrom is { } creadoDesde)
+            query = query.Where(p => p.CreatedAt >= creadoDesde);
+
+        if (filter.CreatedTo is { } creadoHasta)
+            query = query.Where(p => p.CreatedAt <= creadoHasta);
+
+        if (filter.UpdatedFrom is { } actualizadoDesde)
+            query = query.Where(p => p.UpdatedAt >= actualizadoDesde);
+
+        if (filter.UpdatedTo is { } actualizadoHasta)
+            query = query.Where(p => p.UpdatedAt <= actualizadoHasta);
+
+        if (filter.Condiciones is { Count: > 0 } condiciones)
+        {
+            foreach (var condicion in condiciones)
+                query = ApplyCondition(query, condicion);
+        }
+
         return query;
+    }
+
+    // ── Condiciones de la gramática de Consultas (HU #12217) ──────────────────────────────────
+
+    /// <summary>
+    /// Traduce UNA condición del catálogo de la bandeja a <c>WHERE</c>.
+    ///
+    /// <para>El <c>switch</c> es de esta superficie —son SUS identificadores de campo y SU
+    /// vocabulario de estado— pero los predicados salen de
+    /// <see cref="ProcedureInstanceFiltroSql"/>, compartidos con el listado del gestor. Ahí está el
+    /// punto: las dos pantallas preguntan sobre la misma tabla, y una placa que casara en una y no
+    /// en la otra no daría un error, haría que el producto se contradijera sobre el mismo
+    /// trámite.</para>
+    ///
+    /// <para>Un campo desconocido devuelve la consulta INTACTA en vez de lanzar: el endpoint ya
+    /// rechaza con 400 lo que no está en el catálogo, así que llegar aquí con uno significaría que
+    /// catálogo y traductor se desincronizaron. Silenciarlo es preferible a tumbar la bandeja, y la
+    /// validación de arriba es la que impide que pase inadvertido.</para>
+    /// </summary>
+    private IQueryable<ProcedureInstance> ApplyCondition(
+        IQueryable<ProcedureInstance> query, QueryCondition condicion)
+    {
+        var op = condicion.Operator;
+        var esIdentificador = OtBandejaQueryFieldCatalog.IsIdentifier(condicion.FieldId);
+        var valores = ProcedureInstanceFiltroSql.Normalizar(condicion, esIdentificador);
+
+        if (ProcedureInstanceFiltroSql.EsInerte(op, valores))
+            return query;
+
+        return condicion.FieldId switch
+        {
+            OtBandejaQueryFieldCatalog.Radicado =>
+                ProcedureInstanceFiltroSql.PorRadicado(query, op, valores),
+            OtBandejaQueryFieldCatalog.Placa =>
+                ProcedureInstanceFiltroSql.PorPlaca(query, op, valores),
+            OtBandejaQueryFieldCatalog.Vin =>
+                ProcedureInstanceFiltroSql.PorVin(query, op, valores),
+
+            OtBandejaQueryFieldCatalog.Comprador => ProcedureInstanceFiltroSql.PorActor(
+                query, op, valores, ProcedureInstanceFiltroSql.ActorTipoComprador),
+            OtBandejaQueryFieldCatalog.Vendedor => ProcedureInstanceFiltroSql.PorActor(
+                query, op, valores, ProcedureInstanceFiltroSql.ActorTipoVendedor),
+
+            // «Empresa cliente» para el organismo es la misma columna que «Compañía» para el gestor:
+            // el tenant dueño del trámite, mirado desde el otro lado.
+            OtBandejaQueryFieldCatalog.Empresa =>
+                ProcedureInstanceFiltroSql.PorTenant(query, op, valores),
+            // Por Id y NO por el código del tipo, que es como lo compara el listado del gestor: es
+            // la convención de la superficie OT —su catálogo de Consultas ya nombra los tipos por
+            // Id— y el filtro suelto `procedureTypeId` de esta misma bandeja también. Es la clase de
+            // diferencia que no se puede compartir: el predicado compartido compara otra columna.
+            OtBandejaQueryFieldCatalog.TipoTramite => PorTipoTramiteId(query, op, valores),
+
+            // El estado CRUDO que el organismo recibe. No es la lectura derivada del informe: ver la
+            // justificación en OtBandejaQueryFieldCatalog.
+            OtBandejaQueryFieldCatalog.Estado => op switch
+            {
+                QueryOperator.EsAlguno => query.Where(x => valores.Contains(x.Status.ToUpper())),
+                QueryOperator.NoEsNinguno => query.Where(x => !valores.Contains(x.Status.ToUpper())),
+                _ => query,
+            },
+
+            OtBandejaQueryFieldCatalog.SubEstadoPlaca => PorSubEstadoPlaca(query, op, valores),
+
+            // Gestor = quien radicó el trámite en la empresa cliente. Es el mismo criterio que ya
+            // usaba el filtro suelto de la bandeja: para el organismo, el interlocutor es quien
+            // radicó, no a quién se lo reasignaron puertas adentro de la empresa.
+            OtBandejaQueryFieldCatalog.Gestor => op switch
+            {
+                QueryOperator.EsAlguno => query.Where(x => _context.Users.Any(u =>
+                    u.Id == x.CreatedByUserId && valores.Contains(u.DisplayName.ToUpper()))),
+                QueryOperator.NoEsNinguno => query.Where(x => !_context.Users.Any(u =>
+                    u.Id == x.CreatedByUserId && valores.Contains(u.DisplayName.ToUpper()))),
+                QueryOperator.Contiene => query.Where(x => _context.Users.Any(u =>
+                    u.Id == x.CreatedByUserId && u.DisplayName.ToUpper().Contains(valores[0]))),
+                QueryOperator.EstaVacio => query.Where(x =>
+                    !_context.Users.Any(u => u.Id == x.CreatedByUserId)),
+                QueryOperator.NoEstaVacio => query.Where(x =>
+                    _context.Users.Any(u => u.Id == x.CreatedByUserId)),
+                _ => query,
+            },
+
+            OtBandejaQueryFieldCatalog.Prioritario => ProcedureInstanceFiltroSql.Booleano(
+                query, op, valores,
+                verdadero: q => q.Where(x => x.Prioritario),
+                falso: q => q.Where(x => !x.Prioritario)),
+
+            OtBandejaQueryFieldCatalog.Prenda => ProcedureInstanceFiltroSql.Booleano(
+                query, op, valores,
+                verdadero: q => q.Where(ProcedureInstanceFiltroSql.TienePrenda(_context)),
+                falso: q => q.Where(ProcedureInstanceFiltroSql.Negar(
+                    ProcedureInstanceFiltroSql.TienePrenda(_context)))),
+
+            _ => query,
+        };
+    }
+
+    /// <summary>
+    /// Tipo de trámite por identificador. Un valor que no sea un Guid se descarta en vez de tumbar
+    /// la consulta; si no queda ninguno, la condición no acota (filtrar por «nada» no debe vaciar
+    /// la bandeja).
+    /// </summary>
+    private static IQueryable<ProcedureInstance> PorTipoTramiteId(
+        IQueryable<ProcedureInstance> query, string op, List<string> valores)
+    {
+        var ids = new List<Guid>();
+        foreach (var valor in valores)
+            if (Guid.TryParse(valor, out var id)) ids.Add(id);
+        if (ids.Count == 0) return query;
+
+        return op switch
+        {
+            QueryOperator.EsAlguno => query.Where(p => ids.Contains(p.ProcedureTypeId)),
+            QueryOperator.NoEsNinguno => query.Where(p => !ids.Contains(p.ProcedureTypeId)),
+            _ => query,
+        };
+    }
+
+    /// <summary>
+    /// Ruta de placa. <c>sin_ruta</c> no es un valor de la columna sino su ausencia, así que se trata
+    /// aparte para poder pedirlo junto a valores reales — misma regla que ya aplica el filtro suelto
+    /// <c>PlateFlowStatus</c> que mandan las tarjetas de la cabecera.
+    /// </summary>
+    private static IQueryable<ProcedureInstance> PorSubEstadoPlaca(
+        IQueryable<ProcedureInstance> query, string op, List<string> valores)
+    {
+        var enMinuscula = valores.Select(v => v.ToLowerInvariant()).ToList();
+        var incluirSinRuta = enMinuscula.Remove(PlateFlowSinRuta);
+        var negado = op == QueryOperator.NoEsNinguno;
+
+        if (op != QueryOperator.EsAlguno && !negado)
+            return query;
+
+        // Se arma el predicado en positivo y se niega al final: escribir las dos ramas por separado
+        // es la forma de que «es alguno» y «no es ninguno» dejen de ser complementarios sin que
+        // nadie lo note.
+        return (incluirSinRuta, enMinuscula.Count > 0, negado) switch
+        {
+            (true, true, false) => query.Where(p =>
+                p.PlateFlowStatus == null || enMinuscula.Contains(p.PlateFlowStatus)),
+            (true, true, true) => query.Where(p =>
+                p.PlateFlowStatus != null && !enMinuscula.Contains(p.PlateFlowStatus)),
+            (true, false, false) => query.Where(p => p.PlateFlowStatus == null),
+            (true, false, true) => query.Where(p => p.PlateFlowStatus != null),
+            (false, true, false) => query.Where(p =>
+                p.PlateFlowStatus != null && enMinuscula.Contains(p.PlateFlowStatus)),
+            (false, true, true) => query.Where(p =>
+                p.PlateFlowStatus == null || !enMinuscula.Contains(p.PlateFlowStatus)),
+            _ => query,
+        };
     }
 
     /// <summary>
@@ -1617,6 +1867,28 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 ordered.ThenBy(p => p.Status).ThenByDescending(p => p.Id),
             ("status", false) or ("estado", false) =>
                 ordered.ThenByDescending(p => p.Status).ThenByDescending(p => p.Id),
+            // La celda «Empresa / Gestor» apila los dos datos y hasta la HU #12219 solo se podía
+            // ordenar por el segundo: la cabecera prometía un orden por empresa que no existía. La
+            // razón social vive en otra tabla, así que va por subconsulta correlacionada — el mismo
+            // patrón que ya usaba «gestor» contra identity.users.
+            ("empresa", true) => ordered
+                .ThenBy(p => _context.Tenants
+                    .Where(t => t.Id == p.TenantId)
+                    .Select(t => t.LegalName)
+                    .FirstOrDefault())
+                .ThenByDescending(p => p.Id),
+            ("empresa", false) => ordered
+                .ThenByDescending(p => _context.Tenants
+                    .Where(t => t.Id == p.TenantId)
+                    .Select(t => t.LegalName)
+                    .FirstOrDefault())
+                .ThenByDescending(p => p.Id),
+            ("tipo_tramite", true) or ("tipotramite", true) => ordered
+                .ThenBy(p => p.ProcedureType != null ? p.ProcedureType.Name : "")
+                .ThenByDescending(p => p.Id),
+            ("tipo_tramite", false) or ("tipotramite", false) => ordered
+                .ThenByDescending(p => p.ProcedureType != null ? p.ProcedureType.Name : "")
+                .ThenByDescending(p => p.Id),
             ("createdat", true) or ("fecharadicacion", true) =>
                 ordered.ThenBy(p => p.CreatedAt).ThenByDescending(p => p.Id),
             _ => ordered.ThenByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id),

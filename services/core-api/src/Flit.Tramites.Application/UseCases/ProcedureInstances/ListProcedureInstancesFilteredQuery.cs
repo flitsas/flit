@@ -66,54 +66,9 @@ public sealed record ProcedureInstanceListRequest
 public static class TramitesQueryConditions
 {
     /// <summary>Mensaje del primer problema encontrado, o <c>null</c> si todas son válidas.</summary>
-    public static string? Validate(IReadOnlyList<QueryCondition>? condiciones)
-    {
-        if (condiciones is null || condiciones.Count == 0)
-            return null;
-
-        foreach (var condicion in condiciones)
-        {
-            var campo = TramitesQueryFieldCatalog.Find(condicion.FieldId);
-            if (campo is null)
-                return $"El campo «{condicion.FieldId}» no se puede filtrar en el listado de trámites.";
-
-            if (!QueryOperator.IsKnown(condicion.Operator))
-                return $"El operador «{condicion.Operator}» no existe.";
-
-            if (!campo.Operators.Contains(condicion.Operator, StringComparer.Ordinal))
-                return $"El campo «{campo.Label}» no admite el operador «{condicion.Operator}».";
-
-            var unario = QueryOperator.IsUnary(condicion.Operator);
-            var valores = condicion.Values ?? [];
-
-            if (unario && valores.Count > 0)
-                return $"El operador «{condicion.Operator}» de «{campo.Label}» no lleva valores.";
-
-            if (!unario && valores.Count == 0)
-                return $"Falta el valor del filtro «{campo.Label}».";
-
-            // «Contiene» compara UN texto: con varios, el resultado dependería de cuál se eligiera.
-            if (condicion.Operator == QueryOperator.Contiene && valores.Count > 1)
-                return $"El filtro «{campo.Label}» con «contiene» admite un solo valor.";
-
-            // Una lista pegada en un campo que no la admite suele ser un error de quien la pega, y
-            // aceptarla en silencio daría un resultado que no se corresponde con lo que ve en pantalla.
-            if (!campo.AdmiteLista && valores.Count > 1)
-                return $"El filtro «{campo.Label}» admite un solo valor.";
-
-            // Una opción fuera del catálogo solo puede devolver cero: decirlo es más útil que
-            // devolver una lista vacía sin explicación.
-            if (campo.Options.Count > 0 && !unario)
-            {
-                var desconocida = valores.FirstOrDefault(v =>
-                    !campo.Options.Any(o => string.Equals(o.Value, v, StringComparison.OrdinalIgnoreCase)));
-                if (desconocida is not null)
-                    return $"«{desconocida}» no es una opción de «{campo.Label}».";
-            }
-        }
-
-        return null;
-    }
+    public static string? Validate(IReadOnlyList<QueryCondition>? condiciones) =>
+        QueryConditionValidator.Validate(
+            TramitesQueryFieldCatalog.Instance, condiciones, "el listado de trámites");
 }
 
 /// <summary>

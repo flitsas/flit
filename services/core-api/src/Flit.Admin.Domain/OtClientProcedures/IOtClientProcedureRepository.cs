@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Common;
+using Flit.Queries.Domain;
 
 namespace Flit.Admin.Domain.OtClientProcedures;
 
@@ -36,6 +37,23 @@ public interface IOtClientProcedureRepository
     /// bandeja está paginada y contar la página respondería otra pregunta.
     /// <para>Devuelve <c>null</c> cuando el tenant no resuelve ningún organismo de tránsito.</para>
     /// </summary>
+    /// <summary>
+    /// El catálogo de campos filtrables de la bandeja (HU #12217), con las opciones que dependen del
+    /// organismo ya resueltas: las empresas que le entregan de verdad y los tipos que de verdad ha
+    /// recibido.
+    ///
+    /// <para>Se resuelven aquí y no en el catálogo estático porque ofrecer una empresa con la que
+    /// este organismo nunca ha tramitado es ofrecer un filtro que solo puede devolver cero, y un
+    /// filtro que devuelve cero se lee como que el dato no existe.</para>
+    ///
+    /// <para><c>null</c> cuando quien pregunta no tiene organismo resoluble, igual que el resto de
+    /// la superficie OT.</para>
+    /// </summary>
+    Task<IReadOnlyList<QueryFieldDto>?> GetBandejaFilterFieldsAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
     Task<OtBandejaCounters?> GetBandejaCountersAsync(
         Guid otTenantId,
         Guid? transitOfficeIdOverride = null,

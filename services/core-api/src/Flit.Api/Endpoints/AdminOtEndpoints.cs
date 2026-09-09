@@ -9,6 +9,7 @@ using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.RevokeOtClientProcedure;
 using Flit.Admin.Application.OtDocumentPrecedence;
+using Flit.Queries.Domain;
 using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentTags;
@@ -155,6 +156,26 @@ public static class AdminOtEndpoints
             .WithName("AdminOtListClientProcedures")
             .WithSummary("Lista trámites de clientes con grant vigente hacia el OT")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // Filtros con la gramática de Consultas (HU #12217). Dos rutas, por lo mismo que en el
+        // listado del gestor: el catálogo se pide por GET, pero las condiciones viajan por POST
+        // porque placa, VIN y radicado admiten pegar una lista completa desde Excel y unos cientos
+        // de valores no caben en una query string. El GET de arriba se deja INTACTO: lo siguen
+        // usando las tarjetas de la cabecera y los enlaces profundos de los reportes.
+        group.MapGet("/client-procedures/fields", GetClientProceduresFilterFieldsAsync)
+            .WithName("AdminOtClientProceduresFilterFields")
+            .WithSummary("Campos por los que el organismo puede filtrar su bandeja")
+            .Produces<IReadOnlyList<QueryFieldDto>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/client-procedures/search", SearchClientProceduresAsync)
+            .WithName("AdminOtSearchClientProcedures")
+            .WithSummary("Bandeja del organismo filtrada con la gramática de consultas")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
@@ -1057,6 +1078,88 @@ public static class AdminOtEndpoints
             Page = page,
             PageSize = pageSize,
         }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new
+        {
+            data = result.Data,
+            totalCount = result.TotalCount,
+            page = result.Page,
+            pageSize = result.PageSize,
+        });
+    }
+
+    private static async Task<IResult> GetClientProceduresFilterFieldsAsync(
+        HttpContext httpContext,
+        GetOtBandejaFilterFieldsHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var campos = await handler
+            .HandleAsync(tenantId, scopedOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Sin organismo resoluble no hay catálogo, pero tampoco es un error del cliente: la barra de
+        // filtros degrada con elegancia y la bandeja se pinta igual.
+        return Results.Ok(campos ?? []);
+    }
+
+    /// <summary>
+    /// La MISMA bandeja que el GET, aceptando además condiciones de la gramática de Consultas.
+    /// </summary>
+    private static async Task<IResult> SearchClientProceduresAsync(
+        HttpContext httpContext,
+        ListOtClientProceduresHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromBody] OtBandejaSearchRequest body,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        // Un campo o un operador fuera del catálogo se RECHAZA. Ignorarlo devolvería una bandeja más
+        // amplia de la pedida con apariencia de estar filtrada, y nadie revisa un resultado que
+        // parece correcto.
+        if (OtBandejaQueryConditions.Validate(body.Condiciones) is { } problema)
+        {
+            return Results.BadRequest(new { error = problema });
+        }
+
+        var result = await handler
+            .HandleAsync(body.ToQuery(tenantId, scopedOfficeId), cancellationToken)
+            .ConfigureAwait(false);
 
         return Results.Ok(new
         {
@@ -2795,6 +2898,61 @@ public static class AdminOtEndpoints
         bool IsSuspended,
         long RowVersion,
         DateTimeOffset? DeletedAt = null);
+}
+
+/// <summary>
+/// Cuerpo de <c>POST /client-procedures/search</c> (HU #12217).
+///
+/// <para>Conserva los filtros sueltos del GET además de <see cref="Condiciones"/>: <c>status</c> y
+/// <c>plateFlowStatus</c> los sigue mandando la tira de tarjetas de la cabecera, que no es un filtro
+/// que el usuario escriba sino un atajo a un recuento ya hecho, y los enlaces profundos de los
+/// reportes entran por ahí también.</para>
+/// </summary>
+internal sealed record OtBandejaSearchRequest
+{
+    public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
+
+    public string? Status { get; init; }
+    public string? PlateFlowStatus { get; init; }
+    public Guid? ProcedureTypeId { get; init; }
+    public string? Vin { get; init; }
+    public string? Placa { get; init; }
+    public string? Vendedor { get; init; }
+    public string? Comprador { get; init; }
+    public string? Gestor { get; init; }
+
+    public DateTimeOffset? CreatedFrom { get; init; }
+    public DateTimeOffset? CreatedTo { get; init; }
+    public DateTimeOffset? UpdatedFrom { get; init; }
+    public DateTimeOffset? UpdatedTo { get; init; }
+
+    public string? SortBy { get; init; }
+    public string? SortDir { get; init; }
+    public int? Page { get; init; }
+    public int? PageSize { get; init; }
+
+    public ListOtClientProceduresQuery ToQuery(Guid otTenantId, Guid? transitOfficeId) => new()
+    {
+        OtTenantId = otTenantId,
+        TransitOfficeId = transitOfficeId,
+        Condiciones = Condiciones,
+        Status = Status,
+        PlateFlowStatus = PlateFlowStatus,
+        ProcedureTypeId = ProcedureTypeId,
+        Vin = Vin,
+        Placa = Placa,
+        Vendedor = Vendedor,
+        Comprador = Comprador,
+        Gestor = Gestor,
+        CreatedFrom = CreatedFrom,
+        CreatedTo = CreatedTo,
+        UpdatedFrom = UpdatedFrom,
+        UpdatedTo = UpdatedTo,
+        SortBy = SortBy,
+        SortDir = SortDir,
+        Page = Page,
+        PageSize = PageSize,
+    };
 }
 
 /// <summary>Logging source-generated (CA1848) de la aprobación OT. Sin PII.</summary>
