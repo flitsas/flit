@@ -80,6 +80,14 @@ export interface BannerFormInput {
   /** `yyyy-mm-dd` o cadena vacía = sin vigencia. */
   validUntil: string;
   file: File | null;
+  /**
+   * `POST`/`PUT` de `AdminBannersEndpoints.cs` NO aceptan este campo — el backend siempre crea el
+   * banner activo y, al editar, conserva el estado que ya tenía. `createBanner`/`updateBanner` lo
+   * aplican aparte con el `PATCH /{id}/active` dedicado cuando difiere, para que el formulario
+   * (alta o edición) pueda dejar el banner inhabilitado sin que el caller tenga que orquestar dos
+   * llamadas.
+   */
+  isActive: boolean;
 }
 
 /**
@@ -137,19 +145,28 @@ async function submitMultipart(url: string, method: "POST" | "PUT", form: FormDa
   return (await response.json()) as Banner;
 }
 
-/** POST "" — alta de banner (AC2). La imagen es obligatoria. */
-export function createBanner(input: BannerFormInput): Promise<Banner> {
-  return submitMultipart(resolveUrl(base), "POST", buildFormData(input));
+/** POST "" — alta de banner (AC2). La imagen es obligatoria; siempre nace activa en el backend. */
+export async function createBanner(input: BannerFormInput): Promise<Banner> {
+  const created = await submitMultipart(resolveUrl(base), "POST", buildFormData(input));
+  return input.isActive ? created : applyActiveState(created, false);
 }
 
 /** PUT "/{id}" — edición de banner (AC2). Si no se elige imagen nueva, conserva la actual. */
-export function updateBanner(id: string, input: BannerFormInput): Promise<Banner> {
-  return submitMultipart(resolveUrl(`${base}/${id}`), "PUT", buildFormData(input));
+export async function updateBanner(id: string, input: BannerFormInput): Promise<Banner> {
+  const updated = await submitMultipart(resolveUrl(`${base}/${id}`), "PUT", buildFormData(input));
+  return updated.isActive === input.isActive ? updated : applyActiveState(updated, input.isActive);
 }
 
 /** PATCH "/{id}/active" — activar/desactivar sin abrir el formulario completo. */
 export function setBannerActive(id: string, isActive: boolean): Promise<void> {
   return apiFetch<void>(`${base}/${id}/active`, { method: "PATCH", body: { isActive } });
+}
+
+/** Aplica el PATCH de estado y refleja el resultado en el objeto ya devuelto por create/update,
+ * para no forzar un segundo GET solo para refrescar `isActive` en la UI. */
+async function applyActiveState(banner: Banner, isActive: boolean): Promise<Banner> {
+  await setBannerActive(banner.id, isActive);
+  return { ...banner, isActive };
 }
 
 /** DELETE "/{id}?confirm=true" — baja con confirmación explícita obligatoria (AC3). */

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Loader2, UploadCloud } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
+import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import {
   bannerDateInputValue,
   bannerImageUrl,
@@ -31,9 +32,17 @@ interface FormState {
   validFrom: string;
   validUntil: string;
   file: File | null;
+  isActive: boolean;
 }
 
-const EMPTY: FormState = { name: "", linkUrl: "", validFrom: "", validUntil: "", file: null };
+const EMPTY: FormState = {
+  name: "",
+  linkUrl: "",
+  validFrom: "",
+  validUntil: "",
+  file: null,
+  isActive: true,
+};
 
 function fromEditing(b: Banner): FormState {
   return {
@@ -42,6 +51,7 @@ function fromEditing(b: Banner): FormState {
     validFrom: bannerDateInputValue(b.validFrom),
     validUntil: bannerDateInputValue(b.validUntil),
     file: null,
+    isActive: b.isActive,
   };
 }
 
@@ -121,6 +131,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
         validFrom: form.validFrom,
         validUntil: form.validUntil,
         file: form.file,
+        isActive: form.isActive,
       });
       onSaved(saved);
     } catch (err) {
@@ -181,6 +192,14 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
             placeholder="https://flitsas.com/promo"
           />
         </Field>
+
+        <ToggleSwitch
+          id="banner-activo"
+          label="Banner activo"
+          description="Si lo desactivas, no aparece en los carruseles aunque esté dentro de su rango de vigencia."
+          checked={form.isActive}
+          onChange={(checked) => patch({ isActive: checked })}
+        />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field
@@ -269,9 +288,8 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
           {/* AC4 — guía de tamaño recomendado, puramente informativa: no bloquea imágenes con otra
               proporción, siempre que cumplan formato/tamaño (validados también en backend). */}
           <p id="banner-file-guide" className="mt-1.5 text-[11px] opacity-70">
-            Tamaño recomendado: 1600 x 400 px (proporción 4:1), formato PNG, JPEG o WEBP, máximo
-            2MB. Mantén el contenido importante (texto, logo) centrado: la imagen se recorta
-            distinto en el carrusel del gestor y en el del organismo de tránsito.
+            Tamaño recomendado: 1500 x 500 px (proporción 3:1), formato PNG, JPEG o WEBP, máximo
+            2MB.
           </p>
           {missingFile && (
             <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>

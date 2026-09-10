@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Image as ImageIcon, ShieldAlert } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
@@ -124,7 +125,14 @@ function BannersList() {
         <CreateButton label="Nuevo banner" icon={ImageIcon} onClick={() => setFormTarget("new")} />
       </div>
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      {/* Sin tarjeta blanca envolvente: mismo lenguaje visual que TramitesTable — la tabla es una
+          pila de filas-tarjeta directamente sobre el fondo de la app, no un bloque encapsulado.
+          Carga: el mismo loader del carrito que usa el módulo de trámites (`CarLoaderModal`), no
+          el esqueleto genérico de `UiStateBoundary` — error/vacío sí siguen ese componente
+          compartido, que ya es el patrón correcto para esos dos estados. */}
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando banners…" />
+      ) : (
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}
@@ -143,7 +151,7 @@ function BannersList() {
             />
           )}
         </UiStateBoundary>
-      </div>
+      )}
 
       {formTarget !== null && (
         <BannerFormPanel

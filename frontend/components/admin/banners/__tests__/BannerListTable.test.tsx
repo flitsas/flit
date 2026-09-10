@@ -50,14 +50,32 @@ describe("BannerListTable", () => {
     expect(img.src).toContain("/api/v1/public/banners/abc-123/image");
   });
 
-  it("marca 'Tiene enlace' SI cuando el banner tiene linkUrl", () => {
-    renderTable([banner({ linkUrl: "https://flitsas.com/promo" })]);
-    expect(screen.getByText("SÍ")).toBeInTheDocument();
+  it("muestra la foto completa (object-contain, sin recortarla)", () => {
+    renderTable([banner()]);
+    const img = screen.getByAltText(/vista previa del banner promo verano/i) as HTMLImageElement;
+    expect(img.className).toContain("object-contain");
+    expect(img.className).not.toContain("object-cover");
   });
 
-  it("marca 'Tiene enlace' NO cuando el banner no tiene linkUrl", () => {
+  it("Fecha inicio y Fecha fin son columnas separadas (no una sola celda apilada)", () => {
+    renderTable([banner()]);
+    expect(screen.getByRole("columnheader", { name: "Fecha inicio" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Fecha fin" })).toBeInTheDocument();
+  });
+
+  it("si tiene linkUrl, muestra el badge SÍ junto a un ícono que abre esa URL en pestaña nueva", () => {
+    renderTable([banner({ linkUrl: "https://flitsas.com/promo" })]);
+    expect(screen.getByText("SÍ")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /abrir el enlace del banner promo verano/i });
+    expect(link).toHaveAttribute("href", "https://flitsas.com/promo");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("sin linkUrl, muestra el badge NO y no hay ícono de enlace clicable", () => {
     renderTable([banner({ linkUrl: null })]);
     expect(screen.getByText("NO")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /abrir el enlace/i })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -76,10 +94,25 @@ describe("BannerListTable", () => {
     expect(messages).toHaveLength(2);
   });
 
-  it("formatea las fechas cuando sí hay vigencia configurada", () => {
+  it("formatea las fechas (en columnas separadas) cuando sí hay vigencia configurada", () => {
     renderTable([banner({ validFrom: "2026-09-01T00:00:00Z", validUntil: "2026-09-30T23:59:59Z" })]);
-    expect(screen.getByText(/inicio: 01\/09\/2026/i)).toBeInTheDocument();
-    expect(screen.getByText(/fin: 30\/09\/2026/i)).toBeInTheDocument();
+    expect(screen.getByText("01/09/2026")).toBeInTheDocument();
+    expect(screen.getByText("30/09/2026")).toBeInTheDocument();
+  });
+
+  it("al hacer clic en la miniatura, abre un visualizador con la imagen completa", async () => {
+    const user = userEvent.setup();
+    renderTable([banner({ id: "abc-123", name: "Promo verano" })]);
+
+    expect(screen.queryByAltText(/imagen completa del banner/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /ver la imagen completa del banner promo verano/i }));
+
+    const full = screen.getByAltText(/imagen completa del banner promo verano/i) as HTMLImageElement;
+    expect(full.src).toContain("/api/v1/public/banners/abc-123/image");
+
+    await user.click(screen.getByRole("button", { name: /cerrar/i }));
+    expect(screen.queryByAltText(/imagen completa del banner/i)).not.toBeInTheDocument();
   });
 
   it("dispara onEdit / onDelete desde las acciones de la fila", async () => {

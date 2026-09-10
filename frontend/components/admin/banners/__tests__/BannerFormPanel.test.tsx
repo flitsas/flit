@@ -54,10 +54,9 @@ describe("BannerFormPanel — AC4 guía de tamaño", () => {
   it("muestra el texto de ayuda del campo de imagen", () => {
     renderPanel();
     expect(
-      screen.getByText(/tamaño recomendado: 1600 x 400 px \(proporción 4:1\)/i),
+      screen.getByText(/tamaño recomendado: 1500 x 500 px \(proporción 3:1\)/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/máximo\s*2mb/i)).toBeInTheDocument();
-    expect(screen.getByText(/se recorta distinto en el carrusel del gestor/i)).toBeInTheDocument();
   });
 });
 
@@ -132,6 +131,30 @@ describe("BannerFormPanel — validación y envío", () => {
     expect(input.name).toBe("Promo verano");
     expect(input.linkUrl).toBe("https://flitsas.com/promo");
     expect(input.file).toBe(file);
+    expect(input.isActive).toBe(true);
     expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ id: "new-id" }));
+  });
+});
+
+describe("BannerFormPanel — activar/inhabilitar", () => {
+  it("nace activo por defecto en alta", async () => {
+    renderPanel();
+    expect(screen.getByRole("switch", { name: /banner activo/i })).toBeChecked();
+  });
+
+  it("precarga el estado real del banner en edición", () => {
+    renderPanel({ editing: banner({ isActive: false }) });
+    expect(screen.getByRole("switch", { name: /banner activo/i })).not.toBeChecked();
+  });
+
+  it("al desactivarlo, envía isActive: false en el submit", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderPanel({ editing: banner() });
+
+    await user.click(screen.getByRole("switch", { name: /banner activo/i }));
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect((onSubmit.mock.calls[0][0] as BannerFormInput).isActive).toBe(false);
   });
 });

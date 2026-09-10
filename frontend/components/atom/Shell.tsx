@@ -311,44 +311,68 @@ export function Shell({
         active: !onAdminRoute && active === "auditoria",
         onClick: () => onNav("auditoria"),
       },
+    );
+  }
+
+  // Plataforma es contenedor (mismo patrón que Tránsito): cuelga los sub-módulos de
+  // configuración de plataforma. Sus hijos "core" (tipos de trámite, mandatos, FUR,
+  // notificaciones) siguen exclusivos de SuperAdmin; Banners (HU #12241, Feature #12236)
+  // cuelga aparte del permiso `banners.manage` del JWT (bypass SuperAdmin incluido en
+  // `canManageBanners`), para que un AdminCompany con el módulo concedido también lo vea —
+  // por eso el contenedor se construye con una lista de hijos armada dinámicamente en vez
+  // de vivir dentro del bloque `if (currentUser?.isSuperAdmin)` de arriba.
+  const platformaChildren: DockEntry[] = [];
+  if (currentUser?.isSuperAdmin) {
+    platformaChildren.push(
       {
-        key: "admin-plataforma",
-        label: "Plataforma",
-        icon: Monitor,
-        active: pathname.startsWith("/admin/plataforma"),
-        onClick: () => undefined,
-        children: [
-          {
-            key: "admin-tipos-tramite",
-            label: "Tipos de trámites",
-            icon: ListChecks,
-            active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
-            onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
-          },
-          {
-            key: "admin-mandatos",
-            label: "Mandatos",
-            icon: FileSignature,
-            active: pathname.startsWith("/admin/plataforma/mandatos"),
-            onClick: () => window.location.assign("/admin/plataforma/mandatos"),
-          },
-          {
-            key: "admin-fur",
-            label: "FUR",
-            icon: FileText,
-            active: pathname.startsWith("/admin/plataforma/fur"),
-            onClick: () => window.location.assign("/admin/plataforma/fur"),
-          },
-          {
-            key: "admin-notificaciones",
-            label: "Notificaciones",
-            icon: Bell,
-            active: pathname.startsWith("/admin/plataforma/notificaciones"),
-            onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
-          },
-        ],
+        key: "admin-tipos-tramite",
+        label: "Tipos de trámites",
+        icon: ListChecks,
+        active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
+        onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
+      },
+      {
+        key: "admin-mandatos",
+        label: "Mandatos",
+        icon: FileSignature,
+        active: pathname.startsWith("/admin/plataforma/mandatos"),
+        onClick: () => window.location.assign("/admin/plataforma/mandatos"),
+      },
+      {
+        key: "admin-fur",
+        label: "FUR",
+        icon: FileText,
+        active: pathname.startsWith("/admin/plataforma/fur"),
+        onClick: () => window.location.assign("/admin/plataforma/fur"),
+      },
+      {
+        key: "admin-notificaciones",
+        label: "Notificaciones",
+        icon: Bell,
+        active: pathname.startsWith("/admin/plataforma/notificaciones"),
+        onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
       },
     );
+  }
+  if (currentUser?.canManageBanners) {
+    platformaChildren.push({
+      key: "admin-banners",
+      label: "Banners",
+      icon: ImageIcon,
+      active: pathname.startsWith("/admin/banners"),
+      onClick: () => window.location.assign("/admin/banners"),
+    });
+  }
+  if (platformaChildren.length > 0) {
+    entries.push({
+      key: "admin-plataforma",
+      label: "Plataforma",
+      icon: Monitor,
+      active:
+        pathname.startsWith("/admin/plataforma") || pathname.startsWith("/admin/banners"),
+      onClick: () => undefined,
+      children: platformaChildren,
+    });
   }
 
   // Generación documental (HU-01, Feature #12201) — R12: esta entrada NO cuelga de
@@ -503,19 +527,6 @@ export function Shell({
           onClick: () => onNav("ict-reportes"),
         },
       ],
-    });
-  }
-
-  // Banners promocionales (HU #12241, Feature #12236) — mismo patrón que Generación documental:
-  // NO cuelga de `isSuperAdmin` sino del permiso `banners.manage` del JWT (bypass SuperAdmin
-  // incluido en `canManageBanners`), para que un AdminCompany con el módulo concedido lo vea.
-  if (currentUser?.canManageBanners) {
-    entries.push({
-      key: "admin-banners",
-      label: "Banners",
-      icon: ImageIcon,
-      active: pathname.startsWith("/admin/banners"),
-      onClick: () => window.location.assign("/admin/banners"),
     });
   }
 

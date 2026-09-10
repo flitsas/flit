@@ -43,6 +43,7 @@ const EMPTY_INPUT: BannerFormInput = {
   validFrom: "",
   validUntil: "",
   file: null,
+  isActive: true,
 };
 
 beforeEach(() => {
@@ -86,6 +87,7 @@ describe("createBanner", () => {
       validFrom: "2026-09-01",
       validUntil: "2026-09-30",
       file,
+      isActive: true,
     });
 
     expect(capturedUrl).toContain("/api/v1/admin/banners");
@@ -126,6 +128,36 @@ describe("createBanner", () => {
     });
   });
 
+  it("si isActive: false, aplica el PATCH /active tras crear (el POST siempre nace activo)", async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    global.fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: url.toString(), method: init?.method ?? "GET" });
+      if (calls.length === 1) {
+        return new Response(JSON.stringify(banner({ isActive: true })), { status: 201 });
+      }
+      return new Response(null, { status: 204 });
+    }) as never;
+
+    const result = await createBanner({ ...EMPTY_INPUT, isActive: false });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1].method).toBe("PATCH");
+    expect(calls[1].url).toContain("/api/v1/admin/banners/b1/active");
+    expect(result.isActive).toBe(false);
+  });
+
+  it("si isActive: true (el default del backend), NO hace un segundo request", async () => {
+    let calls = 0;
+    global.fetch = vi.fn(async () => {
+      calls++;
+      return new Response(JSON.stringify(banner({ isActive: true })), { status: 201 });
+    }) as never;
+
+    await createBanner(EMPTY_INPUT);
+
+    expect(calls).toBe(1);
+  });
+
   it("propaga ApiError en fallos no-2xx genéricos", async () => {
     global.fetch = vi.fn().mockResolvedValue(new Response(null, { status: 500 })) as never;
     await expect(createBanner(EMPTY_INPUT)).rejects.toBeInstanceOf(ApiError);
@@ -150,6 +182,36 @@ describe("updateBanner", () => {
     expect(capturedUrl).toContain("/api/v1/admin/banners/b2");
     expect(result.id).toBe("b2");
     expect((capturedForm as unknown as FormData).get("file")).toBeNull();
+  });
+
+  it("si isActive difiere del banner devuelto, aplica el PATCH /active tras editar", async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    global.fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: url.toString(), method: init?.method ?? "GET" });
+      if (calls.length === 1) {
+        return new Response(JSON.stringify(banner({ id: "b2", isActive: true })), { status: 200 });
+      }
+      return new Response(null, { status: 204 });
+    }) as never;
+
+    const result = await updateBanner("b2", { ...EMPTY_INPUT, isActive: false });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1].method).toBe("PATCH");
+    expect(calls[1].url).toContain("/api/v1/admin/banners/b2/active");
+    expect(result.isActive).toBe(false);
+  });
+
+  it("si isActive coincide con el banner devuelto, NO hace un segundo request", async () => {
+    let calls = 0;
+    global.fetch = vi.fn(async () => {
+      calls++;
+      return new Response(JSON.stringify(banner({ id: "b2", isActive: false })), { status: 200 });
+    }) as never;
+
+    await updateBanner("b2", { ...EMPTY_INPUT, isActive: false });
+
+    expect(calls).toBe(1);
   });
 });
 
