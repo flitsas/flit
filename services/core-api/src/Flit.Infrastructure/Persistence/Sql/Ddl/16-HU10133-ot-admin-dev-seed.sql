@@ -110,6 +110,10 @@ ON CONFLICT (code) DO NOTHING;
 -- La idempotencia deja de apoyarse en ON CONFLICT (tenant_id, reference_number) —esa constraint
 -- ya no existe tras la 103— y pasa al id, que ya era un GUID fijo: era la llave natural desde
 -- el principio.
+-- HU #12371 (DDL 108): sobre una base ya migrada el trigger BEFORE INSERT lee este número pelado,
+-- lo guarda en consecutivo y compone reference_number como FT2-9100000001 (la familia sale del
+-- tipo). El seed no cambia: sigue trayendo el número, y el trigger lo respeta en vez de gastar
+-- uno de la secuencia real.
 INSERT INTO tramites.procedure_instances
     (id, tenant_id, procedure_type_id, reference_number, status, transit_office_id,
      submitted_at, created_by_user_id, created_at)

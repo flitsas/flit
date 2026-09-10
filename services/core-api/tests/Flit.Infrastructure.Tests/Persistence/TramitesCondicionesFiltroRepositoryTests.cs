@@ -41,6 +41,7 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
         TenantId = TenantId,
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = reference,
+        Consecutivo = RadicadoFixture.ConsecutivoDe(reference),
         Plate = plate,
         Vin = vin,
         CompradorNombre = comprador,
@@ -68,38 +69,55 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
         return (items.Select(i => i.ReferenceNumber).ToList(), total);
     }
 
-    // ── HU #12153 AC3 — buscar por el consecutivo ────────────────────────────────────────────
+    // ── HU #12153 AC3 / HU #12371 AC7 — buscar por el radicado ─────────────────────────────────
 
-    [Fact]
-    public async Task BuscarPorElConsecutivoEncuentraElTramite()
+    [Theory]
+    [InlineData("4571")]
+    [InlineData("0004571")]
+    [InlineData("FT1-0004571")]
+    [InlineData("ft1 4571")]
+    public async Task BuscarPorElRadicado_LoLeeComoLoEscribeElUsuario(string valor)
     {
-        // El identificador pasa a ser un número pelado. El filtro ya normalizaba quitando guiones
-        // y puntos, así que sigue sirviendo tal cual: esta prueba lo fija para que nadie lo cambie
-        // suponiendo que el radicado siempre lleva prefijo.
-        await using var db = NewContext(nameof(BuscarPorElConsecutivoEncuentraElTramite));
-        db.ProcedureInstances.AddRange(Instancia("4571"), Instancia("4572"), Instancia("571"));
+        // «Es alguno» lee el valor como radicado: sin prefijo casa el consecutivo, con prefijo el
+        // texto canónico. Los cuatro son el mismo trámite.
+        await using var db = NewContext($"{nameof(BuscarPorElRadicado_LoLeeComoLoEscribeElUsuario)}-{valor}");
+        db.ProcedureInstances.AddRange(Instancia("FT1-0004571"), Instancia("FT1-0004572"), Instancia("FT2-0000571"));
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var (refs, total) = await Filtrar(db,
-            Cond(TramitesQueryFieldCatalog.Radicado, QueryOperator.EsAlguno, "4571"));
+            Cond(TramitesQueryFieldCatalog.Radicado, QueryOperator.EsAlguno, valor));
 
-        refs.Should().ContainSingle().Which.Should().Be("4571");
+        refs.Should().ContainSingle().Which.Should().Be("FT1-0004571");
         total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task BuscarPorElRadicado_ConPrefijoDeOtraFamilia_NoCasa()
+    {
+        await using var db = NewContext(nameof(BuscarPorElRadicado_ConPrefijoDeOtraFamilia_NoCasa));
+        db.ProcedureInstances.Add(Instancia("FT1-0004571"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Radicado, QueryOperator.EsAlguno, "FT2-0004571"));
+
+        refs.Should().BeEmpty();
     }
 
     [Fact]
     public async Task BuscarPorParteDelConsecutivoNoSeLlevaAlQueSoloLoContiene()
     {
-        // «contiene» sigue siendo contiene: 571 aparece dentro de 4571. Se deja explícito para que
-        // nadie lo lea como búsqueda numérica por prefijo, que es lo que un usuario podría esperar.
+        // «contiene» sigue siendo contiene, sobre el texto sin guion: 571 aparece dentro de
+        // FT10004571 y de FT20000571. Se deja explícito para que nadie lo lea como búsqueda
+        // numérica exacta, que es lo que hace «es alguno».
         await using var db = NewContext(nameof(BuscarPorParteDelConsecutivoNoSeLlevaAlQueSoloLoContiene));
-        db.ProcedureInstances.AddRange(Instancia("4571"), Instancia("571"), Instancia("900"));
+        db.ProcedureInstances.AddRange(Instancia("FT1-0004571"), Instancia("FT2-0000571"), Instancia("FT1-0000900"));
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var (refs, _) = await Filtrar(db,
             Cond(TramitesQueryFieldCatalog.Radicado, QueryOperator.Contiene, "571"));
 
-        refs.Should().BeEquivalentTo(["571", "4571"]);
+        refs.Should().BeEquivalentTo(["FT2-0000571", "FT1-0004571"]);
     }
 
     // ── AC3 — los cinco operadores, con la normalización de identificadores ──────────────────
@@ -372,6 +390,36 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
 
         refs.Should().Equal("R1");
         total.Should().Be(1);
+    }
+
+    // ── Feature #12276 (HU #12312 AC3) — «Confirmado en RUNT» resuelve en SQL sobre el universo ───
+
+    [Theory]
+    [InlineData("yes", new[] { "C1" })]
+    [InlineData("no", new[] { "N1", "N2" })]
+    [InlineData("not_consulted", new[] { "S1" })]
+    public async Task ConfirmadoRunt_FiltraPorLasColumnasDelTramite_SoloEntreAprobados(string valor, string[] esperado)
+    {
+        await using var db = NewContext(nameof(ConfirmadoRunt_FiltraPorLasColumnasDelTramite_SoloEntreAprobados) + valor);
+        var confirmado = Instancia("C1", estado: TramiteEstado.Aprobado);
+        confirmado.RuntConfirmedAt = Base;
+        confirmado.RuntAttempts = 2;
+        var pendiente = Instancia("N1", estado: TramiteEstado.Aprobado);
+        pendiente.RuntAttempts = 1;
+        var discrepancia = Instancia("N2", estado: TramiteEstado.Aprobado);
+        discrepancia.RuntFlag = "discrepancia";
+        var sinConsultar = Instancia("S1", estado: TramiteEstado.Aprobado);
+        // No aprobado con intentos: la columna no aplica, así que ningún valor lo trae.
+        var entregado = Instancia("E1", estado: TramiteEstado.Entregado);
+        entregado.RuntAttempts = 1;
+        db.ProcedureInstances.AddRange(confirmado, pendiente, discrepancia, sinConsultar, entregado);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.ConfirmadoRunt, QueryOperator.EsAlguno, valor));
+
+        refs.Should().BeEquivalentTo(esperado);
+        total.Should().Be(esperado.Length);
     }
 
     [Fact]

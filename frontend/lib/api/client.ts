@@ -8,6 +8,20 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 /**
+ * Arma una URL absoluta contra el API a partir de un `path` que ya trae el prefijo completo
+ * (p. ej. `/api/v1/public/banners/{id}/image`). Usa `new URL(path, origin)` en vez de
+ * concatenar strings: si `API_BASE_URL` trae un sufijo de path (como en DEV/QA/PDN, donde el
+ * CD arma `NEXT_PUBLIC_API_BASE_URL=https://api.<env>.flitsas.online/api/v1`), un `path`
+ * absoluto (con `/` inicial) reemplaza ese sufijo en vez de duplicarlo — concatenar a mano
+ * produjo `/api/v1/api/v1/...` (404) en banners promocionales.
+ */
+export function resolveApiUrl(path: string): string {
+  const origin =
+    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  return new URL(path, origin).toString();
+}
+
+/**
  * Obtiene el JWT en cliente: primero cookie `flit_token`, luego localStorage
  * `flit:jwt`. En SSR/edge devuelve `null` (el middleware ya gobierna el acceso).
  */

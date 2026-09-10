@@ -14,6 +14,7 @@ const fetchOtProfile = vi.fn();
 const fetchOtOperationalPanel = vi.fn();
 const fetchOtReport = vi.fn();
 const fetchTransitOffices = vi.fn();
+const getActiveBanners = vi.fn();
 
 vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtProfile: (...args: unknown[]) => fetchOtProfile(...args),
@@ -21,6 +22,12 @@ vi.mock("@/lib/api/admin-ot", () => ({
 
 vi.mock("@/lib/api/admin-companies", () => ({
   fetchTransitOffices: (...args: unknown[]) => fetchTransitOffices(...args),
+}));
+
+// HU #12242 (Feature #12236) — banners Activos globales, mismo set que ve el gestor.
+vi.mock("@/lib/api/public-banners", () => ({
+  getActiveBanners: (...args: unknown[]) => getActiveBanners(...args),
+  bannerImageUrl: (id: string) => `http://api.test/api/v1/public/banners/${id}/image`,
 }));
 
 vi.mock("@/lib/api/ot-metrics", async (importOriginal) => ({
@@ -108,6 +115,7 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     fetchTransitOffices.mockResolvedValue([
       { id: OT_ID, name: "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA", code: "11001000" },
     ]);
+    getActiveBanners.mockResolvedValue([]);
   });
 
   it("AC1 — la franja pide el informe del organismo y distingue radicado, aprobado y rechazado", async () => {
@@ -194,31 +202,110 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(screen.queryByText(/Nueva integración/i)).not.toBeInTheDocument();
   });
 
-  it("AC3 — el banner conserva el mecanismo de pasar mensajes, con contenido del organismo", async () => {
+  it("AC2/AC3 — sin banners activos, el carrusel del OT solo muestra 'Tu cola de trabajo'", async () => {
     render(<OtDashboard />);
 
     expect(await screen.findByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
-    // El primer mensaje cuenta el estado real de la cola, no un texto fijo.
-    expect(screen.getByText(/Tienes 3 trámites esperando tu decisión/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Mensaje siguiente" }));
+    // El primer mensaje cuenta el estado real de la cola, no un texto fijo. Con `masDe7Dias: 0`
+    // (fixture PANEL) no menciona estancados, pero sí la mediana de decisión de hoy — ambos datos
+    // ya vienen en el mismo panel operativo, sin llamada nueva (Opción A).
     expect(
-      screen.getByRole("heading", { name: "Lo que se envejece, primero" }),
+      screen.getByText(
+        "Tienes 3 trámites esperando tu decisión. Tu mediana de decisión hoy es de 6 h. Los datos son del día calendario de Bogotá.",
+      ),
     ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Mensaje siguiente" }));
-    expect(screen.getByRole("heading", { name: "Reportes del organismo" })).toBeInTheDocument();
+    // Los mensajes de relleno que existían antes de la HU #12242 ya no se muestran.
+    expect(screen.queryByText(/Lo que se envejece, primero/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Reportes del organismo/)).not.toBeInTheDocument();
+    // Un solo punto de navegación: no hay slides detrás del fijo.
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /^Mensaje \d/ })).toHaveLength(1),
+    );
 
     // El nombre del organismo NO rota: identifica de quién es la pantalla.
     expect(
+      await screen.findByText(/SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA \(11001000\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("con trámites estancados (masDe7Dias > 0), lo menciona dentro de la misma frase de la cola", async () => {
+    fetchOtOperationalPanel.mockResolvedValue({
+      ...PANEL,
+      antiguedad: { ...PANEL.antiguedad, masDe7Dias: 2 },
+    });
+    render(<OtDashboard />);
+
+    expect(
+      await screen.findByText(
+        "Tienes 3 trámites esperando tu decisión, 2 llevan más de 7 días esperando. Tu mediana de decisión hoy es de 6 h. Los datos son del día calendario de Bogotá.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("AC2 — los banners Activos globales se agregan como slides tras 'Tu cola de trabajo'", async () => {
+    getActiveBanners.mockResolvedValue([
+      { id: "b1", name: "Banner del organismo", linkUrl: null },
+    ]);
+    render(<OtDashboard />);
+
+    expect(await screen.findByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /^Mensaje \d/ })).toHaveLength(2),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Mensaje siguiente" }));
+    const img = await screen.findByRole("img", { name: "Banner del organismo" });
+    expect(img).toHaveAttribute("src", "http://api.test/api/v1/public/banners/b1/image");
+    // El nombre del organismo se conserva encima del banner.
+    expect(
       screen.getByText(/SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA \(11001000\)/),
     ).toBeInTheDocument();
+    // Sin enlace: sin título visible del banner ni <a> envolviéndolo (solo sr-only para lectores
+    // de pantalla).
+    expect(screen.getByText("Banner del organismo")).toHaveClass("sr-only");
+    expect(screen.queryByRole("link", { name: "Banner del organismo" })).not.toBeInTheDocument();
+  });
 
-    // Y se puede saltar directo a uno con su selector.
-    await userEvent.click(
-      screen.getByRole("button", { name: /Mensaje 1 de 3: Tu cola de trabajo/ }),
+  it("AC2 — un banner con enlace se cubre completo con un <a>, sin título visible", async () => {
+    getActiveBanners.mockResolvedValue([
+      { id: "b2", name: "Promo con enlace", linkUrl: "https://flit.example/promo" },
+    ]);
+    render(<OtDashboard />);
+
+    expect(await screen.findByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /^Mensaje \d/ })).toHaveLength(2),
     );
-    expect(screen.getByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Mensaje siguiente" }));
+    expect(await screen.findByRole("img", { name: "Promo con enlace" })).toBeInTheDocument();
+
+    const enlace = screen.getByRole("link", { name: "Promo con enlace" });
+    expect(enlace).toHaveAttribute("href", "https://flit.example/promo");
+    expect(enlace).toHaveAttribute("target", "_blank");
+    expect(enlace).toHaveAttribute("rel", "noopener noreferrer");
+    expect(enlace.textContent).toBe("");
+
+    // Regresión: la caja de contenido (etiqueta del organismo + controles) ocupa el alto
+    // completo del header (`flex-1`) aunque solo tenga texto arriba y abajo — sin
+    // `pointer-events-none` ahí (y `pointer-events-auto` solo en la franja de controles), esa
+    // caja tapaba el <a> de abajo y el enlace nunca recibía hover ni clic.
+    const cajaDeContenido = enlace.nextElementSibling as HTMLElement;
+    expect(cajaDeContenido).toHaveClass("pointer-events-none");
+    const franjaDeControles = screen.getByRole("button", { name: "Mensaje siguiente" }).closest(
+      "div.mt-4",
+    );
+    expect(franjaDeControles).toHaveClass("pointer-events-auto");
+  });
+
+  it("AC3 — un fallo al consultar banners degrada al slide fijo, sin romper la pantalla", async () => {
+    getActiveBanners.mockRejectedValue(new Error("network error"));
+    render(<OtDashboard />);
+
+    expect(await screen.findByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
+    await waitFor(() => expect(getActiveBanners).toHaveBeenCalled());
+    expect(screen.getAllByRole("button", { name: /^Mensaje \d/ })).toHaveLength(1);
+    expect(await screen.findByText("Pendientes en total")).toBeInTheDocument();
   });
 
   it("AC3 — con la cola vacía el banner no promete trabajo que no existe", async () => {

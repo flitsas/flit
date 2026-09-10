@@ -10,6 +10,9 @@ import type {
 
 // N 03 (ADR-0022) — estados de NEGOCIO del trámite, vocabulario único de la API.
 // Fuente de verdad de labels/estilos: lib/tramites/estados.ts.
+/** Valor de la columna «Confirmado en RUNT» (Feature #12276): mismo vocabulario que `RuntConfirmedColumn` del backend. */
+export type RuntConfirmedValue = 'yes' | 'no' | 'not_consulted';
+
 export type InstanceStatus =
   | 'borrador'
   | 'anulado'
@@ -157,6 +160,12 @@ export interface InstanceSummary {
    */
   tienePrenda?: boolean;
   tieneTransformacion?: boolean;
+  /**
+   * Feature #12276 (HU #12312) — «Confirmado en RUNT». Exactamente uno de tres valores en trámites
+   * aprobados; `null`/ausente cuando no aplica. La celda pinta SÍ / NO / — y NADA más: intentos,
+   * marcas y motivos son del Historial interno de plataforma, no del gestor.
+   */
+  runtConfirmed?: RuntConfirmedValue | null;
   estado: InstanceStatus;
   /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
   plateFlowStatus?: PlateFlowStatus | null;
@@ -427,6 +436,27 @@ export interface ProcedureInstanceDetail {
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];
+  /**
+   * Bug #12376, defectos 3/4 — eventos administrativos relevantes para el tracking del dashboard
+   * (reenvío de validación de identidad, reasignación de gestor). Solo estos dos tipos: el resto ya
+   * está cubierto por `statusHistory`. `undefined`/vacío en consumidores previos a este campo.
+   */
+  events?: ProcedureInstanceEvent[];
+}
+
+/** Ver `ProcedureInstanceDetail.events`. */
+export interface ProcedureInstanceEvent {
+  tipo: 'reasignar_gestor_admin' | 'reenvio_validacion_admin';
+  createdAt: string;
+  createdByName: string | null;
+  // reasignar_gestor_admin
+  previousAssignedToName?: string | null;
+  newAssignedToName?: string | null;
+  // reenvio_validacion_admin
+  partyRole?: BiometricParte | null;
+  emailActualizado?: boolean | null;
+  /** Correo SIEMPRE enmascarado (Habeas Data). */
+  correoDestinoEnmascarado?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */
@@ -1417,6 +1447,12 @@ export interface BiometricValidation {
    * histórica/huérfana) — con 1 solo actor por lado (caso mayoritario) siempre trae `1`.
    */
   ordinal?: number | null;
+  /**
+   * Bug #12376, defecto 3 — correo CON EL QUE SE CREÓ el registro (inmutable): el tracking lo usa para
+   * seguir mostrando el correo original aunque `email` haya cambiado por un reenvío administrativo.
+   * `null`/ausente en filas anteriores a este campo — el consumidor cae a `email`.
+   */
+  registeredEmail?: string | null;
 }
 
 /**

@@ -7,6 +7,12 @@ export interface PaginationProps {
   totalCount: number;
   onPageChange: (page: number) => void;
   className?: string;
+  /**
+   * Tamaños de página que el usuario puede elegir («Filas por página», como en /tramites). Solo se
+   * muestra el selector si vienen las opciones y el manejador; el cambio debe volver a la página 1.
+   */
+  pageSizeOptions?: readonly number[];
+  onPageSizeChange?: (pageSize: number) => void;
 }
 
 /**
@@ -20,6 +26,8 @@ export function Pagination({
   totalCount,
   onPageChange,
   className = "",
+  pageSizeOptions,
+  onPageSizeChange,
 }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const from = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -30,6 +38,23 @@ export function Pagination({
       className={`mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] ${className}`}
       aria-label="Paginación"
     >
+      {pageSizeOptions && onPageSizeChange && (
+        <label className="flex items-center gap-2 opacity-70">
+          Filas por página
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            aria-label="Filas por página"
+            className="rounded-lg border border-[#DFE5ED] bg-white px-2 py-1 text-[11px] text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+          >
+            {pageSizeOptions.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <p className="opacity-60" role="status" aria-live="polite">
         Mostrando {from}–{to} de {totalCount}
       </p>

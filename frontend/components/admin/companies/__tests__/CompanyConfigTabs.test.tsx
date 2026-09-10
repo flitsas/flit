@@ -84,6 +84,10 @@ describe("CompanyConfigTabs (AC2)", () => {
       },
       // FEATURE 02 (HU #10723/#10724) — default sin config: 'external' (SIMIT en línea).
       finesQuerySource: "external",
+      // HU #12252 (Feature #12249) — default sin config: los 3 módulos apagados.
+      tramitesModuleEnabled: false,
+      comparendosModuleEnabled: false,
+      resolucionesModuleEnabled: false,
     });
 
     // El resultado se muestra en la misma ventana (fase éxito), no como banner fijo.

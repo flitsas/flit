@@ -5,6 +5,7 @@ import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
   marcasLabel,
+  runtConfirmadoLabel,
   stepLabel,
   tramiteLabel,
   vehiculo,
@@ -66,8 +67,8 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // El piso lo manda la línea más larga que apila, "Actualización: 2026/08/27": ~158px de texto
   // + los 32px de padding del `<td>`. Con 190px se cortaba a "Actualización: 2026/08…" — una
   // fecha a medias no dice nada, y a diferencia de un nombre no tiene dónde partirse bien.
-  // HU #12154 — el radicado pasa de TRM-2026-000123 a un numero pelado, asi que la columna
-  // deja de necesitar 210px. Dejarlos era regalar ancho en una tabla que va justa.
+  // HU #12154 / HU #12371 — el radicado es FT1-0000012: 11 caracteres monoespaciados (~79px)
+  // más el padding del <td> caben de sobra en 120px; los 210px del TRM-2026-000123 se fueron.
   { key: 'radicado', label: 'Radicado', minPx: 120, group: GRUPO_BASE },
   // Vehículo = placa + VIN + marca/línea en UNA celda. Los tres identifican el mismo objeto y el
   // gestor los lee juntos; repartidos en tres columnas, la placa quedaba a dos columnas del VIN y
@@ -96,6 +97,9 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // HU #12183 — dos íconos como mucho, de 20px, y nunca texto: el piso cubre los dos más el
   // padding de la celda. Fija por eso mismo: no tiene nada que hacer con el ancho sobrante.
   { key: 'marcas', label: 'Marcas', minPx: 84, fixed: true, group: GRUPO_BASE },
+  // Feature #12276 (HU #12312) — píldora SÍ / NO / — y nada más. Fija: tres valores de ancho
+  // constante; el piso cubre la cabecera «Confirmado en RUNT», que es lo más ancho de la columna.
+  { key: 'confirmadoRunt', label: 'Confirmado en RUNT', minPx: 132, fixed: true, group: GRUPO_BASE },
   // Sin truncar: el nombre del organismo es la mitad del valor de la columna ("SECRETARIA
   // DISTRITAL DE MOVILIDAD DE BOGOTA" cortado a "SECRETARIA DISTRITAL DE…" no distingue nada).
   // Envuelve en varias líneas, así que es de las que mejor aprovecha el ancho sobrante.
@@ -140,6 +144,8 @@ export const TRAMITES_COLUMNS_ADDED_SINCE_LEGACY: readonly string[] = [
   // existiera `known`, la columna nacería invisible: vería el listado igual que antes y desde el
   // selector parecería un dato que falta, no una columna que él ocultó.
   'marcas',
+  // Feature #12276 — misma razón: la columna nace visible también para quien ya tenía preferencia.
+  'confirmadoRunt',
 ];
 
 
@@ -165,6 +171,8 @@ export const DEFAULT_TRAMITES_VISIBLE_COLUMNS: readonly string[] = [
   // HU #12183 — visible de salida: la prenda y la transformación no se ven en ninguna otra
   // columna, y una marca que hay que activar a mano no informa a quien no sabe que existe.
   'marcas',
+  // Feature #12276 — visible de salida: es lo único que el gestor ve del proceso de confirmación.
+  'confirmadoRunt',
   'secretaria',
 ] as const;
 
@@ -411,10 +419,11 @@ function apilado(campo: TramitesExportField, ownedBy: string): TramitesExportFie
  */
 const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   radicado: [
-    // Ancho de la columna en el .xlsx. La celda va como TEXTO a proposito: como numero, Excel
-    // le mete separador de miles (4.571) y deja de leerse como un identificador.
+    // Ancho de la columna en el .xlsx: FT1-0000012 son 11 caracteres, y 14 deja aire para el
+    // día en que el consecutivo gane un dígito. La celda va como TEXTO: es un identificador con
+    // prefijo (HU #12371), no una cantidad, y así se ve igual en el export del organismo.
     {
-      ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 12),
+      ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 14),
       sort: 'radicado',
       sortKind: 'numero',
     },
@@ -439,6 +448,9 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
     // en el archivo, que es donde nadie puede contrastarlo con la pantalla.
     campoTexto('marcas', 'Marcas', (row) => marcasLabel(row), 18),
   ],
+  // Feature #12276 — SÍ, NO o celda vacía (HU #12312 AC5). Sin orden: no es un dato por el que
+  // se ordene el listado.
+  confirmadoRunt: [campoTexto('confirmadoRunt', 'Confirmado en RUNT', (row) => runtConfirmadoLabel(row), 18)],
   tramite: [
     { ...campoTexto('tramite', 'Trámite', (row) => tramiteLabel(row), 22), sort: 'tipo_tramite' },
     apilado(CAMPO_ESTADO, 'estado'),

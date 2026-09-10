@@ -165,6 +165,11 @@ public sealed class UpdateTenantSettingsHandler
             ConsultationProviderConfig = consultationConfig ?? previous.ConsultationProviderConfig,
             AvaluoProviderConfig = avaluoConfig ?? previous.AvaluoProviderConfig,
             FinesQuerySource = finesQuerySource ?? previous.FinesQuerySource,
+            // HU #12250 (Feature #12249) — flags de módulos del dashboard: opcionales, si el
+            // request los omite se conserva el valor previo (AC4).
+            TramitesModuleEnabled = request.TramitesModuleEnabled ?? previous.TramitesModuleEnabled,
+            ComparendosModuleEnabled = request.ComparendosModuleEnabled ?? previous.ComparendosModuleEnabled,
+            ResolucionesModuleEnabled = request.ResolucionesModuleEnabled ?? previous.ResolucionesModuleEnabled,
         };
 
         var changes = SettingsDiff.Compute(previous, updated);

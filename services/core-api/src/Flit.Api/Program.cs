@@ -233,6 +233,7 @@ app.MapAdminPlataformaFurEndpoints();
 app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
 app.MapAdminPlataformaNotificacionesEndpoints();
 app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
+app.MapAdminRuntConfirmationEndpoints();
 app.MapAdminLogQxEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
@@ -246,6 +247,7 @@ app.MapAdminCompanyNotificationDeliveryLogsEndpoints();
 app.MapAdminLegalRepresentativeIdentityEndpoints();
 app.MapAdminIdentityVigenciaEndpoints();
 app.MapAdminDocumentTypesEndpoints();
+app.MapAdminBannersEndpoints();
 app.MapAdminRejectionReasonsEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();
@@ -267,6 +269,8 @@ app.MapPublicProcedureTypeEndpoints();
 app.MapPublicBiometricaEndpoints();
 app.MapPublicKyverumWebhookEndpoints();
 app.MapPublicPortalEndpoints();
+// HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
+app.MapPublicBannersEndpoints();
 app.MapTramitesInstanceEndpoints();
 app.MapTramitesActorEndpoints();
 // HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
@@ -297,6 +301,7 @@ app.MapLegalRepresentativeConsumptionEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();
+app.MapDashboardActiveModulesEndpoints(); // HU #12251 (Feature #12249) — flags de módulos activos, sin AdminCompanyPolicy
 app.MapDetailedReportEndpoints(); // Feature #10813
 app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
 app.MapSuperAdminReportSchedulesEndpoints(); // Reportes2 HU-D 2da ola — informes de consulta SuperAdmin

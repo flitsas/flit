@@ -1492,8 +1492,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 const SENTIDO_ETIQUETA: Record<'texto' | 'fecha' | 'numero', { asc: string; desc: string }> = {
   texto: { asc: 'A-Z', desc: 'Z-A' },
   fecha: { asc: 'Más antigua', desc: 'Más reciente' },
-  // HU #12154 — el radicado dejó de ser TRM-2026-000123 para ser un número. «A-Z» sobre un número
-  // no dice nada: el usuario no sabe si el 10 va antes o después del 9.
+  // HU #12154 / HU #12371 — el radicado (FT1-0000012) se ordena por su consecutivo, no por el
+  // texto: «A-Z» diría que todos los FT1 van antes que los FT2, y no es así. «Menor a mayor» es
+  // lo que de verdad hace el servidor.
   numero: { asc: 'Menor a mayor', desc: 'Mayor a menor' },
 };
 
@@ -2173,7 +2174,11 @@ function TramiteRow({
     // HU #12163 — gestión avanzada del administrador, anexada al final del menú de la fila.
     ...adminActionItems,
   ];
-  const motivoRechazo = item.ultimoRechazoMotivo?.trim() || null;
+  // Bug #12376, defecto 1 — en Anulado el motivo del último rechazo ya NO es vigente: se anuló el
+  // trámite, no se resolvió el rechazo. El historial general (línea de tiempo) sí lo conserva; solo
+  // se oculta aquí, donde se pintaba como si siguiera activo.
+  const motivoRechazo =
+    item.estado === 'anulado' ? null : item.ultimoRechazoMotivo?.trim() || null;
   const subsanacionCount = item.subsanacionCount ?? 0;
   const enSubsanacion = !!item.subsanacionActiva;
   const showRejectPopover =
@@ -2569,6 +2574,27 @@ function TramiteRow({
     //
     // Cada ícono lleva su rótulo en `alt` y en `title`: el color es lo único que los distingue a
     // simple vista, y el color no puede ser el único portador del significado.
+    // Feature #12276 (HU #12312) — «Confirmado en RUNT»: SÍ, NO o «—». Sin tooltip, sin contador,
+    // sin marca: al cliente no se le explica el porqué (decisión de producto); eso vive en el
+    // Historial de plataforma. El guion cubre el «no consultado» y los trámites no aprobados.
+    confirmadoRunt: (
+      <span className="flex items-center">
+        {item.runtConfirmed === 'yes' || item.runtConfirmed === 'no' ? (
+          <span
+            data-testid="tramite-confirmado-runt"
+            className={`inline-flex min-w-[36px] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${
+              item.runtConfirmed === 'yes'
+                ? 'bg-[#00DBD5]/20 text-[#0B6F6C] dark:text-[#00DBD5]'
+                : 'bg-[#FF4E00]/10 text-[#B33600] dark:text-[#FF8A5B]'
+            }`}
+          >
+            {item.runtConfirmed === 'yes' ? 'SÍ' : 'NO'}
+          </span>
+        ) : (
+          <span className="text-xs text-[#162744]/45 dark:text-white/40">—</span>
+        )}
+      </span>
+    ),
     marcas: (
       <span className="flex items-center gap-1.5">
         {marcasDe(item).length === 0 ? (

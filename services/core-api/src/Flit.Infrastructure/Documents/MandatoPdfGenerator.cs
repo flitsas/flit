@@ -1023,8 +1023,11 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private static string Val(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
 
+    // El guion se conserva: desde la HU #12371 el radicado es FT1-0000012 y el archivo tiene que
+    // llamarse igual que el del FUR, la compraventa y el consolidado (mandato_FT1-0000012.pdf), no
+    // mandato_FT1_0000012.pdf. Es la misma regla de SafeRef en ConsolidadoCommand.
     private static string SafeRef(string? reference) =>
         string.IsNullOrWhiteSpace(reference)
             ? "sin_ref"
-            : new string(reference.Trim().Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
+            : new string(reference.Trim().Select(c => char.IsLetterOrDigit(c) || c is '-' ? c : '_').ToArray());
 }

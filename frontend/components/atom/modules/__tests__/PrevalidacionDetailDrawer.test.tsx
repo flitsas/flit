@@ -174,13 +174,13 @@ describe('PrevalidacionDetailDrawer (HU #11008)', () => {
         linkedProcedures: [
           {
             instanceId: 'inst-1',
-            referenceNumber: 'TRM-2026-000006',
+            referenceNumber: 'FT1-0000006',
             status: 'borrador',
             modalidad: 'matricula_inicial',
           },
           {
             instanceId: 'inst-99',
-            referenceNumber: 'TRM-2026-000099',
+            referenceNumber: 'FT1-0000099',
             status: 'preparado',
             modalidad: 'traspaso',
           },
@@ -191,18 +191,18 @@ describe('PrevalidacionDetailDrawer (HU #11008)', () => {
     render(<PrevalidacionDetailDrawer validationId="pv-1" onClose={() => {}} />);
 
     expect(await screen.findByRole('button', { name: /ver trámites asociados/i })).toBeInTheDocument();
-    expect(screen.queryByText('TRM-2026-000006')).not.toBeInTheDocument();
+    expect(screen.queryByText('FT1-0000006')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /ver trámites asociados/i }));
 
     const section = await screen.findByLabelText(/trámites asociados a esta validación/i);
-    expect(within(section).getByText('TRM-2026-000006')).toBeInTheDocument();
-    expect(within(section).getByText('TRM-2026-000099')).toBeInTheDocument();
-    expect(within(section).getByRole('link', { name: /TRM-2026-000006/ })).toHaveAttribute(
+    expect(within(section).getByText('FT1-0000006')).toBeInTheDocument();
+    expect(within(section).getByText('FT1-0000099')).toBeInTheDocument();
+    expect(within(section).getByRole('link', { name: /FT1-0000006/ })).toHaveAttribute(
       'href',
       '/tramites/inst-1',
     );
-    expect(within(section).getByRole('link', { name: /TRM-2026-000099/ })).toHaveAttribute(
+    expect(within(section).getByRole('link', { name: /FT1-0000099/ })).toHaveAttribute(
       'href',
       '/tramites/inst-99',
     );
@@ -217,7 +217,7 @@ describe('PrevalidacionDetailDrawer (HU #11008)', () => {
         expired: true,
         captureUrl: 'https://capture.kyverum.co/tok-expirado',
         procedureInstanceId: 'inst-1',
-        referenceNumber: 'TRM-2026-000006',
+        referenceNumber: 'FT1-0000006',
       }),
     );
 

@@ -37,6 +37,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  ExternalLink,
   Inbox,
   Timer,
 } from "lucide-react";
@@ -53,6 +54,9 @@ import {
   type OtReportSeriesPoint,
   type OtReportSummary,
 } from "@/lib/api/ot-metrics";
+import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
+import { useActiveBanners } from "@/hooks/useActiveBanners";
+import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
 import { resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import {
   DrilldownPanel,
@@ -136,6 +140,9 @@ export function OtDashboard() {
 
   const reintentar = useCallback(() => setIntento((n) => n + 1), []);
 
+  // Banners Activos globales (HU #12242, AC2): mismo set y mismo hook que ve el gestor.
+  const activeBanners = useActiveBanners();
+
   // El detalle se pide con los MISMOS parámetros del panel, para que la lista nunca contradiga a la
   // tarjeta que la abrió: es el backend quien recalcula el bloque con idénticos predicados.
   const abrirBloque = useCallback<AbrirBloque>(
@@ -162,15 +169,26 @@ export function OtDashboard() {
       className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-[#162744] dark:text-white"
       data-testid="ot-inicio"
     >
-      <Bienvenida
-        organismo={organismo}
-        porRevisar={estado === "listo" ? (panel?.cola.porRevisar ?? null) : null}
-      />
+      {/* Banner + KPIs: misma grilla que el dashboard del gestor (`Dashboard.tsx`) — banner en
+          2/3, KPIs en 2×2 en el 1/3 restante — para que ambos contenedores de banner midan lo
+          mismo. Durante error no hay KPIs que mostrar (AC del panel operativo); el banner ocupa
+          entonces el ancho completo en vez de dejar la columna vacía. */}
+      <div className="grid grid-cols-1 gap-3 shrink-0 md:grid-cols-3">
+        <Bienvenida
+          organismo={organismo}
+          panel={estado === "listo" ? panel : null}
+          banners={activeBanners}
+          className={estado === "error" ? "md:col-span-3" : "md:col-span-2"}
+        />
+        {estado !== "error" && (
+          <PanelOperativoKpis panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
+        )}
+      </div>
 
       {estado === "error" ? (
         <ErrorPanel message={mensajeError} onRetry={reintentar} />
       ) : (
-        <PanelOperativo panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
+        <PanelOperativoResto panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
       )}
 
       <PeriodoReciente transitOfficeId={params?.transitOfficeId} />
@@ -187,60 +205,107 @@ export function OtDashboard() {
 /** Cada cuánto rota el banner. Mismo ritmo que el del gestor, para que la plataforma se sienta una. */
 const ROTACION_MS = 6000;
 
+/** Fondo del carrusel, IGUAL en todos los slides (mensaje fijo y banner) — ver `Bienvenida`. */
+const BRAND_GRADIENT = "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)";
+
+type MensajeSlide = {
+  kind: "mensaje";
+  id: string;
+  title: string;
+  body: string;
+};
+
+type BannerSlide = {
+  kind: "banner";
+  id: string;
+  name: string;
+  imageUrl: string;
+  linkUrl: string | null;
+};
+
+type OrganismoSlide = MensajeSlide | BannerSlide;
+
 /**
- * Mensajes del banner del organismo.
+ * Slides del banner del organismo.
  *
  * El carrusel del gestor no servía tal cual: anunciaba «validación de identidad con IA ya integrada
  * en TUS trámites» a quien no radica trámites ni valida biometrías. Lo que se conserva es el
- * mecanismo —el sitio donde se pasan mensajes—; lo que cambia es que aquí los mensajes hablan del
- * organismo. Añadir uno nuevo es añadir una entrada a esta lista.
+ * mecanismo —el sitio donde se pasan mensajes—; lo que cambia es que aquí el único mensaje propio
+ * habla de la cola. Detrás van los banners Activos del Administrador (HU #12242, AC2): el mismo
+ * set global que ve el gestor. Sin banners activos, el slide fijo queda solo (AC3).
  */
-function mensajesDelOrganismo(organismo: string | null, porRevisar: number | null) {
+function mensajesDelOrganismo(
+  organismo: string | null,
+  panel: OtOperationalPanel | null,
+  banners: ActiveBanner[],
+): OrganismoSlide[] {
+  const porRevisar = panel?.cola.porRevisar ?? null;
+  // Opción A (dato ya cargado en el mismo panel operativo, sin llamada nueva): la cola no solo
+  // dice cuántos esperan, sino cuántos ya llevan estancados y cuál es la mediana de decisión hoy.
+  const estancados = panel?.antiguedad.masDe7Dias ?? 0;
+  const mediana = panel?.movimiento.tiempoMedianoDecisionHoras ?? null;
+
   const cola =
     porRevisar === null
       ? "Aquí ves el estado de tu cola en este momento y el movimiento del día."
       : porRevisar === 0
         ? "No tienes trámites esperando decisión en este momento."
-        : `Tienes ${porRevisar} ${porRevisar === 1 ? "trámite" : "trámites"} esperando tu decisión.`;
+        : `Tienes ${porRevisar} ${porRevisar === 1 ? "trámite" : "trámites"} esperando tu decisión` +
+          (estancados > 0
+            ? `, ${estancados} ${estancados === 1 ? "lleva" : "llevan"} más de 7 días esperando`
+            : "") +
+          ".";
 
-  return [
-    {
-      id: "bienvenida",
-      title: "Tu cola de trabajo",
-      body: `${cola} Los datos son del día calendario de Bogotá.`,
-      bg: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)",
-    },
-    {
-      id: "antiguedad",
-      title: "Lo que se envejece, primero",
-      body: "La antigüedad de lo pendiente avisa antes de que un trámite se convierta en un reclamo. El tramo de más de 7 días solo se enciende cuando tiene algo.",
-      bg: "linear-gradient(120deg,#557eff 0%,#8a5cf6 100%)",
-    },
-    {
-      id: "reportes",
-      title: "Reportes del organismo",
-      body: "Consulta el desempeño por revisor, la calidad de cada empresa que radica y los motivos de rechazo más frecuentes.",
-      bg: "linear-gradient(120deg,#0ea5e9 0%,#00dbd5 100%)",
-    },
-  ];
+  const medianaTexto =
+    porRevisar !== null && mediana !== null
+      ? ` Tu mediana de decisión hoy es de ${formatHours(mediana)}.`
+      : "";
+
+  const fijo: MensajeSlide = {
+    kind: "mensaje",
+    id: "bienvenida",
+    title: "Tu cola de trabajo",
+    body: `${cola}${medianaTexto} Los datos son del día calendario de Bogotá.`,
+  };
+
+  const bannerSlides: BannerSlide[] = banners.map((banner) => ({
+    kind: "banner",
+    id: banner.id,
+    name: banner.name,
+    imageUrl: bannerImageUrl(banner.id),
+    linkUrl: banner.linkUrl,
+  }));
+
+  return [fijo, ...bannerSlides];
 }
 
 /**
- * Banner del organismo: el nombre siempre visible y los mensajes rotando encima.
+ * Banner del organismo: el nombre siempre visible y los slides rotando encima.
  *
  * El nombre NO entra en la rotación a propósito: identifica el organismo y desaparecería dos de cada
  * tres veces.
  */
 function Bienvenida({
   organismo,
-  porRevisar,
+  panel,
+  banners,
+  className = "",
 }: {
   organismo: string | null;
-  porRevisar: number | null;
+  panel: OtOperationalPanel | null;
+  banners: ActiveBanner[];
+  className?: string;
 }) {
+  // Si una imagen de banner falla al cargar (`onError`), ese slide puntual se retira sin romper
+  // el resto del carrusel (AC3).
+  const [failedBannerIds, setFailedBannerIds] = useState<Set<string>>(new Set());
+  const bannersVisibles = useMemo(
+    () => banners.filter((banner) => !failedBannerIds.has(banner.id)),
+    [banners, failedBannerIds],
+  );
   const mensajes = useMemo(
-    () => mensajesDelOrganismo(organismo, porRevisar),
-    [organismo, porRevisar],
+    () => mensajesDelOrganismo(organismo, panel, bannersVisibles),
+    [organismo, panel, bannersVisibles],
   );
   const [actual, setActual] = useState(0);
 
@@ -249,56 +314,122 @@ function Bienvenida({
     return () => clearInterval(id);
   }, [mensajes.length]);
 
-  const mensaje = mensajes[actual];
+  // Defensivo: si el slide actual desaparece (banner con imagen rota), el índice se reacomoda
+  // en el siguiente render; mientras tanto no debe intentar leer un slide inexistente.
+  const mensaje = mensajes[actual] ?? mensajes[0];
+  const bannerColor = useDominantColor(mensaje.kind === "banner" ? mensaje.imageUrl : undefined);
 
   return (
     <header
-      className="relative flex flex-col justify-between overflow-hidden rounded-2xl px-6 py-5 text-white"
-      style={{ background: mensaje.bg, minHeight: "168px" }}
+      className={`relative flex flex-col justify-between overflow-hidden rounded-2xl text-white ${className}`}
+      style={{ minHeight: "220px" }}
     >
-      <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white opacity-15" />
-      <div className="relative max-w-[85%]">
-        <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
-          {organismo ?? "Organismo de tránsito"}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">{mensaje.title}</h1>
-        <p className="mt-1.5 text-sm leading-snug opacity-90">{mensaje.body}</p>
-      </div>
+      {/* Capa de fondo: gradiente de marca fijo en el slide de la cola; en un banner, el color
+          PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con el
+          azul/turquesa de marca) — es el respaldo que se ve cuando `object-contain` deja margen
+          (abajo de `md`, ver siguiente bloque); en `md+` es invisible, cubierto por el banner a
+          pantalla completa. */}
+      <div
+        className="absolute inset-0"
+        style={{ background: mensaje.kind === "mensaje" ? BRAND_GRADIENT : bannerAmbientGradient(bannerColor) }}
+      />
+      {mensaje.kind === "banner" && (
+        // Ajuste adaptable, mismo criterio que Spotify/YouTube/Amazon: con espacio de sobra
+        // (`md:` en adelante, header a 2/3 de ancho junto a los KPIs) se ajusta completo al
+        // contenedor (object-cover, sesgado a la derecha para no cortar el texto); en pantallas
+        // angostas (abajo de `md`, el header pasa a ancho completo y el recorte horizontal sería
+        // mucho más agresivo) se ve la imagen COMPLETA sin recortar (object-contain).
+        <img
+          src={mensaje.imageUrl}
+          alt={mensaje.name}
+          onError={() => setFailedBannerIds((prev) => (prev.has(mensaje.id) ? prev : new Set(prev).add(mensaje.id)))}
+          className="absolute inset-0 h-full w-full object-contain object-center md:object-cover md:object-[80%_center]"
+        />
+      )}
+      {/* Velo para que el nombre del organismo y los controles mantengan contraste sobre
+          cualquier imagen de banner; sobre el gradiente es imperceptible. */}
+      <div
+        className="absolute inset-0"
+        style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)" }}
+      />
+      {mensaje.kind === "mensaje" && (
+        <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white opacity-15" />
+      )}
 
-      <div className="relative mt-4 flex items-center justify-between">
-        <div className="flex gap-1">
-          {mensajes.map((m, i) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setActual(i)}
-              aria-label={`Mensaje ${i + 1} de ${mensajes.length}: ${m.title}`}
-              aria-current={i === actual}
-              className="h-1.5 rounded-full transition-all"
-              style={{
-                width: i === actual ? 16 : 5,
-                background: i === actual ? "#ffffff" : "rgba(255,255,255,0.5)",
-              }}
-            />
-          ))}
+      {/* Sin título visible del banner (solo el banner): el enlace cubre toda la imagen — al
+          acercarse, se opaca un poco y aparece el ícono de enlace; clic en cualquier punto abre
+          el enlace. El nombre del organismo (fuera de la rotación) sigue viéndose igual. */}
+      {mensaje.kind === "banner" && mensaje.linkUrl && (
+        <a
+          href={mensaje.linkUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={mensaje.name}
+          className="group absolute inset-0"
+        >
+          <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
+          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[#162744] shadow-lg">
+              <ExternalLink className="h-5 w-5" aria-hidden="true" />
+            </span>
+          </span>
+        </a>
+      )}
+
+      {/* pointer-events-none: esta caja ocupa TODO el alto del header (flex-1) aunque su contenido
+          solo ocupe una franja arriba y otra abajo — sin esto, el hueco vacío del medio tapaba el
+          enlace del banner de abajo y ni el hover ni el clic le llegaban nunca. Se restaura
+          pointer-events-auto solo en la franja de controles (puntos/flechas), que sí son clicables. */}
+      <div className="relative flex flex-1 flex-col justify-between px-6 py-5 pointer-events-none">
+        <div className="max-w-[85%]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+            {organismo ?? "Organismo de tránsito"}
+          </p>
+          {mensaje.kind === "mensaje" ? (
+            <>
+              <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">{mensaje.title}</h1>
+              <p className="mt-1.5 text-sm leading-snug opacity-90">{mensaje.body}</p>
+            </>
+          ) : (
+            <span className="sr-only">{mensaje.name}</span>
+          )}
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
-            aria-label="Mensaje anterior"
-            className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
-          >
-            <ChevronLeft className="h-3 w-3" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setActual((i) => (i + 1) % mensajes.length)}
-            aria-label="Mensaje siguiente"
-            className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
-          >
-            <ChevronRight className="h-3 w-3" aria-hidden="true" />
-          </button>
+
+        <div className="mt-4 flex items-center justify-between pointer-events-auto">
+          <div className="flex gap-1">
+            {mensajes.map((m, i) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setActual(i)}
+                aria-label={`Mensaje ${i + 1} de ${mensajes.length}`}
+                aria-current={i === actual}
+                className="h-1.5 rounded-full transition-all"
+                style={{
+                  width: i === actual ? 16 : 5,
+                  background: i === actual ? "#ffffff" : "rgba(255,255,255,0.5)",
+                }}
+              />
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
+              aria-label="Mensaje anterior"
+              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+            >
+              <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActual((i) => (i + 1) % mensajes.length)}
+              aria-label="Mensaje siguiente"
+              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+            >
+              <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
     </header>
@@ -587,13 +718,12 @@ function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () 
   );
 }
 
-function PanelOperativo({
-  panel,
-  onAbrir,
-}: {
-  panel: OtOperationalPanel | null;
-  onAbrir: AbrirBloque;
-}) {
+/**
+ * Cifras derivadas del panel operativo, compartidas por {@link PanelOperativoKpis} (al lado del
+ * banner) y {@link PanelOperativoResto} (desglose debajo) — un solo lugar que decide qué significa
+ * "cargando" o "sin pendientes" para que las dos mitades del panel jamás se contradigan.
+ */
+function useDerivadosPanelOperativo(panel: OtOperationalPanel | null) {
   const cargando = panel === null;
   const movimiento = panel?.movimiento;
   const cola = panel?.cola;
@@ -601,63 +731,93 @@ function PanelOperativo({
   const pendientes = movimiento?.pendientesTotal ?? 0;
   const sinPendientes = !cargando && pendientes === 0;
   const sinMediana = !cargando && (movimiento?.tiempoMedianoDecisionHoras ?? null) === null;
+  return { cargando, movimiento, cola, antiguedad, pendientes, sinPendientes, sinMediana };
+}
+
+/**
+ * Los 4 indicadores del panel operativo, en 2×2 — mismo patrón que las 4 tarjetas KPI del
+ * dashboard del gestor al lado de su banner (`Dashboard.tsx`), para que ambos contenedores de
+ * banner midan exactamente lo mismo (misma grilla `md:grid-cols-3`, mismo `col-span-1` de al lado).
+ */
+function PanelOperativoKpis({
+  panel,
+  onAbrir,
+}: {
+  panel: OtOperationalPanel | null;
+  onAbrir: AbrirBloque;
+}) {
+  const { cargando, movimiento, cola, sinMediana } = useDerivadosPanelOperativo(panel);
+  const pendientes = movimiento?.pendientesTotal ?? 0;
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <Kpi
+        label="Esperan mi decisión"
+        value={cola?.porRevisar}
+        cargando={cargando}
+        color="#557EFF"
+        icon={Inbox}
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, "Esperan mi decisión")}
+      />
+      <Kpi
+        label="Pendientes en total"
+        value={pendientes}
+        cargando={cargando}
+        color="#F9AC00"
+        icon={Clock}
+        hint="Incluye lo que espera a un tercero"
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
+      />
+      <Kpi
+        label="Entregados hoy"
+        value={movimiento?.entregadosHoy}
+        cargando={cargando}
+        color="#8CC63F"
+        icon={CheckCircle2}
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, "Entregados hoy")}
+      />
+      <Kpi
+        label="Tiempo mediano de decisión"
+        // Sin decisiones en la ventana no hay mediana que calcular. Antes esto pintaba un «—» del
+        // tamaño de un titular y en color de acento: se leía como una barra de algún color, no
+        // como una cifra ausente. Ahora se dice con palabras por qué está vacío.
+        value={
+          cargando
+            ? undefined
+            : sinMediana
+              ? "Sin decisiones aún"
+              : // Se formatea en vez de interpolar el número crudo: una mediana de dos minutos
+                // salía como «0.03 h», con punto decimal inglés y en una unidad donde el dato no
+                // significa nada.
+                formatHours(movimiento?.tiempoMedianoDecisionHoras)
+        }
+        cargando={cargando}
+        color="#00DBD5"
+        sinDato={sinMediana}
+        icon={Timer}
+        hint={
+          sinMediana
+            ? `Ninguna decisión en los últimos ${VENTANA_MEDIANA_DIAS} días`
+            : `Últimos ${VENTANA_MEDIANA_DIAS} días`
+        }
+        // Una mediana no es un conjunto de trámites: no hay lista que abrir detrás.
+      />
+    </div>
+  );
+}
+
+/** Desglose de la cola y antigüedad de lo pendiente — el resto del panel operativo, debajo del banner. */
+function PanelOperativoResto({
+  panel,
+  onAbrir,
+}: {
+  panel: OtOperationalPanel | null;
+  onAbrir: AbrirBloque;
+}) {
+  const { cargando, cola, antiguedad, pendientes, sinPendientes } = useDerivadosPanelOperativo(panel);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi
-          label="Esperan mi decisión"
-          value={cola?.porRevisar}
-          cargando={cargando}
-          color="#557EFF"
-          icon={Inbox}
-          onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, "Esperan mi decisión")}
-        />
-        <Kpi
-          label="Pendientes en total"
-          value={pendientes}
-          cargando={cargando}
-          color="#F9AC00"
-          icon={Clock}
-          hint="Incluye lo que espera a un tercero"
-          onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
-        />
-        <Kpi
-          label="Entregados hoy"
-          value={movimiento?.entregadosHoy}
-          cargando={cargando}
-          color="#8CC63F"
-          icon={CheckCircle2}
-          onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, "Entregados hoy")}
-        />
-        <Kpi
-          label="Tiempo mediano de decisión"
-          // Sin decisiones en la ventana no hay mediana que calcular. Antes esto pintaba un «—» del
-          // tamaño de un titular y en color de acento: se leía como una barra de algún color, no
-          // como una cifra ausente. Ahora se dice con palabras por qué está vacío.
-          value={
-            cargando
-              ? undefined
-              : sinMediana
-                ? "Sin decisiones aún"
-                : // Se formatea en vez de interpolar el número crudo: una mediana de dos minutos
-                  // salía como «0.03 h», con punto decimal inglés y en una unidad donde el dato no
-                  // significa nada.
-                  formatHours(movimiento?.tiempoMedianoDecisionHoras)
-          }
-          cargando={cargando}
-          color="#00DBD5"
-          sinDato={sinMediana}
-          icon={Timer}
-          hint={
-            sinMediana
-              ? `Ninguna decisión en los últimos ${VENTANA_MEDIANA_DIAS} días`
-              : `Últimos ${VENTANA_MEDIANA_DIAS} días`
-          }
-          // Una mediana no es un conjunto de trámites: no hay lista que abrir detrás.
-        />
-      </div>
-
       {sinPendientes ? (
         <Tarjeta>
           <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">

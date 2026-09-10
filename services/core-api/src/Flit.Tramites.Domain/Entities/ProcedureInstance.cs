@@ -5,7 +5,18 @@ public sealed class ProcedureInstance
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public Guid ProcedureTypeId { get; set; }
+    /// <summary>
+    /// Radicado compuesto: <c>FT1-0000012</c> (HU #12371). Lo escribe la base al insertar y no
+    /// cambia nunca; ver <see cref="Tramites.ValueObjects.Radicado"/>.
+    /// </summary>
     public string ReferenceNumber { get; set; } = string.Empty;
+
+    /// <summary>
+    /// La parte numérica del radicado, pelada: el 12 de <c>FT1-0000012</c>. Contador global que da
+    /// la secuencia. Por él se ordena y se busca; ordenar por <see cref="ReferenceNumber"/>
+    /// agruparía por familia.
+    /// </summary>
+    public long Consecutivo { get; set; }
     public string Status { get; set; } = Tramites.Estados.TramiteEstado.Borrador;
 
     // Rework trámites (Slice 1) — checklist explícito.
@@ -84,6 +95,19 @@ public sealed class ProcedureInstance
     /// agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea.
     /// </summary>
     public DateTimeOffset? PlateUpdatedAt { get; set; }
+
+    /// <summary>
+    /// Feature #12276 — momento en que la Confirmación RUNT dio Confirmado. NULL = no confirmado: la
+    /// columna del gestor muestra NO si ya hubo intentos y — si nunca se consultó. Ortogonal al
+    /// <see cref="Status"/>: la corrida jamás lo cambia.
+    /// </summary>
+    public DateTimeOffset? RuntConfirmedAt { get; set; }
+
+    /// <summary>Intentos con veredicto de negocio (Pendiente/Discrepancia). Un error del proveedor no cuenta.</summary>
+    public int RuntAttempts { get; set; }
+
+    /// <summary>Marca interna (<c>Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationFlags</c>): discrepancia | no_verificable | tope. Solo la ve el Historial.</summary>
+    public string? RuntFlag { get; set; }
 
     /// <summary>
     /// Marca de "borrador finalizado" (HU #10349, fase 2). El gestor finaliza la captura de datos
