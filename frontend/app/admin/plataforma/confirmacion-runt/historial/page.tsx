@@ -1,9 +1,12 @@
 "use client";
 
+import { Suspense } from "react";
+import { ConfirmacionRuntHistorialPanel } from "@/components/admin/plataforma/confirmacion-runt/ConfirmacionRuntHistorialPanel";
 import { ConfirmacionRuntPage } from "@/components/admin/plataforma/confirmacion-runt/ConfirmacionRuntPage";
 
 /**
- * Plataforma → Confirmación RUNT → Historial (HU #12313 arma; HU #12311 rellena).
+ * Plataforma → Confirmación RUNT → Historial (HU #12313 arma la pestaña; HU #12311 el panel).
+ * `Suspense` porque el panel lee `useSearchParams` (filtros en la URL) y Next lo exige en build.
  * Requiere `runt_confirmation.history.read` (o SuperAdmin).
  */
 export default function AdminConfirmacionRuntHistorialPage() {
@@ -12,9 +15,9 @@ export default function AdminConfirmacionRuntHistorialPage() {
       tab="historial"
       subtitle="Corridas e intentos de confirmación por trámite: qué se consultó, qué respondió el RUNT y por qué se marcó SÍ o NO. Uso interno."
     >
-      <p className="text-sm text-[#59677D] dark:text-white/65">
-        El historial se habilita en la HU #12311.
-      </p>
+      <Suspense fallback={null}>
+        <ConfirmacionRuntHistorialPanel />
+      </Suspense>
     </ConfirmacionRuntPage>
   );
 }
