@@ -59,10 +59,9 @@ export function ConfirmacionRuntPage({
 
         <ModuleTitle title="Confirmación RUNT" subtitle={subtitle} />
 
-        <div className="flex flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 dark:border-white/10 dark:bg-[#0B0F14]/60">
-          <ConfirmacionRuntTabs tabs={visibleConfirmacionRuntTabs(claims)} activeId={tab} />
-          <div className="flex flex-col p-4">{children}</div>
-        </div>
+        {/* Sin tarjeta detrás: como /tramites, la tabla va directo sobre el fondo de la página (regla de UI/UX). */}
+        <ConfirmacionRuntTabs tabs={visibleConfirmacionRuntTabs(claims)} activeId={tab} />
+        <div className="flex flex-col">{children}</div>
       </div>
     </ToastProvider>
   );
