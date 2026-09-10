@@ -1,0 +1,202 @@
+{
+  "ok": true,
+  "data": {
+    "vehiculo": {
+      "placa": "QOO862",
+      "nombrePais": null,
+      "numLicencia": "10039202257",
+      "estadoAutomotor": "ACTIVO",
+      "tipoServicio": "Público",
+      "clase": "CAMIONETA",
+      "marca": "RENAULT",
+      "linea": "KANGOO",
+      "modelo": "2027",
+      "color": "AMARILLO",
+      "numSerie": null,
+      "numMotor": "H4MJ759Q389860",
+      "numChasis": "8A18SRDD4VL528706",
+      "vin": "8A18SRDD4VL528706",
+      "cilindraje": "1598",
+      "tipoCarroceria": "PANEL",
+      "fechaRegistro": "2026-03-28T08:31:39.000-05:00",
+      "gravamenes": "NO",
+      "organismoTransito": "STRIA TTOyTTE MCPAL FUNZA",
+      "capacidadCarga": "608",
+      "codigoMedidaCarga": null,
+      "pesoBruto": "1900",
+      "numeroEjes": "2",
+      "idAutomotor": 613239908,
+      "repotenciado": "NO",
+      "idTipoServicio": 2,
+      "idClaseVehiculo": 5,
+      "diasMatriculado": "166",
+      "prendas": "NO",
+      "clasificacion": "AUTOMOVIL",
+      "esRegrabadoMotor": "NO",
+      "esRegrabadoChasis": "NO",
+      "esRegrabadoSerie": "NO",
+      "esRegrabadoVin": "NO",
+      "numRegraChasis": null,
+      "numRegraMotor": null,
+      "numRegraSerie": null,
+      "numRegraVin": null,
+      "antiguoClasico": "NO",
+      "tipoCombustible": "GAS GASOL",
+      "pasajerosTotal": null,
+      "pasajerosSentados": "2",
+      "vehiculoEnsenanza": "NO",
+      "puertas": "5",
+      "importacion": 0,
+      "fechaExpedLTImportacion": null,
+      "fechaVenciLTImportacion": null,
+      "seguridadEstado": "NO",
+      "verValidaDIAN": false,
+      "validacionDIAN": null,
+      "mostrarSolicitudes": "SI",
+      "tipoMaquinaria": null,
+      "subpartida": null,
+      "fechaMatricula": null,
+      "tarjetaRegistro": null,
+      "noIdentificacion": null
+    },
+    "tipoDocPropietario": "N",
+    "datosTecnicos": {
+      "capacidadCarga": "608 Kgs",
+      "pesoBrutoVehicular": "1900 Kgs",
+      "noEjes": "2",
+      "noLlantas": null,
+      "alto": null,
+      "ancho": null,
+      "largo": null,
+      "pasajerosTotal": null,
+      "pasajerosSentados": "2",
+      "rodaje": null,
+      "peso": null
+    },
+    "soat": [
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "222",
+        "numSoat": "3540859400",
+        "fechaExpedicion": "2026-03-27T00:00:00.000-05:00",
+        "fechaExpediSoat": "2026-03-27T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2026-03-28T00:00:00.000-05:00",
+        "fechaVencimSoat": "2027-03-27T00:00:00.000-05:00",
+        "razonSocialAsegur": "AXA COLPATRIA SEGUROS SA",
+        "estado": "VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      }
+    ],
+    "solicitudes": [
+      {
+        "noSolicitud": "296090366",
+        "fechaSolicitud": "2026-06-16T16:08:06.000-05:00",
+        "estado": "AUTORIZADA",
+        "tramitesRealizados": "TRÁMITE CAMBIO COLOR, TRÁMITE TRANSFORMACIÓN, ",
+        "entidad": "STRIA TTOyTTE MCPAL FUNZA"
+      },
+      {
+        "noSolicitud": "290679071",
+        "fechaSolicitud": "2026-03-26T17:30:39.000-05:00",
+        "estado": "AUTORIZADA",
+        "tramitesRealizados": "TRÁMITE MATRÍCULA INICIAL, ",
+        "entidad": "STRIA TTOyTTE MCPAL FUNZA"
+      },
+      {
+        "noSolicitud": "290613267",
+        "fechaSolicitud": "2026-03-26T09:45:00.000-05:00",
+        "estado": "APROBADA",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, ",
+        "entidad": "STRIA TTOyTTE MCPAL FUNZA"
+      }
+    ],
+    "garantias": [],
+    "garantiasPrendas": [],
+    "limitacionesPropiedad": [],
+    "polizaCaucion": {
+      "noPoliza": null,
+      "estadoPoliza": null,
+      "fechaExpedicion": null,
+      "fechaVigenciaPoliza": null,
+      "noCertificacion": null,
+      "estadoCertificado": null
+    },
+    "responsabilidadCivil": [],
+    "responsabilidadCivilHabilitar": true,
+    "tarjetaOperacion": {
+      "empresaAfiliadora": null,
+      "modalidadTransporte": null,
+      "modalidadServicio": null,
+      "radioAccion": null,
+      "fechaExpedicion": null,
+      "fechaInicio": null,
+      "fechaFin": null,
+      "estado": null,
+      "nroTarjetaOperacion": null
+    },
+    "permisosPcr": [],
+    "datosBlindaje": {
+      "blindado": null,
+      "nivelBlindaje": null,
+      "nivelBlindajeNumero": null,
+      "fechaBlindaje": null,
+      "fechaDesblindaje": null,
+      "numeroResolucion": null,
+      "tipoBlindajeNombre": null,
+      "fechaExpedicionCertificado": null,
+      "fechaExpedicionCertificadoFormatoWS": null,
+      "idDocumentoCertificadoBlindaje": null,
+      "autorizacion": null
+    },
+    "informacionGps": {
+      "noIdentificacionSerie": null,
+      "empresaHabilitacion": null
+    },
+    "informacionRepotenciado": {
+      "repotenciado": null,
+      "fechaRepotenciacion": null,
+      "modeloRepotenciado": null
+    },
+    "desintegracion": {
+      "placa": null,
+      "desintegrar": null
+    },
+    "certificadoDesintegracion": {
+      "noCertificado": null,
+      "estadoCertificado": null,
+      "fechaExpedicion": null,
+      "entidadDesintegradora": null
+    },
+    "normalizacion": [
+      {
+        "deficienciaMatriculaInicial": "NO",
+        "vehiculoNormalizado": "NO DISPONIBLE",
+        "fecha": null,
+        "numeroActoAdministrativo": null,
+        "descargaCertificado": null,
+        "solicitudNormalizacion": null
+      }
+    ],
+    "certificadoDijin": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "entidadCertificado": null,
+      "estadoCertificado": null
+    },
+    "registroInicial": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "estadoCertificado": null,
+      "placaReposicion": null
+    },
+    "registroInicialInvc": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "estadoCertificado": null,
+      "placaReposicion": null
+    }
+  },
+  "fromCache": false
+}

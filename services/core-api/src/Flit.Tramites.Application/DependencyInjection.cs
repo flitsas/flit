@@ -276,6 +276,7 @@ public static class DependencyInjection
         // Confirmación RUNT (Epic #12234, Feature #12276): configuración global (HU #12277).
         services.AddScoped<UseCases.RuntConfirmation.GetRuntConfirmationSettingsHandler>();
         services.AddScoped<UseCases.RuntConfirmation.UpdateRuntConfirmationSettingsHandler>();
+        services.AddScoped<UseCases.RuntConfirmation.ReevaluateRuntConfirmationAttemptHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
         // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).

@@ -1,0 +1,272 @@
+{
+  "ok": true,
+  "data": {
+    "vehiculo": {
+      "placa": "QZU024",
+      "nombrePais": null,
+      "numLicencia": "10040143175",
+      "estadoAutomotor": "ACTIVO",
+      "tipoServicio": "Público",
+      "clase": "CAMION",
+      "marca": "DAF",
+      "linea": "LF250",
+      "modelo": "2023",
+      "color": "ROSADO",
+      "numSerie": "XLRAEL2G0PL523530",
+      "numMotor": "22562346",
+      "numChasis": "XLRAEL2G0PL523530",
+      "vin": "XLRAEL2G0PL523530",
+      "cilindraje": "6700",
+      "tipoCarroceria": "ESTIBAS",
+      "fechaRegistro": "2026-08-31T10:56:04.000-05:00",
+      "gravamenes": "NO",
+      "organismoTransito": "STRIA TTEyTTO BELLO",
+      "capacidadCarga": "9820",
+      "codigoMedidaCarga": null,
+      "pesoBruto": "16500",
+      "numeroEjes": "2",
+      "idAutomotor": 499007672,
+      "repotenciado": "NO",
+      "idTipoServicio": 2,
+      "idClaseVehiculo": 4,
+      "diasMatriculado": "9",
+      "prendas": "NO",
+      "clasificacion": "AUTOMOVIL",
+      "esRegrabadoMotor": "NO",
+      "esRegrabadoChasis": "NO",
+      "esRegrabadoSerie": "NO",
+      "esRegrabadoVin": "NO",
+      "numRegraChasis": null,
+      "numRegraMotor": null,
+      "numRegraSerie": null,
+      "numRegraVin": null,
+      "antiguoClasico": "NO",
+      "tipoCombustible": "DIESEL",
+      "pasajerosTotal": null,
+      "pasajerosSentados": "2",
+      "vehiculoEnsenanza": "NO",
+      "puertas": "2",
+      "importacion": 0,
+      "fechaExpedLTImportacion": null,
+      "fechaVenciLTImportacion": null,
+      "seguridadEstado": "NO",
+      "verValidaDIAN": false,
+      "validacionDIAN": null,
+      "mostrarSolicitudes": "SI",
+      "tipoMaquinaria": null,
+      "subpartida": null,
+      "fechaMatricula": null,
+      "tarjetaRegistro": null,
+      "noIdentificacion": null
+    },
+    "tipoDocPropietario": "N",
+    "datosTecnicos": {
+      "capacidadCarga": "9820 Kgs",
+      "pesoBrutoVehicular": "16500 Kgs",
+      "noEjes": "2",
+      "noLlantas": null,
+      "alto": null,
+      "ancho": null,
+      "largo": null,
+      "pasajerosTotal": null,
+      "pasajerosSentados": "2",
+      "rodaje": null,
+      "peso": null
+    },
+    "soat": [
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "310",
+        "numSoat": "43458674",
+        "fechaExpedicion": "2026-08-28T00:00:00.000-05:00",
+        "fechaExpediSoat": "2026-08-28T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2026-08-29T00:00:00.000-05:00",
+        "fechaVencimSoat": "2027-08-28T00:00:00.000-05:00",
+        "razonSocialAsegur": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      },
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "330",
+        "numSoat": "43173998",
+        "fechaExpedicion": "2026-05-19T00:00:00.000-05:00",
+        "fechaExpediSoat": "2026-05-19T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2026-05-20T00:00:00.000-05:00",
+        "fechaVencimSoat": "2026-06-19T00:00:00.000-05:00",
+        "razonSocialAsegur": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      },
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "330",
+        "numSoat": "42532319",
+        "fechaExpedicion": "2025-11-20T00:00:00.000-05:00",
+        "fechaExpediSoat": "2025-11-20T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2025-11-21T00:00:00.000-05:00",
+        "fechaVencimSoat": "2025-12-20T00:00:00.000-05:00",
+        "razonSocialAsegur": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      },
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "330",
+        "numSoat": "39246717",
+        "fechaExpedicion": "2024-05-22T00:00:00.000-05:00",
+        "fechaExpediSoat": "2024-05-22T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2024-05-23T00:00:00.000-05:00",
+        "fechaVencimSoat": "2024-06-22T00:00:00.000-05:00",
+        "razonSocialAsegur": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      },
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "331",
+        "numSoat": "5350036604",
+        "fechaExpedicion": "2023-08-14T00:00:00.000-05:00",
+        "fechaExpediSoat": "2023-08-14T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2023-08-15T00:00:00.000-05:00",
+        "fechaVencimSoat": "2023-09-14T00:00:00.000-05:00",
+        "razonSocialAsegur": "ASEGURADORA SOLIDARIA DE COLOMBIA ENTIDAD COOPERATIVA",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      }
+    ],
+    "solicitudes": [
+      {
+        "noSolicitud": "302345557",
+        "fechaSolicitud": "2026-09-08T15:49:49.000-05:00",
+        "estado": "AUTORIZADA",
+        "tramitesRealizados": "TRÁMITE CAMBIO COLOR, ",
+        "entidad": "STRIA TTEyTTO BELLO"
+      },
+      {
+        "noSolicitud": "301644309",
+        "fechaSolicitud": "2026-08-31T10:53:48.000-05:00",
+        "estado": "AUTORIZADA",
+        "tramitesRealizados": "TRÁMITE MATRÍCULA INICIAL, ",
+        "entidad": "STRIA TTEyTTO BELLO"
+      },
+      {
+        "noSolicitud": "301391897",
+        "fechaSolicitud": "2026-08-27T12:29:28.000-05:00",
+        "estado": "APROBADA",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, ",
+        "entidad": "STRIA TTEyTTO BELLO"
+      },
+      {
+        "noSolicitud": "301351487",
+        "fechaSolicitud": "2026-08-27T08:51:19.000-05:00",
+        "estado": "RECHAZADA",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, ",
+        "entidad": "STRIA TTEyTTO BELLO"
+      },
+      {
+        "noSolicitud": "301257350",
+        "fechaSolicitud": "2026-08-26T09:48:17.000-05:00",
+        "estado": "RECHAZADA",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, ",
+        "entidad": "STRIA TTEyTTO BELLO"
+      }
+    ],
+    "garantias": [],
+    "garantiasPrendas": [],
+    "limitacionesPropiedad": [],
+    "polizaCaucion": {
+      "noPoliza": "INVC2336000",
+      "estadoPoliza": "UTILIZADA",
+      "fechaExpedicion": "2026-08-18T15:08:24.000-05:00",
+      "fechaVigenciaPoliza": "2027-08-20T15:08:24.000-05:00",
+      "noCertificacion": "INVC2336000",
+      "estadoCertificado": "UTILIZADO"
+    },
+    "responsabilidadCivil": [],
+    "responsabilidadCivilHabilitar": true,
+    "tarjetaOperacion": {
+      "empresaAfiliadora": null,
+      "modalidadTransporte": null,
+      "modalidadServicio": null,
+      "radioAccion": null,
+      "fechaExpedicion": null,
+      "fechaInicio": null,
+      "fechaFin": null,
+      "estado": null,
+      "nroTarjetaOperacion": null
+    },
+    "permisosPcr": [],
+    "datosBlindaje": {
+      "blindado": null,
+      "nivelBlindaje": null,
+      "nivelBlindajeNumero": null,
+      "fechaBlindaje": null,
+      "fechaDesblindaje": null,
+      "numeroResolucion": null,
+      "tipoBlindajeNombre": null,
+      "fechaExpedicionCertificado": null,
+      "fechaExpedicionCertificadoFormatoWS": null,
+      "idDocumentoCertificadoBlindaje": null,
+      "autorizacion": null
+    },
+    "informacionGps": {
+      "noIdentificacionSerie": null,
+      "empresaHabilitacion": null
+    },
+    "informacionRepotenciado": {
+      "repotenciado": null,
+      "fechaRepotenciacion": null,
+      "modeloRepotenciado": null
+    },
+    "desintegracion": {
+      "placa": null,
+      "desintegrar": null
+    },
+    "certificadoDesintegracion": {
+      "noCertificado": null,
+      "estadoCertificado": null,
+      "fechaExpedicion": null,
+      "entidadDesintegradora": null
+    },
+    "normalizacion": [
+      {
+        "deficienciaMatriculaInicial": "NO",
+        "vehiculoNormalizado": "NO DISPONIBLE",
+        "fecha": null,
+        "numeroActoAdministrativo": null,
+        "descargaCertificado": null,
+        "solicitudNormalizacion": null
+      }
+    ],
+    "certificadoDijin": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "entidadCertificado": null,
+      "estadoCertificado": null
+    },
+    "registroInicial": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "estadoCertificado": null,
+      "placaReposicion": null
+    },
+    "registroInicialInvc": {
+      "noCertificado": "INVC2336000",
+      "fechaExpedicion": "2026-08-20T15:08:24.000-05:00",
+      "estadoCertificado": "UTILIZADO",
+      "placaReposicion": null
+    }
+  },
+  "fromCache": false
+}
