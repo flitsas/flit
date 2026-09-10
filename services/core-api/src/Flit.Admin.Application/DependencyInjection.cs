@@ -120,6 +120,11 @@ public static class DependencyInjection
         // Editar compañía (botón "Editar" en el listado, #10118).
         services.AddScoped<UpdateCompanyHandler>();
 
+        // HU #12345 — gestión de clientes hijos por cabeza de grupo.
+        services.AddScoped<Companies.Children.CreateChildCompany.CreateChildCompanyHandler>();
+        services.AddScoped<Companies.Children.UpdateChildCompany.UpdateChildCompanyHandler>();
+        services.AddScoped<Companies.Children.SetChildCompanyStatus.SetChildCompanyStatusHandler>();
+
         // HU #10190 — configuración operativa + audit log.
         services.AddScoped<GetTenantSettingsHandler>();
         services.AddScoped<UpdateTenantSettingsHandler>();

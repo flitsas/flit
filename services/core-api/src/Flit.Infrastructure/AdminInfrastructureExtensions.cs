@@ -60,6 +60,7 @@ public static class AdminInfrastructureExtensions
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
+        services.AddScoped<ICompanyHierarchyRepository, CompanyHierarchyRepository>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
 
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
