@@ -35,6 +35,11 @@ internal static class SettingsDiff
         AddBool(changes, "tramite_approved_emails_enabled", previous.TramiteApprovedEmailsEnabled, updated.TramiteApprovedEmailsEnabled);
         AddBool(changes, "tramite_rejected_emails_enabled", previous.TramiteRejectedEmailsEnabled, updated.TramiteRejectedEmailsEnabled);
 
+        // HU #12250 (Feature #12249) — flags de módulos del dashboard.
+        AddBool(changes, "tramites_module_enabled", previous.TramitesModuleEnabled, updated.TramitesModuleEnabled);
+        AddBool(changes, "comparendos_module_enabled", previous.ComparendosModuleEnabled, updated.ComparendosModuleEnabled);
+        AddBool(changes, "resoluciones_module_enabled", previous.ResolucionesModuleEnabled, updated.ResolucionesModuleEnabled);
+
         // FEATURE 02 — fuente de comparendos (internal | external).
         AddString(changes, "fines_query_source", previous.FinesQuerySource, updated.FinesQuerySource);
 
