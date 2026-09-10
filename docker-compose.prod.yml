@@ -486,7 +486,7 @@ services:
       MIGRACION_API_KEY: ${FLITMIG_MIGRACION_API_KEY:-}
       # Por la red interna de Docker, NO por el dominio público: ese salto pasa por nginx, cuyo
       # proxy_read_timeout de 60 s corta migraciones de instancia 3 que sí se completan.
-      MIGRACION_API_URL: http://gateway:${GATEWAY_PORT:-5002}
+      MIGRACION_API_URL: http://gateway:${GATEWAY_PORT:-6002}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-6001}:${FRONTEND_PORT:-6001}"
     depends_on:
