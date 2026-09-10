@@ -551,6 +551,42 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
     expect(within(select).getByRole('option', { name: 'Comprador · Juan Pérez' })).toBeInTheDocument();
     expect(within(dialog).getByText(/Correo registrado:/)).toBeInTheDocument();
   });
+
+  // Verificación en vivo del Bug #12376 destapó este gap: un trámite con identidad ya `aprobado`
+  // (incluida la reusada de otro trámite, HU #10350) ofrecía "Reenviar validación" igual, y el
+  // backend respondía con un error confuso (IdentidadAprobada o incluso NoEncontrado cuando la
+  // validación pertenece a OTRO trámite). El frontend ahora lo deshabilita antes de intentarlo.
+  it('con identidad ya aprobada, "Reenviar validación" está deshabilitada', async () => {
+    mocks.listInstances.mockResolvedValue([
+      makeInstance({ identityValidationStatus: 'aprobado' }),
+    ]);
+    renderTable();
+    await screen.findByText('P0001');
+    await abrirAcciones();
+
+    const item = screen.getByRole('menuitem', { name: 'Reenviar validación' });
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute(
+      'title',
+      'La identidad de este trámite ya está aprobada: no hay nada que reenviar.',
+    );
+    await userEvent.click(item);
+    expect(mocks.listBiometricExpediente).not.toHaveBeenCalled();
+  });
+
+  it('sobre un trámite Anulado, "Reenviar validación" está deshabilitada', async () => {
+    mocks.listInstances.mockResolvedValue([makeInstance({ estado: 'anulado' })]);
+    renderTable();
+    await screen.findByText('P0001');
+    await abrirAcciones();
+
+    const item = screen.getByRole('menuitem', { name: 'Reenviar validación' });
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute(
+      'title',
+      'La identidad ya no es accionable en este estado del trámite.',
+    );
+  });
 });
 
 describe('HU #12163 — Reasignar gestor', () => {
