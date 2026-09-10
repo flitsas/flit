@@ -374,6 +374,36 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
         total.Should().Be(1);
     }
 
+    // ── Feature #12276 (HU #12312 AC3) — «Confirmado en RUNT» resuelve en SQL sobre el universo ───
+
+    [Theory]
+    [InlineData("yes", new[] { "C1" })]
+    [InlineData("no", new[] { "N1", "N2" })]
+    [InlineData("not_consulted", new[] { "S1" })]
+    public async Task ConfirmadoRunt_FiltraPorLasColumnasDelTramite_SoloEntreAprobados(string valor, string[] esperado)
+    {
+        await using var db = NewContext(nameof(ConfirmadoRunt_FiltraPorLasColumnasDelTramite_SoloEntreAprobados) + valor);
+        var confirmado = Instancia("C1", estado: TramiteEstado.Aprobado);
+        confirmado.RuntConfirmedAt = Base;
+        confirmado.RuntAttempts = 2;
+        var pendiente = Instancia("N1", estado: TramiteEstado.Aprobado);
+        pendiente.RuntAttempts = 1;
+        var discrepancia = Instancia("N2", estado: TramiteEstado.Aprobado);
+        discrepancia.RuntFlag = "discrepancia";
+        var sinConsultar = Instancia("S1", estado: TramiteEstado.Aprobado);
+        // No aprobado con intentos: la columna no aplica, así que ningún valor lo trae.
+        var entregado = Instancia("E1", estado: TramiteEstado.Entregado);
+        entregado.RuntAttempts = 1;
+        db.ProcedureInstances.AddRange(confirmado, pendiente, discrepancia, sinConsultar, entregado);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (refs, total) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.ConfirmadoRunt, QueryOperator.EsAlguno, valor));
+
+        refs.Should().BeEquivalentTo(esperado);
+        total.Should().Be(esperado.Length);
+    }
+
     [Fact]
     public async Task Booleano_ConLasDosOpciones_NoAcotaNada()
     {

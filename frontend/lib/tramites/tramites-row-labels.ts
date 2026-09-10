@@ -12,7 +12,12 @@
  * que el módulo de columnas pueda importarlo sin arrastrar el componente.
  */
 
-import type { FirmaParteEstado, InstanceSummary, TramiteFuente } from '@/lib/api/types/procedure-runtime';
+import type {
+  FirmaParteEstado,
+  InstanceSummary,
+  RuntConfirmedValue,
+  TramiteFuente,
+} from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 export function vehiculo(item: InstanceSummary): string {
@@ -144,3 +149,18 @@ export const FUENTE_LABEL: Record<TramiteFuente, string> = {
   integracion: 'Integración',
   migrado: 'Migrado',
 };
+
+/**
+ * Feature #12276 (HU #12312) — texto de la columna «Confirmado en RUNT»: SÍ, NO o vacío (la celda
+ * pinta «—», el Excel deja la celda vacía). Sin explicaciones: el porqué vive en el Historial de
+ * plataforma, no en el listado del gestor.
+ */
+export const RUNT_CONFIRMED_LABEL: Record<RuntConfirmedValue, string> = {
+  yes: 'SÍ',
+  no: 'NO',
+  not_consulted: '',
+};
+
+export function runtConfirmadoLabel(item: InstanceSummary): string {
+  return item.runtConfirmed ? RUNT_CONFIRMED_LABEL[item.runtConfirmed] : '';
+}

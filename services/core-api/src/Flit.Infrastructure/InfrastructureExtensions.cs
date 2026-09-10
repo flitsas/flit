@@ -121,6 +121,35 @@ public static class InfrastructureExtensions
         // (SOAT, RTM y registro mercantil) en modelo canónico, con payload crudo para reprocesar.
         services.AddScoped<Flit.Tramites.Application.UseCases.Certifications.ICertificationRepository,
             CertificationRepository>();
+        // Feature #12276 — Confirmación RUNT: configuración global (HU #12277) y su auditoría sobre el
+        // rastro administrativo unificado (IAdminAuditWriter), sin tabla de auditoría nueva.
+        services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntConfirmationSettingsRepository,
+            RuntConfirmation.RuntConfirmationSettingsRepository>();
+        services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntConfirmationAuditWriter,
+            RuntConfirmation.RuntConfirmationAuditWriter>();
+        // HU #12309 — almacén con scope propio por operación (la corrida graba en paralelo), consumidor
+        // propio del RUNT según providerKey (sin pasar por la cadena de proveedores del wizard) y el
+        // programador diario. Registrado siempre; el gate es la fila de configuración en BD.
+        services.AddSingleton<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntConfirmationStore,
+            RuntConfirmation.RuntConfirmationStore>();
+        services.AddSingleton(new Flit.Tramites.Application.UseCases.RuntConfirmation.RuntConfirmationRunnerOptions
+        {
+            MaxConcurrency = int.TryParse(configuration["RuntConfirmation:MaxConcurrency"], out var rcMax) && rcMax > 0 ? rcMax : 4,
+            StaleRunAfterHours = int.TryParse(configuration["RuntConfirmation:StaleRunAfterHours"], out var rcStale) && rcStale > 0 ? rcStale : 6,
+            MaxCandidatesPerRun = int.TryParse(configuration["RuntConfirmation:MaxCandidatesPerRun"], out var rcCap) && rcCap > 0 ? rcCap : 5000,
+        });
+        services.AddHttpClient<RuntConfirmation.VerifikRuntRawHttpClient>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<VerifikOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+        services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntVehicleRawClient,
+            RuntConfirmation.RuntVehicleRawClient>();
+        services.AddHostedService<RuntConfirmation.RuntConfirmationSchedulerProcessor>();
+        // HU #12310 — lecturas del Historial (cross-tenant, pantalla de plataforma).
+        services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntConfirmationHistoryReader,
+            RuntConfirmation.RuntConfirmationHistoryReader>();
         // HU #10865 — entidad persona/sujeto a nivel tenant (Feature #10864, CF-00, ADR-0030).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).

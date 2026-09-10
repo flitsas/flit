@@ -1,0 +1,223 @@
+{
+  "data": {
+    "datosTecnicos": {
+      "alto": null,
+      "ancho": null,
+      "capacidadCarga": "9820 Kgs",
+      "largo": null,
+      "noEjes": "2",
+      "noLlantas": null,
+      "pasajerosSentados": "2",
+      "pasajerosTotal": null,
+      "peso": null,
+      "pesoBrutoVehicular": "16500 Kgs",
+      "rodaje": null
+    },
+    "documentNumber": "890903938",
+    "documentType": "NIT",
+    "garantiasFavorDe": [],
+    "garantiasMobiliarias": [],
+    "informacionBlindaje": {
+      "autorizacion": null,
+      "blindado": null,
+      "fechaBlindaje": null,
+      "fechaDesblindaje": null,
+      "fechaExpedicionCertificado": null,
+      "fechaExpedicionCertificadoFormatoWS": null,
+      "idDocumentoCertificadoBlindaje": null,
+      "nivelBlindaje": null,
+      "nivelBlindajeNumero": null,
+      "numeroResolucion": null,
+      "tipoBlindajeNombre": null
+    },
+    "informacionGeneral": {
+      "capacidadCarga": "9820",
+      "cilindraje": "6700",
+      "claseVehiculo": "CAMION",
+      "clasificacion": "AUTOMOVIL",
+      "color": "ROSADO",
+      "diasMatriculado": "9",
+      "esRegrabadoChasis": "NO",
+      "esRegrabadoMotor": "NO",
+      "esRegrabadoSerie": "NO",
+      "esRegrabadoVin": "NO",
+      "estadoDelVehiculo": "ACTIVO",
+      "fechaExpedLTImportacion": null,
+      "fechaMatricula": "01/09/2026",
+      "fechaVenciLTImportacion": null,
+      "idTipoServicio": "2",
+      "linea": "LF250",
+      "marca": "DAF",
+      "modelo": "2023",
+      "mostrarSolicitudes": "SI",
+      "noChasis": "XLRAEL2G0PL523530",
+      "noEjes": "2",
+      "noIdentificacion": null,
+      "noLicenciaTransito": "10040143175",
+      "noMotor": "22562346",
+      "noPlaca": "QZU024",
+      "noSerie": "XLRAEL2G0PL523530",
+      "noVin": "XLRAEL2G0PL523530",
+      "nombrePais": null,
+      "organismoTransito": "STRIA TTEyTTO BELLO",
+      "pasajerosSentados": "2",
+      "pasajerosTotal": null,
+      "pesoBruto": "16500",
+      "prendas": "NO",
+      "puertas": "2",
+      "repotenciado": "NO",
+      "seguridadEstado": "NO",
+      "subpartida": null,
+      "tarjetaServicio": "NO",
+      "tieneGravamenes": "NO",
+      "tieneLTImportacion": false,
+      "tipoCarroceria": "ESTIBAS",
+      "tipoCombustible": "DIESEL",
+      "tipoMaquinaria": null,
+      "tipoServicio": "Público",
+      "validacionDIAN": "No Exitoso",
+      "vehiculoEnsenanza": "NO",
+      "verValidaDIAN": false
+    },
+    "limitacionPropiedad": [],
+    "normalizacionSaneamiento": [
+      {
+        "deficienciaMatriculaInicial": "NO",
+        "descargaCertificado": null,
+        "fecha": null,
+        "numeroActoAdministrativo": null,
+        "solicitudNormalizacion": null,
+        "vehiculoNormalizado": "NO DISPONIBLE"
+      }
+    ],
+    "plate": "QZU024",
+    "polizasResponsabilidadCivil": [],
+    "soat": [
+      {
+        "entidadExpideSoat": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "fechaExpediSoat": "28/08/2026",
+        "fechaExpedicion": "28/08/2026",
+        "fechaVencimiento": "28/08/2027",
+        "fechaVigencia": "29/08/2026",
+        "noPoliza": "43458674",
+        "nombrePais": null,
+        "origen": "NACIONAL",
+        "placa": null,
+        "tipoTarifa": "310"
+      },
+      {
+        "entidadExpideSoat": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "fechaExpediSoat": "19/05/2026",
+        "fechaExpedicion": "19/05/2026",
+        "fechaVencimiento": "19/06/2026",
+        "fechaVigencia": "20/05/2026",
+        "noPoliza": "43173998",
+        "nombrePais": null,
+        "origen": "NACIONAL",
+        "placa": null,
+        "tipoTarifa": "330"
+      },
+      {
+        "entidadExpideSoat": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "fechaExpediSoat": "20/11/2025",
+        "fechaExpedicion": "20/11/2025",
+        "fechaVencimiento": "20/12/2025",
+        "fechaVigencia": "21/11/2025",
+        "noPoliza": "42532319",
+        "nombrePais": null,
+        "origen": "NACIONAL",
+        "placa": null,
+        "tipoTarifa": "330"
+      },
+      {
+        "entidadExpideSoat": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "fechaExpediSoat": "22/05/2024",
+        "fechaExpedicion": "22/05/2024",
+        "fechaVencimiento": "22/06/2024",
+        "fechaVigencia": "23/05/2024",
+        "noPoliza": "39246717",
+        "nombrePais": null,
+        "origen": "NACIONAL",
+        "placa": null,
+        "tipoTarifa": "330"
+      },
+      {
+        "entidadExpideSoat": "ASEGURADORA SOLIDARIA DE COLOMBIA ENTIDAD COOPERATIVA",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "fechaExpediSoat": "14/08/2023",
+        "fechaExpedicion": "14/08/2023",
+        "fechaVencimiento": "14/09/2023",
+        "fechaVigencia": "15/08/2023",
+        "noPoliza": "5350036604",
+        "nombrePais": null,
+        "origen": "NACIONAL",
+        "placa": null,
+        "tipoTarifa": "331"
+      }
+    ],
+    "solicitudes": [
+      {
+        "entidad": "STRIA TTEyTTO BELLO",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "08/09/2026",
+        "noSolicitud": "302345557",
+        "tramitesRealizados": "TRÁMITE CAMBIO COLOR, "
+      },
+      {
+        "entidad": "STRIA TTEyTTO BELLO",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "31/08/2026",
+        "noSolicitud": "301644309",
+        "tramitesRealizados": "TRÁMITE MATRÍCULA INICIAL, "
+      },
+      {
+        "entidad": "STRIA TTEyTTO BELLO",
+        "estado": "APROBADA",
+        "fechaSolicitud": "27/08/2026",
+        "noSolicitud": "301391897",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, "
+      },
+      {
+        "entidad": "STRIA TTEyTTO BELLO",
+        "estado": "RECHAZADA",
+        "fechaSolicitud": "27/08/2026",
+        "noSolicitud": "301351487",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, "
+      },
+      {
+        "entidad": "STRIA TTEyTTO BELLO",
+        "estado": "RECHAZADA",
+        "fechaSolicitud": "26/08/2026",
+        "noSolicitud": "301257350",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, "
+      }
+    ],
+    "tarjetaOperacion": {
+      "empresaAfiliadora": null,
+      "estado": null,
+      "fechaExpedicion": null,
+      "fechaFin": null,
+      "fechaInicio": null,
+      "modalidadTransporte": null,
+      "nroTarjetaOperacion": null,
+      "radioAccion": null,
+      "servicio": null
+    },
+    "tecnoMecanica": [],
+    "vin": "XLRAEL2G0PL523530"
+  },
+  "signature": {
+    "dateTime": "September 10, 2026 1:40 PM",
+    "message": "Certified by Verifik.co"
+  },
+  "id": "F2QHL"
+}

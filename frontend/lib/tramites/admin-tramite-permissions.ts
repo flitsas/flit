@@ -12,6 +12,10 @@ export const ADMIN_TRAMITE_PERMISSIONS = {
   anular: 'AdminTramiteAnular',
   reenviarValidacion: 'AdminTramiteReenviarValidacion',
   reasignarGestor: 'AdminTramiteReasignarGestor',
+  // Feature #12276 — «Consultar ahora en RUNT»: la consulta manual de la Confirmación RUNT se ofrece
+  // desde el menú del admin (no solo desde el Historial, donde un trámite nunca consultado no aparece).
+  // Mismo slug que protege el endpoint POST /admin/runt-confirmation/procedures/{id}/consult-now.
+  consultarRunt: 'runt_confirmation.history.read',
 } as const;
 
 /**
