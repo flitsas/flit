@@ -651,6 +651,34 @@ describe('TramitesTable — subsanación / motivo de rechazo', () => {
     await userEvent.click(trigger);
     expect(screen.queryByText('Falta certificado de tradición')).not.toBeInTheDocument();
   });
+
+  // Bug #12376, defecto 1 — al anular un trámite que venía de Rechazado, el motivo del OT ya NO es
+  // vigente (el historial general sí lo conserva; esto solo cubre la UI del estado actual).
+  it('en Anulado no muestra el motivo del OT como vigente', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'anu-1',
+        placa: 'ANU001',
+        estado: 'anulado',
+        subsanacionActiva: false,
+        subsanacionCount: 1,
+        ultimoRechazoMotivo: 'Falta certificado de tradición',
+      },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('ANU001');
+    const trigger = screen.getByRole('button', {
+      name: /Ver detalle de rechazo \/ subsanación de TR-0001/,
+    });
+    await userEvent.click(trigger);
+
+    expect(screen.queryByText('Motivo del OT')).not.toBeInTheDocument();
+    expect(screen.queryByText('Falta certificado de tradición')).not.toBeInTheDocument();
+    // La subsanación histórica (conteo) sí puede seguir mostrándose: no es "motivo activo".
+    expect(screen.getByText('Subsanado ×1')).toBeInTheDocument();
+  });
 });
 
 describe('TramitesTable — SuperAdmin multi-tenant', () => {
