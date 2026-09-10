@@ -61,7 +61,10 @@ internal sealed class RuntConfirmationSchedulerProcessor(
         var store = scope.ServiceProvider.GetRequiredService<IRuntConfirmationStore>();
 
         var settings = await settingsRepo.GetAsync(ct).ConfigureAwait(false);
-        var last = await store.GetLastScheduledRunStartedAtAsync(ct).ConfigureAwait(false);
+
+        // Apagada: una marca «saltada» por día basta, así que la de hoy cuenta. Encendida: solo cuentan
+        // las corridas que consultaron; si se enciende con la hora ya pasada, la de hoy sale ahora.
+        var last = await store.GetLastScheduledRunStartedAtAsync(includeSkipped: !settings.Enabled, ct).ConfigureAwait(false);
 
         if (!IsDue(settings.RunAtLocal, last, nowUtc, BogotaTimeZone))
             return;

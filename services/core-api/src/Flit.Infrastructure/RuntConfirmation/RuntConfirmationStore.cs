@@ -235,14 +235,12 @@ internal sealed class RuntConfirmationStore(IServiceScopeFactory scopeFactory) :
             .ConfigureAwait(false);
     }
 
-    public async Task<DateTimeOffset?> GetLastScheduledRunStartedAtAsync(CancellationToken ct = default)
+    public async Task<DateTimeOffset?> GetLastScheduledRunStartedAtAsync(bool includeSkipped, CancellationToken ct = default)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         return await db.RuntConfirmationRuns.AsNoTracking()
-            // Una corrida saltada (interruptor apagado) no cuenta: si se enciende a media mañana con la
-            // hora ya pasada, la de hoy se ejecuta en el siguiente tick.
-            .Where(r => r.Trigger == RuntConfirmationRunTriggers.Scheduled && r.SkippedReason == null)
+            .Where(r => r.Trigger == RuntConfirmationRunTriggers.Scheduled && (includeSkipped || r.SkippedReason == null))
             .MaxAsync(r => (DateTimeOffset?)r.StartedAt, ct)
             .ConfigureAwait(false);
     }
