@@ -63,10 +63,19 @@ internal sealed class FakeRuntConfirmationStore : IRuntConfirmationStore
 
     // La corrida graba desde varias tareas a la vez (concurrencia acotada): el doble debe ser
     // seguro para hilos igual que el almacén real (scope propio por operación).
+    /// <summary>Simula que la BD rechaza el intento (p. ej. un CHECK): la primera grabación que cumpla el predicado revienta.</summary>
+    public Func<RuntConfirmationAttempt, bool>? RejectRecordOnce { get; set; }
+
     public Task RecordAttemptAsync(RuntConfirmationAttempt attempt, RuntConfirmationInstanceUpdate update, CancellationToken ct = default)
     {
         lock (_gate)
         {
+            if (RejectRecordOnce is { } reject && reject(attempt))
+            {
+                RejectRecordOnce = null;
+                throw new InvalidOperationException("23514: new row violates check constraint \"ck_x\"");
+            }
+
             Attempts.Add(attempt);
             Updates.Add((attempt.ProcedureInstanceId, update));
 

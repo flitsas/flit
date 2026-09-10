@@ -226,7 +226,12 @@ public sealed class RuntConfirmationRunner(
             RunnerLog.CandidateFailed(logger, run.Id, candidate.InstanceId, ex);
             try
             {
-                var d = new RuntConfirmationDecision(RuntConfirmationVerdict.Error, Truncate($"Fallo interno al procesar: {ex.GetType().Name}: {ex.Message}", 2000), RuntConfirmationRules.Version);
+                // El motivo lo lee gente de operación: sin nombres de excepción ni mensajes de EF. El detalle
+                // técnico ya quedó en el log con el id de la corrida y del trámite.
+                var d = new RuntConfirmationDecision(
+                    RuntConfirmationVerdict.Error,
+                    $"FLIT no pudo terminar de procesar este trámite (fallo interno, no del proveedor); no cuenta como intento y se reintenta en la siguiente corrida. Detalle en el log del servidor, corrida {run.Id}.",
+                    RuntConfirmationRules.Version);
                 var attempt = BuildAttempt(run, candidate, attemptNo, queriedAt, RuntConfirmationQueryKinds.Plate, settings.ProviderKey, d, null, null, requestedBy, null);
                 await store.RecordAttemptAsync(attempt, new RuntConfirmationInstanceUpdate(false, null, null, false), CancellationToken.None).ConfigureAwait(false);
             }

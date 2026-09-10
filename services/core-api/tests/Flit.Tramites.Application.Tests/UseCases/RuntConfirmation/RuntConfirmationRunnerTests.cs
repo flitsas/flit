@@ -321,6 +321,24 @@ public sealed class RuntConfirmationRunnerTests
     }
 
     [Fact]
+    public async Task AC7_FalloInternoAlGrabar_DejaErrorLegible_SinTextoDeExcepcion_YNoConsumeIntento()
+    {
+        var (runner, store, client) = Build(new RuntConfirmationSettings { Enabled = true });
+        store.Candidates.Add(Otros("CAMBIO_COLOR"));
+        client.Respond(_ => new(RuntRawOutcome.Found, CambioColorOk, null));
+        store.RejectRecordOnce = a => a.Verdict == "confirmed";
+
+        var run = await runner.RunAsync(new(RuntConfirmationRunTriggers.Scheduled), TestContext.Current.CancellationToken);
+
+        run.Errors.Should().Be(1);
+        var a = store.Attempts.Single();
+        a.Verdict.Should().Be("error");
+        a.ReasonText.Should().Contain("fallo interno").And.Contain(run.Id.ToString());
+        a.ReasonText.Should().NotContainAny("Exception", "23514", "entity changes", "ck_x");
+        store.Candidates.Single().RuntAttempts.Should().Be(0);
+    }
+
+    [Fact]
     public async Task AC7_Traspaso_ConUnaDeLasDosEnError_EsError()
     {
         var (runner, store, client) = Build(new RuntConfirmationSettings { Enabled = true });
