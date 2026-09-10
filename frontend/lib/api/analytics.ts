@@ -3,6 +3,7 @@
 import { apiFetch } from "./client";
 import { downloadFile } from "./download";
 import type {
+  ActiveModulesResponse,
   AnalyticsOverviewParams,
   AnalyticsOverviewResponse,
   ExecutivePdfParams,
@@ -110,6 +111,21 @@ export function exportExecutivePdf(params: ExecutivePdfParams, signal?: AbortSig
     method: "POST",
     body: { from: params.from, to: params.to, tenantId: params.tenantId },
     fallbackFilename: `resumen_ejecutivo_${params.from}_${params.to}.pdf`,
+    signal,
+  });
+}
+
+/**
+ * GET /active-modules — flags de módulos activos del dashboard (Trámites/Comparendos/
+ * Resoluciones) para el tenant del usuario autenticado (HU #12253, Feature #12249).
+ * A diferencia del resto de este cliente, solo exige sesión (sin policy de Admin): el
+ * backend resuelve el tenant desde el claim JWT; un SuperAdmin puede indicar `tenantId`
+ * explícito. Lanza `ApiError` con el status del backend (400 SuperAdmin sin tenantId,
+ * 403 tenant ajeno, 401 sin sesión).
+ */
+export function fetchActiveModules(tenantId?: string, signal?: AbortSignal): Promise<ActiveModulesResponse> {
+  return apiFetch<ActiveModulesResponse>(`${base}/active-modules`, {
+    query: { tenantId },
     signal,
   });
 }

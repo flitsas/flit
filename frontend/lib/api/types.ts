@@ -443,6 +443,17 @@ export interface AnalyticsOverviewParams {
   tenantId?: string;
 }
 
+/**
+ * Respuesta de GET /api/v1/analytics/active-modules (HU #12251 backend / #12253 frontend,
+ * Feature #12249). Los 3 flags de módulos activos del dashboard para el tenant del usuario
+ * autenticado (o el `tenantId` indicado por un SuperAdmin).
+ */
+export interface ActiveModulesResponse {
+  tramitesModuleEnabled: boolean;
+  comparendosModuleEnabled: boolean;
+  resolucionesModuleEnabled: boolean;
+}
+
 /** Productividad de un radicador en el periodo (RF07). */
 export interface TopProducer {
   userId: string;
