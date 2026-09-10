@@ -332,3 +332,95 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     expect(screen.queryByRole("img", { name: "Banner roto" })).not.toBeInTheDocument();
   });
 });
+
+// ── Cuerpo dinámico del slide de bienvenida (Opción A: sin llamadas nuevas) ─────────────────
+
+const GENERIC_BODY =
+  "Tus procesos y validaciones se encuentran sincronizados. Continúa gestionando tu operación de manera segura y eficiente.";
+
+/** Mock de `listTenantBiometricValidations` que distingue la consulta de stats (sin
+ *  `vigenciaEstado`) de la de "por vencer" (`vigenciaEstado: 'por_vencer'`), como hace el
+ *  componente real con dos llamadas al mismo cliente. */
+function mockBiometricCalls(rechazadas: number, porVencer: number) {
+  mocks.listTenantBiometricValidations.mockImplementation(async (params: Record<string, unknown>) => {
+    if (params?.vigenciaEstado === "por_vencer") {
+      return { validations: [], stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 }, page: 1, pageSize: 10, total: porVencer };
+    }
+    return {
+      validations: [],
+      stats: { total: rechazadas, aprobadas: 0, enProceso: 0, rechazadas, expiradas: 0 },
+      page: 1,
+      pageSize: 10,
+      total: rechazadas,
+    };
+  });
+}
+
+describe("Dashboard — cuerpo dinámico del slide de bienvenida (Opción A)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchMonthlyTrend.mockResolvedValue(CAROUSEL_TREND);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it("con rechazadas y por vencer, combina ambas en un solo mensaje", async () => {
+    mocks.fetchAnalyticsOverview.mockResolvedValue(OVERVIEW);
+    mockBiometricCalls(2, 1);
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    expect(
+      await screen.findByText(
+        "Tienes 3 validaciones de identidad que requieren tu atención: 2 rechazadas y 1 por vencer.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("solo con rechazadas (singular), usa el mensaje en singular", async () => {
+    mocks.fetchAnalyticsOverview.mockResolvedValue(OVERVIEW);
+    mockBiometricCalls(1, 0);
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    expect(
+      await screen.findByText(
+        "Tienes 1 validación de identidad rechazada que requiere tu atención.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("solo con validaciones por vencer (plural), usa ese mensaje", async () => {
+    mocks.fetchAnalyticsOverview.mockResolvedValue(OVERVIEW);
+    mockBiometricCalls(0, 3);
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    expect(
+      await screen.findByText(
+        "Tienes 3 validaciones de identidad por vencer que requieren tu atención.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("sin alertas, cae al total de trámites del periodo (dato ya cargado, sin llamada nueva)", async () => {
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mockBiometricCalls(0, 0);
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    expect(
+      await screen.findByText(
+        "Tienes 7 trámites en este periodo. Todo sincronizado — sin identidades pendientes de atención.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("mientras las biométricas cargan, mantiene el texto genérico (sin parpadeo de '0 alertas')", async () => {
+    mocks.fetchAnalyticsOverview.mockResolvedValue(OVERVIEW);
+    // Nunca resuelve dentro de este test: el estado se queda en "loading".
+    mocks.listTenantBiometricValidations.mockReturnValue(new Promise(() => {}));
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    expect(await screen.findByText(GENERIC_BODY)).toBeInTheDocument();
+  });
+});
