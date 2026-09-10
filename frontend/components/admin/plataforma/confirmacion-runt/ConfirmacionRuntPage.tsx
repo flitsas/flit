@@ -46,7 +46,7 @@ export function ConfirmacionRuntPage({
 
   return (
     <ToastProvider>
-      <div className="flex min-h-screen flex-col gap-4 px-4 pt-6 pb-10 md:px-6">
+      <div className="flex flex-col gap-4 px-4 pt-6 pb-24 md:px-6">
         <button
           type="button"
           onClick={() => router.push("/")}
@@ -59,9 +59,9 @@ export function ConfirmacionRuntPage({
 
         <ModuleTitle title="Confirmación RUNT" subtitle={subtitle} />
 
-        <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 dark:border-white/10 dark:bg-[#0B0F14]/60">
+        <div className="flex flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 dark:border-white/10 dark:bg-[#0B0F14]/60">
           <ConfirmacionRuntTabs tabs={visibleConfirmacionRuntTabs(claims)} activeId={tab} />
-          <div className="flex flex-1 flex-col p-4">{children}</div>
+          <div className="flex flex-col p-4">{children}</div>
         </div>
       </div>
     </ToastProvider>

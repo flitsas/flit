@@ -143,11 +143,12 @@ describe("ConfirmacionRuntConfigPanel", () => {
     renderPanel();
 
     const resumen = await screen.findByTestId("confirmacion-runt-ultima-corrida");
-    expect(within(resumen).getByText("Kyverum")).toBeInTheDocument();
+    expect(within(resumen).getByText("Programada · Kyverum")).toBeInTheDocument();
     expect(within(resumen).getByText("38")).toBeInTheDocument();
-    expect(within(resumen).getByText("45")).toBeInTheDocument();
-    expect(within(resumen).getByText("1 min 30 s")).toBeInTheDocument();
-    expect(within(resumen).getByText("Programada")).toBeInTheDocument();
+    expect(within(resumen).getByText("20")).toBeInTheDocument();
+    expect(within(resumen).getByText("12")).toBeInTheDocument();
+    // Duración, llamadas y errores van en la línea de pie, no en tarjetas.
+    expect(within(resumen).getByText(/Duración 1 min 30 s · 45 llamadas al proveedor · 1 error de proveedor/)).toBeInTheDocument();
   });
 
   it("AC5 — sin corridas dice «Sin corridas todavía»", async () => {

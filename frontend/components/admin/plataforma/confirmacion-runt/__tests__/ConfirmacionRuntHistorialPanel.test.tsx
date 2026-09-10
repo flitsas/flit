@@ -108,7 +108,15 @@ describe("ConfirmacionRuntHistorialPanel", () => {
       runtAttempts: 1,
       runtFlag: null,
     }));
-    getRuntConfirmationAttemptRaw.mockResolvedValue({ primary: { ok: true, data: { solicitudes: [] } } });
+    getRuntConfirmationAttemptRaw.mockResolvedValue({
+      primary: {
+        ok: true,
+        data: {
+          vehiculo: { placa: "QYS575", estadoAutomotor: "ACTIVO", mostrarSolicitudes: "SI" },
+          solicitudes: [{ noSolicitud: "298997109", fechaSolicitud: "2026-07-25T10:00:00.000-05:00", estado: "AUTORIZADA", tramitesRealizados: "TRÁMITE MATRÍCULA INICIAL, ", entidad: "STRIA DE TTOyTTE MEDELLIN" }],
+        },
+      },
+    });
   });
 
   it("AC1 — lista los intentos con trámite, tipo, placa, proveedor, número, píldora con texto y botón Ver", async () => {
@@ -132,7 +140,7 @@ describe("ConfirmacionRuntHistorialPanel", () => {
 
     const resumen = await screen.findByTestId("confirmacion-runt-ultima-corrida");
     expect(within(resumen).getByText("Resumen de la corrida")).toBeInTheDocument();
-    expect(within(resumen).getByText("6")).toBeInTheDocument();
+    expect(within(resumen).getByText(/6 llamadas al proveedor/)).toBeInTheDocument();
     expect(listRuntConfirmationAttempts).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1" }), 1, 25, expect.anything());
 
     await user.selectOptions(screen.getByLabelText("Resultado"), "pending");
@@ -143,21 +151,31 @@ describe("ConfirmacionRuntHistorialPanel", () => {
     expect(replace).toHaveBeenLastCalledWith("/admin/plataforma/confirmacion-runt/historial?runId=run-1&q=QYS575");
   });
 
-  it("AC3 — Ver expande el detalle con motivo, regla, proveedor y el JSON crudo en un panel", async () => {
+  it("AC3 — Ver expande el detalle: veredicto con motivo y proveedor; la respuesta en secciones y el JSON en pestañas", async () => {
     renderPanel();
     const user = userEvent.setup();
 
     await user.click((await screen.findAllByRole("button", { name: "Ver" }))[0]);
     const detalle = await screen.findByTestId("intento-detalle");
-    expect(within(detalle).getByText(/Solicitud 298997109/)).toBeInTheDocument();
-    expect(within(detalle).getByText("confirmacion-v1")).toBeInTheDocument();
+    expect(within(detalle).getByTestId("intento-motivo")).toHaveTextContent(/Solicitud 298997109/);
     expect(within(detalle).getByText("Kyverum")).toBeInTheDocument();
     expect(within(detalle).getByText("Corrida programada")).toBeInTheDocument();
+    expect(within(detalle).getByText(/Confirmado en el RUNT: sale de las corridas/)).toBeInTheDocument();
+    // La versión de la regla ya no se muestra: no le dice nada al usuario (sigue en el export).
+    expect(within(detalle).queryByText("confirmacion-v1")).not.toBeInTheDocument();
 
-    await user.click(within(detalle).getByRole("button", { name: "Ver JSON crudo del proveedor" }));
+    // Respuesta del RUNT en secciones de negocio, desde el mismo crudo (se pide una sola vez).
+    await user.click(within(detalle).getByRole("tab", { name: "Respuesta del RUNT" }));
+    expect(await within(detalle).findByText("Vehículo en el RUNT")).toBeInTheDocument();
+    expect(within(detalle).getByText(/Solicitudes ante el RUNT/)).toBeInTheDocument();
+    expect(within(detalle).getByText("25/07/2026")).toBeInTheDocument();
+    expect(within(detalle).getByText("AUTORIZADA")).toBeInTheDocument();
+    expect(getRuntConfirmationAttemptRaw).toHaveBeenCalledWith("a-1", expect.anything());
+
+    await user.click(within(detalle).getByRole("tab", { name: "JSON crudo" }));
     const raw = await screen.findByTestId("intento-raw");
     expect(raw).toHaveTextContent('"solicitudes"');
-    expect(getRuntConfirmationAttemptRaw).toHaveBeenCalledWith("a-1");
+    expect(getRuntConfirmationAttemptRaw).toHaveBeenCalledTimes(1);
   });
 
   it("AC4 — Consultar ahora pide confirmación, llama al endpoint y recarga; un 409 muestra el motivo sin recargar", async () => {

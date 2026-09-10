@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { ArrowRightLeft, Ban, Paperclip, RefreshCcw, Send, UserCog } from 'lucide-react';
+import { ArrowRightLeft, BadgeCheck, Ban, Paperclip, RefreshCcw, Send, UserCog } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type { ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -15,6 +15,7 @@ import { ReenviarValidacionIdentidadModal } from './ReenviarValidacionIdentidadM
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient, type GestorOption } from '@/lib/api/tramites-client';
+import { ConsultNowConflictError, consultRuntNow, RUNT_VERDICT_LABEL } from '@/lib/api/admin-runt-confirmation';
 import { estadoLabel } from '@/lib/tramites/estados';
 import {
   ADMIN_ESTADO_DESTINO_OPTIONS,
@@ -563,6 +564,72 @@ function ReasignarGestorModal({ open, onClose, item, tenantId, onSuccess, onErro
   );
 }
 
+/**
+ * Feature #12276 — «Consultar ahora en RUNT»: consulta manual e inmediata al proveedor configurado.
+ * Es una llamada real (paga) al RUNT, así que pide confirmación antes. Corre aunque la consulta
+ * programada esté apagada o el trámite haya llegado al tope; el 409 del backend (no aprobado, tipo
+ * fuera de alcance, ya confirmado) llega como motivo legible.
+ */
+function ConsultarRuntModal({ open, onClose, item, onSuccess, onError }: Omit<ModalBaseProps, 'tenantId'>) {
+  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const confirmar = async () => {
+    setBusy(true);
+    setSubmitError(null);
+    try {
+      const { attempt } = await consultRuntNow(item.id);
+      const veredicto = attempt ? (RUNT_VERDICT_LABEL[attempt.verdict] ?? attempt.verdict) : null;
+      onSuccess(veredicto ? `Consulta al RUNT realizada: ${veredicto}.` : 'Consulta al RUNT realizada.');
+      onClose();
+    } catch (err) {
+      const message = err instanceof ConsultNowConflictError
+        ? err.message
+        : err instanceof Error ? err.message : 'No se pudo consultar al RUNT.';
+      setSubmitError(message);
+      if (!(err instanceof ConsultNowConflictError)) onError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Consultar ahora en RUNT"
+      titleClassName="text-base font-bold text-[#557EFF]"
+      icon={BadgeCheck}
+      description={`Trámite ${item.referenceNumber}${item.placa ? ` · ${item.placa}` : ''}`}
+      size="sm"
+      busy={busy}
+    >
+      <div className="contents" onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-3">
+          <p className="text-sm text-[#162744] dark:text-white">
+            Se consulta el RUNT de inmediato con el proveedor configurado y el resultado queda en el
+            historial de Confirmación RUNT. Cuenta como un intento.
+          </p>
+          <p className="text-xs text-[#59677D] dark:text-white/60">
+            La columna «Confirmado en RUNT» de este trámite se actualiza al terminar.
+          </p>
+
+          {submitError ? <InlineAlert tone="warning">{submitError}</InlineAlert> : null}
+
+          <div className="flex gap-3 pt-1">
+            <SecondaryButton className="flex-1" onClick={onClose} disabled={busy}>
+              Cancelar
+            </SecondaryButton>
+            <PrimaryButton className="flex-1" onClick={() => void confirmar()} disabled={busy}>
+              {busy ? 'Consultando…' : 'Sí, consultar'}
+            </PrimaryButton>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export interface UseAdminTramiteAccionesArgs {
   item: InstanceSummary;
   /** SuperAdmin viendo el trámite de OTRA compañía: las llamadas llevan X-Tenant-Id de la FILA. */
@@ -603,6 +670,7 @@ export function useAdminTramiteAcciones({
   const [consolidadoOpen, setConsolidadoOpen] = useState(false);
   const [reenviarOpen, setReenviarOpen] = useState(false);
   const [reasignarOpen, setReasignarOpen] = useState(false);
+  const [consultarRuntOpen, setConsultarRuntOpen] = useState(false);
 
   const onSuccess = (message: string) => {
     show(message, 'success');
@@ -660,6 +728,20 @@ export function useAdminTramiteAcciones({
       onSelect: () => setReasignarOpen(true),
     });
   }
+  // Feature #12276 — solo tiene sentido sobre un aprobado que aún no está confirmado en el RUNT.
+  if (puede(ADMIN_TRAMITE_PERMISSIONS.consultarRunt)) {
+    const yaConfirmado = item.runtConfirmed === 'yes';
+    items.push({
+      key: 'admin-consultar-runt',
+      label: 'Consultar ahora en RUNT',
+      icon: BadgeCheck,
+      disabled: !esAprobado || yaConfirmado,
+      disabledReason: !esAprobado
+        ? 'Solo se confirman en el RUNT los trámites aprobados.'
+        : 'Este trámite ya está confirmado en el RUNT.',
+      onSelect: () => setConsultarRuntOpen(true),
+    });
+  }
 
   const modals = (
     <>
@@ -703,6 +785,13 @@ export function useAdminTramiteAcciones({
         onClose={() => setReasignarOpen(false)}
         item={item}
         tenantId={tenantId}
+        onSuccess={onSuccess}
+        onError={onError}
+      />
+      <ConsultarRuntModal
+        open={consultarRuntOpen}
+        onClose={() => setConsultarRuntOpen(false)}
+        item={item}
         onSuccess={onSuccess}
         onError={onError}
       />

@@ -172,7 +172,7 @@ export function ConfirmacionRuntConfigPanel() {
     );
   }
 
-  const campoNumero = (campo: "graceDays" | "discrepancyAfterRuns" | "maxAttempts", label: string, min: number) => {
+  const campoNumero = (campo: "graceDays" | "discrepancyAfterRuns" | "maxAttempts", label: string, min: number, unidad: string) => {
     const id = `confirmacion-runt-${campo}`;
     const error = errores[campo];
     return (
@@ -180,19 +180,22 @@ export function ConfirmacionRuntConfigPanel() {
         <label htmlFor={id} className="text-xs font-semibold text-[#162744] dark:text-white">
           {label}
         </label>
-        <input
-          id={id}
-          type="number"
-          inputMode="numeric"
-          min={min}
-          step={1}
-          value={borrador[campo]}
-          onChange={(e) => set(campo, e.target.value)}
-          disabled={guardando}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
-          className={`${inputCls} ${error ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-white/10"}`}
-        />
+        <div className={`flex items-center rounded-xl border bg-white dark:bg-[#0B0F14] ${error ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-white/10"}`}>
+          <input
+            id={id}
+            type="number"
+            inputMode="numeric"
+            min={min}
+            step={1}
+            value={borrador[campo]}
+            onChange={(e) => set(campo, e.target.value)}
+            disabled={guardando}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
+            className="w-full min-w-0 rounded-xl bg-transparent px-3 py-2 font-mono text-sm text-[#162744] outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:text-white"
+          />
+          <span className="shrink-0 pr-3 text-[11px] text-[#59677D] dark:text-white/55">{unidad}</span>
+        </div>
         <p id={`${id}-hint`} className="text-[11px] leading-snug text-[#59677D] dark:text-white/60">
           {HINTS[campo]}
         </p>
@@ -206,7 +209,7 @@ export function ConfirmacionRuntConfigPanel() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <form onSubmit={(e) => void guardar(e)} className="flex flex-col gap-5" noValidate data-testid="confirmacion-runt-config-form">
         {/* Interruptor */}
         <div className="flex items-start justify-between gap-4 rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]">
@@ -228,7 +231,7 @@ export function ConfirmacionRuntConfigPanel() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid gap-x-5 gap-y-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
           <div className="flex flex-col gap-1">
             <label htmlFor="confirmacion-runt-runAtLocal" className="text-xs font-semibold text-[#162744] dark:text-white">
               Hora de ejecución diaria
@@ -241,7 +244,7 @@ export function ConfirmacionRuntConfigPanel() {
               disabled={guardando}
               aria-invalid={errores.runAtLocal ? true : undefined}
               aria-describedby={`confirmacion-runt-runAtLocal-hint${errores.runAtLocal ? " confirmacion-runt-runAtLocal-error" : ""}`}
-              className={`${inputCls} ${errores.runAtLocal ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-white/10"}`}
+              className={`${inputCls} font-mono ${errores.runAtLocal ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-white/10"}`}
             />
             <p id="confirmacion-runt-runAtLocal-hint" className="text-[11px] leading-snug text-[#59677D] dark:text-white/60">
               {HINTS.runAtLocal}
@@ -282,9 +285,9 @@ export function ConfirmacionRuntConfigPanel() {
             ) : null}
           </div>
 
-          {campoNumero("graceDays", "Días de gracia tras la aprobación", 0)}
-          {campoNumero("discrepancyAfterRuns", "Corridas en NO antes de marcar discrepancia", 1)}
-          {campoNumero("maxAttempts", "Tope de reintentos", 1)}
+          {campoNumero("graceDays", "Días de gracia tras la aprobación", 0, "días")}
+          {campoNumero("discrepancyAfterRuns", "Corridas en NO antes de marcar discrepancia", 1, "corridas")}
+          {campoNumero("maxAttempts", "Tope de reintentos", 1, "intentos")}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

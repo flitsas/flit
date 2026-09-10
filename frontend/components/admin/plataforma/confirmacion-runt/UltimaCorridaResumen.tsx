@@ -22,50 +22,72 @@ export function duracionDe(run: Pick<RuntConfirmationRun, "startedAt" | "finishe
   return `${m} min ${s % 60} s`;
 }
 
+/** Tarjetas de resumen (patrón del artifact): la cifra manda, con su tono semántico. */
+const STAT_TONE = {
+  neutral: "text-[#162744] dark:text-white",
+  ok: "text-[#15803D]",
+  warn: "text-[#C2410C]",
+  bad: "text-[#991B1B]",
+  mute: "text-[#64748B]",
+} as const;
+
 /**
- * Resumen de una corrida (HU #12279 AC5, HU #12311 AC2): fecha, proveedor, contadores por
- * veredicto, duración y llamadas al proveedor. Con `run` nulo dice «Sin corridas todavía».
+ * Resumen de una corrida (HU #12279 AC5, HU #12311 AC2): una tarjeta por cifra —consultados y los
+ * cuatro veredictos— y una línea con duración, llamadas y errores. Con `run` nulo dice «Sin
+ * corridas todavía».
  */
 export function UltimaCorridaResumen({ run, titulo }: { run: RuntConfirmationRun | null; titulo?: string }) {
   if (!run) {
     return (
-      <p className="rounded-2xl border border-dashed border-[#DFE5ED] px-4 py-6 text-center text-sm text-[#59677D] dark:border-white/10 dark:text-white/60" data-testid="confirmacion-runt-sin-corridas">
+      <p
+        className="rounded-2xl border border-dashed border-[#DFE5ED] px-4 py-6 text-center text-sm text-[#59677D] dark:border-white/10 dark:text-white/60"
+        data-testid="confirmacion-runt-sin-corridas"
+      >
         Sin corridas todavía
       </p>
     );
   }
 
-  const celdas: Array<{ label: string; value: string }> = [
-    { label: "Fecha y hora", value: formatFechaHora(run.startedAt) },
-    { label: "Origen", value: run.trigger === "manual" ? "Manual (Consultar ahora)" : "Programada" },
-    { label: "Proveedor", value: run.providerKey ? (PROVEEDOR_LABEL[run.providerKey] ?? run.providerKey) : "—" },
-    { label: "Consultados", value: String(run.consulted) },
-    { label: "Confirmados", value: String(run.confirmed) },
-    { label: "Pendientes", value: String(run.pending) },
-    { label: "Discrepancias", value: String(run.discrepancies) },
-    { label: "No verificables", value: String(run.unverifiable) },
-    { label: "Errores", value: String(run.errors) },
-    { label: "Duración", value: duracionDe(run) },
-    { label: "Llamadas al proveedor", value: String(run.providerCalls) },
+  const stats: Array<{ label: string; value: string; tone: keyof typeof STAT_TONE; small?: string }> = [
+    {
+      label: "Ejecutada",
+      value: formatFechaHora(run.startedAt),
+      tone: "neutral",
+      small: `${run.trigger === "manual" ? "Manual" : "Programada"} · ${run.providerKey ? (PROVEEDOR_LABEL[run.providerKey] ?? run.providerKey) : "—"}`,
+    },
+    { label: "Trámites consultados", value: String(run.consulted), tone: "neutral" },
+    { label: "Confirmados", value: String(run.confirmed), tone: "ok" },
+    { label: "Pendientes", value: String(run.pending), tone: "warn" },
+    { label: "Discrepancias", value: String(run.discrepancies), tone: "bad" },
+    { label: "No verificables", value: String(run.unverifiable), tone: "mute" },
   ];
 
   return (
-    <div className="rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]" data-testid="confirmacion-runt-ultima-corrida">
-      {titulo ? <p className="mb-3 text-xs font-semibold text-[#162744] dark:text-white">{titulo}</p> : null}
+    <div className="flex flex-col gap-2" data-testid="confirmacion-runt-ultima-corrida">
+      {titulo ? <p className="text-xs font-semibold text-[#162744] dark:text-white">{titulo}</p> : null}
       {run.skippedReason ? (
-        <p className="mb-3 text-xs font-semibold text-[#B33600] dark:text-[#FF8A5B]">{SKIPPED_LABEL[run.skippedReason] ?? run.skippedReason}</p>
+        <p className="rounded-lg bg-[#FF4E00]/10 px-3 py-2 text-xs font-semibold text-[#B33600] dark:text-[#FF8A5B]">
+          {SKIPPED_LABEL[run.skippedReason] ?? run.skippedReason}
+        </p>
       ) : null}
       {run.errorMessage ? (
-        <p className="mb-3 text-xs text-[#B33600] dark:text-[#FF8A5B]">{run.errorMessage}</p>
+        <p className="rounded-lg bg-[#991B1B]/10 px-3 py-2 text-xs text-[#991B1B]">{run.errorMessage}</p>
       ) : null}
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
-        {celdas.map((c) => (
-          <div key={c.label} className="flex flex-col">
-            <dt className="text-[10px] font-semibold uppercase tracking-wide text-[#59677D] dark:text-white/55">{c.label}</dt>
-            <dd className="text-sm font-semibold tabular-nums text-[#162744] dark:text-white">{c.value}</dd>
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {stats.map((s) => (
+          <div key={s.label} className="flex flex-col gap-0.5 rounded-xl border border-[#DFE5ED] bg-white px-3.5 py-3 dark:border-white/10 dark:bg-[#0B0F14]">
+            <dt className="text-[10px] font-semibold uppercase tracking-wide text-[#59677D] dark:text-white/55">{s.label}</dt>
+            <dd className={`${s.small ? "text-sm" : "text-2xl"} font-semibold leading-tight tabular-nums ${STAT_TONE[s.tone]}`}>
+              {s.value}
+              {s.small ? <span className="block text-[11px] font-medium text-[#59677D] dark:text-white/60">{s.small}</span> : null}
+            </dd>
           </div>
         ))}
       </dl>
+      <p className="text-[12px] text-[#59677D] dark:text-white/60">
+        Duración {duracionDe(run)} · {run.providerCalls} {run.providerCalls === 1 ? "llamada" : "llamadas"} al proveedor · {run.errors}{" "}
+        {run.errors === 1 ? "error" : "errores"} de proveedor
+      </p>
     </div>
   );
 }
