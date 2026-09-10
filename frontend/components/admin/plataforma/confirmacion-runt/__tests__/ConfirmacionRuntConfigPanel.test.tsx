@@ -73,7 +73,7 @@ describe("ConfirmacionRuntConfigPanel", () => {
     expect(screen.getByLabelText("Hora de ejecución diaria")).toHaveValue("02:00");
     expect(screen.getByLabelText("Proveedor activo")).toHaveValue("kyverum_runt");
     expect(screen.getByLabelText("Días de gracia tras la aprobación")).toHaveValue(0);
-    expect(screen.getByLabelText("Corridas en NO antes de marcar discrepancia")).toHaveValue(3);
+    expect(screen.getByLabelText("Corridas antes de discrepancia")).toHaveValue(3);
     expect(screen.getByLabelText("Tope de reintentos")).toHaveValue(10);
 
     const opciones = within(screen.getByLabelText("Proveedor activo")).getAllByRole("option").map((o) => o.textContent);

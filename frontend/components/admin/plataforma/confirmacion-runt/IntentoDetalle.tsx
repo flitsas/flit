@@ -24,7 +24,7 @@ type Pestana = "veredicto" | "respuesta" | "json";
 const PESTANAS: Array<{ id: Pestana; label: string }> = [
   { id: "veredicto", label: "Veredicto" },
   { id: "respuesta", label: "Respuesta del RUNT" },
-  { id: "json", label: "JSON crudo" },
+  { id: "json", label: "JSON" },
 ];
 
 /** Mismo mapa de tonos que los hitos de Trazabilidad ICT: color + ícono, y el texto siempre al lado. */
@@ -146,7 +146,7 @@ export function IntentoDetalle({
       className="mx-1 rounded-2xl border border-[#557EFF]/30 bg-white dark:border-white/10 dark:bg-[#0B0F14]"
       data-testid="intento-detalle"
     >
-      <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className="flex gap-1 overflow-x-auto border-b border-[#DFE5ED] px-3 dark:border-white/10">
+      <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className="flex flex-wrap gap-1 border-b border-[#DFE5ED] px-3 dark:border-white/10">
         {PESTANAS.map((p) => {
           const activa = pestana === p.id;
           const deshabilitada = p.id !== "veredicto" && !row.hasRaw;
@@ -345,7 +345,7 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
         <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "rgba(255,78,0,0.10)", color: "#C2410C" }}>
           {vista.resultado === "no_encontrado"
             ? `El proveedor no encontró el vehículo con ese documento${vista.mensaje ? `: «${vista.mensaje}»` : "."}`
-            : "La respuesta no tiene la forma esperada; mira el JSON crudo."}
+            : "La respuesta no tiene la forma esperada; mira la pestaña JSON."}
         </p>
       </section>
     );

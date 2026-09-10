@@ -286,7 +286,7 @@ export function ConfirmacionRuntConfigPanel() {
           </div>
 
           {campoNumero("graceDays", "Días de gracia tras la aprobación", 0, "días")}
-          {campoNumero("discrepancyAfterRuns", "Corridas en NO antes de marcar discrepancia", 1, "corridas")}
+          {campoNumero("discrepancyAfterRuns", "Corridas antes de discrepancia", 1, "corridas")}
           {campoNumero("maxAttempts", "Tope de reintentos", 1, "intentos")}
         </div>
 

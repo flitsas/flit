@@ -334,7 +334,7 @@ export function ConfirmacionRuntHistorialPanel() {
             className="flex items-center gap-1 rounded-full border border-[#DFE5ED] px-3 py-2 text-xs font-semibold text-[#162744] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:border-white/10 dark:text-white"
           >
             <Download className={`h-3.5 w-3.5 ${exportando ? "animate-pulse" : ""}`} aria-hidden="true" />
-            {exportando ? "Exportando…" : "Exportar XLSX"}
+            {exportando ? "Exportando…" : "Exportar"}
           </button>
         </span>
       </form>

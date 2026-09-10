@@ -172,7 +172,7 @@ describe("ConfirmacionRuntHistorialPanel", () => {
     expect(within(detalle).getByText("AUTORIZADA")).toBeInTheDocument();
     expect(getRuntConfirmationAttemptRaw).toHaveBeenCalledWith("a-1", expect.anything());
 
-    await user.click(within(detalle).getByRole("tab", { name: "JSON crudo" }));
+    await user.click(within(detalle).getByRole("tab", { name: "JSON" }));
     const raw = await screen.findByTestId("intento-raw");
     expect(raw).toHaveTextContent('"solicitudes"');
     expect(getRuntConfirmationAttemptRaw).toHaveBeenCalledTimes(1);
